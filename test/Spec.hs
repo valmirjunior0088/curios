@@ -10,5 +10,5 @@ main = parseTest (dbg "statements" (some statement)) exampleStatements
 
 exampleStatements =
   "assume either : <type! type! type>\n\
- \ assume left : <a:type. b:type! (either a b)>\n\
- \ assume right : <a:type! b:type. (either a b)>"
+ \ assume left : <a:type! b:type. (either a b)>\n\
+ \ assume right : <a:type. b:type! (either a b)>"
