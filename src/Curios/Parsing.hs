@@ -104,4 +104,4 @@ statement =
 
 program :: Parser Program
 program =
-  lexeme (Program <$> (symbol "module" *> name) <*> (symbol "where " *> Me.manyTill statement (symbol "end")))
+  lexeme (Program <$> (symbol "module" *> name) <*> (symbol "where" *> Me.manyTill statement (symbol "end")))
