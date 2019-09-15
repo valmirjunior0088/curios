@@ -58,11 +58,11 @@ availability =
 
 quantifier :: Parser Quantifier
 quantifier =
-  lexeme (Quantifier <$> Me.optional (name <* symbol ":") <*> expression <*> availability)
+  lexeme (Quantifier <$> Me.optional (Me.try (name <* symbol ":")) <*> expression <*> availability)
 
 binding :: Parser Binding
 binding =
-  lexeme (Binding <$> name <*> Me.optional (symbol ":" *> expression) <*> availability)
+  lexeme (Binding <$> name <*> Me.optional (Me.try (symbol ":" *> expression)) <*> availability)
 
 argument :: Parser Argument
 argument =
@@ -88,8 +88,8 @@ identifier =
 expression :: Parser Expression
 expression =
   lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exFunctionApplication <|> exLiteral <|> exVariable) where
-    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> Me.some quantifier) <*> (expression <* symbol ">")
-    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> Me.some binding) <*> (expression <* symbol "}")
+    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> Me.some (Me.try quantifier)) <*> (expression <* symbol ">")
+    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> Me.some (Me.try binding)) <*> (expression <* symbol "}")
     exFunctionApplication = ExApplication <$> (symbol "(" *> expression) <*> Me.manyTill argument (symbol ")")
     exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> identifier
