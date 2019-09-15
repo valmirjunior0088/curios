@@ -1,5 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
-
 import Curios.Expression
 import Curios.Program
 import qualified Curios.Parsing as Pa
