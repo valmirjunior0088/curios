@@ -19,3 +19,41 @@ example =
     "  assume right : <a:type. b:type! (either a b)>",
     "end"
   ]
+
+{-
+StProgram
+  (Program "either"
+    [StAssume "either"
+      (ExPiAbstraction
+        [Quantifier Nothing (ExVariable (Identifier ["type"])) AvExplicit
+        ,Quantifier Nothing (ExVariable (Identifier ["type"])) AvExplicit
+        ]
+        (ExVariable (Identifier ["type"]))
+      )
+    ,StAssume "left"
+      (ExPiAbstraction
+        [Quantifier (Just "a") (ExVariable (Identifier ["type"])) AvExplicit
+        ,Quantifier (Just "b") (ExVariable (Identifier ["type"])) AvImplicit
+        ]
+        (ExApplication
+          (ExVariable (Identifier ["either"]))
+          [Argument (ExVariable (Identifier ["a"])) Nothing
+          ,Argument (ExVariable (Identifier ["b"])) Nothing
+          ]
+        )
+      )
+    ,StAssume "right"
+      (ExPiAbstraction
+        [Quantifier (Just "a") (ExVariable (Identifier ["type"])) AvImplicit
+        ,Quantifier (Just "b") (ExVariable (Identifier ["type"])) AvExplicit
+        ]
+        (ExApplication
+          (ExVariable (Identifier ["either"]))
+          [Argument (ExVariable (Identifier ["a"])) Nothing
+          ,Argument (ExVariable (Identifier ["b"])) Nothing
+          ]
+        )
+      )
+    ]
+  )
+-}
