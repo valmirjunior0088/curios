@@ -1,14 +1,21 @@
+{-# LANGUAGE QuasiQuotes #-}
+
 import Curios.Expression
 import Curios.Program
-import Curios.Parsing
+import qualified Curios.Parsing as Pa
 
 import Text.Megaparsec
 import Text.Megaparsec.Debug
 
 main :: IO ()
-main = parseTest (dbg "statements" (some statement)) exampleStatements
+main = parseTest Pa.statement example
 
-exampleStatements =
-  "assume either : <type! type! type>\n\
- \ assume left : <a:type! b:type. (either a b)>\n\
- \ assume right : <a:type. b:type! (either a b)>"
+example :: String
+example =
+  unlines [
+    "module either where",
+    "  assume either : <type! type! type>",
+    "  assume left : <a:type! b:type. (either a b)>",
+    "  assume right : <a:type. b:type! (either a b)>",
+    "end"
+  ]
