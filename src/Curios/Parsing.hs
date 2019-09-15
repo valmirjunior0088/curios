@@ -87,10 +87,10 @@ identifier =
 
 expression :: Parser Expression
 expression =
-  lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exFunctionApplication <|> exLiteral <|> exVariable) where
+  lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exLiteral <|> exVariable) where
     exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> Me.some (Me.try quantifier)) <*> (expression <* symbol ">")
     exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> Me.some (Me.try binding)) <*> (expression <* symbol "}")
-    exFunctionApplication = ExApplication <$> (symbol "(" *> expression) <*> Me.manyTill argument (symbol ")")
+    exApplication = ExApplication <$> (symbol "(" *> expression) <*> Me.manyTill argument (symbol ")")
     exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> identifier
 
