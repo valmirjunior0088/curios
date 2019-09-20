@@ -1,12 +1,13 @@
-import Curios.Expression
-import Curios.Program
-import qualified Curios.Parsing as Pa
+import Curios.Parsing
+  ( statement
+  )
 
 import Text.Megaparsec
-import Text.Megaparsec.Debug
+  ( parseTest
+  )
 
 main :: IO ()
-main = parseTest Pa.statement example
+main = parseTest statement example
 
 example :: String
 example =

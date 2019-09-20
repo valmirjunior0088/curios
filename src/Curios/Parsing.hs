@@ -16,35 +16,74 @@ module Curios.Parsing
   where
 
 import Data.Void
-import Control.Applicative
+  ( Void
+  )
 
-import qualified Text.Megaparsec as Me
-import qualified Text.Megaparsec.Char as Ch
-import qualified Text.Megaparsec.Char.Lexer as Le
+import Control.Applicative
+  ( (<|>)
+  )
+
+import Text.Megaparsec
+  ( Parsec (..)
+  , optional
+  , try
+  , some
+  , oneOf
+  , single
+  , manyTill
+  , sepBy
+  )
+
+import Text.Megaparsec.Char
+  ( space1
+  )
+
+import qualified Text.Megaparsec.Char.Lexer as Lexer
+  ( space
+  , skipLineComment
+  , skipBlockComment
+  , lexeme
+  , symbol
+  , charLiteral
+  , decimal
+  , float
+  )
 
 import Curios.Expression
+  ( Availability (..)
+  , Binding (..)
+  , Quantifier (..)
+  , Argument (..)
+  , Literal (..)
+  , Identifier (..)
+  , Expression (..)
+  )
+
 import Curios.Program
+  ( Statement (..)
+  , Program (..)
+  )
 
 type Parser a =
-  Me.Parsec Void String a
+  Parsec Void String a
 
 space :: Parser ()
 space =
-  Le.space Ch.space1 spLine spBlock where
-    spLine = Le.skipLineComment "//"
-    spBlock = Le.skipBlockComment "/*" "*/"
+  Lexer.space space1 spLine spBlock where
+    spLine = Lexer.skipLineComment "//"
+    spBlock = Lexer.skipBlockComment "/*" "*/"
 
 lexeme :: Parser a -> Parser a
 lexeme parser =
-  Le.lexeme space parser
+  Lexer.lexeme space parser
 
 symbol :: String -> Parser String
 symbol string =
-  Le.symbol space string
+  Lexer.symbol space string
 
 name :: Parser String
 name =
-  lexeme (Me.some (Me.oneOf naValidCharacters)) where
+  lexeme (some (oneOf naValidCharacters)) where
     naValidCharacters =
       ['a'..'z'] ++
       ['A'..'Z'] ++
@@ -58,39 +97,39 @@ availability =
 
 quantifier :: Parser Quantifier
 quantifier =
-  lexeme (Quantifier <$> Me.optional (Me.try (name <* symbol ":")) <*> expression <*> availability)
+  lexeme (Quantifier <$> optional (try (name <* symbol ":")) <*> expression <*> availability)
 
 binding :: Parser Binding
 binding =
-  lexeme (Binding <$> name <*> Me.optional (Me.try (symbol ":" *> expression)) <*> availability)
+  lexeme (Binding <$> name <*> optional (try (symbol ":" *> expression)) <*> availability)
 
 argument :: Parser Argument
 argument =
-  lexeme (Argument <$> expression <*> Me.optional availability)
+  lexeme (Argument <$> expression <*> optional availability)
 
 literal :: Parser Literal
 literal =
   lexeme (liCharacter <|> liString <|> liNumber) where
-    liCharacter = LiCharacter <$> (Me.single '\'' *> Le.charLiteral)
-    liString = LiString <$> (Me.single '"' *> Me.manyTill Le.charLiteral (Me.single '"'))
-    liNumber = Me.try nuRational <|> nuInteger where
+    liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral)
+    liString = LiString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
+    liNumber = try nuRational <|> nuInteger where
       nuRational = raPositive <|> raNegative where
-        raPositive = LiRational <$> (optional (Me.single '+') *> Le.float)
-        raNegative = (LiRational . negate) <$> (Me.single '-' *> Le.float)
+        raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
+        raNegative = (LiRational . negate) <$> (single '-' *> Lexer.float)
       nuInteger = inPositive <|> inNegative where
-        inPositive = LiInteger <$> (optional (Me.single '+') *> Le.decimal)
-        inNegative = (LiInteger . negate) <$> (Me.single '-' *> Le.decimal)
+        inPositive = LiInteger <$> (optional (single '+') *> Lexer.decimal)
+        inNegative = (LiInteger . negate) <$> (single '-' *> Lexer.decimal)
 
 identifier :: Parser Identifier
 identifier =
-  lexeme (Identifier <$> Me.sepBy name (Me.single ';'))
+  lexeme (Identifier <$> sepBy name (single ';'))
 
 expression :: Parser Expression
 expression =
   lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exLiteral <|> exVariable) where
-    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> Me.some (Me.try quantifier)) <*> (expression <* symbol ">")
-    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> Me.some (Me.try binding)) <*> (expression <* symbol "}")
-    exApplication = ExApplication <$> (symbol "(" *> expression) <*> Me.manyTill argument (symbol ")")
+    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> some (try quantifier)) <*> (expression <* symbol ">")
+    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> some (try binding)) <*> (expression <* symbol "}")
+    exApplication = ExApplication <$> (symbol "(" *> expression) <*> manyTill argument (symbol ")")
     exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> identifier
 
@@ -104,4 +143,4 @@ statement =
 
 program :: Parser Program
 program =
-  lexeme (Program <$> (symbol "module" *> name) <*> (symbol "where" *> Me.manyTill statement (symbol "end")))
+  lexeme (Program <$> (symbol "module" *> name) <*> (symbol "where" *> manyTill statement (symbol "end")))

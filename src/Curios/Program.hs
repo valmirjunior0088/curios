@@ -5,6 +5,9 @@ module Curios.Program
   where
 
 import Curios.Expression
+  ( Identifier (..)
+  , Expression (..)
+  )
 
 data Statement =
   StProgram Program |
