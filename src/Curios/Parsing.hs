@@ -69,9 +69,9 @@ type Parser a =
 
 space :: Parser ()
 space =
-  Lexer.space space1 spLine spBlock where
-    spLine = Lexer.skipLineComment "//"
-    spBlock = Lexer.skipBlockComment "/*" "*/"
+  Lexer.space space1 spLineComment spBlockComment where
+    spLineComment = Lexer.skipLineComment "//"
+    spBlockComment = Lexer.skipBlockComment "/*" "*/"
 
 lexeme :: Parser a -> Parser a
 lexeme parser =
