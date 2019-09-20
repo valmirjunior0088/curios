@@ -7,7 +7,8 @@ import Text.Megaparsec
   )
 
 main :: IO ()
-main = parseTest statement example
+main =
+  parseTest statement example
 
 example :: String
 example =
