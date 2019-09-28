@@ -11,7 +11,7 @@ module Curios.Parsing
   , identifier
   , expression
   , statement
-  , program
+  , package
   )
   where
 
@@ -57,11 +57,8 @@ import Curios.Expression
   , Literal (..)
   , Identifier (..)
   , Expression (..)
-  )
-
-import Curios.Program
-  ( Statement (..)
-  , Program (..)
+  , Statement (..)
+  , Package (..)
   )
 
 type Parser a =
@@ -135,12 +132,12 @@ expression =
 
 statement :: Parser Statement
 statement =
-  lexeme (stModule <|> stImport <|> stAssume <|> stDefine) where
-    stModule = StProgram <$> program
+  lexeme (stPackage <|> stImport <|> stAssume <|> stDefine) where
+    stPackage = StPackage <$> package
     stImport = StImport <$> (symbol "import" *> identifier)
     stAssume = StAssume <$> (symbol "assume" *> name) <*> (symbol ":" *> expression)
     stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression)
 
-program :: Parser Program
-program =
-  lexeme (Program <$> (symbol "module" *> name) <*> (symbol "where" *> manyTill statement (symbol "end")))
+package :: Parser Package
+package =
+  lexeme (Package <$> (symbol "package" *> name) <*> (symbol "where" *> manyTill statement (symbol "end")))

@@ -6,6 +6,8 @@ module Curios.Expression
   , Literal (..)
   , Identifier (..)
   , Expression (..)
+  , Statement (..)
+  , Package (..)
   )
   where
 
@@ -43,4 +45,15 @@ data Expression =
   ExApplication Expression [Argument] |
   ExLiteral Literal |
   ExVariable Identifier
+  deriving (Show)
+
+data Statement =
+  StPackage Package |
+  StImport Identifier |
+  StAssume String Expression |
+  StDefine String Expression Expression
+  deriving (Show)
+
+data Package =
+  Package String [Statement]
   deriving (Show)

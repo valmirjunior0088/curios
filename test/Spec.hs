@@ -13,7 +13,7 @@ main =
 example :: String
 example =
   unlines [
-    "module either where",
+    "package either where",
     "  assume either : <type! type! type>",
     "  assume left : <a:type! b:type. (either a b)>",
     "  assume right : <a:type. b:type! (either a b)>",
@@ -22,8 +22,8 @@ example =
   ]
 
 {-
-StProgram
-  (Program "either"
+(StPackage
+  (Package "either"
     [StAssume "either"
       (ExPiAbstraction
         [Quantifier Nothing (ExVariable (Identifier ["type"])) AvExplicit
@@ -66,4 +66,5 @@ StProgram
       )
     ]
   )
+)
 -}
