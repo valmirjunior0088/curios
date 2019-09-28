@@ -55,10 +55,14 @@ import Curios.Expression
   , Quantifier (..)
   , Argument (..)
   , Literal (..)
-  , Identifier (..)
   , Expression (..)
   , Statement (..)
   , Package (..)
+  )
+
+import Curios.Common
+  ( Name (..)
+  , Identifier (..)
   )
 
 type Parser a =
@@ -78,7 +82,7 @@ symbol :: String -> Parser String
 symbol string =
   Lexer.symbol space string
 
-name :: Parser String
+name :: Parser Name
 name =
   lexeme (some (oneOf naValidCharacters)) where
     naValidCharacters =

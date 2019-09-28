@@ -4,12 +4,16 @@ module Curios.Expression
   , Quantifier (..)
   , Argument (..)
   , Literal (..)
-  , Identifier (..)
   , Expression (..)
   , Statement (..)
   , Package (..)
   )
   where
+
+import Curios.Common
+  ( Name (..)
+  , Identifier (..)
+  )
 
 data Availability =
   AvImplicit |
@@ -17,11 +21,11 @@ data Availability =
   deriving (Show)
 
 data Quantifier =
-  Quantifier (Maybe String) Expression Availability
+  Quantifier (Maybe Name) Expression Availability
   deriving (Show)
 
 data Binding =
-  Binding String (Maybe Expression) Availability
+  Binding Name (Maybe Expression) Availability
   deriving (Show)
 
 data Argument =
@@ -33,10 +37,6 @@ data Literal =
   LiString String |
   LiInteger Integer |
   LiRational Double
-  deriving (Show)
-
-data Identifier =
-  Identifier [String]
   deriving (Show)
 
 data Expression =
@@ -55,5 +55,5 @@ data Statement =
   deriving (Show)
 
 data Package =
-  Package String [Statement]
+  Package Name [Statement]
   deriving (Show)
