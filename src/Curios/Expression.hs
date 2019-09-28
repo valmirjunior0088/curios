@@ -13,6 +13,7 @@ module Curios.Expression
 import Curios.Common
   ( Name (..)
   , Identifier (..)
+  , Literal (..)
   )
 
 data Availability =
@@ -32,19 +33,12 @@ data Argument =
   Argument Expression (Maybe Availability)
   deriving (Show)
 
-data Literal =
-  LiCharacter Char |
-  LiString String |
-  LiInteger Integer |
-  LiRational Double
-  deriving (Show)
-
 data Expression =
+  ExVariable Identifier |
+  ExLiteral Literal |
   ExPiAbstraction [Quantifier] Expression |
   ExLambdaAbstraction [Binding] Expression |
-  ExApplication Expression [Argument] |
-  ExLiteral Literal |
-  ExVariable Identifier
+  ExApplication Expression [Argument]
   deriving (Show)
 
 data Statement =
