@@ -4,7 +4,7 @@ module Curios.Term
   )
   where
 
-import Curios.Common
+import Curios.Expression
   ( Identifier (..)
   , Literal (..)
   )
@@ -14,16 +14,21 @@ data Primitive =
   PrString |
   PrInteger |
   PrRational
-  deriving (show)
+  deriving (Show)
 
--- A LOT IS MISSING, REALLY
+-- Inspired by Edwin Brady's "A practical implementation of a 
+-- dependently typed functional programming language"
+data Scope a =
+  Scope a
+  deriving (Show)
+
 data Term =
-  TeFreeVariable Identifier |
-  TeBoundVariable Integer |
   TeType Integer |
+  TePiAbstraction Term (Scope Term) |
+  TeLambdaAbstraction Term (Scope Term) |
+  TeApplication Term Term |
   TePrimitive Primitive |
   TeLiteral Literal |
-  TePiAbstraction {-?-} |
-  TeLambdaAbstraction {-?-} |
-  TeApplication Term Term
+  TeFreeVariable Identifier |
+  TeBoundVariable Integer
   deriving (Show)

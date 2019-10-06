@@ -1,20 +1,20 @@
 module Curios.Expression
-  ( Availability (..)
+  ( Name (..)
+  , Availability (..)
   , Binding (..)
   , Quantifier (..)
   , Argument (..)
   , Literal (..)
+  , Identifier (..)
   , Expression (..)
   , Statement (..)
-  , Package (..)
+  , Program (..)
   )
   where
 
-import Curios.Common
-  ( Name (..)
-  , Identifier (..)
-  , Literal (..)
-  )
+data Name =
+  Name String
+  deriving (Show)
 
 data Availability =
   AvImplicit |
@@ -33,21 +33,33 @@ data Argument =
   Argument Expression (Maybe Availability)
   deriving (Show)
 
+data Literal =
+  LiCharacter Char |
+  LiString String |
+  LiInteger Integer |
+  LiRational Double
+  deriving (Show)
+
+data Identifier =
+  Identifier [Name]
+  deriving (Show)
+
 data Expression =
-  ExVariable Identifier |
-  ExLiteral Literal |
   ExPiAbstraction [Quantifier] Expression |
   ExLambdaAbstraction [Binding] Expression |
-  ExApplication Expression [Argument]
+  ExApplication Expression [Argument] |
+  ExLiteral Literal |
+  ExVariable Identifier
   deriving (Show)
 
 data Statement =
-  StPackage Package |
+  StPackage Name Program |
   StImport Identifier |
-  StAssume String Expression |
-  StDefine String Expression Expression
+  StAssume Name Expression |
+  StDefine Name Expression Expression |
+  StAlias Name Expression
   deriving (Show)
 
-data Package =
-  Package Name [Statement]
+data Program =
+  Program [Statement]
   deriving (Show)

@@ -11,7 +11,7 @@ module Curios.Parsing
   , identifier
   , expression
   , statement
-  , package
+  , program
   )
   where
 
@@ -28,6 +28,7 @@ import Text.Megaparsec
   , optional
   , try
   , some
+  , many
   , oneOf
   , single
   , manyTill
@@ -50,19 +51,16 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
   )
 
 import Curios.Expression
-  ( Availability (..)
+  ( Name (..)
+  , Availability (..)
   , Binding (..)
   , Quantifier (..)
   , Argument (..)
   , Literal (..)
+  , Identifier (..)
   , Expression (..)
   , Statement (..)
-  , Package (..)
-  )
-
-import Curios.Common
-  ( Name (..)
-  , Identifier (..)
+  , Program (..)
   )
 
 type Parser a =
@@ -84,7 +82,7 @@ symbol string =
 
 name :: Parser Name
 name =
-  lexeme (some (oneOf naValidCharacters)) where
+  lexeme (Name <$> some (oneOf naValidCharacters)) where
     naValidCharacters =
       ['a'..'z'] ++
       ['A'..'Z'] ++
@@ -127,21 +125,22 @@ identifier =
 
 expression :: Parser Expression
 expression =
-  lexeme (exLiteral <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exVariable) where
-    exLiteral = ExLiteral <$> literal
+  lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exLiteral <|> exVariable) where
     exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> some (try quantifier)) <*> (expression <* symbol ">")
     exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> some (try binding)) <*> (expression <* symbol "}")
     exApplication = ExApplication <$> (symbol "(" *> expression) <*> manyTill argument (symbol ")")
+    exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> identifier
 
 statement :: Parser Statement
 statement =
-  lexeme (stPackage <|> stImport <|> stAssume <|> stDefine) where
-    stPackage = StPackage <$> package
+  lexeme (stPackage <|> stImport <|> stAssume <|> stDefine <|> stAlias) where
+    stPackage = StPackage <$> (symbol "package" *> name) <*> (symbol "where" *> program <* symbol "end")
     stImport = StImport <$> (symbol "import" *> identifier)
     stAssume = StAssume <$> (symbol "assume" *> name) <*> (symbol ":" *> expression)
     stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression)
+    stAlias = StAlias <$> (symbol "alias" *> name) <*> (symbol "=" *> expression)
 
-package :: Parser Package
-package =
-  lexeme (Package <$> (symbol "package" *> name) <*> (symbol "where" *> manyTill statement (symbol "end")))
+program :: Parser Program
+program =
+  lexeme (Program <$> many (try statement))
