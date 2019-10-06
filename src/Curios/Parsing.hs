@@ -108,16 +108,15 @@ argument =
 
 literal :: Parser Literal
 literal =
-  lexeme (liCharacter <|> liString <|> liNumber) where
+  lexeme (liCharacter <|> liString <|> try liRational <|> liInteger) where
     liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral)
     liString = LiString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
-    liNumber = try nuRational <|> nuInteger where
-      nuRational = raPositive <|> raNegative where
-        raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
-        raNegative = (LiRational . negate) <$> (single '-' *> Lexer.float)
-      nuInteger = inPositive <|> inNegative where
-        inPositive = LiInteger <$> (optional (single '+') *> Lexer.decimal)
-        inNegative = (LiInteger . negate) <$> (single '-' *> Lexer.decimal)
+    liRational = raPositive <|> raNegative where
+      raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
+      raNegative = (LiRational . negate) <$> (single '-' *> Lexer.float)
+    liInteger = inPositive <|> inNegative where
+      inPositive = LiInteger <$> (optional (single '+') *> Lexer.decimal)
+      inNegative = (LiInteger . negate) <$> (single '-' *> Lexer.decimal)
 
 identifier :: Parser Identifier
 identifier =
