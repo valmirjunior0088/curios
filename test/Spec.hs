@@ -12,14 +12,14 @@ main =
 
 example :: String
 example =
-  unlines [
-    "package either where",
-    "  assume either : <type! type! type>",
-    "  assume left : <a:type! b:type. (either a b)>",
-    "  assume right : <a:type. b:type! (either a b)>",
-    "  define elim : <unknown! unknown> = {unknown! unknown}",
-    "end"
-  ]
+  unlines
+    [ "package either where"
+    , "  assume either : <type! type! type>"
+    , "  assume left : <a:type! b:type. (either a b)>"
+    , "  assume right : <a:type. b:type! (either a b)>"
+    , "  define elim : <unknown! unknown> = {unknown! unknown}"
+    , "end"
+    ]
 
 {-
 ( StPackage (Name "either")
