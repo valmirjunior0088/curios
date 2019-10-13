@@ -1,5 +1,6 @@
 module Curios.Term
-  ( Primitive (..) 
+  ( Constant (..)
+  , Scope (..)
   , Term (..)
   )
   where
@@ -9,11 +10,12 @@ import Curios.Expression
   , Literal (..)
   )
 
-data Primitive =
-  PrCharacter |
-  PrString |
-  PrInteger |
-  PrRational
+data Constant =
+  CoType Integer |
+  CoCharacter |
+  CoString |
+  CoInteger |
+  CoRational
   deriving (Show)
 
 -- Inspired by Edwin Brady's "A practical implementation of a 
@@ -23,11 +25,10 @@ data Scope a =
   deriving (Show)
 
 data Term =
-  TeType Integer |
+  TeConstant Constant |
   TePiAbstraction Term (Scope Term) |
   TeLambdaAbstraction Term (Scope Term) |
   TeApplication Term Term |
-  TePrimitive Primitive |
   TeLiteral Literal |
   TeFreeVariable Identifier |
   TeBoundVariable Integer
