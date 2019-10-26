@@ -30,7 +30,7 @@ import Text.Megaparsec
   , oneOf
   , single
   , manyTill
-  , sepBy
+  , sepBy1
   )
 
 import Text.Megaparsec.Char
@@ -57,10 +57,6 @@ import Curios.Expression
   , Expression (..)
   , Statement (..)
   , Program (..)
-  )
-
-import Text.Megaparsec.Debug
-  ( dbg
   )
 
 type Parser a =
@@ -90,7 +86,7 @@ name =
 
 identifier :: Parser Identifier
 identifier =
-  lexeme (Identifier <$> sepBy name (single ';'))
+  lexeme (Identifier <$> sepBy1 name (single ';'))
 
 piBinding :: Parser PiBinding
 piBinding =
@@ -114,7 +110,7 @@ literal =
 
 expression :: Parser Expression
 expression =
-  lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exLiteral <|> exVariable) where
+  lexeme (exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exLiteral) where
     exVariable = ExVariable <$> identifier
     exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> some (try piBinding)) <*> (expression <* symbol ">")
     exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> some (try lambdaBinding)) <*> (expression <* symbol "}")
