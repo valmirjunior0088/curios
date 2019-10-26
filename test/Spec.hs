@@ -46,7 +46,7 @@ example =
         [ PiBinding (Just (Name "a")) (ExVariable (Identifier [Name "type"]))
         , PiBinding Nothing (ExVariable (Identifier [Name "a"]))
         ]
-        ( ExVariable (Identifier [Name "a"]))
+        (ExVariable (Identifier [Name "a"]))
       )
       ( ExLambdaAbstraction
         [ LambdaBinding (Name "a") Nothing
