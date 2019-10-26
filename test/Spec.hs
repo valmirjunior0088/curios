@@ -6,10 +6,6 @@ import Text.Megaparsec
   ( parseTest
   )
 
-import Text.Megaparsec.Debug
-  ( dbg
-  )
-
 main :: IO ()
 main =
   parseTest statement example
