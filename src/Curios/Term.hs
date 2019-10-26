@@ -1,6 +1,6 @@
 module Curios.Term
-  ( Constant (..)
-  , Scope (..)
+  ( Type (..)
+  , Primitive (..)
   , Term (..)
   )
   where
