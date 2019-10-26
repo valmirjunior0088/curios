@@ -13,58 +13,23 @@ main =
 example :: String
 example =
   unlines
-    [ "package either where"
-    , "  assume either : <type! type! type>"
-    , "  assume left : <a:type! b:type. (either a b)>"
-    , "  assume right : <a:type. b:type! (either a b)>"
-    , "  define elim : <unknown! unknown> = {unknown! unknown}"
-    , "end"
-    ]
+    [ "( package examples"
+    , "  ( define id <a:type. a. a>"
+    , "    {a. value. value}"
+    , "  )"
+    , ""
+    , "( package pair"
+    , "  ( define pair <type. type. type>"
+    , "    {a. b. <c:type. <a. b. c.>. c>}"
+    , "  )"
+    , ""
+    , "  ( define make <a:type. b:type. a. b. pair a b>"
+    , "    {a. b. x. y. {c. f. f x y}}"
+    , "  )"
+    , ")"
+    )
 
 {-
-( StPackage (Name "either")
-  ( Program
-    [ StAssume (Name "either")
-      ( ExPiAbstraction
-        [ Quantifier Nothing (ExVariable (Identifier [Name "type"])) AvExplicit
-        , Quantifier Nothing (ExVariable (Identifier [Name "type"])) AvExplicit
-        ]
-        (ExVariable (Identifier [Name "type"]))
-      )
-    , StAssume (Name "left")
-      ( ExPiAbstraction
-        [ Quantifier (Just (Name "a")) (ExVariable (Identifier [Name "type"])) AvExplicit
-        , Quantifier (Just (Name "b")) (ExVariable (Identifier [Name "type"])) AvImplicit
-        ]
-        ( ExApplication
-          (ExVariable (Identifier [Name "either"]))
-          [ Argument (ExVariable (Identifier [Name "a"])) Nothing
-          , Argument (ExVariable (Identifier [Name "b"])) Nothing
-          ]
-        )
-      )
-    , StAssume (Name "right")
-      ( ExPiAbstraction
-        [ Quantifier (Just (Name "a")) (ExVariable (Identifier [Name "type"])) AvImplicit
-        , Quantifier (Just (Name "b")) (ExVariable (Identifier [Name "type"])) AvExplicit
-        ]
-        ( ExApplication
-          (ExVariable (Identifier [Name "either"]))
-          [ Argument (ExVariable (Identifier [Name "a"])) Nothing
-          , Argument (ExVariable (Identifier [Name "b"])) Nothing
-          ]
-        )
-      )
-    , StDefine (Name "elim")
-      ( ExPiAbstraction
-        [Quantifier Nothing (ExVariable (Identifier [Name "unknown"])) AvExplicit]
-        (ExVariable (Identifier [Name "unknown"]))
-      )
-      ( ExLambdaAbstraction
-        [Binding (Name "unknown") Nothing AvExplicit]
-        (ExVariable (Identifier [Name "unknown"]))
-      )
-    ]
-  )
-)
+The generated AST will be here
+once the test works.
 -}
