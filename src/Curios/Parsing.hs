@@ -3,12 +3,10 @@ module Curios.Parsing
   , lexeme
   , symbol
   , name
-  , availability
-  , binding
-  , quantifier
-  , argument
-  , literal
   , identifier
+  , piBinding
+  , lambdaBinding
+  , literal
   , expression
   , statement
   , program
@@ -52,15 +50,17 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 
 import Curios.Expression
   ( Name (..)
-  , Availability (..)
-  , Binding (..)
-  , Quantifier (..)
-  , Argument (..)
+  , PiBinding (..)
+  , LambdaBinding (..)
   , Literal (..)
   , Identifier (..)
   , Expression (..)
   , Statement (..)
   , Program (..)
+  )
+
+import Text.Megaparsec.Debug
+  ( dbg
   )
 
 type Parser a =
@@ -86,25 +86,19 @@ name =
     naValidCharacters =
       ['a'..'z'] ++
       ['A'..'Z'] ++
-      ['+', '-', '*', '/', '=', '\'']
+      ['+', '-', '*', '/', '=']
 
-availability :: Parser Availability
-availability =
-  lexeme (avImplicit <|> avExplicit) where
-    avImplicit = AvImplicit <$ symbol "."
-    avExplicit = AvExplicit <$ symbol "!"
+identifier :: Parser Identifier
+identifier =
+  lexeme (Identifier <$> sepBy name (single ';'))
 
-quantifier :: Parser Quantifier
-quantifier =
-  lexeme (Quantifier <$> optional (try (name <* symbol ":")) <*> expression <*> availability)
+piBinding :: Parser PiBinding
+piBinding =
+  lexeme (PiBinding <$> optional (try (name <* symbol ":")) <*> (expression <* symbol "."))
 
-binding :: Parser Binding
-binding =
-  lexeme (Binding <$> name <*> optional (try (symbol ":" *> expression)) <*> availability)
-
-argument :: Parser Argument
-argument =
-  lexeme (Argument <$> expression <*> optional availability)
+lambdaBinding :: Parser LambdaBinding
+lambdaBinding =
+  lexeme (LambdaBinding <$> name <*> optional (symbol ":" *> expression) <* symbol ".")
 
 literal :: Parser Literal
 literal =
@@ -118,27 +112,22 @@ literal =
       inPositive = LiInteger <$> (optional (single '+') *> Lexer.decimal)
       inNegative = (LiInteger . negate) <$> (single '-' *> Lexer.decimal)
 
-identifier :: Parser Identifier
-identifier =
-  lexeme (Identifier <$> sepBy name (single ';'))
-
 expression :: Parser Expression
 expression =
   lexeme (exPiAbstraction <|> exLambdaAbstraction <|> exApplication <|> exLiteral <|> exVariable) where
-    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> some (try quantifier)) <*> (expression <* symbol ">")
-    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> some (try binding)) <*> (expression <* symbol "}")
-    exApplication = ExApplication <$> (symbol "(" *> expression) <*> manyTill argument (symbol ")")
-    exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> identifier
+    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> some (try piBinding)) <*> (expression <* symbol ">")
+    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> some (try lambdaBinding)) <*> (expression <* symbol "}")
+    exApplication = ExApplication <$> (symbol "[" *> expression) <*> manyTill expression (symbol "]")
+    exLiteral = ExLiteral <$> literal
 
 statement :: Parser Statement
 statement =
-  lexeme (stPackage <|> stImport <|> stAssume <|> stDefine <|> stAlias) where
-    stPackage = StPackage <$> (symbol "package" *> name) <*> (symbol "where" *> program <* symbol "end")
+  lexeme (symbol "(" *> (stPackage <|> stImport <|> stAssume <|> stDefine) <* symbol ")") where
+    stPackage = StPackage <$> (symbol "package" *> name) <*> program
     stImport = StImport <$> (symbol "import" *> identifier)
-    stAssume = StAssume <$> (symbol "assume" *> name) <*> (symbol ":" *> expression)
-    stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression)
-    stAlias = StAlias <$> (symbol "alias" *> name) <*> (symbol "=" *> expression)
+    stAssume = StAssume <$> (symbol "assume" *> name) <*> expression
+    stDefine = StDefine <$> (symbol "define" *> name) <*> expression <*> expression
 
 program :: Parser Program
 program =
