@@ -6,9 +6,13 @@ import Text.Megaparsec
   ( parseTest
   )
 
+import Text.Megaparsec.Debug
+  ( dbg
+  )
+
 main :: IO ()
 main =
-  parseTest statement example
+  parseTest (dbg "statement" statement) example
 
 example :: String
 example =
@@ -18,16 +22,21 @@ example =
     , "    {a. value. value}"
     , "  )"
     , ""
-    , "( package pair"
-    , "  ( define pair <type. type. type>"
-    , "    {a. b. <c:type. <a. b. c.>. c>}"
-    , "  )"
+    , "  ( package pair"
+    , "    ( define pair <type. type. type>"
+    , "      { a. b."
+    , "        <c:type. <a. b. c>. c>"
+    , "      }"
+    , "    )"
     , ""
-    , "  ( define make <a:type. b:type. a. b. pair a b>"
-    , "    {a. b. x. y. {c. f. f x y}}"
+    , "    ( define make <a:type. b:type. a. b. pair a b>"
+    , "      { a. b. x. y."
+    , "        {c. f. (f x y)}"
+    , "      }"
+    , "    )"
     , "  )"
     , ")"
-    )
+    ]
 
 {-
 The generated AST will be here
