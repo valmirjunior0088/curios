@@ -2,6 +2,8 @@ module Curios.Elaborator
   ( Hole
   , Guess
   , Proof
+  , ElaboratorState
+  , Elaborator
   )
   where
 
@@ -41,10 +43,12 @@ data Proof =
   PfLiteral Literal
   deriving (Show)
 
--- This is missing stuff like context and environment
 data ElaboratorState =
   ElaboratorState
-    { esProof :: Proof
+    { esEnvironment :: [(Name, Term)]
+    , esContext :: [Type]
+    , esType :: Type
+    , esProof :: Proof
     , esHoles :: [Hole]
     }
 
