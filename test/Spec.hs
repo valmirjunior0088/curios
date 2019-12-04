@@ -1,4 +1,4 @@
-import Curios.Parsing
+import Curios.Parser
   ( statement
   )
 
@@ -13,25 +13,26 @@ main =
 example :: String
 example =
   unlines
-    [ "( package examples"
-    , "  ( define id <a:type. a. a>"
+    [ "(package examples"
+    , "  (define id <a:type. a. a>"
     , "    {a. value. value}"
     , "  )"
     , ""
-    , "  ( package pair"
-    , "    ( define pair <type. type. type>"
-    , "      { a. b."
+    , "  (package pair"
+    , "    (define pair <type. type. type>"
+    , "      {a. b."
     , "        <c:type. <a. b. c>. c>"
     , "      }"
     , "    )"
     , ""
-    , "    ( define make <a:type. b:type. a. b. [pair a b]>"
-    , "      { a. b. x. y."
+    , "    (define make <a:type. b:type. a. b. [pair a b]>"
+    , "      {a. b. x. y."
     , "        {c. f. [f x y]}"
     , "      }"
     , "    )"
     , "  )"
     , ")"
+    , ""
     ]
 
 {-
@@ -42,13 +43,13 @@ example =
         [ PiBinding (Just (Name "a")) (ExVariable (Identifier [Name "type"]))
         , PiBinding Nothing (ExVariable (Identifier [Name "a"]))
         ]
-        (ExVariable (Identifier [Name "a"]))
+        ( ExVariable (Identifier [Name "a"]) )
       )
       ( ExLambdaAbstraction
         [ LambdaBinding (Name "a") Nothing
         , LambdaBinding (Name "value") Nothing
         ]
-        (ExVariable (Identifier [Name "value"]))
+        ( ExVariable (Identifier [Name "value"]) )
       )
     , StPackage (Name "pair")
       ( Program
@@ -57,7 +58,7 @@ example =
             [ PiBinding Nothing (ExVariable (Identifier [Name "type"]))
             , PiBinding Nothing (ExVariable (Identifier [Name "type"]))
             ]
-            (ExVariable (Identifier [Name "type"]))
+            ( ExVariable (Identifier [Name "type"]) )
           )
           ( ExLambdaAbstraction
             [ LambdaBinding (Name "a") Nothing
@@ -70,10 +71,10 @@ example =
                   [ PiBinding Nothing (ExVariable (Identifier [Name "a"]))
                   , PiBinding Nothing (ExVariable (Identifier [Name "b"]))
                   ]
-                  (ExVariable (Identifier [Name "c"]))
+                  ( ExVariable (Identifier [Name "c"]) )
                 )
               ]
-              (ExVariable (Identifier [Name "c"]))
+              ( ExVariable (Identifier [Name "c"]) )
             )
           )
         , StDefine (Name "make")
@@ -84,7 +85,7 @@ example =
             , PiBinding Nothing (ExVariable (Identifier [Name "b"]))
             ]
             ( ExApplication
-              (ExVariable (Identifier [Name "pair"]))
+              ( ExVariable (Identifier [Name "pair"]))
               [ ExVariable (Identifier [Name "a"])
               , ExVariable (Identifier [Name "b"])
               ]
@@ -101,7 +102,7 @@ example =
               , LambdaBinding (Name "f") Nothing
               ]
               ( ExApplication
-                (ExVariable (Identifier [Name "f"]))
+                ( ExVariable (Identifier [Name "f"]))
                 [ ExVariable (Identifier [Name "x"])
                 , ExVariable (Identifier [Name "y"])
                 ]

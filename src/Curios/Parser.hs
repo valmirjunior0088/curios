@@ -1,4 +1,4 @@
-module Curios.Parsing
+module Curios.Parser
   ( space
   , lexeme
   , symbol

@@ -10,13 +10,14 @@ extra-source-files:
 - README.md
 - CHANGELOG.md
 
-# synopsis: Short description of your package
-# category: Web
+synopsis: Curios Programming Language
+category: Compiler
 description: Please see the README on GitHub at <https://github.com/valmirjunior0088/curios#readme>
 
 dependencies:
 - base >= 4.7 && < 5
 - megaparsec >= 7.0 && < 8
+- mtl >= 2.2 && < 3
 
 library:
   source-dirs: src
