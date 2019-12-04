@@ -37,8 +37,8 @@ data Proof =
   PfFreeVariable Identifier |
   PfBoundVariable Integer |
   PfType Integer |
-  PfPiAbstraction Type Proof |
-  PfLambdaAbstraction Type Proof |
+  PfPiAbstraction Proposition Proof |
+  PfLambdaAbstraction Proposition Proof |
   PfApplication Proof Proof |
   PfPrimitive Primitive |
   PfLiteral Literal
@@ -47,7 +47,7 @@ data Proof =
 data ElaboratorState =
   ElaboratorState
     { esEnvironment :: [(Name, Term)]
-    , esContext :: [Type]
+    , esContext :: [Proposition]
     , esType :: Type
     , esProof :: Proof
     , esHoles :: [Hole]
