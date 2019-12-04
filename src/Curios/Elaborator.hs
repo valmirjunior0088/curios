@@ -31,6 +31,9 @@ data Guess =
   Guess Name Proof
   deriving (Show)
 
+type Proposition =
+  Proof
+
 data Proof =
   PfHole Hole |
   PfGuess Guess |
