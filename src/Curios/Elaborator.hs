@@ -16,6 +16,7 @@ import Curios.Expression
 import Curios.Term
   ( Type
   , Primitive
+  , Term
   )
 
 import Control.Monad.State
