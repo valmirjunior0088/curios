@@ -17,7 +17,6 @@ description: Please see the README on GitHub at <https://github.com/valmirjunior
 dependencies:
 - base >= 4.7 && < 5
 - megaparsec >= 7.0 && < 8
-- mtl >= 2.2 && < 3
 
 library:
   source-dirs: src

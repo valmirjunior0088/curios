@@ -1,21 +1,28 @@
 module Curios.Expression
   ( Name (..)
   , Identifier (..)
+  , Atom (..)
   , PiBinding (..)
   , LambdaBinding (..)
-  , Literal (..)
+  , Abstraction (..)
   , Expression (..)
   , Statement (..)
   , Program (..)
   )
   where
 
-data Name =
-  Name String
-  deriving (Show)
+type Name =
+  String
 
-data Identifier =
-  Identifier [Name]
+type Identifier =
+  [Name]
+  
+data Atom =
+  AtSymbol Identifier |
+  AtCharacter Char |
+  AtString String |
+  AtInteger Integer |
+  AtRational Double
   deriving (Show)
 
 data PiBinding =
@@ -25,29 +32,24 @@ data PiBinding =
 data LambdaBinding =
   LambdaBinding Name (Maybe Expression)
   deriving (Show)
-
-data Literal =
-  LiCharacter Char |
-  LiString String |
-  LiInteger Integer |
-  LiRational Double
+  
+data Abstraction binding =
+  Abstraction [binding] Expression
   deriving (Show)
 
 data Expression =
-  ExVariable Identifier |
-  ExPiAbstraction [PiBinding] Expression |
-  ExLambdaAbstraction [LambdaBinding] Expression |
-  ExApplication Expression [Expression] |
-  ExLiteral Literal
+  ExAtom Atom |
+  ExPiAbstraction (Abstraction PiBinding) |
+  ExLambdaAbstraction (Abstraction LambdaBinding) |
+  ExApplication Expression [Expression]
   deriving (Show)
 
 data Statement =
-  StPackage Name Program |
+  StModule Name Program |
   StImport Identifier |
-  StAssume Name Expression |
   StDefine Name Expression Expression
   deriving (Show)
 
-data Program =
-  Program [Statement]
-  deriving (Show)
+type Program =
+  [Statement]
+
