@@ -42,3 +42,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - curios
+    - hspec >= 2 && < 3
+    - hspec-megaparsec >= 2 && < 3

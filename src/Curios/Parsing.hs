@@ -1,8 +1,5 @@
-module Curios.Parser
-  ( space
-  , lexeme
-  , symbol
-  , name
+module Curios.Parsing
+  ( name
   , identifier
   , atom
   , piBinding
@@ -47,15 +44,15 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
   )
 
 import Curios.Expression
-  ( Name (..)
-  , Identifier (..)
+  ( Name
+  , Identifier
   , Atom (..)
   , PiBinding (..)
   , LambdaBinding (..)
   , Abstraction (..)
   , Expression (..)
   , Statement (..)
-  , Program (..)
+  , Program
   )
 
 type Parser a =
