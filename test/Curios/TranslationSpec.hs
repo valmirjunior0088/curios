@@ -4,7 +4,7 @@ import Test.Hspec (describe, it)
 
 import Curios.Expression
   ( Name
-  , Identifier
+  , QualifiedName
   , Atom (..)
   , PiBinding (..)
   , LambdaBinding (..)
@@ -22,7 +22,7 @@ import Curios.Term
   )
 
 import Curios.Translation
-  ( idTranslate
+  ( qnTranslate
   , atTranslate
   , teAbstract
   , teApplyPiBinding

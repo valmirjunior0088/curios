@@ -1,6 +1,6 @@
 module Curios.Parsing
   ( name
-  , identifier
+  , qualifiedName
   , atom
   , piBinding
   , lambdaBinding
@@ -45,7 +45,7 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 
 import Curios.Expression
   ( Name
-  , Identifier
+  , QualifiedName
   , Atom (..)
   , PiBinding (..)
   , LambdaBinding (..)
@@ -77,8 +77,8 @@ name =
   lexeme (some (oneOf naValidCharacters)) where
     naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=']
 
-identifier :: Parser Identifier
-identifier =
+qualifiedName :: Parser QualifiedName
+qualifiedName =
   lexeme (sepBy1 name (single ';'))
 
 piBinding :: Parser PiBinding
@@ -95,8 +95,7 @@ abstraction parser =
 
 atom :: Parser Atom
 atom =
-  lexeme (atSymbol <|> atCharacter <|> atString <|> try atRational <|> atInteger) where
-    atSymbol = AtSymbol <$> identifier
+  lexeme (atCharacter <|> atString <|> try atRational <|> atInteger <|> atSymbol) where
     atCharacter = AtCharacter <$> (single '\'' *> Lexer.charLiteral)
     atString = AtString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
     atRational = raPositive <|> raNegative where
@@ -105,6 +104,7 @@ atom =
     atInteger = inPositive <|> inNegative where
       inPositive = AtInteger <$> (optional (single '+') *> Lexer.decimal)
       inNegative = (AtInteger . negate) <$> (single '-' *> Lexer.decimal)
+    atSymbol = AtSymbol <$> qualifiedName
 
 expression :: Parser Expression
 expression =
@@ -118,7 +118,7 @@ statement :: Parser Statement
 statement =
   lexeme (symbol "(" *> (stModule <|> stImport <|> stDefine) <* symbol ")") where
     stModule = StModule <$> (symbol "module" *> name) <*> program
-    stImport = StImport <$> (symbol "import" *> identifier)
+    stImport = StImport <$> (symbol "import" *> qualifiedName)
     stDefine = StDefine <$> (symbol "define" *> name) <*> expression <*> expression
 
 program :: Parser Program

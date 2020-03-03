@@ -1,5 +1,5 @@
 module Curios.Translation
-  ( idTranslate
+  ( qnTranslate
   , atTranslate
   , teAbstract
   , teApplyPiBinding
@@ -10,7 +10,7 @@ module Curios.Translation
   where
 
 import Curios.Expression
-  ( Identifier
+  ( QualifiedName
   , Atom (..)
   , PiBinding (..)
   , LambdaBinding (..)
@@ -37,20 +37,20 @@ import Data.Foldable
   ( foldrM
   )
 
-idTranslate :: Identifier -> Term
-idTranslate identifier =
-  case identifier of
+qnTranslate :: QualifiedName -> Term
+qnTranslate qualifiedName =
+  case qualifiedName of
     ["type"] -> TeType 0
     ["character"] -> TePrimitive PrCharacter
     ["string"] -> TePrimitive PrString
     ["integer"] -> TePrimitive PrInteger
     ["rational"] -> TePrimitive PrRational
-    _ -> TeFreeVariable identifier
+    _ -> TeFreeVariable qualifiedName
 
 atTranslate :: Atom -> Term
 atTranslate atom =
   case atom of
-    AtSymbol identifier -> idTranslate identifier
+    AtSymbol qualifiedName -> qnTranslate qualifiedName
     AtCharacter char -> TeLiteral (LiCharacter char)
     AtString string -> TeLiteral (LiString string)
     AtInteger integer -> TeLiteral (LiInteger integer)

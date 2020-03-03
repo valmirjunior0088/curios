@@ -11,7 +11,7 @@ module Curios.Term
 
 import Curios.Expression
   ( Name
-  , Identifier
+  , QualifiedName
   )
 
 import Data.Unique
@@ -44,7 +44,7 @@ data Term =
   TePiAbstraction Type Term |
   TeLambdaAbstraction Type Term |
   TeApplication Term Term |
-  TeFreeVariable Identifier |
+  TeFreeVariable QualifiedName |
   TeBoundVariable Index |
   TeMetaVariable Unique Type |
   TePrimitive Primitive |

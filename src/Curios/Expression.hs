@@ -1,6 +1,6 @@
 module Curios.Expression
   ( Name
-  , Identifier
+  , QualifiedName
   , Atom (..)
   , PiBinding (..)
   , LambdaBinding (..)
@@ -14,15 +14,15 @@ module Curios.Expression
 type Name =
   String
 
-type Identifier =
+type QualifiedName =
   [Name]
   
 data Atom =
-  AtSymbol Identifier |
   AtCharacter Char |
   AtString String |
   AtInteger Integer |
-  AtRational Double
+  AtRational Double |
+  AtSymbol QualifiedName
   deriving (Show, Eq)
 
 data PiBinding =
@@ -46,7 +46,7 @@ data Expression =
 
 data Statement =
   StModule Name Program |
-  StImport Identifier |
+  StImport QualifiedName |
   StDefine Name Expression Expression
   deriving (Show, Eq)
 
