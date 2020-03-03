@@ -79,7 +79,7 @@ name =
 
 qualifiedName :: Parser QualifiedName
 qualifiedName =
-  lexeme (sepBy1 name (single ';'))
+  lexeme (name `sepBy1` (symbol ";"))
 
 piBinding :: Parser PiBinding
 piBinding =

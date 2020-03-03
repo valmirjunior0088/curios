@@ -29,22 +29,28 @@ import Curios.Expression
 spec =
   describe "Curios.ParsingSpec" $ do
     describe "name" $ do
-      it "succesfully parses a valid name" $
+      it "parses a valid name" $
         parse name "" "name " `shouldParse` "name"
       
-      it "erroneously parses an invalid name" $
+      it "errors on parsing an invalid name" $
         parse name "" `shouldFailOn` "@invalid "
     
     describe "qualifiedName" $ do
-      it "succesfully parses a valid qualified name" $
+      it "parses a valid qualified name" $
         parse qualifiedName "" "first;second " `shouldParse` ["first", "second"]
-      
-      it "erroneously parses an invalid qualified name" $
-        parse qualifiedName "" `shouldFailOn` "first; second "
 
     describe "atom" $ do
-      it "successfully parses a negative rational" $
+      it "parses a character" $
+        parse atom "" "'a" `shouldParse` AtCharacter 'a'
+      
+      it "parses a string" $
+        parse atom "" "\"string\"" `shouldParse` AtString "string"
+      
+      it "parses a positive integer" $
+        parse atom "" "15" `shouldParse` AtInteger 15
+
+      it "parses a negative rational" $
         parse atom "" "-15.0 " `shouldParse` AtRational (-15.0)
       
-      it "successfully parses a symbol with a dash" $
+      it "parses a symbol with a dash" $
         parse atom "" "some-name-with;dashes " `shouldParse` AtSymbol ["some-name-with", "dashes"]
