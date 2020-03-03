@@ -72,14 +72,18 @@ symbol :: String -> Parser String
 symbol string =
   Lexer.symbol space string
 
+name' :: Parser Name
+name' =
+  some (oneOf naValidCharacters) where
+    naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=']
+
 name :: Parser Name
 name =
-  lexeme (some (oneOf naValidCharacters)) where
-    naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=']
+  lexeme name'
 
 qualifiedName :: Parser QualifiedName
 qualifiedName =
-  lexeme (name `sepBy1` (symbol ";"))
+  lexeme (name' `sepBy1` (single ';'))
 
 piBinding :: Parser PiBinding
 piBinding =

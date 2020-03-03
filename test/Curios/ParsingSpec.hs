@@ -1,6 +1,6 @@
 module Curios.ParsingSpec (spec) where
 
-import Text.Megaparsec (parse)
+import qualified Text.Megaparsec as Megaparsec (parse)
 import Test.Hspec.Megaparsec (shouldParse, shouldFailOn)
 import Test.Hspec (describe, it)
 
@@ -29,28 +29,40 @@ import Curios.Expression
 spec =
   describe "Curios.ParsingSpec" $ do
     describe "name" $ do
-      it "parses a valid name" $
-        parse name "" "name " `shouldParse` "name"
+      let parse = Megaparsec.parse name ""
+
+      it "succeeds on a valid name" $
+        parse "name" `shouldParse` "name"
       
-      it "errors on parsing an invalid name" $
-        parse name "" `shouldFailOn` "@invalid "
+      it "fails on an invalid name" $
+        parse `shouldFailOn` "@invalid"
     
     describe "qualifiedName" $ do
-      it "parses a valid qualified name" $
-        parse qualifiedName "" "first;second " `shouldParse` ["first", "second"]
+      let parse = Megaparsec.parse qualifiedName ""
+
+      it "succeeds on a valid qualified name" $
+        parse "first;second" `shouldParse` ["first", "second"]
+      
+      it "fails on an invalid qualified name (1)" $
+        parse `shouldFailOn` "first; second"
+      
+      it "fails on an invalid qualified name (2)" $
+        parse `shouldFailOn` ";second"
 
     describe "atom" $ do
-      it "parses a character" $
-        parse atom "" "'a" `shouldParse` AtCharacter 'a'
-      
-      it "parses a string" $
-        parse atom "" "\"string\"" `shouldParse` AtString "string"
-      
-      it "parses a positive integer" $
-        parse atom "" "15" `shouldParse` AtInteger 15
+      let parse = Megaparsec.parse atom ""
 
-      it "parses a negative rational" $
-        parse atom "" "-15.0 " `shouldParse` AtRational (-15.0)
+      it "succeeds on a character" $
+        parse "'a" `shouldParse` AtCharacter 'a'
       
-      it "parses a symbol with a dash" $
-        parse atom "" "some-name-with;dashes " `shouldParse` AtSymbol ["some-name-with", "dashes"]
+      it "succeeds on a string" $
+        parse "\"string\"" `shouldParse` AtString "string"
+      
+      it "succeeds on a positive integer" $
+        parse "15" `shouldParse` AtInteger 15
+
+      it "succeeds on a negative rational" $
+        parse "-15.0" `shouldParse` AtRational (-15.0)
+      
+      it "succeeds on a symbol with a dash" $
+        parse "some-name-with;dashes" `shouldParse` AtSymbol ["some-name-with", "dashes"]

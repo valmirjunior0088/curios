@@ -52,4 +52,3 @@ data Statement =
 
 type Program =
   [Statement]
-
