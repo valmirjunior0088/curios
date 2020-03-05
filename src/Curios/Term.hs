@@ -1,7 +1,7 @@
 module Curios.Term
   (Universe
   ,Index
-  ,Type
+  ,Type (..)
   ,Primitive (..)
   ,Literal (..)
   ,Term (..)
@@ -12,18 +12,22 @@ import Curios.Expression
   (QualifiedName (..)
   )
 
+import Numeric.Natural
+  (Natural
+  )
+
 import Data.Unique
   (Unique
   )
 
 type Universe =
-  Integer
+  Natural
 
 type Index =
-  Integer
+  Natural
 
-type Type =
-  Term
+newtype Type =
+  Type Term
   
 data Primitive =
   PrCharacter |
