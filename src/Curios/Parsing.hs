@@ -1,58 +1,58 @@
 module Curios.Parsing
-  ( name
-  , qualifiedName
-  , atom
-  , piBinding
-  , lambdaBinding
-  , abstraction
-  , expression
-  , statement
-  , program
+  (name
+  ,qualifiedName
+  ,atom
+  ,piBinding
+  ,lambdaBinding
+  ,abstraction
+  ,expression
+  ,statement
+  ,program
   )
   where
 
 import Data.Void
-  ( Void
+  (Void
   )
 
 import Text.Megaparsec
-  ( Parsec
-  , optional
-  , try
-  , some
-  , many
-  , oneOf
-  , single
-  , manyTill
-  , sepBy1
-  , (<|>)
+  (Parsec
+  ,optional
+  ,try
+  ,some
+  ,many
+  ,oneOf
+  ,single
+  ,manyTill
+  ,sepBy1
+  ,(<|>)
   )
 
 import Text.Megaparsec.Char
-  ( space1
+  (space1
   )
 
 import qualified Text.Megaparsec.Char.Lexer as Lexer
-  ( space
-  , skipLineComment
-  , skipBlockComment
-  , lexeme
-  , symbol
-  , charLiteral
-  , decimal
-  , float
+  (space
+  ,skipLineComment
+  ,skipBlockComment
+  ,lexeme
+  ,symbol
+  ,charLiteral
+  ,decimal
+  ,float
   )
 
 import Curios.Expression
-  ( Name
-  , QualifiedName
-  , Atom (..)
-  , PiBinding (..)
-  , LambdaBinding (..)
-  , Abstraction (..)
-  , Expression (..)
-  , Statement (..)
-  , Program
+  (Name (..)
+  ,QualifiedName (..)
+  ,Atom (..)
+  ,PiBinding (..)
+  ,LambdaBinding (..)
+  ,Abstraction (..)
+  ,Expression (..)
+  ,Statement (..)
+  ,Program (..)
   )
 
 type Parser a =
@@ -74,7 +74,7 @@ symbol string =
 
 name' :: Parser Name
 name' =
-  some (oneOf naValidCharacters) where
+  Name <$> some (oneOf naValidCharacters) where
     naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=']
 
 name :: Parser Name
@@ -83,7 +83,7 @@ name =
 
 qualifiedName :: Parser QualifiedName
 qualifiedName =
-  lexeme (name' `sepBy1` (single ';'))
+  lexeme (QualifiedName <$> name' `sepBy1` (single ';'))
 
 piBinding :: Parser PiBinding
 piBinding =
@@ -127,5 +127,5 @@ statement =
 
 program :: Parser Program
 program =
-  lexeme (many statement)
+  lexeme (Program <$> many statement)
 

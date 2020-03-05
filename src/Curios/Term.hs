@@ -1,21 +1,19 @@
 module Curios.Term
-  ( Universe
-  , Index
-  , Type
-  , Primitive (..)
-  , Literal (..)
-  , Term (..)
-  , teAbstract
+  (Universe
+  ,Index
+  ,Type
+  ,Primitive (..)
+  ,Literal (..)
+  ,Term (..)
   )
   where
 
 import Curios.Expression
-  ( Name
-  , QualifiedName
+  (QualifiedName (..)
   )
 
 import Data.Unique
-  ( Unique
+  (Unique
   )
 
 type Universe =
@@ -49,22 +47,3 @@ data Term =
   TeMetaVariable Unique Type |
   TePrimitive Primitive |
   TeLiteral Literal
-
-teAbstract :: Name -> Term -> Term
-teAbstract name =
-  go 0 where
-    go depth term =
-      case term of
-        TePiAbstraction variableType abstractionBody ->
-          TePiAbstraction (go depth variableType) (go (depth + 1) abstractionBody)
-        TeLambdaAbstraction variableType abstractionBody ->
-          TeLambdaAbstraction (go depth variableType) (go (depth + 1) abstractionBody)
-        TeApplication function argument ->
-          TeApplication (go depth function) (go depth argument)
-        TeMetaVariable unique variableType ->
-          TeMetaVariable unique (go depth variableType)
-        TeFreeVariable [name'] | name == name' ->
-          TeBoundVariable depth
-        _ ->
-          term
-

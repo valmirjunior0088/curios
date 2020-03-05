@@ -1,21 +1,23 @@
 module Curios.Expression
-  ( Name
-  , QualifiedName
-  , Atom (..)
-  , PiBinding (..)
-  , LambdaBinding (..)
-  , Abstraction (..)
-  , Expression (..)
-  , Statement (..)
-  , Program
+  (Name (..)
+  ,QualifiedName (..)
+  ,Atom (..)
+  ,PiBinding (..)
+  ,LambdaBinding (..)
+  ,Abstraction (..)
+  ,Expression (..)
+  ,Statement (..)
+  ,Program (..)
   )
   where
 
-type Name =
-  String
+newtype Name =
+  Name String
+  deriving (Show, Eq)
 
-type QualifiedName =
-  [Name]
+newtype QualifiedName =
+  QualifiedName [Name]
+  deriving (Show, Eq)
   
 data Atom =
   AtCharacter Char |
@@ -50,5 +52,6 @@ data Statement =
   StDefine Name Expression Expression
   deriving (Show, Eq)
 
-type Program =
-  [Statement]
+newtype Program =
+  Program [Statement]
+  deriving (Show, Eq)
