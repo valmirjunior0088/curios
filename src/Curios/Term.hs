@@ -64,6 +64,8 @@ teAbstract name =
   Scope . go 0 where
     go depth term =
       case term of
+        TeFreeVariable (QualifiedName [name']) | name == name' ->
+          TeBoundVariable depth
         TePiAbstraction variableType (Scope abstractionBody) ->
           TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
         TeLambdaAbstraction variableType (Scope abstractionBody) ->
@@ -72,8 +74,6 @@ teAbstract name =
           TeApplication (go depth function) (go depth argument)
         TeMetaVariable unique variableType ->
           TeMetaVariable unique (go depth variableType)
-        TeFreeVariable (QualifiedName [name']) | name == name' ->
-          TeBoundVariable depth
         _ ->
           term
 
@@ -82,6 +82,8 @@ teInstantiate source (Scope body) =
   go 0 body where
     go depth term =
       case term of
+        TeBoundVariable index | index == depth ->
+          source
         TePiAbstraction variableType (Scope abstractionBody) ->
           TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
         TeLambdaAbstraction variableType (Scope abstractionBody) ->
@@ -90,7 +92,5 @@ teInstantiate source (Scope body) =
           TeApplication (go depth function) (go depth argument)
         TeMetaVariable unique variableType ->
           TeMetaVariable unique (go depth variableType)
-        TeBoundVariable index | index == depth ->
-          source
         _ ->
           term
