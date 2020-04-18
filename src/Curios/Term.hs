@@ -12,9 +12,9 @@ module Curios.Term
   where
 
 import Curios.Expression
-  (Name (..)
+  (Literal (..)
+  ,Name (..)
   ,QualifiedName (..)
-  ,Literal (..)
   )
 
 import Numeric.Natural

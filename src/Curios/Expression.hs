@@ -1,7 +1,7 @@
 module Curios.Expression
-  (Name (..)
+  (Literal (..)
+  ,Name (..)
   ,QualifiedName (..)
-  ,Literal (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
   ,Abstraction (..)

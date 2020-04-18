@@ -5,9 +5,9 @@ import Test.Hspec.Megaparsec (shouldParse, shouldFailOn)
 import Test.Hspec (describe, it)
 
 import Curios.Parsing
-  (name
+  (literal
+  ,name
   ,qualifiedName
-  ,literal
   ,piBinding
   ,lambdaBinding
   ,abstraction
@@ -17,9 +17,9 @@ import Curios.Parsing
   )
 
 import Curios.Expression
-  (Name (..)
+  (Literal (..)
+  ,Name (..)
   ,QualifiedName (..)
-  ,Literal (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
   ,Abstraction (..)
