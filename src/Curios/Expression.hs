@@ -1,7 +1,7 @@
 module Curios.Expression
   (Name (..)
   ,QualifiedName (..)
-  ,Atom (..)
+  ,Literal (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
   ,Abstraction (..)
@@ -15,16 +15,15 @@ newtype Name =
   Name String
   deriving (Show, Eq)
 
-newtype QualifiedName =
-  QualifiedName [Name]
+data QualifiedName =
+  QualifiedName [Name] Name
   deriving (Show, Eq)
-  
-data Atom =
-  AtCharacter Char |
-  AtString String |
-  AtInteger Integer |
-  AtRational Double |
-  AtSymbol QualifiedName
+
+data Literal =
+  LiCharacter Char |
+  LiString String |
+  LiInteger Integer |
+  LiRational Double
   deriving (Show, Eq)
 
 data PiBinding =
@@ -40,7 +39,8 @@ data Abstraction binding =
   deriving (Show, Eq)
 
 data Expression =
-  ExAtom Atom |
+  ExLiteral Literal |
+  ExVariable QualifiedName |
   ExPiAbstraction (Abstraction PiBinding) |
   ExLambdaAbstraction (Abstraction LambdaBinding) |
   ExApplication Expression [Expression]

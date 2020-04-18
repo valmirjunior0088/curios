@@ -1,7 +1,7 @@
 module Curios.Parsing
   (name
   ,qualifiedName
-  ,atom
+  ,literal
   ,piBinding
   ,lambdaBinding
   ,abstraction
@@ -24,7 +24,6 @@ import Text.Megaparsec
   ,oneOf
   ,single
   ,manyTill
-  ,sepBy1
   ,(<|>)
   )
 
@@ -46,7 +45,7 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 import Curios.Expression
   (Name (..)
   ,QualifiedName (..)
-  ,Atom (..)
+  ,Literal (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
   ,Abstraction (..)
@@ -83,7 +82,7 @@ name =
 
 qualifiedName :: Parser QualifiedName
 qualifiedName =
-  lexeme (QualifiedName <$> name' `sepBy1` (single ';'))
+  lexeme (QualifiedName <$> many (try (name' <* (single ';'))) <*> name')
 
 piBinding :: Parser PiBinding
 piBinding =
@@ -97,23 +96,23 @@ abstraction :: Parser a -> Parser (Abstraction a)
 abstraction parser =
   lexeme (Abstraction <$> some (try (parser <* symbol ".")) <*> expression)
 
-atom :: Parser Atom
-atom =
-  lexeme (atCharacter <|> atString <|> try atRational <|> atInteger <|> atSymbol) where
-    atCharacter = AtCharacter <$> (single '\'' *> Lexer.charLiteral)
-    atString = AtString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
-    atRational = raPositive <|> raNegative where
-      raPositive = AtRational <$> (optional (single '+') *> Lexer.float)
-      raNegative = (AtRational . negate) <$> (single '-' *> Lexer.float)
-    atInteger = inPositive <|> inNegative where
-      inPositive = AtInteger <$> (optional (single '+') *> Lexer.decimal)
-      inNegative = (AtInteger . negate) <$> (single '-' *> Lexer.decimal)
-    atSymbol = AtSymbol <$> qualifiedName
+literal :: Parser Literal
+literal =
+  lexeme (liCharacter <|> liString <|> try liRational <|> liInteger) where
+    liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral)
+    liString = LiString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
+    liRational = raPositive <|> raNegative where
+      raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
+      raNegative = (LiRational . negate) <$> (single '-' *> Lexer.float)
+    liInteger = inPositive <|> inNegative where
+      inPositive = LiInteger <$> (optional (single '+') *> Lexer.decimal)
+      inNegative = (LiInteger . negate) <$> (single '-' *> Lexer.decimal)
 
 expression :: Parser Expression
 expression =
-  lexeme (exAtom <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
-    exAtom = ExAtom <$> atom
+  lexeme (exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
+    exLiteral = ExLiteral <$> literal
+    exVariable = ExVariable <$> qualifiedName
     exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> abstraction piBinding <* symbol ">")
     exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> abstraction lambdaBinding <* symbol "}")
     exApplication = ExApplication <$> (symbol "[" *> expression) <*> (manyTill expression (symbol "]"))

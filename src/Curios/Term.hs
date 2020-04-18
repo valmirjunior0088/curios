@@ -14,6 +14,7 @@ module Curios.Term
 import Curios.Expression
   (Name (..)
   ,QualifiedName (..)
+  ,Literal (..)
   )
 
 import Numeric.Natural
@@ -42,29 +43,23 @@ data Primitive =
   PrInteger |
   PrRational
 
-data Literal =
-  LiCharacter Char |
-  LiString String |
-  LiInteger Integer |
-  LiRational Double
-
 data Term =
-  TeType Universe |
-  TePiAbstraction Type (Scope Term) |
-  TeLambdaAbstraction Type (Scope Term) |
-  TeApplication Term Term |
+  TePrimitive Primitive |
+  TeLiteral Literal |
   TeFreeVariable QualifiedName |
   TeBoundVariable Index |
   TeMetaVariable Unique Type |
-  TePrimitive Primitive |
-  TeLiteral Literal
+  TeType Universe |
+  TePiAbstraction Type (Scope Term) |
+  TeLambdaAbstraction Type (Scope Term) |
+  TeApplication Term Term
 
 teAbstract :: Name -> Term -> Scope Term
 teAbstract name =
   Scope . go 0 where
     go depth term =
       case term of
-        TeFreeVariable (QualifiedName [name']) | name == name' ->
+        TeFreeVariable (QualifiedName [] name') | name == name' ->
           TeBoundVariable depth
         TePiAbstraction variableType (Scope abstractionBody) ->
           TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))

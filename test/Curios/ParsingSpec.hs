@@ -7,7 +7,7 @@ import Test.Hspec (describe, it)
 import Curios.Parsing
   (name
   ,qualifiedName
-  ,atom
+  ,literal
   ,piBinding
   ,lambdaBinding
   ,abstraction
@@ -19,7 +19,7 @@ import Curios.Parsing
 import Curios.Expression
   (Name (..)
   ,QualifiedName (..)
-  ,Atom (..)
+  ,Literal (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
   ,Abstraction (..)
@@ -43,7 +43,7 @@ spec =
       let parse = Megaparsec.parse qualifiedName ""
 
       it "succeeds on a valid qualified name" $
-        parse "first;second" `shouldParse` QualifiedName [Name "first", Name "second"]
+        parse "first;second" `shouldParse` QualifiedName [Name "first"] (Name "second")
       
       it "fails on an invalid qualified name (1)" $
         parse `shouldFailOn` "first; second"
@@ -51,42 +51,38 @@ spec =
       it "fails on an invalid qualified name (2)" $
         parse `shouldFailOn` ";second"
 
-    describe "atom" $ do
-      let parse = Megaparsec.parse atom ""
+    describe "literal" $ do
+      let parse = Megaparsec.parse literal ""
 
       it "succeeds on a character" $
-        parse "'a" `shouldParse` AtCharacter 'a'
+        parse "'a" `shouldParse` LiCharacter 'a'
       
       it "succeeds on a string" $
-        parse "\"string\"" `shouldParse` AtString "string"
+        parse "\"string\"" `shouldParse` LiString "string"
       
       it "succeeds on a positive integer" $
-        parse "15" `shouldParse` AtInteger 15
+        parse "15" `shouldParse` LiInteger 15
 
       it "succeeds on a negative rational" $
-        parse "-15.0" `shouldParse` AtRational (-15.0)
-      
-      it "succeeds on a symbol with a dash" $
-        parse "some-name-with;dashes" `shouldParse`
-          AtSymbol (QualifiedName [Name "some-name-with", Name "dashes"])
+        parse "-15.0" `shouldParse` LiRational (-15.0)
     
     describe "piBinding" $ do
       let parse = Megaparsec.parse piBinding ""
 
       it "succeeds on a valid pi binding (1)" $
         parse "name:type" `shouldParse`
-          PiBinding (Just (Name "name")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+          PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
       
       it "succeeds on a valid pi binding (2)" $
         parse "type" `shouldParse`
-          PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+          PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
     
     describe "lambdaBinding"$ do
       let parse = Megaparsec.parse lambdaBinding ""
 
       it "succeeds on a valid lambda binding (1)" $
         parse "name:type" `shouldParse`
-          LambdaBinding (Name "name") (Just (ExAtom (AtSymbol (QualifiedName [Name "type"]))))
+          LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
       
       it "succeeds on a valid lambda binding (2)" $
         parse "name" `shouldParse` LambdaBinding (Name "name") Nothing
@@ -97,30 +93,30 @@ spec =
       it "succeeds on a valid pi abstraction (1)" $
         parse "name:type. name" `shouldParse`
           Abstraction
-            [PiBinding (Just (Name "name")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))]
-            (ExAtom (AtSymbol (QualifiedName [Name "name"])))
+            [PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))]
+            (ExVariable (QualifiedName [] (Name "name")))
       
       it "succeeds on a valid pi abstraction (2)" $
         parse "type. type" `shouldParse`
           Abstraction
-            [PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))]
-            (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+            [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))]
+            (ExVariable (QualifiedName [] (Name "type")))
       
       it "succeeds on a valid pi abstraction (3)" $
         parse "name:type. type. type" `shouldParse`
           Abstraction
-            [PiBinding (Just (Name "name")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-            ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+            [PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
+            ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
             ]
-            (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+            (ExVariable (QualifiedName [] (Name "type")))
       
       it "succeeds on a valid pi abstraction (4)" $
         parse "type. name:type. type" `shouldParse`
           Abstraction
-            [PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-            ,PiBinding (Just (Name "name")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+            [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+            ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
             ]
-            (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+            (ExVariable (QualifiedName [] (Name "type")))
 
       it "fails on an invalid pi abstraction" $
         parse `shouldFailOn` "type. name:type. type."
@@ -131,30 +127,30 @@ spec =
       it "succeeds on a valid lambda abstraction (1)" $
         parse "name:type. name" `shouldParse`
           Abstraction
-            [LambdaBinding (Name "name") (Just (ExAtom (AtSymbol (QualifiedName [Name "type"]))))]
-            (ExAtom (AtSymbol (QualifiedName [Name "name"])))
+            [LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))]
+            (ExVariable (QualifiedName [] (Name "name")))
       
       it "succeeds on a valid lambda abstraction (2)" $
         parse "name. name" `shouldParse`
           Abstraction
             [LambdaBinding (Name "name") Nothing]
-            (ExAtom (AtSymbol (QualifiedName [Name "name"])))
+            (ExVariable (QualifiedName [] (Name "name")))
 
       it "succeeds on a valid lambda abstraction (3)" $
         parse "name:type. name. name" `shouldParse`
           Abstraction
-            [LambdaBinding (Name "name") (Just (ExAtom (AtSymbol (QualifiedName [Name "type"]))))
+            [LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
             ,LambdaBinding (Name "name") Nothing
             ]
-            (ExAtom (AtSymbol (QualifiedName [Name "name"])))
+            (ExVariable (QualifiedName [] (Name "name")))
       
       it "succeeds on a valid lambda abstraction (4)" $
         parse "name. name:type. name" `shouldParse`
           Abstraction
             [LambdaBinding (Name "name") Nothing
-            ,LambdaBinding (Name "name") (Just (ExAtom (AtSymbol (QualifiedName [Name "type"]))))
+            ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
             ]
-            (ExAtom (AtSymbol (QualifiedName [Name "name"])))
+            (ExVariable (QualifiedName [] (Name "name")))
       
       it "fails on an invalid lambda abstraction" $
         parse `shouldFailOn` "name. name:type. name."
@@ -162,18 +158,18 @@ spec =
     describe "expression" $ do
       let parse = Megaparsec.parse expression ""
 
-      it "succeeds on a symbol atom" $
+      it "succeeds on a variable" $
         parse "some-name-with;dashes" `shouldParse`
-          ExAtom (AtSymbol (QualifiedName [Name "some-name-with", Name "dashes"]))
+          ExVariable (QualifiedName [Name "some-name-with"] (Name "dashes"))
       
       it "succeeds on a pi abstraction" $
         parse "<type. name:type. type>" `shouldParse`
           ExPiAbstraction
             (Abstraction
-              [PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-              ,PiBinding (Just (Name "name")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+              [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+              ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
               ]
-              (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+              (ExVariable (QualifiedName [] (Name "type")))
             )
       
       it "succeeds on a lambda abstraction" $
@@ -181,17 +177,17 @@ spec =
           ExLambdaAbstraction
             (Abstraction
               [LambdaBinding (Name "name") Nothing
-              ,LambdaBinding (Name "name") (Just (ExAtom (AtSymbol (QualifiedName [Name "type"]))))
+              ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
               ]
-              (ExAtom (AtSymbol (QualifiedName [Name "name"])))
+              (ExVariable (QualifiedName [] (Name "name")))
             )
 
       it "succeeds on an application" $
         parse "[function first-argument second-argument]" `shouldParse`
           ExApplication
-            (ExAtom (AtSymbol (QualifiedName [Name "function"])))
-            [ExAtom (AtSymbol (QualifiedName [Name "first-argument"]))
-            ,ExAtom (AtSymbol (QualifiedName [Name "second-argument"]))
+            (ExVariable (QualifiedName [] (Name "function")))
+            [ExVariable (QualifiedName [] (Name "first-argument"))
+            ,ExVariable (QualifiedName [] (Name "second-argument"))
             ]
 
     describe "statement" $ do
@@ -205,10 +201,10 @@ spec =
           StDefine (Name "identity")
             (ExPiAbstraction
               (Abstraction
-                [PiBinding (Just (Name "a")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-                ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "a"])))
+                [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
                 ]
-                (ExAtom (AtSymbol (QualifiedName [Name "a"])))
+                (ExVariable (QualifiedName [] (Name "a")))
               )
             )
             (ExLambdaAbstraction
@@ -216,7 +212,7 @@ spec =
                 [LambdaBinding (Name "a") Nothing
                 ,LambdaBinding (Name "value") Nothing
                 ]
-                (ExAtom (AtSymbol (QualifiedName [Name "value"])))
+                (ExVariable (QualifiedName [] (Name "value")))
               )
             )
 
@@ -227,10 +223,10 @@ spec =
               [StDefine (Name "identity")
                 (ExPiAbstraction
                   (Abstraction
-                    [PiBinding (Just (Name "a")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-                    ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "a"])))
+                    [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
                     ]
-                    (ExAtom (AtSymbol (QualifiedName [Name "a"])))
+                    (ExVariable (QualifiedName [] (Name "a")))
                   )
                 )
                 (ExLambdaAbstraction
@@ -238,7 +234,7 @@ spec =
                     [LambdaBinding (Name "a") Nothing
                     ,LambdaBinding (Name "value") Nothing
                     ]
-                    (ExAtom (AtSymbol (QualifiedName [Name "value"])))
+                    (ExVariable (QualifiedName [] (Name "value")))
                   )
                 )
               ]
@@ -250,13 +246,13 @@ spec =
 
       it "succeeds on an import" $
         parse "(import some;qualified;name)" `shouldParse`
-          StImport (QualifiedName [Name "some", Name "qualified", Name "name"])
+          StImport (QualifiedName [Name "some", Name "qualified"] (Name "name"))
 
       it "succeeds on a module with an import" $
         parse "(module name (import some;qualified;name))" `shouldParse`
           StModule (Name "name")
             (Program
-              [StImport (QualifiedName [Name "some", Name "qualified", Name "name"])]
+              [StImport (QualifiedName [Name "some", Name "qualified"] (Name "name"))]
             )
 
     describe "program" $ do
@@ -291,16 +287,16 @@ spec =
             [StDefine (Name "identity")
               (ExPiAbstraction
                 (Abstraction
-                  [PiBinding (Just (Name "a")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-                  ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "a"])))
+                  [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                  ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
                   ]
-                  (ExAtom (AtSymbol (QualifiedName [Name "a"])))
+                  (ExVariable (QualifiedName [] (Name "a")))
                 )
               )
               (ExLambdaAbstraction
                 (Abstraction
-                  [LambdaBinding (Name "a") Nothing,LambdaBinding (Name "value") Nothing]
-                  (ExAtom (AtSymbol (QualifiedName [Name "value"])))
+                  [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "value") Nothing]
+                  (ExVariable (QualifiedName [] (Name "value")))
                 )
               )
             ,StModule (Name "pair")
@@ -308,29 +304,29 @@ spec =
                 [StDefine (Name "pair")
                   (ExPiAbstraction
                     (Abstraction
-                      [PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-                      ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+                      [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+                      ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
                       ]
-                      (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+                      (ExVariable (QualifiedName [] (Name "type")))
                     )
                   )
                   (ExLambdaAbstraction
                     (Abstraction
-                      [LambdaBinding (Name "a") Nothing,LambdaBinding (Name "b") Nothing]
+                      [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "b") Nothing]
                       (ExPiAbstraction
                         (Abstraction
-                          [PiBinding (Just (Name "c")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
+                          [PiBinding (Just (Name "c")) (ExVariable (QualifiedName [] (Name "type")))
                           ,PiBinding Nothing
                             (ExPiAbstraction
                               (Abstraction
-                                [PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "a"])))
-                                ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "b"])))
+                                [PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+                                ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
                                 ]
-                                (ExAtom (AtSymbol (QualifiedName [Name "c"])))
+                                (ExVariable (QualifiedName [] (Name "c")))
                               )
                             )
                           ]
-                          (ExAtom (AtSymbol (QualifiedName [Name "c"])))
+                          (ExVariable (QualifiedName [] (Name "c")))
                         )
                       )
                     )
@@ -338,15 +334,15 @@ spec =
                 ,StDefine (Name "make")
                   (ExPiAbstraction
                     (Abstraction
-                      [PiBinding (Just (Name "a")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-                      ,PiBinding (Just (Name "b")) (ExAtom (AtSymbol (QualifiedName [Name "type"])))
-                      ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "a"])))
-                      ,PiBinding Nothing (ExAtom (AtSymbol (QualifiedName [Name "b"])))
+                      [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                      ,PiBinding (Just (Name "b")) (ExVariable (QualifiedName [] (Name "type")))
+                      ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+                      ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
                       ]
                       (ExApplication
-                        (ExAtom (AtSymbol (QualifiedName [Name "pair"]))) 
-                        [ExAtom (AtSymbol (QualifiedName [Name "a"]))
-                        ,ExAtom (AtSymbol (QualifiedName [Name "b"]))
+                        (ExVariable (QualifiedName [] (Name "pair")))
+                        [ExVariable (QualifiedName [] (Name "a"))
+                        ,ExVariable (QualifiedName [] (Name "b"))
                         ]
                       )
                     )
@@ -364,9 +360,9 @@ spec =
                           ,LambdaBinding (Name "f") Nothing
                           ]
                           (ExApplication
-                            (ExAtom (AtSymbol (QualifiedName [Name "f"])))
-                            [ExAtom (AtSymbol (QualifiedName [Name "x"]))
-                            ,ExAtom (AtSymbol (QualifiedName [Name "y"]))
+                            (ExVariable (QualifiedName [] (Name "f")))
+                            [ExVariable (QualifiedName [] (Name "x"))
+                            ,ExVariable (QualifiedName [] (Name "y"))
                             ]
                           )
                         )
