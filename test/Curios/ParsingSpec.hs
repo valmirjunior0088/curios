@@ -55,7 +55,7 @@ spec =
       let parse = Megaparsec.parse literal ""
 
       it "succeeds on a character" $
-        parse "'a" `shouldParse` LiCharacter 'a'
+        parse "'a'" `shouldParse` LiCharacter 'a'
       
       it "succeeds on a string" $
         parse "\"string\"" `shouldParse` LiString "string"

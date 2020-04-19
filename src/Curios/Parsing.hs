@@ -74,7 +74,7 @@ symbol string =
 literal :: Parser Literal
 literal =
   lexeme (liCharacter <|> liString <|> try liRational <|> liInteger) where
-    liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral)
+    liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral <* single '\'')
     liString = LiString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
     liRational = raPositive <|> raNegative where
       raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
