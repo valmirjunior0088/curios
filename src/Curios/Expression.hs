@@ -13,30 +13,30 @@ module Curios.Expression
 
 newtype Name =
   Name String
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data QualifiedName =
   QualifiedName [Name] Name
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data Literal =
   LiCharacter Char |
   LiString String |
   LiInteger Integer |
   LiRational Double
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data PiBinding =
   PiBinding (Maybe Name) Expression
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data LambdaBinding =
   LambdaBinding Name (Maybe Expression)
-  deriving (Show, Eq)
+  deriving (Eq, Show)
   
 data Abstraction binding =
   Abstraction [binding] Expression
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data Expression =
   ExLiteral Literal |
@@ -44,14 +44,14 @@ data Expression =
   ExPiAbstraction (Abstraction PiBinding) |
   ExLambdaAbstraction (Abstraction LambdaBinding) |
   ExApplication Expression [Expression]
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data Statement =
   StModule Name Program |
   StImport QualifiedName |
   StDefine Name Expression Expression
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 newtype Program =
   Program [Statement]
-  deriving (Show, Eq)
+  deriving (Eq, Show)

@@ -36,12 +36,14 @@ type Type =
 
 newtype Scope scope =
   Scope scope
+  deriving (Eq)
   
 data Primitive =
   PrCharacter |
   PrString |
   PrInteger |
   PrRational
+  deriving (Eq)
 
 data Term =
   TePrimitive Primitive |
@@ -53,6 +55,7 @@ data Term =
   TePiAbstraction Type (Scope Term) |
   TeLambdaAbstraction Type (Scope Term) |
   TeApplication Term Term
+  deriving (Eq)
 
 teAbstract :: Name -> Term -> Scope Term
 teAbstract name =

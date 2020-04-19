@@ -10,13 +10,14 @@ extra-source-files:
 - README.md
 - CHANGELOG.md
 
-synopsis: Curios Programming Language
+synopsis: Curios
 category: Compiler
 description: Please see the README on GitHub at <https://github.com/valmirjunior0088/curios#readme>
 
 dependencies:
 - base >= 4 && < 5
-- megaparsec >= 7 && < 8
+- megaparsec >= 8 && < 9
+- prettyprinter >= 1 && < 2
 
 library:
   source-dirs: src
