@@ -1,9 +1,8 @@
 module Curios.Term
-  (Universe
+  (Primitive (..)
   ,Index
+  ,Universe
   ,Scope (..)
-  ,Primitive (..)
-  ,Literal (..)
   ,Term (..)
   ,teAbstract
   ,teInstantiate
@@ -24,22 +23,21 @@ import Data.Unique
   (Unique
   )
 
-type Universe =
-  Natural
-
-type Index =
-  Natural
-
-newtype Scope scope =
-  Scope scope
-  deriving (Eq)
-  
 data Primitive =
   PrCharacter |
   PrString |
   PrInteger |
   PrRational
-  deriving (Eq)
+  deriving (Show)
+
+type Index =
+  Natural
+
+type Universe =
+  Natural
+
+newtype Scope scope =
+  Scope scope
 
 data Term =
   TePrimitive Primitive |
@@ -51,7 +49,6 @@ data Term =
   TePiAbstraction Term (Scope Term) |
   TeLambdaAbstraction Term (Scope Term) |
   TeApplication Term Term
-  deriving (Eq)
 
 teAbstract :: Name -> Term -> Scope Term
 teAbstract name =

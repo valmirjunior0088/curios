@@ -28,11 +28,11 @@ import Text.PrettyPrint.Boxes
   ,char
   ,text
   ,vcat
+  ,left
+  ,rows
   ,(<>)
   ,(<+>)
   ,(//)
-  ,left
-  ,rows
   )
 
 liToBox :: Literal -> Box
@@ -82,7 +82,7 @@ exToBox expression =
       text "ExLambdaAbstraction" // abToBox lbToBox abstraction
     ExApplication function arguments ->
       let
-        trunk size = vcat left (char '┗' : replicate (size - 1) (char '┃'))
+        trunk size = vcat left (replicate (size - 1) (char '┃') ++ [char '┗'])
         branches = (fmap (\branch -> char '▲' // (trunk (rows branch) <+> branch)) . fmap exToBox) arguments
         tree = vcat left branches
         root = char '◆' <+> exToBox function
