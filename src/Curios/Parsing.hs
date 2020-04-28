@@ -11,6 +11,18 @@ module Curios.Parsing
   )
   where
 
+import Curios.Expression
+  (Literal (..)
+  ,Name (..)
+  ,QualifiedName (..)
+  ,PiBinding (..)
+  ,LambdaBinding (..)
+  ,Abstraction (..)
+  ,Expression (..)
+  ,Statement (..)
+  ,Program (..)
+  )
+
 import Data.Void
   (Void
   )
@@ -40,18 +52,6 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
   ,charLiteral
   ,decimal
   ,float
-  )
-
-import Curios.Expression
-  (Literal (..)
-  ,Name (..)
-  ,QualifiedName (..)
-  ,PiBinding (..)
-  ,LambdaBinding (..)
-  ,Abstraction (..)
-  ,Expression (..)
-  ,Statement (..)
-  ,Program (..)
   )
 
 type Parser a =

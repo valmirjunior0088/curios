@@ -17,7 +17,7 @@ description: Please see the README on GitHub at <https://github.com/valmirjunior
 dependencies:
 - base >= 4 && < 5
 - megaparsec >= 8 && < 9
-- prettyprinter >= 1 && < 2
+- boxes >= 0 && < 1
 
 library:
   source-dirs: src

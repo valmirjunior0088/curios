@@ -11,19 +11,19 @@ module Curios.Expression
   )
   where
 
+data Literal =
+  LiCharacter Char |
+  LiString String |
+  LiInteger Integer |
+  LiRational Double
+  deriving (Eq, Show)
+
 newtype Name =
   Name String
   deriving (Eq, Show)
 
 data QualifiedName =
   QualifiedName [Name] Name
-  deriving (Eq, Show)
-
-data Literal =
-  LiCharacter Char |
-  LiString String |
-  LiInteger Integer |
-  LiRational Double
   deriving (Eq, Show)
 
 data PiBinding =

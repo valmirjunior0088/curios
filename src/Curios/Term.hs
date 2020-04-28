@@ -1,7 +1,6 @@
 module Curios.Term
   (Universe
   ,Index
-  ,Type
   ,Scope (..)
   ,Primitive (..)
   ,Literal (..)
@@ -31,9 +30,6 @@ type Universe =
 type Index =
   Natural
 
-type Type =
-  Term
-
 newtype Scope scope =
   Scope scope
   deriving (Eq)
@@ -50,10 +46,10 @@ data Term =
   TeLiteral Literal |
   TeFreeVariable QualifiedName |
   TeBoundVariable Index |
-  TeMetaVariable Unique Type |
+  TeMetaVariable Unique Term |
   TeType Universe |
-  TePiAbstraction Type (Scope Term) |
-  TeLambdaAbstraction Type (Scope Term) |
+  TePiAbstraction Term (Scope Term) |
+  TeLambdaAbstraction Term (Scope Term) |
   TeApplication Term Term
   deriving (Eq)
 
@@ -64,14 +60,14 @@ teAbstract name =
       case term of
         TeFreeVariable (QualifiedName [] name') | name == name' ->
           TeBoundVariable depth
+        TeMetaVariable unique variableType ->
+          TeMetaVariable unique (go depth variableType)
         TePiAbstraction variableType (Scope abstractionBody) ->
           TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
         TeLambdaAbstraction variableType (Scope abstractionBody) ->
           TeLambdaAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
         TeApplication function argument ->
           TeApplication (go depth function) (go depth argument)
-        TeMetaVariable unique variableType ->
-          TeMetaVariable unique (go depth variableType)
         _ ->
           term
 
@@ -82,13 +78,13 @@ teInstantiate source (Scope body) =
       case term of
         TeBoundVariable index | index == depth ->
           source
+        TeMetaVariable unique variableType ->
+          TeMetaVariable unique (go depth variableType)
         TePiAbstraction variableType (Scope abstractionBody) ->
           TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
         TeLambdaAbstraction variableType (Scope abstractionBody) ->
           TeLambdaAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
         TeApplication function argument ->
           TeApplication (go depth function) (go depth argument)
-        TeMetaVariable unique variableType ->
-          TeMetaVariable unique (go depth variableType)
         _ ->
           term
