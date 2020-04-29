@@ -34,7 +34,6 @@ import Text.PrettyPrint.Boxes
   ,(<>)
   ,(<+>)
   ,(//)
-  ,(/+/)
   )
 
 prToBox :: Primitive -> Box
@@ -49,9 +48,9 @@ unToBox :: Universe -> Box
 unToBox universe =
   text (show universe)
 
-scToBox :: Scope Term -> Box
-scToBox (Scope term) =
-  char '◢' <+> teToBox term
+scToBox :: Scope -> Box
+scToBox (Scope body) =
+  char '◆' <+> teToBox body
 
 teToBox :: Term -> Box
 teToBox term =
@@ -69,9 +68,21 @@ teToBox term =
     TeType universe ->
       text "TeType (" <> unToBox universe <> text ")"
     TePiAbstraction variableType scope ->
-      text "TePiAbstraction" // (char '◥' <+> teToBox variableType) /+/ scToBox scope
+      let
+        trunk size = vcat left (char '┏' : replicate (size - 1) (char '┃'))
+        branch = teToBox variableType
+        tree = (trunk (rows branch) <+> branch) // char '▼'
+        root = scToBox scope
+      in
+        text "TePiAbstraction" // tree // root
     TeLambdaAbstraction variableType scope ->
-      text "TeLambdaABstraction" // (char '◥' <+> teToBox variableType) /+/ scToBox scope
+      let
+        trunk size = vcat left (char '┏' : replicate (size - 1) (char '┃'))
+        branch = teToBox variableType
+        tree = (trunk (rows branch) <+> branch) // char '▼'
+        root = scToBox scope
+      in
+        text "TeLambdaAbstraction" // tree // root
     TeApplication function argument ->
       let
         trunk size = vcat left (replicate (size - 1) (char '┃') ++ [char '┗'])

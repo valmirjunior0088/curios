@@ -36,8 +36,8 @@ type Index =
 type Universe =
   Natural
 
-newtype Scope scope =
-  Scope scope
+newtype Scope =
+  Scope Term
 
 data Term =
   TePrimitive Primitive |
@@ -46,11 +46,11 @@ data Term =
   TeBoundVariable Index |
   TeMetaVariable Unique Term |
   TeType Universe |
-  TePiAbstraction Term (Scope Term) |
-  TeLambdaAbstraction Term (Scope Term) |
+  TePiAbstraction Term Scope |
+  TeLambdaAbstraction Term Scope |
   TeApplication Term Term
 
-teAbstract :: Name -> Term -> Scope Term
+teAbstract :: Name -> Term -> Scope
 teAbstract name =
   Scope . go 0 where
     go depth term =
@@ -68,7 +68,7 @@ teAbstract name =
         _ ->
           term
 
-teInstantiate :: Term -> Scope Term -> Term
+teInstantiate :: Term -> Scope -> Term
 teInstantiate source (Scope body) =
   go 0 body where
     go depth term =
