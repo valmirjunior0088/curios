@@ -50,7 +50,7 @@ unToBox universe =
 
 scToBox :: Scope -> Box
 scToBox (Scope body) =
-  char '◆' <+> teToBox body
+  teToBox body
 
 teToBox :: Term -> Box
 teToBox term =
@@ -72,7 +72,7 @@ teToBox term =
         trunk size = vcat left (char '┏' : replicate (size - 1) (char '┃'))
         branch = teToBox variableType
         tree = (trunk (rows branch) <+> branch) // char '▼'
-        root = scToBox scope
+        root = char '◆' <+> scToBox scope
       in
         text "TePiAbstraction" // tree // root
     TeLambdaAbstraction variableType scope ->
@@ -80,7 +80,7 @@ teToBox term =
         trunk size = vcat left (char '┏' : replicate (size - 1) (char '┃'))
         branch = teToBox variableType
         tree = (trunk (rows branch) <+> branch) // char '▼'
-        root = scToBox scope
+        root = char '◆' <+> scToBox scope
       in
         text "TeLambdaAbstraction" // tree // root
     TeApplication function argument ->
