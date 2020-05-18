@@ -70,7 +70,7 @@ spec =
       let parse = Megaparsec.parse piBinding ""
 
       it "succeeds on a valid pi binding (1)" $
-        parse "name:type" `shouldParse`
+        parse "name: type" `shouldParse`
           PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
       
       it "succeeds on a valid pi binding (2)" $
@@ -81,7 +81,7 @@ spec =
       let parse = Megaparsec.parse lambdaBinding ""
 
       it "succeeds on a valid lambda binding (1)" $
-        parse "name:type" `shouldParse`
+        parse "name: type" `shouldParse`
           LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
       
       it "succeeds on a valid lambda binding (2)" $
@@ -91,19 +91,19 @@ spec =
       let parse = Megaparsec.parse (abstraction piBinding) ""
 
       it "succeeds on a valid pi abstraction (1)" $
-        parse "name:type. name" `shouldParse`
+        parse "name: type, name" `shouldParse`
           Abstraction
             [PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))]
             (ExVariable (QualifiedName [] (Name "name")))
       
       it "succeeds on a valid pi abstraction (2)" $
-        parse "type. type" `shouldParse`
+        parse "type, type" `shouldParse`
           Abstraction
             [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))]
             (ExVariable (QualifiedName [] (Name "type")))
       
       it "succeeds on a valid pi abstraction (3)" $
-        parse "name:type. type. type" `shouldParse`
+        parse "name: type, type, type" `shouldParse`
           Abstraction
             [PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
             ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
@@ -111,7 +111,7 @@ spec =
             (ExVariable (QualifiedName [] (Name "type")))
       
       it "succeeds on a valid pi abstraction (4)" $
-        parse "type. name:type. type" `shouldParse`
+        parse "type, name: type, type" `shouldParse`
           Abstraction
             [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
             ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
@@ -119,25 +119,25 @@ spec =
             (ExVariable (QualifiedName [] (Name "type")))
 
       it "fails on an invalid pi abstraction" $
-        parse `shouldFailOn` "type. name:type. type."
+        parse `shouldFailOn` "type, name: type, type,"
     
     describe "abstraction lambdaBinding" $ do
       let parse = Megaparsec.parse (abstraction lambdaBinding) ""
 
       it "succeeds on a valid lambda abstraction (1)" $
-        parse "name:type. name" `shouldParse`
+        parse "name: type, name" `shouldParse`
           Abstraction
             [LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))]
             (ExVariable (QualifiedName [] (Name "name")))
       
       it "succeeds on a valid lambda abstraction (2)" $
-        parse "name. name" `shouldParse`
+        parse "name, name" `shouldParse`
           Abstraction
             [LambdaBinding (Name "name") Nothing]
             (ExVariable (QualifiedName [] (Name "name")))
 
       it "succeeds on a valid lambda abstraction (3)" $
-        parse "name:type. name. name" `shouldParse`
+        parse "name: type, name, name" `shouldParse`
           Abstraction
             [LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
             ,LambdaBinding (Name "name") Nothing
@@ -145,7 +145,7 @@ spec =
             (ExVariable (QualifiedName [] (Name "name")))
       
       it "succeeds on a valid lambda abstraction (4)" $
-        parse "name. name:type. name" `shouldParse`
+        parse "name, name: type, name" `shouldParse`
           Abstraction
             [LambdaBinding (Name "name") Nothing
             ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
@@ -153,7 +153,7 @@ spec =
             (ExVariable (QualifiedName [] (Name "name")))
       
       it "fails on an invalid lambda abstraction" $
-        parse `shouldFailOn` "name. name:type. name."
+        parse `shouldFailOn` "name, name: type, name,"
     
     describe "expression" $ do
       let parse = Megaparsec.parse expression ""
@@ -163,7 +163,7 @@ spec =
           ExVariable (QualifiedName [Name "some-name-with"] (Name "dashes"))
       
       it "succeeds on a pi abstraction" $
-        parse "<type. name:type. type>" `shouldParse`
+        parse "[type, name: type, type]" `shouldParse`
           ExPiAbstraction
             (Abstraction
               [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
@@ -173,7 +173,7 @@ spec =
             )
       
       it "succeeds on a lambda abstraction" $
-        parse "{name. name:type. name}" `shouldParse`
+        parse "{name, name: type, name}" `shouldParse`
           ExLambdaAbstraction
             (Abstraction
               [LambdaBinding (Name "name") Nothing
@@ -183,7 +183,7 @@ spec =
             )
 
       it "succeeds on an application" $
-        parse "[function first-argument second-argument]" `shouldParse`
+        parse "(function first-argument second-argument)" `shouldParse`
           ExApplication
             (ExVariable (QualifiedName [] (Name "function")))
             [ExVariable (QualifiedName [] (Name "first-argument"))
@@ -194,10 +194,10 @@ spec =
       let parse = Megaparsec.parse statement ""
 
       it "succeeds on an empty module" $
-        parse "(module name)" `shouldParse` StModule (Name "name") (Program [])
+        parse "module name end" `shouldParse` StModule (Name "name") (Program [])
       
       it "succeeds on a definition" $
-        parse "(define identity <a:type. a. a> {a. value. value})" `shouldParse`
+        parse "define identity: [a: type, a, a] = {a, value, value} end" `shouldParse`
           StDefine (Name "identity")
             (ExPiAbstraction
               (Abstraction
@@ -217,7 +217,7 @@ spec =
             )
 
       it "succeeds on a module with a single definition" $
-        parse "(module name (define identity <a:type. a. a> {a. value. value}))" `shouldParse`
+        parse "module name define identity: [a: type, a, a] = {a, value, value} end end" `shouldParse`
           StModule (Name "name")
             (Program
               [StDefine (Name "identity")
@@ -241,15 +241,18 @@ spec =
             )
       
       it "succeeds on a nested module" $
-        parse "(module outer (module inner))" `shouldParse`
-          StModule (Name "outer") (Program [StModule (Name "inner") (Program [])])
+        parse "module outer module inner end end" `shouldParse`
+          StModule (Name "outer")
+            (Program
+              [StModule (Name "inner") (Program [])]
+            )
 
       it "succeeds on an import" $
-        parse "(import some;qualified;name)" `shouldParse`
+        parse "import some;qualified;name end" `shouldParse`
           StImport (QualifiedName [Name "some", Name "qualified"] (Name "name"))
 
       it "succeeds on a module with an import" $
-        parse "(module name (import some;qualified;name))" `shouldParse`
+        parse "module name import some;qualified;name end end" `shouldParse`
           StModule (Name "name")
             (Program
               [StImport (QualifiedName [Name "some", Name "qualified"] (Name "name"))]
@@ -262,23 +265,23 @@ spec =
         shouldParse
           (parse
             (unlines
-              ["(define identity <a:type. a. a>"
-              ,"  {a. value. value}"
-              ,")"
+              ["define identity: [a: type, a, a] ="
+              ,"  {a, value, value}"
+              ,"end"
               ,""
-              ,"(module pair"
-              ,"  (define pair <type. type. type>"
-              ,"    {a. b."
-              ,"      <c:type. <a. b. c>. c>"
+              ,"module pair"
+              ,"  define pair: [type, type, type] ="
+              ,"    {a, b,"
+              ,"      [c: type, [a, b, c], c]"
               ,"    }"
-              ,"  )"
-              ,""
-              ,"  (define make <a:type. b:type. a. b. [pair a b]>"
-              ,"    {a. b. x. y."
-              ,"      {c. f. [f x y]}"
+              ,"  end"
+              ,"  "
+              ,"  define make: [a: type, b: type, a, b, (pair a b)] ="
+              ,"    {a, b, x, y,"
+              ,"      {c, f, (f x y)}"
               ,"    }"
-              ,"  )"
-              ,")"
+              ,"  end"
+              ,"end"
               ,""
               ]
             )

@@ -106,23 +106,23 @@ lambdaBinding =
 
 abstraction :: Parser a -> Parser (Abstraction a)
 abstraction parser =
-  lexeme (Abstraction <$> some (try (parser <* symbol ".")) <*> expression)
+  lexeme (Abstraction <$> some (try (parser <* symbol ",")) <*> expression)
 
 expression :: Parser Expression
 expression =
   lexeme (exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
     exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> qualifiedName
-    exPiAbstraction = ExPiAbstraction <$> (symbol "<" *> abstraction piBinding <* symbol ">")
+    exPiAbstraction = ExPiAbstraction <$> (symbol "[" *> abstraction piBinding <* symbol "]")
     exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> abstraction lambdaBinding <* symbol "}")
-    exApplication = ExApplication <$> (symbol "[" *> expression) <*> (manyTill expression (symbol "]"))
+    exApplication = ExApplication <$> (symbol "(" *> expression) <*> (manyTill expression (symbol ")"))
 
 statement :: Parser Statement
 statement =
-  lexeme (symbol "(" *> (stModule <|> stImport <|> stDefine) <* symbol ")") where
+  lexeme ((stModule <|> stImport <|> stDefine) <* symbol "end") where
     stModule = StModule <$> (symbol "module" *> name) <*> program
     stImport = StImport <$> (symbol "import" *> qualifiedName)
-    stDefine = StDefine <$> (symbol "define" *> name) <*> expression <*> expression
+    stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression)
 
 program :: Parser Program
 program =
