@@ -249,13 +249,21 @@ spec =
 
       it "succeeds on an import" $
         parse "import some;qualified;name end" `shouldParse`
-          StImport (QualifiedName [Name "some", Name "qualified"] (Name "name"))
+          StImport [QualifiedName [Name "some", Name "qualified"] (Name "name")]
+      
+      it "succeeds on an import with multiple names" $
+        parse "import one;name another;name a;third;name end" `shouldParse`
+          StImport
+            [QualifiedName [Name "one"] (Name "name")
+            ,QualifiedName [Name "another"] (Name "name")
+            ,QualifiedName [Name "a", Name "third"] (Name "name")
+            ]
 
       it "succeeds on a module with an import" $
         parse "module name import some;qualified;name end end" `shouldParse`
           StModule (Name "name")
             (Program
-              [StImport (QualifiedName [Name "some", Name "qualified"] (Name "name"))]
+              [StImport [QualifiedName [Name "some", Name "qualified"] (Name "name")]]
             )
 
     describe "program" $ do

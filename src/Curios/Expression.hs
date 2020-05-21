@@ -48,7 +48,7 @@ data Expression =
 
 data Statement =
   StModule Name Program |
-  StImport QualifiedName |
+  StImport [QualifiedName] |
   StDefine Name Expression Expression
   deriving (Eq, Show)
 

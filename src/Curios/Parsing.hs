@@ -35,6 +35,7 @@ import Text.Megaparsec
   ,many
   ,oneOf
   ,single
+  ,someTill
   ,manyTill
   ,(<|>)
   )
@@ -119,10 +120,10 @@ expression =
 
 statement :: Parser Statement
 statement =
-  lexeme ((stModule <|> stImport <|> stDefine) <* symbol "end") where
-    stModule = StModule <$> (symbol "module" *> name) <*> program
-    stImport = StImport <$> (symbol "import" *> qualifiedName)
-    stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression)
+  lexeme (stModule <|> stImport <|> stDefine) where
+    stModule = StModule <$> (symbol "module" *> name) <*> program <* symbol "end"
+    stImport = StImport <$> (symbol "import" *> someTill qualifiedName (symbol "end"))
+    stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression <* symbol "end")
 
 program :: Parser Program
 program =
