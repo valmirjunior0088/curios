@@ -20,13 +20,14 @@ import Curios.Expression
 
 import Curios.Term
   (Primitive (..)
+  ,Universe (..)
   ,Scope (..)
   ,Term (..)
   ,teAbstract
   )
 
-import Data.Unique
-  (newUnique
+import Curios.Identifier
+  (idNew
   )
 
 import Data.Foldable
@@ -44,7 +45,7 @@ liToTerm =
 qnToTerm :: QualifiedName -> Term
 qnToTerm qualifiedName =
   case qualifiedName of
-    QualifiedName [] (Name "type") -> TeType 0
+    QualifiedName [] (Name "type") -> TeType (Universe 0)
     QualifiedName [] (Name "character") -> TePrimitive PrCharacter
     QualifiedName [] (Name "string") -> TePrimitive PrString
     QualifiedName [] (Name "integer") -> TePrimitive PrInteger
@@ -68,8 +69,8 @@ teDischargeLambdaBinding (LambdaBinding variableName maybeVariableType) term =
       case maybeVariableType of
         Nothing ->
           do
-            unique <- newUnique
-            return (TeMetaVariable unique (TeType 0))
+            identifier <- idNew
+            return (TeMetaVariable identifier (TeType (Universe 0)))
         Just variableType ->
           exToTerm variableType
     abstractionBody' =
@@ -88,10 +89,10 @@ exToTerm expression =
       return (liToTerm literal)
     ExVariable qualifiedName ->
       return (qnToTerm qualifiedName)
-    ExPiAbstraction abstraction ->
-      abToTerm teDischargePiBinding abstraction 
-    ExLambdaAbstraction abstraction ->
-      abToTerm teDischargeLambdaBinding abstraction
+    ExPiAbstraction piAbstraction ->
+      abToTerm teDischargePiBinding piAbstraction 
+    ExLambdaAbstraction lambdaAbstraction ->
+      abToTerm teDischargeLambdaBinding lambdaAbstraction
     ExApplication function arguments ->
       do
         function' <- exToTerm function

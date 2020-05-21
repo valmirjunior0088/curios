@@ -1,7 +1,7 @@
 module Curios.Term
   (Primitive (..)
-  ,Index
-  ,Universe
+  ,Index (..)
+  ,Universe (..)
   ,Scope (..)
   ,Term (..)
   ,teAbstract
@@ -15,12 +15,12 @@ import Curios.Expression
   ,QualifiedName (..)
   )
 
-import Numeric.Natural
-  (Natural
+import Curios.Identifier
+  (Identifier (..)
   )
 
-import Data.Unique
-  (Unique
+import Numeric.Natural
+  (Natural
   )
 
 data Primitive =
@@ -28,27 +28,31 @@ data Primitive =
   PrString |
   PrInteger |
   PrRational
-  deriving (Show)
+  deriving (Eq, Show)
 
-type Index =
-  Natural
+newtype Index =
+  Index Natural
+  deriving (Eq, Show)
 
-type Universe =
-  Natural
+newtype Universe =
+  Universe Natural
+  deriving (Eq, Show)
 
 newtype Scope =
   Scope Term
+  deriving (Eq, Show)
 
 data Term =
   TePrimitive Primitive |
   TeLiteral Literal |
   TeFreeVariable QualifiedName |
   TeBoundVariable Index |
-  TeMetaVariable Unique Term |
+  TeMetaVariable Identifier Term |
   TeType Universe |
   TePiAbstraction Term Scope |
   TeLambdaAbstraction Term Scope |
   TeApplication Term Term
+  deriving (Eq, Show)
 
 teAbstract :: Name -> Term -> Scope
 teAbstract name =
@@ -56,7 +60,7 @@ teAbstract name =
     go depth term =
       case term of
         TeFreeVariable (QualifiedName [] name') | name == name' ->
-          TeBoundVariable depth
+          TeBoundVariable (Index depth)
         TeMetaVariable unique variableType ->
           TeMetaVariable unique (go depth variableType)
         TePiAbstraction variableType (Scope abstractionBody) ->
@@ -69,12 +73,12 @@ teAbstract name =
           term
 
 teInstantiate :: Term -> Scope -> Term
-teInstantiate source (Scope body) =
+teInstantiate image (Scope body) =
   go 0 body where
     go depth term =
       case term of
-        TeBoundVariable index | index == depth ->
-          source
+        TeBoundVariable (Index index) | index == depth ->
+          image
         TeMetaVariable unique variableType ->
           TeMetaVariable unique (go depth variableType)
         TePiAbstraction variableType (Scope abstractionBody) ->

@@ -18,14 +18,25 @@ main =
       Right expression ->
         do
           term <- exToTerm expression
-          putStr "BEGIN\n"
-          putStr "---\n"
+          putStr "SOURCE TEXT\n"
+          putStr "----------\n"
           putStr input
-          putStr "---\n"
+          putStr "----------\n"
+          putStr "\n"
+          putStr "\n"
+          putStr "\n"
+          putStr "EXPRESSION REPRESENTATION\n"
+          putStr "----------\n"
           putStr (printf "%s\n" (show expression))
-          putStr "---\n"
+          putStr "----------\n"
           putStr (render (exToBox expression))
-          putStr "---\n"
+          putStr "----------\n"
+          putStr "\n"
+          putStr "\n"
+          putStr "\n"
+          putStr "TERM REPRESENTATION\n"
+          putStr "----------\n"
+          putStr (printf "%s\n" (show term))
+          putStr "----------\n"
           putStr (render (teToBox term))
-          putStr "---\n"
-          putStr "END\n"
+          putStr "----------\n"

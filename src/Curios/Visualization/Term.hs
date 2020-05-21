@@ -13,8 +13,8 @@ import Prelude hiding
 
 import Curios.Term
   (Primitive (..)
-  ,Index
-  ,Universe
+  ,Index (..)
+  ,Universe (..)
   ,Scope (..)
   ,Term (..)
   )
@@ -24,15 +24,26 @@ import Curios.Visualization.Expression
   ,qnToBox
   )
 
+import Curios.Visualization.Identifier
+  (idToBox
+  )
+
+import Curios.Visualization.Common
+  (parenthesized
+  ,emphasized
+  ,roofed
+  ,floored
+  ,upwardsArrow
+  ,downwardsArrow
+  )
+
 import Text.PrettyPrint.Boxes
   (Box
   ,char
   ,text
-  ,vcat
-  ,left
   ,rows
-  ,(<>)
   ,(<+>)
+  ,(/+/)
   ,(//)
   )
 
@@ -56,38 +67,32 @@ teToBox :: Term -> Box
 teToBox term =
   case term of
     TePrimitive primitive ->
-      text "TePrimitive (" <> prToBox primitive <> text ")"
+      text "Primitive" <+> parenthesized (prToBox primitive)
     TeLiteral literal ->
-      text "TeLiteral (" <> liToBox literal <> text ")"
+      text "Literal" <+> parenthesized (liToBox literal)
     TeFreeVariable qualifiedName ->
-      text "TeFreeVariable (" <> qnToBox qualifiedName <> text ")"
+      text "Free variable" <+> parenthesized (qnToBox qualifiedName)
     TeBoundVariable index ->
-      text "TeBoundVariable (" <> inToBox index <> text ")"
-    TeMetaVariable _ variableType ->
-      text "TeMetaVariable (?)" // (char '◥' <+> teToBox variableType)
+      text "Bound variable" <+> parenthesized (inToBox index)
+    TeMetaVariable identifier variableType ->
+      text "Meta variable" <+> parenthesized (idToBox identifier) <+> emphasized (teToBox variableType)
     TeType universe ->
-      text "TeType (" <> unToBox universe <> text ")"
+      text "Type" <+> parenthesized (unToBox universe)
     TePiAbstraction variableType scope ->
       let
-        trunk size = vcat left (char '┏' : replicate (size - 1) (char '┃'))
-        branch = teToBox variableType
-        tree = (trunk (rows branch) <+> branch) // char '▼'
-        root = char '◆' <+> scToBox scope
+        content = teToBox variableType /+/ scToBox scope
+        body = (downwardsArrow (rows content - 1) // char 'Π') <+> content
       in
-        text "TePiAbstraction" // tree // root
+        roofed body
     TeLambdaAbstraction variableType scope ->
       let
-        trunk size = vcat left (char '┏' : replicate (size - 1) (char '┃'))
-        branch = teToBox variableType
-        tree = (trunk (rows branch) <+> branch) // char '▼'
-        root = char '◆' <+> scToBox scope
+        content = teToBox variableType /+/ scToBox scope
+        body = (downwardsArrow (rows content - 1) // char 'λ') <+> content
       in
-        text "TeLambdaAbstraction" // tree // root
+        roofed body
     TeApplication function argument ->
       let
-        trunk size = vcat left (replicate (size - 1) (char '┃') ++ [char '┗'])
-        branch = teToBox argument
-        tree = char '▲' // (trunk (rows branch) <+> branch)
-        root = char '◆' <+> teToBox function
+        content = teToBox function /+/ teToBox argument
+        body = (char '◆' // upwardsArrow (rows content - 1)) <+> content
       in
-        text "TeApplication" // root // tree
+        floored body

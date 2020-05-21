@@ -110,7 +110,7 @@ abstraction parser =
 
 expression :: Parser Expression
 expression =
-  lexeme (exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
+  lexeme (try exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
     exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> qualifiedName
     exPiAbstraction = ExPiAbstraction <$> (symbol "[" *> abstraction piBinding <* symbol "]")
