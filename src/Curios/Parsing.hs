@@ -4,7 +4,6 @@ module Curios.Parsing
   ,qualifiedName
   ,piBinding
   ,lambdaBinding
-  ,abstraction
   ,expression
   ,statement
   ,program
@@ -17,7 +16,6 @@ import Curios.Expression
   ,QualifiedName (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
-  ,Abstraction (..)
   ,Expression (..)
   ,Statement (..)
   ,Program (..)
@@ -105,29 +103,44 @@ lambdaBinding :: Parser LambdaBinding
 lambdaBinding =
   lexeme (LambdaBinding <$> name <*> optional (symbol ":" *> expression))
 
-abstraction :: Parser a -> Parser (Abstraction a)
-abstraction parser =
-  lexeme (Abstraction <$> some (try (parser <* symbol ",")) <*> expression)
-
 expression :: Parser Expression
 expression =
   lexeme (try exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
-    exLiteral = ExLiteral <$> literal
-    exVariable = ExVariable <$> qualifiedName
-    exPiAbstraction = ExPiAbstraction <$> (symbol "[" *> abstraction piBinding <* symbol "]")
-    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> abstraction lambdaBinding <* symbol "}")
-    exApplication = ExApplication <$> (symbol "(" *> expression) <*> (manyTill expression (symbol ")"))
+    exLiteral =
+      ExLiteral <$>
+        (literal)
+    exVariable =
+      ExVariable <$> 
+        (qualifiedName)
+    exPiAbstraction =
+      ExPiAbstraction <$>
+        (symbol "[" *> some (try (piBinding <* symbol ","))) <*>
+        (expression <* symbol "]")
+    exLambdaAbstraction =
+      ExLambdaAbstraction <$>
+        (symbol "{" *> some (try (lambdaBinding <* symbol ","))) <*>
+        (expression <* symbol "}")
+    exApplication =
+      ExApplication <$>
+        (symbol "(" *> expression) <*>
+        (manyTill expression (symbol ")"))
 
 statement :: Parser Statement
 statement =
   lexeme (stModule <|> stImport <|> stDefine) where
-    stModule = StModule <$> (symbol "module" *> name) <*> program <* symbol "end"
-    stImport = StImport <$> (symbol "import" *> someTill qualifiedName (symbol "end"))
-    stDefine = StDefine <$> (symbol "define" *> name) <*> deType <*> deBody where
-      deType = symbol ":" *> expression
-      deBody = symbol "=" *> expression <* symbol "end"
+    stModule =
+      StModule <$>
+        (symbol "module" *> name) <*>
+        (program <* symbol "end")
+    stImport =
+      StImport <$>
+        (symbol "import" *> someTill qualifiedName (symbol "end"))
+    stDefine =
+      StDefine <$>
+        (symbol "define" *> name) <*>
+        (symbol ":" *> expression) <*>
+        (symbol "=" *> expression <* symbol "end")
 
 program :: Parser Program
 program =
   lexeme (Program <$> many statement)
-

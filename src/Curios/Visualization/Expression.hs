@@ -4,7 +4,6 @@ module Curios.Visualization.Expression
   ,qnToBox
   ,pbToBox
   ,lbToBox
-  ,abToBox
   ,exToBox
   )
   where
@@ -15,7 +14,6 @@ import Curios.Expression
   ,QualifiedName (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
-  ,Abstraction (..)
   ,Expression (..)
   )
 
@@ -58,12 +56,6 @@ lbToBox (LambdaBinding name maybeExpression) =
     variableName = naToBox name
     variableType = maybe (text "Untyped") exToBox maybeExpression
 
-abToBox :: Char -> (a -> Box) -> Abstraction a -> Box
-abToBox symbol toBox (Abstraction bindings expression) =
-  downwardsTab symbol prefix body where
-    prefix = downwardsSeparated (fmap toBox bindings)
-    body = exToBox expression
-
 exToBox :: Expression -> Box
 exToBox expression =
   case expression of
@@ -71,9 +63,9 @@ exToBox expression =
       text "Literal" <+> parenthesized (liToBox literal)
     ExVariable qualifiedName ->
       text "Variable" <+> parenthesized (qnToBox qualifiedName)
-    ExPiAbstraction piAbstraction ->
-      abToBox 'Π' pbToBox piAbstraction
-    ExLambdaAbstraction lambdaAbstraction ->
-      abToBox 'λ' lbToBox lambdaAbstraction
+    ExPiAbstraction piBindings abstractionBody ->
+      downwardsTab 'Π' (downwardsSeparated (fmap pbToBox piBindings)) (exToBox abstractionBody)
+    ExLambdaAbstraction lambdaBindings abstractionBody ->
+      downwardsTab 'λ' (downwardsSeparated (fmap lbToBox lambdaBindings)) (exToBox abstractionBody)
     ExApplication function arguments ->
       upwardsTab '◆' (exToBox function) (upwardsSeparated (fmap exToBox arguments))

@@ -10,7 +10,6 @@ import Curios.Parsing
   ,qualifiedName
   ,piBinding
   ,lambdaBinding
-  ,abstraction
   ,expression
   ,statement
   ,program
@@ -22,7 +21,6 @@ import Curios.Expression
   ,QualifiedName (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
-  ,Abstraction (..)
   ,Expression (..)
   ,Statement (..)
   ,Program (..)
@@ -57,8 +55,8 @@ spec =
       it "succeeds on a character" $
         parse "'a'" `shouldParse` LiCharacter 'a'
       
-      it "succeeds on a string" $
-        parse "\"string\"" `shouldParse` LiString "string"
+      it "succeeds on text" $
+        parse "\"text\"" `shouldParse` LiText "text"
       
       it "succeeds on a positive integer" $
         parse "15" `shouldParse` LiInteger 15
@@ -87,74 +85,6 @@ spec =
       it "succeeds on a valid lambda binding (2)" $
         parse "name" `shouldParse` LambdaBinding (Name "name") Nothing
     
-    describe "abstraction piBinding" $ do
-      let parse = Megaparsec.parse (abstraction piBinding) ""
-
-      it "succeeds on a valid pi abstraction (1)" $
-        parse "name: type, name" `shouldParse`
-          Abstraction
-            [PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))]
-            (ExVariable (QualifiedName [] (Name "name")))
-      
-      it "succeeds on a valid pi abstraction (2)" $
-        parse "type, type" `shouldParse`
-          Abstraction
-            [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))]
-            (ExVariable (QualifiedName [] (Name "type")))
-      
-      it "succeeds on a valid pi abstraction (3)" $
-        parse "name: type, type, type" `shouldParse`
-          Abstraction
-            [PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
-            ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-            ]
-            (ExVariable (QualifiedName [] (Name "type")))
-      
-      it "succeeds on a valid pi abstraction (4)" $
-        parse "type, name: type, type" `shouldParse`
-          Abstraction
-            [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-            ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
-            ]
-            (ExVariable (QualifiedName [] (Name "type")))
-
-      it "fails on an invalid pi abstraction" $
-        parse `shouldFailOn` "type, name: type, type,"
-    
-    describe "abstraction lambdaBinding" $ do
-      let parse = Megaparsec.parse (abstraction lambdaBinding) ""
-
-      it "succeeds on a valid lambda abstraction (1)" $
-        parse "name: type, name" `shouldParse`
-          Abstraction
-            [LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))]
-            (ExVariable (QualifiedName [] (Name "name")))
-      
-      it "succeeds on a valid lambda abstraction (2)" $
-        parse "name, name" `shouldParse`
-          Abstraction
-            [LambdaBinding (Name "name") Nothing]
-            (ExVariable (QualifiedName [] (Name "name")))
-
-      it "succeeds on a valid lambda abstraction (3)" $
-        parse "name: type, name, name" `shouldParse`
-          Abstraction
-            [LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
-            ,LambdaBinding (Name "name") Nothing
-            ]
-            (ExVariable (QualifiedName [] (Name "name")))
-      
-      it "succeeds on a valid lambda abstraction (4)" $
-        parse "name, name: type, name" `shouldParse`
-          Abstraction
-            [LambdaBinding (Name "name") Nothing
-            ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
-            ]
-            (ExVariable (QualifiedName [] (Name "name")))
-      
-      it "fails on an invalid lambda abstraction" $
-        parse `shouldFailOn` "name, name: type, name,"
-    
     describe "expression" $ do
       let parse = Megaparsec.parse expression ""
 
@@ -165,22 +95,24 @@ spec =
       it "succeeds on a pi abstraction" $
         parse "[type, name: type, type]" `shouldParse`
           ExPiAbstraction
-            (Abstraction
-              [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-              ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
-              ]
-              (ExVariable (QualifiedName [] (Name "type")))
-            )
+            [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+            ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
+            ]
+            (ExVariable (QualifiedName [] (Name "type")))
+      
+      it "fails on an invalid pi abstraction" $
+        parse `shouldFailOn` "[type, name: type, type,]"
       
       it "succeeds on a lambda abstraction" $
         parse "{name, name: type, name}" `shouldParse`
           ExLambdaAbstraction
-            (Abstraction
-              [LambdaBinding (Name "name") Nothing
-              ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
-              ]
-              (ExVariable (QualifiedName [] (Name "name")))
-            )
+            [LambdaBinding (Name "name") Nothing
+            ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
+            ]
+            (ExVariable (QualifiedName [] (Name "name")))
+      
+      it "fails on an invalid lambda abstraction" $
+        parse `shouldFailOn` "{name, name: type, name,}"
 
       it "succeeds on an application" $
         parse "(function first-argument second-argument)" `shouldParse`
@@ -200,20 +132,16 @@ spec =
         parse "define identity: [a: type, a, a] = {a, value, value} end" `shouldParse`
           StDefine (Name "identity")
             (ExPiAbstraction
-              (Abstraction
-                [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                ]
-                (ExVariable (QualifiedName [] (Name "a")))
-              )
+              [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+              ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+              ]
+              (ExVariable (QualifiedName [] (Name "a")))
             )
             (ExLambdaAbstraction
-              (Abstraction
                 [LambdaBinding (Name "a") Nothing
                 ,LambdaBinding (Name "value") Nothing
                 ]
                 (ExVariable (QualifiedName [] (Name "value")))
-              )
             )
 
       it "succeeds on a module with a single definition" $
@@ -222,20 +150,16 @@ spec =
             (Program
               [StDefine (Name "identity")
                 (ExPiAbstraction
-                  (Abstraction
-                    [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                    ]
-                    (ExVariable (QualifiedName [] (Name "a")))
-                  )
+                  [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                  ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+                  ]
+                  (ExVariable (QualifiedName [] (Name "a")))
                 )
                 (ExLambdaAbstraction
-                  (Abstraction
-                    [LambdaBinding (Name "a") Nothing
-                    ,LambdaBinding (Name "value") Nothing
-                    ]
-                    (ExVariable (QualifiedName [] (Name "value")))
-                  )
+                  [LambdaBinding (Name "a") Nothing
+                  ,LambdaBinding (Name "value") Nothing
+                  ]
+                  (ExVariable (QualifiedName [] (Name "value")))
                 )
               ]
             )
@@ -297,86 +221,68 @@ spec =
           (Program
             [StDefine (Name "identity")
               (ExPiAbstraction
-                (Abstraction
-                  [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                  ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                  ]
-                  (ExVariable (QualifiedName [] (Name "a")))
-                )
+                [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+                ]
+                (ExVariable (QualifiedName [] (Name "a")))
               )
               (ExLambdaAbstraction
-                (Abstraction
-                  [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "value") Nothing]
-                  (ExVariable (QualifiedName [] (Name "value")))
-                )
+                [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "value") Nothing]
+                (ExVariable (QualifiedName [] (Name "value")))
               )
             ,StModule (Name "pair")
               (Program
                 [StDefine (Name "pair")
                   (ExPiAbstraction
-                    (Abstraction
-                      [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-                      ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-                      ]
-                      (ExVariable (QualifiedName [] (Name "type")))
-                    )
+                    [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+                    ]
+                    (ExVariable (QualifiedName [] (Name "type")))
                   )
                   (ExLambdaAbstraction
-                    (Abstraction
-                      [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "b") Nothing]
-                      (ExPiAbstraction
-                        (Abstraction
-                          [PiBinding (Just (Name "c")) (ExVariable (QualifiedName [] (Name "type")))
-                          ,PiBinding Nothing
-                            (ExPiAbstraction
-                              (Abstraction
-                                [PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                                ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
-                                ]
-                                (ExVariable (QualifiedName [] (Name "c")))
-                              )
-                            )
+                    [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "b") Nothing]
+                    (ExPiAbstraction
+                      [PiBinding (Just (Name "c")) (ExVariable (QualifiedName [] (Name "type")))
+                      ,PiBinding Nothing
+                        (ExPiAbstraction
+                          [PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+                          ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
                           ]
                           (ExVariable (QualifiedName [] (Name "c")))
                         )
-                      )
+                      ]
+                      (ExVariable (QualifiedName [] (Name "c")))
                     )
                   )
                 ,StDefine (Name "make")
                   (ExPiAbstraction
-                    (Abstraction
-                      [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                      ,PiBinding (Just (Name "b")) (ExVariable (QualifiedName [] (Name "type")))
-                      ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                      ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
+                    [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
+                    ,PiBinding (Just (Name "b")) (ExVariable (QualifiedName [] (Name "type")))
+                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
+                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
+                    ]
+                    (ExApplication
+                      (ExVariable (QualifiedName [] (Name "pair")))
+                      [ExVariable (QualifiedName [] (Name "a"))
+                      ,ExVariable (QualifiedName [] (Name "b"))
                       ]
-                      (ExApplication
-                        (ExVariable (QualifiedName [] (Name "pair")))
-                        [ExVariable (QualifiedName [] (Name "a"))
-                        ,ExVariable (QualifiedName [] (Name "b"))
-                        ]
-                      )
                     )
                   )
                   (ExLambdaAbstraction
-                    (Abstraction
-                      [LambdaBinding (Name "a") Nothing
-                      ,LambdaBinding (Name "b") Nothing
-                      ,LambdaBinding (Name "x") Nothing
-                      ,LambdaBinding (Name "y") Nothing
+                    [LambdaBinding (Name "a") Nothing
+                    ,LambdaBinding (Name "b") Nothing
+                    ,LambdaBinding (Name "x") Nothing
+                    ,LambdaBinding (Name "y") Nothing
+                    ]
+                    (ExLambdaAbstraction
+                      [LambdaBinding (Name "c") Nothing
+                      ,LambdaBinding (Name "f") Nothing
                       ]
-                      (ExLambdaAbstraction
-                        (Abstraction
-                          [LambdaBinding (Name "c") Nothing
-                          ,LambdaBinding (Name "f") Nothing
-                          ]
-                          (ExApplication
-                            (ExVariable (QualifiedName [] (Name "f")))
-                            [ExVariable (QualifiedName [] (Name "x"))
-                            ,ExVariable (QualifiedName [] (Name "y"))
-                            ]
-                          )
-                        )
+                      (ExApplication
+                        (ExVariable (QualifiedName [] (Name "f")))
+                        [ExVariable (QualifiedName [] (Name "x"))
+                        ,ExVariable (QualifiedName [] (Name "y"))
+                        ]
                       )
                     )
                   )

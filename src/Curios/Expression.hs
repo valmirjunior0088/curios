@@ -4,7 +4,6 @@ module Curios.Expression
   ,QualifiedName (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
-  ,Abstraction (..)
   ,Expression (..)
   ,Statement (..)
   ,Program (..)
@@ -33,16 +32,12 @@ data PiBinding =
 data LambdaBinding =
   LambdaBinding Name (Maybe Expression)
   deriving (Eq, Show)
-  
-data Abstraction binding =
-  Abstraction [binding] Expression
-  deriving (Eq, Show)
 
 data Expression =
   ExLiteral Literal |
   ExVariable QualifiedName |
-  ExPiAbstraction (Abstraction PiBinding) |
-  ExLambdaAbstraction (Abstraction LambdaBinding) |
+  ExPiAbstraction [PiBinding] Expression |
+  ExLambdaAbstraction [LambdaBinding] Expression|
   ExApplication Expression [Expression]
   deriving (Eq, Show)
 

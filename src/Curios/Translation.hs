@@ -3,7 +3,6 @@ module Curios.Translation
   ,qnToTerm
   ,teDischargePiBinding
   ,teDischargeLambdaBinding
-  ,abToTerm
   ,exToTerm
   )
   where
@@ -14,7 +13,6 @@ import Curios.Expression
   ,QualifiedName (..)
   ,PiBinding (..)
   ,LambdaBinding (..)
-  ,Abstraction (..)
   ,Expression (..)
   )
 
@@ -76,12 +74,6 @@ teDischargeLambdaBinding (LambdaBinding variableName maybeVariableType) term =
     abstractionBody' =
       return (teAbstract variableName term)
 
-abToTerm :: (binding -> Term -> IO Term) -> Abstraction binding -> IO Term
-abToTerm dischargeBinding (Abstraction bindings abstractionBody) =
-  do
-    abstractionBody' <- exToTerm abstractionBody
-    foldrM dischargeBinding abstractionBody' bindings
-
 exToTerm :: Expression -> IO Term
 exToTerm expression =
   case expression of
@@ -89,10 +81,14 @@ exToTerm expression =
       return (liToTerm literal)
     ExVariable qualifiedName ->
       return (qnToTerm qualifiedName)
-    ExPiAbstraction piAbstraction ->
-      abToTerm teDischargePiBinding piAbstraction 
-    ExLambdaAbstraction lambdaAbstraction ->
-      abToTerm teDischargeLambdaBinding lambdaAbstraction
+    ExPiAbstraction piBindings abstractionBody ->
+      do
+        abstractionBody' <- exToTerm abstractionBody
+        foldrM teDischargePiBinding abstractionBody' piBindings
+    ExLambdaAbstraction lambdaBindings abstractionBody ->
+      do
+        abstractionBody' <- exToTerm abstractionBody
+        foldrM teDischargeLambdaBinding abstractionBody' lambdaBindings
     ExApplication function arguments ->
       do
         function' <- exToTerm function
