@@ -2,10 +2,9 @@ module Curios.Visualization.Common
   (parenthesized
   ,emphasized
   ,horizontalLine
+  ,separator
   ,upwardsSeparator
   ,downwardsSeparator
-  ,roofed
-  ,floored
   ,upwardsSeparated
   ,downwardsSeparated
   ,verticalLine
@@ -47,31 +46,29 @@ horizontalLine :: Int -> Box
 horizontalLine size =
   hcat left (replicate size (char '━'))
 
+separator :: Char -> Int -> Box
+separator symbol size =
+  if size <= 0 then nullBox else char symbol <> horizontalLine (size - 1)
+
 upwardsSeparator :: Int -> Box
 upwardsSeparator size =
-  if size <= 0 then nullBox else char '▲' <> horizontalLine (size - 1)
+  separator '▲' size
 
 downwardsSeparator :: Int -> Box
 downwardsSeparator size =
-  if size <= 0 then nullBox else char '▼' <> horizontalLine (size - 1)
+  separator '▼' size
 
-roofed :: Box -> Box
-roofed box =
-  upwardsSeparator (cols box) // box
-
-floored :: Box -> Box
-floored box =
-  box // downwardsSeparator (cols box)
+maximumWidth :: Foldable f => f Box -> Int
+maximumWidth boxes =
+  foldl (\accumulator box -> max accumulator (cols box)) 0 boxes
 
 upwardsSeparated :: Foldable f => f Box -> Box
 upwardsSeparated boxes =
-  punctuateV left (upwardsSeparator size) boxes where
-    size = foldl (\accumulator box -> max accumulator (cols box)) 0 boxes
+  punctuateV left (upwardsSeparator (maximumWidth boxes)) boxes
 
 downwardsSeparated :: Foldable f => f Box -> Box
 downwardsSeparated boxes =
-  punctuateV left (downwardsSeparator size) boxes where
-    size = foldl (\accumulator box -> max accumulator (cols box)) 0 boxes
+  punctuateV left (downwardsSeparator (maximumWidth boxes)) boxes
 
 verticalLine :: Int -> Box
 verticalLine size =
@@ -87,12 +84,12 @@ downwardsArrow size =
 
 upwardsTab :: Char -> Box -> Box -> Box
 upwardsTab symbol content label =
-  body // roofed label where
+  body // upwardsSeparator (cols label) // label where
     arrow = char symbol // upwardsArrow (rows content - 1)
     body = arrow <+> content
 
 downwardsTab :: Char -> Box -> Box -> Box
 downwardsTab symbol label content =
-  floored label // body where
+  label // downwardsSeparator (cols label) // body where
     arrow = downwardsArrow (rows content - 1) // char symbol
     body = arrow <+> content

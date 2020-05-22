@@ -9,10 +9,6 @@ module Curios.Visualization.Expression
   )
   where
 
-import Prelude hiding
-  ((<>)
-  )
-
 import Curios.Expression
   (Literal (..)
   ,Name (..)

@@ -7,10 +7,6 @@ module Curios.Visualization.Term
   )
   where
 
-import Prelude hiding
-  ((<>)
-  )
-
 import Curios.Term
   (Primitive (..)
   ,Index (..)
