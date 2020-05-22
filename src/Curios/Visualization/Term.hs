@@ -31,20 +31,14 @@ import Curios.Visualization.Identifier
 import Curios.Visualization.Common
   (parenthesized
   ,emphasized
-  ,roofed
-  ,floored
-  ,upwardsArrow
-  ,downwardsArrow
+  ,upwardsTab
+  ,downwardsTab
   )
 
 import Text.PrettyPrint.Boxes
   (Box
-  ,char
   ,text
-  ,rows
   ,(<+>)
-  ,(/+/)
-  ,(//)
   )
 
 prToBox :: Primitive -> Box
@@ -79,20 +73,8 @@ teToBox term =
     TeType universe ->
       text "Type" <+> parenthesized (unToBox universe)
     TePiAbstraction variableType scope ->
-      let
-        content = teToBox variableType /+/ scToBox scope
-        body = (downwardsArrow (rows content - 1) // char 'Π') <+> content
-      in
-        roofed body
+      downwardsTab 'Π' (teToBox variableType) (scToBox scope)
     TeLambdaAbstraction variableType scope ->
-      let
-        content = teToBox variableType /+/ scToBox scope
-        body = (downwardsArrow (rows content - 1) // char 'λ') <+> content
-      in
-        roofed body
+      downwardsTab 'λ' (teToBox variableType) (scToBox scope)
     TeApplication function argument ->
-      let
-        content = teToBox function /+/ teToBox argument
-        body = (char '◆' // upwardsArrow (rows content - 1)) <+> content
-      in
-        floored body
+      upwardsTab '◆' (teToBox function) (teToBox argument)

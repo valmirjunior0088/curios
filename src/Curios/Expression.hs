@@ -13,7 +13,7 @@ module Curios.Expression
 
 data Literal =
   LiCharacter Char |
-  LiString String |
+  LiText String |
   LiInteger Integer |
   LiRational Double
   deriving (Eq, Show)

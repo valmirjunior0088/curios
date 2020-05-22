@@ -6,6 +6,7 @@ module Curios.Term
   ,Term (..)
   ,teAbstract
   ,teInstantiate
+  ,teSubstitute
   )
   where
 
@@ -89,3 +90,7 @@ teInstantiate image (Scope body) =
           TeApplication (go depth function) (go depth argument)
         _ ->
           term
+
+teSubstitute :: Name -> Term -> Term -> Term
+teSubstitute name image term =
+  teInstantiate image (teAbstract name term)

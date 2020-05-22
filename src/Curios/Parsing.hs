@@ -76,7 +76,7 @@ literal :: Parser Literal
 literal =
   lexeme (liCharacter <|> liString <|> try liRational <|> liInteger) where
     liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral <* single '\'')
-    liString = LiString <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
+    liString = LiText <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
     liRational = raPositive <|> raNegative where
       raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
       raNegative = (LiRational . negate) <$> (single '-' *> Lexer.float)
@@ -123,7 +123,9 @@ statement =
   lexeme (stModule <|> stImport <|> stDefine) where
     stModule = StModule <$> (symbol "module" *> name) <*> program <* symbol "end"
     stImport = StImport <$> (symbol "import" *> someTill qualifiedName (symbol "end"))
-    stDefine = StDefine <$> (symbol "define" *> name) <*> (symbol ":" *> expression) <*> (symbol "=" *> expression <* symbol "end")
+    stDefine = StDefine <$> (symbol "define" *> name) <*> deType <*> deBody where
+      deType = symbol ":" *> expression
+      deBody = symbol "=" *> expression <* symbol "end"
 
 program :: Parser Program
 program =
