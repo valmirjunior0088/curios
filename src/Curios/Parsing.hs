@@ -1,24 +1,19 @@
 module Curios.Parsing
   (literal
   ,name
-  ,qualifiedName
-  ,piBinding
-  ,lambdaBinding
+  ,binding
+  ,bindings
   ,expression
   ,statement
-  ,program
   )
   where
 
 import Curios.Expression
   (Literal (..)
   ,Name (..)
-  ,QualifiedName (..)
-  ,PiBinding (..)
-  ,LambdaBinding (..)
+  ,Binding (..)
   ,Expression (..)
   ,Statement (..)
-  ,Program (..)
   )
 
 import Data.Void
@@ -30,10 +25,8 @@ import Text.Megaparsec
   ,optional
   ,try
   ,some
-  ,many
   ,oneOf
   ,single
-  ,someTill
   ,manyTill
   ,(<|>)
   )
@@ -72,75 +65,39 @@ symbol string =
 
 literal :: Parser Literal
 literal =
-  lexeme (liCharacter <|> liString <|> try liRational <|> liInteger) where
-    liCharacter = LiCharacter <$> (single '\'' *> Lexer.charLiteral <* single '\'')
-    liString = LiText <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
-    liRational = raPositive <|> raNegative where
-      raPositive = LiRational <$> (optional (single '+') *> Lexer.float)
-      raNegative = (LiRational . negate) <$> (single '-' *> Lexer.float)
-    liInteger = inPositive <|> inNegative where
-      inPositive = LiInteger <$> (optional (single '+') *> Lexer.decimal)
-      inNegative = (LiInteger . negate) <$> (single '-' *> Lexer.decimal)
-
-name' :: Parser Name
-name' =
-  Name <$> some (oneOf naValidCharacters) where
-    naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=', '\'']
+  lexeme (ltCharacter <|> ltText <|> try ltRational <|> ltInteger) where
+    ltCharacter = LtCharacter <$> (single '\'' *> Lexer.charLiteral <* single '\'')
+    ltText = LtText <$> (single '"' *> manyTill Lexer.charLiteral (single '"'))
+    ltRational = raPositive <|> raNegative where
+      raPositive = LtRational <$> (optional (single '+') *> Lexer.float)
+      raNegative = (LtRational . negate) <$> (single '-' *> Lexer.float)
+    ltInteger = inPositive <|> inNegative where
+      inPositive = LtInteger <$> (optional (single '+') *> Lexer.decimal)
+      inNegative = (LtInteger . negate) <$> (single '-' *> Lexer.decimal)
 
 name :: Parser Name
 name =
-  lexeme name'
+  lexeme (Name <$> some (try (oneOf naValidCharacters))) where
+    naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=', '\'']
 
-qualifiedName :: Parser QualifiedName
-qualifiedName =
-  lexeme (QualifiedName <$> many (try (name' <* (single ';'))) <*> name')
+binding :: Parser Binding
+binding =
+  lexeme (Binding <$> name <*> (symbol ":" *> expression))
 
-piBinding :: Parser PiBinding
-piBinding =
-  lexeme (PiBinding <$> optional (try (name <* symbol ":")) <*> expression)
-
-lambdaBinding :: Parser LambdaBinding
-lambdaBinding =
-  lexeme (LambdaBinding <$> name <*> optional (symbol ":" *> expression))
+bindings :: Parser [Binding]
+bindings =
+  lexeme (some (try (binding <* symbol ",")))
 
 expression :: Parser Expression
 expression =
   lexeme (try exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
-    exLiteral =
-      ExLiteral <$>
-        (literal)
-    exVariable =
-      ExVariable <$> 
-        (qualifiedName)
-    exPiAbstraction =
-      ExPiAbstraction <$>
-        (symbol "[" *> some (try (piBinding <* symbol ","))) <*>
-        (expression <* symbol "]")
-    exLambdaAbstraction =
-      ExLambdaAbstraction <$>
-        (symbol "{" *> some (try (lambdaBinding <* symbol ","))) <*>
-        (expression <* symbol "}")
-    exApplication =
-      ExApplication <$>
-        (symbol "(" *> expression) <*>
-        (manyTill expression (symbol ")"))
+    exLiteral = ExLiteral <$> literal
+    exVariable = ExVariable <$> name
+    exPiAbstraction = ExPiAbstraction <$> (symbol "[" *> bindings) <*> (expression <* symbol "]")
+    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> bindings) <*> (expression <* symbol "}")
+    exApplication = ExApplication <$> (symbol "(" *> expression) <*> (manyTill expression (symbol ")"))
 
 statement :: Parser Statement
 statement =
-  lexeme (stModule <|> stImport <|> stDefine) where
-    stModule =
-      StModule <$>
-        (symbol "module" *> name) <*>
-        (program <* symbol "end")
-    stImport =
-      StImport <$>
-        (symbol "import" *> someTill qualifiedName (symbol "end"))
-    stDefine =
-      StDefine <$>
-        (symbol "define" *> name) <*>
-        (symbol ":" *> expression) <*>
-        (symbol "=" *> expression <* symbol "end")
-
-program :: Parser Program
-program =
-  lexeme (Program <$> many statement)
+  lexeme (stDef) where
+    stDef = StDef <$> (symbol "def" *> name) <*> (expression <* symbol "end")

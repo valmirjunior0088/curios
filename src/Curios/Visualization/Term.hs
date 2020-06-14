@@ -2,31 +2,29 @@ module Curios.Visualization.Term
   (prToBox
   ,inToBox
   ,unToBox
-  ,scToBox
+  ,ssToBox
   ,teToBox
   )
   where
 
+import Curios.Visualization.Expression
+  (naToBox
+  ,liToBox
+  )
+
 import Curios.Term
   (Primitive (..)
   ,Index (..)
-  ,Universe (..)
   ,Scope (..)
   ,Term (..)
   )
 
-import Curios.Visualization.Expression
-  (liToBox
-  ,qnToBox
-  )
-
-import Curios.Visualization.Identifier
-  (idToBox
+import Curios.Universe
+  (Universe (..)
   )
 
 import Curios.Visualization.Common
   (parenthesized
-  ,emphasized
   ,upwardsTab
   ,downwardsTab
   )
@@ -49,28 +47,33 @@ unToBox :: Universe -> Box
 unToBox universe =
   text (show universe)
 
-scToBox :: Scope -> Box
-scToBox (Scope body) =
-  teToBox body
+ssToBox :: Scope -> Box
+ssToBox (Scope output) =
+  teToBox output
 
 teToBox :: Term -> Box
 teToBox term =
   case term of
-    TePrimitive primitive ->
+    TrPrimitive primitive ->
       text "Primitive" <+> parenthesized (prToBox primitive)
-    TeLiteral literal ->
+
+    TrLiteral literal ->
       text "Literal" <+> parenthesized (liToBox literal)
-    TeFreeVariable qualifiedName ->
-      text "Free variable" <+> parenthesized (qnToBox qualifiedName)
-    TeBoundVariable index ->
+
+    TrFreeVariable name ->
+      text "Free variable" <+> parenthesized (naToBox name)
+
+    TrBoundVariable index ->
       text "Bound variable" <+> parenthesized (inToBox index)
-    TeMetaVariable identifier variableType ->
-      text "Meta variable" <+> parenthesized (idToBox identifier) <+> emphasized (teToBox variableType)
-    TeType universe ->
+      
+    TrType universe ->
       text "Type" <+> parenthesized (unToBox universe)
-    TePiAbstraction variableType scope ->
-      downwardsTab 'Π' (teToBox variableType) (scToBox scope)
-    TeLambdaAbstraction variableType scope ->
-      downwardsTab 'λ' (teToBox variableType) (scToBox scope)
-    TeApplication function argument ->
+
+    TrPiAbstraction variableType scope ->
+      downwardsTab 'Π' (teToBox variableType) (ssToBox scope)
+
+    TrLambdaAbstraction variableType scope ->
+      downwardsTab 'λ' (teToBox variableType) (ssToBox scope)
+      
+    TrApplication function argument ->
       upwardsTab '◆' (teToBox function) (teToBox argument)

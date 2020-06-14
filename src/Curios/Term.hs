@@ -1,32 +1,30 @@
 module Curios.Term
   (Primitive (..)
   ,Index (..)
-  ,Universe (..)
   ,Scope (..)
   ,Term (..)
-  ,teAbstract
-  ,teInstantiate
-  ,teSubstitute
+  ,trAbstract
+  ,trInstantiate
+  ,trWeaken
   )
   where
 
 import Curios.Expression
   (Literal (..)
   ,Name (..)
-  ,QualifiedName (..)
   )
 
-import Curios.Identifier
-  (Identifier (..)
+import Curios.Universe
+  (Universe (..)
   )
 
-import Numeric.Natural
+import GHC.Natural
   (Natural
   )
 
 data Primitive =
   PrCharacter |
-  PrString |
+  PrText |
   PrInteger |
   PrRational
   deriving (Eq, Show)
@@ -35,62 +33,63 @@ newtype Index =
   Index Natural
   deriving (Eq, Show)
 
-newtype Universe =
-  Universe Natural
-  deriving (Eq, Show)
-
 newtype Scope =
   Scope Term
   deriving (Eq, Show)
 
 data Term =
-  TePrimitive Primitive |
-  TeLiteral Literal |
-  TeFreeVariable QualifiedName |
-  TeBoundVariable Index |
-  TeMetaVariable Identifier Term |
-  TeType Universe |
-  TePiAbstraction Term Scope |
-  TeLambdaAbstraction Term Scope |
-  TeApplication Term Term
+  TrPrimitive Primitive |
+  TrLiteral Literal |
+  TrFreeVariable Name |
+  TrBoundVariable Index |
+  TrType Universe |
+  TrPiAbstraction Term Scope |
+  TrLambdaAbstraction Term Scope |
+  TrApplication Term Term
   deriving (Eq, Show)
 
-teAbstract :: Name -> Term -> Scope
-teAbstract name =
+trAbstract :: Name -> Term -> Scope
+trAbstract name =
   Scope . go 0 where
     go depth term =
       case term of
-        TeFreeVariable (QualifiedName [] name') | name == name' ->
-          TeBoundVariable (Index depth)
-        TeMetaVariable unique variableType ->
-          TeMetaVariable unique (go depth variableType)
-        TePiAbstraction variableType (Scope abstractionBody) ->
-          TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
-        TeLambdaAbstraction variableType (Scope abstractionBody) ->
-          TeLambdaAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
-        TeApplication function argument ->
-          TeApplication (go depth function) (go depth argument)
+        TrFreeVariable name' | name == name' ->
+          TrBoundVariable (Index depth)
+
+        TrPiAbstraction inputType (Scope output) ->
+          TrPiAbstraction (go depth inputType) (Scope (go (depth + 1) output))
+
+        TrLambdaAbstraction inputType (Scope output) ->
+          TrLambdaAbstraction (go depth inputType) (Scope (go (depth + 1) output))
+
+        TrApplication function argument ->
+          TrApplication (go depth function) (go depth argument)
+
         _ ->
           term
 
-teInstantiate :: Term -> Scope -> Term
-teInstantiate image (Scope body) =
-  go 0 body where
+trInstantiate :: Term -> Scope -> Term
+trInstantiate image (Scope scope) =
+  go 0 scope where
     go depth term =
       case term of
-        TeBoundVariable (Index index) | index == depth ->
+        TrBoundVariable (Index index) | index == depth ->
           image
-        TeMetaVariable unique variableType ->
-          TeMetaVariable unique (go depth variableType)
-        TePiAbstraction variableType (Scope abstractionBody) ->
-          TePiAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
-        TeLambdaAbstraction variableType (Scope abstractionBody) ->
-          TeLambdaAbstraction (go depth variableType) (Scope (go (depth + 1) abstractionBody))
-        TeApplication function argument ->
-          TeApplication (go depth function) (go depth argument)
+
+        TrPiAbstraction inputType (Scope output) ->
+          TrPiAbstraction (go depth inputType) (Scope (go (depth + 1) output))
+
+        TrLambdaAbstraction inputType (Scope output) ->
+          TrLambdaAbstraction (go depth inputType) (Scope (go (depth + 1) output))
+
+        TrApplication function argument ->
+          TrApplication (go depth function) (go depth argument)
+          
         _ ->
           term
 
-teSubstitute :: Name -> Term -> Term -> Term
-teSubstitute name image term =
-  teInstantiate image (teAbstract name term)
+trWeaken :: Term -> Term
+trWeaken term =
+  case term of
+    TrBoundVariable (Index index) -> TrBoundVariable (Index (index + 1))
+    _ -> term

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Curios.ParsingSpec (spec) where
 
 import qualified Text.Megaparsec as Megaparsec (parse)
@@ -7,23 +9,18 @@ import Test.Hspec (describe, it)
 import Curios.Parsing
   (literal
   ,name
-  ,qualifiedName
-  ,piBinding
-  ,lambdaBinding
+  ,binding
+  ,bindings
   ,expression
   ,statement
-  ,program
   )
 
 import Curios.Expression
   (Literal (..)
   ,Name (..)
-  ,QualifiedName (..)
-  ,PiBinding (..)
-  ,LambdaBinding (..)
+  ,Binding (..)
   ,Expression (..)
   ,Statement (..)
-  ,Program (..)
   )
 
 spec =
@@ -36,80 +33,62 @@ spec =
       
       it "fails on an invalid name" $
         parse `shouldFailOn` "@invalid"
-    
-    describe "qualifiedName" $ do
-      let parse = Megaparsec.parse qualifiedName ""
-
-      it "succeeds on a valid qualified name" $
-        parse "first;second" `shouldParse` QualifiedName [Name "first"] (Name "second")
-      
-      it "fails on an invalid qualified name (1)" $
-        parse `shouldFailOn` "first; second"
-      
-      it "fails on an invalid qualified name (2)" $
-        parse `shouldFailOn` ";second"
 
     describe "literal" $ do
       let parse = Megaparsec.parse literal ""
 
       it "succeeds on a character" $
-        parse "'a'" `shouldParse` LiCharacter 'a'
+        parse "'a'" `shouldParse` LtCharacter 'a'
       
       it "succeeds on text" $
-        parse "\"text\"" `shouldParse` LiText "text"
+        parse "\"text\"" `shouldParse` LtText "text"
       
       it "succeeds on a positive integer" $
-        parse "15" `shouldParse` LiInteger 15
+        parse "15" `shouldParse` LtInteger 15
 
       it "succeeds on a negative rational" $
-        parse "-15.0" `shouldParse` LiRational (-15.0)
+        parse "-15.0" `shouldParse` LtRational (-15.0)
     
-    describe "piBinding" $ do
-      let parse = Megaparsec.parse piBinding ""
+    describe "binding" $ do
+      let parse = Megaparsec.parse binding ""
 
-      it "succeeds on a valid pi binding (1)" $
+      it "succeeds on a valid binding" $
         parse "name: type" `shouldParse`
-          PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
+          Binding (Name "name") (ExVariable (Name "type"))
       
-      it "succeeds on a valid pi binding (2)" $
-        parse "type" `shouldParse`
-          PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
+      it "fails on an invalid binding" $
+        parse `shouldFailOn` "name:"
     
-    describe "lambdaBinding"$ do
-      let parse = Megaparsec.parse lambdaBinding ""
+    describe "bindings" $ do
+      let parse = Megaparsec.parse bindings ""
 
-      it "succeeds on a valid lambda binding (1)" $
-        parse "name: type" `shouldParse`
-          LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
-      
-      it "succeeds on a valid lambda binding (2)" $
-        parse "name" `shouldParse` LambdaBinding (Name "name") Nothing
+      it "succeeds on a valid binding sequence" $
+        parse "name: type, name: type," `shouldParse`
+          [Binding (Name "name") (ExVariable (Name "type"))
+          ,Binding (Name "name") (ExVariable (Name "type"))
+          ]
     
     describe "expression" $ do
       let parse = Megaparsec.parse expression ""
-
-      it "succeeds on a variable" $
-        parse "some-name-with;dashes" `shouldParse`
-          ExVariable (QualifiedName [Name "some-name-with"] (Name "dashes"))
       
       it "succeeds on a pi abstraction" $
-        parse "[type, name: type, type]" `shouldParse`
+        parse "[name: type, name: type, type]" `shouldParse`
           ExPiAbstraction
-            [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-            ,PiBinding (Just (Name "name")) (ExVariable (QualifiedName [] (Name "type")))
+            [Binding (Name "name") (ExVariable (Name "type"))
+            ,Binding (Name "name") (ExVariable (Name "type"))
             ]
-            (ExVariable (QualifiedName [] (Name "type")))
+            (ExVariable (Name "type"))
       
       it "fails on an invalid pi abstraction" $
         parse `shouldFailOn` "[type, name: type, type,]"
       
       it "succeeds on a lambda abstraction" $
-        parse "{name, name: type, name}" `shouldParse`
+        parse "{name: type, name: type, name}" `shouldParse`
           ExLambdaAbstraction
-            [LambdaBinding (Name "name") Nothing
-            ,LambdaBinding (Name "name") (Just (ExVariable (QualifiedName [] (Name "type"))))
+            [Binding (Name "name") (ExVariable (Name "type"))
+            ,Binding (Name "name") (ExVariable (Name "type"))
             ]
-            (ExVariable (QualifiedName [] (Name "name")))
+            (ExVariable (Name "name"))
       
       it "fails on an invalid lambda abstraction" $
         parse `shouldFailOn` "{name, name: type, name,}"
@@ -117,176 +96,20 @@ spec =
       it "succeeds on an application" $
         parse "(function first-argument second-argument)" `shouldParse`
           ExApplication
-            (ExVariable (QualifiedName [] (Name "function")))
-            [ExVariable (QualifiedName [] (Name "first-argument"))
-            ,ExVariable (QualifiedName [] (Name "second-argument"))
+            (ExVariable (Name "function"))
+            [ExVariable (Name "first-argument")
+            ,ExVariable (Name "second-argument")
             ]
 
     describe "statement" $ do
       let parse = Megaparsec.parse statement ""
-
-      it "succeeds on an empty module" $
-        parse "module name end" `shouldParse` StModule (Name "name") (Program [])
       
       it "succeeds on a definition" $
-        parse "define identity: [a: type, a, a] = {a, value, value} end" `shouldParse`
-          StDefine (Name "identity")
-            (ExPiAbstraction
-              [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-              ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-              ]
-              (ExVariable (QualifiedName [] (Name "a")))
-            )
+        parse "def identity {a: type, value: a, value} end" `shouldParse`
+          StDef (Name "identity")
             (ExLambdaAbstraction
-                [LambdaBinding (Name "a") Nothing
-                ,LambdaBinding (Name "value") Nothing
-                ]
-                (ExVariable (QualifiedName [] (Name "value")))
-            )
-
-      it "succeeds on a module with a single definition" $
-        parse "module name define identity: [a: type, a, a] = {a, value, value} end end" `shouldParse`
-          StModule (Name "name")
-            (Program
-              [StDefine (Name "identity")
-                (ExPiAbstraction
-                  [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                  ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                  ]
-                  (ExVariable (QualifiedName [] (Name "a")))
-                )
-                (ExLambdaAbstraction
-                  [LambdaBinding (Name "a") Nothing
-                  ,LambdaBinding (Name "value") Nothing
-                  ]
-                  (ExVariable (QualifiedName [] (Name "value")))
-                )
+              [Binding (Name "a") (ExVariable (Name "type"))
+              ,Binding (Name "value") (ExVariable (Name "a"))
               ]
+              (ExVariable (Name "value"))
             )
-      
-      it "succeeds on a nested module" $
-        parse "module outer module inner end end" `shouldParse`
-          StModule (Name "outer")
-            (Program
-              [StModule (Name "inner") (Program [])]
-            )
-
-      it "succeeds on an import" $
-        parse "import some;qualified;name end" `shouldParse`
-          StImport [QualifiedName [Name "some", Name "qualified"] (Name "name")]
-      
-      it "succeeds on an import with multiple names" $
-        parse "import one;name another;name a;third;name end" `shouldParse`
-          StImport
-            [QualifiedName [Name "one"] (Name "name")
-            ,QualifiedName [Name "another"] (Name "name")
-            ,QualifiedName [Name "a", Name "third"] (Name "name")
-            ]
-
-      it "succeeds on a module with an import" $
-        parse "module name import some;qualified;name end end" `shouldParse`
-          StModule (Name "name")
-            (Program
-              [StImport [QualifiedName [Name "some", Name "qualified"] (Name "name")]]
-            )
-
-    describe "program" $ do
-      let parse = Megaparsec.parse program ""
-
-      it "succeeds on an example source" $
-        shouldParse
-          (parse
-            (unlines
-              ["define identity: [a: type, a, a] ="
-              ,"  {a, value, value}"
-              ,"end"
-              ,""
-              ,"module pair"
-              ,"  define pair: [type, type, type] ="
-              ,"    {a, b,"
-              ,"      [c: type, [a, b, c], c]"
-              ,"    }"
-              ,"  end"
-              ,"  "
-              ,"  define make: [a: type, b: type, a, b, (pair a b)] ="
-              ,"    {a, b, x, y,"
-              ,"      {c, f, (f x y)}"
-              ,"    }"
-              ,"  end"
-              ,"end"
-              ,""
-              ]
-            )
-          )
-          (Program
-            [StDefine (Name "identity")
-              (ExPiAbstraction
-                [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                ]
-                (ExVariable (QualifiedName [] (Name "a")))
-              )
-              (ExLambdaAbstraction
-                [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "value") Nothing]
-                (ExVariable (QualifiedName [] (Name "value")))
-              )
-            ,StModule (Name "pair")
-              (Program
-                [StDefine (Name "pair")
-                  (ExPiAbstraction
-                    [PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "type")))
-                    ]
-                    (ExVariable (QualifiedName [] (Name "type")))
-                  )
-                  (ExLambdaAbstraction
-                    [LambdaBinding (Name "a") Nothing, LambdaBinding (Name "b") Nothing]
-                    (ExPiAbstraction
-                      [PiBinding (Just (Name "c")) (ExVariable (QualifiedName [] (Name "type")))
-                      ,PiBinding Nothing
-                        (ExPiAbstraction
-                          [PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                          ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
-                          ]
-                          (ExVariable (QualifiedName [] (Name "c")))
-                        )
-                      ]
-                      (ExVariable (QualifiedName [] (Name "c")))
-                    )
-                  )
-                ,StDefine (Name "make")
-                  (ExPiAbstraction
-                    [PiBinding (Just (Name "a")) (ExVariable (QualifiedName [] (Name "type")))
-                    ,PiBinding (Just (Name "b")) (ExVariable (QualifiedName [] (Name "type")))
-                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "a")))
-                    ,PiBinding Nothing (ExVariable (QualifiedName [] (Name "b")))
-                    ]
-                    (ExApplication
-                      (ExVariable (QualifiedName [] (Name "pair")))
-                      [ExVariable (QualifiedName [] (Name "a"))
-                      ,ExVariable (QualifiedName [] (Name "b"))
-                      ]
-                    )
-                  )
-                  (ExLambdaAbstraction
-                    [LambdaBinding (Name "a") Nothing
-                    ,LambdaBinding (Name "b") Nothing
-                    ,LambdaBinding (Name "x") Nothing
-                    ,LambdaBinding (Name "y") Nothing
-                    ]
-                    (ExLambdaAbstraction
-                      [LambdaBinding (Name "c") Nothing
-                      ,LambdaBinding (Name "f") Nothing
-                      ]
-                      (ExApplication
-                        (ExVariable (QualifiedName [] (Name "f")))
-                        [ExVariable (QualifiedName [] (Name "x"))
-                        ,ExVariable (QualifiedName [] (Name "y"))
-                        ]
-                      )
-                    )
-                  )
-                ]
-              )
-            ]
-          )

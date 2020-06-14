@@ -1,9 +1,7 @@
 module Curios.Visualization.Expression
   (liToBox
   ,naToBox
-  ,qnToBox
-  ,pbToBox
-  ,lbToBox
+  ,biToBox
   ,exToBox
   )
   where
@@ -11,9 +9,7 @@ module Curios.Visualization.Expression
 import Curios.Expression
   (Literal (..)
   ,Name (..)
-  ,QualifiedName (..)
-  ,PiBinding (..)
-  ,LambdaBinding (..)
+  ,Binding (..)
   ,Expression (..)
   )
 
@@ -40,32 +36,24 @@ naToBox :: Name -> Box
 naToBox name =
   text (show name)
 
-qnToBox :: QualifiedName -> Box
-qnToBox qualifiedName =
-  text (show qualifiedName)
-
-pbToBox :: PiBinding -> Box
-pbToBox (PiBinding maybeName expression) =
-  variableName <+> emphasized variableType where
-    variableName = maybe (text "Unnamed") naToBox maybeName
-    variableType = exToBox expression
-
-lbToBox :: LambdaBinding -> Box
-lbToBox (LambdaBinding name maybeExpression) =
-  variableName <+> emphasized variableType where
-    variableName = naToBox name
-    variableType = maybe (text "Untyped") exToBox maybeExpression
+biToBox :: Binding -> Box
+biToBox (Binding name expression) =
+  (naToBox name) <+> emphasized (exToBox expression) where
 
 exToBox :: Expression -> Box
 exToBox expression =
   case expression of
     ExLiteral literal ->
       text "Literal" <+> parenthesized (liToBox literal)
-    ExVariable qualifiedName ->
-      text "Variable" <+> parenthesized (qnToBox qualifiedName)
-    ExPiAbstraction piBindings abstractionBody ->
-      downwardsTab 'Π' (downwardsSeparated (fmap pbToBox piBindings)) (exToBox abstractionBody)
-    ExLambdaAbstraction lambdaBindings abstractionBody ->
-      downwardsTab 'λ' (downwardsSeparated (fmap lbToBox lambdaBindings)) (exToBox abstractionBody)
+
+    ExVariable name ->
+      text "Variable" <+> parenthesized (naToBox name)
+
+    ExPiAbstraction bindings body ->
+      downwardsTab 'Π' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)
+
+    ExLambdaAbstraction bindings body ->
+      downwardsTab 'λ' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)
+      
     ExApplication function arguments ->
       upwardsTab '◆' (exToBox function) (upwardsSeparated (fmap exToBox arguments))

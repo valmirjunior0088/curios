@@ -1,8 +1,7 @@
 module Curios.Translation
-  (liToTerm
-  ,qnToTerm
-  ,teDischargePiBinding
-  ,teDischargeLambdaBinding
+  (ltToTerm
+  ,nmToTerm
+  ,trDischarge
   ,exToTerm
   )
   where
@@ -10,87 +9,44 @@ module Curios.Translation
 import Curios.Expression
   (Literal (..)
   ,Name (..)
-  ,QualifiedName (..)
-  ,PiBinding (..)
-  ,LambdaBinding (..)
+  ,Binding (..)
   ,Expression (..)
   )
 
 import Curios.Term
   (Primitive (..)
-  ,Universe (..)
   ,Scope (..)
   ,Term (..)
-  ,teAbstract
+  ,trAbstract
   )
 
-import Curios.Identifier
-  (idNew
+import Curios.Universe
+  (Universe (..)
   )
 
-import Data.Foldable
-  (foldrM
-  )
+ltToTerm :: Literal -> Term
+ltToTerm =
+  TrLiteral
 
-import Control.Monad
-  (liftM2
-  )
+nmToTerm :: Name -> Term
+nmToTerm name =
+  case name of
+    Name "type" -> TrType (Universe 0)
+    Name "character" -> TrPrimitive PrCharacter
+    Name "text" -> TrPrimitive PrText
+    Name "integer" -> TrPrimitive PrInteger
+    Name "rational" -> TrPrimitive PrRational
+    _ -> TrFreeVariable name
 
-liToTerm :: Literal -> Term
-liToTerm =
-  TeLiteral
+trDischarge :: (Term -> Scope -> Term) -> Binding -> Term -> Term
+trDischarge constructAbstraction (Binding variableName variableType) term =
+  constructAbstraction (exToTerm variableType) (trAbstract variableName term)
 
-qnToTerm :: QualifiedName -> Term
-qnToTerm qualifiedName =
-  case qualifiedName of
-    QualifiedName [] (Name "type") -> TeType (Universe 0)
-    QualifiedName [] (Name "character") -> TePrimitive PrCharacter
-    QualifiedName [] (Name "string") -> TePrimitive PrString
-    QualifiedName [] (Name "integer") -> TePrimitive PrInteger
-    QualifiedName [] (Name "rational") -> TePrimitive PrRational
-    _ -> TeFreeVariable qualifiedName
-
-teDischargePiBinding :: PiBinding -> Term -> IO Term
-teDischargePiBinding (PiBinding maybeVariableName variableType) term =
-  do
-    variableType' <- exToTerm variableType
-    return (TePiAbstraction variableType' abstractionBody') where
-      abstractionBody' =
-        case maybeVariableName of
-          Nothing -> Scope term
-          Just variableName -> teAbstract variableName term
-
-teDischargeLambdaBinding :: LambdaBinding -> Term -> IO Term
-teDischargeLambdaBinding (LambdaBinding variableName maybeVariableType) term =
-  liftM2 TeLambdaAbstraction variableType' abstractionBody' where
-    variableType' =
-      case maybeVariableType of
-        Nothing ->
-          do
-            identifier <- idNew
-            return (TeMetaVariable identifier (TeType (Universe 0)))
-        Just variableType ->
-          exToTerm variableType
-    abstractionBody' =
-      return (teAbstract variableName term)
-
-exToTerm :: Expression -> IO Term
+exToTerm :: Expression -> Term
 exToTerm expression =
   case expression of
-    ExLiteral literal ->
-      return (liToTerm literal)
-    ExVariable qualifiedName ->
-      return (qnToTerm qualifiedName)
-    ExPiAbstraction piBindings abstractionBody ->
-      do
-        abstractionBody' <- exToTerm abstractionBody
-        foldrM teDischargePiBinding abstractionBody' piBindings
-    ExLambdaAbstraction lambdaBindings abstractionBody ->
-      do
-        abstractionBody' <- exToTerm abstractionBody
-        foldrM teDischargeLambdaBinding abstractionBody' lambdaBindings
-    ExApplication function arguments ->
-      do
-        function' <- exToTerm function
-        arguments' <- mapM exToTerm arguments
-        return (foldl TeApplication function' arguments')
+    ExLiteral literal -> ltToTerm literal
+    ExVariable name -> nmToTerm name
+    ExPiAbstraction bindings body -> foldr (trDischarge TrPiAbstraction) (exToTerm body) bindings
+    ExLambdaAbstraction bindings body -> foldr (trDischarge TrLambdaAbstraction) (exToTerm body) bindings
+    ExApplication function arguments -> foldl TrApplication (exToTerm function) (map exToTerm arguments)

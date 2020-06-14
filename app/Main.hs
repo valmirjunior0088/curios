@@ -1,9 +1,12 @@
 import qualified Curios.Parsing as Parsing (expression)
 import qualified Text.Megaparsec as Megaparsec (parse, eof)
 
+import Curios.Translation (exToTerm)
 import Curios.Visualization.Expression (exToBox)
 import Curios.Visualization.Term (teToBox)
-import Curios.Translation (exToTerm)
+import Curios.Context (coEmpty)
+import Curios.Environment (enEmpty)
+import Curios.Typechecking (trCheck)
 import Text.Megaparsec.Error (errorBundlePretty)
 import Text.PrettyPrint.Boxes (render)
 import Text.Printf (printf)
@@ -17,7 +20,7 @@ main =
         putStr (errorBundlePretty errorBundle)
       Right expression ->
         do
-          term <- exToTerm expression
+          let term = exToTerm expression
           putStr "SOURCE TEXT\n"
           putStr "----------\n"
           putStr input
@@ -39,4 +42,11 @@ main =
           putStr (printf "%s\n" (show term))
           putStr "----------\n"
           putStr (render (teToBox term))
+          putStr "----------\n"
+          putStr "\n"
+          putStr "\n"
+          putStr "\n"
+          putStr "TYPE\n"
+          putStr "----------\n"
+          putStr (printf "%s\n" (show (trCheck coEmpty enEmpty term)))
           putStr "----------\n"
