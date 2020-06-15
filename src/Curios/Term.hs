@@ -91,6 +91,9 @@ trInstantiate image (Scope term) =
 
 trWeaken :: Term -> Term
 trWeaken term =
-  case term of
-    TrBoundVariable index -> TrBoundVariable (index + 1)
-    _ -> term
+  trUpdateVariables handleFreeVariable handleBoundVariable term where
+    handleFreeVariable _ name =
+      TrFreeVariable name
+
+    handleBoundVariable _ index =
+      TrBoundVariable (index + 1)
