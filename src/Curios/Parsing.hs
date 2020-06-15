@@ -90,11 +90,11 @@ bindings =
 
 expression :: Parser Expression
 expression =
-  lexeme (try exLiteral <|> exVariable <|> exPiAbstraction <|> exLambdaAbstraction <|> exApplication) where
+  lexeme (try exLiteral <|> exVariable <|> exAbstractionType <|> exAbstraction <|> exApplication) where
     exLiteral = ExLiteral <$> literal
     exVariable = ExVariable <$> name
-    exPiAbstraction = ExPiAbstraction <$> (symbol "[" *> bindings) <*> (expression <* symbol "]")
-    exLambdaAbstraction = ExLambdaAbstraction <$> (symbol "{" *> bindings) <*> (expression <* symbol "}")
+    exAbstractionType = ExAbstractionType <$> (symbol "[" *> bindings) <*> (expression <* symbol "]")
+    exAbstraction = ExAbstraction <$> (symbol "{" *> bindings) <*> (expression <* symbol "}")
     exApplication = ExApplication <$> (symbol "(" *> expression) <*> (manyTill expression (symbol ")"))
 
 statement :: Parser Statement

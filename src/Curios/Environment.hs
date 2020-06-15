@@ -11,8 +11,7 @@ import Prelude hiding
   )
 
 import Curios.Term
-  (Index (..)
-  ,Term (..)
+  (Term (..)
   )
 
 import Data.Sequence
@@ -23,7 +22,8 @@ import Data.Sequence
   )
 
 import GHC.Natural
-  (naturalToInt
+  (Natural (..)
+  ,naturalToInt
   )
 
 newtype Environment =
@@ -37,8 +37,8 @@ enInsert :: Term -> Environment -> Environment
 enInsert term (Environment environment) =
   Environment (term <| environment)
 
-enLookup :: Index -> Environment -> Either String Term
-enLookup (Index index) (Environment environment) =
+enLookup :: Natural -> Environment -> Either String Term
+enLookup index (Environment environment) =
   case lookup (naturalToInt index) environment of
     Nothing -> Left ("Bound variable `" ++ show index ++ "` does not exist in the target environment")
     Just term -> Right term

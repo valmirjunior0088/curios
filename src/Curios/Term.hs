@@ -1,6 +1,5 @@
 module Curios.Term
   (Primitive (..)
-  ,Index (..)
   ,Scope (..)
   ,Term (..)
   ,trAbstract
@@ -19,7 +18,7 @@ import Curios.Universe
   )
 
 import GHC.Natural
-  (Natural
+  (Natural (..)
   )
 
 data Primitive =
@@ -27,10 +26,6 @@ data Primitive =
   PrText |
   PrInteger |
   PrRational
-  deriving (Eq, Show)
-
-newtype Index =
-  Index Natural
   deriving (Eq, Show)
 
 newtype Scope =
@@ -41,55 +36,61 @@ data Term =
   TrPrimitive Primitive |
   TrLiteral Literal |
   TrFreeVariable Name |
-  TrBoundVariable Index |
+  TrBoundVariable Natural |
   TrType Universe |
-  TrPiAbstraction Term Scope |
-  TrLambdaAbstraction Term Scope |
+  TrAbstractionType Term Scope |
+  TrAbstraction Term Scope |
   TrApplication Term Term
   deriving (Eq, Show)
 
-trAbstract :: Name -> Term -> Scope
-trAbstract name =
-  Scope . go 0 where
+trUpdateVariables :: (Natural -> Name -> Term) -> (Natural -> Natural -> Term) -> Term -> Term
+trUpdateVariables handleFreeVariable handleBoundVariable =
+  go 0 where
     go depth term =
       case term of
-        TrFreeVariable name' | name == name' ->
-          TrBoundVariable (Index depth)
+        TrFreeVariable name ->
+          handleFreeVariable depth name
+        
+        TrBoundVariable index ->
+          handleBoundVariable depth index
 
-        TrPiAbstraction inputType (Scope output) ->
-          TrPiAbstraction (go depth inputType) (Scope (go (depth + 1) output))
+        TrAbstractionType inputType (Scope output) ->
+          TrAbstractionType (go depth inputType) (Scope (go (depth + 1) output))
 
-        TrLambdaAbstraction inputType (Scope output) ->
-          TrLambdaAbstraction (go depth inputType) (Scope (go (depth + 1) output))
+        TrAbstraction inputType (Scope output) ->
+          TrAbstraction (go depth inputType) (Scope (go (depth + 1) output))
 
         TrApplication function argument ->
           TrApplication (go depth function) (go depth argument)
 
         _ ->
           term
+
+
+trAbstract :: Name -> Term -> Scope
+trAbstract name term =
+  Scope (trUpdateVariables handleFreeVariable handleBoundVariable term) where
+    handleFreeVariable depth name' =
+      if name == name'
+        then TrBoundVariable depth
+        else TrFreeVariable name'
+
+    handleBoundVariable _ index =
+      TrBoundVariable index
 
 trInstantiate :: Term -> Scope -> Term
-trInstantiate image (Scope scope) =
-  go 0 scope where
-    go depth term =
-      case term of
-        TrBoundVariable (Index index) | index == depth ->
-          image
+trInstantiate image (Scope term) =
+  trUpdateVariables handleFreeVariable handleBoundVariable term where
+    handleFreeVariable _ name =
+      TrFreeVariable name
 
-        TrPiAbstraction inputType (Scope output) ->
-          TrPiAbstraction (go depth inputType) (Scope (go (depth + 1) output))
-
-        TrLambdaAbstraction inputType (Scope output) ->
-          TrLambdaAbstraction (go depth inputType) (Scope (go (depth + 1) output))
-
-        TrApplication function argument ->
-          TrApplication (go depth function) (go depth argument)
-          
-        _ ->
-          term
+    handleBoundVariable depth index =
+      if depth == index
+        then image
+        else TrBoundVariable index
 
 trWeaken :: Term -> Term
 trWeaken term =
   case term of
-    TrBoundVariable (Index index) -> TrBoundVariable (Index (index + 1))
+    TrBoundVariable index -> TrBoundVariable (index + 1)
     _ -> term

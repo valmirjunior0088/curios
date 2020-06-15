@@ -25,8 +25,8 @@ data Binding =
 data Expression =
   ExLiteral Literal |
   ExVariable Name |
-  ExPiAbstraction [Binding] Expression |
-  ExLambdaAbstraction [Binding] Expression|
+  ExAbstractionType [Binding] Expression |
+  ExAbstraction [Binding] Expression|
   ExApplication Expression [Expression]
   deriving (Eq, Show)
 

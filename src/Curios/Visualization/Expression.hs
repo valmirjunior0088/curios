@@ -49,10 +49,10 @@ exToBox expression =
     ExVariable name ->
       text "Variable" <+> parenthesized (naToBox name)
 
-    ExPiAbstraction bindings body ->
+    ExAbstractionType bindings body ->
       downwardsTab 'Π' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)
 
-    ExLambdaAbstraction bindings body ->
+    ExAbstraction bindings body ->
       downwardsTab 'λ' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)
       
     ExApplication function arguments ->

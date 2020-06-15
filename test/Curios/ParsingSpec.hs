@@ -73,7 +73,7 @@ spec =
       
       it "succeeds on a pi abstraction" $
         parse "[name: type, name: type, type]" `shouldParse`
-          ExPiAbstraction
+          ExAbstractionType
             [Binding (Name "name") (ExVariable (Name "type"))
             ,Binding (Name "name") (ExVariable (Name "type"))
             ]
@@ -84,7 +84,7 @@ spec =
       
       it "succeeds on a lambda abstraction" $
         parse "{name: type, name: type, name}" `shouldParse`
-          ExLambdaAbstraction
+          ExAbstraction
             [Binding (Name "name") (ExVariable (Name "type"))
             ,Binding (Name "name") (ExVariable (Name "type"))
             ]
@@ -107,7 +107,7 @@ spec =
       it "succeeds on a definition" $
         parse "def identity {a: type, value: a, value} end" `shouldParse`
           StDef (Name "identity")
-            (ExLambdaAbstraction
+            (ExAbstraction
               [Binding (Name "a") (ExVariable (Name "type"))
               ,Binding (Name "value") (ExVariable (Name "a"))
               ]

@@ -59,7 +59,7 @@ trNormalize term =
   case term of
     TrApplication function argument ->
       case trNormalize function of
-        TrLambdaAbstraction _ output -> trNormalize (trInstantiate argument output)
+        TrAbstraction _ output -> trNormalize (trInstantiate argument output)
         normalizedFunction -> TrApplication normalizedFunction argument
 
     _ ->
@@ -83,7 +83,7 @@ trCheck context environment term =
     TrType universe ->
       Right (TrType (unNext universe))
 
-    TrPiAbstraction inputType (Scope output) ->
+    TrAbstractionType inputType (Scope output) ->
       do
         inputKind <- trCheck context environment inputType
         inputUniverse <- case trNormalize inputKind of
@@ -97,12 +97,12 @@ trCheck context environment term =
 
         Right (TrType (unMax inputUniverse outputUniverse))
 
-    TrLambdaAbstraction inputType (Scope output) ->
+    TrAbstraction inputType (Scope output) ->
       do
         _ <- trCheck context environment inputType
         outputType <- trCheck context (enInsert inputType environment) output
 
-        let inferredType = TrPiAbstraction inputType (Scope (trWeaken outputType))
+        let inferredType = TrAbstractionType inputType (Scope (trWeaken outputType))
         _ <- trCheck context environment inferredType
 
         Right inferredType
@@ -112,7 +112,7 @@ trCheck context environment term =
         functionType <- trCheck context environment function
 
         case trNormalize functionType of
-          TrPiAbstraction inputType output ->
+          TrAbstractionType inputType output ->
             do
               argumentType <- trCheck context environment argument
               unless (inputType == argumentType) (Left "Ill typed application")

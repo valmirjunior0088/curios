@@ -1,6 +1,6 @@
 module Curios.Visualization.Term
   (prToBox
-  ,inToBox
+  ,ntToBox
   ,unToBox
   ,ssToBox
   ,teToBox
@@ -14,7 +14,6 @@ import Curios.Visualization.Expression
 
 import Curios.Term
   (Primitive (..)
-  ,Index (..)
   ,Scope (..)
   ,Term (..)
   )
@@ -29,6 +28,10 @@ import Curios.Visualization.Common
   ,downwardsTab
   )
 
+import GHC.Natural
+  (Natural (..)
+  )
+
 import Text.PrettyPrint.Boxes
   (Box
   ,text
@@ -39,9 +42,9 @@ prToBox :: Primitive -> Box
 prToBox primitive =
   text (show primitive)
 
-inToBox :: Index -> Box
-inToBox index =
-  text (show index)
+ntToBox :: Natural -> Box
+ntToBox natural =
+  text (show natural)
 
 unToBox :: Universe -> Box
 unToBox universe =
@@ -64,15 +67,15 @@ teToBox term =
       text "Free variable" <+> parenthesized (naToBox name)
 
     TrBoundVariable index ->
-      text "Bound variable" <+> parenthesized (inToBox index)
+      text "Bound variable" <+> parenthesized (ntToBox index)
       
     TrType universe ->
       text "Type" <+> parenthesized (unToBox universe)
 
-    TrPiAbstraction variableType scope ->
+    TrAbstractionType variableType scope ->
       downwardsTab 'Π' (teToBox variableType) (ssToBox scope)
 
-    TrLambdaAbstraction variableType scope ->
+    TrAbstraction variableType scope ->
       downwardsTab 'λ' (teToBox variableType) (ssToBox scope)
       
     TrApplication function argument ->
