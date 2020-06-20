@@ -6,7 +6,7 @@ import Curios.Visualization.Expression (exToBox)
 import Curios.Visualization.Term (teToBox)
 import Curios.Context (coEmpty)
 import Curios.Environment (enEmpty)
-import Curios.Typechecking (trCheck)
+import Curios.Typechecking (trInfer)
 import Text.Megaparsec.Error (errorBundlePretty)
 import Text.PrettyPrint.Boxes (render)
 import Text.Printf (printf)
@@ -46,7 +46,7 @@ main =
           putStr "\n"
           putStr "\n"
           putStr "\n"
-          putStr "TYPE\n"
+          putStr "INFERRED TYPE\n"
           putStr "----------\n"
-          putStr (printf "%s\n" (show (trCheck coEmpty enEmpty term)))
+          putStr (printf "%s\n" (show (trInfer coEmpty enEmpty term)))
           putStr "----------\n"

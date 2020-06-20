@@ -12,6 +12,7 @@ import Prelude hiding
 
 import Curios.Term
   (Term (..)
+  ,trWeaken
   )
 
 import Data.Sequence
@@ -28,6 +29,7 @@ import GHC.Natural
 
 newtype Environment =
   Environment (Seq Term)
+  deriving (Show)
 
 enEmpty :: Environment
 enEmpty =

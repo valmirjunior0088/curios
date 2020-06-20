@@ -27,6 +27,7 @@ import Data.Map.Strict
 
 newtype Context =
   Context (Map Name Term)
+  deriving (Show)
 
 coEmpty :: Context
 coEmpty =

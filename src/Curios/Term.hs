@@ -66,7 +66,6 @@ trUpdateVariables handleFreeVariable handleBoundVariable =
         _ ->
           term
 
-
 trAbstract :: Name -> Term -> Scope
 trAbstract name term =
   Scope (trUpdateVariables handleFreeVariable handleBoundVariable term) where
@@ -94,6 +93,6 @@ trWeaken term =
   trUpdateVariables handleFreeVariable handleBoundVariable term where
     handleFreeVariable _ name =
       TrFreeVariable name
-
+    
     handleBoundVariable _ index =
       TrBoundVariable (index + 1)
