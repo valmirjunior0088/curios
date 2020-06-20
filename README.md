@@ -28,7 +28,7 @@ end
 mod pair
   def pair
     {a: type, b: type,
-      [z: type, [first: a, second: b, z], z]
+      [z: type, f: [first: a, second: b, z], z]
     }
   end
 

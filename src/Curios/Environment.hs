@@ -12,7 +12,6 @@ import Prelude hiding
 
 import Curios.Term
   (Term (..)
-  ,trWeaken
   )
 
 import Data.Sequence
