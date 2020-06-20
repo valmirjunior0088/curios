@@ -14,7 +14,6 @@ import Curios.Term
   ,Scope (..)
   ,Term (..)
   ,trInstantiate
-  ,trWeaken
   )
 
 import Curios.Universe
@@ -32,6 +31,7 @@ import Curios.Environment
   (Environment (..)
   ,enInsert
   ,enLookup
+  ,enWeaken
   )
 
 import Control.Monad
@@ -90,7 +90,7 @@ trInfer context environment term =
           TrType universe -> Right universe
           _ -> Left "Invalid input type"
         
-        outputType <- trInfer context (enInsert inputType environment) output
+        outputType <- trInfer context (enWeaken (enInsert inputType environment)) output
         outputUniverse <- case trWeakNormalize outputType of
           TrType universe -> Right universe
           _ -> Left "Invalid output type"
@@ -100,7 +100,7 @@ trInfer context environment term =
     TrAbstraction inputType (Scope output) ->
       do
         _ <- trInfer context environment inputType
-        outputType <- trInfer context (enInsert (trWeaken inputType) environment) output
+        outputType <- trInfer context (enWeaken (enInsert inputType environment)) output
 
         let inferredType = TrAbstractionType inputType (Scope outputType)
         _ <- trInfer context environment inferredType
