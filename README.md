@@ -4,7 +4,7 @@ Curios is a dependently typed functional programming language.
 
 ## Usage
 
-Curios programs cannot yet be ran, but the internal representation of expressions can be viewed.
+Curios programs cannot yet be ran, but the internal representation of expressions can be viewed, and they can also be typechecked.
 
 1. Clone the repo:
 
@@ -12,11 +12,19 @@ Curios programs cannot yet be ran, but the internal representation of expression
 git clone https://github.com/valmirjunior0088/curios
 ```
 
-2. View the internal representation of expressions:
+2. Use the executable:
 
-```
-echo "{a: type, value: a, value}" | stack run
-```
+    1. View the internal representation of expressions:
+
+    ```
+    stack run print "{a: type, value: a, value}"
+    ```
+
+    2. Typecheck a file, and optionally print the type of a definition:
+
+    ```
+    stack run check ~/example.crs identity
+    ```
 
 ## Example source
 

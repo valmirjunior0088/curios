@@ -24,7 +24,7 @@ import Curios.Universe
 
 import Curios.Context
   (Context (..)
-  ,coLookup
+  ,cnLookup
   )
 
 import Curios.Environment
@@ -75,7 +75,7 @@ trInfer context environment term =
       ltInfer context environment literal
 
     TrFreeVariable name ->
-      coLookup name context
+      cnLookup name context
 
     TrBoundVariable index ->
       enLookup index environment

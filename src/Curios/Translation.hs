@@ -3,6 +3,8 @@ module Curios.Translation
   ,nmToTerm
   ,trDischarge
   ,exToTerm
+  ,cnInsertStatement
+  ,cnInsertStatements
   )
   where
 
@@ -11,6 +13,7 @@ import Curios.Expression
   ,Name (..)
   ,Binding (..)
   ,Expression (..)
+  ,Statement (..)
   )
 
 import Curios.Term
@@ -20,8 +23,25 @@ import Curios.Term
   ,trAbstract
   )
 
+import Curios.Environment
+  (enEmpty
+  )
+
+import Curios.Context
+  (Context (..)
+  ,cnInsert
+  )
+
+import Curios.Typechecking
+  (trInfer
+  )
+
 import Curios.Universe
   (Universe (..)
+  )
+
+import Data.Foldable
+  (foldlM
   )
 
 ltToTerm :: Literal -> Term
@@ -50,3 +70,16 @@ exToTerm expression =
     ExAbstractionType bindings body -> foldr (trDischarge TrAbstractionType) (exToTerm body) bindings
     ExAbstraction bindings body -> foldr (trDischarge TrAbstraction) (exToTerm body) bindings
     ExApplication function arguments -> foldl TrApplication (exToTerm function) (map exToTerm arguments)
+
+cnInsertStatement :: Context -> Statement -> Either String Context
+cnInsertStatement context (StDef name expression) =
+  case trInfer context enEmpty (exToTerm expression) of
+    Left message ->
+      Left ("Failed to typecheck [" ++ show name ++ "]: " ++ message)
+
+    Right term ->
+      cnInsert name term context
+
+cnInsertStatements :: [Statement] -> Context -> Either String Context
+cnInsertStatements statements context =
+  foldlM cnInsertStatement context statements

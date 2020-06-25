@@ -5,6 +5,7 @@ module Curios.Parsing
   ,bindings
   ,expression
   ,statement
+  ,statements
   )
   where
 
@@ -101,3 +102,7 @@ statement :: Parser Statement
 statement =
   lexeme (stDef) where
     stDef = StDef <$> (symbol "def" *> name) <*> (expression <* symbol "end")
+
+statements :: Parser [Statement]
+statements =
+  lexeme (some (try statement))

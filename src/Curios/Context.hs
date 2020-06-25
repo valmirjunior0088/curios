@@ -1,8 +1,8 @@
 module Curios.Context
   (Context (..)
-  ,coEmpty
-  ,coInsert
-  ,coLookup
+  ,cnEmpty
+  ,cnInsert
+  ,cnLookup
   )
   where
 
@@ -29,18 +29,18 @@ newtype Context =
   Context (Map Name Term)
   deriving (Show)
 
-coEmpty :: Context
-coEmpty =
+cnEmpty :: Context
+cnEmpty =
   Context empty
 
-coInsert :: Name -> Term -> Context -> Either String Context
-coInsert name term (Context context) =
+cnInsert :: Name -> Term -> Context -> Either String Context
+cnInsert name term (Context context) =
   case lookup name context of
     Nothing -> Right (Context (insert name term context))
     Just _ -> Left ("Free variable `" ++ show name ++ "` already exists in the target context")
 
-coLookup :: Name -> Context -> Either String Term
-coLookup name (Context context) =
+cnLookup :: Name -> Context -> Either String Term
+cnLookup name (Context context) =
   case lookup name context of
     Nothing -> Left ("Free variable `" ++ show name ++ "` does not exist in the target context")
     Just term -> Right term
