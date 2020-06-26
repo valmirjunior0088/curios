@@ -37,15 +37,19 @@ coParser =
       CoPrint <$> argument str (metavar "EXPRESSION")
 
     coPrintCommand =
-      command "print" (info (helper <*> coPrintParser)
-        (progDesc "Prints the representation of an expression"))
+      command "print"
+        (info (helper <*> coPrintParser)
+          (progDesc "Prints the representation of an expression")
+        )
     
     coCheckParser =
       CoCheck <$> argument str (metavar "PATH") <*> optional (argument str (metavar "NAME"))
 
     coCheckCommand =
-      command "check" (info (helper <*> coCheckParser)
-        (progDesc "Typechecks a source file"))
+      command "check"
+        (info (helper <*> coCheckParser)
+          (progDesc "Typechecks a source file")
+        )
 
 coMain :: (CommandOptions -> IO ()) -> IO ()
 coMain coRun =

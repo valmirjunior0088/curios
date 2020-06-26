@@ -18,6 +18,7 @@ run commandOptions =
       case Megaparsec.parse (Parsing.expression <* Megaparsec.eof) "" sourceExpression of
         Left errorBundle ->
           putStr (errorBundlePretty errorBundle)
+
         Right expression ->
           do
             let term = exToTerm expression
@@ -51,6 +52,7 @@ run commandOptions =
         case Megaparsec.parse (Parsing.statements <* Megaparsec.eof) "" file of
           Left errorBundle ->
             putStr (errorBundlePretty errorBundle)
+
           Right statements ->
             case cnInsertStatements statements cnEmpty of
               Left message ->
@@ -64,7 +66,7 @@ run commandOptions =
                   Just name ->
                     case cnLookup (Name name) context of
                       Left message ->
-                        putStr ("Error looking name up: [" ++ message ++ "]\n")
+                        putStr ("Name lookup failed [" ++ message ++ "]\n")
 
                       Right term ->
                         do
