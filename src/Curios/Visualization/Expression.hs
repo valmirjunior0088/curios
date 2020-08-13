@@ -46,8 +46,8 @@ exToBox expression =
     ExLiteral literal ->
       text "Literal" <+> parenthesized (liToBox literal)
 
-    ExVariable name ->
-      text "Variable" <+> parenthesized (naToBox name)
+    ExIdentifier name ->
+      text "Identifier" <+> parenthesized (naToBox name)
 
     ExAbstractionType bindings body ->
       downwardsTab 'Π' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)

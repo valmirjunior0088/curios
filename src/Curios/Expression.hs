@@ -24,7 +24,7 @@ data Binding =
 
 data Expression =
   ExLiteral Literal |
-  ExVariable Name |
+  ExIdentifier Name |
   ExAbstractionType [Binding] Expression |
   ExAbstraction [Binding] Expression|
   ExApplication Expression [Expression]

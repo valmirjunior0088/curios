@@ -66,7 +66,7 @@ exToTerm :: Expression -> Term
 exToTerm expression =
   case expression of
     ExLiteral literal -> ltToTerm literal
-    ExVariable name -> nmToTerm name
+    ExIdentifier name -> nmToTerm name
     ExAbstractionType bindings body -> foldr (trDischarge TrAbstractionType) (exToTerm body) bindings
     ExAbstraction bindings body -> foldr (trDischarge TrAbstraction) (exToTerm body) bindings
     ExApplication function arguments -> foldl TrApplication (exToTerm function) (map exToTerm arguments)

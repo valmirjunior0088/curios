@@ -1,6 +1,5 @@
 module Curios.Typechecking
-  (prInfer
-  ,ltInfer
+  (ltInfer
   ,trInfer
   )
   where
@@ -14,6 +13,7 @@ import Curios.Term
   ,Scope (..)
   ,Term (..)
   ,trInstantiate
+  ,trWhnf
   )
 
 import Curios.Universe
@@ -31,48 +31,28 @@ import Curios.Environment
   (Environment (..)
   ,enInsert
   ,enLookup
-  ,enWeaken
   )
 
 import Control.Monad
   (unless
   )
 
-prInfer :: Context -> Environment -> Primitive -> Either String Term
-prInfer _ _ _ =
-  Right (TrType (Universe 0))
-
-ltInfer :: Context -> Environment -> Literal -> Either String Term
-ltInfer _ _ literal =
-  Right
-    (TrPrimitive
-      (case literal of
-        LtCharacter _ -> PrCharacter
-        LtText _ -> PrText
-        LtInteger _ -> PrInteger
-        LtRational _ -> PrRational
-      )
-    )
-
-trWeakNormalize :: Term -> Term
-trWeakNormalize term =
-  case term of
-    TrApplication function argument ->
-      case trWeakNormalize function of
-        TrAbstraction _ output -> trWeakNormalize (trInstantiate argument output)
-        normalizedFunction -> TrApplication normalizedFunction argument
-
-    _ ->
-      term
+ltInfer :: Literal -> Primitive
+ltInfer literal =
+  case literal of
+    LtCharacter _ -> PrCharacter
+    LtText _ -> PrText
+    LtInteger _ -> PrInteger
+    LtRational _ -> PrRational
 
 trInfer :: Context -> Environment -> Term -> Either String Term
 trInfer context environment term =
   case term of
     TrPrimitive primitive ->
-      prInfer context environment primitive
+      Right (TrType (Universe 0))
 
     TrLiteral literal ->
-      ltInfer context environment literal
+      Right (TrPrimitive (ltInfer literal))
 
     TrFreeVariable name ->
       cnLookup name context
@@ -83,24 +63,24 @@ trInfer context environment term =
     TrType universe ->
       Right (TrType (unNext universe))
 
-    TrAbstractionType inputType (Scope output) ->
+    TrAbstractionType inputType (Scope outputType) ->
       do
         inputKind <- trInfer context environment inputType
-        inputUniverse <- case trWeakNormalize inputKind of
+        inputUniverse <- case trWhnf inputKind of
           TrType universe -> Right universe
-          _ -> Left "Invalid input type"
+          term' -> Left ("Invalid input type [" ++ show term' ++ "]")
         
-        outputType <- trInfer context (enWeaken (enInsert inputType environment)) output
-        outputUniverse <- case trWeakNormalize outputType of
+        outputKind <- trInfer context (enInsert inputType environment) outputType
+        outputUniverse <- case trWhnf outputKind of
           TrType universe -> Right universe
-          _ -> Left "Invalid output type"
+          term' -> Left ("Invalid output type [" ++ show term' ++ "]")
 
         Right (TrType (unMax inputUniverse outputUniverse))
 
-    TrAbstraction inputType (Scope output) ->
+    TrAbstraction inputType (Scope outputTerm) ->
       do
         _ <- trInfer context environment inputType
-        outputType <- trInfer context (enWeaken (enInsert inputType environment)) output
+        outputType <- trInfer context (enInsert inputType environment) outputTerm
 
         let inferredType = TrAbstractionType inputType (Scope outputType)
         _ <- trInfer context environment inferredType
@@ -111,13 +91,16 @@ trInfer context environment term =
       do
         functionType <- trInfer context environment function
 
-        case trWeakNormalize functionType of
-          TrAbstractionType inputType output ->
+        case trWhnf functionType of
+          TrAbstractionType inputType outputType ->
             do
               argumentType <- trInfer context environment argument
-              unless (inputType == argumentType) (Left "Ill typed application")
 
-              Right (trInstantiate argument output)
+              unless
+                (inputType == argumentType)
+                (Left "Ill typed application")
+
+              Right (trInstantiate argument outputType)
           
           _ ->
             Left "Invalid application"

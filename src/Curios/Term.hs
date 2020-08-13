@@ -5,6 +5,7 @@ module Curios.Term
   ,trAbstract
   ,trInstantiate
   ,trWeaken
+  ,trWhnf
   )
   where
 
@@ -96,3 +97,14 @@ trWeaken term =
     
     handleBoundVariable _ index =
       TrBoundVariable (index + 1)
+
+trWhnf :: Term -> Term
+trWhnf term =
+  case term of
+    TrApplication function argument ->
+      case trWhnf function of
+        TrAbstraction _ output -> trWhnf (trInstantiate argument output)
+        normalizedFunction -> TrApplication normalizedFunction argument
+
+    _ ->
+      term
