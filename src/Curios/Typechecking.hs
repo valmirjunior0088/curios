@@ -48,7 +48,7 @@ ltInfer literal =
 trInfer :: Context -> Environment -> Term -> Either String Term
 trInfer context environment term =
   case term of
-    TrPrimitive primitive ->
+    TrPrimitive _ ->
       Right (TrType (Universe 0))
 
     TrLiteral literal ->
