@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-
 module Curios.Context
   (Context
   ,cnEmpty
@@ -18,19 +16,21 @@ import Curios.Term
   ,trShift
   )
 
-newtype Context a =
-  Context [(Identifier, a)]
-  deriving (Functor)
+newtype Context =
+  Context [(Identifier, Term)]
 
-cnEmpty :: Context Term
+cnEmpty :: Context
 cnEmpty =
   Context []
 
-cnInsert :: Identifier -> Term -> Context Term -> Context Term
+cnInsert :: Identifier -> Term -> Context -> Context
 cnInsert identifier term (Context context) =
-  fmap (trShift 1 identifier) (Context ((identifier, term) : context))
+  let
+    cnShift (identifier', term') = (identifier', trShift 1 identifier term')
+  in
+    Context (fmap cnShift ((identifier, term) : context))
 
-cnLookup :: Name -> Context Term -> Maybe Term
+cnLookup :: Name -> Context -> Maybe Term
 cnLookup name@(Name identifier index) (Context context) =
   case context of
     [] -> Nothing

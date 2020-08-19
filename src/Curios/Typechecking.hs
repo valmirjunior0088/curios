@@ -55,11 +55,11 @@ ctRule constant constant' =
     (CtType, CtKind) -> CtKind
     (CtType, CtType) -> CtType
 
-trIsWellTypedWith :: Context Term -> Term -> Either String ()
+trIsWellTypedWith :: Context -> Term -> Either String ()
 trIsWellTypedWith context term =
   trSynthesiseTypeWith context term >> Right ()
 
-trSynthesiseTypeWith :: Context Term -> Term -> Either String Type
+trSynthesiseTypeWith :: Context -> Term -> Either String Type
 trSynthesiseTypeWith context term =
   case term of
     TrPrimitive _ -> Right (TrConstant CtType)
