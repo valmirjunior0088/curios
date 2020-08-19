@@ -1,4 +1,8 @@
-# Curios
+<p align="center">
+  <img width="350" height="183" src="https://github.com/valmirjunior0088/curios/raw/master/logo.png">
+</p>
+
+### Checklist
 
 - [x] [Calculus of constructions](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
 - [ ] [Implicit calculus of constructions](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.99.4335&rep=rep1&type=pdf)
