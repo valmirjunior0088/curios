@@ -44,7 +44,7 @@ run commandOptions =
             putStr (render (trToBox term))
             putStr "----------\n"
 
-    CoCheck path maybeName ->
+    CoCheck path maybeIdentifier ->
       do
         file <- readFile path
 
@@ -58,9 +58,9 @@ run commandOptions =
                 putStr ("Typechecking failed [" ++ message ++ "]\n")
 
               Right definitions ->
-                case maybeName of
+                case maybeIdentifier of
                   Nothing -> 
-                    putStr "Typechecking succeeded!"
+                    putStr "Typechecking succeeded!\n"
                   
                   Just identifier ->
                     case dfLookup identifier definitions of
