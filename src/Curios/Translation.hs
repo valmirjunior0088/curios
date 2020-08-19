@@ -75,7 +75,7 @@ dfInsert definitions (StDef identifier expression) =
     let output = exToTerm expression
     input <- trSynthesiseTypeOf (trDefineManyIn definitions output)
 
-    Right (definitions ++ [Definition identifier (trWhnf input) (trWhnf output)])
+    Right (definitions ++ [Definition identifier input (trWhnf output)])
 
 dfInsertMany :: [Definition] -> [Statement] -> Either String [Definition]
 dfInsertMany definitions statements =
