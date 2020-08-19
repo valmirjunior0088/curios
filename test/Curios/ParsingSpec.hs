@@ -8,7 +8,7 @@ import Test.Hspec (describe, it)
 
 import Curios.Parsing
   (literal
-  ,name
+  ,identifier
   ,binding
   ,bindings
   ,expression
@@ -17,7 +17,7 @@ import Curios.Parsing
 
 import Curios.Expression
   (Literal (..)
-  ,Name (..)
+  ,Identifier
   ,Binding (..)
   ,Expression (..)
   ,Statement (..)
@@ -26,12 +26,12 @@ import Curios.Expression
 spec =
   describe "Curios.ParsingSpec" $ do
     describe "name" $ do
-      let parse = Megaparsec.parse name ""
+      let parse = Megaparsec.parse identifier ""
 
-      it "succeeds on a valid name" $
-        parse "name" `shouldParse` Name "name"
+      it "succeeds on a valid identifier" $
+        parse "identifier" `shouldParse` "identifier"
       
-      it "fails on an invalid name" $
+      it "fails on an invalid identifier" $
         parse `shouldFailOn` "@invalid"
 
     describe "literal" $ do
@@ -53,8 +53,8 @@ spec =
       let parse = Megaparsec.parse binding ""
 
       it "succeeds on a valid binding" $
-        parse "name: type" `shouldParse`
-          Binding (Name "name") (ExVariable (Name "type"))
+        parse "identifier: type" `shouldParse`
+          Binding "identifier" (ExIdentifier "type")
       
       it "fails on an invalid binding" $
         parse `shouldFailOn` "name:"
@@ -63,53 +63,53 @@ spec =
       let parse = Megaparsec.parse bindings ""
 
       it "succeeds on a valid binding sequence" $
-        parse "name: type, name: type," `shouldParse`
-          [Binding (Name "name") (ExVariable (Name "type"))
-          ,Binding (Name "name") (ExVariable (Name "type"))
+        parse "identifier: type. identifier: type." `shouldParse`
+          [Binding "identifier" (ExIdentifier "type")
+          ,Binding "identifier" (ExIdentifier "type")
           ]
     
     describe "expression" $ do
       let parse = Megaparsec.parse expression ""
       
       it "succeeds on a pi abstraction" $
-        parse "[name: type, name: type, type]" `shouldParse`
+        parse "[identifier: type. identifier: type. type]" `shouldParse`
           ExAbstractionType
-            [Binding (Name "name") (ExVariable (Name "type"))
-            ,Binding (Name "name") (ExVariable (Name "type"))
+            [Binding "identifier" (ExIdentifier "type")
+            ,Binding "identifier" (ExIdentifier "type")
             ]
-            (ExVariable (Name "type"))
+            (ExIdentifier "type")
       
       it "fails on an invalid pi abstraction" $
-        parse `shouldFailOn` "[type, name: type, type,]"
+        parse `shouldFailOn` "[type. identifier: type. type.]"
       
       it "succeeds on a lambda abstraction" $
-        parse "{name: type, name: type, name}" `shouldParse`
+        parse "{identifier: type. identifier: type. identifier}" `shouldParse`
           ExAbstraction
-            [Binding (Name "name") (ExVariable (Name "type"))
-            ,Binding (Name "name") (ExVariable (Name "type"))
+            [Binding "identifier" (ExIdentifier "type")
+            ,Binding "identifier" (ExIdentifier "type")
             ]
-            (ExVariable (Name "name"))
+            (ExIdentifier "identifier")
       
       it "fails on an invalid lambda abstraction" $
-        parse `shouldFailOn` "{name, name: type, name,}"
+        parse `shouldFailOn` "{identifier. identifier: type. identifier.}"
 
       it "succeeds on an application" $
         parse "(function first-argument second-argument)" `shouldParse`
           ExApplication
-            (ExVariable (Name "function"))
-            [ExVariable (Name "first-argument")
-            ,ExVariable (Name "second-argument")
+            (ExIdentifier "function")
+            [ExIdentifier "first-argument"
+            ,ExIdentifier "second-argument"
             ]
 
     describe "statement" $ do
       let parse = Megaparsec.parse statement ""
       
       it "succeeds on a definition" $
-        parse "def identity {a: type, value: a, value} end" `shouldParse`
-          StDef (Name "identity")
+        parse "def identity {a: type. value: a. value} end" `shouldParse`
+          StDef "identity"
             (ExAbstraction
-              [Binding (Name "a") (ExVariable (Name "type"))
-              ,Binding (Name "value") (ExVariable (Name "a"))
+              [Binding "a" (ExIdentifier "type")
+              ,Binding "value" (ExIdentifier "a")
               ]
-              (ExVariable (Name "value"))
+              (ExIdentifier "value")
             )
