@@ -86,5 +86,7 @@ trToBox term =
       text "Variable" <+> parenthesized (nmToBox name)
 
 dfToBox :: Definition -> Box
-dfToBox (Definition identifier range domain) =
-  horizontallySeparated (text identifier <+> char ':' <+> trToBox range) (trToBox domain)
+dfToBox (Definition identifier domain range) =
+  horizontallySeparated
+    (text "def" <+> text identifier)
+    (horizontallySeparated (trToBox domain) (trToBox range))

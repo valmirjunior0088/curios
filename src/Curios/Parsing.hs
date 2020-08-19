@@ -78,8 +78,8 @@ literal =
 
 identifier :: Parser Identifier
 identifier =
-  lexeme (some (try (oneOf naValidCharacters))) where
-    naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=', '\'']
+  lexeme (some (try (oneOf idValidCharacters))) where
+    idValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=', '\'']
 
 binding :: Parser Binding
 binding =

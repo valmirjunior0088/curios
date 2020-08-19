@@ -25,9 +25,7 @@ cnEmpty =
 
 cnInsert :: Identifier -> Term -> Context -> Context
 cnInsert identifier term (Context context) =
-  let
-    cnShift (identifier', term') = (identifier', trShift 1 identifier term')
-  in
+  let cnShift (identifier', term') = (identifier', trShift 1 identifier term') in
     Context (fmap cnShift ((identifier, term) : context))
 
 cnLookup :: Name -> Context -> Maybe Term
