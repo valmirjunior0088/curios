@@ -26,6 +26,7 @@ import Curios.Term
   ,Term (..)
   ,Definition (..)
   ,trWhnf
+  ,trBetaReduce
   )
 
 import Curios.Typechecking
@@ -39,12 +40,12 @@ import Data.Foldable
 idToTerm :: Identifier -> Term
 idToTerm identifier =
   case identifier of
-    "kind" -> TrConstant CtKind
-    "type" -> TrConstant CtType
     "character" -> TrPrimitive PrCharacter
     "text" -> TrPrimitive PrText
     "integer" -> TrPrimitive PrInteger
     "rational" -> TrPrimitive PrRational
+    "kind" -> TrConstant CtKind
+    "type" -> TrConstant CtType
     _ -> TrVariable (Name identifier 0)
 
 trDischarge :: (Identifier -> Type -> Scope -> Term) -> Binding -> Term -> Term
@@ -61,8 +62,8 @@ exToTerm expression =
     ExIdentifier identifier -> idToTerm identifier
 
 trDefineIn :: Definition -> Term -> Term
-trDefineIn (Definition identifier range domain) term =
-  trWhnf (TrApplication (TrAbstraction identifier range (Scope term)) domain)
+trDefineIn (Definition identifier _ domain) term =
+  trBetaReduce identifier domain (Scope term)
 
 trDefineManyIn :: [Definition] -> Term -> Term
 trDefineManyIn definitions term =
