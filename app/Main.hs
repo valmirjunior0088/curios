@@ -2,11 +2,10 @@ import qualified Curios.Parsing as Parsing (expression, statements)
 import qualified Text.Megaparsec as Megaparsec (parse, eof)
 
 import CommandOptions (CommandOptions (..), coMain)
-import Curios.Expression (Name (..))
-import Curios.Translation (exToTerm, cnInsertStatements)
+import Curios.Translation (exToTerm, stToDefinitions)
 import Curios.Visualization.Expression (exToBox)
-import Curios.Visualization.Term (teToBox)
-import Curios.Context (cnEmpty, cnLookup)
+import Curios.Visualization.Term (trToBox, dfToBox)
+import Curios.Term (dfLookup)
 import Text.Megaparsec.Error (errorBundlePretty)
 import Text.PrettyPrint.Boxes (render)
 import Text.Printf (printf)
@@ -42,7 +41,7 @@ run commandOptions =
             putStr "----------\n"
             putStr (printf "%s\n" (show term))
             putStr "----------\n"
-            putStr (render (teToBox term))
+            putStr (render (trToBox term))
             putStr "----------\n"
 
     CoCheck path maybeName ->
@@ -54,27 +53,27 @@ run commandOptions =
             putStr (errorBundlePretty errorBundle)
 
           Right statements ->
-            case cnInsertStatements statements cnEmpty of
+            case stToDefinitions statements of
               Left message ->
                 putStr ("Typechecking failed [" ++ message ++ "]\n")
 
-              Right context ->
+              Right definitions ->
                 case maybeName of
                   Nothing -> 
                     putStr "Typechecking succeeded!"
                   
-                  Just name ->
-                    case cnLookup (Name name) context of
-                      Left message ->
-                        putStr ("Name lookup failed [" ++ message ++ "]\n")
+                  Just identifier ->
+                    case dfLookup identifier definitions of
+                      Nothing ->
+                        putStr ("Unbound identifier [" ++ identifier ++ "]\n")
 
-                      Right term ->
+                      Just definition ->
                         do
                           putStr "TERM\n"
                           putStr "----------\n"
-                          putStr (printf "%s\n" (show term))
+                          putStr (printf "%s\n" (show definition))
                           putStr "----------\n"
-                          putStr (render (teToBox term))
+                          putStr (render (dfToBox definition))
                           putStr "----------\n"
 
 main :: IO ()

@@ -1,46 +1,42 @@
+{-# LANGUAGE DeriveFunctor #-}
+
 module Curios.Context
-  (Context (..)
+  (Context
   ,cnEmpty
   ,cnInsert
   ,cnLookup
   )
   where
 
-import Prelude hiding
-  (lookup
-  )
-
 import Curios.Expression
-  (Name (..)
+  (Identifier
   )
 
 import Curios.Term
-  (Term (..)
+  (Name (..)
+  ,Term (..)
+  ,trShift
   )
 
-import Data.Map.Strict
-  (Map
-  ,empty
-  ,insert
-  ,lookup
-  )
+newtype Context a =
+  Context [(Identifier, a)]
+  deriving (Functor)
 
-newtype Context =
-  Context (Map Name Term)
-  deriving (Show)
-
-cnEmpty :: Context
+cnEmpty :: Context Term
 cnEmpty =
-  Context empty
+  Context []
 
-cnInsert :: Name -> Term -> Context -> Either String Context
-cnInsert name term (Context context) =
-  case lookup name context of
-    Nothing -> Right (Context (insert name term context))
-    Just _ -> Left ("Free variable `" ++ show name ++ "` already exists in the target context")
+cnInsert :: Identifier -> Term -> Context Term -> Context Term
+cnInsert identifier term (Context context) =
+  fmap (trShift 1 identifier) (Context ((identifier, term) : context))
 
-cnLookup :: Name -> Context -> Either String Term
-cnLookup name (Context context) =
-  case lookup name context of
-    Nothing -> Left ("Free variable `" ++ show name ++ "` does not exist in the target context")
-    Just term -> Right term
+cnLookup :: Name -> Context Term -> Maybe Term
+cnLookup name@(Name identifier index) (Context context) =
+  case context of
+    [] -> Nothing
+
+    ((identifier', term) : context')
+      | identifier /= identifier' -> cnLookup name (Context context')
+      | index > 0 -> cnLookup (Name identifier (pred index)) (Context context')
+      | index == 0 -> Just term
+      | otherwise -> Nothing

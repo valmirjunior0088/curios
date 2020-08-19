@@ -1,16 +1,17 @@
 module Curios.Translation
-  (ltToTerm
-  ,nmToTerm
+  (idToTerm
   ,trDischarge
   ,exToTerm
-  ,cnInsertStatement
-  ,cnInsertStatements
+  ,trDefineIn
+  ,trDefineManyIn
+  ,dfInsert
+  ,dfInsertMany
+  ,stToDefinitions
   )
   where
 
 import Curios.Expression
-  (Literal (..)
-  ,Name (..)
+  (Identifier
   ,Binding (..)
   ,Expression (..)
   ,Statement (..)
@@ -18,68 +19,67 @@ import Curios.Expression
 
 import Curios.Term
   (Primitive (..)
+  ,Constant (..)
+  ,Type
+  ,Name (..)
   ,Scope (..)
   ,Term (..)
-  ,trAbstract
-  )
-
-import Curios.Environment
-  (enEmpty
-  )
-
-import Curios.Context
-  (Context (..)
-  ,cnInsert
+  ,Definition (..)
+  ,trWhnf
   )
 
 import Curios.Typechecking
-  (trInfer
-  )
-
-import Curios.Universe
-  (Universe (..)
+  (trSynthesiseTypeOf
   )
 
 import Data.Foldable
   (foldlM
   )
 
-ltToTerm :: Literal -> Term
-ltToTerm =
-  TrLiteral
+idToTerm :: Identifier -> Term
+idToTerm identifier =
+  case identifier of
+    "kind" -> TrConstant CtKind
+    "type" -> TrConstant CtType
+    "character" -> TrPrimitive PrCharacter
+    "text" -> TrPrimitive PrText
+    "integer" -> TrPrimitive PrInteger
+    "rational" -> TrPrimitive PrRational
+    _ -> TrVariable (Name identifier 0)
 
-nmToTerm :: Name -> Term
-nmToTerm name =
-  case name of
-    Name "type" -> TrType (Universe 0)
-    Name "character" -> TrPrimitive PrCharacter
-    Name "text" -> TrPrimitive PrText
-    Name "integer" -> TrPrimitive PrInteger
-    Name "rational" -> TrPrimitive PrRational
-    _ -> TrFreeVariable name
-
-trDischarge :: (Term -> Scope -> Term) -> Binding -> Term -> Term
-trDischarge constructAbstraction (Binding variableName variableType) term =
-  constructAbstraction (exToTerm variableType) (trAbstract variableName term)
+trDischarge :: (Identifier -> Type -> Scope -> Term) -> Binding -> Term -> Term
+trDischarge construct (Binding identifier expression) term =
+  construct identifier (exToTerm expression) (Scope term)
 
 exToTerm :: Expression -> Term
 exToTerm expression =
   case expression of
-    ExLiteral literal -> ltToTerm literal
-    ExIdentifier name -> nmToTerm name
+    ExLiteral literal -> TrLiteral literal
     ExAbstractionType bindings body -> foldr (trDischarge TrAbstractionType) (exToTerm body) bindings
     ExAbstraction bindings body -> foldr (trDischarge TrAbstraction) (exToTerm body) bindings
     ExApplication function arguments -> foldl TrApplication (exToTerm function) (map exToTerm arguments)
+    ExIdentifier identifier -> idToTerm identifier
 
-cnInsertStatement :: Context -> Statement -> Either String Context
-cnInsertStatement context (StDef name expression) =
-  case trInfer context enEmpty (exToTerm expression) of
-    Left message ->
-      Left ("Failed to typecheck [" ++ show name ++ "]: " ++ message)
+trDefineIn :: Definition -> Term -> Term
+trDefineIn (Definition identifier range domain) term =
+  trWhnf (TrApplication (TrAbstraction identifier range (Scope term)) domain)
 
-    Right term ->
-      cnInsert name term context
+trDefineManyIn :: [Definition] -> Term -> Term
+trDefineManyIn definitions term =
+  foldr trDefineIn term definitions
 
-cnInsertStatements :: [Statement] -> Context -> Either String Context
-cnInsertStatements statements context =
-  foldlM cnInsertStatement context statements
+dfInsert :: [Definition] -> Statement -> Either String [Definition]
+dfInsert definitions (StDef identifier expression) =
+  do
+    let domain = exToTerm expression
+    range <- trSynthesiseTypeOf (trDefineManyIn definitions domain)
+
+    Right (definitions ++ [Definition identifier (trWhnf range) (trWhnf domain)])
+
+dfInsertMany :: [Definition] -> [Statement] -> Either String [Definition]
+dfInsertMany definitions statements =
+  foldlM dfInsert definitions statements
+
+stToDefinitions :: [Statement] -> Either String [Definition]
+stToDefinitions statements =
+  dfInsertMany [] statements

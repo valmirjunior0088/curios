@@ -1,6 +1,6 @@
 module Curios.Expression
   (Literal (..)
-  ,Name (..)
+  ,Identifier
   ,Binding (..)
   ,Expression (..)
   ,Statement (..)
@@ -14,22 +14,21 @@ data Literal =
   LtRational Double
   deriving (Eq, Show)
 
-newtype Name =
-  Name String
-  deriving (Eq, Show, Ord)
+type Identifier =
+  String
 
 data Binding =
-  Binding Name Expression
+  Binding Identifier Expression
   deriving (Eq, Show)
 
 data Expression =
   ExLiteral Literal |
-  ExIdentifier Name |
   ExAbstractionType [Binding] Expression |
-  ExAbstraction [Binding] Expression|
-  ExApplication Expression [Expression]
+  ExAbstraction [Binding] Expression |
+  ExApplication Expression [Expression] |
+  ExIdentifier Identifier
   deriving (Eq, Show)
 
 data Statement =
-  StDef Name Expression
+  StDef Identifier Expression
   deriving (Eq, Show)

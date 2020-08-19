@@ -1,31 +1,33 @@
 module Curios.Visualization.Term
-  (prToBox
+  (nmToBox
+  ,prToBox
   ,ntToBox
-  ,unToBox
-  ,ssToBox
-  ,teToBox
+  ,ctToBox
+  ,scToBox
+  ,trToBox
+  ,dfToBox
   )
   where
 
 import Curios.Visualization.Expression
-  (naToBox
+  (idToBox
   ,liToBox
   )
 
 import Curios.Term
   (Primitive (..)
+  ,Constant (..)
+  ,Name (..)
   ,Scope (..)
   ,Term (..)
-  )
-
-import Curios.Universe
-  (Universe (..)
+  ,Definition (..)
   )
 
 import Curios.Visualization.Common
   (parenthesized
   ,upwardsTab
   ,downwardsTab
+  ,horizontallySeparated
   )
 
 import GHC.Natural
@@ -34,9 +36,14 @@ import GHC.Natural
 
 import Text.PrettyPrint.Boxes
   (Box
+  ,char
   ,text
   ,(<+>)
   )
+
+nmToBox :: Name -> Box
+nmToBox name =
+  text (show name)
 
 prToBox :: Primitive -> Box
 prToBox primitive =
@@ -46,37 +53,38 @@ ntToBox :: Natural -> Box
 ntToBox natural =
   text (show natural)
 
-unToBox :: Universe -> Box
-unToBox universe =
-  text (show universe)
+ctToBox :: Constant -> Box
+ctToBox constant =
+  text (show constant)
 
-ssToBox :: Scope -> Box
-ssToBox (Scope output) =
-  teToBox output
+scToBox :: Scope -> Box
+scToBox (Scope output) =
+  trToBox output
 
-teToBox :: Term -> Box
-teToBox term =
+trToBox :: Term -> Box
+trToBox term =
   case term of
     TrPrimitive primitive ->
       text "Primitive" <+> parenthesized (prToBox primitive)
 
     TrLiteral literal ->
       text "Literal" <+> parenthesized (liToBox literal)
+    
+    TrConstant constant ->
+      text "Constant" <+> parenthesized (ctToBox constant)
 
-    TrFreeVariable name ->
-      text "Free variable" <+> parenthesized (naToBox name)
+    TrAbstractionType identifier input scope ->
+      downwardsTab 'Π' (idToBox identifier <+> char ':' <+> trToBox input) (scToBox scope)
 
-    TrBoundVariable index ->
-      text "Bound variable" <+> parenthesized (ntToBox index)
-      
-    TrType universe ->
-      text "Type" <+> parenthesized (unToBox universe)
-
-    TrAbstractionType variableType scope ->
-      downwardsTab 'Π' (teToBox variableType) (ssToBox scope)
-
-    TrAbstraction variableType scope ->
-      downwardsTab 'λ' (teToBox variableType) (ssToBox scope)
+    TrAbstraction identifier input scope ->
+      downwardsTab 'λ' (idToBox identifier <+> char ':' <+> trToBox input) (scToBox scope)
       
     TrApplication function argument ->
-      upwardsTab '◆' (teToBox function) (teToBox argument)
+      upwardsTab '◆' (trToBox function) (trToBox argument)
+    
+    TrVariable name ->
+      text "Variable" <+> parenthesized (nmToBox name)
+
+dfToBox :: Definition -> Box
+dfToBox (Definition identifier range domain) =
+  horizontallySeparated (text identifier <+> char ':' <+> trToBox range) (trToBox domain)

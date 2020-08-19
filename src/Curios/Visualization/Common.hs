@@ -12,6 +12,7 @@ module Curios.Visualization.Common
   ,downwardsArrow
   ,upwardsTab
   ,downwardsTab
+  ,horizontallySeparated
   )
   where
 
@@ -32,6 +33,7 @@ import Text.PrettyPrint.Boxes
   ,(<>)
   ,(<+>)
   ,(//)
+  ,(/+/)
   )
 
 parenthesized :: Box -> Box
@@ -93,3 +95,7 @@ downwardsTab symbol label content =
   label // downwardsSeparator (cols label) // body where
     arrow = downwardsArrow (rows content - 1) // char symbol
     body = arrow <+> content
+
+horizontallySeparated :: Box -> Box -> Box
+horizontallySeparated above below =
+  above /+/ horizontalLine (max (cols above) (cols below)) /+/ below

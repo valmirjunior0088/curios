@@ -1,6 +1,6 @@
 module Curios.Parsing
   (literal
-  ,name
+  ,identifier
   ,binding
   ,bindings
   ,expression
@@ -11,7 +11,7 @@ module Curios.Parsing
 
 import Curios.Expression
   (Literal (..)
-  ,Name (..)
+  ,Identifier
   ,Binding (..)
   ,Expression (..)
   ,Statement (..)
@@ -76,32 +76,32 @@ literal =
       inPositive = LtInteger <$> (optional (single '+') *> Lexer.decimal)
       inNegative = (LtInteger . negate) <$> (single '-' *> Lexer.decimal)
 
-name :: Parser Name
-name =
-  lexeme (Name <$> some (try (oneOf naValidCharacters))) where
+identifier :: Parser Identifier
+identifier =
+  lexeme (some (try (oneOf naValidCharacters))) where
     naValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '-', '*', '/', '=', '\'']
 
 binding :: Parser Binding
 binding =
-  lexeme (Binding <$> name <*> (symbol ":" *> expression))
+  lexeme (Binding <$> identifier <*> (symbol ":" *> expression))
 
 bindings :: Parser [Binding]
 bindings =
-  lexeme (some (try (binding <* symbol ",")))
+  lexeme (some (try (binding <* symbol ".")))
 
 expression :: Parser Expression
 expression =
-  lexeme (try exLiteral <|> exIdentifier <|> exAbstractionType <|> exAbstraction <|> exApplication) where
+  lexeme (try exLiteral <|> exAbstractionType <|> exAbstraction <|> exApplication <|> exIdentifier) where
     exLiteral = ExLiteral <$> literal
-    exIdentifier = ExIdentifier <$> name
     exAbstractionType = ExAbstractionType <$> (symbol "[" *> bindings) <*> (expression <* symbol "]")
     exAbstraction = ExAbstraction <$> (symbol "{" *> bindings) <*> (expression <* symbol "}")
     exApplication = ExApplication <$> (symbol "(" *> expression) <*> (manyTill expression (symbol ")"))
+    exIdentifier = ExIdentifier <$> identifier
 
 statement :: Parser Statement
 statement =
   lexeme (stDef) where
-    stDef = StDef <$> (symbol "def" *> name) <*> (expression <* symbol "end")
+    stDef = StDef <$> (symbol "def" *> identifier) <*> (expression <* symbol "end")
 
 statements :: Parser [Statement]
 statements =

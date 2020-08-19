@@ -1,6 +1,10 @@
 module Curios.Typechecking
-  (ltInfer
-  ,trInfer
+  (ltSynthesiseType
+  ,ctAxiom
+  ,ctRule
+  ,trIsWellTypedWith
+  ,trSynthesiseTypeWith
+  ,trSynthesiseTypeOf
   )
   where
 
@@ -10,97 +14,106 @@ import Curios.Expression
 
 import Curios.Term
   (Primitive (..)
+  ,Constant (..)
+  ,Type
   ,Scope (..)
   ,Term (..)
-  ,trInstantiate
   ,trWhnf
-  )
-
-import Curios.Universe
-  (Universe (..)
-  ,unNext
-  ,unMax
+  ,trBetaReduce
   )
 
 import Curios.Context
-  (Context (..)
+  (Context
+  ,cnEmpty
+  ,cnInsert
   ,cnLookup
-  )
-
-import Curios.Environment
-  (Environment (..)
-  ,enInsert
-  ,enLookup
   )
 
 import Control.Monad
   (unless
   )
 
-ltInfer :: Literal -> Primitive
-ltInfer literal =
+ltSynthesiseType :: Literal -> Primitive
+ltSynthesiseType literal =
   case literal of
     LtCharacter _ -> PrCharacter
     LtText _ -> PrText
     LtInteger _ -> PrInteger
     LtRational _ -> PrRational
 
-trInfer :: Context -> Environment -> Term -> Either String Term
-trInfer context environment term =
+ctAxiom :: Constant -> Either String Constant
+ctAxiom constant =
+  case constant of
+    CtKind -> Left "Sole superkind is untyped"
+    CtType -> Right CtKind
+
+ctRule :: Constant -> Constant -> Constant
+ctRule constant constant' =
+  case (constant, constant') of
+    (CtKind, CtKind) -> CtKind
+    (CtKind, CtType) -> CtType
+    (CtType, CtKind) -> CtKind
+    (CtType, CtType) -> CtType
+
+trIsWellTypedWith :: Context Term -> Term -> Either String ()
+trIsWellTypedWith context term =
+  trSynthesiseTypeWith context term >> Right ()
+
+trSynthesiseTypeWith :: Context Term -> Term -> Either String Type
+trSynthesiseTypeWith context term =
   case term of
-    TrPrimitive _ ->
-      Right (TrType (Universe 0))
+    TrPrimitive _ -> Right (TrConstant CtType)
+    TrLiteral literal -> Right (TrPrimitive (ltSynthesiseType literal))
+    TrConstant constant -> ctAxiom constant >>= Right . TrConstant
 
-    TrLiteral literal ->
-      Right (TrPrimitive (ltInfer literal))
-
-    TrFreeVariable name ->
-      cnLookup name context
-
-    TrBoundVariable index ->
-      enLookup index environment
-
-    TrType universe ->
-      Right (TrType (unNext universe))
-
-    TrAbstractionType inputType (Scope outputType) ->
+    TrAbstractionType identifier input (Scope output) ->
       do
-        inputKind <- trInfer context environment inputType
-        inputUniverse <- case trWhnf inputKind of
-          TrType universe -> Right universe
-          term' -> Left ("Invalid input type [" ++ show term' ++ "]")
+        inputKind <- trSynthesiseTypeWith context input >>= Right . trWhnf
+
+        inputKind' <- case inputKind of
+          TrConstant constant -> Right constant
+          _ -> Left ("Input of pi-type is not a type [" ++ show input ++ "]")
+
+        outputKind <- trSynthesiseTypeWith (cnInsert identifier input context) output >>= Right . trWhnf
+
+        outputKind' <- case outputKind of
+          TrConstant constant -> Right constant
+          _ -> Left ("Output of pi-type is not a type [" ++ show output ++ "]")
+
+        Right (TrConstant (ctRule inputKind' outputKind'))
+
+    TrAbstraction identifier input (Scope output) ->
+      do
+        trIsWellTypedWith context input
+        outputType <- trSynthesiseTypeWith (cnInsert identifier input context) output
+        let abstractionType = TrAbstractionType identifier input (Scope outputType)
+        trIsWellTypedWith context abstractionType
         
-        outputKind <- trInfer context (enInsert inputType environment) outputType
-        outputUniverse <- case trWhnf outputKind of
-          TrType universe -> Right universe
-          term' -> Left ("Invalid output type [" ++ show term' ++ "]")
-
-        Right (TrType (unMax inputUniverse outputUniverse))
-
-    TrAbstraction inputType (Scope outputTerm) ->
-      do
-        _ <- trInfer context environment inputType
-        outputType <- trInfer context (enInsert inputType environment) outputTerm
-
-        let inferredType = TrAbstractionType inputType (Scope outputType)
-        _ <- trInfer context environment inferredType
-
-        Right inferredType
-
+        Right abstractionType
+    
     TrApplication function argument ->
       do
-        functionType <- trInfer context environment function
+        functionType <- trSynthesiseTypeWith context function >>= Right . trWhnf
 
-        case trWhnf functionType of
-          TrAbstractionType inputType outputType ->
+        case functionType of
+          TrAbstractionType identifier input scope ->
             do
-              argumentType <- trInfer context environment argument
+              argumentType <- trSynthesiseTypeWith context argument
 
               unless
-                (inputType == argumentType)
-                (Left "Ill typed application")
+                (input == argumentType)
+                (Left ("Ill-typed application [" ++ show input ++ "] [" ++ show argumentType ++ "]"))
 
-              Right (trInstantiate argument outputType)
-          
+              Right (trBetaReduce identifier argument scope)
+
           _ ->
-            Left "Invalid application"
+            Left ("Left-hand side of application is not a function [" ++ show function ++ "]")
+    
+    TrVariable name ->
+      case cnLookup name context of
+        Nothing -> Left ("Unbound variable [" ++ show name ++ "]")
+        Just term' -> Right term'
+
+trSynthesiseTypeOf :: Term -> Either String Type
+trSynthesiseTypeOf term =
+  trSynthesiseTypeWith cnEmpty term

@@ -1,89 +1,37 @@
 # Curios
 
-Curios is a dependently typed functional programming language.
+- [x] [Calculus of constructions](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
+- [ ] [Implicit calculus of constructions](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.99.4335&rep=rep1&type=pdf)
+- [ ] [Calculus of dependent lambda eliminations](https://github.com/astump/cedille-core-spec/blob/master/spec.pdf)
+- [ ] System input and output
 
-## Usage
+### How do I run this thing?
 
-Curios programs cannot yet be ran, but the internal representation of expressions can be viewed, and they can also be typechecked.
+- `stack run print "[a: type. value: a. a]"` will print the internal representation of the type of the identity function;
+- `stack run check ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the type and body of said definition;
 
-1. Clone the repo:
-
-```
-git clone https://github.com/valmirjunior0088/curios
-```
-
-2. Use the executable:
-
-    1. View the internal representation of expressions:
-
-    ```
-    stack run print "{a: type, value: a, value}"
-    ```
-
-    2. Typecheck a file, and optionally print the type of a definition:
-
-    ```
-    stack run check ~/example.crs identity
-    ```
-
-## Example source
+### Example source
 
 ```
 def identity
-  {a, value, value}
+  {a: type. value: a.
+    value
+  }
 end
 
-mod pair
-  def pair
-    {a: type, b: type,
-      [z: type, f: [first: a, second: b, z], z]
-    }
-  end
-
-  def make
-    {a: type, b: type, first: a, second: b,
-      {z: type, f: [first: a, second: b, z], (f first second)}
-    }
-  end
-    
-  def first
-    {a: type, b: type, data: (pair a b),
-      (data a {first: a, second: b, first})
-    }
-  end
-    
-  def second
-    {a: type, b: type, data: (pair a b),
-      (data b {first: a, second: b, second})
-    }
-  end
+def Pair
+  {a: type. b: type.
+    [z: type. f: [first: a. second: b. z]. z]
+  }
 end
 
-mod either
-  def either
-    {a: type, b: type,
-      [z: type, [value-left: a, z], [value-right: b, z], z]
-    }
-  end
+def pair
+  {a: type. b: type. first: a. second: b.
+    {z: type. f: [first: a. second: b. z]. (f first second)}
+  }
+end
 
-  def left
-    {a: type, b: type, value: a,
-      {z: type, case-left: [value-left: a, z], case-right: [value-right: b, z],
-        (case-left data)
-      }
-    }
-  end
-    
-  def right
-    {a: type, b: type, value: b,
-      {z: type, case-left: [value-left: a, z], case-right: [value-right: b, z],
-        (case-right data)
-      }
-    }
-  end
-
-  // To destructure an instance of either...
-  // One must apply a function for each of the two possibilities:
-  // (either-value string {value, "left branch"} {value, "right branch"})
+def example
+  (identity (Pair integer integer) (pair integer integer 5 10))
 end
 ```

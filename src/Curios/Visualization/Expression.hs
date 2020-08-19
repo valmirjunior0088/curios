@@ -1,14 +1,14 @@
 module Curios.Visualization.Expression
   (liToBox
-  ,naToBox
-  ,biToBox
+  ,idToBox
+  ,bnToBox
   ,exToBox
   )
   where
 
 import Curios.Expression
   (Literal (..)
-  ,Name (..)
+  ,Identifier
   ,Binding (..)
   ,Expression (..)
   )
@@ -32,13 +32,13 @@ liToBox :: Literal -> Box
 liToBox literal =
   text (show literal)
 
-naToBox :: Name -> Box
-naToBox name =
-  text (show name)
+idToBox :: Identifier -> Box
+idToBox identifier =
+  text (show identifier)
 
-biToBox :: Binding -> Box
-biToBox (Binding name expression) =
-  (naToBox name) <+> emphasized (exToBox expression) where
+bnToBox :: Binding -> Box
+bnToBox (Binding name expression) =
+  (idToBox name) <+> emphasized (exToBox expression) where
 
 exToBox :: Expression -> Box
 exToBox expression =
@@ -46,14 +46,14 @@ exToBox expression =
     ExLiteral literal ->
       text "Literal" <+> parenthesized (liToBox literal)
 
-    ExIdentifier name ->
-      text "Identifier" <+> parenthesized (naToBox name)
+    ExIdentifier identifier ->
+      text "Identifier" <+> parenthesized (idToBox identifier)
 
     ExAbstractionType bindings body ->
-      downwardsTab 'Π' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)
+      downwardsTab 'Π' (downwardsSeparated (fmap bnToBox bindings)) (exToBox body)
 
     ExAbstraction bindings body ->
-      downwardsTab 'λ' (downwardsSeparated (fmap biToBox bindings)) (exToBox body)
+      downwardsTab 'λ' (downwardsSeparated (fmap bnToBox bindings)) (exToBox body)
       
     ExApplication function arguments ->
       upwardsTab '◆' (exToBox function) (upwardsSeparated (fmap exToBox arguments))
