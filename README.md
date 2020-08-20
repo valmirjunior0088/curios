@@ -5,7 +5,6 @@
 ### Checklist
 
 - [x] [Calculus of constructions](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
-- [ ] [Implicit calculus of constructions](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.99.4335&rep=rep1&type=pdf)
 - [ ] [Calculus of dependent lambda eliminations](https://github.com/astump/cedille-core-spec/blob/master/spec.pdf)
 - [ ] System input and output
 
