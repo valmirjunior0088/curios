@@ -1,86 +1,106 @@
 module Curios.Translation
-  (idToTerm
-  ,trDischarge
-  ,exToTerm
-  ,trDefineIn
-  ,trDefineManyIn
-  ,dfInsert
-  ,dfInsertMany
-  ,stToDefinitions
+  (trSubstitute
+  ,trDischargeDependentVariable
+  ,trDischargeVariable
+  ,exTranslate
+  ,pgTranslate
   )
   where
-
-import Curios.Expression
-  (Identifier
-  ,Binding (..)
-  ,Expression (..)
-  ,Statement (..)
-  )
-
-import Curios.Term
-  (Primitive (..)
-  ,Constant (..)
-  ,Type
-  ,Name (..)
-  ,Scope (..)
-  ,Term (..)
-  ,Definition (..)
-  ,trWhnf
-  ,trBetaReduce
-  )
-
-import Curios.Typechecking
-  (trSynthesiseTypeOf
-  )
 
 import Data.Foldable
   (foldlM
   )
 
-idToTerm :: Identifier -> Term
-idToTerm identifier =
-  case identifier of
-    "character" -> TrPrimitive PrCharacter
-    "text" -> TrPrimitive PrText
-    "integer" -> TrPrimitive PrInteger
-    "rational" -> TrPrimitive PrRational
-    "kind" -> TrConstant CtKind
-    "type" -> TrConstant CtType
-    _ -> TrVariable (Name identifier 0)
+import Curios.Error
+  (Error (..)
+  )
 
-trDischarge :: (Identifier -> Type -> Scope -> Term) -> Binding -> Term -> Term
-trDischarge construct (Binding identifier expression) term =
-  construct identifier (exToTerm expression) (Scope term)
+import Curios.Syntax.Expression
+  (Expression (..)
+  ,Name (..)
+  ,DependentVariable (..)
+  ,Variable (..)
+  ,Program (..)
+  ,pgBindings
+  ,pgDefinitions
+  )
 
-exToTerm :: Expression -> Term
-exToTerm expression =
+import Curios.Core.Term
+  (Term (..)
+  ,PrimitiveType (..)
+  )
+
+import Curios.Core.Context
+  (Context (..)
+  ,cnEmpty
+  ,cnInsertBinding
+  ,cnInsertDefinition
+  )
+
+trSubstitute :: Name -> Term -> Term -> Term
+trSubstitute name source term =
+  case term of
+    TrReference name' | name == name' ->
+      source
+    TrFunctionType input output ->
+      TrFunctionType
+        (trSubstitute name source input)
+        (\self variable -> trSubstitute name source (output self variable))
+    TrFunction output ->
+      TrFunction (\variable -> trSubstitute name source (output variable))
+    TrApplication function argument ->
+      TrApplication
+        (trSubstitute name source function)
+        (trSubstitute name source argument)
+    term' ->
+      term'
+
+trDischargeDependentVariable :: DependentVariable -> Term -> Term
+trDischargeDependentVariable (DependentVariable maybeSelfName maybeVariableName expression') term =
+  TrFunctionType input output where
+    input = exTranslate expression'
+    output self variable =
+      let
+        term' = case maybeSelfName of
+          Nothing -> term
+          Just selfName -> trSubstitute selfName self term
+      in
+        case maybeVariableName of
+          Nothing -> term'
+          Just variableName -> trSubstitute variableName variable term'
+
+trDischargeVariable :: Variable -> Term -> Term
+trDischargeVariable (Variable variableName) term =
+  TrFunction output where
+    output variable = trSubstitute variableName variable term
+
+exTranslate :: Expression -> Term
+exTranslate expression =
   case expression of
-    ExLiteral literal -> TrLiteral literal
-    ExAbstractionType bindings body -> foldr (trDischarge TrAbstractionType) (exToTerm body) bindings
-    ExAbstraction bindings body -> foldr (trDischarge TrAbstraction) (exToTerm body) bindings
-    ExApplication function arguments -> foldl TrApplication (exToTerm function) (map exToTerm arguments)
-    ExIdentifier identifier -> idToTerm identifier
-
-trDefineIn :: Definition -> Term -> Term
-trDefineIn (Definition identifier _ domain) term =
-  trBetaReduce identifier domain (Scope term)
-
-trDefineManyIn :: [Definition] -> Term -> Term
-trDefineManyIn definitions term =
-  foldr trDefineIn term definitions
-
-dfInsert :: [Definition] -> Statement -> Either String [Definition]
-dfInsert definitions (StDef identifier expression) =
+    ExName (Name "Type") -> TrType
+    ExName (Name "Text") -> TrPrimitiveType PtText
+    ExName (Name "Integer") -> TrPrimitiveType PtInteger
+    ExName (Name "Rational") -> TrPrimitiveType PtRational
+    ExName name -> TrReference name
+    ExPrimitive primitive -> TrPrimitive primitive
+    ExFunctionType variables body ->
+      build trDischargeDependentVariable variables body
+    ExFunction variables body ->
+      build trDischargeVariable variables body
+    ExApplication function arguments ->
+      foldl TrApplication (exTranslate function) (fmap exTranslate arguments)
+  where
+    build discharge variables body =
+      foldr discharge (exTranslate body) variables
+      
+pgTranslate :: Program -> Either Error Context
+pgTranslate program =
   do
-    let output = exToTerm expression
-    input <- trSynthesiseTypeOf (trDefineManyIn definitions output)
-
-    Right (definitions ++ [Definition identifier input (trWhnf output)])
-
-dfInsertMany :: [Definition] -> [Statement] -> Either String [Definition]
-dfInsertMany definitions statements =
-  foldlM dfInsert definitions statements
-
-stToDefinitions :: [Statement] -> Either String [Definition]
-stToDefinitions statements =
-  dfInsertMany [] statements
+    context <- build cnInsertBinding (pgBindings program) cnEmpty
+    build cnInsertDefinition (pgDefinitions program) context
+  where
+    combine insert context (name, expression) =
+      insert name (exTranslate expression) context
+    build insert expressions context =
+      foldlM (combine insert) context expressions
+      

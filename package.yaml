@@ -1,5 +1,5 @@
 name: curios
-version: 0.1.0.0
+version: 0.0.2
 github: "valmirjunior0088/curios"
 license: BSD3
 author: "Valmir Junior"
@@ -17,7 +17,6 @@ description: Please see the README on GitHub at <https://github.com/valmirjunior
 dependencies:
 - base >= 4 && < 5
 - megaparsec >= 7 && < 8
-- boxes >= 0 && < 1
 - containers >= 0 && < 1
 
 library:

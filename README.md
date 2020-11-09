@@ -4,37 +4,32 @@
 
 ### Checklist
 
-- [x] [Calculus of constructions](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
-- [ ] [Calculus of dependent lambda eliminations](https://github.com/astump/cedille-core-spec/blob/master/spec.pdf)
+- [x] [Dependent types](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
+- [x] General and mutual recursion
+- [x] [Very dependent types](http://www.nuprl.org/documents/Hickey/FormalObjectsinTypeTheory.pdf)
 - [ ] System input and output
 
 ### How do I run this thing?
 
-- `stack run print "[a: type. value: a. a]"` will print the internal representation of the type of the identity function;
+- `stack run print "[A: Type, a: A, A]"` will print the internal representation of the type of the identity function;
 - `stack run check ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the type and body of said definition;
 
 ### Example source
 
 ```
-def identity
-  {a: type. value: a.
-    value
-  }
+let identity: [A: Type, a: A, A] =
+  {A, a, a}
 end
 
-def Pair
-  {a: type. b: type.
-    [z: type. f: [first: a. second: b. z]. z]
-  }
+let Boolean: Type =
+	[self | P: [Boolean, Type], (P true), (P false), (P self)]
 end
 
-def pair
-  {a: type. b: type. first: a. second: b.
-    {z: type. f: [first: a. second: b. z]. (f first second)}
-  }
+let true: Boolean =
+	{P, p_true, p_false, p_true}
 end
 
-def example
-  (identity (Pair integer integer) (pair integer integer 5 10))
+let false: Boolean =
+  {P, p_true, p_false, p_false}
 end
 ```

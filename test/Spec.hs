@@ -1,6 +1,3 @@
-import qualified Curios.ParsingSpec (spec)
-import Test.Hspec (hspec)
-
+main :: IO ()
 main =
-  hspec $ do
-    Curios.ParsingSpec.spec
+  return ()

@@ -1,80 +1,53 @@
-import qualified Curios.Parsing as Parsing (expression, statements)
-import qualified Text.Megaparsec as Megaparsec (parse, eof)
+import qualified Curios.Syntax.Parser as Parser
+import qualified Text.Megaparsec as Megaparsec
 
-import CommandOptions (CommandOptions (..), coMain)
-import Curios.Translation (exToTerm, stToDefinitions)
-import Curios.Visualization.Expression (exToBox)
-import Curios.Visualization.Term (trToBox, dfToBox)
-import Curios.Term (dfLookup)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Text.PrettyPrint.Boxes (render)
-import Text.Printf (printf)
+import CommandOptions (CommandOptions (..), coMain)
+import Curios.Syntax.Expression (Name (..))
+import Curios.Core.Context (cnLookupBinding, cnLookupDefinition)
+import Curios.Translation (exTranslate, pgTranslate)
 
 run :: CommandOptions -> IO ()
 run commandOptions =
   case commandOptions of
-    CoPrint sourceExpression ->
-      case Megaparsec.parse (Parsing.expression <* Megaparsec.eof) "" sourceExpression of
+    CoPrint string ->
+      case Megaparsec.parse (Parser.expression <* Megaparsec.eof) "" string of
         Left errorBundle ->
           putStr (errorBundlePretty errorBundle)
 
         Right expression ->
           do
-            let term = exToTerm expression
-            putStr "SOURCE EXPRESSION\n"
-            putStr "----------\n"
-            putStr sourceExpression
-            putStr "----------\n"
-            putStr "\n"
-            putStr "\n"
-            putStr "\n"
-            putStr "EXPRESSION\n"
-            putStr "----------\n"
-            putStr (printf "%s\n" (show expression))
-            putStr "----------\n"
-            putStr (render (exToBox expression))
-            putStr "----------\n"
-            putStr "\n"
-            putStr "\n"
-            putStr "\n"
-            putStr "TERM\n"
-            putStr "----------\n"
-            putStr (printf "%s\n" (show term))
-            putStr "----------\n"
-            putStr (render (trToBox term))
-            putStr "----------\n"
+            putStrLn ("Expression")
+            putStrLn (show expression)
+            putStrLn ("")
+            putStrLn ("Term")
+            putStrLn (show (exTranslate expression))
 
-    CoCheck path maybeIdentifier ->
+    CoCheck path maybeName ->
       do
         file <- readFile path
 
-        case Megaparsec.parse (Parsing.statements <* Megaparsec.eof) "" file of
+        case Megaparsec.parse (Parser.program <* Megaparsec.eof) "" file of
           Left errorBundle ->
             putStr (errorBundlePretty errorBundle)
 
-          Right statements ->
-            case stToDefinitions statements of
-              Left message ->
-                putStr ("Typechecking failed [" ++ message ++ "]\n")
+          Right program ->
+            case pgTranslate program of
+              Left translationError ->
+                putStrLn ("Check failed [" ++ show translationError ++ "]")
 
-              Right definitions ->
-                case maybeIdentifier of
+              Right context ->
+                case maybeName of
                   Nothing -> 
-                    putStr "Typechecking succeeded!\n"
+                    putStrLn ("Check succeeded!")
                   
-                  Just identifier ->
-                    case dfLookup identifier definitions of
-                      Nothing ->
-                        putStr ("Unbound identifier [" ++ identifier ++ "]\n")
-
-                      Just definition ->
-                        do
-                          putStr "TERM\n"
-                          putStr "----------\n"
-                          putStr (printf "%s\n" (show definition))
-                          putStr "----------\n"
-                          putStr (render (dfToBox definition))
-                          putStr "----------\n"
+                  Just name ->
+                    do
+                      putStrLn ("Binding [" ++ show name ++ "]")
+                      putStrLn (show (cnLookupBinding (Name name) context))
+                      putStrLn ("")
+                      putStrLn ("Definition [" ++ show name ++ "]")
+                      putStrLn (show (cnLookupDefinition (Name name) context))
 
 main :: IO ()
 main =

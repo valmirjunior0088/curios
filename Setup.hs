@@ -1,5 +1,5 @@
 import Distribution.Simple
-  ( defaultMain
+  (defaultMain
   )
 
 main :: IO ()
