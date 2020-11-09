@@ -22,11 +22,11 @@ let identity: [A: Type, a: A, A] =
 end
 
 let Boolean: Type =
-	[self | P: [Boolean, Type], (P true), (P false), (P self)]
+  [self | P: [Boolean, Type], (P true), (P false), (P self)]
 end
 
 let true: Boolean =
-	{P, p_true, p_false, p_true}
+  {P, p_true, p_false, p_true}
 end
 
 let false: Boolean =
