@@ -22,14 +22,49 @@ let identity: [A: Type, a: A, A] =
 end
 
 let Boolean: Type =
-  [self | P: [Boolean, Type], (P true), (P false), (P self)]
+	[self | P: [Boolean, Type], (P true), (P false), (P self)]
 end
 
 let true: Boolean =
-  {P, p_true, p_false, p_true}
+	{P, p_true, p_false, p_true}
 end
 
 let false: Boolean =
   {P, p_true, p_false, p_false}
+end
+
+let Natural: Type =
+  [self | P: [Natural, Type], (P zero), [natural: Natural, (P (successor natural))], (P self)]
+end
+
+let zero: Natural =
+  {P, p_zero, p_successor, p_zero}
+end
+
+let successor: [Natural, Natural] =
+  {natural, P, p_zero, p_sucessor, (p_sucessor natural)}
+end
+
+let Vector: [Natural, Type, Type] =
+  {size, A,
+    [self
+    |P: [(Vector size A), Type]
+    ,(P (empty A))
+    ,[a: A, vector: (Vector size A), (P (cell size A a vector))]
+    ,(P self)
+    ]
+  }
+end
+
+let empty: [A: Type, (Vector zero A)] =
+  {A,
+    {P, p_empty, p_cell, p_empty}
+  }
+end
+
+let cell: [size: Natural, A: Type, A, (Vector size A), (Vector (successor size) A)] =
+  {size, A,
+    {a, vector, P, p_empty, p_cell, (p_cell a vector)}
+  }
 end
 ```
