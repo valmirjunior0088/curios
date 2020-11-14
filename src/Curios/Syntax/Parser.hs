@@ -1,8 +1,8 @@
 module Curios.Syntax.Parser
   (name
   ,primitive
-  ,dependentVariable
-  ,variable
+  ,functionTypeVariable
+  ,functionVariable
   ,multiple
   ,expression
   ,statement
@@ -43,8 +43,8 @@ import qualified Text.Megaparsec.Char.Lexer as Lexer
 import Curios.Syntax.Expression
   (Name (..)
   ,Primitive (..)
-  ,DependentVariable (..)
-  ,Variable (..)
+  ,FunctionTypeVariable (..)
+  ,FunctionVariable (..)
   ,Expression (..)
   ,Statement (..)
   ,Program (..)
@@ -83,18 +83,18 @@ primitive =
       inPositive = PrInteger <$> (optional (single '+') *> Lexer.decimal)
       inNegative = (PrInteger . negate) <$> (single '-' *> Lexer.decimal)
 
-dependentVariable :: Parser DependentVariable
-dependentVariable =
+functionTypeVariable :: Parser FunctionTypeVariable
+functionTypeVariable =
   lexeme
-    (DependentVariable <$>
+    (FunctionTypeVariable <$>
       (optional (try (name <* symbol "|"))) <*>
       (optional (try (name <* symbol ":"))) <*>
       expression
     )
 
-variable :: Parser Variable
-variable =
-  lexeme (Variable <$> name)
+functionVariable :: Parser FunctionVariable
+functionVariable =
+  lexeme (FunctionVariable <$> name)
 
 multiple :: Parser a -> Parser [a]
 multiple parser =
@@ -102,12 +102,23 @@ multiple parser =
 
 expression :: Parser Expression
 expression =
-  lexeme (exName <|> exPrimitive <|> exFunctionType <|> exFunction <|> exApplication) where
-    exName = ExName <$> name
-    exPrimitive = ExPrimitive <$> primitive
-    exFunctionType = ExFunctionType <$> (symbol "[" *> multiple dependentVariable) <*> (expression <* symbol "]")
-    exFunction = ExFunction <$> (symbol "{" *> multiple variable) <*> (expression <* symbol "}")
-    exApplication = ExApplication <$> (symbol "(" *> expression) <*> (manyTill expression (symbol ")"))
+  lexeme (exName <|> exPrimitive <|> try exFunctionType <|> try exFunction <|> exApplication) where
+    exName =
+      ExName <$> name
+    exPrimitive =
+      ExPrimitive <$> primitive
+    exFunctionType =
+      ExFunctionType <$>
+        (symbol "(->" *> multiple functionTypeVariable) <*>
+        (expression <* symbol ")")
+    exFunction =
+      ExFunction <$>
+        (symbol "(fn" *> multiple functionVariable) <*>
+        (expression <* symbol ")")
+    exApplication =
+      ExApplication <$>
+        (symbol "(" *> expression) <*>
+        (manyTill expression (symbol ")"))
 
 statement :: Parser Statement
 statement =

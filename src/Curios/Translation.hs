@@ -1,7 +1,7 @@
 module Curios.Translation
   (trSubstitute
-  ,trDischargeDependentVariable
-  ,trDischargeVariable
+  ,trDischargeFunctionTypeVariable
+  ,trDischargeFunctionVariable
   ,exTranslate
   ,pgTranslate
   )
@@ -18,8 +18,8 @@ import Curios.Error
 import Curios.Syntax.Expression
   (Expression (..)
   ,Name (..)
-  ,DependentVariable (..)
-  ,Variable (..)
+  ,FunctionTypeVariable (..)
+  ,FunctionVariable (..)
   ,Program (..)
   ,pgBindings
   ,pgDefinitions
@@ -55,22 +55,22 @@ trSubstitute name source term =
     term' ->
       term'
 
-trDischargeDependentVariable :: DependentVariable -> Term -> Term
-trDischargeDependentVariable (DependentVariable maybeSelfName maybeVariableName expression') term =
+trDischargeFunctionTypeVariable :: FunctionTypeVariable -> Term -> Term
+trDischargeFunctionTypeVariable (FunctionTypeVariable selfName variableName expression') term =
   TrFunctionType input output where
     input = exTranslate expression'
     output self variable =
       let
-        term' = case maybeSelfName of
+        term' = case selfName of
           Nothing -> term
-          Just selfName -> trSubstitute selfName self term
+          Just selfName' -> trSubstitute selfName' self term
       in
-        case maybeVariableName of
+        case variableName of
           Nothing -> term'
-          Just variableName -> trSubstitute variableName variable term'
+          Just variableName' -> trSubstitute variableName' variable term'
 
-trDischargeVariable :: Variable -> Term -> Term
-trDischargeVariable (Variable variableName) term =
+trDischargeFunctionVariable :: FunctionVariable -> Term -> Term
+trDischargeFunctionVariable (FunctionVariable variableName) term =
   TrFunction output where
     output variable = trSubstitute variableName variable term
 
@@ -84,9 +84,9 @@ exTranslate expression =
     ExName name -> TrReference name
     ExPrimitive primitive -> TrPrimitive primitive
     ExFunctionType variables body ->
-      build trDischargeDependentVariable variables body
+      build trDischargeFunctionTypeVariable variables body
     ExFunction variables body ->
-      build trDischargeVariable variables body
+      build trDischargeFunctionVariable variables body
     ExApplication function arguments ->
       foldl TrApplication (exTranslate function) (fmap exTranslate arguments)
   where

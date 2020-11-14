@@ -1,8 +1,8 @@
 module Curios.Syntax.Expression
   (Name (..)
   ,Primitive (..)
-  ,DependentVariable (..)
-  ,Variable (..)
+  ,FunctionTypeVariable (..)
+  ,FunctionVariable (..)
   ,Expression (..)
   ,Statement (..)
   ,Program (..)
@@ -25,19 +25,19 @@ data Primitive =
   PrRational Double
   deriving (Show, Eq)
 
-data DependentVariable =
-  DependentVariable (Maybe Name) (Maybe Name) Expression
+data FunctionTypeVariable =
+  FunctionTypeVariable (Maybe Name) (Maybe Name) Expression
   deriving (Show)
 
-newtype Variable =
-  Variable Name
+newtype FunctionVariable =
+  FunctionVariable Name
   deriving (Show)
 
 data Expression =
   ExName Name |
   ExPrimitive Primitive |
-  ExFunctionType [DependentVariable] Expression |
-  ExFunction [Variable] Expression |
+  ExFunctionType [FunctionTypeVariable] Expression |
+  ExFunction [FunctionVariable] Expression |
   ExApplication Expression [Expression]
   deriving (Show)
 
