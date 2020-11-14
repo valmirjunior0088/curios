@@ -1,7 +1,6 @@
 module Curios.Core.Verification
   (trReduce
   ,trConvertsWith
-  ,trInfer
   ,trCheck
   )
   where
@@ -62,80 +61,76 @@ trConvertsWith definitions =
             (one'', other'') ->
               one'' == other''
 
-trInfer' :: Environment -> Bindings -> Definitions -> Term -> Either Error Type
-trInfer' environment bindings definitions term =
-  case term of
-    TrVariable index ->
-      Right (fromJust (enLookup index environment))
-    TrReference name ->
-      bnLookup name bindings
-    TrType ->
-      Right TrType
-    TrPrimitiveType _ ->
-      Right TrType
-    TrPrimitive primitive ->
-      Right (TrPrimitiveType primitiveType) where
-        primitiveType =
-          case primitive of
-            PrText _ -> PtText
-            PrInteger _ -> PtInteger
-            PrRational _ -> PtRational
-    TrFunctionType input output ->
-      do
-        trCheck' environment bindings definitions TrType input
-        
-        let self = TrVariable (enLength environment)
-        let environment' = enInsert term environment
-        let variable = TrVariable (enLength environment')
-        let environment'' = enInsert input environment'
-        trCheck' environment'' bindings definitions TrType (output self variable)
-        
-        Right TrType
-    TrFunction output ->
-      Left (ErNonInferableTerm (TrFunction output))
-    TrApplication function argument ->
-      do
-        functionType <- trInfer' environment bindings definitions function
-        
-        case functionType of
-          TrFunctionType input output ->
-            do
-              trCheck' environment bindings definitions input argument
-
-              Right (output function argument)
-          _ ->
-            Left (ErNonFunctionApplication (TrApplication function argument))
-    TrAnnotated termType term' ->
-      do
-        trCheck' environment bindings definitions TrType termType
-        trCheck' environment bindings definitions termType term'
-        
-        Right termType
-
-trCheck' :: Environment -> Bindings -> Definitions -> Type -> Term -> Either Error ()
-trCheck' environment bindings definitions termType term =
-  case (trReduce definitions termType, term) of
-    (TrFunctionType input output, TrFunction output') ->
-      let
-        self = TrAnnotated termType term
-        variable = TrVariable (enLength environment)
-        environment' = enInsert input environment
-      in
-        trCheck' environment' bindings definitions (output self variable) (output' variable)
-    (termType', term') ->
-      do
-        termType'' <- trInfer' environment bindings definitions term
-
-        unless
-          (trConvertsWith definitions termType' termType'')
-          (Left (ErIllTypedTerm environment termType' term'))
-        
-        Right ()
-
-trInfer :: Bindings -> Definitions -> Term -> Either Error Type
-trInfer =
-  trInfer' enEmpty
-
 trCheck :: Bindings -> Definitions -> Type -> Term -> Either Error ()
-trCheck =
-  trCheck' enEmpty
+trCheck bindings definitions =
+  check enEmpty where
+
+    check :: Environment -> Type -> Term -> Either Error ()
+    check environment termType term =
+      case (trReduce definitions termType, term) of
+        (TrFunctionType input output, TrFunction output') ->
+          let
+            self = TrAnnotated termType term
+            variable = TrVariable (enLength environment)
+            environment' = enInsert input environment
+          in
+            check environment' (output self variable) (output' variable)
+        (termType', term') ->
+          do
+            termType'' <- infer environment term'
+
+            unless
+              (trConvertsWith definitions termType' termType'')
+              (Left (ErIllTypedTerm environment termType' term'))
+            
+            Right ()
+    
+    infer :: Environment -> Term -> Either Error Type
+    infer environment term =
+      case term of
+        TrVariable index ->
+          Right (fromJust (enLookup index environment))
+        TrReference name ->
+          bnLookup name bindings
+        TrType ->
+          Right TrType
+        TrPrimitiveType _ ->
+          Right TrType
+        TrPrimitive primitive ->
+          Right (TrPrimitiveType primitiveType) where
+            primitiveType =
+              case primitive of
+                PrText _ -> PtText
+                PrInteger _ -> PtInteger
+                PrRational _ -> PtRational
+        TrFunctionType input output ->
+          do
+            check environment TrType input
+            
+            let self = TrVariable (enLength environment)
+            let environment' = enInsert term environment
+            let variable = TrVariable (enLength environment')
+            let environment'' = enInsert input environment'
+            check environment'' TrType (output self variable)
+            
+            Right TrType
+        TrFunction output ->
+          Left (ErNonInferableTerm (TrFunction output))
+        TrApplication function argument ->
+          do
+            functionType <- infer environment function
+            
+            case functionType of
+              TrFunctionType input output ->
+                do
+                  check environment input argument
+
+                  Right (output function argument)
+              _ ->
+                Left (ErNonFunctionApplication (TrApplication function argument))
+        TrAnnotated termType term' ->
+          do
+            check environment TrType termType
+            check environment termType term'
+            
+            Right termType
