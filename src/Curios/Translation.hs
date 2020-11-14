@@ -55,8 +55,8 @@ trSubstitute name source term =
     term' ->
       term'
 
-trDischargeFunctionTypeVariable :: FunctionTypeVariable -> Term -> Term
-trDischargeFunctionTypeVariable (FunctionTypeVariable selfName variableName expression') term =
+trDischargeFunctionTypeVariable :: Maybe Name -> FunctionTypeVariable -> Term -> Term
+trDischargeFunctionTypeVariable selfName (FunctionTypeVariable variableName expression') term =
   TrFunctionType input output where
     input = exTranslate expression'
     output self variable =
@@ -83,8 +83,13 @@ exTranslate expression =
     ExName (Name "Rational") -> TrPrimitiveType PtRational
     ExName name -> TrReference name
     ExPrimitive primitive -> TrPrimitive primitive
-    ExFunctionType variables body ->
-      build trDischargeFunctionTypeVariable variables body
+    ExFunctionType selfName variables body ->
+      case variables of
+        [] ->
+          exTranslate body
+        (variable : variables') ->
+          trDischargeFunctionTypeVariable selfName variable
+            (build (trDischargeFunctionTypeVariable Nothing) variables' body)
     ExFunction variables body ->
       build trDischargeFunctionVariable variables body
     ExApplication function arguments ->

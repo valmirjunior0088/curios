@@ -85,12 +85,7 @@ primitive =
 
 functionTypeVariable :: Parser FunctionTypeVariable
 functionTypeVariable =
-  lexeme
-    (FunctionTypeVariable <$>
-      optional (try (name <* symbol "|")) <*>
-      optional (try (name <* symbol ":")) <*>
-      expression
-    )
+  lexeme (FunctionTypeVariable <$> optional (try (name <* symbol ":")) <*> expression)
 
 functionVariable :: Parser FunctionVariable
 functionVariable =
@@ -109,7 +104,8 @@ expression =
       ExPrimitive <$> primitive
     exFunctionType =
       ExFunctionType <$>
-        (symbol "(" *> symbol "->" *> prefix functionTypeVariable) <*>
+        (symbol "(" *> symbol "->" *> optional (try (name <* symbol "|"))) <*>
+        (prefix functionTypeVariable) <*>
         (expression <* symbol ")")
     exFunction =
       ExFunction <$>

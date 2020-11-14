@@ -26,7 +26,7 @@ data Primitive =
   deriving (Show, Eq)
 
 data FunctionTypeVariable =
-  FunctionTypeVariable (Maybe Name) (Maybe Name) Expression
+  FunctionTypeVariable (Maybe Name) Expression
   deriving (Show)
 
 newtype FunctionVariable =
@@ -36,7 +36,7 @@ newtype FunctionVariable =
 data Expression =
   ExName Name |
   ExPrimitive Primitive |
-  ExFunctionType [FunctionTypeVariable] Expression |
+  ExFunctionType (Maybe Name) [FunctionTypeVariable] Expression |
   ExFunction [FunctionVariable] Expression |
   ExApplication Expression [Expression]
   deriving (Show)
