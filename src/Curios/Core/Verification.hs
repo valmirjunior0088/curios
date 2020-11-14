@@ -101,7 +101,7 @@ trInfer' environment bindings definitions term =
           TrFunctionType input output ->
             do
               trCheck' environment bindings definitions input argument
-              
+
               Right (output function argument)
           _ ->
             Left (ErNonFunctionApplication (TrApplication function argument))
@@ -109,7 +109,7 @@ trInfer' environment bindings definitions term =
       do
         trCheck' environment bindings definitions TrType termType
         trCheck' environment bindings definitions termType term'
-
+        
         Right termType
 
 trCheck' :: Environment -> Bindings -> Definitions -> Type -> Term -> Either Error ()

@@ -43,11 +43,12 @@ trSubstitute name source term =
     TrReference name' | name == name' ->
       source
     TrFunctionType input output ->
-      TrFunctionType
-        (trSubstitute name source input)
-        (\self variable -> trSubstitute name source (output self variable))
+      TrFunctionType input' output' where
+        input' = trSubstitute name source input
+        output' self variable = trSubstitute name source (output self variable)
     TrFunction output ->
-      TrFunction (\variable -> trSubstitute name source (output variable))
+      TrFunction output' where
+        output' variable = trSubstitute name source (output variable)
     TrApplication function argument ->
       TrApplication
         (trSubstitute name source function)
@@ -102,6 +103,7 @@ pgTranslate :: Program -> Either Error Context
 pgTranslate program =
   do
     context <- build cnInsertBinding (pgBindings program) cnEmpty
+    
     build cnInsertDefinition (pgDefinitions program) context
   where
     combine insert context (name, expression) =
