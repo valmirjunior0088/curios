@@ -1,7 +1,7 @@
 module Curios.Translation
   (trSubstitute
-  ,trDischargeFunctionTypeVariable
-  ,trDischargeFunctionVariable
+  ,trAbstractFunctionTypeVariable
+  ,trAbstractFunctionVariable
   ,exTranslate
   ,pgTranslate
   )
@@ -55,8 +55,8 @@ trSubstitute name source term =
     term' ->
       term'
 
-trDischargeFunctionTypeVariable :: Maybe Name -> FunctionTypeVariable -> Term -> Term
-trDischargeFunctionTypeVariable selfName (FunctionTypeVariable variableName expression') term =
+trAbstractFunctionTypeVariable :: Maybe Name -> FunctionTypeVariable -> Term -> Term
+trAbstractFunctionTypeVariable selfName (FunctionTypeVariable variableName expression') term =
   TrFunctionType input output where
     input = exTranslate expression'
     output self variable =
@@ -69,8 +69,8 @@ trDischargeFunctionTypeVariable selfName (FunctionTypeVariable variableName expr
           Nothing -> term'
           Just variableName' -> trSubstitute variableName' variable term'
 
-trDischargeFunctionVariable :: FunctionVariable -> Term -> Term
-trDischargeFunctionVariable (FunctionVariable variableName) term =
+trAbstractFunctionVariable :: FunctionVariable -> Term -> Term
+trAbstractFunctionVariable (FunctionVariable variableName) term =
   TrFunction output where
     output variable = trSubstitute variableName variable term
 
@@ -88,15 +88,15 @@ exTranslate expression =
         [] ->
           exTranslate body
         (variable : variables') ->
-          trDischargeFunctionTypeVariable selfName variable
-            (build (trDischargeFunctionTypeVariable Nothing) variables' body)
+          trAbstractFunctionTypeVariable selfName variable
+            (build (trAbstractFunctionTypeVariable Nothing) variables' body)
     ExFunction variables body ->
-      build trDischargeFunctionVariable variables body
+      build trAbstractFunctionVariable variables body
     ExApplication function arguments ->
       foldl TrApplication (exTranslate function) (fmap exTranslate arguments)
   where
-    build discharge variables body =
-      foldr discharge (exTranslate body) variables
+    build abstract variables body =
+      foldr abstract (exTranslate body) variables
       
 pgTranslate :: Program -> Either Error Context
 pgTranslate program =
