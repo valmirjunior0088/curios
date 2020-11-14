@@ -3,7 +3,7 @@ module Curios.Syntax.Parser
   ,primitive
   ,functionTypeVariable
   ,functionVariable
-  ,multiple
+  ,prefix
   ,expression
   ,statement
   ,program
@@ -96,8 +96,8 @@ functionVariable :: Parser FunctionVariable
 functionVariable =
   lexeme (FunctionVariable <$> name)
 
-multiple :: Parser a -> Parser [a]
-multiple parser =
+prefix :: Parser a -> Parser [a]
+prefix parser =
   lexeme (some (try (parser <* symbol ",")))
 
 expression :: Parser Expression
@@ -109,11 +109,11 @@ expression =
       ExPrimitive <$> primitive
     exFunctionType =
       ExFunctionType <$>
-        (symbol "(->" *> multiple functionTypeVariable) <*>
+        (symbol "(" *> symbol "->" *> prefix functionTypeVariable) <*>
         (expression <* symbol ")")
     exFunction =
       ExFunction <$>
-        (symbol "(fn" *> multiple functionVariable) <*>
+        (symbol "(" *> symbol "fn" *> prefix functionVariable) <*>
         (expression <* symbol ")")
     exApplication =
       ExApplication <$>
