@@ -131,4 +131,4 @@ statement =
 
 program :: Parser Program
 program =
-  lexeme (Program <$> some (try statement))
+  lexeme (Program <$> some statement)
