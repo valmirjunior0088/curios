@@ -87,8 +87,8 @@ functionTypeVariable :: Parser FunctionTypeVariable
 functionTypeVariable =
   lexeme
     (FunctionTypeVariable <$>
-      (optional (try (name <* symbol "|"))) <*>
-      (optional (try (name <* symbol ":"))) <*>
+      optional (try (name <* symbol "|")) <*>
+      optional (try (name <* symbol ":")) <*>
       expression
     )
 
