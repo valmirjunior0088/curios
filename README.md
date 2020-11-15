@@ -22,16 +22,16 @@ let identity: (-> A: Type, a: A, A) =
 end
 
 let Boolean: Type =
-	(-> self |
-	  P: (-> Boolean, Type),
-	  (P true),
-	  (P false),
-	  (P self)
-	)
+  (-> self |
+    P: (-> Boolean, Type),
+    (P true),
+    (P false),
+    (P self)
+  )
 end
 
 let true: Boolean =
-	(fn P, p_true, p_false, p_true)
+  (fn P, p_true, p_false, p_true)
 end
 
 let false: Boolean =

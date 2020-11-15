@@ -75,6 +75,8 @@ trCheck bindings definitions =
             environment' = enInsert input environment
           in
             check environment' (output self variable) (output' variable)
+        (termType', TrFunction output') ->
+          Left (ErIllTypedTerm environment termType' (TrFunction output'))
         (termType', term') ->
           do
             termType'' <- infer environment term'
