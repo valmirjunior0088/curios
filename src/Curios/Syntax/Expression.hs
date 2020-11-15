@@ -52,9 +52,9 @@ newtype Program =
 pgBindings :: Program -> [(Name, Expression)]
 pgBindings (Program program) =
   map transform program where
-    transform (Statement name expressionType _) = (name, expressionType)
+    transform (Statement name binding _) = (name, binding)
 
 pgDefinitions :: Program -> [(Name, Expression)]
 pgDefinitions (Program program) =
   map transform program where
-    transform (Statement name _ expression) = (name, expression)
+    transform (Statement name _ definition) = (name, definition)
