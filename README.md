@@ -7,11 +7,17 @@
 - [x] [Dependent types](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
 - [x] General and mutual recursion
 - [x] [Very dependent types](http://www.nuprl.org/documents/Hickey/FormalObjectsinTypeTheory.pdf)
+- [ ] Better error messages
+- [ ] Interpreter
+- [ ] WebAssembly generation
+- [ ] Irrelevant arguments
 - [ ] System input and output
+- [ ] Module system
+- [ ] Dependency manager
 
 ### How do I run this thing?
 
-- `stack run print "[A: Type, a: A, A]"` will print the internal representation of the type of the identity function;
+- `stack run print "(-> A: Type, a: A, A)"` will print the internal representation of the type of the identity function;
 - `stack run check ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the type and body of said definition;
 
 ### Example source
