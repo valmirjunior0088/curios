@@ -122,7 +122,7 @@ trCheck bindings definitions =
           do
             functionType <- infer environment function
             
-            case functionType of
+            case trReduce definitions functionType of
               TrFunctionType input output ->
                 do
                   check environment input argument
