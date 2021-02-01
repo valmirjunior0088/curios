@@ -5,134 +5,153 @@ module Curios.Core.Verification
   )
   where
 
-import Data.Maybe (fromJust)
-import Control.Monad (unless)
-import Curios.Error (Error (..))
-import Curios.Syntax.Expression (Primitive (..))
-import Curios.Core.Term (PrimitiveType (..), Type, Term (..))
-import Curios.Core.Seen (snEmpty, snMember, snInsert)
-import Curios.Core.Bindings (Bindings (..), bnLookup)
+import Curios.Core.History (hsEmpty, hsInsert, hsMember)
+import Curios.Core.Declarations (Declarations (..), dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfLookup)
-import Curios.Core.Environment (Environment (..), enEmpty, enInsert, enLookup, enLength)
+import Curios.Core.Variables (Variables (..), vrEmpty, vrInsert, vrLookup, vrNext)
+import Control.Monad (unless)
+import Data.Maybe (fromJust)
+
+import Curios.Error
+  (Error (..)
+  ,erMismatchedFunctionType
+  ,erMismatchedType
+  ,erUndeclaredName
+  ,erFunctionNotInferable
+  )
+
+import Curios.Core.Term
+  (Origin (..)
+  ,Argument (..)
+  ,Primitive (..)
+  ,Literal (..)
+  ,Type
+  ,Term (..)
+  ,trOrigin
+  )
 
 trReduce :: Definitions -> Term -> Term
 trReduce definitions term =
   case term of
-    TrReference name -> 
+    TrReference _ name -> 
       case dfLookup name definitions of
-        Nothing -> TrReference name
         Just term' -> trReduce definitions term'
-    TrApplication function argument ->  
+        _ -> term
+    TrApplication _ function argument ->  
       case trReduce definitions function of
-        TrFunction output -> trReduce definitions (output argument)
-        function' -> function'
+        TrFunction _ output -> trReduce definitions (output (ArTerm argument))
+        _ -> term
+    TrAnnotated _ _ term' ->
+      trReduce definitions term'
     term' ->
       term'
 
 trConvertsWith :: Definitions -> Term -> Term -> Bool
 trConvertsWith definitions =
-  go snEmpty 0 where
-    go seen depth one other =
-      snMember (one', other') seen || comparison where
+  go hsEmpty 0 where
+    go history depth one other =
+      hsMember (one', other') history || comparison where
         one' = trReduce definitions one
         other' = trReduce definitions other
-        seen' = snInsert (one', other') seen
+        history' = hsInsert (one', other') history
         comparison =
           case (one', other') of
-            (TrFunctionType input output, TrFunctionType input' output') ->
+            (TrFunctionType _ input output, TrFunctionType _ input' output') ->
               (&&)
-                (go seen' (depth + 0) input input')
-                (go seen' (depth + 2)
-                  (output (TrVariable (depth + 0)) (TrVariable (depth + 1)))
-                  (output' (TrVariable (depth + 0)) (TrVariable (depth + 1)))
+                (go history' (depth + 0) input input')
+                (go history' (depth + 2)
+                  (output (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1)))
+                  (output' (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1)))
                 )
-            (TrFunction output, TrFunction output') ->
-              go seen' (depth + 1)
-                (output (TrVariable (depth + 0)))
-                (output' (TrVariable (depth + 0)))
-            (TrApplication function argument, TrApplication function' argument') ->
+            (TrFunction _ output, TrFunction _ output') ->
+              go history' (depth + 1)
+                (output (ArPlaceholder (depth + 0)))
+                (output' (ArPlaceholder (depth + 0)))
+            (TrApplication _ function argument, TrApplication _ function' argument') ->
               (&&)
-                (go seen' (depth + 0) function function')
-                (go seen' (depth + 0) argument argument')
-            (TrAnnotated termType term, TrAnnotated termType' term') ->
+                (go history' (depth + 0) function function')
+                (go history' (depth + 0) argument argument')
+            (TrAnnotated _ termType term, TrAnnotated _ termType' term') ->
               (&&)
-                (go seen' (depth + 0) termType termType')
-                (go seen' (depth + 0) term term')
+                (go history' (depth + 0) termType termType')
+                (go history' (depth + 0) term term')
             (one'', other'') ->
               one'' == other''
 
-trCheck :: Bindings -> Definitions -> Type -> Term -> Either Error ()
-trCheck bindings definitions =
-  check enEmpty where
+trCheck :: Declarations -> Definitions -> Type -> Term -> Either Error ()
+trCheck declarations definitions =
+  check vrEmpty where
 
-    check :: Environment -> Type -> Term -> Either Error ()
-    check environment termType term =
+    check :: Variables -> Type -> Term -> Either Error ()
+    check variables termType term =
       case (trReduce definitions termType, term) of
-        (TrFunctionType input output, TrFunction output') ->
+        (TrFunctionType _ input output, TrFunction _ output') ->
           let
-            self = TrAnnotated termType term
-            variable = TrVariable (enLength environment)
-            environment' = enInsert input environment
+            selfArgument = ArTerm (TrAnnotated OrMachine termType term)
+            variableArgument = ArPlaceholder (vrNext variables)
+            variables' = vrInsert input variables
           in
-            check environment' (output self variable) (output' variable)
-        (termType', TrFunction output') ->
-          Left (ErIllTypedTerm environment termType' (TrFunction output'))
+            check variables' (output selfArgument variableArgument) (output' variableArgument)
+        (termType', TrFunction origin _) ->
+          Left (erMismatchedFunctionType origin termType')
         (termType', term') ->
           do
-            termType'' <- infer environment term'
+            termType'' <- infer variables term'
 
             unless
               (trConvertsWith definitions termType' termType'')
-              (Left (ErIllTypedTerm environment termType' term'))
+              (Left (erMismatchedType (trOrigin term') termType termType''))
             
             Right ()
     
-    infer :: Environment -> Term -> Either Error Type
-    infer environment term =
+    infer :: Variables -> Term -> Either Error Type
+    infer variables term =
       case term of
-        TrVariable index ->
-          Right (fromJust (enLookup index environment))
-        TrReference name ->
-          bnLookup name bindings
-        TrType ->
-          Right TrType
-        TrPrimitiveType _ ->
-          Right TrType
-        TrPrimitive primitive ->
-          Right (TrPrimitiveType primitiveType) where
-            primitiveType =
-              case primitive of
-                PrText _ -> PtText
-                PrInteger _ -> PtInteger
-                PrRational _ -> PtRational
-        TrFunctionType input output ->
+        TrPrimitive _ _ ->
+          Right (TrType OrMachine)
+        TrLiteral _ literal ->
+          Right (TrPrimitive OrMachine primitive) where
+            primitive =
+              case literal of
+                LtText _ -> PrText
+                LtInteger _ -> PrInteger
+                LtReal _ -> PrReal
+        TrVariable _ index ->
+          Right (fromJust (vrLookup index variables))
+        TrReference origin name ->
+          case dcLookup name declarations of
+            Nothing -> Left (erUndeclaredName origin name)
+            Just termType -> Right termType
+        TrType _ ->
+          Right (TrType OrMachine)
+        TrFunctionType _ input output ->
           do
-            check environment TrType input
+            check variables (TrType OrMachine) input
             
-            let self = TrVariable (enLength environment)
-            let environment' = enInsert term environment
-            let variable = TrVariable (enLength environment')
-            let environment'' = enInsert input environment'
-            check environment'' TrType (output self variable)
+            let selfArgument = ArPlaceholder (vrNext variables)
+            let variables' = vrInsert term variables
+            let variableArgument = ArPlaceholder (vrNext variables')
+            let variables'' = vrInsert input variables'
+            check variables'' (TrType OrMachine) (output selfArgument variableArgument)
             
-            Right TrType
-        TrFunction output ->
-          Left (ErNonInferableTerm (TrFunction output))
-        TrApplication function argument ->
+            Right (TrType OrMachine)
+        TrFunction origin _ ->
+          Left (erFunctionNotInferable origin)
+        TrApplication _ function argument ->
           do
-            functionType <- infer environment function
+            functionType <- infer variables function
             
             case trReduce definitions functionType of
-              TrFunctionType input output ->
+              TrFunctionType _ input output ->
                 do
-                  check environment input argument
+                  check variables input argument
 
-                  Right (output function argument)
-              _ ->
-                Left (ErNonFunctionApplication (TrApplication function argument))
-        TrAnnotated termType term' ->
+                  Right (output (ArTerm function) (ArTerm argument))
+              functionType' ->
+                Left (erMismatchedFunctionType (trOrigin function) functionType')
+        TrAnnotated _ termType term' ->
           do
-            check environment TrType termType
-            check environment termType term'
+            check variables (TrType OrMachine) termType
+            check variables termType term'
             
             Right termType

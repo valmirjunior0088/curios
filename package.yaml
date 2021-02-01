@@ -18,6 +18,7 @@ dependencies:
 - base >= 4 && < 5
 - megaparsec >= 7 && < 8
 - containers >= 0 && < 1
+- boxes >= 0 && < 1
 
 library:
   source-dirs: src
@@ -44,5 +45,3 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - curios
-    - hspec >= 2 && < 3
-    - hspec-megaparsec >= 2 && < 3

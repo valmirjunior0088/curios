@@ -7,7 +7,9 @@
 - [x] [Dependent types](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
 - [x] General and mutual recursion
 - [x] [Very dependent types](http://www.nuprl.org/documents/Hickey/FormalObjectsinTypeTheory.pdf)
-- [ ] Better error messages
+- [ ] Better error messages (1/2)
+  - [x] Report on source positions
+  - [ ] Pretty-print terms
 - [ ] Interpreter
 - [ ] WebAssembly generation
 - [ ] Irrelevant arguments
@@ -63,26 +65,26 @@ let successor: (-> Natural, Natural) =
   )
 end
 
-let Vector: (-> Natural, Type, Type) =
-  (fn size, A,
+let List: (-> Type, Type) =
+  (fn A,
     (-> self |
-      P: (-> (Vector size A), Type),
+      P: (-> (List A), Type),
       (P (empty A)),
-      (-> a: A, vector: (Vector size A), (P (cell size A a vector))),
+      (-> a: A, list: (List A), (P (push A a list))),
       (P self)
     )
   )
 end
 
-let empty: (-> A: Type, (Vector zero A)) =
+let empty: (-> A: Type, (List A)) =
   (fn A,
-    (fn P, p_empty, p_cell, p_empty)
+    (fn P, p_empty, p_push, p_empty)
   )
 end
 
-let cell: (-> size: Natural, A: Type, A, (Vector size A), (Vector (successor size) A)) =
-  (fn size, A, a, vector,
-    (fn P, p_empty, p_cell, (p_cell a vector))
+let push: (-> A: Type, a: A, (List A), (List A)) =
+  (fn A, a, list,
+    (fn P, p_empty, p_push, (p_push a list))
   )
 end
 
@@ -104,5 +106,33 @@ end
 
 let ones: (Stream Natural) =
   (build Natural (successor zero) ones)
+end
+
+let Unit: Type =
+  (-> self |
+    P: (-> Unit, Type),
+    (P unit),
+    (P self)
+  )
+end
+
+let unit: Unit =
+  (fn P, p_unit, p_unit)
+end
+
+let Pair: (-> Type, Type, Type) =
+  (fn A, B,
+    (-> self |
+      P: (-> (Pair A B), Type),
+      (-> a: A, b: B, (P (pair A B a b))),
+      (P self)
+    )
+  )
+end
+
+let pair: (-> A: Type, B: Type, A, B, (Pair A B)) =
+  (fn A, B, a, b,
+    (fn P, p_pair, (p_pair a b))
+  )
 end
 ```
