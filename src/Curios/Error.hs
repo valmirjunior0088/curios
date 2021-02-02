@@ -8,12 +8,38 @@ module Curios.Error
   ,erMismatchedFunctionType
   ,erMismatchedType
   ,erFunctionNotInferable
+  ,orList
+  ,showParseTokens
+  ,showErrorItem
+  ,showErrorFancy
+  ,showParseError
+  ,showErrorOrigin
+  ,showErrorKind
+  ,showError
   )
   where
 
-import Curios.Core.Term (Origin (..), Name (..), Type)
-import Text.Megaparsec.Error (ParseError (..))
+import Curios.Formatting (showFramed)
+import Curios.Core.Term (Origin (..), Name (..), Type, showTerm)
+import Text.Megaparsec.Pos (unPos)
+import Data.Maybe (maybe, isNothing)
+import Data.Proxy (Proxy (..))
 import Data.Void (Void)
+import Data.Set (Set (..))
+import Data.List (intercalate)
+import qualified Data.Set as Set
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
+
+import Text.Megaparsec
+  (Token (..)
+  ,SourcePos (..)
+  ,ParseError (..)
+  ,ErrorItem (..)
+  ,ErrorFancy (..)
+  ,ShowErrorComponent (..)
+  ,showTokens
+  )
 
 data Kind =
   KnParsing (ParseError String Void) |
@@ -54,3 +80,101 @@ erMismatchedType origin expectedType obtainedType =
 erFunctionNotInferable :: Origin -> Error
 erFunctionNotInferable origin =
   Error { erOrigin = origin, erKind = KnFunctionNotInferable }
+
+orList :: NonEmpty String -> String
+orList tokens =
+  case tokens of
+    (item :| []) -> item
+    (item :| [item']) -> item <> " or " <> item'
+    _ -> intercalate ", " (NonEmpty.init tokens) <> ", or " <> NonEmpty.last tokens
+
+showParseTokens :: String -> Set String -> String
+showParseTokens prefix tokens
+  | Set.null tokens = ""
+  | otherwise = prefix ++ (orList . NonEmpty.fromList . Set.toAscList) tokens
+
+showErrorItem :: ErrorItem (Token String) -> String
+showErrorItem errorItem =
+  case errorItem of
+    Tokens token -> showTokens (Proxy :: Proxy String) token
+    Label label -> NonEmpty.toList label
+    EndOfInput -> "<end of input>"
+
+showErrorFancy :: ErrorFancy Void -> String
+showErrorFancy errorsFancy =
+  case errorsFancy of
+    ErrorFail message ->
+      "Parsing error: explicit failure." ++ "\n" ++
+        message
+    ErrorIndentation ordering reference actual ->
+      let
+        sign = case ordering of
+          LT -> "> "
+          EQ -> "= "
+          GT -> "< "
+      in
+        "Parsing error: incorrect indentation." ++ "\n" ++
+          "- Expected: " ++ sign ++ show (unPos reference) ++ "\n" ++
+          "- Obtained: " ++ "  " ++ show (unPos actual) ++ "\n"
+    ErrorCustom void ->
+      showErrorComponent void
+
+showParseError :: ParseError String Void -> String
+showParseError parseError =
+  case parseError of
+    TrivialError _ obtainedToken expectedTokens ->
+      if Set.null expectedTokens && isNothing obtainedToken
+        then "Parsing error: unknown trivial error." ++ "\n"
+        else 
+          "Parsing error: unexpected token." ++ "\n" ++
+            showParseTokens "- Expected: " (showErrorItem `Set.map` expectedTokens) ++ "\n" ++
+            showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtainedToken) ++ "\n"
+    FancyError _ errors ->
+      if Set.null errors
+        then "Parsing error: unknown fancy error." ++ "\n"
+        else unlines (showErrorFancy <$> Set.toAscList errors) ++ "\n"
+
+showErrorOrigin :: String -> String -> Origin -> String
+showErrorOrigin file source origin =
+  "In file " ++ file ++ "..." ++ "\n" ++
+    case origin of
+      OrMachine ->
+        "In a machine-generated term..."
+      OrSource sourcePos ->
+        let
+          line = unPos (sourceLine sourcePos)
+          column = unPos (sourceColumn sourcePos)
+        in
+          "In line " ++ show line ++ ", column " ++ show column ++ "..." ++ "\n" ++
+            "\n" ++
+            showFramed 3 60 (line - 1) (column - 1) source ++
+            "\n"
+
+showErrorKind :: Kind -> String
+showErrorKind kind =
+  case kind of
+    KnParsing parseError ->
+      showParseError parseError ++ "\n"
+    KnUndeclaredName name ->
+      "The name \"" ++ show name ++ "\" is undeclared." ++ "\n"
+    KnRepeatedlyDeclaredName name ->
+      "The name \"" ++ show name ++ "\" is repeatedly declared." ++ "\n"
+    KnRepeatedlyDefinedName name ->
+      "The name \"" ++ show name ++ "\" is repeatedly defined." ++ "\n"
+    KnMismatchedFunctionType obtainedType ->
+      "Type mismatch." ++ "\n" ++
+        "- Expected: <function type>" ++ "\n" ++
+        "- Obtained: " ++ showTerm obtainedType ++ "\n"
+    KnMismatchedType expectedType obtainedType ->
+      "Type mismatch." ++ "\n" ++
+        "- Expected: " ++ showTerm expectedType ++ "\n" ++
+        "- Obtained: " ++ showTerm obtainedType ++ "\n"
+    KnFunctionNotInferable ->
+      "The types of functions are not inferable without annotations." ++ "\n"
+
+showError :: String -> String -> Error -> String
+showError file source error =
+  "Check failed." ++ "\n" ++
+    "\n" ++
+    showErrorOrigin file source (erOrigin error) ++
+    showErrorKind (erKind error)

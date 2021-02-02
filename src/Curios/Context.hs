@@ -6,12 +6,13 @@ module Curios.Context
   ,cnInsertDefinition
   ,cnLookupDefinition
   ,pgCheck
+  ,showContext
   )
   where
 
 import Curios.Translation (exTranslate)
 import Curios.Source.Types (Identifier (..), Program (..), pgDeclarations, pgDefinitions)
-import Curios.Core.Term (Origin (..), Name (..), Type, Term (..))
+import Curios.Core.Term (Origin (..), Name (..), Type, Term (..), showTerm)
 import Curios.Core.Declarations (Declarations (..), dcEmpty, dcInsert, dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfEmpty, dfInsert, dfLookup)
 import Curios.Core.Verification (trCheck)
@@ -82,3 +83,13 @@ pgCheck program =
       insert name (exTranslate expression) context
     build insert expressions context =
       foldlM (combine insert) context expressions
+
+showContext :: String -> Context -> String
+showContext name context =
+  "Check succeeded!" ++ "\n" ++
+    "\n" ++
+    "Declaration:" ++ "\n" ++
+    show (fmap showTerm (cnLookupDeclaration (Name name) context)) ++ "\n" ++
+    "\n" ++
+    "Definition:" ++ "\n" ++
+    show (fmap showTerm (cnLookupDefinition (Name name) context)) ++ "\n"

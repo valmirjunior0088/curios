@@ -7,7 +7,7 @@ module Curios.Formatting
   ,within
   ,boxed
   ,framed
-  ,putFramedLn
+  ,showFramed
   )
   where
   
@@ -81,6 +81,6 @@ framed :: Int -> Int -> Int -> Int -> String -> Box
 framed lineQuantity columnQuantity highlightedLine highlightedColumn =
   assemble . boxed lineQuantity columnQuantity highlightedLine highlightedColumn
 
-putFramedLn :: Int -> Int -> Int -> Int -> String -> IO ()
-putFramedLn lineQuantity columnQuantity highlightedLine highlightedColumn =
-  putStr . render . framed lineQuantity columnQuantity highlightedLine highlightedColumn
+showFramed :: Int -> Int -> Int -> Int -> String -> String
+showFramed lineQuantity columnQuantity highlightedLine highlightedColumn =
+  render . framed lineQuantity columnQuantity highlightedLine highlightedColumn

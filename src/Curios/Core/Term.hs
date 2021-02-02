@@ -9,7 +9,7 @@ module Curios.Core.Term
   ,trOrigin
   ,trAbstract
   ,trSubstitute
-  ,trShow
+  ,showTerm
   )
   where
 
@@ -154,8 +154,8 @@ trSubstitute name source term =
     term' ->
       term'
 
-trShow :: Term -> String
-trShow =
+showTerm :: Term -> String
+showTerm =
   go 0 where
     go depth term =
       case term of
