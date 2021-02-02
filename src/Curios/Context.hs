@@ -93,3 +93,4 @@ showContext name context =
     "\n" ++
     "Definition:" ++ "\n" ++
     show (fmap showTerm (cnLookupDefinition (Name name) context)) ++ "\n"
+  

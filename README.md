@@ -7,9 +7,7 @@
 - [x] [Dependent types](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
 - [x] General and mutual recursion
 - [x] [Very dependent types](http://www.nuprl.org/documents/Hickey/FormalObjectsinTypeTheory.pdf)
-- [ ] Better error messages (1/2)
-  - [x] Report on source positions
-  - [ ] Pretty-print terms
+- [x] Better error messages
 - [ ] Interpreter
 - [ ] WebAssembly generation
 - [ ] Irrelevant arguments
