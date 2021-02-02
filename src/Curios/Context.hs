@@ -39,34 +39,32 @@ cnEmpty =
     }
 
 cnInsertDeclaration :: Identifier -> Type -> Context -> Either Error Context
-cnInsertDeclaration (Identifier namePos name) termType context =
-  do
-    declarations <- case dcInsert (Name name) termType (cnDeclarations context) of
-      Nothing -> Left (erRepeatedlyDeclaredName (OrSource namePos) (Name name))
-      Just declarations -> Right declarations
+cnInsertDeclaration (Identifier namePos name) termType context = do
+  declarations <- case dcInsert (Name name) termType (cnDeclarations context) of
+    Nothing -> Left (erRepeatedlyDeclaredName (OrSource namePos) (Name name))
+    Just declarations -> Right declarations
 
-    trCheck declarations (cnDefinitions context) (TrType OrMachine) termType
-    
-    Right (context { cnDeclarations = declarations })
+  trCheck declarations (cnDefinitions context) (TrType OrMachine) termType
+  
+  Right (context { cnDeclarations = declarations })
 
 cnLookupDeclaration :: Name -> Context -> Maybe Type
 cnLookupDeclaration name context =
   dcLookup name (cnDeclarations context)
 
 cnInsertDefinition :: Identifier -> Term -> Context -> Either Error Context
-cnInsertDefinition (Identifier namePos name) term context =
-  do
-    termType <- case dcLookup (Name name) (cnDeclarations context) of
-      Nothing -> Left (erUndeclaredName (OrSource namePos) (Name name))
-      Just termType -> Right termType
+cnInsertDefinition (Identifier namePos name) term context = do
+  termType <- case dcLookup (Name name) (cnDeclarations context) of
+    Nothing -> Left (erUndeclaredName (OrSource namePos) (Name name))
+    Just termType -> Right termType
 
-    definitions <- case dfInsert (Name name) term (cnDefinitions context) of
-      Nothing -> Left (erRepeatedlyDefinedName (OrSource namePos) (Name name))
-      Just definitions -> Right definitions
+  definitions <- case dfInsert (Name name) term (cnDefinitions context) of
+    Nothing -> Left (erRepeatedlyDefinedName (OrSource namePos) (Name name))
+    Just definitions -> Right definitions
 
-    trCheck (cnDeclarations context) definitions termType term
+  trCheck (cnDeclarations context) definitions termType term
 
-    Right (context { cnDefinitions = definitions })
+  Right (context { cnDefinitions = definitions })
 
 cnLookupDefinition :: Name -> Context -> Maybe Term
 cnLookupDefinition name context =

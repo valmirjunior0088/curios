@@ -94,15 +94,14 @@ trCheck declarations definitions =
             check variables' (output selfArgument variableArgument) (output' variableArgument)
         (termType', TrFunction origin _) ->
           Left (erMismatchedFunctionType origin termType')
-        (termType', term') ->
-          do
-            termType'' <- infer variables term'
+        (termType', term') -> do
+          termType'' <- infer variables term'
 
-            unless
-              (trConvertsWith definitions termType' termType'')
-              (Left (erMismatchedType (trOrigin term') termType termType''))
-            
-            Right ()
+          unless
+            (trConvertsWith definitions termType' termType'')
+            (Left (erMismatchedType (trOrigin term') termType termType''))
+          
+          Right ()
     
     infer :: Variables -> Term -> Either Error Type
     infer variables term =
@@ -124,34 +123,30 @@ trCheck declarations definitions =
             Just termType -> Right termType
         TrType _ ->
           Right (TrType OrMachine)
-        TrFunctionType _ input output ->
-          do
-            check variables (TrType OrMachine) input
-            
-            let selfArgument = ArPlaceholder (vrNext variables)
-            let variables' = vrInsert term variables
-            let variableArgument = ArPlaceholder (vrNext variables')
-            let variables'' = vrInsert input variables'
-            check variables'' (TrType OrMachine) (output selfArgument variableArgument)
-            
-            Right (TrType OrMachine)
+        TrFunctionType _ input output -> do
+          check variables (TrType OrMachine) input
+          
+          let selfArgument = ArPlaceholder (vrNext variables)
+          let variables' = vrInsert term variables
+          let variableArgument = ArPlaceholder (vrNext variables')
+          let variables'' = vrInsert input variables'
+          check variables'' (TrType OrMachine) (output selfArgument variableArgument)
+          
+          Right (TrType OrMachine)
         TrFunction origin _ ->
           Left (erFunctionNotInferable origin)
-        TrApplication _ function argument ->
-          do
-            functionType <- infer variables function
-            
-            case trReduce definitions functionType of
-              TrFunctionType _ input output ->
-                do
-                  check variables input argument
+        TrApplication _ function argument -> do
+          functionType <- infer variables function
+          
+          case trReduce definitions functionType of
+            TrFunctionType _ input output -> do
+              check variables input argument
 
-                  Right (output (ArTerm function) (ArTerm argument))
-              functionType' ->
-                Left (erMismatchedFunctionType (trOrigin function) functionType')
-        TrAnnotated _ termType term' ->
-          do
-            check variables (TrType OrMachine) termType
-            check variables termType term'
-            
-            Right termType
+              Right (output (ArTerm function) (ArTerm argument))
+            functionType' ->
+              Left (erMismatchedFunctionType (trOrigin function) functionType')
+        TrAnnotated _ termType term' -> do
+          check variables (TrType OrMachine) termType
+          check variables termType term'
+          
+          Right termType

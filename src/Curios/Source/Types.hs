@@ -11,9 +11,7 @@ module Curios.Source.Types
   )
   where
 
-import Text.Megaparsec
-  (SourcePos
-  )
+import Text.Megaparsec (SourcePos)
 
 data Identifier =
   Identifier SourcePos String

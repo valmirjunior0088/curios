@@ -3,15 +3,15 @@ module Curios.Translation
   )
   where
 
+import qualified Curios.Source.Types as Source (Literal (..))
+import qualified Curios.Core.Term as Core (Literal (..))
+import Text.Megaparsec (SourcePos (..))
+
 import Curios.Source.Types
   (Identifier (..)
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
   ,Expression (..)
-  )
-
-import qualified Curios.Source.Types as Source
-  (Literal (..)
   )
 
 import Curios.Core.Term
@@ -22,14 +22,6 @@ import Curios.Core.Term
   ,Term (..)
   ,trAbstract
   ,trSubstitute
-  )
-
-import qualified Curios.Core.Term as Core
-  (Literal (..)
-  )
-
-import Text.Megaparsec
-  (SourcePos (..)
   )
 
 trApplyArgument :: Name -> Argument -> Term -> Term

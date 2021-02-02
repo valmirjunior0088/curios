@@ -19,14 +19,16 @@ module Curios.Error
   )
   where
 
+import Prelude hiding (error)
+
 import Curios.Formatting (showFramed)
 import Curios.Core.Term (Origin (..), Name (..), Type, showTerm)
 import Text.Megaparsec.Pos (unPos)
+import Data.List (intercalate)
 import Data.Maybe (maybe, isNothing)
 import Data.Proxy (Proxy (..))
-import Data.Void (Void)
-import Data.Set (Set (..))
-import Data.List (intercalate)
+import Data.Void (Void, absurd)
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -37,8 +39,7 @@ import Text.Megaparsec
   ,ParseError (..)
   ,ErrorItem (..)
   ,ErrorFancy (..)
-  ,ShowErrorComponent (..)
-  ,showTokens
+  ,Stream (..)
   )
 
 data Kind =
@@ -108,16 +109,17 @@ showErrorFancy errorsFancy =
         message
     ErrorIndentation ordering reference actual ->
       let
-        sign = case ordering of
-          LT -> "> "
-          EQ -> "= "
-          GT -> "< "
+        sign =
+          case ordering of
+            LT -> "> "
+            EQ -> "= "
+            GT -> "< "
       in
         "Parsing error: incorrect indentation." ++ "\n" ++
           "- Expected: " ++ sign ++ show (unPos reference) ++ "\n" ++
           "- Obtained: " ++ "  " ++ show (unPos actual) ++ "\n"
     ErrorCustom void ->
-      showErrorComponent void
+      absurd void
 
 showParseError :: ParseError String Void -> String
 showParseError parseError =

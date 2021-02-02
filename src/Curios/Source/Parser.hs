@@ -9,6 +9,9 @@ module Curios.Source.Parser
   )
   where
 
+import Text.Megaparsec.Char (space1)
+import Data.Void (Void)
+
 import Curios.Source.Types
   (Identifier (..)
   ,Literal (..)
@@ -17,10 +20,6 @@ import Curios.Source.Types
   ,Expression (..)
   ,Statement (..)
   ,Program (..)
-  )
-
-import Data.Void
-  (Void
   )
 
 import Text.Megaparsec
@@ -34,10 +33,6 @@ import Text.Megaparsec
   ,manyTill
   ,eof
   ,(<|>)
-  )
-
-import Text.Megaparsec.Char
-  (space1
   )
 
 import qualified Text.Megaparsec.Char.Lexer as Lexer

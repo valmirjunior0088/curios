@@ -4,6 +4,8 @@ module Curios
   )
   where
 
+import Prelude hiding (error)
+
 import Curios.Error (Error (..), erParsing)
 import Curios.Context (Context (..), pgCheck)
 import Curios.Source.Types (Program)

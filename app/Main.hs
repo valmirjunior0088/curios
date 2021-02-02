@@ -24,7 +24,7 @@ main = do
       source <- openFile file ReadMode >>= hGetContents
 
       case check file source of
-        Left error -> putStrLn (showError file source error)
+        Left error -> putStr (showError file source error)
         Right _ -> putStr ("Check succeeded!" ++ "\n")
 
     _ -> do
