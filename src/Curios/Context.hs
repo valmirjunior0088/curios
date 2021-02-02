@@ -12,7 +12,7 @@ module Curios.Context
 
 import Curios.Translation (exTranslate)
 import Curios.Source.Types (Identifier (..), Program (..), pgDeclarations, pgDefinitions)
-import Curios.Core.Term (Origin (..), Name (..), Type, Term (..), showTerm)
+import Curios.Core.Term (Origin (..), Name, Type, Term (..), showTerm)
 import Curios.Core.Declarations (Declarations (..), dcEmpty, dcInsert, dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfEmpty, dfInsert, dfLookup)
 import Curios.Core.Verification (trCheck)
@@ -40,8 +40,8 @@ cnEmpty =
 
 cnInsertDeclaration :: Identifier -> Type -> Context -> Either Error Context
 cnInsertDeclaration (Identifier namePos name) termType context = do
-  declarations <- case dcInsert (Name name) termType (cnDeclarations context) of
-    Nothing -> Left (erRepeatedlyDeclaredName (OrSource namePos) (Name name))
+  declarations <- case dcInsert name termType (cnDeclarations context) of
+    Nothing -> Left (erRepeatedlyDeclaredName (OrSource namePos) name)
     Just declarations -> Right declarations
 
   trCheck declarations (cnDefinitions context) (TrType OrMachine) termType
@@ -54,12 +54,12 @@ cnLookupDeclaration name context =
 
 cnInsertDefinition :: Identifier -> Term -> Context -> Either Error Context
 cnInsertDefinition (Identifier namePos name) term context = do
-  termType <- case dcLookup (Name name) (cnDeclarations context) of
-    Nothing -> Left (erUndeclaredName (OrSource namePos) (Name name))
+  termType <- case dcLookup name (cnDeclarations context) of
+    Nothing -> Left (erUndeclaredName (OrSource namePos) name)
     Just termType -> Right termType
 
-  definitions <- case dfInsert (Name name) term (cnDefinitions context) of
-    Nothing -> Left (erRepeatedlyDefinedName (OrSource namePos) (Name name))
+  definitions <- case dfInsert name term (cnDefinitions context) of
+    Nothing -> Left (erRepeatedlyDefinedName (OrSource namePos) name)
     Just definitions -> Right definitions
 
   trCheck (cnDeclarations context) definitions termType term
@@ -87,8 +87,8 @@ showContext name context =
   "Check succeeded!" ++ "\n" ++
     "\n" ++
     "Declaration:" ++ "\n" ++
-    show (fmap showTerm (cnLookupDeclaration (Name name) context)) ++ "\n" ++
+    show (fmap showTerm (cnLookupDeclaration name context)) ++ "\n" ++
     "\n" ++
     "Definition:" ++ "\n" ++
-    show (fmap showTerm (cnLookupDefinition (Name name) context)) ++ "\n"
+    show (fmap showTerm (cnLookupDefinition name context)) ++ "\n"
   

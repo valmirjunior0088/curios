@@ -2,7 +2,7 @@ module Curios.Core.Term
   (Origin (..)
   ,Primitive (..)
   ,Literal (..)
-  ,Name (..)
+  ,Name
   ,Type
   ,Argument (..)
   ,Term (..)
@@ -32,13 +32,8 @@ data Literal =
   LtReal Double
   deriving (Eq, Show)
 
-newtype Name =
-  Name String
-  deriving (Eq, Ord)
-
-instance Show Name where
-  show (Name name) =
-    name
+type Name =
+  String
 
 type Type =
   Term

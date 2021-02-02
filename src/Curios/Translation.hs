@@ -17,7 +17,7 @@ import Curios.Source.Types
 import Curios.Core.Term
   (Origin (..)
   ,Primitive (..)
-  ,Name (..)
+  ,Name
   ,Argument (..)
   ,Term (..)
   ,trAbstract
@@ -38,7 +38,7 @@ trAbstractFunctionTypeVariable functionTypePos (FunctionTypeVariable _ variableN
     output _ variableArgument =
       case variableName of
         Just (Identifier _ name) ->
-          trApplyArgument (Name name) variableArgument term
+          trApplyArgument name variableArgument term
         Nothing ->
           term
 
@@ -46,7 +46,7 @@ trAbstractFunctionVariable :: SourcePos -> FunctionVariable -> Term -> Term
 trAbstractFunctionVariable functionPos (FunctionVariable _ (Identifier _ name)) term =
   TrFunction (OrSource functionPos) output where
     output variableArgument =
-      trApplyArgument (Name name) variableArgument term
+      trApplyArgument name variableArgument term
 
 idTranslate :: SourcePos -> Identifier -> Term
 idTranslate sourcePos identifier =
@@ -55,7 +55,7 @@ idTranslate sourcePos identifier =
     Identifier _ "Text" -> TrPrimitive (OrSource sourcePos) PrText
     Identifier _ "Integer" -> TrPrimitive (OrSource sourcePos) PrInteger
     Identifier _ "Real" -> TrPrimitive (OrSource sourcePos) PrReal
-    Identifier _ name -> TrReference (OrSource sourcePos) (Name name)
+    Identifier _ name -> TrReference (OrSource sourcePos) name
 
 ltTranslate :: SourcePos -> Source.Literal -> Term
 ltTranslate sourcePos literal =
@@ -78,7 +78,7 @@ exTranslate expression =
             output' selfArgument variableArgument =
               case selfName of
                 Just (Identifier _ name) ->
-                  trApplyArgument (Name name) selfArgument (output selfArgument variableArgument)
+                  trApplyArgument name selfArgument (output selfArgument variableArgument)
                 Nothing ->
                   output selfArgument variableArgument
         term ->

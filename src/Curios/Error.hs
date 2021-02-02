@@ -22,7 +22,7 @@ module Curios.Error
 import Prelude hiding (error)
 
 import Curios.Formatting (showFramed)
-import Curios.Core.Term (Origin (..), Name (..), Type, showTerm)
+import Curios.Core.Term (Origin (..), Name, Type, showTerm)
 import Text.Megaparsec.Pos (unPos)
 import Data.List (intercalate)
 import Data.Maybe (maybe, isNothing)
