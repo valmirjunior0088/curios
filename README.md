@@ -17,8 +17,7 @@
 
 ### How do I run this thing?
 
-- `stack run print "(-> A: Type, a: A, A)"` will print the internal representation of the type of the identity function;
-- `stack run check ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the type and body of said definition;
+`stack run ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the declaration and definition of said name;
 
 ### Example source
 
