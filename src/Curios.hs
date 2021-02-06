@@ -8,6 +8,7 @@ import Prelude hiding (error)
 
 import Curios.Error (Error (..), erParsing)
 import Curios.Context (Context (..), pgCheck)
+import Curios.Prelude (cnInitial)
 import Curios.Source.Types (Program)
 import qualified Curios.Source.Parser as Parser (program)
 import Curios.Core.Term (Origin (..))
@@ -27,4 +28,4 @@ parse file source =
 
 check :: String -> String -> Either Error Context
 check file source =
-  parse file source >>= pgCheck
+  parse file source >>= pgCheck cnInitial

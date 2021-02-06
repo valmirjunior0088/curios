@@ -2,10 +2,30 @@ module Curios.Core.Term
   (Origin (..)
   ,Primitive (..)
   ,Literal (..)
+  ,Operator (..)
   ,Name
   ,Type
   ,Argument (..)
+  ,arUnwrap
   ,Term (..)
+  ,trPrimitive
+  ,trPrText
+  ,trPrInteger
+  ,trPrReal
+  ,trLiteral
+  ,trLtText
+  ,trLtInteger
+  ,trLtReal
+  ,trOperator
+  ,trOpUnary
+  ,trOpBinary
+  ,trReference
+  ,trVariable
+  ,trType
+  ,trFunctionType
+  ,trFunction
+  ,trApplication
+  ,trAnnotated
   ,trOrigin
   ,trAbstract
   ,trSubstitute
@@ -28,9 +48,13 @@ data Primitive =
 
 data Literal =
   LtText String |
-  LtInteger Integer |
+  LtInteger Int |
   LtReal Double
   deriving (Eq, Show)
+
+data Operator =
+  OpUnary (Literal -> Term) |
+  OpBinary (Literal -> Literal -> Term)
 
 type Name =
   String
@@ -42,9 +66,16 @@ data Argument =
   ArPlaceholder Natural |
   ArTerm Term
 
+arUnwrap :: Argument -> Term
+arUnwrap argument =
+  case argument of
+    ArPlaceholder index -> trVariable index
+    ArTerm term -> term
+
 data Term =
   TrPrimitive Origin Primitive |
   TrLiteral Origin Literal |
+  TrOperator Origin Name Operator |
   TrReference Origin Name |
   TrVariable Origin Natural |
   TrType Origin |
@@ -62,6 +93,8 @@ instance Eq Term where
             primitive == primitive'
           (TrLiteral _ literal, TrLiteral _ literal') ->
             literal == literal'
+          (TrOperator _ name _, TrOperator _ name' _) ->
+            name == name'
           (TrReference _ name, TrReference _ name') ->
             name == name'
           (TrVariable _ index, TrVariable _ index') ->
@@ -90,11 +123,84 @@ instance Eq Term where
           _ ->
             False
 
+trPrimitive :: Primitive -> Term
+trPrimitive primitive =
+  TrPrimitive OrMachine primitive
+
+trPrText :: Term
+trPrText = 
+  trPrimitive PrText
+
+trPrInteger :: Term
+trPrInteger =
+  trPrimitive PrInteger
+
+trPrReal :: Term
+trPrReal =
+  trPrimitive PrReal
+
+trLiteral :: Literal -> Term
+trLiteral literal =
+  TrLiteral OrMachine literal
+
+trLtText :: String -> Term
+trLtText text =
+  trLiteral (LtText text)
+
+trLtInteger :: Int -> Term
+trLtInteger int =
+  trLiteral (LtInteger int)
+
+trLtReal :: Double -> Term
+trLtReal real =
+  trLiteral (LtReal real)
+
+trOperator :: Name -> Operator -> Term
+trOperator name operator =
+  TrOperator OrMachine name operator
+
+trOpUnary :: Name -> (Literal -> Term) -> Term
+trOpUnary name operator =
+  trOperator name (OpUnary operator)
+
+trOpBinary :: Name -> (Literal -> Literal -> Term) -> Term
+trOpBinary name operator =
+  trOperator name (OpBinary operator)
+
+trReference :: Name -> Term
+trReference name =
+  TrReference OrMachine name
+
+trVariable :: Natural -> Term
+trVariable index =
+  TrVariable OrMachine index
+
+trType :: Term
+trType =
+  TrType OrMachine
+
+trFunctionType :: Type -> (Argument -> Argument -> Term) -> Term
+trFunctionType input output =
+  TrFunctionType OrMachine input output
+
+trFunction :: (Argument -> Term) -> Term
+trFunction output =
+  TrFunction OrMachine output
+
+trApplication :: Term -> Term -> Term
+trApplication function argument =
+  TrApplication OrMachine function argument
+
+trAnnotated :: Type -> Term -> Term
+trAnnotated termType term =
+  TrAnnotated OrMachine termType term
+
 trOrigin :: Term -> Origin
 trOrigin term =
   case term of
     TrPrimitive origin _ -> origin
     TrLiteral origin _ -> origin
+    TrOperator origin _ _ -> origin
     TrReference origin _ -> origin
     TrVariable origin _ -> origin
     TrType origin -> origin
@@ -158,8 +264,10 @@ showTerm =
           "(TrPrimitive (" ++ show primitive ++ "))"
         TrLiteral _ literal ->
           "(TrLiteral (" ++ show literal ++ "))"
+        TrOperator _ name _ ->
+          "(TrOperator \"" ++ name ++ "\")"
         TrReference _ name ->
-          "(TrReference " ++ show name ++ ")"
+          "(TrReference \"" ++ name ++ "\")"
         TrVariable _ index ->
           "(TrVariable " ++ show index ++ ")"
         TrType _ ->

@@ -17,7 +17,7 @@ import Curios.Error
   ,erMismatchedFunctionType
   ,erMismatchedType
   ,erUndeclaredName
-  ,erFunctionNotInferable
+  ,erNonInferable
   )
 
 import Curios.Core.Term
@@ -25,22 +25,31 @@ import Curios.Core.Term
   ,Argument (..)
   ,Primitive (..)
   ,Literal (..)
+  ,Operator (..)
   ,Type
   ,Term (..)
+  ,trType
+  ,trPrimitive
   ,trOrigin
   )
 
 trReduce :: Definitions -> Term -> Term
 trReduce definitions term =
   case term of
-    TrReference _ name -> 
+    TrReference origin name -> 
       case dfLookup name definitions of
         Just term' -> trReduce definitions term'
-        _ -> term
-    TrApplication _ function argument ->  
-      case trReduce definitions function of
-        TrFunction _ output -> trReduce definitions (output (ArTerm argument))
-        _ -> term
+        Nothing -> TrReference origin name
+    TrApplication origin function argument ->
+      case (trReduce definitions function, trReduce definitions argument) of
+        (TrOperator _ _ (OpUnary operator), TrLiteral _ literal) ->
+          trReduce definitions (operator literal)
+        (TrApplication _ (TrOperator _ _ (OpBinary operator)) (TrLiteral _ one), TrLiteral _ another) ->
+          trReduce definitions (operator one another)
+        (TrFunction _ output, argument') ->
+          trReduce definitions (output (ArTerm argument'))
+        (function', argument') ->
+          TrApplication origin function' argument'
     TrAnnotated _ _ term' ->
       trReduce definitions term'
     term' ->
@@ -107,14 +116,16 @@ trCheck declarations definitions =
     infer variables term =
       case term of
         TrPrimitive _ _ ->
-          Right (TrType OrMachine)
+          Right trType
         TrLiteral _ literal ->
-          Right (TrPrimitive OrMachine primitive) where
+          Right (trPrimitive primitive) where
             primitive =
               case literal of
                 LtText _ -> PrText
                 LtInteger _ -> PrInteger
                 LtReal _ -> PrReal
+        TrOperator _ name _ ->
+          Right (fromJust (dcLookup name declarations))
         TrVariable _ index ->
           Right (fromJust (vrLookup index variables))
         TrReference origin name ->
@@ -122,19 +133,19 @@ trCheck declarations definitions =
             Nothing -> Left (erUndeclaredName origin name)
             Just termType -> Right termType
         TrType _ ->
-          Right (TrType OrMachine)
+          Right trType
         TrFunctionType _ input output -> do
-          check variables (TrType OrMachine) input
+          check variables trType input
           
           let selfArgument = ArPlaceholder (vrNext variables)
           let variables' = vrInsert term variables
           let variableArgument = ArPlaceholder (vrNext variables')
           let variables'' = vrInsert input variables'
-          check variables'' (TrType OrMachine) (output selfArgument variableArgument)
+          check variables'' trType (output selfArgument variableArgument)
           
-          Right (TrType OrMachine)
+          Right trType
         TrFunction origin _ ->
-          Left (erFunctionNotInferable origin)
+          Left (erNonInferable origin)
         TrApplication _ function argument -> do
           functionType <- infer variables function
           
@@ -146,7 +157,7 @@ trCheck declarations definitions =
             functionType' ->
               Left (erMismatchedFunctionType (trOrigin function) functionType')
         TrAnnotated _ termType term' -> do
-          check variables (TrType OrMachine) termType
+          check variables trType termType
           check variables termType term'
           
           Right termType

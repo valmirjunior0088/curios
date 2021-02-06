@@ -2,8 +2,10 @@ module Curios.Context
   (Context (..)
   ,cnEmpty
   ,cnInsertDeclaration
+  ,cnInsertSourceDeclaration
   ,cnLookupDeclaration
   ,cnInsertDefinition
+  ,cnInsertSourceDefinition
   ,cnLookupDefinition
   ,pgCheck
   ,showContext
@@ -12,17 +14,17 @@ module Curios.Context
 
 import Curios.Translation (exTranslate)
 import Curios.Source.Types (Identifier (..), Program (..), pgDeclarations, pgDefinitions)
-import Curios.Core.Term (Origin (..), Name, Type, Term (..), showTerm)
+import Curios.Core.Term (Origin (..), Name, Type, Term (..), trType, showTerm)
 import Curios.Core.Declarations (Declarations (..), dcEmpty, dcInsert, dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfEmpty, dfInsert, dfLookup)
-import Curios.Core.Verification (trCheck)
+import Curios.Core.Verification (trReduce, trCheck)
 import Data.Foldable (foldlM)
+import Data.Maybe (fromJust)
 
 import Curios.Error
   (Error (..)
   ,erRepeatedlyDeclaredName
   ,erRepeatedlyDefinedName
-  ,erUndeclaredName
   )
 
 data Context =
@@ -38,57 +40,68 @@ cnEmpty =
     ,cnDefinitions = dfEmpty
     }
 
-cnInsertDeclaration :: Identifier -> Type -> Context -> Either Error Context
-cnInsertDeclaration (Identifier namePos name) termType context = do
+cnInsertDeclaration :: Origin -> Name -> Type -> Context -> Either Error Context
+cnInsertDeclaration origin name termType context = do
   declarations <- case dcInsert name termType (cnDeclarations context) of
-    Nothing -> Left (erRepeatedlyDeclaredName (OrSource namePos) name)
+    Nothing -> Left (erRepeatedlyDeclaredName origin name)
     Just declarations -> Right declarations
 
-  trCheck declarations (cnDefinitions context) (TrType OrMachine) termType
+  trCheck declarations (cnDefinitions context) trType termType
   
   Right (context { cnDeclarations = declarations })
+
+cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
+cnInsertSourceDeclaration (Identifier namePos name) termType context =
+  cnInsertDeclaration (OrSource namePos) name termType context
 
 cnLookupDeclaration :: Name -> Context -> Maybe Type
 cnLookupDeclaration name context =
   dcLookup name (cnDeclarations context)
 
-cnInsertDefinition :: Identifier -> Term -> Context -> Either Error Context
-cnInsertDefinition (Identifier namePos name) term context = do
-  termType <- case dcLookup name (cnDeclarations context) of
-    Nothing -> Left (erUndeclaredName (OrSource namePos) name)
-    Just termType -> Right termType
+cnInsertDefinition :: Origin -> Name -> Term -> Context -> Either Error Context
+cnInsertDefinition origin name term context = do
+  let termType = fromJust (dcLookup name (cnDeclarations context))
 
   definitions <- case dfInsert name term (cnDefinitions context) of
-    Nothing -> Left (erRepeatedlyDefinedName (OrSource namePos) name)
+    Nothing -> Left (erRepeatedlyDefinedName origin name)
     Just definitions -> Right definitions
 
   trCheck (cnDeclarations context) definitions termType term
 
   Right (context { cnDefinitions = definitions })
 
+cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either Error Context
+cnInsertSourceDefinition (Identifier namePos name) term context =
+  cnInsertDefinition (OrSource namePos) name term context
+
 cnLookupDefinition :: Name -> Context -> Maybe Term
 cnLookupDefinition name context =
   dfLookup name (cnDefinitions context)
 
-pgCheck :: Program -> Either Error Context
-pgCheck program =
+pgCheck :: Context -> Program -> Either Error Context
+pgCheck programContext program =
   do
-    context <- build cnInsertDeclaration (pgDeclarations program) cnEmpty
-    
-    build cnInsertDefinition (pgDefinitions program) context
+    programContext' <- foldlM combineDeclaration programContext (pgDeclarations program)
+    foldlM combineDefinitions programContext' (pgDefinitions program)
   where
-    combine insert context (name, expression) =
-      insert name (exTranslate expression) context
-    build insert expressions context =
-      foldlM (combine insert) context expressions
+    combineDeclaration context (identifier, expression) =
+      cnInsertSourceDeclaration identifier (exTranslate expression) context
+    combineDefinitions context (identifier, expression) =
+      cnInsertSourceDefinition identifier (exTranslate expression) context
 
 showContext :: String -> Context -> String
 showContext name context =
   "Check succeeded!" ++ "\n" ++
     "\n" ++
-    "Declaration:" ++ "\n" ++
-    show (fmap showTerm (cnLookupDeclaration name context)) ++ "\n" ++
-    "\n" ++
-    "Definition:" ++ "\n" ++
-    show (fmap showTerm (cnLookupDefinition name context)) ++ "\n"
-  
+    case (cnLookupDeclaration name context, cnLookupDefinition name context) of
+      (Just declaration, Just definition) ->
+        "Declaration:" ++ "\n" ++
+        showTerm declaration ++ "\n" ++
+        "\n" ++
+        "Definition:" ++ "\n" ++
+        showTerm definition ++ "\n" ++
+        "\n" ++
+        "Evaluation:" ++ "\n" ++ 
+        showTerm (trReduce (cnDefinitions context) definition) ++ "\n"
+      _ ->
+        "An undeclared name was supplied for evaluation." ++ "\n"

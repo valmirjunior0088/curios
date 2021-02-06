@@ -7,7 +7,7 @@ module Curios.Error
   ,erRepeatedlyDefinedName
   ,erMismatchedFunctionType
   ,erMismatchedType
-  ,erFunctionNotInferable
+  ,erNonInferable
   ,orList
   ,showParseTokens
   ,showErrorItem
@@ -49,7 +49,7 @@ data Kind =
   KnRepeatedlyDefinedName Name |
   KnMismatchedFunctionType Type |
   KnMismatchedType Type Type |
-  KnFunctionNotInferable
+  KnNonInferable
 
 data Error =
   Error { erOrigin :: Origin, erKind :: Kind }
@@ -78,9 +78,9 @@ erMismatchedType :: Origin -> Type -> Type -> Error
 erMismatchedType origin expectedType obtainedType =
   Error { erOrigin = origin, erKind = KnMismatchedType expectedType obtainedType }
 
-erFunctionNotInferable :: Origin -> Error
-erFunctionNotInferable origin =
-  Error { erOrigin = origin, erKind = KnFunctionNotInferable }
+erNonInferable :: Origin -> Error
+erNonInferable origin =
+  Error { erOrigin = origin, erKind = KnNonInferable }
 
 orList :: NonEmpty String -> String
 orList tokens =
@@ -158,11 +158,11 @@ showErrorKind kind =
     KnParsing parseError ->
       showParseError parseError ++ "\n"
     KnUndeclaredName name ->
-      "The name \"" ++ show name ++ "\" is undeclared." ++ "\n"
+      "The name \"" ++ name ++ "\" is undeclared." ++ "\n"
     KnRepeatedlyDeclaredName name ->
-      "The name \"" ++ show name ++ "\" is repeatedly declared." ++ "\n"
+      "The name \"" ++ name ++ "\" is repeatedly declared." ++ "\n"
     KnRepeatedlyDefinedName name ->
-      "The name \"" ++ show name ++ "\" is repeatedly defined." ++ "\n"
+      "The name \"" ++ name ++ "\" is repeatedly defined." ++ "\n"
     KnMismatchedFunctionType obtainedType ->
       "Type mismatch." ++ "\n" ++
         "- Expected: <function type>" ++ "\n" ++
@@ -171,8 +171,8 @@ showErrorKind kind =
       "Type mismatch." ++ "\n" ++
         "- Expected: " ++ showTerm expectedType ++ "\n" ++
         "- Obtained: " ++ showTerm obtainedType ++ "\n"
-    KnFunctionNotInferable ->
-      "The types of functions are not inferable without annotations." ++ "\n"
+    KnNonInferable ->
+      "The term does not have an inferable type without an annotation." ++ "\n"
 
 showError :: String -> String -> Error -> String
 showError file source error =

@@ -18,7 +18,7 @@ data Identifier =
 
 data Literal =
   LtText SourcePos String |
-  LtInteger SourcePos Integer |
+  LtInteger SourcePos Int |
   LtReal SourcePos Double
 
 data FunctionTypeVariable =

@@ -19,28 +19,17 @@
 
 `stack run ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the declaration and definition of said name;
 
+### Primitives
+
+- `Text`: `~~` (length), `++` (concatenate);
+- `Integer`: `+`, `-`, `*`, `/`, `=`, `<`, `<=`, `>`, `>=`;
+- `Real`: `+.`, `-.`, `*.`, `/.`, `=.`, `<.`, `<=.`, `>.`, `>=.`;
+
 ### Example source
 
 ```
 let identity: (-> A: Type, a: A, A) =
   (fn A, a, a)
-end
-
-let Boolean: Type =
-  (-> self |
-    P: (-> Boolean, Type),
-    (P true),
-    (P false),
-    (P self)
-  )
-end
-
-let true: Boolean =
-  (fn P, p_true, p_false, p_true)
-end
-
-let false: Boolean =
-  (fn P, p_true, p_false, p_false)
 end
 
 let Natural: Type =
