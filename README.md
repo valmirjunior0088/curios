@@ -20,7 +20,7 @@
 `stack run ~/example.crs example` will typecheck the `~/example.crs` file. The `example` argument is optional, and if supplied, will print the declaration and definition of said name;
 
 ### Primitives
-
+- `Boolean`: (lambda-encoded) `true` and `false`;
 - `Text`: `~~` (length), `++` (concatenate);
 - `Integer`: `+`, `-`, `*`, `/`, `=`, `<`, `<=`, `>`, `>=`;
 - `Real`: `+.`, `-.`, `*.`, `/.`, `=.`, `<.`, `<=.`, `>.`, `>=.`;
