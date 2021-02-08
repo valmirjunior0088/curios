@@ -4,6 +4,7 @@ module Curios.Source.Parser
   ,functionTypeVariable
   ,functionVariable
   ,expression
+  ,variable
   ,statement
   ,program
   )
@@ -12,14 +13,14 @@ module Curios.Source.Parser
 import Text.Megaparsec.Char (space1)
 import Data.Void (Void)
 
-import Text.Megaparsec.Debug (dbg)
-
 import Curios.Source.Types
   (Identifier (..)
   ,Literal (..)
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
   ,Expression (..)
+  ,Variable (..)
+  ,Variables (..)
   ,Statement (..)
   ,Program (..)
   )
@@ -99,7 +100,7 @@ expression =
       ExIdentifier <$> getSourcePos <*> identifier
     exFunctionType =
       ExFunctionType <$> getSourcePos <*>
-        (symbol "->" *> optional (try identifier)) <*>
+        (symbol "->" *> optional identifier) <*>
         (symbol "{" *> some (try (functionTypeVariable <* symbol ","))) <*>
         (expression <* symbol "}")
     exFunction =
@@ -111,12 +112,24 @@ expression =
         (exIdentifier <* symbol "(") <*>
         (sepBy expression (symbol ",") <* symbol ")")
 
+variable :: Parser Variable
+variable =
+  lexeme (Variable <$> getSourcePos <*> (identifier <* symbol ":") <*>  expression)
+
+variables :: Parser Variables
+variables =
+  lexeme
+    (Variables <$> getSourcePos <*>
+      (concat <$> (optional (symbol "(" *> sepBy variable (symbol ",") <* symbol ")")))
+    )
+
 statement :: Parser Statement
 statement =
   lexeme (stLet) where
     stLet =
       StLet <$> getSourcePos <*>
         (symbol "let" *> identifier) <*>
+        (variables) <*>
         (symbol ":" *> expression) <*>
         (symbol "=" *> expression <* symbol "end")
 

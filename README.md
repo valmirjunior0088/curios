@@ -28,8 +28,8 @@
 ### Example source
 
 ```
-let the: -> { A: Type, a: A, A } =
-  fn { A, a, a }
+let the(A: Type, a: A): A =
+  a
 end
 
 let Unit: Type =
@@ -57,65 +57,49 @@ let zero: Natural =
   fn { P, p_zero, p_successor, p_zero }
 end
 
-let successor: -> { Natural, Natural } =
-  fn { natural,
-    fn { P, p_zero, p_sucessor, p_sucessor(natural) }
+let successor(natural: Natural): Natural =
+  fn { P, p_zero, p_sucessor, p_sucessor(natural) }
+end
+
+let Pair(A: Type, B: Type): Type =
+  -> self {
+    P: -> { Pair(A, B), Type },
+    -> { a: A, b: B, P(pair(A, B, a, b)) },
+    P(self)
   }
 end
 
-let Pair: -> { Type, Type, Type } =
-  fn { A, B,
-    -> self {
-      P: -> { Pair(A, B), Type },
-      -> { a: A, b: B, P(pair(A, B, a, b)) },
-      P(self)
-    }
+let pair(A: Type, B: Type, a: A, b: B): Pair(A, B) =
+  fn { P, p_pair, p_pair(a, b) }
+end
+
+let List(A: Type): Type =
+  -> self {
+    P: -> { List(A), Type },
+    P(empty(A)),
+    -> { a: A, list: List(A), P(push(A, a, list)) },
+    P(self)
   }
 end
 
-let pair: -> { A: Type, B: Type, a: A, b: B, Pair(A, B) } =
-  fn { A, B, a, b,
-    fn { P, p_pair, p_pair(a, b) }
+let empty(A: Type): List(A) =
+  fn { P, p_empty, p_push, p_empty }
+end
+
+let push(A: Type, a: A, list: List(A)): List(A) =
+  fn { P, p_empty, p_push, p_push(a, list) }
+end
+
+let Stream(A: Type): Type =
+  -> self {
+    P: -> { Stream(A), Type },
+    -> { a: A, stream: Stream(A), P(next(A, a, stream)) },
+    P(self)
   }
 end
 
-let List: -> { Type, Type } =
-  fn { A,
-    -> self {
-      P: -> { List(A), Type },
-      P(empty(A)),
-      -> { a: A, list: List(A), P(push(A, a, list)) },
-      P(self)
-    }
-  }
-end
-
-let empty: -> { A: Type, List(A) } =
-  fn { A,
-    fn { P, p_empty, p_push, p_empty }
-  }
-end
-
-let push: -> { A: Type, a: A, List(A), List(A) } =
-  fn { A, a, list,
-    fn { P, p_empty, p_push, p_push(a, list) }
-  }
-end
-
-let Stream: -> { Type, Type } =
-  fn { A,
-    -> self {
-      P: -> { Stream(A), Type },
-      -> { a: A, stream: Stream(A), P(next(A, a, stream)) },
-      P(self)
-    }
-  }
-end
-
-let next: -> { A: Type, A, Stream(A), Stream(A) } =
-  fn { A, a, stream,
-    fn { P, p_build, p_build(a, stream) }
-  }
+let next(A: Type, a: A, stream: Stream(A)): Stream(A) =
+  fn { P, p_build, p_build(a, stream) }
 end
 
 let one: Natural =

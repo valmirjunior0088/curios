@@ -4,10 +4,10 @@ module Curios.Source.Types
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
   ,Expression (..)
+  ,Variable (..)
+  ,Variables (..)
   ,Statement (..)
   ,Program (..)
-  ,pgDeclarations
-  ,pgDefinitions
   )
   where
 
@@ -34,18 +34,14 @@ data Expression =
   ExFunction SourcePos [FunctionVariable] Expression |
   ExApplication SourcePos Expression [Expression]
 
+data Variable =
+  Variable SourcePos Identifier Expression
+
+data Variables =
+  Variables SourcePos [Variable]
+
 data Statement =
-  StLet SourcePos Identifier Expression Expression
+  StLet SourcePos Identifier Variables Expression Expression
 
 data Program =
   Program SourcePos [Statement]
-
-pgDeclarations :: Program -> [(Identifier, Expression)]
-pgDeclarations (Program _ program) =
-  map transform program where
-    transform (StLet _ identifier expression _) = (identifier, expression)
-
-pgDefinitions :: Program -> [(Identifier, Expression)]
-pgDefinitions (Program _ program) =
-  map transform program where
-    transform (StLet _ identifier _ expression) = (identifier, expression)

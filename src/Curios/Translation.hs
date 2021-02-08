@@ -1,5 +1,7 @@
 module Curios.Translation
   (exTranslate
+  ,trAbstractDeclarationVariable
+  ,trAbstractDefinitionVariable
   )
   where
 
@@ -11,6 +13,7 @@ import Curios.Source.Types
   (Identifier (..)
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
+  ,Variable (..)
   ,Expression (..)
   )
 
@@ -23,6 +26,22 @@ import Curios.Core.Term
   ,trAbstract
   ,trSubstitute
   )
+
+idTranslate :: SourcePos -> Identifier -> Term
+idTranslate sourcePos identifier =
+  case identifier of
+    Identifier _ "Type" -> TrType (OrSource sourcePos)
+    Identifier _ "Text" -> TrPrimitive (OrSource sourcePos) PrText
+    Identifier _ "Integer" -> TrPrimitive (OrSource sourcePos) PrInteger
+    Identifier _ "Real" -> TrPrimitive (OrSource sourcePos) PrReal
+    Identifier _ name -> TrReference (OrSource sourcePos) name
+
+ltTranslate :: SourcePos -> Source.Literal -> Term
+ltTranslate sourcePos literal =
+  case literal of
+    Source.LtText _ string -> TrLiteral (OrSource sourcePos) (Core.LtText string)
+    Source.LtInteger _ integer -> TrLiteral (OrSource sourcePos) (Core.LtInteger integer)
+    Source.LtReal _ double -> TrLiteral (OrSource sourcePos) (Core.LtReal double)
 
 trApplyArgument :: Name -> Argument -> Term -> Term
 trApplyArgument name argument term =
@@ -48,22 +67,6 @@ trAbstractFunctionVariable functionPos (FunctionVariable _ (Identifier _ name)) 
     output variableArgument =
       trApplyArgument name variableArgument term
 
-idTranslate :: SourcePos -> Identifier -> Term
-idTranslate sourcePos identifier =
-  case identifier of
-    Identifier _ "Type" -> TrType (OrSource sourcePos)
-    Identifier _ "Text" -> TrPrimitive (OrSource sourcePos) PrText
-    Identifier _ "Integer" -> TrPrimitive (OrSource sourcePos) PrInteger
-    Identifier _ "Real" -> TrPrimitive (OrSource sourcePos) PrReal
-    Identifier _ name -> TrReference (OrSource sourcePos) name
-
-ltTranslate :: SourcePos -> Source.Literal -> Term
-ltTranslate sourcePos literal =
-  case literal of
-    Source.LtText _ string -> TrLiteral (OrSource sourcePos) (Core.LtText string)
-    Source.LtInteger _ integer -> TrLiteral (OrSource sourcePos) (Core.LtInteger integer)
-    Source.LtReal _ double -> TrLiteral (OrSource sourcePos) (Core.LtReal double)
-
 exTranslate :: Expression -> Term
 exTranslate expression =
   case expression of
@@ -87,3 +90,13 @@ exTranslate expression =
       foldr (trAbstractFunctionVariable sourcePos) (exTranslate body) variables
     ExApplication sourcePos function arguments ->
       foldl (TrApplication (OrSource sourcePos)) (exTranslate function) (fmap exTranslate arguments)
+
+trAbstractDeclarationVariable :: SourcePos -> Variable -> Term -> Term
+trAbstractDeclarationVariable sourcePos (Variable _ (Identifier _ name) expression) term =
+  TrFunctionType (OrSource sourcePos) (exTranslate expression) output where
+    output _ variableArgument = trApplyArgument name variableArgument term
+
+trAbstractDefinitionVariable :: SourcePos -> Variable -> Term -> Term
+trAbstractDefinitionVariable sourcePos (Variable _ (Identifier _ name) _) term =
+  TrFunction (OrSource sourcePos) output where
+    output argument = trApplyArgument name argument term
