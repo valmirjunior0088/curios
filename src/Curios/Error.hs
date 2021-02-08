@@ -71,12 +71,12 @@ erRepeatedlyDefinedName origin name =
   Error { erOrigin = origin, erKind = KnRepeatedlyDefinedName name }
 
 erMismatchedFunctionType :: Origin -> Type -> Error
-erMismatchedFunctionType origin obtainedType =
-  Error { erOrigin = origin, erKind = KnMismatchedFunctionType obtainedType }
+erMismatchedFunctionType origin obtained =
+  Error { erOrigin = origin, erKind = KnMismatchedFunctionType obtained }
 
 erMismatchedType :: Origin -> Type -> Type -> Error
-erMismatchedType origin expectedType obtainedType =
-  Error { erOrigin = origin, erKind = KnMismatchedType expectedType obtainedType }
+erMismatchedType origin expected obtained =
+  Error { erOrigin = origin, erKind = KnMismatchedType expected obtained }
 
 erNonInferable :: Origin -> Error
 erNonInferable origin =
@@ -86,8 +86,8 @@ orList :: NonEmpty String -> String
 orList tokens =
   case tokens of
     (item :| []) -> item
-    (item :| [item']) -> item <> " or " <> item'
-    _ -> intercalate ", " (NonEmpty.init tokens) <> ", or " <> NonEmpty.last tokens
+    (item :| [item']) -> item ++ " or " ++ item'
+    _ -> intercalate ", " (NonEmpty.init tokens) ++ ", or " ++ NonEmpty.last tokens
 
 showParseTokens :: String -> Set String -> String
 showParseTokens prefix tokens
@@ -124,13 +124,13 @@ showErrorFancy errorsFancy =
 showParseError :: ParseError String Void -> String
 showParseError parseError =
   case parseError of
-    TrivialError _ obtainedToken expectedTokens ->
-      if Set.null expectedTokens && isNothing obtainedToken
+    TrivialError _ obtained expected ->
+      if Set.null expected && isNothing obtained
         then "Parsing error: unknown trivial error." ++ "\n"
         else 
           "Parsing error: unexpected token." ++ "\n" ++
-            showParseTokens "- Expected: " (showErrorItem `Set.map` expectedTokens) ++ "\n" ++
-            showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtainedToken) ++ "\n"
+            showParseTokens "- Expected: " (showErrorItem `Set.map` expected) ++ "\n" ++
+            showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtained) ++ "\n"
     FancyError _ errors ->
       if Set.null errors
         then "Parsing error: unknown fancy error." ++ "\n"
@@ -163,14 +163,14 @@ showErrorKind kind =
       "The name \"" ++ name ++ "\" is repeatedly declared." ++ "\n"
     KnRepeatedlyDefinedName name ->
       "The name \"" ++ name ++ "\" is repeatedly defined." ++ "\n"
-    KnMismatchedFunctionType obtainedType ->
+    KnMismatchedFunctionType obtained ->
       "Type mismatch." ++ "\n" ++
         "- Expected: <function type>" ++ "\n" ++
-        "- Obtained: " ++ showTerm obtainedType ++ "\n"
-    KnMismatchedType expectedType obtainedType ->
+        "- Obtained: " ++ showTerm obtained ++ "\n"
+    KnMismatchedType expected obtained ->
       "Type mismatch." ++ "\n" ++
-        "- Expected: " ++ showTerm expectedType ++ "\n" ++
-        "- Obtained: " ++ showTerm obtainedType ++ "\n"
+        "- Expected: " ++ showTerm expected ++ "\n" ++
+        "- Obtained: " ++ showTerm obtained ++ "\n"
     KnNonInferable ->
       "The term does not have an inferable type without an annotation." ++ "\n"
 

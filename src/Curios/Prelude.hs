@@ -5,6 +5,7 @@ module Curios.Prelude
 
 import Curios.Error (Error (..), showErrorKind)
 import Data.Foldable (foldlM)
+import Data.Either (either)
 
 import Curios.Context
   (Context (..)
@@ -40,6 +41,43 @@ data Entry =
     {enName :: Name
     ,enType :: Type
     ,enTerm :: Term
+    }
+
+boolean :: Entry
+boolean =
+  Entry
+    {enName = "Boolean"
+    ,enType = trType
+    ,enTerm =
+      trFunctionType
+        (trFunctionType (trReference "Boolean") (\_ _ -> trType))
+        (\selfArgument variableArgument ->
+          (trFunctionType (trApplication (arUnwrap variableArgument) (trReference "true"))
+            (\_ _ ->
+              (trFunctionType (trApplication (arUnwrap variableArgument) (trReference "false"))
+                (\_ _ ->
+                  (trApplication (arUnwrap variableArgument) (arUnwrap selfArgument))
+                )
+              )
+            )
+          )
+        )
+    }
+
+booleanTrue :: Entry
+booleanTrue =
+  Entry
+    {enName = "true"
+    ,enType = trReference "Boolean"
+    ,enTerm = trFunction (\_ -> trFunction (\pTrue -> trFunction (\_ -> arUnwrap pTrue)))
+    }
+
+booleanFalse :: Entry
+booleanFalse =
+  Entry
+    {enName = "false"
+    ,enType = trReference "Boolean"
+    ,enTerm = trFunction (\_ -> trFunction (\_ -> trFunction (\pFalse -> arUnwrap pFalse)))
     }
 
 textLength :: Entry
@@ -112,43 +150,6 @@ realDivide =
     {enName = "/."
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
     ,enTerm = trOpBinary "/." (\(LtReal one) (LtReal another) -> trLtReal (one / another))
-    }
-
-boolean :: Entry
-boolean =
-  Entry
-    {enName = "Boolean"
-    ,enType = trType
-    ,enTerm =
-      trFunctionType
-        (trFunctionType (trReference "Boolean") (\_ _ -> trType))
-        (\selfArgument variableArgument ->
-          (trFunctionType (trApplication (arUnwrap variableArgument) (trReference "true"))
-            (\_ _ ->
-              (trFunctionType (trApplication (arUnwrap variableArgument) (trReference "false"))
-                (\_ _ ->
-                  (trApplication (arUnwrap variableArgument) (arUnwrap selfArgument))
-                )
-              )
-            )
-          )
-        )
-    }
-
-true :: Entry
-true =
-  Entry
-    {enName = "true"
-    ,enType = trReference "Boolean"
-    ,enTerm = trFunction (\_ -> trFunction (\pTrue -> trFunction (\_ -> arUnwrap pTrue)))
-    }
-
-false :: Entry
-false =
-  Entry
-    {enName = "false"
-    ,enType = trReference "Boolean"
-    ,enTerm = trFunction (\_ -> trFunction (\_ -> trFunction (\pFalse -> arUnwrap pFalse)))
     }
 
 integerEqualTo :: Entry
@@ -238,7 +239,10 @@ realGreaterThanOrEqualTo =
 
 prelude :: [Entry]
 prelude =
-  [textLength
+  [boolean
+  ,booleanTrue
+  ,booleanFalse
+  ,textLength
   ,textConcatenate
   ,integerSum
   ,integerSubtract
@@ -247,9 +251,6 @@ prelude =
   ,realSubtract
   ,realMultiply
   ,realDivide
-  ,boolean
-  ,true
-  ,false
   ,integerEqualTo
   ,integerLesserThan
   ,integerLesserThanOrEqualTo
@@ -274,10 +275,7 @@ enDefinitions entries =
 
 cnInitial :: Context
 cnInitial =
-  case contextResult of
-    Left error' -> error ("Error in prelude: " ++ "\n" ++ showErrorKind (erKind error'))
-    Right context -> context
-  where
+  either (error . (++) "Error in prelude: " . showErrorKind . erKind) id contextResult where
     combineDeclaration context (name, term) = cnInsertDeclaration OrMachine name term context
     combineDefinition context (name, term) = cnInsertDefinition OrMachine name term context
     contextResult = do

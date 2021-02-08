@@ -114,13 +114,13 @@ expression =
 
 variable :: Parser Variable
 variable =
-  lexeme (Variable <$> getSourcePos <*> (identifier <* symbol ":") <*>  expression)
+  lexeme (Variable <$> getSourcePos <*> (identifier <* symbol ":") <*> expression)
 
 variables :: Parser Variables
 variables =
   lexeme
     (Variables <$> getSourcePos <*>
-      (concat <$> (optional (symbol "(" *> sepBy variable (symbol ",") <* symbol ")")))
+      (concat <$> optional (symbol "(" *> sepBy variable (symbol ",") <* symbol ")"))
     )
 
 statement :: Parser Statement

@@ -87,7 +87,7 @@ pgDeclarations (Program _ program) =
 pgDefinitions :: Program -> [(Identifier, Term)]
 pgDefinitions (Program _ program) =
   map transform program where
-    transform (StLet _ identifier (Variables sourcePos variables) output expression) =
+    transform (StLet _ identifier (Variables sourcePos variables) _ expression) =
       (identifier, foldr (trAbstractDefinitionVariable sourcePos) (exTranslate expression) variables)
 
 pgCheck :: Context -> Program -> Either Error Context
