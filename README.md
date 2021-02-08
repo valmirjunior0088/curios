@@ -7,12 +7,16 @@
 - [x] [Dependent types](https://www.microsoft.com/en-us/research/wp-content/uploads/1997/01/henk.pdf)
 - [x] General and mutual recursion
 - [x] [Very dependent types](http://www.nuprl.org/documents/Hickey/FormalObjectsinTypeTheory.pdf)
-- [x] Better error messages
+- [x] Errors with source positions
 - [x] Interpreter
 - [ ] WebAssembly generation
-- [ ] Irrelevant arguments
-- [ ] System input and output
+- [ ] Errors with human-readable types and terms
 - [ ] Module system
+- [ ] Data types
+- [ ] Library for state and side-effects
+- [ ] System input and output
+- [ ] Irrelevant arguments
+- [ ] Implicit arguments
 - [ ] Dependency manager
 
 ### How do I run this thing?
