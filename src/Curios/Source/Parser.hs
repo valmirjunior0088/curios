@@ -12,6 +12,8 @@ module Curios.Source.Parser
 import Text.Megaparsec.Char (space1)
 import Data.Void (Void)
 
+import Text.Megaparsec.Debug (dbg)
+
 import Curios.Source.Types
   (Identifier (..)
   ,Literal (..)
@@ -31,6 +33,7 @@ import Text.Megaparsec
   ,oneOf
   ,single
   ,manyTill
+  ,sepBy
   ,eof
   ,(<|>)
   )
@@ -66,7 +69,7 @@ symbol string =
 identifier :: Parser Identifier
 identifier =
   lexeme (Identifier <$> getSourcePos <*> some (try (oneOf idValidCharacters))) where
-    idValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['+', '*', '/', '=', '>', '<', '\'', '_', '.']
+    idValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.']
 
 literal :: Parser Literal
 literal =
@@ -89,24 +92,24 @@ functionVariable =
 
 expression :: Parser Expression
 expression =
-  lexeme (exIdentifier <|> exLiteral <|> try exFunctionType <|> try exFunction <|> exApplication) where
-    exIdentifier =
-      ExIdentifier <$> getSourcePos <*> identifier
+  lexeme (try exLiteral <|> exFunctionType <|> exFunction <|> try exApplication <|> exIdentifier) where
     exLiteral =
       ExLiteral <$> getSourcePos <*> literal
+    exIdentifier =
+      ExIdentifier <$> getSourcePos <*> identifier
     exFunctionType =
       ExFunctionType <$> getSourcePos <*>
-        (symbol "(" *> symbol "->" *> optional (try (identifier <* symbol "|"))) <*>
-        (some (try (functionTypeVariable <* symbol ","))) <*>
-        (expression <* symbol ")")
+        (symbol "->" *> optional (try identifier)) <*>
+        (symbol "{" *> some (try (functionTypeVariable <* symbol ","))) <*>
+        (expression <* symbol "}")
     exFunction =
       ExFunction <$> getSourcePos <*>
-        (symbol "(" *> symbol "fn" *> some (try (functionVariable <* symbol ","))) <*>
-        (expression <* symbol ")")
+        (symbol "fn" *> symbol "{" *> some (try (functionVariable <* symbol ","))) <*>
+        (expression <* symbol "}")
     exApplication =
       ExApplication <$> getSourcePos <*>
-        (symbol "(" *> expression) <*>
-        (manyTill expression (symbol ")"))
+        (exIdentifier <* symbol "(") <*>
+        (sepBy expression (symbol ",") <* symbol ")")
 
 statement :: Parser Statement
 statement =

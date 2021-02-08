@@ -67,10 +67,10 @@ ltTranslate sourcePos literal =
 exTranslate :: Expression -> Term
 exTranslate expression =
   case expression of
-    ExIdentifier sourcePos identifier ->
-      idTranslate sourcePos identifier
     ExLiteral sourcePos literal ->
       ltTranslate sourcePos literal
+    ExIdentifier sourcePos identifier ->
+      idTranslate sourcePos identifier
     ExFunctionType sourcePos selfName variables body ->
       case foldr (trAbstractFunctionTypeVariable sourcePos) (exTranslate body) variables of
         TrFunctionType origin input output ->

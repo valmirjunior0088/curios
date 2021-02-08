@@ -1,6 +1,6 @@
 module Curios.Source.Types
-  (Identifier (..)
-  ,Literal (..)
+  (Literal (..)
+  ,Identifier (..)
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
   ,Expression (..)
@@ -13,13 +13,13 @@ module Curios.Source.Types
 
 import Text.Megaparsec (SourcePos)
 
-data Identifier =
-  Identifier SourcePos String
-
 data Literal =
   LtText SourcePos String |
   LtInteger SourcePos Int |
   LtReal SourcePos Double
+
+data Identifier =
+  Identifier SourcePos String
 
 data FunctionTypeVariable =
   FunctionTypeVariable SourcePos (Maybe Identifier) Expression
@@ -28,8 +28,8 @@ data FunctionVariable =
   FunctionVariable SourcePos Identifier
 
 data Expression =
-  ExIdentifier SourcePos Identifier |
   ExLiteral SourcePos Literal |
+  ExIdentifier SourcePos Identifier |
   ExFunctionType SourcePos (Maybe Identifier) [FunctionTypeVariable] Expression |
   ExFunction SourcePos [FunctionVariable] Expression |
   ExApplication SourcePos Expression [Expression]
