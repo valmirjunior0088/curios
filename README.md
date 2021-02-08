@@ -8,7 +8,7 @@
 - [x] General and mutual recursion
 - [x] [Very dependent types](http://www.nuprl.org/documents/Hickey/FormalObjectsinTypeTheory.pdf)
 - [x] Better error messages
-- [ ] Interpreter
+- [x] Interpreter
 - [ ] WebAssembly generation
 - [ ] Irrelevant arguments
 - [ ] System input and output
