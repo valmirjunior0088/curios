@@ -93,24 +93,24 @@ functionVariable =
 
 expression :: Parser Expression
 expression =
-  lexeme (try exLiteral <|> exFunctionType <|> exFunction <|> try exApplication <|> exIdentifier) where
-    exLiteral =
-      ExLiteral <$> getSourcePos <*> literal
-    exIdentifier =
-      ExIdentifier <$> getSourcePos <*> identifier
+  lexeme (exFunctionType <|> exFunction <|> exApplication <|> exLiteral <|> exIdentifier) where
     exFunctionType =
       ExFunctionType <$> getSourcePos <*>
-        (symbol "->" *> optional identifier) <*>
+        (try (symbol "->") *> optional identifier) <*>
         (symbol "{" *> some (try (functionTypeVariable <* symbol ","))) <*>
         (expression <* symbol "}")
     exFunction =
       ExFunction <$> getSourcePos <*>
-        (symbol "fn" *> symbol "{" *> some (try (functionVariable <* symbol ","))) <*>
+        (try (symbol "fn") *> symbol "{" *> some (try (functionVariable <* symbol ","))) <*>
         (expression <* symbol "}")
     exApplication =
       ExApplication <$> getSourcePos <*>
-        (exIdentifier <* symbol "(") <*>
+        (try (exIdentifier <* symbol "(")) <*>
         (sepBy expression (symbol ",") <* symbol ")")
+    exLiteral =
+      ExLiteral <$> getSourcePos <*> literal
+    exIdentifier =
+      ExIdentifier <$> getSourcePos <*> identifier
 
 variable :: Parser Variable
 variable =
