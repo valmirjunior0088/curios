@@ -62,7 +62,7 @@ let zero: Natural =
 end
 
 let successor(natural: Natural): Natural =
-  fn { P, p_zero, p_sucessor, p_sucessor(natural) }
+  fn { P, p_zero, p_successor, p_sucessor(natural) }
 end
 
 let Pair(A: Type, B: Type): Type =
@@ -103,7 +103,7 @@ let Stream(A: Type): Type =
 end
 
 let next(A: Type, a: A, stream: Stream(A)): Stream(A) =
-  fn { P, p_build, p_build(a, stream) }
+  fn { P, p_next, p_next(a, stream) }
 end
 
 let one: Natural =
