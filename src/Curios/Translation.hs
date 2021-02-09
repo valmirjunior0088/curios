@@ -1,7 +1,7 @@
 module Curios.Translation
   (exTranslate
-  ,trAbstractDeclarationVariable
-  ,trAbstractDefinitionVariable
+  ,trAbstractDeclarationBinding
+  ,trAbstractDefinitionBinding
   )
   where
 
@@ -13,7 +13,7 @@ import Curios.Source.Types
   (Identifier (..)
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
-  ,Variable (..)
+  ,Binding (..)
   ,Expression (..)
   )
 
@@ -91,12 +91,12 @@ exTranslate expression =
     ExApplication sourcePos function arguments ->
       foldl (TrApplication (OrSource sourcePos)) (exTranslate function) (fmap exTranslate arguments)
 
-trAbstractDeclarationVariable :: SourcePos -> Variable -> Term -> Term
-trAbstractDeclarationVariable sourcePos (Variable _ (Identifier _ name) expression) term =
+trAbstractDeclarationBinding :: SourcePos -> Binding -> Term -> Term
+trAbstractDeclarationBinding sourcePos (Binding _ (Identifier _ name) expression) term =
   TrFunctionType (OrSource sourcePos) (exTranslate expression) output where
     output _ variableArgument = trApplyArgument name variableArgument term
 
-trAbstractDefinitionVariable :: SourcePos -> Variable -> Term -> Term
-trAbstractDefinitionVariable sourcePos (Variable _ (Identifier _ name) _) term =
+trAbstractDefinitionBinding :: SourcePos -> Binding -> Term -> Term
+trAbstractDefinitionBinding sourcePos (Binding _ (Identifier _ name) _) term =
   TrFunction (OrSource sourcePos) output where
     output argument = trApplyArgument name argument term

@@ -12,8 +12,8 @@ module Curios.Context
   )
   where
 
-import Curios.Translation (exTranslate, trAbstractDeclarationVariable, trAbstractDefinitionVariable)
-import Curios.Source.Types (Identifier (..), Program (..), Variables (..), Statement (..))
+import Curios.Translation (exTranslate, trAbstractDeclarationBinding, trAbstractDefinitionBinding)
+import Curios.Source.Types (Identifier (..), Program (..), Prefix (..), Statement (..))
 import Curios.Core.Term (Origin (..), Name, Type, Term (..), trType, showTerm)
 import Curios.Core.Declarations (Declarations (..), dcEmpty, dcInsert, dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfEmpty, dfInsert, dfLookup)
@@ -81,14 +81,14 @@ cnLookupDefinition name context =
 pgDeclarations :: Program -> [(Identifier, Term)]
 pgDeclarations (Program _ program) =
   map transform program where
-    transform (StLet _ identifier (Variables sourcePos variables) output _) =
-      (identifier, foldr (trAbstractDeclarationVariable sourcePos) (exTranslate output) variables)
+    transform (StLet _ identifier (Prefix sourcePos variables) output _) =
+      (identifier, foldr (trAbstractDeclarationBinding sourcePos) (exTranslate output) variables)
 
 pgDefinitions :: Program -> [(Identifier, Term)]
 pgDefinitions (Program _ program) =
   map transform program where
-    transform (StLet _ identifier (Variables sourcePos variables) _ expression) =
-      (identifier, foldr (trAbstractDefinitionVariable sourcePos) (exTranslate expression) variables)
+    transform (StLet _ identifier (Prefix sourcePos variables) _ expression) =
+      (identifier, foldr (trAbstractDefinitionBinding sourcePos) (exTranslate expression) variables)
 
 pgCheck :: Context -> Program -> Either Error Context
 pgCheck programContext program =

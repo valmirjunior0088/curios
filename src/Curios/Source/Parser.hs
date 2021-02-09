@@ -4,7 +4,8 @@ module Curios.Source.Parser
   ,functionTypeVariable
   ,functionVariable
   ,expression
-  ,variable
+  ,binding
+  ,prefix
   ,statement
   ,program
   )
@@ -19,8 +20,8 @@ import Curios.Source.Types
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
   ,Expression (..)
-  ,Variable (..)
-  ,Variables (..)
+  ,Binding (..)
+  ,Prefix (..)
   ,Statement (..)
   ,Program (..)
   )
@@ -112,15 +113,15 @@ expression =
     exIdentifier =
       ExIdentifier <$> getSourcePos <*> identifier
 
-variable :: Parser Variable
-variable =
-  lexeme (Variable <$> getSourcePos <*> (identifier <* symbol ":") <*> expression)
+binding :: Parser Binding
+binding =
+  lexeme (Binding <$> getSourcePos <*> (identifier <* symbol ":") <*> expression)
 
-variables :: Parser Variables
-variables =
+prefix :: Parser Prefix
+prefix =
   lexeme
-    (Variables <$> getSourcePos <*>
-      (concat <$> optional (symbol "(" *> sepBy variable (symbol ",") <* symbol ")"))
+    (Prefix <$> getSourcePos <*>
+      (concat <$> optional (symbol "(" *> sepBy binding (symbol ",") <* symbol ")"))
     )
 
 statement :: Parser Statement
@@ -129,7 +130,7 @@ statement =
     stLet =
       StLet <$> getSourcePos <*>
         (symbol "let" *> identifier) <*>
-        (variables) <*>
+        (prefix) <*>
         (symbol ":" *> expression) <*>
         (symbol "=" *> expression <* symbol "end")
 

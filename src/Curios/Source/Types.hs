@@ -4,8 +4,8 @@ module Curios.Source.Types
   ,FunctionTypeVariable (..)
   ,FunctionVariable (..)
   ,Expression (..)
-  ,Variable (..)
-  ,Variables (..)
+  ,Binding (..)
+  ,Prefix (..)
   ,Statement (..)
   ,Program (..)
   )
@@ -34,14 +34,14 @@ data Expression =
   ExFunction SourcePos [FunctionVariable] Expression |
   ExApplication SourcePos Expression [Expression]
 
-data Variable =
-  Variable SourcePos Identifier Expression
+data Binding =
+  Binding SourcePos Identifier Expression
 
-data Variables =
-  Variables SourcePos [Variable]
+data Prefix =
+  Prefix SourcePos [Binding]
 
 data Statement =
-  StLet SourcePos Identifier Variables Expression Expression
+  StLet SourcePos Identifier Prefix Expression Expression
 
 data Program =
   Program SourcePos [Statement]
