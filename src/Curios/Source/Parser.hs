@@ -69,19 +69,19 @@ symbol string =
 
 identifier :: Parser Identifier
 identifier =
-  lexeme (Identifier <$> getSourcePos <*> some (try (oneOf idValidCharacters))) where
-    idValidCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.']
+  lexeme (Identifier <$> getSourcePos <*> some (try (oneOf validCharacters))) where
+    validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.']
 
 literal :: Parser Literal
 literal =
   lexeme (ltText <|> try ltReal <|> ltInteger) where
     ltText = LtText <$> getSourcePos <*> (single '"' *> manyTill Lexer.charLiteral (single '"'))
-    ltReal = rlPositive <|> rlNegative where
-      rlPositive = LtReal <$> getSourcePos <*> (optional (single '+') *> Lexer.float)
-      rlNegative = LtReal <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.float))
-    ltInteger = inPositive <|> inNegative where
-      inPositive = LtInteger <$> getSourcePos <*> (optional (single '+') *> Lexer.decimal)
-      inNegative = LtInteger <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.decimal))
+    ltReal = positive <|> negative where
+      positive = LtReal <$> getSourcePos <*> (optional (single '+') *> Lexer.float)
+      negative = LtReal <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.float))
+    ltInteger = positive <|> negative where
+      positive = LtInteger <$> getSourcePos <*> (optional (single '+') *> Lexer.decimal)
+      negative = LtInteger <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.decimal))
 
 functionTypeVariable :: Parser FunctionTypeVariable
 functionTypeVariable =
