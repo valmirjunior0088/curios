@@ -6,8 +6,8 @@ module Curios.Core.Term
   ,Name
   ,Type
   ,Argument (..)
-  ,arUnwrap
   ,Term (..)
+  ,arUnwrap
   ,trPrimitive
   ,trPrText
   ,trPrInteger
@@ -66,12 +66,6 @@ data Argument =
   ArPlaceholder Natural |
   ArTerm Term
 
-arUnwrap :: Argument -> Term
-arUnwrap argument =
-  case argument of
-    ArPlaceholder index -> trVariable index
-    ArTerm term -> term
-
 data Term =
   TrPrimitive Origin Primitive |
   TrLiteral Origin Literal |
@@ -84,44 +78,11 @@ data Term =
   TrApplication Origin Term Term |
   TrAnnotated Origin Type Term
 
-instance Eq Term where
-  (==) =
-    go 0 where
-      go depth one other =
-        case (one, other) of
-          (TrPrimitive _ primitive, TrPrimitive _ primitive') ->
-            primitive == primitive'
-          (TrLiteral _ literal, TrLiteral _ literal') ->
-            literal == literal'
-          (TrOperator _ name _, TrOperator _ name' _) ->
-            name == name'
-          (TrReference _ name, TrReference _ name') ->
-            name == name'
-          (TrVariable _ index, TrVariable _ index') ->
-            index == index'
-          (TrType _, TrType _) ->
-            True
-          (TrFunctionType _ input output, TrFunctionType _ input' output') ->
-            (&&)
-              (go (depth + 0) input input')
-              (go (depth + 2)
-                (output (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1)))
-                (output' (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1)))
-              )
-          (TrFunction _ output, TrFunction _ output') ->
-            go (depth + 1)
-              (output (ArPlaceholder (depth + 0)))
-              (output' (ArPlaceholder (depth + 0)))
-          (TrApplication _ function argument, TrApplication _ function' argument') ->
-            (&&)
-              (go (depth + 0) function function')
-              (go (depth + 0) argument argument')
-          (TrAnnotated _ termType term, TrAnnotated _ termType' term') ->
-            (&&)
-              (go (depth + 0) termType termType')
-              (go (depth + 0) term term')
-          _ ->
-            False
+arUnwrap :: Argument -> Term
+arUnwrap argument =
+  case argument of
+    ArPlaceholder index -> trVariable index
+    ArTerm term -> term
 
 trPrimitive :: Primitive -> Term
 trPrimitive primitive =

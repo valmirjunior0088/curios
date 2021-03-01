@@ -41,7 +41,7 @@ data Prefix =
   Prefix SourcePos [Binding]
 
 data Statement =
-  StLet SourcePos Identifier Prefix Expression Expression
+  Statement SourcePos Identifier Prefix Expression Expression
 
 data Program =
   Program SourcePos [Statement]

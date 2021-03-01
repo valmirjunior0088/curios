@@ -1,13 +1,13 @@
 module Curios.Translation
-  (exTranslate
-  ,trAbstractDeclarationBinding
-  ,trAbstractDefinitionBinding
+  (pgCheck
   )
   where
 
+import Curios.Core.Verification (trCheck)
+import Text.Megaparsec (SourcePos (..))
+import Data.Foldable (foldlM)
 import qualified Curios.Source.Types as Source (Literal (..))
 import qualified Curios.Core.Term as Core (Literal (..))
-import Text.Megaparsec (SourcePos (..))
 
 import Curios.Source.Types
   (Identifier (..)
@@ -15,16 +15,35 @@ import Curios.Source.Types
   ,FunctionVariable (..)
   ,Binding (..)
   ,Expression (..)
+  ,Prefix (..)
+  ,Statement (..)
+  ,Program (..)
   )
 
 import Curios.Core.Term
   (Origin (..)
   ,Primitive (..)
   ,Name
+  ,Type
   ,Argument (..)
   ,Term (..)
   ,trAbstract
   ,trSubstitute
+  ,trType
+  )
+
+import Curios.Core.Context
+  (Context (..)
+  ,cnInsertDeclaration
+  ,cnLookupDeclaration
+  ,cnInsertDefinition
+  ,cnInitial
+  )
+
+import Curios.Error
+  (Error (..)
+  ,erRepeatedlyDeclaredName
+  ,erUndeclaredName
   )
 
 idTranslate :: SourcePos -> Identifier -> Term
@@ -100,3 +119,46 @@ trAbstractDefinitionBinding :: SourcePos -> Binding -> Term -> Term
 trAbstractDefinitionBinding sourcePos (Binding _ (Identifier _ name) _) term =
   TrFunction (OrSource sourcePos) output where
     output argument = trApplyArgument name argument term
+
+pgDeclarations :: Program -> [(Identifier, Term)]
+pgDeclarations (Program _ program) =
+  map transform program where
+    transform (Statement _ identifier (Prefix sourcePos variables) output _) =
+      (identifier, foldr (trAbstractDeclarationBinding sourcePos) (exTranslate output) variables)
+
+pgDefinitions :: Program -> [(Identifier, Term)]
+pgDefinitions (Program _ program) =
+  map transform program where
+    transform (Statement _ identifier (Prefix sourcePos variables) _ expression) =
+      (identifier, foldr (trAbstractDefinitionBinding sourcePos) (exTranslate expression) variables)
+
+cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
+cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do
+  context' <- case cnInsertDeclaration name termType context of
+    Nothing -> Left (erRepeatedlyDeclaredName (OrSource sourcePos) name)
+    Just value -> Right value
+  
+  trCheck (cnDeclarations context') (cnDefinitions context') trType termType
+  
+  Right context'
+
+cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either Error Context
+cnInsertSourceDefinition (Identifier sourcePos name) term context = do
+  termType <- case cnLookupDeclaration name context of
+    Nothing -> Left (erUndeclaredName (OrSource sourcePos) name)
+    Just value -> Right value
+  
+  context' <- case cnInsertDefinition name term context of
+    Nothing -> Left (erRepeatedlyDeclaredName (OrSource sourcePos) name)
+    Just value -> Right value
+  
+  trCheck (cnDeclarations context') (cnDefinitions context') termType term
+  
+  Right context'
+
+pgCheck :: Program -> Either Error Context
+pgCheck program = do
+  let combine construct context (identifier, term) = construct identifier term context
+  step <- foldlM (combine cnInsertSourceDeclaration) cnInitial (pgDeclarations program)
+
+  foldlM (combine cnInsertSourceDefinition) step (pgDefinitions program)

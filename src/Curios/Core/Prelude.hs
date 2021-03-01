@@ -1,22 +1,13 @@
-module Curios.Prelude
-  (cnInitial
+module Curios.Core.Prelude
+  (Prelude
+  ,prelude
+  ,prDefinitions
+  ,prDeclarations
   )
   where
 
-import Curios.Error (Error (..), showErrorKind)
-import Data.Foldable (foldlM)
-import Data.Either (either)
-
-import Curios.Context
-  (Context (..)
-  ,cnEmpty
-  ,cnInsertDeclaration
-  ,cnInsertDefinition
-  )
-
 import Curios.Core.Term
-  (Origin (..)
-  ,Literal (..)
+  (Literal (..)
   ,Name
   ,Type
   ,arUnwrap
@@ -120,38 +111,6 @@ integerMultiply =
     ,enTerm = trOpBinary "*" (\(LtInteger one) (LtInteger another) -> trLtInteger (one * another))
     }
 
-realSum :: Entry
-realSum =
-  Entry
-    {enName = "+."
-    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "+." (\(LtReal one) (LtReal another) -> trLtReal (one + another))
-    }
-
-realSubtract :: Entry
-realSubtract =
-  Entry
-    {enName = "-."
-    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "-." (\(LtReal one) (LtReal another) -> trLtReal (one - another))
-    }
-
-realMultiply :: Entry
-realMultiply =
-  Entry
-    {enName = "*."
-    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "*." (\(LtReal one) (LtReal another) -> trLtReal (one * another))
-    }
-
-realDivide :: Entry
-realDivide =
-  Entry
-    {enName = "/."
-    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "/." (\(LtReal one) (LtReal another) -> trLtReal (one / another))
-    }
-
 integerEqualTo :: Entry
 integerEqualTo =
   Entry
@@ -197,6 +156,38 @@ integerGreaterThanOrEqualTo =
       trOpBinary ">=" (\(LtInteger one) (LtInteger other) -> trReference (if one >= other then "true" else "false"))
     }
 
+realSum :: Entry
+realSum =
+  Entry
+    {enName = "+."
+    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
+    ,enTerm = trOpBinary "+." (\(LtReal one) (LtReal another) -> trLtReal (one + another))
+    }
+
+realSubtract :: Entry
+realSubtract =
+  Entry
+    {enName = "-."
+    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
+    ,enTerm = trOpBinary "-." (\(LtReal one) (LtReal another) -> trLtReal (one - another))
+    }
+
+realMultiply :: Entry
+realMultiply =
+  Entry
+    {enName = "*."
+    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
+    ,enTerm = trOpBinary "*." (\(LtReal one) (LtReal another) -> trLtReal (one * another))
+    }
+
+realDivide :: Entry
+realDivide =
+  Entry
+    {enName = "/."
+    ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
+    ,enTerm = trOpBinary "/." (\(LtReal one) (LtReal another) -> trLtReal (one / another))
+    }
+
 realEqualTo :: Entry
 realEqualTo =
   Entry
@@ -237,7 +228,10 @@ realGreaterThanOrEqualTo =
     ,enTerm = trOpBinary ">=." (\(LtReal one) (LtReal other) -> trReference (if one >= other then "true" else "false"))
     }
 
-prelude :: [Entry]
+type Prelude =
+  [Entry]
+
+prelude :: Prelude
 prelude =
   [boolean
   ,booleanTrue
@@ -247,15 +241,15 @@ prelude =
   ,integerSum
   ,integerSubtract
   ,integerMultiply
-  ,realSum
-  ,realSubtract
-  ,realMultiply
-  ,realDivide
   ,integerEqualTo
   ,integerLesserThan
   ,integerLesserThanOrEqualTo
   ,integerGreaterThan
   ,integerGreaterThanOrEqualTo
+  ,realSum
+  ,realSubtract
+  ,realMultiply
+  ,realDivide
   ,realEqualTo
   ,realLesserThan
   ,realLesserThanOrEqualTo
@@ -263,21 +257,12 @@ prelude =
   ,realGreaterThanOrEqualTo
   ]
 
-enDeclarations :: [Entry] -> [(Name, Term)]
-enDeclarations entries =
+prDeclarations :: Prelude -> [(Name, Term)]
+prDeclarations entries =
   map transform entries where
     transform entry = (enName entry, enType entry)
 
-enDefinitions :: [Entry] -> [(Name, Term)]
-enDefinitions entries =
+prDefinitions :: Prelude -> [(Name, Term)]
+prDefinitions entries =
   map transform entries where
     transform entry = (enName entry, enTerm entry)
-
-cnInitial :: Context
-cnInitial =
-  either (error . (++) "Error in prelude: " . showErrorKind . erKind) id contextResult where
-    combineDeclaration context (name, term) = cnInsertDeclaration OrMachine name term context
-    combineDefinition context (name, term) = cnInsertDefinition OrMachine name term context
-    contextResult = do
-      context <- foldlM combineDeclaration cnEmpty (enDeclarations prelude)
-      foldlM combineDefinition context (enDefinitions prelude)

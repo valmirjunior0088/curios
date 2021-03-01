@@ -5,12 +5,12 @@ module Curios.Core.Verification
   )
   where
 
-import Curios.Core.History (hsEmpty, hsInsert, hsMember)
 import Curios.Core.Declarations (Declarations (..), dcLookup)
-import Curios.Core.Definitions (Definitions (..), dfLookup)
-import Curios.Core.Variables (Variables (..), vrEmpty, vrInsert, vrLookup, vrNext)
+import Curios.Core.Definitions (Definitions (..), dfEmpty, dfLookup)
+import Curios.Core.Variables (Variables (..), vrEmpty, vrAllocate, vrLookup)
 import Control.Monad (unless)
 import Data.Maybe (fromJust)
+import GHC.Natural (Natural)
 
 import Curios.Error
   (Error (..)
@@ -57,35 +57,75 @@ trReduce definitions term =
 
 trConvertsWith :: Definitions -> Term -> Term -> Bool
 trConvertsWith definitions =
-  go hsEmpty 0 where
-    go history depth one other =
-      hsMember (one', other') history || comparison where
-        one' = trReduce definitions one
-        other' = trReduce definitions other
-        history' = hsInsert (one', other') history
+  beta [] 0 where
+    
+    alpha :: Natural -> Term -> Term -> Bool
+    alpha depth one other =
+      case (one, other) of
+        (TrPrimitive _ primitive, TrPrimitive _ primitive') ->
+          primitive == primitive'
+        (TrLiteral _ literal, TrLiteral _ literal') ->
+          literal == literal'
+        (TrOperator _ name _, TrOperator _ name' _) ->
+          name == name'
+        (TrReference _ name, TrReference _ name') ->
+          name == name'
+        (TrVariable _ index, TrVariable _ index') ->
+          index == index'
+        (TrType _, TrType _) ->
+          True
+        (TrFunctionType _ input output, TrFunctionType _ input' output') ->
+          (&&)
+            (alpha depth input input')
+            (alpha (succ (succ depth))
+              (output (ArPlaceholder depth) (ArPlaceholder (succ depth)))
+              (output' (ArPlaceholder depth) (ArPlaceholder (succ depth)))
+            )
+        (TrFunction _ output, TrFunction _ output') ->
+          alpha (succ depth)
+            (output (ArPlaceholder depth))
+            (output' (ArPlaceholder depth))
+        (TrApplication _ function argument, TrApplication _ function' argument') ->
+          (&&)
+            (alpha depth function function')
+            (alpha depth argument argument')
+        _ ->
+          False
+    
+    predicate :: Natural -> (Term, Term) -> (Term, Term) -> Bool
+    predicate depth (one, other) (one', other') =
+      alpha depth one one' && alpha depth other other'
+    
+    beta :: [(Term, Term)] -> Natural -> Term -> Term -> Bool
+    beta history depth one other =
+      alpha depth (trReduce dfEmpty one) (trReduce dfEmpty other) ||
+        any (predicate depth (one, other)) history ||
+        comparison
+      where
+        history' = (one, other) : history
         comparison =
-          case (one', other') of
+          case (trReduce definitions one, trReduce definitions other) of
             (TrFunctionType _ input output, TrFunctionType _ input' output') ->
               (&&)
-                (go history' (depth + 0) input input')
-                (go history' (depth + 2)
-                  (output (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1)))
-                  (output' (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1)))
+                (beta history' depth input input')
+                (beta history' (succ (succ depth))
+                  (output (ArPlaceholder depth) (ArPlaceholder (succ depth)))
+                  (output' (ArPlaceholder depth) (ArPlaceholder (succ depth)))
                 )
             (TrFunction _ output, TrFunction _ output') ->
-              go history' (depth + 1)
-                (output (ArPlaceholder (depth + 0)))
-                (output' (ArPlaceholder (depth + 0)))
+              beta history' (succ depth)
+                (output (ArPlaceholder depth))
+                (output' (ArPlaceholder depth))
             (TrApplication _ function argument, TrApplication _ function' argument') ->
               (&&)
-                (go history' (depth + 0) function function')
-                (go history' (depth + 0) argument argument')
+                (beta history' depth function function')
+                (beta history' depth argument argument')
             (TrAnnotated _ termType term, TrAnnotated _ termType' term') ->
               (&&)
-                (go history' (depth + 0) termType termType')
-                (go history' (depth + 0) term term')
+                (beta history' depth termType termType')
+                (beta history' depth term term')
             (one'', other'') ->
-              one'' == other''
+              alpha depth one'' other''
 
 trCheck :: Declarations -> Definitions -> Type -> Term -> Either Error ()
 trCheck declarations definitions =
@@ -95,12 +135,10 @@ trCheck declarations definitions =
     check variables termType term =
       case (trReduce definitions termType, term) of
         (TrFunctionType _ input output, TrFunction _ output') ->
-          let
+          check variables' (output selfArgument variableArgument) (output' variableArgument) where
             selfArgument = ArTerm (TrAnnotated OrMachine termType term)
-            variableArgument = ArPlaceholder (vrNext variables)
-            variables' = vrInsert input variables
-          in
-            check variables' (output selfArgument variableArgument) (output' variableArgument)
+            (index, variables') = vrAllocate input variables
+            variableArgument = ArPlaceholder index
         (termType', TrFunction origin _) ->
           Left (erMismatchedFunctionType origin termType')
         (termType', term') -> do
@@ -137,10 +175,10 @@ trCheck declarations definitions =
         TrFunctionType _ input output -> do
           check variables trType input
           
-          let selfArgument = ArPlaceholder (vrNext variables)
-          let variables' = vrInsert term variables
-          let variableArgument = ArPlaceholder (vrNext variables')
-          let variables'' = vrInsert input variables'
+          let (index, variables') = vrAllocate term variables
+          let selfArgument = ArPlaceholder index
+          let (index', variables'') = vrAllocate input variables'
+          let variableArgument = ArPlaceholder index'
           check variables'' trType (output selfArgument variableArgument)
           
           Right trType

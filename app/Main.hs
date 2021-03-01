@@ -2,7 +2,7 @@ import Prelude hiding (error)
 
 import Curios (check)
 import Curios.Error (showError)
-import Curios.Context (showContext)
+import Curios.Core.Context (showContext)
 import System.IO (IOMode (..), openFile, hGetContents)
 import System.Environment (getArgs)
 

@@ -7,16 +7,16 @@ module Curios
 import Prelude hiding (error)
 
 import Curios.Error (Error (..), erParsing)
-import Curios.Context (Context (..), pgCheck)
-import Curios.Prelude (cnInitial)
+import Curios.Core.Context (Context (..))
 import Curios.Source.Types (Program)
-import qualified Curios.Source.Parser as Parser (program)
 import Curios.Core.Term (Origin (..))
-import qualified Text.Megaparsec as Megaparsec (parse)
+import Curios.Translation (pgCheck)
 import Text.Megaparsec (ParseErrorBundle (..), errorOffset)
 import Text.Megaparsec.Stream (reachOffset)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Bifunctor (first)
+import qualified Curios.Source.Parser as Parser
+import qualified Text.Megaparsec as Megaparsec
 
 parse :: String -> String -> Either Error Program
 parse file source =
@@ -28,4 +28,4 @@ parse file source =
 
 check :: String -> String -> Either Error Context
 check file source =
-  parse file source >>= pgCheck cnInitial
+  parse file source >>= pgCheck

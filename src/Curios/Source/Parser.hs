@@ -71,7 +71,7 @@ symbol string =
 identifier :: Parser Identifier
 identifier =
   lexeme (Identifier <$> getSourcePos <*> some (try (oneOf validCharacters))) where
-    validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.']
+    validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.', '~']
 
 literal :: Parser Literal
 literal =
@@ -119,20 +119,15 @@ binding =
 
 prefix :: Parser Prefix
 prefix =
-  lexeme
-    (Prefix <$> getSourcePos <*>
-      (concat <$> optional (symbol "(" *> sepBy binding (symbol ",") <* symbol ")"))
-    )
+  lexeme (Prefix <$> getSourcePos <*> prBindings) where
+    prBindings = concat <$> optional (symbol "(" *> sepBy binding (symbol ",") <* symbol ")")
 
 statement :: Parser Statement
 statement =
-  lexeme (stLet) where
-    stLet =
-      StLet <$> getSourcePos <*>
-        (symbol "let" *> identifier) <*>
-        (prefix) <*>
-        (symbol ":" *> expression) <*>
-        (symbol "=" *> expression <* symbol "end")
+  lexeme (Statement <$> getSourcePos <*> stIdentifier <*> prefix <*> stDeclaration <*> stDefinition) where
+    stIdentifier = symbol "let" *> identifier
+    stDeclaration = symbol ":" *> expression
+    stDefinition = symbol "=" *> expression <* symbol "end"
 
 program :: Parser Program
 program =

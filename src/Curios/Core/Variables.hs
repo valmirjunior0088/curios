@@ -1,9 +1,8 @@
 module Curios.Core.Variables
   (Variables (..)
   ,vrEmpty
-  ,vrInsert
+  ,vrAllocate
   ,vrLookup
-  ,vrNext
   )
   where
 
@@ -19,14 +18,10 @@ vrEmpty :: Variables
 vrEmpty =
   Variables (Seq.empty)
 
-vrInsert :: Term -> Variables -> Variables
-vrInsert term (Variables variables) =
-  Variables (variables |> term)
+vrAllocate :: Term -> Variables -> (Natural, Variables)
+vrAllocate term (Variables variables) =
+  (intToNatural (Seq.length variables), Variables (variables |> term))
 
 vrLookup :: Natural -> Variables -> Maybe Term
 vrLookup index (Variables variables) =
   Seq.lookup (naturalToInt index) variables
-
-vrNext :: Variables -> Natural
-vrNext (Variables variables) =
-  intToNatural (Seq.length variables)
