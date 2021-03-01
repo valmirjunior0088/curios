@@ -43,6 +43,7 @@ import Curios.Core.Context
 import Curios.Error
   (Error (..)
   ,erRepeatedlyDeclaredName
+  ,erRepeatedlyDefinedName
   ,erUndeclaredName
   )
 
@@ -149,7 +150,7 @@ cnInsertSourceDefinition (Identifier sourcePos name) term context = do
     Just value -> Right value
   
   context' <- case cnInsertDefinition name term context of
-    Nothing -> Left (erRepeatedlyDeclaredName (OrSource sourcePos) name)
+    Nothing -> Left (erRepeatedlyDefinedName (OrSource sourcePos) name)
     Just value -> Right value
   
   trCheck (cnDeclarations context') (cnDefinitions context') termType term
