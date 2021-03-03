@@ -71,7 +71,11 @@ symbol string =
 identifier :: Parser Identifier
 identifier =
   lexeme (Identifier <$> getSourcePos <*> some (try (oneOf validCharacters))) where
-    validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.', '~']
+    validCharacters =
+      ['a'..'z'] ++
+        ['A'..'Z'] ++
+        ['0'..'9'] ++
+        ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.', '~']
 
 literal :: Parser Literal
 literal =

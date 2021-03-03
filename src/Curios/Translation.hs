@@ -81,6 +81,20 @@ trAbstractFunctionTypeVariable functionTypePos (FunctionTypeVariable _ variableN
         Nothing ->
           term
 
+trAbstractFunctionType :: SourcePos -> Maybe Identifier -> [FunctionTypeVariable] -> Term -> Term
+trAbstractFunctionType sourcePos selfName variables term =
+  case foldr (trAbstractFunctionTypeVariable sourcePos) term variables of
+    TrFunctionType origin input output ->
+      TrFunctionType origin input output' where
+        output' selfArgument variableArgument =
+          case selfName of
+            Just (Identifier _ name) ->
+              trApplyArgument name selfArgument (output selfArgument variableArgument)
+            Nothing ->
+              output selfArgument variableArgument
+    term ->
+      term
+
 trAbstractFunctionVariable :: SourcePos -> FunctionVariable -> Term -> Term
 trAbstractFunctionVariable functionPos (FunctionVariable _ (Identifier _ name)) term =
   TrFunction (OrSource functionPos) output where
@@ -95,17 +109,7 @@ exTranslate expression =
     ExIdentifier sourcePos identifier ->
       idTranslate sourcePos identifier
     ExFunctionType sourcePos selfName variables body ->
-      case foldr (trAbstractFunctionTypeVariable sourcePos) (exTranslate body) variables of
-        TrFunctionType origin input output ->
-          TrFunctionType origin input output' where
-            output' selfArgument variableArgument =
-              case selfName of
-                Just (Identifier _ name) ->
-                  trApplyArgument name selfArgument (output selfArgument variableArgument)
-                Nothing ->
-                  output selfArgument variableArgument
-        term ->
-          term
+      trAbstractFunctionType sourcePos selfName variables (exTranslate body)
     ExFunction sourcePos variables body ->
       foldr (trAbstractFunctionVariable sourcePos) (exTranslate body) variables
     ExApplication sourcePos function arguments ->
