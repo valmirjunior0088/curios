@@ -92,8 +92,8 @@ trAbstractFunctionType sourcePos selfName variables term =
               trApplyArgument name selfArgument (output selfArgument variableArgument)
             Nothing ->
               output selfArgument variableArgument
-    term ->
-      term
+    term' ->
+      term'
 
 trAbstractFunctionVariable :: SourcePos -> FunctionVariable -> Term -> Term
 trAbstractFunctionVariable functionPos (FunctionVariable _ (Identifier _ name)) term =

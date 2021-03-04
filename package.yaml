@@ -8,7 +8,6 @@ copyright: "2019 Valmir Junior"
 
 extra-source-files:
 - README.md
-- CHANGELOG.md
 
 synopsis: Curios
 category: Compiler
