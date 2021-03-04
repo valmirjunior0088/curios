@@ -94,6 +94,14 @@ let push(A: Type, a: A, rest: List(A)): List(A) =
   fn { P, p_empty, p_push, p_push(a, rest) }
 end
 
+let map(A: Type, B: Type, transform: -> { A, B }, list: List(A)): List(B) =
+  list(
+    fn { _, List(B) },
+    empty(B),
+    fn { a, rest, push(B, transform(a), map(A, B, transform, rest)) }
+  )
+end
+
 let Stream(A: Type): Type =
   -> self {
     P: -> { Stream(A), Type },
@@ -119,6 +127,51 @@ let take(A: Type, quantity: Natural, stream: Stream(A)): List(A) =
   )
 end
 
+let Vector(size: Natural, A: Type): Type =
+  -> self {
+    P: -> { size: Natural, Vector(size, A), Type },
+    P(zero, vempty(A)),
+    -> { size: Natural, a: A, rest: Vector(size, A), P(succ(size), vpush(size, A, a, rest)) },
+    P(size, self)
+  }
+end
+
+let vempty(A: Type): Vector(zero, A) =
+  fn { P, p_empty, p_push, p_empty }
+end
+
+let vpush(size: Natural, A: Type, a: A, rest: Vector(size, A)): Vector(succ(size), A) =
+  fn { P, p_empty, p_push, p_push(size, a, rest) }
+end
+
+let vhead(size: Natural, A: Type, vector: Vector(succ(size), A)): A =
+  vector(
+    fn { vector_size, vector,
+      vector_size(
+        fn { _, Type },
+        Unit,
+        fn { _, A }
+      )
+    },
+    unit,
+    fn { vector_size, a, rest, a }
+  )
+end
+
+let vtail(size: Natural, A: Type, vector: Vector(succ(size), A)): Vector(size, A) =
+  vector(
+    fn { vector_size, vector,
+      vector_size(
+        fn { _, Type },
+        Unit,
+        fn { n, Vector(n, A) }
+      )
+    },
+    unit,
+    fn { vector_size, a, rest, rest }
+  )
+end
+
 let twelve: Integer =
   +(4, -(16, 8))
 end
@@ -139,20 +192,35 @@ let list_of_ones: List(Integer) =
   take(Integer, succ(succ(zero)), stream_of_ones)
 end
 
-let Vector(size: Natural, A: Type): Type =
-  -> self {
-    P: -> { size: Natural, Vector(size, A), Type },
-    P(zero, vempty(A)),
-    -> { size: Natural, a: A, rest: Vector(size, A), P(succ(size), vpush(size, A, a, rest)) },
-    P(size, self)
-  }
+let list_of_naturals: List(Natural) =
+  push(Natural, succ(succ(zero)), push(Natural, succ(zero), empty(Natural)))
 end
 
-let vempty(A: Type): Vector(zero, A) =
-  fn { P, p_empty, p_push, p_empty }
+let natural_to_text(natural: Natural): Text =
+  natural(
+    fn { _, Text },
+    "Z",
+    fn { n, ++("S", natural_to_text(n)) }
+  )
 end
 
-let vpush(size: Natural, A: Type, a: A, rest: Vector(size, A)): Vector(succ(size), A) =
-  fn { P, p_empty, p_push, p_push(size, a, rest) }
+let list_of_texts: List(Text) =
+  map(Natural, Text, natural_to_text, list_of_naturals)
+end
+
+let list_to_text_aux(list: List(Text)): Text =
+  list(
+    fn { _, Text },
+    " ]",
+    fn { text, rest, ++(++(" ", text), list_to_text_aux(rest)) }
+  )
+end
+
+let list_to_text(list: List(Text)): Text =
+  ++("[", list_to_text_aux(list))
+end
+
+let example: Text =
+  list_to_text(list_of_texts)
 end
 ```
