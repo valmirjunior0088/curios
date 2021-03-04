@@ -32,7 +32,6 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - curios
-    - optparse-applicative >= 0 && < 1
 
 tests:
   curios-test:
