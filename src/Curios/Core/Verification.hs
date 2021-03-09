@@ -7,6 +7,7 @@ module Curios.Core.Verification
 
 import Curios.Core.Declarations (Declarations (..), dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfEmpty, dfLookup)
+import Curios.Core.History (History, hsEmpty, hsInsert, hsAny)
 import Curios.Core.Variables (Variables (..), vrEmpty, vrAllocate, vrLookup)
 import Control.Monad (unless)
 import Data.Maybe (fromJust)
@@ -57,7 +58,7 @@ trReduce definitions term =
 
 trConvertsWith :: Definitions -> Term -> Term -> Bool
 trConvertsWith definitions =
-  beta [] 0 where
+  eqrec hsEmpty 0 where
     
     alpha :: Natural -> Term -> Term -> Bool
     alpha depth one other =
@@ -92,38 +93,39 @@ trConvertsWith definitions =
         _ ->
           False
     
+    beta :: Natural -> Term -> Term -> Bool
+    beta depth one other =
+      alpha depth (trReduce dfEmpty one) (trReduce dfEmpty other)
+    
     predicate :: Natural -> (Term, Term) -> (Term, Term) -> Bool
     predicate depth (one, other) (one', other') =
       alpha depth one one' && alpha depth other other'
     
-    beta :: [(Term, Term)] -> Natural -> Term -> Term -> Bool
-    beta history depth one other =
-      alpha depth (trReduce dfEmpty one) (trReduce dfEmpty other) ||
-        any (predicate depth (one, other)) history ||
-        comparison
-      where
-        history' = (one, other) : history
+    eqrec :: History (Term, Term) -> Natural -> Term -> Term -> Bool
+    eqrec history depth one other =
+      beta depth one other || hsAny (predicate depth (one, other)) history || comparison where
+        history' = hsInsert (one, other) history
         comparison =
           case (trReduce definitions one, trReduce definitions other) of
             (TrFunctionType _ input output, TrFunctionType _ input' output') ->
               (&&)
-                (beta history' depth input input')
-                (beta history' (succ (succ depth))
+                (eqrec history' depth input input')
+                (eqrec history' (succ (succ depth))
                   (output (ArPlaceholder depth) (ArPlaceholder (succ depth)))
                   (output' (ArPlaceholder depth) (ArPlaceholder (succ depth)))
                 )
             (TrFunction _ output, TrFunction _ output') ->
-              beta history' (succ depth)
+              eqrec history' (succ depth)
                 (output (ArPlaceholder depth))
                 (output' (ArPlaceholder depth))
             (TrApplication _ function argument, TrApplication _ function' argument') ->
               (&&)
-                (beta history' depth function function')
-                (beta history' depth argument argument')
+                (eqrec history' depth function function')
+                (eqrec history' depth argument argument')
             (TrAnnotated _ termType term, TrAnnotated _ termType' term') ->
               (&&)
-                (beta history' depth termType termType')
-                (beta history' depth term term')
+                (eqrec history' depth termType termType')
+                (eqrec history' depth term term')
             (one'', other'') ->
               alpha depth one'' other''
 

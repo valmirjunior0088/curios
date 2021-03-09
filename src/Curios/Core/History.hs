@@ -2,7 +2,7 @@ module Curios.Core.History
   (History (..)
   ,hsEmpty
   ,hsInsert
-  ,hsMember
+  ,hsAny
   )
   where
 
@@ -17,6 +17,6 @@ hsInsert :: a -> History a -> History a
 hsInsert item (History history) =
   History (item : history)
 
-hsMember :: Eq a => a -> History a -> Bool
-hsMember item (History history) =
-  any (== item) history
+hsAny :: (a -> Bool) -> History a -> Bool
+hsAny predicate (History history) =
+  any predicate history
