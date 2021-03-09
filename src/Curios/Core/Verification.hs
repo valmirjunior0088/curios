@@ -21,8 +21,7 @@ import Curios.Error
   )
 
 import Curios.Core.Term
-  (Origin (..)
-  ,Argument (..)
+  (Argument (..)
   ,Primitive (..)
   ,Literal (..)
   ,Operator (..)
@@ -51,8 +50,6 @@ trReduce definitions term =
           trReduce definitions (output (ArTerm argument'))
         (function', argument') ->
           TrApplication origin function' argument'
-    TrAnnotated _ _ term' ->
-      trReduce definitions term'
     term' ->
       term'
 
@@ -122,10 +119,6 @@ trConvertsWith definitions =
               (&&)
                 (eqrec history' depth function function')
                 (eqrec history' depth argument argument')
-            (TrAnnotated _ termType term, TrAnnotated _ termType' term') ->
-              (&&)
-                (eqrec history' depth termType termType')
-                (eqrec history' depth term term')
             (one', other') ->
               alpha depth one' other'
 
@@ -137,10 +130,9 @@ trCheck declarations definitions =
     check variables termType term =
       case (trReduce definitions termType, term) of
         (TrFunctionType _ input output, TrFunction _ output') ->
-          check variables' (output selfArgument variableArgument) (output' variableArgument) where
-            selfArgument = ArTerm (TrAnnotated OrMachine termType term)
+          check variables' (output (ArTerm term) argument) (output' argument) where
             (index, variables') = vrAllocate input variables
-            variableArgument = ArPlaceholder index
+            argument = ArPlaceholder index
         (termType', TrFunction origin _) ->
           Left (erMismatchedFunctionType origin termType')
         (termType', term') -> do
@@ -196,8 +188,3 @@ trCheck declarations definitions =
               Right (output (ArTerm function) (ArTerm argument))
             functionType' ->
               Left (erMismatchedFunctionType (trOrigin function) functionType')
-        TrAnnotated _ termType term' -> do
-          check variables trType termType
-          check variables termType term'
-          
-          Right termType

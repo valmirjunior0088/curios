@@ -27,7 +27,6 @@ module Curios.Core.Term
   ,trFunctionType
   ,trFunction
   ,trApplication
-  ,trAnnotated
   ,trOrigin
   ,trAbstract
   ,trSubstitute
@@ -83,8 +82,7 @@ data Term =
   TrType Origin |
   TrFunctionType Origin Type (Argument -> Argument -> Term) |
   TrFunction Origin (Argument -> Term) |
-  TrApplication Origin Term Term |
-  TrAnnotated Origin Type Term
+  TrApplication Origin Term Term
 
 arUnwrap :: Argument -> Term
 arUnwrap argument =
@@ -160,10 +158,6 @@ trApplication :: Term -> Term -> Term
 trApplication function argument =
   TrApplication OrMachine function argument
 
-trAnnotated :: Type -> Term -> Term
-trAnnotated termType term =
-  TrAnnotated OrMachine termType term
-
 trOrigin :: Term -> Origin
 trOrigin term =
   case term of
@@ -176,7 +170,6 @@ trOrigin term =
     TrFunctionType origin _ _ -> origin
     TrFunction origin _ -> origin
     TrApplication origin _ _ -> origin
-    TrAnnotated origin _ _ -> origin
 
 trAbstract :: Name -> Index -> Term -> Term
 trAbstract name index term =
@@ -194,10 +187,6 @@ trAbstract name index term =
       TrApplication origin
         (trAbstract name index function)
         (trAbstract name index argument)
-    TrAnnotated origin termType term' ->
-      TrAnnotated origin
-        (trAbstract name index termType)
-        (trAbstract name index term')
     term' ->
       term'
 
@@ -217,10 +206,6 @@ trSubstitute name source term =
       TrApplication origin
         (trSubstitute name source function)
         (trSubstitute name source argument)
-    TrAnnotated origin termType term' ->
-      TrAnnotated origin
-        (trSubstitute name source termType)
-        (trSubstitute name source term')
     term' ->
       term'
 
@@ -252,5 +237,3 @@ showTerm =
             ++ "{ " ++ go (depth + 1) (output (ArPlaceholder (depth + 0))) ++ " })"
         TrApplication _ function argument ->
           "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"
-        TrAnnotated _ termType term' ->
-          "(TrAnnotated " ++ go (depth + 0) termType ++ " " ++ go (depth + 0) term' ++ ")"
