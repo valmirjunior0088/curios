@@ -130,9 +130,8 @@ trCheck declarations definitions =
     check variables termType term =
       case (trReduce definitions termType, term) of
         (TrFunctionType _ input output, TrFunction _ output') ->
-          check variables' (output (ArTerm term) argument) (output' argument) where
-            (index, variables') = vrAllocate input variables
-            argument = ArPlaceholder index
+          check variables' (output (ArTerm term) variableArgument) (output' variableArgument) where
+            (variableArgument, variables') = vrAllocate input variables
         (termType', TrFunction origin _) ->
           Left (erMismatchedFunctionType origin termType')
         (termType', term') -> do
@@ -169,10 +168,8 @@ trCheck declarations definitions =
         TrFunctionType _ input output -> do
           check variables trType input
           
-          let (index, variables') = vrAllocate term variables
-          let selfArgument = ArPlaceholder index
-          let (index', variables'') = vrAllocate input variables'
-          let variableArgument = ArPlaceholder index'
+          let (selfArgument, variables') = vrAllocate term variables
+          let (variableArgument, variables'') = vrAllocate input variables'
           check variables'' trType (output selfArgument variableArgument)
           
           Right trType

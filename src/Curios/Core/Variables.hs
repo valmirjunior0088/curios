@@ -6,7 +6,7 @@ module Curios.Core.Variables
   )
   where
 
-import Curios.Core.Term (Index, Term (..))
+import Curios.Core.Term (Argument (..), Index, Term (..))
 import Data.Sequence (Seq (..), (|>))
 import GHC.Natural (naturalToInt, intToNatural)
 import qualified Data.Sequence as Seq
@@ -18,9 +18,9 @@ vrEmpty :: Variables
 vrEmpty =
   Variables (Seq.empty)
 
-vrAllocate :: Term -> Variables -> (Index, Variables)
+vrAllocate :: Term -> Variables -> (Argument, Variables)
 vrAllocate term (Variables variables) =
-  (intToNatural (Seq.length variables), Variables (variables |> term))
+  (ArPlaceholder (intToNatural (Seq.length variables)), Variables (variables |> term))
 
 vrLookup :: Index -> Variables -> Maybe Term
 vrLookup index (Variables variables) =
