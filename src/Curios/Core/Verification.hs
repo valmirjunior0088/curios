@@ -11,7 +11,6 @@ import Curios.Core.History (History, hsEmpty, hsInsert, hsAny)
 import Curios.Core.Variables (Variables (..), vrEmpty, vrAllocate, vrLookup)
 import Control.Monad (unless)
 import Data.Maybe (fromJust)
-import GHC.Natural (Natural)
 
 import Curios.Error
   (Error (..)
@@ -28,6 +27,7 @@ import Curios.Core.Term
   ,Literal (..)
   ,Operator (..)
   ,Type
+  ,Depth
   ,Term (..)
   ,trType
   ,trPrimitive
@@ -60,7 +60,7 @@ trConvertsWith :: Definitions -> Term -> Term -> Bool
 trConvertsWith definitions =
   eqrec hsEmpty 0 where
     
-    alpha :: Natural -> Term -> Term -> Bool
+    alpha :: Depth -> Term -> Term -> Bool
     alpha depth one other =
       case (one, other) of
         (TrPrimitive _ primitive, TrPrimitive _ primitive') ->
@@ -93,15 +93,15 @@ trConvertsWith definitions =
         _ ->
           False
     
-    beta :: Natural -> Term -> Term -> Bool
+    beta :: Depth -> Term -> Term -> Bool
     beta depth one other =
       alpha depth (trReduce dfEmpty one) (trReduce dfEmpty other)
     
-    predicate :: Natural -> (Term, Term) -> (Term, Term) -> Bool
+    predicate :: Depth -> (Term, Term) -> (Term, Term) -> Bool
     predicate depth (one, other) (one', other') =
       alpha depth one one' && alpha depth other other'
     
-    eqrec :: History (Term, Term) -> Natural -> Term -> Term -> Bool
+    eqrec :: History (Term, Term) -> Depth -> Term -> Term -> Bool
     eqrec history depth one other =
       beta depth one other || hsAny (predicate depth (one, other)) history || comparison where
         history' = hsInsert (one, other) history

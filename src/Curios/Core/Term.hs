@@ -4,8 +4,10 @@ module Curios.Core.Term
   ,Literal (..)
   ,Operator (..)
   ,Name
+  ,Index
   ,Type
   ,Argument (..)
+  ,Depth
   ,Term (..)
   ,arUnwrap
   ,trPrimitive
@@ -59,19 +61,25 @@ data Operator =
 type Name =
   String
 
+type Index =
+  Natural
+
 type Type =
   Term
 
 data Argument =
-  ArPlaceholder Natural |
+  ArPlaceholder Index |
   ArTerm Term
+
+type Depth =
+  Natural
 
 data Term =
   TrPrimitive Origin Primitive |
   TrLiteral Origin Literal |
   TrOperator Origin Name Operator |
   TrReference Origin Name |
-  TrVariable Origin Natural |
+  TrVariable Origin Index |
   TrType Origin |
   TrFunctionType Origin Type (Argument -> Argument -> Term) |
   TrFunction Origin (Argument -> Term) |
@@ -132,7 +140,7 @@ trReference :: Name -> Term
 trReference name =
   TrReference OrMachine name
 
-trVariable :: Natural -> Term
+trVariable :: Index -> Term
 trVariable index =
   TrVariable OrMachine index
 
@@ -170,7 +178,7 @@ trOrigin term =
     TrApplication origin _ _ -> origin
     TrAnnotated origin _ _ -> origin
 
-trAbstract :: Name -> Natural -> Term -> Term
+trAbstract :: Name -> Index -> Term -> Term
 trAbstract name index term =
   case term of
     TrReference origin name' | name == name' ->
