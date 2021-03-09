@@ -101,7 +101,7 @@ trConvertsWith definitions =
     predicate depth (one, other) (one', other') =
       alpha depth one one' && alpha depth other other'
     
-    eqrec :: History (Term, Term) -> Depth -> Term -> Term -> Bool
+    eqrec :: History -> Depth -> Term -> Term -> Bool
     eqrec history depth one other =
       beta depth one other || hsAny (predicate depth (one, other)) history || comparison where
         history' = hsInsert (one, other) history

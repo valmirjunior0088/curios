@@ -6,17 +6,19 @@ module Curios.Core.History
   )
   where
 
-newtype History a =
-  History [a]
+import Curios.Core.Term (Term (..))
 
-hsEmpty :: History a
+newtype History =
+  History [(Term, Term)]
+
+hsEmpty :: History
 hsEmpty =
   History []
 
-hsInsert :: a -> History a -> History a
+hsInsert :: (Term, Term) -> History -> History
 hsInsert item (History history) =
   History (item : history)
 
-hsAny :: (a -> Bool) -> History a -> Bool
+hsAny :: ((Term, Term) -> Bool) -> History -> Bool
 hsAny predicate (History history) =
   any predicate history
