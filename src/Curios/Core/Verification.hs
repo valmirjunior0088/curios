@@ -126,8 +126,8 @@ trConvertsWith definitions =
               (&&)
                 (eqrec history' depth termType termType')
                 (eqrec history' depth term term')
-            (one'', other'') ->
-              alpha depth one'' other''
+            (one', other') ->
+              alpha depth one' other'
 
 trCheck :: Declarations -> Definitions -> Type -> Term -> Either Error ()
 trCheck declarations definitions =
