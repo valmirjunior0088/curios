@@ -6,10 +6,9 @@ module Curios.Core.Term
   ,Name
   ,Index
   ,Type
-  ,Argument (..)
+  ,Variable (..)
   ,Depth
   ,Term (..)
-  ,arUnwrap
   ,trPrimitive
   ,trPrText
   ,trPrInteger
@@ -28,9 +27,8 @@ module Curios.Core.Term
   ,trFunction
   ,trApplication
   ,trOrigin
-  ,trAbstract
-  ,trSubstitute
-  ,trApplyArgument
+  ,vrUnwrap
+  ,trApplyVariable
   ,showTerm
   )
   where
@@ -67,9 +65,9 @@ type Index =
 type Type =
   Term
 
-data Argument =
-  ArQuote Index |
-  ArTerm Term
+data Variable =
+  VrQuote Index |
+  VrTerm Term
 
 type Depth =
   Natural
@@ -81,15 +79,9 @@ data Term =
   TrReference Origin Name |
   TrVariable Origin Index |
   TrType Origin |
-  TrFunctionType Origin Type (Argument -> Argument -> Term) |
-  TrFunction Origin (Argument -> Term) |
+  TrFunctionType Origin Type (Variable -> Variable -> Term) |
+  TrFunction Origin (Variable -> Term) |
   TrApplication Origin Term Term
-
-arUnwrap :: Argument -> Term
-arUnwrap argument =
-  case argument of
-    ArQuote index -> trVariable index
-    ArTerm term -> term
 
 trPrimitive :: Primitive -> Term
 trPrimitive primitive =
@@ -147,11 +139,11 @@ trType :: Term
 trType =
   TrType OrMachine
 
-trFunctionType :: Type -> (Argument -> Argument -> Term) -> Term
-trFunctionType input output =
-  TrFunctionType OrMachine input output
+trFunctionType :: Type -> (Variable -> Variable -> Term) -> Term
+trFunctionType inputType output =
+  TrFunctionType OrMachine inputType output
 
-trFunction :: (Argument -> Term) -> Term
+trFunction :: (Variable -> Term) -> Term
 trFunction output =
   TrFunction OrMachine output
 
@@ -172,49 +164,32 @@ trOrigin term =
     TrFunction origin _ -> origin
     TrApplication origin _ _ -> origin
 
-trAbstract :: Name -> Index -> Term -> Term
-trAbstract name index term =
+vrUnwrap :: Variable -> Term
+vrUnwrap variable =
+  case variable of
+    VrQuote index -> trVariable index
+    VrTerm term -> term
+
+trApplyVariable :: Name -> Variable -> Term -> Term
+trApplyVariable name variable term =
   case term of
     TrReference origin name' | name == name' ->
-      TrVariable origin index
-    TrFunctionType origin input output ->
-      TrFunctionType origin input' output' where
-        input' = trAbstract name index input
-        output' self variable = trAbstract name index (output self variable)
+      case variable of
+        VrQuote index -> TrVariable origin index
+        VrTerm image -> image
+    TrFunctionType origin inputType output ->
+      TrFunctionType origin inputType' output' where
+        inputType' = trApplyVariable name variable inputType
+        output' self input = trApplyVariable name variable (output self input)
     TrFunction origin output ->
       TrFunction origin output' where
-        output' variable = trAbstract name index (output variable)
+        output' input = trApplyVariable name variable (output input)
     TrApplication origin function argument ->
       TrApplication origin
-        (trAbstract name index function)
-        (trAbstract name index argument)
+        (trApplyVariable name variable function)
+        (trApplyVariable name variable argument)
     term' ->
       term'
-
-trSubstitute :: Name -> Term -> Term -> Term
-trSubstitute name image term =
-  case term of
-    TrReference _ name' | name == name' ->
-      image
-    TrFunctionType origin input output ->
-      TrFunctionType origin input' output' where
-        input' = trSubstitute name image input
-        output' self variable = trSubstitute name image (output self variable)
-    TrFunction origin output ->
-      TrFunction origin output' where
-        output' variable = trSubstitute name image (output variable)
-    TrApplication origin function argument ->
-      TrApplication origin
-        (trSubstitute name image function)
-        (trSubstitute name image argument)
-    term' ->
-      term'
-
-trApplyArgument :: Name -> Argument -> Term -> Term
-trApplyArgument name argument term =
-  case argument of
-    ArQuote index -> trAbstract name index term
-    ArTerm image -> trSubstitute name image term
 
 showTerm :: Term -> String
 showTerm =
@@ -233,14 +208,14 @@ showTerm =
           "(TrVariable " ++ show index ++ ")"
         TrType _ ->
           "(TrType)"
-        TrFunctionType _ input output ->
+        TrFunctionType _ inputType output ->
           "(TrFunctionType "
             ++ "(Self " ++ show (depth + 0) ++ ") "
-            ++ "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) input ++ ") "
-            ++ "{ " ++ go (depth + 2) (output (ArQuote (depth + 0)) (ArQuote (depth + 1))) ++ " })"
+            ++ "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) inputType ++ ") "
+            ++ "{ " ++ go (depth + 2) (output (VrQuote (depth + 0)) (VrQuote (depth + 1))) ++ " })"
         TrFunction _ output ->
           "(TrFunction "
             ++ "(Variable " ++ show (depth + 0) ++ ") "
-            ++ "{ " ++ go (depth + 1) (output (ArQuote (depth + 0))) ++ " })"
+            ++ "{ " ++ go (depth + 1) (output (VrQuote (depth + 0))) ++ " })"
         TrApplication _ function argument ->
           "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"

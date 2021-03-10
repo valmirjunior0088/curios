@@ -20,8 +20,8 @@ hsEmpty =
   History []
 
 hsInsert :: Equation -> History -> History
-hsInsert item (History history) =
-  History (item : history)
+hsInsert equation (History history) =
+  History (equation : history)
 
 hsAny :: (Equation -> Bool) -> History -> Bool
 hsAny predicate (History history) =

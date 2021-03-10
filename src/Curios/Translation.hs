@@ -11,8 +11,8 @@ import qualified Curios.Core.Term as Core (Literal (..))
 
 import Curios.Source.Types
   (Identifier (..)
-  ,FunctionTypeVariable (..)
-  ,FunctionVariable (..)
+  ,FunctionTypeBinding (..)
+  ,FunctionBinding (..)
   ,Binding (..)
   ,Expression (..)
   ,Prefix (..)
@@ -26,7 +26,7 @@ import Curios.Core.Term
   ,Type
   ,Term (..)
   ,trType
-  ,trApplyArgument
+  ,trApplyVariable
   )
 
 import Curios.Core.Context
@@ -60,37 +60,37 @@ ltTranslate sourcePos literal =
     Source.LtInteger _ integer -> TrLiteral (OrSource sourcePos) (Core.LtInteger integer)
     Source.LtReal _ double -> TrLiteral (OrSource sourcePos) (Core.LtReal double)
 
-trAbstractFunctionTypeVariable :: SourcePos -> FunctionTypeVariable -> Term -> Term
-trAbstractFunctionTypeVariable functionTypePos (FunctionTypeVariable _ variableName expression) term =
-  TrFunctionType (OrSource functionTypePos) input output where
-    input =
-      exTranslate expression
-    output _ variableArgument =
-      case variableName of
+trAbstractFunctionTypeBinding :: SourcePos -> FunctionTypeBinding -> Term -> Term
+trAbstractFunctionTypeBinding functionTypePos (FunctionTypeBinding _ inputName inputTypeExpression) term =
+  TrFunctionType (OrSource functionTypePos) inputType output where
+    inputType =
+      exTranslate inputTypeExpression
+    output _ input =
+      case inputName of
         Just (Identifier _ name) ->
-          trApplyArgument name variableArgument term
+          trApplyVariable name input term
         Nothing ->
           term
 
-trAbstractFunctionType :: SourcePos -> Maybe Identifier -> [FunctionTypeVariable] -> Term -> Term
-trAbstractFunctionType sourcePos selfName variables term =
-  case foldr (trAbstractFunctionTypeVariable sourcePos) term variables of
-    TrFunctionType origin input output ->
-      TrFunctionType origin input output' where
-        output' selfArgument variableArgument =
+trAbstractFunctionType :: SourcePos -> Maybe Identifier -> [FunctionTypeBinding] -> Term -> Term
+trAbstractFunctionType sourcePos selfName bindings term =
+  case foldr (trAbstractFunctionTypeBinding sourcePos) term bindings of
+    TrFunctionType origin inputType output ->
+      TrFunctionType origin inputType output' where
+        output' self input =
           case selfName of
             Just (Identifier _ name) ->
-              trApplyArgument name selfArgument (output selfArgument variableArgument)
+              trApplyVariable name self (output self input)
             Nothing ->
-              output selfArgument variableArgument
+              output self input
     term' ->
       term'
 
-trAbstractFunctionVariable :: SourcePos -> FunctionVariable -> Term -> Term
-trAbstractFunctionVariable functionPos (FunctionVariable _ (Identifier _ name)) term =
+trAbstractFunctionBinding :: SourcePos -> FunctionBinding -> Term -> Term
+trAbstractFunctionBinding functionPos (FunctionBinding _ (Identifier _ name)) term =
   TrFunction (OrSource functionPos) output where
-    output variableArgument =
-      trApplyArgument name variableArgument term
+    output input =
+      trApplyVariable name input term
 
 exTranslate :: Expression -> Term
 exTranslate expression =
@@ -99,34 +99,34 @@ exTranslate expression =
       ltTranslate sourcePos literal
     ExIdentifier sourcePos identifier ->
       idTranslate sourcePos identifier
-    ExFunctionType sourcePos selfName variables body ->
-      trAbstractFunctionType sourcePos selfName variables (exTranslate body)
-    ExFunction sourcePos variables body ->
-      foldr (trAbstractFunctionVariable sourcePos) (exTranslate body) variables
+    ExFunctionType sourcePos selfName bindings body ->
+      trAbstractFunctionType sourcePos selfName bindings (exTranslate body)
+    ExFunction sourcePos bindings body ->
+      foldr (trAbstractFunctionBinding sourcePos) (exTranslate body) bindings
     ExApplication sourcePos function arguments ->
       foldl (TrApplication (OrSource sourcePos)) (exTranslate function) (fmap exTranslate arguments)
 
 trAbstractDeclarationBinding :: SourcePos -> Binding -> Term -> Term
 trAbstractDeclarationBinding sourcePos (Binding _ (Identifier _ name) expression) term =
   TrFunctionType (OrSource sourcePos) (exTranslate expression) output where
-    output _ variableArgument = trApplyArgument name variableArgument term
+    output _ input = trApplyVariable name input term
 
 trAbstractDefinitionBinding :: SourcePos -> Binding -> Term -> Term
 trAbstractDefinitionBinding sourcePos (Binding _ (Identifier _ name) _) term =
   TrFunction (OrSource sourcePos) output where
-    output argument = trApplyArgument name argument term
+    output input = trApplyVariable name input term
 
 pgDeclarations :: Program -> [(Identifier, Term)]
 pgDeclarations (Program _ program) =
   map transform program where
-    transform (Statement _ identifier (Prefix sourcePos variables) output _) =
-      (identifier, foldr (trAbstractDeclarationBinding sourcePos) (exTranslate output) variables)
+    transform (Statement _ identifier (Prefix sourcePos bindings) declaration _) =
+      (identifier, foldr (trAbstractDeclarationBinding sourcePos) (exTranslate declaration) bindings)
 
 pgDefinitions :: Program -> [(Identifier, Term)]
 pgDefinitions (Program _ program) =
   map transform program where
-    transform (Statement _ identifier (Prefix sourcePos variables) _ expression) =
-      (identifier, foldr (trAbstractDefinitionBinding sourcePos) (exTranslate expression) variables)
+    transform (Statement _ identifier (Prefix sourcePos bindings) _ definition) =
+      (identifier, foldr (trAbstractDefinitionBinding sourcePos) (exTranslate definition) bindings)
 
 cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
 cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do

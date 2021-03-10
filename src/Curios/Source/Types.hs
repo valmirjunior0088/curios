@@ -1,8 +1,8 @@
 module Curios.Source.Types
   (Literal (..)
   ,Identifier (..)
-  ,FunctionTypeVariable (..)
-  ,FunctionVariable (..)
+  ,FunctionTypeBinding (..)
+  ,FunctionBinding (..)
   ,Expression (..)
   ,Binding (..)
   ,Prefix (..)
@@ -21,17 +21,17 @@ data Literal =
 data Identifier =
   Identifier SourcePos String
 
-data FunctionTypeVariable =
-  FunctionTypeVariable SourcePos (Maybe Identifier) Expression
+data FunctionTypeBinding =
+  FunctionTypeBinding SourcePos (Maybe Identifier) Expression
 
-data FunctionVariable =
-  FunctionVariable SourcePos Identifier
+data FunctionBinding =
+  FunctionBinding SourcePos Identifier
 
 data Expression =
   ExLiteral SourcePos Literal |
   ExIdentifier SourcePos Identifier |
-  ExFunctionType SourcePos (Maybe Identifier) [FunctionTypeVariable] Expression |
-  ExFunction SourcePos [FunctionVariable] Expression |
+  ExFunctionType SourcePos (Maybe Identifier) [FunctionTypeBinding] Expression |
+  ExFunction SourcePos [FunctionBinding] Expression |
   ExApplication SourcePos Expression [Expression]
 
 data Binding =

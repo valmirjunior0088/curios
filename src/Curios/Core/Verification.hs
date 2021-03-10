@@ -21,7 +21,7 @@ import Curios.Error
   )
 
 import Curios.Core.Term
-  (Argument (..)
+  (Variable (..)
   ,Primitive (..)
   ,Literal (..)
   ,Operator (..)
@@ -46,8 +46,8 @@ trReduce definitions term =
           trReduce definitions (operator literal)
         (TrApplication _ (TrOperator _ _ (OpBinary operator)) (TrLiteral _ one), TrLiteral _ another) ->
           trReduce definitions (operator one another)
-        (TrFunction _ output, argument') ->
-          trReduce definitions (output (ArTerm argument'))
+        (TrFunction _ function', argument') ->
+          trReduce definitions (function' (VrTerm argument'))
         (function', argument') ->
           TrApplication origin function' argument'
     term' ->
@@ -72,17 +72,17 @@ trConvertsWith definitions =
           index == index'
         (TrType _, TrType _) ->
           True
-        (TrFunctionType _ input output, TrFunctionType _ input' output') ->
+        (TrFunctionType _ inputType output, TrFunctionType _ inputType' output') ->
           (&&)
-            (alpha depth input input')
+            (alpha depth inputType inputType')
             (alpha (succ (succ depth))
-              (output (ArQuote depth) (ArQuote (succ depth)))
-              (output' (ArQuote depth) (ArQuote (succ depth)))
+              (output (VrQuote depth) (VrQuote (succ depth)))
+              (output' (VrQuote depth) (VrQuote (succ depth)))
             )
         (TrFunction _ output, TrFunction _ output') ->
           alpha (succ depth)
-            (output (ArQuote depth))
-            (output' (ArQuote depth))
+            (output (VrQuote depth))
+            (output' (VrQuote depth))
         (TrApplication _ function argument, TrApplication _ function' argument') ->
           (&&)
             (alpha depth function function')
@@ -109,17 +109,17 @@ trConvertsWith definitions =
         history' = hsInsert equation history
         comparison =
           case (trReduce definitions one, trReduce definitions other) of
-            (TrFunctionType _ input output, TrFunctionType _ input' output') ->
+            (TrFunctionType _ inputType output, TrFunctionType _ inputType' output') ->
               (&&)
-                (eqrec history' depth input input')
+                (eqrec history' depth inputType inputType')
                 (eqrec history' (succ (succ depth))
-                  (output (ArQuote depth) (ArQuote (succ depth)))
-                  (output' (ArQuote depth) (ArQuote (succ depth)))
+                  (output (VrQuote depth) (VrQuote (succ depth)))
+                  (output' (VrQuote depth) (VrQuote (succ depth)))
                 )
             (TrFunction _ output, TrFunction _ output') ->
               eqrec history' (succ depth)
-                (output (ArQuote depth))
-                (output' (ArQuote depth))
+                (output (VrQuote depth))
+                (output' (VrQuote depth))
             (TrApplication _ function argument, TrApplication _ function' argument') ->
               (&&)
                 (eqrec history' depth function function')
@@ -134,9 +134,9 @@ trCheck declarations definitions =
     check :: Variables -> Type -> Term -> Either Error ()
     check variables termType term =
       case (trReduce definitions termType, term) of
-        (TrFunctionType _ input output, TrFunction _ output') ->
-          check variables' (output (ArTerm term) variableArgument) (output' variableArgument) where
-            (variableArgument, variables') = vrAllocate input variables
+        (TrFunctionType _ inputType output, TrFunction _ output') ->
+          check variables' (output (VrTerm term) input) (output' input) where
+            (input, variables') = vrAllocate inputType variables
         (termType', TrFunction origin _) ->
           Left (erMismatchedFunctionType origin termType')
         (termType', term') -> do
@@ -170,12 +170,12 @@ trCheck declarations definitions =
             Just termType -> Right termType
         TrType _ ->
           Right trType
-        TrFunctionType _ input output -> do
-          check variables trType input
+        TrFunctionType _ inputType output -> do
+          check variables trType inputType
           
-          let (selfArgument, variables') = vrAllocate term variables
-          let (variableArgument, variables'') = vrAllocate input variables'
-          check variables'' trType (output selfArgument variableArgument)
+          let (self, variables') = vrAllocate term variables
+          let (input, variables'') = vrAllocate inputType variables'
+          check variables'' trType (output self input)
           
           Right trType
         TrFunction origin _ ->
@@ -184,9 +184,9 @@ trCheck declarations definitions =
           functionType <- infer variables function
           
           case trReduce definitions functionType of
-            TrFunctionType _ input output -> do
-              check variables input argument
+            TrFunctionType _ inputType output -> do
+              check variables inputType argument
 
-              Right (output (ArTerm function) (ArTerm argument))
+              Right (output (VrTerm function) (VrTerm argument))
             functionType' ->
               Left (erMismatchedFunctionType (trOrigin function) functionType')

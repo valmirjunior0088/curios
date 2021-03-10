@@ -10,7 +10,6 @@ import Curios.Core.Term
   (Literal (..)
   ,Name
   ,Type
-  ,arUnwrap
   ,Term (..)
   ,trPrText
   ,trPrInteger
@@ -25,6 +24,7 @@ import Curios.Core.Term
   ,trFunctionType
   ,trFunction
   ,trApplication
+  ,vrUnwrap
   )
 
 data Entry =
@@ -42,12 +42,12 @@ boolean =
     ,enTerm =
       trFunctionType
         (trFunctionType (trReference "Boolean") (\_ _ -> trType))
-        (\selfArgument variableArgument ->
-          (trFunctionType (trApplication (arUnwrap variableArgument) (trReference "true"))
+        (\self input ->
+          (trFunctionType (trApplication (vrUnwrap input) (trReference "true"))
             (\_ _ ->
-              (trFunctionType (trApplication (arUnwrap variableArgument) (trReference "false"))
+              (trFunctionType (trApplication (vrUnwrap input) (trReference "false"))
                 (\_ _ ->
-                  (trApplication (arUnwrap variableArgument) (arUnwrap selfArgument))
+                  (trApplication (vrUnwrap input) (vrUnwrap self))
                 )
               )
             )
@@ -60,7 +60,7 @@ booleanTrue =
   Entry
     {enName = "true"
     ,enType = trReference "Boolean"
-    ,enTerm = trFunction (\_ -> trFunction (\pTrue -> trFunction (\_ -> arUnwrap pTrue)))
+    ,enTerm = trFunction (\_ -> trFunction (\pTrue -> trFunction (\_ -> vrUnwrap pTrue)))
     }
 
 booleanFalse :: Entry
@@ -68,7 +68,7 @@ booleanFalse =
   Entry
     {enName = "false"
     ,enType = trReference "Boolean"
-    ,enTerm = trFunction (\_ -> trFunction (\_ -> trFunction (\pFalse -> arUnwrap pFalse)))
+    ,enTerm = trFunction (\_ -> trFunction (\_ -> trFunction (\pFalse -> vrUnwrap pFalse)))
     }
 
 textLength :: Entry

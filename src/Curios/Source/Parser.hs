@@ -1,8 +1,8 @@
 module Curios.Source.Parser
   (identifier
   ,literal
-  ,functionTypeVariable
-  ,functionVariable
+  ,functionTypeBinding
+  ,functionBinding
   ,expression
   ,binding
   ,prefix
@@ -17,8 +17,8 @@ import Data.Void (Void)
 import Curios.Source.Types
   (Identifier (..)
   ,Literal (..)
-  ,FunctionTypeVariable (..)
-  ,FunctionVariable (..)
+  ,FunctionTypeBinding (..)
+  ,FunctionBinding (..)
   ,Expression (..)
   ,Binding (..)
   ,Prefix (..)
@@ -88,13 +88,13 @@ literal =
       positive = LtInteger <$> getSourcePos <*> (optional (single '+') *> Lexer.decimal)
       negative = LtInteger <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.decimal))
 
-functionTypeVariable :: Parser FunctionTypeVariable
-functionTypeVariable =
-  lexeme (FunctionTypeVariable <$> getSourcePos <*> optional (try (identifier <* symbol ":")) <*> expression)
+functionTypeBinding :: Parser FunctionTypeBinding
+functionTypeBinding =
+  lexeme (FunctionTypeBinding <$> getSourcePos <*> optional (try (identifier <* symbol ":")) <*> expression)
 
-functionVariable :: Parser FunctionVariable
-functionVariable =
-  lexeme (FunctionVariable <$> getSourcePos <*> identifier)
+functionBinding :: Parser FunctionBinding
+functionBinding =
+  lexeme (FunctionBinding <$> getSourcePos <*> identifier)
 
 expression :: Parser Expression
 expression =
@@ -102,11 +102,11 @@ expression =
     exFunctionType =
       ExFunctionType <$> getSourcePos <*>
         (try (symbol "->") *> optional identifier) <*>
-        (symbol "{" *> some (try (functionTypeVariable <* symbol ","))) <*>
+        (symbol "{" *> some (try (functionTypeBinding <* symbol ","))) <*>
         (expression <* symbol "}")
     exFunction =
       ExFunction <$> getSourcePos <*>
-        (try (symbol "fn") *> symbol "{" *> some (try (functionVariable <* symbol ","))) <*>
+        (try (symbol "fn") *> symbol "{" *> some (try (functionBinding <* symbol ","))) <*>
         (expression <* symbol "}")
     exApplication =
       ExApplication <$> getSourcePos <*>
