@@ -23,13 +23,10 @@ import Curios.Source.Types
 import Curios.Core.Term
   (Origin (..)
   ,Primitive (..)
-  ,Name
   ,Type
-  ,Argument (..)
   ,Term (..)
-  ,trAbstract
-  ,trSubstitute
   ,trType
+  ,trApplyArgument
   )
 
 import Curios.Core.Context
@@ -62,12 +59,6 @@ ltTranslate sourcePos literal =
     Source.LtText _ string -> TrLiteral (OrSource sourcePos) (Core.LtText string)
     Source.LtInteger _ integer -> TrLiteral (OrSource sourcePos) (Core.LtInteger integer)
     Source.LtReal _ double -> TrLiteral (OrSource sourcePos) (Core.LtReal double)
-
-trApplyArgument :: Name -> Argument -> Term -> Term
-trApplyArgument name argument term =
-  case argument of
-    ArQuote index -> trAbstract name index term
-    ArTerm image -> trSubstitute name image term
 
 trAbstractFunctionTypeVariable :: SourcePos -> FunctionTypeVariable -> Term -> Term
 trAbstractFunctionTypeVariable functionTypePos (FunctionTypeVariable _ variableName expression) term =

@@ -30,6 +30,7 @@ module Curios.Core.Term
   ,trOrigin
   ,trAbstract
   ,trSubstitute
+  ,trApplyArgument
   ,showTerm
   )
   where
@@ -208,6 +209,12 @@ trSubstitute name image term =
         (trSubstitute name image argument)
     term' ->
       term'
+
+trApplyArgument :: Name -> Argument -> Term -> Term
+trApplyArgument name argument term =
+  case argument of
+    ArQuote index -> trAbstract name index term
+    ArTerm image -> trSubstitute name image term
 
 showTerm :: Term -> String
 showTerm =
