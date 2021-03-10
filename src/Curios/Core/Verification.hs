@@ -98,9 +98,13 @@ trConvertsWith definitions =
     predicate depth (one, other) (one', other') =
       alpha depth one one' && alpha depth other other'
     
+    seen :: Depth -> Equation -> History -> Bool
+    seen depth equation history =
+      hsAny (predicate depth equation) history
+    
     eqrec :: History -> Depth -> Term -> Term -> Bool
     eqrec history depth one other =
-      beta depth one other || hsAny (predicate depth equation) history || comparison where
+      beta depth one other || seen depth equation history || comparison where
         equation = (one, other)
         history' = hsInsert equation history
         comparison =
