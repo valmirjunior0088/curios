@@ -7,7 +7,7 @@ module Curios.Core.Verification
 
 import Curios.Core.Declarations (Declarations (..), dcLookup)
 import Curios.Core.Definitions (Definitions (..), dfEmpty, dfLookup)
-import Curios.Core.History (History, hsEmpty, hsInsert, hsAny)
+import Curios.Core.History (Equation, History (..), hsEmpty, hsInsert, hsAny)
 import Curios.Core.Variables (Variables (..), vrEmpty, vrAllocate, vrLookup)
 import Control.Monad (unless)
 import Data.Maybe (fromJust)
@@ -94,14 +94,15 @@ trConvertsWith definitions =
     beta depth one other =
       alpha depth (trReduce dfEmpty one) (trReduce dfEmpty other)
     
-    predicate :: Depth -> (Term, Term) -> (Term, Term) -> Bool
+    predicate :: Depth -> Equation -> Equation -> Bool
     predicate depth (one, other) (one', other') =
       alpha depth one one' && alpha depth other other'
     
     eqrec :: History -> Depth -> Term -> Term -> Bool
     eqrec history depth one other =
-      beta depth one other || hsAny (predicate depth (one, other)) history || comparison where
-        history' = hsInsert (one, other) history
+      beta depth one other || hsAny (predicate depth equation) history || comparison where
+        equation = (one, other)
+        history' = hsInsert equation history
         comparison =
           case (trReduce definitions one, trReduce definitions other) of
             (TrFunctionType _ input output, TrFunctionType _ input' output') ->

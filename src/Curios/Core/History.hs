@@ -1,5 +1,6 @@
 module Curios.Core.History
-  (History (..)
+  (Equation
+  ,History (..)
   ,hsEmpty
   ,hsInsert
   ,hsAny
@@ -8,17 +9,20 @@ module Curios.Core.History
 
 import Curios.Core.Term (Term (..))
 
+type Equation =
+  (Term, Term)
+
 newtype History =
-  History [(Term, Term)]
+  History [Equation]
 
 hsEmpty :: History
 hsEmpty =
   History []
 
-hsInsert :: (Term, Term) -> History -> History
+hsInsert :: Equation -> History -> History
 hsInsert item (History history) =
   History (item : history)
 
-hsAny :: ((Term, Term) -> Bool) -> History -> Bool
+hsAny :: (Equation -> Bool) -> History -> Bool
 hsAny predicate (History history) =
   any predicate history
