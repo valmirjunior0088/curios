@@ -66,7 +66,7 @@ ltTranslate sourcePos literal =
 trApplyArgument :: Name -> Argument -> Term -> Term
 trApplyArgument name argument term =
   case argument of
-    ArPlaceholder depth -> trAbstract name depth term
+    ArQuote index -> trAbstract name index term
     ArTerm source -> trSubstitute name source term
 
 trAbstractFunctionTypeVariable :: SourcePos -> FunctionTypeVariable -> Term -> Term

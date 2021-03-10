@@ -20,7 +20,7 @@ vrEmpty =
 
 vrAllocate :: Term -> Variables -> (Argument, Variables)
 vrAllocate term (Variables variables) =
-  (ArPlaceholder (intToNatural (Seq.length variables)), Variables (variables |> term))
+  (ArQuote (intToNatural (Seq.length variables)), Variables (variables |> term))
 
 vrLookup :: Index -> Variables -> Maybe Term
 vrLookup index (Variables variables) =

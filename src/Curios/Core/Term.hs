@@ -67,7 +67,7 @@ type Type =
   Term
 
 data Argument =
-  ArPlaceholder Index |
+  ArQuote Index |
   ArTerm Term
 
 type Depth =
@@ -87,7 +87,7 @@ data Term =
 arUnwrap :: Argument -> Term
 arUnwrap argument =
   case argument of
-    ArPlaceholder index -> trVariable index
+    ArQuote index -> trVariable index
     ArTerm term -> term
 
 trPrimitive :: Primitive -> Term
@@ -230,10 +230,10 @@ showTerm =
           "(TrFunctionType "
             ++ "(Self " ++ show (depth + 0) ++ ") "
             ++ "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) input ++ ") "
-            ++ "{ " ++ go (depth + 2) (output (ArPlaceholder (depth + 0)) (ArPlaceholder (depth + 1))) ++ " })"
+            ++ "{ " ++ go (depth + 2) (output (ArQuote (depth + 0)) (ArQuote (depth + 1))) ++ " })"
         TrFunction _ output ->
           "(TrFunction "
             ++ "(Variable " ++ show (depth + 0) ++ ") "
-            ++ "{ " ++ go (depth + 1) (output (ArPlaceholder (depth + 0))) ++ " })"
+            ++ "{ " ++ go (depth + 1) (output (ArQuote (depth + 0))) ++ " })"
         TrApplication _ function argument ->
           "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"
