@@ -19,8 +19,8 @@ vrEmpty =
   Variables (Seq.empty)
 
 vrAllocate :: Type -> Variables -> (Variable, Variables)
-vrAllocate term (Variables variables) =
-  (VrQuote (intToNatural (Seq.length variables)), Variables (variables |> term))
+vrAllocate termType (Variables variables) =
+  (VrQuote (intToNatural (Seq.length variables)), Variables (variables |> termType))
 
 vrLookup :: Index -> Variables -> Maybe Type
 vrLookup index (Variables variables) =
