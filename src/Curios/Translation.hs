@@ -67,7 +67,7 @@ trApplyArgument :: Name -> Argument -> Term -> Term
 trApplyArgument name argument term =
   case argument of
     ArQuote index -> trAbstract name index term
-    ArTerm source -> trSubstitute name source term
+    ArTerm image -> trSubstitute name image term
 
 trAbstractFunctionTypeVariable :: SourcePos -> FunctionTypeVariable -> Term -> Term
 trAbstractFunctionTypeVariable functionTypePos (FunctionTypeVariable _ variableName expression) term =

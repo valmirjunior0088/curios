@@ -191,21 +191,21 @@ trAbstract name index term =
       term'
 
 trSubstitute :: Name -> Term -> Term -> Term
-trSubstitute name source term =
+trSubstitute name image term =
   case term of
     TrReference _ name' | name == name' ->
-      source
+      image
     TrFunctionType origin input output ->
       TrFunctionType origin input' output' where
-        input' = trSubstitute name source input
-        output' self variable = trSubstitute name source (output self variable)
+        input' = trSubstitute name image input
+        output' self variable = trSubstitute name image (output self variable)
     TrFunction origin output ->
       TrFunction origin output' where
-        output' variable = trSubstitute name source (output variable)
+        output' variable = trSubstitute name image (output variable)
     TrApplication origin function argument ->
       TrApplication origin
-        (trSubstitute name source function)
-        (trSubstitute name source argument)
+        (trSubstitute name image function)
+        (trSubstitute name image argument)
     term' ->
       term'
 
