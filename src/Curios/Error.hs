@@ -29,12 +29,12 @@ import Data.Maybe (maybe, isNothing)
 import Data.Proxy (Proxy (..))
 import Data.Void (Void, absurd)
 import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NonEmpty
 
 import Text.Megaparsec
-  (Token (..)
+  (Token
   ,SourcePos (..)
   ,ParseError (..)
   ,ErrorItem (..)

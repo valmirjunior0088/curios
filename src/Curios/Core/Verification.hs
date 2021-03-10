@@ -5,15 +5,15 @@ module Curios.Core.Verification
   )
   where
 
-import Curios.Core.Declarations (Declarations (..), dcLookup)
-import Curios.Core.Definitions (Definitions (..), dfEmpty, dfLookup)
-import Curios.Core.History (Equation, History (..), hsEmpty, hsInsert, hsAny)
-import Curios.Core.Variables (Variables (..), vrEmpty, vrAllocate, vrLookup)
+import Curios.Core.Declarations (Declarations, dcLookup)
+import Curios.Core.Definitions (Definitions, dfEmpty, dfLookup)
+import Curios.Core.History (Equation, History, hsEmpty, hsInsert, hsAny)
+import Curios.Core.Variables (Variables, vrEmpty, vrAllocate, vrLookup)
 import Control.Monad (unless)
 import Data.Maybe (fromJust)
 
 import Curios.Error
-  (Error (..)
+  (Error
   ,erMismatchedFunctionType
   ,erMismatchedType
   ,erUndeclaredName

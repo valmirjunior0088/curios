@@ -10,7 +10,7 @@ import Curios.Core.Term
   (Literal (..)
   ,Name
   ,Type
-  ,Term (..)
+  ,Term
   ,trPrText
   ,trPrInteger
   ,trPrReal

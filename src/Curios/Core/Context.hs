@@ -11,8 +11,8 @@ module Curios.Core.Context
 
 import Curios.Core.Term (Name, Type, Term, trType, showTerm)
 import Curios.Core.Verification (trReduce, trCheck)
-import Curios.Core.Declarations (Declarations (..), dcEmpty, dcInsert, dcLookup)
-import Curios.Core.Definitions (Definitions (..), dfEmpty, dfInsert, dfLookup)
+import Curios.Core.Declarations (Declarations, dcEmpty, dcInsert, dcLookup)
+import Curios.Core.Definitions (Definitions, dfEmpty, dfInsert, dfLookup)
 import Curios.Core.Prelude (prelude, prDeclarations, prDefinitions)
 import Curios.Error (Error (..), showErrorKind)
 

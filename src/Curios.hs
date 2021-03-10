@@ -6,8 +6,8 @@ module Curios
 
 import Prelude hiding (error)
 
-import Curios.Error (Error (..), erParsing)
-import Curios.Core.Context (Context (..))
+import Curios.Error (Error, erParsing)
+import Curios.Core.Context (Context)
 import Curios.Source.Types (Program)
 import Curios.Core.Term (Origin (..))
 import Curios.Translation (pgCheck)

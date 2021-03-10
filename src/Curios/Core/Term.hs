@@ -33,8 +33,8 @@ module Curios.Core.Term
   )
   where
 
-import GHC.Natural (Natural (..))
-import Text.Megaparsec (SourcePos (..))
+import GHC.Natural (Natural)
+import Text.Megaparsec (SourcePos)
 
 data Origin =
   OrMachine |
