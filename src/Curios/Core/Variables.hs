@@ -16,7 +16,7 @@ newtype Variables =
 
 vrEmpty :: Variables
 vrEmpty =
-  Variables (Seq.empty)
+  Variables Seq.empty
 
 vrAllocate :: Type -> Variables -> (Variable, Variables)
 vrAllocate termType (Variables variables) =
