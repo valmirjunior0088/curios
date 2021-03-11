@@ -21,15 +21,17 @@ import Curios.Error
   )
 
 import Curios.Core.Term
-  (Variable (..)
-  ,Primitive (..)
+  (Primitive
   ,Literal (..)
   ,Operator (..)
   ,Type
+  ,Variable (..)
   ,Depth
   ,Term (..)
+  ,trPrText
+  ,trPrInteger
+  ,trPrReal
   ,trType
-  ,trPrimitive
   ,trOrigin
   )
 
@@ -154,12 +156,12 @@ trCheck declarations definitions =
         TrPrimitive _ _ ->
           Right trType
         TrLiteral _ literal ->
-          Right (trPrimitive primitive) where
+          Right primitive where
             primitive =
               case literal of
-                LtText _ -> PrText
-                LtInteger _ -> PrInteger
-                LtReal _ -> PrReal
+                LtText _ -> trPrText
+                LtInteger _ -> trPrInteger
+                LtReal _ -> trPrReal
         TrOperator _ name _ ->
           Right (fromJust (dcLookup name declarations))
         TrVariable _ index ->

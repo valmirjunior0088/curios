@@ -9,19 +9,15 @@ module Curios.Core.Term
   ,Variable (..)
   ,Depth
   ,Term (..)
-  ,trPrimitive
   ,trPrText
   ,trPrInteger
   ,trPrReal
-  ,trLiteral
   ,trLtText
   ,trLtInteger
   ,trLtReal
-  ,trOperator
   ,trOpUnary
   ,trOpBinary
   ,trReference
-  ,trVariable
   ,trType
   ,trFunctionType
   ,trFunction
