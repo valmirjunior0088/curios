@@ -90,9 +90,10 @@ orList tokens =
     _ -> intercalate ", " (NonEmpty.init tokens) ++ ", or " ++ NonEmpty.last tokens
 
 showParseTokens :: String -> Set String -> String
-showParseTokens prefix tokens
-  | Set.null tokens = ""
-  | otherwise = prefix ++ (orList . NonEmpty.fromList . Set.toAscList) tokens
+showParseTokens prefix tokens =
+  if Set.null tokens
+    then ""
+    else prefix ++ (orList . NonEmpty.fromList . Set.toAscList) tokens
 
 showErrorItem :: ErrorItem (Token String) -> String
 showErrorItem errorItem =
