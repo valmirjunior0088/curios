@@ -21,8 +21,7 @@ import Curios.Error
   )
 
 import Curios.Core.Term
-  (Primitive
-  ,Literal (..)
+  (Literal (..)
   ,Operator (..)
   ,Type
   ,Variable (..)
