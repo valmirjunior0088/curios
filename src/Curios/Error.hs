@@ -142,7 +142,7 @@ showErrorOrigin file source origin =
   "In file " ++ file ++ "..." ++ "\n" ++
     case origin of
       OrMachine ->
-        "In a machine-generated term..."
+        "In a machine-generated term..." ++ "\n"
       OrSource sourcePos ->
         let
           line = unPos (sourceLine sourcePos)
