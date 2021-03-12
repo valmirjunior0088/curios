@@ -75,7 +75,7 @@ data Term =
   TrReference Origin Name |
   TrVariable Origin Index |
   TrType Origin |
-  TrFunctionType Origin Type (Variable -> Variable -> Term) |
+  TrFunctionType Origin Type (Variable -> Variable -> Type) |
   TrFunction Origin (Variable -> Term) |
   TrApplication Origin Term Term
 
@@ -135,7 +135,7 @@ trType :: Term
 trType =
   TrType OrMachine
 
-trFunctionType :: Type -> (Variable -> Variable -> Term) -> Term
+trFunctionType :: Type -> (Variable -> Variable -> Type) -> Term
 trFunctionType inputType output =
   TrFunctionType OrMachine inputType output
 
