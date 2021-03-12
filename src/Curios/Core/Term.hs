@@ -205,13 +205,15 @@ showTerm =
         TrType _ ->
           "(TrType)"
         TrFunctionType _ inputType output ->
-          "(TrFunctionType "
-            ++ "(Self " ++ show (depth + 0) ++ ") "
-            ++ "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) inputType ++ ") "
-            ++ "{ " ++ go (depth + 2) (output (VrQuote (depth + 0)) (VrQuote (depth + 1))) ++ " })"
+          "(TrFunctionType " ++
+            "(Self " ++ show (depth + 0) ++ ") " ++
+            "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) inputType ++ ") " ++
+            "{ " ++ go (depth + 2) (output (VrQuote (depth + 0)) (VrQuote (depth + 1))) ++ " }" ++
+            ")"
         TrFunction _ output ->
-          "(TrFunction "
-            ++ "(Variable " ++ show (depth + 0) ++ ") "
-            ++ "{ " ++ go (depth + 1) (output (VrQuote (depth + 0))) ++ " })"
+          "(TrFunction " ++
+            "(Variable " ++ show (depth + 0) ++ ") " ++
+            "{ " ++ go (depth + 1) (output (VrQuote (depth + 0))) ++ " }" ++
+            ")"
         TrApplication _ function argument ->
           "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"
