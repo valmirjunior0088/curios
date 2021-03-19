@@ -1,8 +1,7 @@
 import Prelude hiding (error)
 
-import Curios (check)
+import Curios (check, evaluate)
 import Curios.Error (showError)
-import Curios.Core.Context (showContext)
 import System.IO (IOMode (..), openFile, hGetContents)
 import System.Environment (getArgs)
 
@@ -18,7 +17,7 @@ main = do
 
       case check file source of
         Left error -> putStr (showError file source error)
-        Right context -> putStr (showContext name context)
+        Right context -> putStr (evaluate name context)
 
     [file] -> do
       source <- openFile file ReadMode >>= hGetContents

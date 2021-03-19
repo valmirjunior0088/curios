@@ -4,6 +4,7 @@ module Curios.Translation
   where
 
 import Curios.Core.Verification (trCheck)
+import Curios.Core.Prelude (cnInitial)
 import Text.Megaparsec (SourcePos (..))
 import Data.Foldable (foldlM)
 import qualified Curios.Source.Types as Source (Literal (..))
@@ -34,7 +35,6 @@ import Curios.Core.Context
   ,cnInsertDeclaration
   ,cnLookupDeclaration
   ,cnInsertDefinition
-  ,cnInitial
   )
 
 import Curios.Error
