@@ -1,10 +1,9 @@
 module Curios.Core.Prelude
-  (cnInitial
+  (prelude
+  ,prDeclarations
+  ,prDefinitions
   )
   where
-
-import Curios.Core.Verification (trCheck)
-import Curios.Error (Error (..), showErrorKind)
 
 import Curios.Core.Term
   (Literal (..)
@@ -25,14 +24,6 @@ import Curios.Core.Term
   ,trFunction
   ,trApplication
   ,vrUnwrap
-  )
-
-import Curios.Core.Context
-  (Context (..)
-  ,cnEmpty
-  ,cnInsertDeclaration
-  ,cnLookupDeclaration
-  ,cnInsertDefinition
   )
 
 data Entry =
@@ -236,10 +227,7 @@ realGreaterThanOrEqualTo =
     ,enTerm = trOpBinary ">=." (\(LtReal one) (LtReal other) -> trReference (if one >= other then "true" else "false"))
     }
 
-type Prelude =
-  [Entry]
-
-prelude :: Prelude
+prelude :: [Entry]
 prelude =
   [boolean
   ,booleanTrue
@@ -265,53 +253,12 @@ prelude =
   ,realGreaterThanOrEqualTo
   ]
 
-prDeclarations :: Prelude -> [(Name, Term)]
+prDeclarations :: [Entry] -> [(Name, Term)]
 prDeclarations entries =
   map transform entries where
     transform entry = (enName entry, enType entry)
 
-prDefinitions :: Prelude -> [(Name, Term)]
+prDefinitions :: [Entry] -> [(Name, Term)]
 prDefinitions entries =
   map transform entries where
     transform entry = (enName entry, enTerm entry)
-
-cnInsertUnsafeDeclaration :: Name -> Type -> Context -> Context
-cnInsertUnsafeDeclaration name termType context =
-  let
-    context' =
-      case cnInsertDeclaration name termType context of
-        Nothing -> error ("Prelude error: \"" ++ name ++ "\" is repeatedly declared")
-        Just value -> value
-  in
-    case trCheck (cnDeclarations context') (cnDefinitions context') trType termType of
-      Left checkError ->
-        error ("Prelude error: In \"" ++ name ++ "\"...\n" ++ showErrorKind (erKind checkError))
-      Right () ->
-        context'
-
-cnInsertUnsafeDefinition :: Name -> Term -> Context -> Context
-cnInsertUnsafeDefinition name term context =
-  let
-    termType =
-      case cnLookupDeclaration name context of
-        Nothing -> error ("Prelude error: \"" ++ name ++ "\" is undeclared")
-        Just value -> value
-
-    context' =
-      case cnInsertDefinition name term context of
-        Nothing -> error ("Prelude error: \"" ++ name ++ "\" is repeatedly defined")
-        Just value -> value
-  in
-    case trCheck (cnDeclarations context') (cnDefinitions context') termType term of
-      Left checkError ->
-        error ("Prelude error: In \"" ++ name ++ "\"..." ++ "\n" ++ showErrorKind (erKind checkError))
-      Right () -> 
-        context'
-
-cnInitial :: Context
-cnInitial =
-  let
-    combine construct context (name, term) = construct name term context
-    step = foldl (combine cnInsertUnsafeDeclaration) cnEmpty (prDeclarations prelude)
-  in
-    foldl (combine cnInsertUnsafeDefinition) step (prDefinitions prelude)
