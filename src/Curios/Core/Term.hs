@@ -25,7 +25,6 @@ module Curios.Core.Term
   ,trOrigin
   ,vrUnwrap
   ,trApplyVariable
-  ,showTerm
   )
   where
 
@@ -78,6 +77,37 @@ data Term =
   TrFunctionType Origin Type (Variable -> Variable -> Type) |
   TrFunction Origin (Variable -> Term) |
   TrApplication Origin Term Term
+
+instance Show Term where
+  show =
+    go 0 where
+      go depth term =
+        case term of
+          TrPrimitive _ primitive ->
+            "(TrPrimitive (" ++ show primitive ++ "))"
+          TrLiteral _ literal ->
+            "(TrLiteral (" ++ show literal ++ "))"
+          TrOperator _ name _ ->
+            "(TrOperator \"" ++ name ++ "\")"
+          TrReference _ name ->
+            "(TrReference \"" ++ name ++ "\")"
+          TrVariable _ index ->
+            "(TrVariable " ++ show index ++ ")"
+          TrType _ ->
+            "(TrType)"
+          TrFunctionType _ inputType output ->
+            "(TrFunctionType " ++
+              "(Self " ++ show (depth + 0) ++ ") " ++
+              "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) inputType ++ ") " ++
+              "{ " ++ go (depth + 2) (output (VrQuote (depth + 0)) (VrQuote (depth + 1))) ++ " }" ++
+              ")"
+          TrFunction _ output ->
+            "(TrFunction " ++
+              "(Variable " ++ show (depth + 0) ++ ") " ++
+              "{ " ++ go (depth + 1) (output (VrQuote (depth + 0))) ++ " }" ++
+              ")"
+          TrApplication _ function argument ->
+            "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"
 
 trPrimitive :: Primitive -> Term
 trPrimitive primitive =
@@ -186,34 +216,3 @@ trApplyVariable name variable term =
         (trApplyVariable name variable argument)
     term' ->
       term'
-
-showTerm :: Term -> String
-showTerm =
-  go 0 where
-    go depth term =
-      case term of
-        TrPrimitive _ primitive ->
-          "(TrPrimitive (" ++ show primitive ++ "))"
-        TrLiteral _ literal ->
-          "(TrLiteral (" ++ show literal ++ "))"
-        TrOperator _ name _ ->
-          "(TrOperator \"" ++ name ++ "\")"
-        TrReference _ name ->
-          "(TrReference \"" ++ name ++ "\")"
-        TrVariable _ index ->
-          "(TrVariable " ++ show index ++ ")"
-        TrType _ ->
-          "(TrType)"
-        TrFunctionType _ inputType output ->
-          "(TrFunctionType " ++
-            "(Self " ++ show (depth + 0) ++ ") " ++
-            "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) inputType ++ ") " ++
-            "{ " ++ go (depth + 2) (output (VrQuote (depth + 0)) (VrQuote (depth + 1))) ++ " }" ++
-            ")"
-        TrFunction _ output ->
-          "(TrFunction " ++
-            "(Variable " ++ show (depth + 0) ++ ") " ++
-            "{ " ++ go (depth + 1) (output (VrQuote (depth + 0))) ++ " }" ++
-            ")"
-        TrApplication _ function argument ->
-          "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"

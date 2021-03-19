@@ -22,7 +22,7 @@ module Curios.Error
 import Prelude hiding (error)
 
 import Curios.Formatting (showFramed)
-import Curios.Core.Term (Origin (..), Name, Type, showTerm)
+import Curios.Core.Term (Origin (..), Name, Type)
 import Text.Megaparsec.Pos (unPos)
 import Data.List (intercalate)
 import Data.Maybe (maybe, isNothing)
@@ -167,11 +167,11 @@ showErrorKind kind =
     KnMismatchedFunctionType obtained ->
       "Type mismatch." ++ "\n" ++
         "- Expected: <function type>" ++ "\n" ++
-        "- Obtained: " ++ showTerm obtained ++ "\n"
+        "- Obtained: " ++ show obtained ++ "\n"
     KnMismatchedType expected obtained ->
       "Type mismatch." ++ "\n" ++
-        "- Expected: " ++ showTerm expected ++ "\n" ++
-        "- Obtained: " ++ showTerm obtained ++ "\n"
+        "- Expected: " ++ show expected ++ "\n" ++
+        "- Obtained: " ++ show obtained ++ "\n"
     KnNonInferable ->
       "The term does not have an inferable type without an annotation." ++ "\n"
 

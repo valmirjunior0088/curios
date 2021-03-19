@@ -8,7 +8,7 @@ module Curios
 import Prelude hiding (error)
 
 import Curios.Core.Context (Context)
-import Curios.Core.Term (Origin (..), Name, showTerm)
+import Curios.Core.Term (Origin (..), Name)
 import Curios.Core.Context (Context (..), cnLookupDeclaration, cnLookupDefinition)
 import Curios.Core.Verification (trReduce)
 import Curios.Source.Types (Program)
@@ -40,12 +40,12 @@ evaluate name context =
     case (cnLookupDeclaration name context, cnLookupDefinition name context) of
       (Just declaration, Just definition) ->
         "Declaration:" ++ "\n" ++
-          showTerm declaration ++ "\n" ++
+          show declaration ++ "\n" ++
           "\n" ++
           "Definition:" ++ "\n" ++
-          showTerm definition ++ "\n" ++
+          show definition ++ "\n" ++
           "\n" ++
           "Evaluation:" ++ "\n" ++ 
-          showTerm (trReduce (cnDefinitions context) definition) ++ "\n"
+          show (trReduce (cnDefinitions context) definition) ++ "\n"
       _ ->
         "An undeclared name was supplied for evaluation." ++ "\n"
