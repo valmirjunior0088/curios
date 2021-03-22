@@ -9,34 +9,24 @@ import Curios.Elaboration.Miscellaneous (idTranslate, ltTranslate)
 import Text.Megaparsec (SourcePos)
 
 trAbstractFunctionTypeBinding :: SourcePos -> FunctionTypeBinding -> Term -> Term
-trAbstractFunctionTypeBinding functionTypePos (FunctionTypeBinding _ inputName inputTypeExpression) term =
-  TrFunctionType (OrSource functionTypePos) inputType output where
+trAbstractFunctionTypeBinding sourcePos (FunctionTypeBinding _ selfName inputName inputTypeExpression) term =
+  TrFunctionType (OrSource sourcePos) inputType output where
     inputType =
       exTranslate inputTypeExpression
-    output _ input =
-      case inputName of
-        Just (Identifier _ name) ->
-          trApplyVariable name input term
-        Nothing ->
-          term
-
-trAbstractFunctionType :: SourcePos -> Maybe Identifier -> [FunctionTypeBinding] -> Term -> Term
-trAbstractFunctionType sourcePos selfName bindings term =
-  case foldr (trAbstractFunctionTypeBinding sourcePos) term bindings of
-    TrFunctionType origin inputType output ->
-      TrFunctionType origin inputType output' where
-        output' self input =
-          case selfName of
-            Just (Identifier _ name) ->
-              trApplyVariable name self (output self input)
-            Nothing ->
-              output self input
-    term' ->
-      term'
+    output self input =
+      let
+        step =
+          case inputName of
+            Just (Identifier _ name) -> trApplyVariable name input term
+            Nothing -> term
+      in
+        case selfName of
+          Just (Identifier _ name) -> trApplyVariable name self step
+          Nothing -> step
 
 trAbstractFunctionBinding :: SourcePos -> FunctionBinding -> Term -> Term
-trAbstractFunctionBinding functionPos (FunctionBinding _ (Identifier _ name)) term =
-  TrFunction (OrSource functionPos) output where
+trAbstractFunctionBinding sourcePos (FunctionBinding _ (Identifier _ name)) term =
+  TrFunction (OrSource sourcePos) output where
     output input =
       trApplyVariable name input term
 
@@ -47,9 +37,11 @@ exTranslate expression =
       ltTranslate sourcePos literal
     ExIdentifier sourcePos identifier ->
       idTranslate sourcePos identifier
-    ExFunctionType sourcePos selfName bindings body ->
-      trAbstractFunctionType sourcePos selfName bindings (exTranslate body)
+    ExFunctionType sourcePos bindings body ->
+      foldr (trAbstractFunctionTypeBinding sourcePos) (exTranslate body) bindings
     ExFunction sourcePos bindings body ->
       foldr (trAbstractFunctionBinding sourcePos) (exTranslate body) bindings
     ExApplication sourcePos function arguments ->
       foldl (TrApplication (OrSource sourcePos)) (exTranslate function) (fmap exTranslate arguments)
+    ExParens _ expression' ->
+      exTranslate expression'

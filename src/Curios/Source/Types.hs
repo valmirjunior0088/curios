@@ -22,7 +22,7 @@ data Identifier =
   Identifier SourcePos String
 
 data FunctionTypeBinding =
-  FunctionTypeBinding SourcePos (Maybe Identifier) Expression
+  FunctionTypeBinding SourcePos (Maybe Identifier) (Maybe Identifier) Expression
 
 data FunctionBinding =
   FunctionBinding SourcePos Identifier
@@ -30,9 +30,10 @@ data FunctionBinding =
 data Expression =
   ExLiteral SourcePos Literal |
   ExIdentifier SourcePos Identifier |
-  ExFunctionType SourcePos (Maybe Identifier) [FunctionTypeBinding] Expression |
+  ExFunctionType SourcePos [FunctionTypeBinding] Expression |
   ExFunction SourcePos [FunctionBinding] Expression |
-  ExApplication SourcePos Expression [Expression]
+  ExApplication SourcePos Expression [Expression] |
+  ExParens SourcePos Expression
 
 data Binding =
   Binding SourcePos Identifier Expression

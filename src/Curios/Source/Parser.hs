@@ -1,13 +1,5 @@
 module Curios.Source.Parser
-  (identifier
-  ,literal
-  ,functionTypeBinding
-  ,functionBinding
-  ,expression
-  ,binding
-  ,prefix
-  ,statement
-  ,program
+  (program
   )
   where
 
@@ -29,13 +21,14 @@ import Curios.Source.Types
 import Text.Megaparsec
   (Parsec
   ,getSourcePos
-  ,optional
   ,try
-  ,some
   ,oneOf
   ,single
+  ,optional
+  ,many
+  ,some
   ,manyTill
-  ,sepBy
+  ,someTill
   ,eof
   ,(<|>)
   )
@@ -72,10 +65,10 @@ identifier :: Parser Identifier
 identifier =
   lexeme (Identifier <$> getSourcePos <*> some (try (oneOf validCharacters))) where
     validCharacters =
-      ['a'..'z'] ++
-        ['A'..'Z'] ++
-        ['0'..'9'] ++
-        ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.', '~']
+      ['a' .. 'z']
+        ++ ['A' .. 'Z']
+        ++ ['0' .. '9']
+        ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '.', '~']
 
 literal :: Parser Literal
 literal =
@@ -90,48 +83,72 @@ literal =
 
 functionTypeBinding :: Parser FunctionTypeBinding
 functionTypeBinding =
-  lexeme (FunctionTypeBinding <$> getSourcePos <*> optional (try (identifier <* symbol ":")) <*> expression)
+  lexeme (try named <|> unnamed) where
+    named =
+      FunctionTypeBinding <$> getSourcePos
+        <*> (symbol "(" *> optional (try (identifier <* symbol "|")))
+        <*> optional (try (identifier <* symbol ":"))
+        <*> exFunctionType (symbol ")") <* symbol "->"
+    unnamed = 
+      FunctionTypeBinding <$> getSourcePos
+        <*> pure Nothing
+        <*> pure Nothing
+        <*> exApplication (symbol "->")
 
 functionBinding :: Parser FunctionBinding
 functionBinding =
-  lexeme (FunctionBinding <$> getSourcePos <*> identifier)
+  lexeme (FunctionBinding <$> getSourcePos <*> (identifier <* symbol "=>"))
 
-expression :: Parser Expression
-expression =
-  lexeme (exFunctionType <|> exFunction <|> exApplication <|> exLiteral <|> exIdentifier) where
-    exFunctionType =
-      ExFunctionType <$> getSourcePos <*>
-        (try (symbol "->") *> optional identifier) <*>
-        (symbol "{" *> some (try (functionTypeBinding <* symbol ","))) <*>
-        (expression <* symbol "}")
-    exFunction =
-      ExFunction <$> getSourcePos <*>
-        (try (symbol "fn") *> symbol "{" *> some (try (functionBinding <* symbol ","))) <*>
-        (expression <* symbol "}")
-    exApplication =
-      ExApplication <$> getSourcePos <*>
-        (try (exIdentifier <* symbol "(")) <*>
-        (sepBy expression (symbol ",") <* symbol ")")
-    exLiteral =
-      ExLiteral <$> getSourcePos <*> literal
-    exIdentifier =
-      ExIdentifier <$> getSourcePos <*> identifier
+exClosed :: Parser Expression
+exClosed =
+  lexeme (try exLiteral <|> exIdentifier <|> exParens) where
+    exLiteral = ExLiteral <$> getSourcePos <*> literal
+    exIdentifier = ExIdentifier <$> getSourcePos <*> identifier
+    exParens = ExParens <$> getSourcePos <*> (symbol "(" *> exFunction (symbol ")"))
+
+exApplication :: Parser a -> Parser Expression
+exApplication terminator =
+  lexeme (try application <|> exClosed <* terminator) where
+    application =
+      ExApplication <$> getSourcePos
+        <*> exClosed
+        <*> someTill exClosed terminator
+
+exFunctionType :: Parser a -> Parser Expression
+exFunctionType terminator =
+  lexeme (functionType <|> exApplication terminator) where
+    functionType =
+      ExFunctionType <$> getSourcePos
+        <*> some (try functionTypeBinding)
+        <*> exApplication terminator
+
+exFunction :: Parser a -> Parser Expression
+exFunction terminator =
+  lexeme (function <|> exFunctionType terminator) where
+    function =
+      ExFunction <$> getSourcePos
+        <*> some (try functionBinding)
+        <*> exFunctionType terminator
+
+expression :: Parser a -> Parser Expression
+expression terminator =
+  lexeme (exFunction terminator)
 
 binding :: Parser Binding
 binding =
-  lexeme (Binding <$> getSourcePos <*> (identifier <* symbol ":") <*> expression)
+  Binding <$> getSourcePos <*> (symbol "(" *> identifier <* symbol ":") <*> expression (symbol ")")
 
 prefix :: Parser Prefix
 prefix =
-  lexeme (Prefix <$> getSourcePos <*> prBindings) where
-    prBindings = concat <$> optional (symbol "(" *> sepBy binding (symbol ",") <* symbol ")")
+  lexeme (Prefix <$> getSourcePos <*> bindings) where
+    bindings = concat <$> optional (many binding)
 
 statement :: Parser Statement
 statement =
   lexeme (Statement <$> getSourcePos <*> stIdentifier <*> prefix <*> stDeclaration <*> stDefinition) where
     stIdentifier = symbol "let" *> identifier
-    stDeclaration = symbol ":" *> expression
-    stDefinition = symbol "=" *> expression <* symbol "end"
+    stDeclaration = symbol ":" *> expression (symbol "{")
+    stDefinition = expression (symbol "}")
 
 program :: Parser Program
 program =
