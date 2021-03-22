@@ -86,7 +86,8 @@ functionTypeBinding =
   lexeme (try named <|> unnamed) where
     named =
       FunctionTypeBinding <$> getSourcePos
-        <*> (symbol "(" *> optional (try (identifier <* symbol "|")))
+        <* symbol "("
+        <*> optional (try (identifier <* symbol "|"))
         <*> optional (try (identifier <* symbol ":"))
         <*> exFunctionType (symbol ")") <* symbol "->"
     unnamed = 
@@ -97,14 +98,14 @@ functionTypeBinding =
 
 functionBinding :: Parser FunctionBinding
 functionBinding =
-  lexeme (FunctionBinding <$> getSourcePos <*> (identifier <* symbol "=>"))
+  lexeme (FunctionBinding <$> getSourcePos <*> identifier <* symbol "=>")
 
 exClosed :: Parser Expression
 exClosed =
   lexeme (try exLiteral <|> exIdentifier <|> exParens) where
     exLiteral = ExLiteral <$> getSourcePos <*> literal
     exIdentifier = ExIdentifier <$> getSourcePos <*> identifier
-    exParens = ExParens <$> getSourcePos <*> (symbol "(" *> exFunction (symbol ")"))
+    exParens = ExParens <$> getSourcePos <* symbol "(" <*> exFunction (symbol ")")
 
 exApplication :: Parser a -> Parser Expression
 exApplication terminator =
@@ -136,7 +137,9 @@ expression terminator =
 
 binding :: Parser Binding
 binding =
-  Binding <$> getSourcePos <*> (symbol "(" *> identifier <* symbol ":") <*> expression (symbol ")")
+  lexeme (Binding <$> getSourcePos <*> name <*> declaration) where
+    name = symbol "(" *> identifier
+    declaration = symbol ":" *> expression (symbol ")")
 
 prefix :: Parser Prefix
 prefix =
@@ -145,10 +148,10 @@ prefix =
 
 statement :: Parser Statement
 statement =
-  lexeme (Statement <$> getSourcePos <*> stIdentifier <*> prefix <*> stDeclaration <*> stDefinition) where
-    stIdentifier = symbol "let" *> identifier
-    stDeclaration = symbol ":" *> expression (symbol "{")
-    stDefinition = expression (symbol "}")
+  lexeme (Statement <$> getSourcePos <*> name <*> prefix <*> declaration <*> definition) where
+    name = symbol "let" *> identifier
+    declaration = symbol ":" *> expression (symbol "{")
+    definition = expression (symbol "}")
 
 program :: Parser Program
 program =
