@@ -83,14 +83,13 @@ literal =
 
 functionTypeBinding :: Parser FunctionTypeBinding
 functionTypeBinding =
-  lexeme (try named <|> unnamed) where
-    named =
+  lexeme (withParens <|> withoutParens) where
+    withParens =
       FunctionTypeBinding <$> getSourcePos
-        <* symbol "("
-        <*> optional (try (identifier <* symbol "|"))
+        <*> (symbol "(" *> optional (try (identifier <* symbol "|")))
         <*> optional (try (identifier <* symbol ":"))
         <*> exFunctionType (symbol ")") <* symbol "->"
-    unnamed = 
+    withoutParens = 
       FunctionTypeBinding <$> getSourcePos
         <*> pure Nothing
         <*> pure Nothing
@@ -105,7 +104,7 @@ exClosed =
   lexeme (try exLiteral <|> exIdentifier <|> exParens) where
     exLiteral = ExLiteral <$> getSourcePos <*> literal
     exIdentifier = ExIdentifier <$> getSourcePos <*> identifier
-    exParens = ExParens <$> getSourcePos <* symbol "(" <*> exFunction (symbol ")")
+    exParens = ExParens <$> getSourcePos <*> (symbol "(" *> exFunction (symbol ")"))
 
 exApplication :: Parser a -> Parser Expression
 exApplication terminator =
@@ -132,8 +131,8 @@ exFunction terminator =
         <*> exFunctionType terminator
 
 expression :: Parser a -> Parser Expression
-expression terminator =
-  lexeme (exFunction terminator)
+expression =
+  exFunction
 
 binding :: Parser Binding
 binding =
