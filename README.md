@@ -132,7 +132,7 @@ let vpush (size : Natural) (A : Type) (a : A) (rest : Vector size A) : Vector (s
 
 let vhead (size : Natural) (A : Type) (vector : Vector (succ size) A) : A {
   vector
-    (vector_size => vector => vector_size (_ => Type) Unit (_ => A))
+    (size => vector => size (_ => Type) Unit (_ => A))
     unit
     (size => a => rest => a)
 }
@@ -149,7 +149,7 @@ let twelve : Integer {
 }
 
 let pi : Real {
-  /. 22.0 7.0
+  /' 22.0 7.0
 }
 
 let hello_world_length : Integer {

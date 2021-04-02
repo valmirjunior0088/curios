@@ -158,73 +158,73 @@ integerGreaterThanOrEqualTo =
 realSum :: Entry
 realSum =
   Entry
-    {enName = "+."
+    {enName = "+'"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "+." (\(LtReal one) (LtReal another) -> trLtReal (one + another))
+    ,enTerm = trOpBinary "+'" (\(LtReal one) (LtReal another) -> trLtReal (one + another))
     }
 
 realSubtract :: Entry
 realSubtract =
   Entry
-    {enName = "-."
+    {enName = "-'"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "-." (\(LtReal one) (LtReal another) -> trLtReal (one - another))
+    ,enTerm = trOpBinary "-'" (\(LtReal one) (LtReal another) -> trLtReal (one - another))
     }
 
 realMultiply :: Entry
 realMultiply =
   Entry
-    {enName = "*."
+    {enName = "*'"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "*." (\(LtReal one) (LtReal another) -> trLtReal (one * another))
+    ,enTerm = trOpBinary "*'" (\(LtReal one) (LtReal another) -> trLtReal (one * another))
     }
 
 realDivide :: Entry
 realDivide =
   Entry
-    {enName = "/."
+    {enName = "/'"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal))
-    ,enTerm = trOpBinary "/." (\(LtReal one) (LtReal another) -> trLtReal (one / another))
+    ,enTerm = trOpBinary "/'" (\(LtReal one) (LtReal another) -> trLtReal (one / another))
     }
 
 realEqualTo :: Entry
 realEqualTo =
   Entry
-    {enName = "=."
+    {enName = "='"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trReference "Boolean"))
-    ,enTerm = trOpBinary "=." (\(LtReal one) (LtReal other) -> trReference (if one == other then "true" else "false"))
+    ,enTerm = trOpBinary "='" (\(LtReal one) (LtReal other) -> trReference (if one == other then "true" else "false"))
     }
 
 realLesserThan :: Entry
 realLesserThan =
   Entry
-    {enName = "<."
+    {enName = "<'"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trReference "Boolean"))
-    ,enTerm = trOpBinary "<." (\(LtReal one) (LtReal other) -> trReference (if one < other then "true" else "false"))
+    ,enTerm = trOpBinary "<'" (\(LtReal one) (LtReal other) -> trReference (if one < other then "true" else "false"))
     }
 
 realLesserThanOrEqualTo :: Entry
 realLesserThanOrEqualTo =
   Entry
-    {enName = "<=."
+    {enName = "<='"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trReference "Boolean"))
-    ,enTerm = trOpBinary "<=." (\(LtReal one) (LtReal other) -> trReference (if one <= other then "true" else "false"))
+    ,enTerm = trOpBinary "<='" (\(LtReal one) (LtReal other) -> trReference (if one <= other then "true" else "false"))
     }
 
 realGreaterThan :: Entry
 realGreaterThan =
   Entry
-    {enName = ">."
+    {enName = ">'"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trReference "Boolean"))
-    ,enTerm = trOpBinary ">." (\(LtReal one) (LtReal other) -> trReference (if one > other then "true" else "false"))
+    ,enTerm = trOpBinary ">'" (\(LtReal one) (LtReal other) -> trReference (if one > other then "true" else "false"))
     }
 
 realGreaterThanOrEqualTo :: Entry
 realGreaterThanOrEqualTo =
   Entry
-    {enName = ">=."
+    {enName = ">='"
     ,enType = trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trReference "Boolean"))
-    ,enTerm = trOpBinary ">=." (\(LtReal one) (LtReal other) -> trReference (if one >= other then "true" else "false"))
+    ,enTerm = trOpBinary ">='" (\(LtReal one) (LtReal other) -> trReference (if one >= other then "true" else "false"))
     }
 
 prelude :: [Entry]
