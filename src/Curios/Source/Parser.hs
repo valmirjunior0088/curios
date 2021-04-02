@@ -13,7 +13,6 @@ import Curios.Source.Types
   ,FunctionBinding (..)
   ,Expression (..)
   ,Binding (..)
-  ,Prefix (..)
   ,Statement (..)
   ,Program (..)
   )
@@ -140,14 +139,9 @@ binding =
     name = symbol "(" *> identifier
     declaration = symbol ":" *> expression (symbol ")")
 
-prefix :: Parser Prefix
-prefix =
-  lexeme (Prefix <$> getSourcePos <*> bindings) where
-    bindings = concat <$> optional (many binding)
-
 statement :: Parser Statement
 statement =
-  lexeme (Statement <$> getSourcePos <*> name <*> prefix <*> declaration <*> definition) where
+  lexeme (Statement <$> getSourcePos <*> name <*> many binding <*> declaration <*> definition) where
     name = symbol "let" *> identifier
     declaration = symbol ":" *> expression (symbol "{")
     definition = expression (symbol "}")

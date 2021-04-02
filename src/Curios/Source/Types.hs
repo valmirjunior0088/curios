@@ -5,7 +5,6 @@ module Curios.Source.Types
   ,FunctionBinding (..)
   ,Expression (..)
   ,Binding (..)
-  ,Prefix (..)
   ,Statement (..)
   ,Program (..)
   )
@@ -38,11 +37,8 @@ data Expression =
 data Binding =
   Binding SourcePos Identifier Expression
 
-data Prefix =
-  Prefix SourcePos [Binding]
-
 data Statement =
-  Statement SourcePos Identifier Prefix Expression Expression
+  Statement SourcePos Identifier [Binding] Expression Expression
 
 data Program =
   Program SourcePos [Statement]
