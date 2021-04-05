@@ -9,16 +9,9 @@ import Curios.Core.Declarations (Declarations, dcLookup)
 import Curios.Core.Definitions (Definitions, dfEmpty, dfLookup)
 import Curios.Core.History (Equation, History, hsEmpty, hsInsert, hsAny)
 import Curios.Core.Variables (Variables, vrEmpty, vrAllocate, vrLookup)
+import Curios.Core.TypeError (Kind (..), TypeError (..))
 import Control.Monad (unless)
 import Data.Maybe (fromJust)
-
-import Curios.Error
-  (Error
-  ,erTeMismatchedFunctionType
-  ,erTeMismatchedType
-  ,erTeUndeclaredName
-  ,erTeNonInferable
-  )
 
 import Curios.Core
   (Literal (..)
@@ -128,28 +121,28 @@ trConvertsWith definitions =
             (one', other') ->
               alpha depth one' other'
 
-trCheck :: Declarations -> Definitions -> Type -> Term -> Either Error ()
+trCheck :: Declarations -> Definitions -> Type -> Term -> Either TypeError ()
 trCheck declarations definitions =
   check vrEmpty where
 
-    check :: Variables -> Type -> Term -> Either Error ()
+    check :: Variables -> Type -> Term -> Either TypeError ()
     check variables termType term =
       case (trReduce definitions termType, term) of
         (TrFunctionType _ inputType output, TrFunction _ output') ->
           check variables' (output (VrTerm term) input) (output' input) where
             (input, variables') = vrAllocate inputType variables
         (termType', TrFunction origin _) ->
-          Left (erTeMismatchedFunctionType origin termType')
+          Left (TypeError { teOrigin = origin, teKind = KnMismatchedFunctionType termType' })
         (termType', term') -> do
           termType'' <- infer variables term'
 
           unless
             (trConvertsWith definitions termType' termType'')
-            (Left (erTeMismatchedType (trOrigin term') termType termType''))
+            (Left (TypeError { teOrigin = trOrigin term', teKind = KnMismatchedType termType termType' }))
           
           Right ()
     
-    infer :: Variables -> Term -> Either Error Type
+    infer :: Variables -> Term -> Either TypeError Type
     infer variables term =
       case term of
         TrPrimitive _ _ ->
@@ -167,7 +160,7 @@ trCheck declarations definitions =
           Right (fromJust (vrLookup index variables))
         TrReference origin name ->
           case dcLookup name declarations of
-            Nothing -> Left (erTeUndeclaredName origin name)
+            Nothing -> Left (TypeError { teOrigin = origin, teKind = KnUndeclaredName name })
             Just termType -> Right termType
         TrType _ ->
           Right trType
@@ -180,7 +173,7 @@ trCheck declarations definitions =
           
           Right trType
         TrFunction origin _ ->
-          Left (erTeNonInferable origin)
+          Left (TypeError { teOrigin = origin, teKind = KnNonInferable })
         TrApplication _ function argument -> do
           functionType <- infer variables function
           
@@ -190,4 +183,4 @@ trCheck declarations definitions =
 
               Right (output (VrTerm function) (VrTerm argument))
             functionType' ->
-              Left (erTeMismatchedFunctionType (trOrigin function) functionType')
+              Left (TypeError { teOrigin = trOrigin function, teKind = KnMismatchedFunctionType functionType' })

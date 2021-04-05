@@ -9,11 +9,17 @@ import Curios.Core (Name)
 import Curios.Core.Verification (trReduce)
 import Curios.Context (Context (..), cnLookupDeclaration, cnLookupDefinition)
 import Curios.Elaboration.Program (pgCheck)
-import Curios.Error (Error)
+import Curios.Error (Error (..))
 
 check :: String -> String -> Either Error Context
-check file source =
-  parse file source >>= pgCheck
+check file source = do
+  program <- case parse file source of
+    Left parsingError -> Left (ErParsing parsingError)
+    Right program -> Right program
+  
+  case pgCheck program of
+    Left elaborationError -> Left (ErElaboration elaborationError)
+    Right context -> Right context
 
 evaluate :: Name -> Context -> String
 evaluate name context =

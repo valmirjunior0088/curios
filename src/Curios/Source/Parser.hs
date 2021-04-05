@@ -3,7 +3,7 @@ module Curios.Source.Parser
   )
   where
 
-import Curios.Error (Error, erParsing)
+import Curios.Source.ParsingError (ParsingError, fromParseErrorBundle)
 import Text.Megaparsec.Char (space1)
 import Data.Void (Void)
 import qualified Text.Megaparsec as Megaparsec
@@ -155,8 +155,8 @@ program :: Parser Program
 program =
   lexeme (Program <$> getSourcePos <*> some statement <* eof)
 
-parse :: String -> String -> Either Error Program
+parse :: String -> String -> Either ParsingError Program
 parse file source =
   case Megaparsec.parse program file source of
-    Left parseErrorBundle -> Left (erParsing parseErrorBundle)
+    Left parseErrorBundle -> Left (fromParseErrorBundle parseErrorBundle)
     Right result -> Right result

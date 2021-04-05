@@ -9,40 +9,34 @@ import Curios.Core.Verification (trCheck)
 import Curios.Context (Context (..), cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
 import Curios.Context.Initial (cnInitial)
 import Curios.Elaboration.Statement (pgDeclarations, pgDefinitions)
+import Curios.Elaboration.ElaborationError (ElaborationError (..))
 import Data.Foldable (foldlM)
 
-import Curios.Error
-  (Error
-  ,erEeRepeatedlyDeclaredName
-  ,erEeUndeclaredName
-  ,erEeRepeatedlyDefinedName
-  )
-
-cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
+cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either ElaborationError Context
 cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do
   context' <- case cnInsertDeclaration name termType context of
-    Nothing -> Left (erEeRepeatedlyDeclaredName sourcePos name)
-    Just value -> Right value
+    Nothing -> Left (EeRepeatedlyDeclaredName sourcePos name)
+    Just context' -> Right context'
   
-  trCheck (cnDeclarations context') (cnDefinitions context') trType termType
-  
-  Right context'
+  case trCheck (cnDeclarations context') (cnDefinitions context') trType termType of
+    Left typeError -> Left (EeTypeError typeError name)
+    Right () -> Right context'
 
-cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either Error Context
+cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either ElaborationError Context
 cnInsertSourceDefinition (Identifier sourcePos name) term context = do
   termType <- case cnLookupDeclaration name context of
-    Nothing -> Left (erEeUndeclaredName sourcePos name)
-    Just value -> Right value
+    Nothing -> Left (EeUndeclaredName sourcePos name)
+    Just termType -> Right termType
   
   context' <- case cnInsertDefinition name term context of
-    Nothing -> Left (erEeRepeatedlyDefinedName sourcePos name)
-    Just value -> Right value
+    Nothing -> Left (EeRepeatedlyDefinedName sourcePos name)
+    Just context' -> Right context'
   
-  trCheck (cnDeclarations context') (cnDefinitions context') termType term
-  
-  Right context'
+  case trCheck (cnDeclarations context') (cnDefinitions context') termType term of
+    Left typeError -> Left (EeTypeError typeError name)
+    Right () -> Right context'
 
-pgCheck :: Program -> Either Error Context
+pgCheck :: Program -> Either ElaborationError Context
 pgCheck program = do
   let combine construct context (identifier, term) = construct identifier term context
   step <- foldlM (combine cnInsertSourceDeclaration) cnInitial (pgDeclarations program)
