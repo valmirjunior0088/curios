@@ -143,10 +143,13 @@ binding =
 
 statement :: Parser Statement
 statement =
-  lexeme (Statement <$> getSourcePos <*> name <*> many binding <*> declaration <*> definition) where
-    name = symbol "let" *> identifier
-    declaration = symbol ":" *> expression (symbol "{")
-    definition = expression (symbol "}")
+  lexeme (stDefn) where
+    stDefn =
+      StDefn <$> getSourcePos
+        <*> (symbol "defn" *> identifier)
+        <*> many binding
+        <*> (symbol ":" *> expression (symbol "{"))
+        <*> (expression (symbol "}"))
 
 program :: Parser Program
 program =

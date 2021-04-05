@@ -16,7 +16,7 @@ trAbstractDeclarationBinding (Binding sourcePos (Identifier _ name) expression) 
 pgDeclarations :: Program -> [(Identifier, Term)]
 pgDeclarations (Program _ program) =
   map transform program where
-    transform (Statement _ identifier bindings declaration _) =
+    transform (StDefn _ identifier bindings declaration _) =
       (identifier, foldr trAbstractDeclarationBinding (exTranslate declaration) bindings)
 
 trAbstractDefinitionBinding :: Binding -> Term -> Term
@@ -27,5 +27,5 @@ trAbstractDefinitionBinding (Binding sourcePos (Identifier _ name) _) term =
 pgDefinitions :: Program -> [(Identifier, Term)]
 pgDefinitions (Program _ program) =
   map transform program where
-    transform (Statement _ identifier bindings _ definition) =
+    transform (StDefn _ identifier bindings _ definition) =
       (identifier, foldr trAbstractDefinitionBinding (exTranslate definition) bindings)

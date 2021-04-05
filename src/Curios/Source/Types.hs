@@ -38,7 +38,7 @@ data Binding =
   Binding SourcePos Identifier Expression
 
 data Statement =
-  Statement SourcePos Identifier [Binding] Expression Expression
+  StDefn SourcePos Identifier [Binding] Expression Expression
 
 data Program =
   Program SourcePos [Statement]
