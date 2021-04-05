@@ -4,13 +4,11 @@ module Curios
   )
   where
 
-import Prelude hiding (error)
-
-import Curios.Core.Term (Name)
-import Curios.Core.Context (Context (..), cnLookupDeclaration, cnLookupDefinition)
-import Curios.Core.Verification (trReduce)
-import Curios.Elaboration.Program (pgCheck)
 import Curios.Source.Parser (parse)
+import Curios.Core (Name)
+import Curios.Core.Verification (trReduce)
+import Curios.Context (Context (..), cnLookupDeclaration, cnLookupDefinition)
+import Curios.Elaboration.Program (pgCheck)
 import Curios.Error (Error)
 
 check :: String -> String -> Either Error Context

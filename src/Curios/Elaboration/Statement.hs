@@ -4,8 +4,8 @@ module Curios.Elaboration.Statement
   )
   where
 
-import Curios.Source.Types (Identifier (..), Binding (..), Statement (..), Program (..))
-import Curios.Core.Term (Origin (..), Term (..), trApplyVariable)
+import Curios.Source (Identifier (..), Binding (..), Statement (..), Program (..))
+import Curios.Core (Origin (..), Term (..), trApplyVariable)
 import Curios.Elaboration.Expression (exTranslate)
 
 trAbstractDeclarationBinding :: Binding -> Term -> Term

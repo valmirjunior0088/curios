@@ -3,8 +3,8 @@ module Curios.Elaboration.Expression
   )
   where
 
-import Curios.Source.Types (Identifier (..), FunctionTypeBinding (..), FunctionBinding (..), Expression (..))
-import Curios.Core.Term (Origin (..), Term (..), trApplyVariable)
+import Curios.Source (Identifier (..), FunctionTypeBinding (..), FunctionBinding (..), Expression (..))
+import Curios.Core (Origin (..), Term (..), trApplyVariable)
 import Curios.Elaboration.Miscellaneous (idTranslate, ltTranslate)
 import Text.Megaparsec (SourcePos)
 

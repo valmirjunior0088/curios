@@ -3,11 +3,11 @@ module Curios.Elaboration.Program
   )
   where
 
-import Curios.Source.Types (Identifier (..), Program (..))
-import Curios.Core.Term (Type, Term, trType)
-import Curios.Core.Context (Context (..), cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
+import Curios.Source (Identifier (..), Program (..))
+import Curios.Core (Type, Term, trType)
 import Curios.Core.Verification (trCheck)
-import Curios.Elaboration.Prelude (cnInitial)
+import Curios.Context (Context (..), cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
+import Curios.Context.Initial (cnInitial)
 import Curios.Elaboration.Statement (pgDeclarations, pgDefinitions)
 import Data.Foldable (foldlM)
 

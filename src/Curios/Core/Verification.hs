@@ -20,13 +20,13 @@ import Curios.Error
   ,erTeNonInferable
   )
 
-import Curios.Core.Term
+import Curios.Core
   (Literal (..)
   ,Operator (..)
   ,Type
   ,Variable (..)
-  ,Depth
   ,Term (..)
+  ,Depth
   ,trPrText
   ,trPrInteger
   ,trPrReal

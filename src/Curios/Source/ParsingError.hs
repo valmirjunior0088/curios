@@ -5,7 +5,7 @@ module Curios.Source.ParsingError
   )
   where
 
-import Curios.Formatting (framed)
+import Curios.PrettyPrinting.Framed (framed)
 import Data.List (intercalate)
 import Data.Maybe (maybe, isNothing)
 import Data.Proxy (Proxy (..))

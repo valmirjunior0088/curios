@@ -1,4 +1,4 @@
-module Curios.Formatting
+module Curios.PrettyPrinting.Framed
   (framed
   )
   where

@@ -12,7 +12,7 @@ module Curios.Error
   )
   where
 
-import Curios.Core.Term (Origin, Name, Type)
+import Curios.Core (Origin, Name, Type)
 import Data.Void (Void)
 import Text.Megaparsec (SourcePos)
 import Text.Megaparsec.Error (ParseErrorBundle)

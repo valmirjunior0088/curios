@@ -7,7 +7,7 @@ module Curios.Core.History
   )
   where
 
-import Curios.Core.Term (Term)
+import Curios.Core (Term)
 
 type Equation =
   (Term, Term)

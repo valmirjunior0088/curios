@@ -6,7 +6,7 @@ module Curios.Core.Declarations
   )
   where
 
-import Curios.Core.Term (Name, Type)
+import Curios.Core (Name, Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 

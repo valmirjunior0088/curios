@@ -6,7 +6,7 @@ module Curios.Core.Variables
   )
   where
 
-import Curios.Core.Term (Variable (..), Index, Type)
+import Curios.Core (Variable (..), Index, Type)
 import Data.Sequence (Seq, (|>))
 import GHC.Natural (naturalToInt, intToNatural)
 import qualified Data.Sequence as Seq

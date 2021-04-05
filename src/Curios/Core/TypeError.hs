@@ -8,8 +8,8 @@ module Curios.Core.TypeError
   )
   where
 
-import Curios.Core.Term (Origin (..), Name, Type)
-import Curios.Formatting (framed)
+import Curios.Core (Origin (..), Name, Type)
+import Curios.PrettyPrinting.Framed (framed)
 
 data Kind =
   KnMismatchedFunctionType Type |

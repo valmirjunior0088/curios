@@ -1,4 +1,4 @@
-module Curios.Core.Context
+module Curios.Context
   (Context (..)
   ,cnEmpty
   ,cnInsertDeclaration
@@ -8,7 +8,7 @@ module Curios.Core.Context
   )
   where
 
-import Curios.Core.Term (Name, Type, Term)
+import Curios.Core (Name, Type, Term)
 import Curios.Core.Declarations (Declarations, dcEmpty, dcInsert, dcLookup)
 import Curios.Core.Definitions (Definitions, dfEmpty, dfInsert, dfLookup)
 

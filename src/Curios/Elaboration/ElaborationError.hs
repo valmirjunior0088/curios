@@ -7,8 +7,8 @@ module Curios.Elaboration.ElaborationError
   )
   where
 
-import Curios.Core.Term (Name)
-import Curios.Formatting (framed)
+import Curios.Core (Name)
+import Curios.PrettyPrinting.Framed (framed)
 import Text.Megaparsec (SourcePos)
 
 data Kind =

@@ -4,11 +4,11 @@ module Curios.Elaboration.Miscellaneous
   )
   where
 
-import Curios.Source.Types (Identifier (..))
-import Curios.Core.Term (Origin (..), Primitive (..), Term (..))
+import Curios.Source (Identifier (..))
+import Curios.Core (Origin (..), Primitive (..), Term (..))
 import Text.Megaparsec (SourcePos)
-import qualified Curios.Source.Types as Source
-import qualified Curios.Core.Term as Core
+import qualified Curios.Source as Source
+import qualified Curios.Core as Core
 
 idTranslate :: SourcePos -> Identifier -> Term
 idTranslate sourcePos identifier =

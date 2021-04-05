@@ -1,12 +1,12 @@
-module Curios.Elaboration.Prelude
+module Curios.Context.Initial
   (cnInitial
   )
   where
 
-import Curios.Core.Term (Name, Type, Term, trType)
-import Curios.Core.Context (Context (..), cnEmpty, cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
+import Curios.Core (Name, Type, Term, trType)
 import Curios.Core.Verification (trCheck)
-import Curios.Core.Prelude (prelude, prDeclarations, prDefinitions)
+import Curios.Context (Context (..), cnEmpty, cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
+import Curios.Context.Prelude (prelude, prDeclarations, prDefinitions)
 import Curios.Error (showError)
 
 cnInsertUnsafeDeclaration :: Name -> Type -> Context -> Context

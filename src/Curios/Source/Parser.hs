@@ -8,7 +8,7 @@ import Text.Megaparsec.Char (space1)
 import Data.Void (Void)
 import qualified Text.Megaparsec as Megaparsec
 
-import Curios.Source.Types
+import Curios.Source
   (Identifier (..)
   ,Literal (..)
   ,FunctionTypeBinding (..)

@@ -1,4 +1,4 @@
-module Curios.Source.Types
+module Curios.Source
   (Literal (..)
   ,Identifier (..)
   ,FunctionTypeBinding (..)
