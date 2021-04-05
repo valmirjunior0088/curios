@@ -1,10 +1,12 @@
 module Curios.Source.Parser
-  (program
+  (parse
   )
   where
 
+import Curios.Error (Error, erParsing)
 import Text.Megaparsec.Char (space1)
 import Data.Void (Void)
+import qualified Text.Megaparsec as Megaparsec
 
 import Curios.Source.Types
   (Identifier (..)
@@ -149,3 +151,9 @@ statement =
 program :: Parser Program
 program =
   lexeme (Program <$> getSourcePos <*> some statement <* eof)
+
+parse :: String -> String -> Either Error Program
+parse file source =
+  case Megaparsec.parse program file source of
+    Left parseErrorBundle -> Left (erParsing parseErrorBundle)
+    Right result -> Right result

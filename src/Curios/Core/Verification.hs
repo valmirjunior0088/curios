@@ -14,10 +14,10 @@ import Data.Maybe (fromJust)
 
 import Curios.Error
   (Error
-  ,erMismatchedFunctionType
-  ,erMismatchedType
-  ,erUndeclaredName
-  ,erNonInferable
+  ,erTeMismatchedFunctionType
+  ,erTeMismatchedType
+  ,erTeUndeclaredName
+  ,erTeNonInferable
   )
 
 import Curios.Core.Term
@@ -139,13 +139,13 @@ trCheck declarations definitions =
           check variables' (output (VrTerm term) input) (output' input) where
             (input, variables') = vrAllocate inputType variables
         (termType', TrFunction origin _) ->
-          Left (erMismatchedFunctionType origin termType')
+          Left (erTeMismatchedFunctionType origin termType')
         (termType', term') -> do
           termType'' <- infer variables term'
 
           unless
             (trConvertsWith definitions termType' termType'')
-            (Left (erMismatchedType (trOrigin term') termType termType''))
+            (Left (erTeMismatchedType (trOrigin term') termType termType''))
           
           Right ()
     
@@ -167,7 +167,7 @@ trCheck declarations definitions =
           Right (fromJust (vrLookup index variables))
         TrReference origin name ->
           case dcLookup name declarations of
-            Nothing -> Left (erUndeclaredName origin name)
+            Nothing -> Left (erTeUndeclaredName origin name)
             Just termType -> Right termType
         TrType _ ->
           Right trType
@@ -180,7 +180,7 @@ trCheck declarations definitions =
           
           Right trType
         TrFunction origin _ ->
-          Left (erNonInferable origin)
+          Left (erTeNonInferable origin)
         TrApplication _ function argument -> do
           functionType <- infer variables function
           
@@ -190,4 +190,4 @@ trCheck declarations definitions =
 
               Right (output (VrTerm function) (VrTerm argument))
             functionType' ->
-              Left (erMismatchedFunctionType (trOrigin function) functionType')
+              Left (erTeMismatchedFunctionType (trOrigin function) functionType')

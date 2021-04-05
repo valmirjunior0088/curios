@@ -1,15 +1,10 @@
 module Curios.Formatting
-  (label
-  ,regularRow
-  ,highlightedRow
-  ,assemble
-  ,enumerate
-  ,within
-  ,boxed
-  ,framed
-  ,showFramed
+  (framed
   )
   where
+
+import Text.Megaparsec (SourcePos (..))
+import Text.Megaparsec.Pos (unPos)
   
 import Text.PrettyPrint.Boxes
   (Box
@@ -77,10 +72,8 @@ boxed lineQuantity columnQuantity highlightedLine highlightedColumn =
     transformLines (lineNumber, lineColumns) =
       (text (show (lineNumber + 1)), map (transformColumns lineNumber) lineColumns)
 
-framed :: Int -> Int -> Int -> Int -> String -> Box
-framed lineQuantity columnQuantity highlightedLine highlightedColumn =
-  assemble . boxed lineQuantity columnQuantity highlightedLine highlightedColumn
-
-showFramed :: Int -> Int -> Int -> Int -> String -> String
-showFramed lineQuantity columnQuantity highlightedLine highlightedColumn =
-  render . framed lineQuantity columnQuantity highlightedLine highlightedColumn
+framed :: SourcePos -> String -> String
+framed sourcePos =
+  render . assemble . boxed 5 40 (line - 1) (column - 1) where
+    line = unPos (sourceLine sourcePos)
+    column = unPos (sourceColumn sourcePos)

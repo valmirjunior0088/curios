@@ -4,18 +4,24 @@ module Curios.Elaboration.Program
   where
 
 import Curios.Source.Types (Identifier (..), Program (..))
-import Curios.Core.Term (Origin (..), Type, Term, trType)
+import Curios.Core.Term (Type, Term, trType)
 import Curios.Core.Context (Context (..), cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
 import Curios.Core.Verification (trCheck)
 import Curios.Elaboration.Prelude (cnInitial)
 import Curios.Elaboration.Statement (pgDeclarations, pgDefinitions)
-import Curios.Error (Error, erRepeatedlyDeclaredName, erUndeclaredName, erRepeatedlyDefinedName)
 import Data.Foldable (foldlM)
+
+import Curios.Error
+  (Error
+  ,erEeRepeatedlyDeclaredName
+  ,erEeUndeclaredName
+  ,erEeRepeatedlyDefinedName
+  )
 
 cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
 cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do
   context' <- case cnInsertDeclaration name termType context of
-    Nothing -> Left (erRepeatedlyDeclaredName (OrSource sourcePos) name)
+    Nothing -> Left (erEeRepeatedlyDeclaredName sourcePos name)
     Just value -> Right value
   
   trCheck (cnDeclarations context') (cnDefinitions context') trType termType
@@ -25,11 +31,11 @@ cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do
 cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either Error Context
 cnInsertSourceDefinition (Identifier sourcePos name) term context = do
   termType <- case cnLookupDeclaration name context of
-    Nothing -> Left (erUndeclaredName (OrSource sourcePos) name)
+    Nothing -> Left (erEeUndeclaredName sourcePos name)
     Just value -> Right value
   
   context' <- case cnInsertDefinition name term context of
-    Nothing -> Left (erRepeatedlyDefinedName (OrSource sourcePos) name)
+    Nothing -> Left (erEeRepeatedlyDefinedName sourcePos name)
     Just value -> Right value
   
   trCheck (cnDeclarations context') (cnDefinitions context') termType term

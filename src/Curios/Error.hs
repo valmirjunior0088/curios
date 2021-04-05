@@ -1,183 +1,85 @@
 module Curios.Error
-  (Kind (..)
-  ,Error (..)
+  (Error (..)
   ,erParsing
-  ,erUndeclaredName
-  ,erRepeatedlyDeclaredName
-  ,erRepeatedlyDefinedName
-  ,erMismatchedFunctionType
-  ,erMismatchedType
-  ,erNonInferable
-  ,orList
-  ,showParseTokens
-  ,showErrorItem
-  ,showErrorFancy
-  ,showParseError
-  ,showErrorOrigin
-  ,showErrorKind
+  ,erEeUndeclaredName
+  ,erEeRepeatedlyDeclaredName
+  ,erEeRepeatedlyDefinedName
+  ,erTeUndeclaredName
+  ,erTeMismatchedFunctionType
+  ,erTeMismatchedType
+  ,erTeNonInferable
   ,showError
   )
   where
 
-import Prelude hiding (error)
+import Curios.Core.Term (Origin, Name, Type)
+import Data.Void (Void)
+import Text.Megaparsec (SourcePos)
+import Text.Megaparsec.Error (ParseErrorBundle)
 
-import Curios.Formatting (showFramed)
-import Curios.Core.Term (Origin (..), Name, Type)
-import Text.Megaparsec.Pos (unPos)
-import Data.List (intercalate)
-import Data.Maybe (maybe, isNothing)
-import Data.Proxy (Proxy (..))
-import Data.Void (Void, absurd)
-import Data.Set (Set)
-import Data.List.NonEmpty (NonEmpty (..))
-import qualified Data.Set as Set
-import qualified Data.List.NonEmpty as NonEmpty
-
-import Text.Megaparsec
-  (Token
-  ,SourcePos (..)
-  ,ParseError (..)
-  ,ErrorItem (..)
-  ,ErrorFancy (..)
-  ,Stream (..)
+import Curios.Source.ParsingError
+  (ParsingError (..)
+  ,fromParseErrorBundle
+  ,showParsingError
   )
 
-data Kind =
-  KnParsing (ParseError String Void) |
-  KnUndeclaredName Name |
-  KnRepeatedlyDeclaredName Name |
-  KnRepeatedlyDefinedName Name |
-  KnMismatchedFunctionType Type |
-  KnMismatchedType Type Type |
-  KnNonInferable
+import Curios.Elaboration.ElaborationError
+  (ElaborationError (..)
+  ,eeUndeclaredName
+  ,eeRepeatedlyDeclaredName
+  ,eeRepeatedlyDefinedName
+  ,showElaborationError
+  )
+
+import Curios.Core.TypeError
+  (TypeError (..)
+  ,teUndeclaredName
+  ,teMismatchedFunctionType
+  ,teMismatchedType
+  ,teNonInferable
+  ,showTypeError
+  )
 
 data Error =
-  Error { erOrigin :: Origin, erKind :: Kind }
+  ErParsing ParsingError |
+  ErElaboration ElaborationError |
+  ErType TypeError
 
-erParsing :: Origin -> (ParseError String Void) -> Error
-erParsing origin parseError =
-  Error { erOrigin = origin, erKind = KnParsing parseError }
+erParsing :: (ParseErrorBundle String Void) -> Error
+erParsing parseErrorBundle =
+  ErParsing (fromParseErrorBundle parseErrorBundle)
 
-erUndeclaredName :: Origin -> Name -> Error
-erUndeclaredName origin name =
-  Error { erOrigin = origin, erKind = KnUndeclaredName name }
+erEeUndeclaredName :: SourcePos -> Name -> Error
+erEeUndeclaredName sourcePos name =
+  ErElaboration (eeUndeclaredName sourcePos name)
 
-erRepeatedlyDeclaredName :: Origin -> Name -> Error
-erRepeatedlyDeclaredName origin name =
-  Error { erOrigin = origin, erKind = KnRepeatedlyDeclaredName name }
+erEeRepeatedlyDeclaredName :: SourcePos -> Name -> Error
+erEeRepeatedlyDeclaredName sourcePos name =
+  ErElaboration (eeRepeatedlyDeclaredName sourcePos name)
 
-erRepeatedlyDefinedName :: Origin -> Name -> Error
-erRepeatedlyDefinedName origin name =
-  Error { erOrigin = origin, erKind = KnRepeatedlyDefinedName name }
+erEeRepeatedlyDefinedName :: SourcePos -> Name -> Error
+erEeRepeatedlyDefinedName sourcePos name =
+  ErElaboration (eeRepeatedlyDefinedName sourcePos name)
 
-erMismatchedFunctionType :: Origin -> Type -> Error
-erMismatchedFunctionType origin obtained =
-  Error { erOrigin = origin, erKind = KnMismatchedFunctionType obtained }
+erTeUndeclaredName :: Origin -> Name -> Error
+erTeUndeclaredName origin name =
+  ErType (teUndeclaredName origin name)
 
-erMismatchedType :: Origin -> Type -> Type -> Error
-erMismatchedType origin expected obtained =
-  Error { erOrigin = origin, erKind = KnMismatchedType expected obtained }
+erTeMismatchedFunctionType :: Origin -> Type -> Error
+erTeMismatchedFunctionType origin obtained =
+  ErType (teMismatchedFunctionType origin obtained)
 
-erNonInferable :: Origin -> Error
-erNonInferable origin =
-  Error { erOrigin = origin, erKind = KnNonInferable }
+erTeMismatchedType :: Origin -> Type -> Type -> Error
+erTeMismatchedType origin expected obtained =
+  ErType (teMismatchedType origin expected obtained)
 
-orList :: NonEmpty String -> String
-orList tokens =
-  case tokens of
-    (item :| []) -> item
-    (item :| [item']) -> item ++ " or " ++ item'
-    _ -> intercalate ", " (NonEmpty.init tokens) ++ ", or " ++ NonEmpty.last tokens
+erTeNonInferable :: Origin -> Error
+erTeNonInferable origin =
+  ErType (teNonInferable origin)
 
-showParseTokens :: String -> Set String -> String
-showParseTokens prefix tokens =
-  if Set.null tokens
-    then ""
-    else prefix ++ (orList . NonEmpty.fromList . Set.toAscList) tokens
-
-showErrorItem :: ErrorItem (Token String) -> String
-showErrorItem errorItem =
-  case errorItem of
-    Tokens token -> showTokens (Proxy :: Proxy String) token
-    Label label -> NonEmpty.toList label
-    EndOfInput -> "<end of input>"
-
-showErrorFancy :: ErrorFancy Void -> String
-showErrorFancy errorsFancy =
-  case errorsFancy of
-    ErrorFail message ->
-      "Parsing error: explicit failure." ++ "\n" ++
-        message
-    ErrorIndentation ordering reference actual ->
-      let
-        sign =
-          case ordering of
-            LT -> "> "
-            EQ -> "= "
-            GT -> "< "
-      in
-        "Parsing error: incorrect indentation." ++ "\n" ++
-          "- Expected: " ++ sign ++ show (unPos reference) ++ "\n" ++
-          "- Obtained: " ++ "  " ++ show (unPos actual) ++ "\n"
-    ErrorCustom void ->
-      absurd void
-
-showParseError :: ParseError String Void -> String
-showParseError parseError =
-  case parseError of
-    TrivialError _ obtained expected ->
-      if Set.null expected && isNothing obtained
-        then "Parsing error: unknown trivial error." ++ "\n"
-        else 
-          "Parsing error: unexpected token." ++ "\n" ++
-            showParseTokens "- Expected: " (showErrorItem `Set.map` expected) ++ "\n" ++
-            showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtained) ++ "\n"
-    FancyError _ errors ->
-      if Set.null errors
-        then "Parsing error: unknown fancy error." ++ "\n"
-        else unlines (showErrorFancy <$> Set.toAscList errors) ++ "\n"
-
-showErrorOrigin :: String -> String -> Origin -> String
-showErrorOrigin file source origin =
-  "In file " ++ file ++ "..." ++ "\n" ++
-    case origin of
-      OrMachine ->
-        "In a machine-generated term..." ++ "\n"
-      OrSource sourcePos ->
-        let
-          line = unPos (sourceLine sourcePos)
-          column = unPos (sourceColumn sourcePos)
-        in
-          "In line " ++ show line ++ ", column " ++ show column ++ "..." ++ "\n" ++
-            "\n" ++
-            showFramed 3 60 (line - 1) (column - 1) source ++
-            "\n"
-
-showErrorKind :: Kind -> String
-showErrorKind kind =
-  case kind of
-    KnParsing parseError ->
-      showParseError parseError ++ "\n"
-    KnUndeclaredName name ->
-      "The name \"" ++ name ++ "\" is undeclared." ++ "\n"
-    KnRepeatedlyDeclaredName name ->
-      "The name \"" ++ name ++ "\" is repeatedly declared." ++ "\n"
-    KnRepeatedlyDefinedName name ->
-      "The name \"" ++ name ++ "\" is repeatedly defined." ++ "\n"
-    KnMismatchedFunctionType obtained ->
-      "Type mismatch." ++ "\n" ++
-        "- Expected: <function type>" ++ "\n" ++
-        "- Obtained: " ++ show obtained ++ "\n"
-    KnMismatchedType expected obtained ->
-      "Type mismatch." ++ "\n" ++
-        "- Expected: " ++ show expected ++ "\n" ++
-        "- Obtained: " ++ show obtained ++ "\n"
-    KnNonInferable ->
-      "The term does not have an inferable type without an annotation." ++ "\n"
-
-showError :: String -> String -> Error -> String
-showError file source error =
-  "Check failed." ++ "\n" ++
-    "\n" ++
-    showErrorOrigin file source (erOrigin error) ++
-    showErrorKind (erKind error)
+showError :: Error -> String -> String
+showError curiosError source =
+  case curiosError of
+    ErParsing parsingError -> showParsingError parsingError source
+    ErElaboration elaborationError -> showElaborationError elaborationError source
+    ErType typeError -> showTypeError typeError source

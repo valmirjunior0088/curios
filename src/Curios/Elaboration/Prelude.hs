@@ -7,7 +7,7 @@ import Curios.Core.Term (Name, Type, Term, trType)
 import Curios.Core.Context (Context (..), cnEmpty, cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
 import Curios.Core.Verification (trCheck)
 import Curios.Core.Prelude (prelude, prDeclarations, prDefinitions)
-import Curios.Error (Error (..), showErrorKind)
+import Curios.Error (showError)
 
 cnInsertUnsafeDeclaration :: Name -> Type -> Context -> Context
 cnInsertUnsafeDeclaration name termType context =
@@ -18,8 +18,8 @@ cnInsertUnsafeDeclaration name termType context =
         Just value -> value
   in
     case trCheck (cnDeclarations context') (cnDefinitions context') trType termType of
-      Left checkError ->
-        error ("Prelude error: In \"" ++ name ++ "\"...\n" ++ showErrorKind (erKind checkError))
+      Left curiosError ->
+        error ("Prelude error: In \"" ++ name ++ "\"...\n" ++ showError curiosError "<prelude>")
       Right () ->
         context'
 
@@ -37,8 +37,8 @@ cnInsertUnsafeDefinition name term context =
         Just value -> value
   in
     case trCheck (cnDeclarations context') (cnDefinitions context') termType term of
-      Left checkError ->
-        error ("Prelude error: In \"" ++ name ++ "\"..." ++ "\n" ++ showErrorKind (erKind checkError))
+      Left curiosError ->
+        error ("Prelude error: In \"" ++ name ++ "\"..." ++ "\n" ++ showError curiosError "<prelude>")
       Right () -> 
         context'
 
