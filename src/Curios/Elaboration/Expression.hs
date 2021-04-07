@@ -4,9 +4,26 @@ module Curios.Elaboration.Expression
   where
 
 import Curios.Source (Identifier (..), FunctionTypeBinding (..), FunctionBinding (..), Expression (..))
-import Curios.Core (Origin (..), Term (..), trApplyVariable)
-import Curios.Elaboration.Miscellaneous (idTranslate, ltTranslate)
+import Curios.Core (Origin (..), Primitive (..), Term (..), trApplyVariable)
 import Text.Megaparsec (SourcePos)
+import qualified Curios.Source as Source
+import qualified Curios.Core as Core
+
+idTranslate :: SourcePos -> Identifier -> Term
+idTranslate sourcePos identifier =
+  case identifier of
+    Identifier _ "Type" -> TrType (OrSource sourcePos)
+    Identifier _ "Text" -> TrPrimitive (OrSource sourcePos) PrText
+    Identifier _ "Integer" -> TrPrimitive (OrSource sourcePos) PrInteger
+    Identifier _ "Real" -> TrPrimitive (OrSource sourcePos) PrReal
+    Identifier _ name -> TrReference (OrSource sourcePos) name
+
+ltTranslate :: SourcePos -> Source.Literal -> Term
+ltTranslate sourcePos literal =
+  case literal of
+    Source.LtText _ string -> TrLiteral (OrSource sourcePos) (Core.LtText string)
+    Source.LtInteger _ integer -> TrLiteral (OrSource sourcePos) (Core.LtInteger integer)
+    Source.LtReal _ double -> TrLiteral (OrSource sourcePos) (Core.LtReal double)
 
 trAbstractFunctionTypeBinding :: SourcePos -> FunctionTypeBinding -> Term -> Term
 trAbstractFunctionTypeBinding sourcePos (FunctionTypeBinding _ selfName inputName inputTypeExpression) term =
