@@ -88,25 +88,25 @@ textConcatenate :: Entry
 textConcatenate =
   enOpBinary "++"
     (trFunctionType trPrText (\_ _ -> trFunctionType trPrText (\_ _ -> trPrText)))
-    (\(LtText one) (LtText another) -> trLtText (one ++ another))
+    (\(LtText one) (LtText other) -> trLtText (one ++ other))
 
 integerSum :: Entry
 integerSum =
   enOpBinary "+"
     (trFunctionType trPrInteger (\_ _ -> trFunctionType trPrInteger (\_ _ -> trPrInteger)))
-    (\(LtInteger one) (LtInteger another) -> trLtInteger (one + another))
+    (\(LtInteger one) (LtInteger other) -> trLtInteger (one + other))
 
 integerSubtract :: Entry
 integerSubtract =
   enOpBinary "-"
     (trFunctionType trPrInteger (\_ _ -> trFunctionType trPrInteger (\_ _ -> trPrInteger)))
-    (\(LtInteger one) (LtInteger another) -> trLtInteger (one - another))
+    (\(LtInteger one) (LtInteger other) -> trLtInteger (one - other))
 
 integerMultiply :: Entry
 integerMultiply =
   enOpBinary "*"
     (trFunctionType trPrInteger (\_ _ -> trFunctionType trPrInteger (\_ _ -> trPrInteger)))
-    (\(LtInteger one) (LtInteger another) -> trLtInteger (one * another))
+    (\(LtInteger one) (LtInteger other) -> trLtInteger (one * other))
 
 integerEqualTo :: Entry
 integerEqualTo =
@@ -142,25 +142,25 @@ realSum :: Entry
 realSum =
   enOpBinary "+'"
     (trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal)))
-    (\(LtReal one) (LtReal another) -> trLtReal (one + another))
+    (\(LtReal one) (LtReal other) -> trLtReal (one + other))
 
 realSubtract :: Entry
 realSubtract =
   enOpBinary "-'"
     (trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal)))
-    (\(LtReal one) (LtReal another) -> trLtReal (one - another))
+    (\(LtReal one) (LtReal other) -> trLtReal (one - other))
 
 realMultiply :: Entry
 realMultiply =
   enOpBinary "*'"
     (trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal)))
-    (\(LtReal one) (LtReal another) -> trLtReal (one * another))
+    (\(LtReal one) (LtReal other) -> trLtReal (one * other))
 
 realDivide :: Entry
 realDivide =
   enOpBinary "/'"
     (trFunctionType trPrReal (\_ _ -> trFunctionType trPrReal (\_ _ -> trPrReal)))
-    (\(LtReal one) (LtReal another) -> trLtReal (one / another))
+    (\(LtReal one) (LtReal other) -> trLtReal (one / other))
 
 realEqualTo :: Entry
 realEqualTo =
