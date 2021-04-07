@@ -33,4 +33,4 @@ showError error source =
         ++ "\n"
         ++ "The name \"" ++ name ++ "\" is repeatedly defined" ++ "\n"
     ErCoreError coreError name ->
-      Core.showError coreError name source
+      Core.showError name coreError source

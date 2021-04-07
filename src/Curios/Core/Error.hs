@@ -43,8 +43,8 @@ showOrigin origin source =
     OrSource sourcePos ->
       framed sourcePos source
 
-showError :: Error -> String -> String -> String
-showError error name source =
+showError :: String -> Error -> String -> String
+showError name error source =
   showOrigin (erOrigin error) source
     ++ "\n"
     ++ "When processing \"" ++ name ++ "\": " ++ showKind (erKind error)

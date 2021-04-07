@@ -18,7 +18,7 @@ cnInsertUnsafeDeclaration name termType context =
         Just value -> value
   in
     case trCheck (cnDeclarations context') (cnDefinitions context') trType termType of
-      Left coreError -> error (showError coreError name "<prelude>")
+      Left coreError -> error (showError name coreError "<prelude>")
       Right () -> context'
 
 cnInsertUnsafeDefinition :: Name -> Term -> Context -> Context
@@ -35,7 +35,7 @@ cnInsertUnsafeDefinition name term context =
         Just value -> value
   in
     case trCheck (cnDeclarations context') (cnDefinitions context') termType term of
-      Left coreError -> error (showError coreError name "<prelude>")
+      Left coreError -> error (showError name coreError "<prelude>")
       Right () -> context'
 
 cnInitial :: Context
