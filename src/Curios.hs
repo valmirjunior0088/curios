@@ -14,7 +14,7 @@ import Curios.Error (Error (..))
 check :: String -> String -> Either Error Context
 check file source = do
   program <- case parse file source of
-    Left parsingError -> Left (ErParsing parsingError)
+    Left sourceError -> Left (ErSource sourceError)
     Right program -> Right program
   
   case pgCheck program of

@@ -9,34 +9,34 @@ import Curios.Core.Verification (trCheck)
 import Curios.Context (Context (..), cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
 import Curios.Context.Initial (cnInitial)
 import Curios.Elaboration.Statement (pgDeclarations, pgDefinitions)
-import Curios.Elaboration.ElaborationError (ElaborationError (..))
+import Curios.Elaboration.Error (Error (..))
 import Data.Foldable (foldlM)
 
-cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either ElaborationError Context
+cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
 cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do
   context' <- case cnInsertDeclaration name termType context of
-    Nothing -> Left (EeRepeatedlyDeclaredName sourcePos name)
+    Nothing -> Left (ErRepeatedlyDeclaredName sourcePos name)
     Just context' -> Right context'
   
   case trCheck (cnDeclarations context') (cnDefinitions context') trType termType of
-    Left typeError -> Left (EeTypeError typeError name)
+    Left coreError -> Left (ErCoreError coreError name)
     Right () -> Right context'
 
-cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either ElaborationError Context
+cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either Error Context
 cnInsertSourceDefinition (Identifier sourcePos name) term context = do
   termType <- case cnLookupDeclaration name context of
-    Nothing -> Left (EeUndeclaredName sourcePos name)
+    Nothing -> Left (ErUndeclaredName sourcePos name)
     Just termType -> Right termType
   
   context' <- case cnInsertDefinition name term context of
-    Nothing -> Left (EeRepeatedlyDefinedName sourcePos name)
+    Nothing -> Left (ErRepeatedlyDefinedName sourcePos name)
     Just context' -> Right context'
   
   case trCheck (cnDeclarations context') (cnDefinitions context') termType term of
-    Left typeError -> Left (EeTypeError typeError name)
+    Left coreError -> Left (ErCoreError coreError name)
     Right () -> Right context'
 
-pgCheck :: Program -> Either ElaborationError Context
+pgCheck :: Program -> Either Error Context
 pgCheck program = do
   let combine construct context (identifier, term) = construct identifier term context
   step <- foldlM (combine cnInsertSourceDeclaration) cnInitial (pgDeclarations program)

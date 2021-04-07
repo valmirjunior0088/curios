@@ -1,7 +1,7 @@
-module Curios.Source.ParsingError
-  (ParsingError (..)
+module Curios.Source.Error
+  (Error (..)
   ,fromParseErrorBundle
-  ,showParsingError
+  ,showError
   )
   where
 
@@ -26,12 +26,12 @@ import Text.Megaparsec
   ,Stream (..)
   )
 
-data ParsingError =
-  ParsingError SourcePos (ParseError String Void)
+data Error =
+  Error SourcePos (ParseError String Void)
 
-fromParseErrorBundle :: (ParseErrorBundle String Void) -> ParsingError
+fromParseErrorBundle :: (ParseErrorBundle String Void) -> Error
 fromParseErrorBundle parseErrorBundle =
-  ParsingError sourcePos parseError where
+  Error sourcePos parseError where
     (parseError :| _) = bundleErrors parseErrorBundle
     (sourcePos, _, _) = reachOffset (errorOffset parseError) (bundlePosState parseErrorBundle)
 
@@ -90,8 +90,8 @@ showParseError parseError =
         then "Parsing error: unknown fancy error" ++ "\n"
         else unlines (showErrorFancy <$> Set.toAscList errors) ++ "\n"
 
-showParsingError :: ParsingError -> String -> String
-showParsingError (ParsingError sourcePos parseError) source =
+showError :: Error -> String -> String
+showError (Error sourcePos parseError) source =
   framed sourcePos source
     ++ "\n"
     ++ showParseError parseError ++ "\n"

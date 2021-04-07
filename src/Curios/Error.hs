@@ -4,15 +4,17 @@ module Curios.Error
   )
   where
 
-import Curios.Source.ParsingError (ParsingError, showParsingError)
-import Curios.Elaboration.ElaborationError (ElaborationError, showElaborationError)
+import Prelude hiding (error)
+
+import qualified Curios.Source.Error as Source
+import qualified Curios.Elaboration.Error as Elaboration
 
 data Error =
-  ErParsing ParsingError |
-  ErElaboration ElaborationError
+  ErSource Source.Error |
+  ErElaboration Elaboration.Error
 
 showError :: Error -> String -> String
-showError curiosError source =
-  case curiosError of
-    ErParsing parsingError -> showParsingError parsingError source
-    ErElaboration elaborationError -> showElaborationError elaborationError source
+showError error source =
+  case error of
+    ErSource sourceError -> Source.showError sourceError source
+    ErElaboration elaborationError -> Elaboration.showError elaborationError source

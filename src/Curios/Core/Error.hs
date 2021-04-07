@@ -1,9 +1,11 @@
-module Curios.Core.TypeError
+module Curios.Core.Error
   (Kind (..)
-  ,TypeError (..)
-  ,showTypeError
+  ,Error (..)
+  ,showError
   )
   where
+
+import Prelude hiding (error)
 
 import Curios.Core (Origin (..), Name, Type)
 import Curios.PrettyPrinting.Framed (framed)
@@ -14,8 +16,8 @@ data Kind =
   KnUndeclaredName Name |
   KnNonInferable
 
-data TypeError =
-  TypeError { teOrigin :: Origin, teKind :: Kind }
+data Error =
+  Error { erOrigin :: Origin, erKind :: Kind }
 
 showKind :: Kind -> String
 showKind kind =
@@ -41,8 +43,8 @@ showOrigin origin source =
     OrSource sourcePos ->
       framed sourcePos source
 
-showTypeError :: TypeError -> String -> String -> String
-showTypeError typeError name source =
-  showOrigin (teOrigin typeError) source
+showError :: Error -> String -> String -> String
+showError error name source =
+  showOrigin (erOrigin error) source
     ++ "\n"
-    ++ "When processing \"" ++ name ++ "\": " ++ showKind (teKind typeError)
+    ++ "When processing \"" ++ name ++ "\": " ++ showKind (erKind error)
