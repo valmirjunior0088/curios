@@ -3,10 +3,12 @@ module Curios.Core.Declarations
   ,dcEmpty
   ,dcInsert
   ,dcLookup
+  ,dcMember
   )
   where
 
 import Curios.Core (Name, Type)
+
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
@@ -17,12 +19,14 @@ dcEmpty :: Declarations
 dcEmpty =
   Declarations (Map.empty)
 
-dcInsert :: Name -> Type -> Declarations -> Maybe Declarations
+dcInsert :: Name -> Type -> Declarations -> Declarations
 dcInsert name termType (Declarations declarations) =
-  if Map.member name declarations
-    then Nothing
-    else Just (Declarations (Map.insert name termType declarations))
+  Declarations (Map.insert name termType declarations)
 
 dcLookup :: Name -> Declarations -> Maybe Type
 dcLookup name (Declarations declarations) =
   Map.lookup name declarations
+
+dcMember :: Name -> Declarations -> Bool
+dcMember name (Declarations declarations) =
+  Map.member name declarations

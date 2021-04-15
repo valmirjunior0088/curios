@@ -1,14 +1,14 @@
 module Curios.Core.Error
   (Kind (..)
   ,Error (..)
+  ,throw
   ,showError
   )
   where
 
-import Prelude hiding (error)
-
-import Curios.Core (Origin (..), Name, Type)
-import Curios.PrettyPrinting.Framed (framed)
+import Curios.Core (Origin (..), Name, Type, trShow)
+import Curios.Core.Variables (Variables, vrDepth)
+import Curios.PrettyPrinting.Megaparsec (showSource)
 
 data Kind =
   KnMismatchedFunctionType Type |
@@ -17,34 +17,40 @@ data Kind =
   KnNonInferable
 
 data Error =
-  Error { erOrigin :: Origin, erKind :: Kind }
+  Error { erOrigin :: Origin, erVariables :: Variables, erKind :: Kind }
 
-showKind :: Kind -> String
-showKind kind =
+throw :: Origin -> Variables -> Kind -> Either Error a
+throw origin variables kind =
+  Left (Error { erOrigin = origin, erVariables = variables, erKind = kind })
+
+showKind :: (Type -> String) -> Kind -> String
+showKind showType kind =
   case kind of
     KnMismatchedFunctionType obtained ->
       "Type mismatch" ++ "\n"
         ++ "- Expected: <function type>" ++ "\n"
-        ++ "- Obtained: " ++ show obtained ++ "\n"
+        ++ "- Obtained: " ++ showType obtained ++ "\n"
     KnMismatchedType expected obtained ->
       "Type mismatch" ++ "\n"
-        ++ "- Expected: " ++ show expected ++ "\n"
-        ++ "- Obtained: " ++ show obtained ++ "\n"
+        ++ "- Expected: " ++ showType expected ++ "\n"
+        ++ "- Obtained: " ++ showType obtained ++ "\n"
     KnUndeclaredName name ->
       "The name \"" ++ name ++ "\" is undeclared" ++ "\n"
     KnNonInferable ->
       "The term does not have an inferable type without an annotation" ++ "\n"
 
-showOrigin :: Origin -> String -> String
-showOrigin origin source =
+showOrigin ::  String -> Origin -> String
+showOrigin source origin =
   case origin of
     OrMachine ->
       "In a machine-generated term..." ++ "\n"
     OrSource sourcePos ->
-      framed sourcePos source
+      showSource sourcePos source
 
-showError :: String -> Error -> String -> String
-showError name error source =
-  showOrigin (erOrigin error) source
+showError :: String -> Error -> String
+showError source (Error { erVariables, erOrigin, erKind }) =
+  showOrigin source erOrigin
     ++ "\n"
-    ++ "When processing \"" ++ name ++ "\": " ++ showKind (erKind error)
+    ++ showKind showType erKind
+  where
+    showType termType = trShow (vrDepth erVariables) termType

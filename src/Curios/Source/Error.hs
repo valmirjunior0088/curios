@@ -1,20 +1,22 @@
 module Curios.Source.Error
   (Error (..)
-  ,fromParseErrorBundle
+  ,erFromMegaparsec
   ,showError
   )
   where
 
-import Curios.PrettyPrinting.Framed (framed)
+import Curios.PrettyPrinting.Megaparsec (showFile, showSource)
 import Data.List (intercalate)
 import Data.Maybe (maybe, isNothing)
 import Data.Proxy (Proxy (..))
 import Data.Void (Void, absurd)
-import Data.Set (Set)
-import Data.List.NonEmpty (NonEmpty (..))
 import Text.Megaparsec.Pos (unPos)
 import Text.Megaparsec.Error (ParseErrorBundle (..), errorOffset)
+
+import Data.Set (Set)
 import qualified Data.Set as Set
+
+import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 
 import Text.Megaparsec
@@ -29,11 +31,11 @@ import Text.Megaparsec
 data Error =
   Error SourcePos (ParseError String Void)
 
-fromParseErrorBundle :: (ParseErrorBundle String Void) -> Error
-fromParseErrorBundle parseErrorBundle =
+erFromMegaparsec :: (ParseErrorBundle String Void) -> Error
+erFromMegaparsec (ParseErrorBundle { bundleErrors, bundlePosState }) =
   Error sourcePos parseError where
-    (parseError :| _) = bundleErrors parseErrorBundle
-    (sourcePos, _, _) = reachOffset (errorOffset parseError) (bundlePosState parseErrorBundle)
+    (parseError :| _) = bundleErrors
+    (sourcePos, _, _) = reachOffset (errorOffset parseError) bundlePosState
 
 orList :: NonEmpty String -> String
 orList tokens =
@@ -90,8 +92,11 @@ showParseError parseError =
         then "Parsing error: unknown fancy error" ++ "\n"
         else unlines (showErrorFancy <$> Set.toAscList errors) ++ "\n"
 
-showError :: Error -> String -> String
-showError (Error sourcePos parseError) source =
-  framed sourcePos source
+showError :: String -> Error -> String
+showError source (Error sourcePos parseError) =
+  showFile sourcePos
     ++ "\n"
-    ++ showParseError parseError ++ "\n"
+    ++ showSource sourcePos source
+    ++ "\n"
+    ++ showParseError parseError
+    ++ "\n"

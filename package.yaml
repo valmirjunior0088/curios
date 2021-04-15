@@ -19,6 +19,9 @@ dependencies:
 - containers >= 0 && < 1
 - boxes >= 0 && < 1
 
+default-extensions:
+- NamedFieldPuns
+
 library:
   source-dirs: src
 

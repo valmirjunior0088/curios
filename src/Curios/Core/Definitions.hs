@@ -3,10 +3,12 @@ module Curios.Core.Definitions
   ,dfEmpty
   ,dfInsert
   ,dfLookup
+  ,dfMember
   )
   where
 
 import Curios.Core (Name, Term)
+
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
@@ -17,12 +19,14 @@ dfEmpty :: Definitions
 dfEmpty =
   Definitions (Map.empty)
 
-dfInsert :: Name -> Term -> Definitions -> Maybe Definitions
+dfInsert :: Name -> Term -> Definitions -> Definitions
 dfInsert name term (Definitions definitions) =
-  if Map.member name definitions
-    then Nothing
-    else Just (Definitions (Map.insert name term definitions))
+  Definitions (Map.insert name term definitions)
 
 dfLookup :: Name -> Definitions -> Maybe Term
 dfLookup name (Definitions definitions) =
   Map.lookup name definitions
+
+dfMember :: Name -> Definitions -> Bool
+dfMember name (Definitions definitions) =
+  Map.member name definitions

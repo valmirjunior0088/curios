@@ -9,7 +9,6 @@ module Curios.Core
   ,Variable (..)
   ,vrUnwrap
   ,Term (..)
-  ,Depth
   ,trPrText
   ,trPrInteger
   ,trPrReal
@@ -23,6 +22,7 @@ module Curios.Core
   ,trFunctionType
   ,trFunction
   ,trApplication
+  ,trShow
   ,trOrigin
   ,trApplyVariable
   )
@@ -80,40 +80,6 @@ data Term =
   TrFunctionType Origin Type (Variable -> Variable -> Type) |
   TrFunction Origin (Variable -> Term) |
   TrApplication Origin Term Term
-
-type Depth =
-  Natural
-
-instance Show Term where
-  show =
-    go 0 where
-      go depth term =
-        case term of
-          TrPrimitive _ primitive ->
-            "(TrPrimitive (" ++ show primitive ++ "))"
-          TrLiteral _ literal ->
-            "(TrLiteral (" ++ show literal ++ "))"
-          TrOperator _ name _ ->
-            "(TrOperator \"" ++ name ++ "\")"
-          TrReference _ name ->
-            "(TrReference \"" ++ name ++ "\")"
-          TrVariable _ index ->
-            "(TrVariable " ++ show index ++ ")"
-          TrType _ ->
-            "(TrType)"
-          TrFunctionType _ inputType output ->
-            "(TrFunctionType "
-              ++ "(Self " ++ show (depth + 0) ++ ") "
-              ++ "(Variable " ++ show (depth + 1) ++ ": " ++ go (depth + 0) inputType ++ ") "
-              ++ "{ " ++ go (depth + 2) (output (VrQuote (depth + 0)) (VrQuote (depth + 1))) ++ " }"
-              ++ ")"
-          TrFunction _ output ->
-            "(TrFunction "
-              ++ "(Variable " ++ show (depth + 0) ++ ") "
-              ++ "{ " ++ go (depth + 1) (output (VrQuote (depth + 0))) ++ " }"
-              ++ ")"
-          TrApplication _ function argument ->
-            "(TrApplication " ++ go (depth + 0) function ++ " " ++ go (depth + 0) argument ++ ")"
 
 trPrimitive :: Primitive -> Term
 trPrimitive primitive =
@@ -183,6 +149,46 @@ trApplication :: Term -> Term -> Term
 trApplication function argument =
   TrApplication OrMachine function argument
 
+trShow :: Natural -> Term -> String
+trShow depth term =
+  case term of
+    TrPrimitive _ primitive ->
+      "(TrPrimitive " ++ show primitive ++ ")"
+
+    TrLiteral _ literal ->
+      "(TrLiteral " ++ show literal ++ ")"
+
+    TrOperator _ name _ ->
+      "(TrOperator " ++ show name ++ ")"
+
+    TrReference _ name ->
+      "(TrReference " ++ show name ++ ")"
+
+    TrVariable _ index ->
+      "(TrVariable " ++ show index ++ ")"
+
+    TrType _ ->
+      "(TrType)"
+
+    TrFunctionType _ inputType output ->
+      "(TrFunctionType " ++ inputTypeString ++ " " ++ outputString ++ ")" where
+        inputTypeString = trShow depth inputType
+        self = VrQuote depth
+        input = VrQuote (succ depth)
+        depth' = succ (succ depth)
+        outputString = trShow depth' (output self input)
+
+    TrFunction _ output ->
+      "(TrFunction " ++ outputString ++ ")" where
+        input = VrQuote depth
+        depth' = succ depth
+        outputString = trShow depth' (output input)
+        
+    TrApplication _ function argument ->
+      "(TrApplication " ++ functionString ++ " " ++ argumentString ++ ")" where
+        functionString = trShow depth function
+        argumentString = trShow depth argument
+
 trOrigin :: Term -> Origin
 trOrigin term =
   case term of
@@ -203,16 +209,20 @@ trApplyVariable name variable term =
       case variable of
         VrQuote index -> TrVariable origin index
         VrTerm image -> image
+
     TrFunctionType origin inputType output ->
       TrFunctionType origin inputType' output' where
         inputType' = trApplyVariable name variable inputType
         output' self input = trApplyVariable name variable (output self input)
+
     TrFunction origin output ->
       TrFunction origin output' where
         output' input = trApplyVariable name variable (output input)
+
     TrApplication origin function argument ->
       TrApplication origin
         (trApplyVariable name variable function)
         (trApplyVariable name variable argument)
+        
     term' ->
       term'

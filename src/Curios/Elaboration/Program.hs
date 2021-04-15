@@ -1,44 +1,32 @@
 module Curios.Elaboration.Program
-  (pgCheck
+  (pgDeclarations
+  ,pgDefinitions
   )
   where
 
-import Curios.Source (Identifier (..), Program (..))
-import Curios.Core (Type, Term, trType)
-import Curios.Core.Verification (trCheck)
-import Curios.Context (Context (..), cnInsertDeclaration, cnLookupDeclaration, cnInsertDefinition)
-import Curios.Context.Initial (cnInitial)
-import Curios.Elaboration.Statement (pgDeclarations, pgDefinitions)
-import Curios.Elaboration.Error (Error (..))
-import Data.Foldable (foldlM)
+import Curios.Source (Identifier (..), Binding (..), Statement (..), Program (..))
+import Curios.Core (Origin (..), Name, Term (..), trApplyVariable)
+import Curios.Elaboration.Expression (exTranslate)
+import Text.Megaparsec (SourcePos)
 
-cnInsertSourceDeclaration :: Identifier -> Type -> Context -> Either Error Context
-cnInsertSourceDeclaration (Identifier sourcePos name) termType context = do
-  context' <- case cnInsertDeclaration name termType context of
-    Nothing -> Left (ErRepeatedlyDeclaredName sourcePos name)
-    Just context' -> Right context'
-  
-  case trCheck (cnDeclarations context') (cnDefinitions context') trType termType of
-    Left coreError -> Left (ErCoreError coreError name)
-    Right () -> Right context'
+trAbstractDeclarationBinding :: Binding -> Term -> Term
+trAbstractDeclarationBinding (Binding sourcePos (Identifier _ name) expression) term =
+  TrFunctionType (OrSource sourcePos) (exTranslate expression) output where
+    output _ input = trApplyVariable name input term
 
-cnInsertSourceDefinition :: Identifier -> Term -> Context -> Either Error Context
-cnInsertSourceDefinition (Identifier sourcePos name) term context = do
-  termType <- case cnLookupDeclaration name context of
-    Nothing -> Left (ErUndeclaredName sourcePos name)
-    Just termType -> Right termType
-  
-  context' <- case cnInsertDefinition name term context of
-    Nothing -> Left (ErRepeatedlyDefinedName sourcePos name)
-    Just context' -> Right context'
-  
-  case trCheck (cnDeclarations context') (cnDefinitions context') termType term of
-    Left coreError -> Left (ErCoreError coreError name)
-    Right () -> Right context'
+pgDeclarations :: Program -> [(SourcePos, Name, Term)]
+pgDeclarations (Program _ program) =
+  map transform program where
+    transform (StDefn sourcePos (Identifier _ name) bindings declaration _) =
+      (sourcePos, name, foldr trAbstractDeclarationBinding (exTranslate declaration) bindings)
 
-pgCheck :: Program -> Either Error Context
-pgCheck program = do
-  let combine construct context (identifier, term) = construct identifier term context
-  step <- foldlM (combine cnInsertSourceDeclaration) cnInitial (pgDeclarations program)
+trAbstractDefinitionBinding :: Binding -> Term -> Term
+trAbstractDefinitionBinding (Binding sourcePos (Identifier _ name) _) term =
+  TrFunction (OrSource sourcePos) output where
+    output input = trApplyVariable name input term
 
-  foldlM (combine cnInsertSourceDefinition) step (pgDefinitions program)
+pgDefinitions :: Program -> [(SourcePos, Name, Term)]
+pgDefinitions (Program _ program) =
+  map transform program where
+    transform (StDefn sourcePos (Identifier _ name) bindings _ definition) =
+      (sourcePos, name, foldr trAbstractDefinitionBinding (exTranslate definition) bindings)

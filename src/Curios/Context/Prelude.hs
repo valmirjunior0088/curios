@@ -1,7 +1,6 @@
 module Curios.Context.Prelude
-  (prelude
-  ,prDeclarations
-  ,prDefinitions
+  (declarations
+  ,definitions
   )
   where
 
@@ -218,12 +217,12 @@ prelude =
   ,realGreaterThanOrEqualTo
   ]
 
-prDeclarations :: [Entry] -> [(Name, Term)]
-prDeclarations entries =
-  map transform entries where
-    transform entry = (enName entry, enType entry)
+declarations :: [(Name, Term)]
+declarations =
+  map transform prelude where
+    transform (Entry { enName, enType }) = (enName, enType)
 
-prDefinitions :: [Entry] -> [(Name, Term)]
-prDefinitions entries =
-  map transform entries where
-    transform entry = (enName entry, enTerm entry)
+definitions :: [(Name, Term)]
+definitions =
+  map transform prelude where
+    transform (Entry { enName, enTerm }) = (enName, enTerm)

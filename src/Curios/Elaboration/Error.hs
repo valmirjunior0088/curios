@@ -1,36 +1,49 @@
 module Curios.Elaboration.Error
-  (Error (..)
+  (Kind (..)
+  ,Error (..)
+  ,throw
   ,showError
   )
   where
 
-import Prelude hiding (error)
-
 import Curios.Core (Name)
-import Curios.PrettyPrinting.Framed (framed)
-import Text.Megaparsec (SourcePos)
+import Curios.PrettyPrinting.Megaparsec (showFile, showSource)
+import Text.Megaparsec (SourcePos (..))
+
 import qualified Curios.Core.Error as Core
 
-data Error =
-  ErUndeclaredName SourcePos Name |
-  ErRepeatedlyDeclaredName SourcePos Name |
-  ErRepeatedlyDefinedName SourcePos Name |
-  ErCoreError Core.Error Name
+data Kind =
+  KnUndeclaredName |
+  KnRepeatedlyDeclaredName |
+  KnRepeatedlyDefinedName |
+  KnCoreError Core.Error
 
-showError :: Error -> String -> String
-showError error source =
-  case error of
-    ErUndeclaredName sourcePos name ->
-      framed sourcePos source
+data Error =
+  Error { erSourcePos :: SourcePos, erName :: Name, erKind :: Kind }
+
+throw :: SourcePos -> Name -> Kind -> Either Error a
+throw sourcePos name kind =
+  Left (Error { erSourcePos = sourcePos, erName = name, erKind = kind })
+
+showMessage :: SourcePos -> String -> String -> String
+showMessage sourcePos source message =
+  showFile sourcePos
+    ++ "\n"
+    ++ showSource sourcePos source
+    ++ "\n"
+    ++ message ++ "\n"
+
+showError :: String -> Error -> String
+showError source (Error { erSourcePos, erName, erKind }) =
+  case erKind of
+    KnUndeclaredName ->
+      showMessage erSourcePos source ("The name \"" ++ erName ++ "\" is undeclared")
+    KnRepeatedlyDeclaredName ->
+      showMessage erSourcePos source ("The name \"" ++ erName ++ "\" is repeatedly declared")
+    KnRepeatedlyDefinedName ->
+      showMessage erSourcePos source ("The name \"" ++ erName ++ "\" is repeatedly defined")
+    KnCoreError coreError ->
+      showFile erSourcePos
+        ++ "When elaborating \"" ++ erName ++ "\"..." ++ "\n"
         ++ "\n"
-        ++ "The name \"" ++ name ++ "\" is undeclared" ++ "\n"
-    ErRepeatedlyDeclaredName sourcePos name ->
-      framed sourcePos source
-        ++ "\n"
-        ++ "The name \"" ++ name ++ "\" is repeatedly declared" ++ "\n"
-    ErRepeatedlyDefinedName sourcePos name ->
-      framed sourcePos source
-        ++ "\n"
-        ++ "The name \"" ++ name ++ "\" is repeatedly defined" ++ "\n"
-    ErCoreError coreError name ->
-      Core.showError name coreError source
+        ++ Core.showError source coreError

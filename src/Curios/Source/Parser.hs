@@ -3,9 +3,10 @@ module Curios.Source.Parser
   )
   where
 
-import Curios.Source.Error (Error, fromParseErrorBundle)
+import Curios.Source.Error (Error, erFromMegaparsec)
 import Text.Megaparsec.Char (space1)
 import Data.Void (Void)
+
 import qualified Text.Megaparsec as Megaparsec
 
 import Curios.Source
@@ -158,5 +159,5 @@ program =
 parse :: String -> String -> Either Error Program
 parse file source =
   case Megaparsec.parse program file source of
-    Left parseErrorBundle -> Left (fromParseErrorBundle parseErrorBundle)
+    Left parseErrorBundle -> Left (erFromMegaparsec parseErrorBundle)
     Right result -> Right result
