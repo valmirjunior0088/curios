@@ -217,7 +217,7 @@ prelude =
   ,realGreaterThanOrEqualTo
   ]
 
-declarations :: [(Name, Term)]
+declarations :: [(Name, Type)]
 declarations =
   map transform prelude where
     transform (Entry { enName, enType }) = (enName, enType)
