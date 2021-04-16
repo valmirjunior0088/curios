@@ -1,6 +1,6 @@
 module Curios.Elaboration.Program
-  (pgDeclarations
-  ,pgDefinitions
+  ( pgDeclarations
+  , pgDefinitions
   )
   where
 

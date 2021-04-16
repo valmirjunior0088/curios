@@ -1,5 +1,5 @@
 module Curios.Source.Parser
-  (parse
+  ( parse
   )
   where
 
@@ -10,40 +10,40 @@ import Data.Void (Void)
 import qualified Text.Megaparsec as Megaparsec
 
 import Curios.Source
-  (Identifier (..)
-  ,Literal (..)
-  ,FunctionTypeBinding (..)
-  ,FunctionBinding (..)
-  ,Expression (..)
-  ,Binding (..)
-  ,Statement (..)
-  ,Program (..)
+  ( Identifier (..)
+  , Literal (..)
+  , FunctionTypeBinding (..)
+  , FunctionBinding (..)
+  , Expression (..)
+  , Binding (..)
+  , Statement (..)
+  , Program (..)
   )
 
 import Text.Megaparsec
-  (Parsec
-  ,getSourcePos
-  ,try
-  ,oneOf
-  ,single
-  ,optional
-  ,many
-  ,some
-  ,manyTill
-  ,someTill
-  ,eof
-  ,(<|>)
+  ( Parsec
+  , getSourcePos
+  , try
+  , oneOf
+  , single
+  , optional
+  , many
+  , some
+  , manyTill
+  , someTill
+  , eof
+  , (<|>)
   )
 
 import qualified Text.Megaparsec.Char.Lexer as Lexer
-  (space
-  ,skipLineComment
-  ,skipBlockComment
-  ,lexeme
-  ,symbol
-  ,charLiteral
-  ,decimal
-  ,float
+  ( space
+  , skipLineComment
+  , skipBlockComment
+  , lexeme
+  , symbol
+  , charLiteral
+  , decimal
+  , float
   )
 
 type Parser a =

@@ -1,5 +1,5 @@
 module Curios.Elaboration.Expression
-  (exTranslate
+  ( exTranslate
   )
   where
 

@@ -1,7 +1,7 @@
 module Curios.Source.Error
-  (Error (..)
-  ,erFromMegaparsec
-  ,showError
+  ( Error (..)
+  , erFromMegaparsec
+  , showError
   )
   where
 
@@ -20,12 +20,12 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 
 import Text.Megaparsec
-  (Token
-  ,SourcePos (..)
-  ,ParseError (..)
-  ,ErrorItem (..)
-  ,ErrorFancy (..)
-  ,Stream (..)
+  ( Token
+  , SourcePos (..)
+  , ParseError (..)
+  , ErrorItem (..)
+  , ErrorFancy (..)
+  , Stream (..)
   )
 
 data Error =

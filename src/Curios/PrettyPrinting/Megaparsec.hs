@@ -1,6 +1,6 @@
 module Curios.PrettyPrinting.Megaparsec
-  (showFile
-  ,showSource
+  ( showFile
+  , showSource
   )
   where
 

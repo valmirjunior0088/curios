@@ -1,8 +1,8 @@
 module Curios.Context
-  (Context (..)
-  ,ctEmpty
-  ,ctHandleDeclaration
-  ,ctHandleDefinition
+  ( Context (..)
+  , ctEmpty
+  , ctHandleDeclaration
+  , ctHandleDefinition
   )
   where
 

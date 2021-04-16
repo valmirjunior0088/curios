@@ -1,28 +1,28 @@
 module Curios.Context.Prelude
-  (declarations
-  ,definitions
+  ( declarations
+  , definitions
   )
   where
 
 import Curios.Core
-  (Literal (..)
-  ,Name
-  ,Type
-  ,vrUnwrap
-  ,Term
-  ,trPrText
-  ,trPrInteger
-  ,trPrReal
-  ,trLtText
-  ,trLtInteger
-  ,trLtReal
-  ,trOpUnary
-  ,trOpBinary
-  ,trReference
-  ,trType
-  ,trFunctionType
-  ,trFunction
-  ,trApplication
+  ( Literal (..)
+  , Name
+  , Type
+  , vrUnwrap
+  , Term
+  , trPrText
+  , trPrInteger
+  , trPrReal
+  , trLtText
+  , trLtInteger
+  , trLtReal
+  , trOpUnary
+  , trOpBinary
+  , trReference
+  , trType
+  , trFunctionType
+  , trFunction
+  , trApplication
   )
 
 data Entry =
@@ -193,28 +193,28 @@ realGreaterThanOrEqualTo =
 
 prelude :: [Entry]
 prelude =
-  [boolean
-  ,booleanTrue
-  ,booleanFalse
-  ,textLength
-  ,textConcatenate
-  ,integerSum
-  ,integerSubtract
-  ,integerMultiply
-  ,integerEqualTo
-  ,integerLesserThan
-  ,integerLesserThanOrEqualTo
-  ,integerGreaterThan
-  ,integerGreaterThanOrEqualTo
-  ,realSum
-  ,realSubtract
-  ,realMultiply
-  ,realDivide
-  ,realEqualTo
-  ,realLesserThan
-  ,realLesserThanOrEqualTo
-  ,realGreaterThan
-  ,realGreaterThanOrEqualTo
+  [ boolean
+  , booleanTrue
+  , booleanFalse
+  , textLength
+  , textConcatenate
+  , integerSum
+  , integerSubtract
+  , integerMultiply
+  , integerEqualTo
+  , integerLesserThan
+  , integerLesserThanOrEqualTo
+  , integerGreaterThan
+  , integerGreaterThanOrEqualTo
+  , realSum
+  , realSubtract
+  , realMultiply
+  , realDivide
+  , realEqualTo
+  , realLesserThan
+  , realLesserThanOrEqualTo
+  , realGreaterThan
+  , realGreaterThanOrEqualTo
   ]
 
 declarations :: [(Name, Type)]

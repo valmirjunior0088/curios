@@ -1,30 +1,30 @@
 module Curios.Core
-  (Origin (..)
-  ,Primitive (..)
-  ,Literal (..)
-  ,Operator (..)
-  ,Name
-  ,Index
-  ,Type
-  ,Variable (..)
-  ,vrUnwrap
-  ,Term (..)
-  ,trPrText
-  ,trPrInteger
-  ,trPrReal
-  ,trLtText
-  ,trLtInteger
-  ,trLtReal
-  ,trOpUnary
-  ,trOpBinary
-  ,trReference
-  ,trType
-  ,trFunctionType
-  ,trFunction
-  ,trApplication
-  ,trShow
-  ,trOrigin
-  ,trApplyVariable
+  ( Origin (..)
+  , Primitive (..)
+  , Literal (..)
+  , Operator (..)
+  , Name
+  , Index
+  , Type
+  , Variable (..)
+  , vrUnwrap
+  , Term (..)
+  , trPrText
+  , trPrInteger
+  , trPrReal
+  , trLtText
+  , trLtInteger
+  , trLtReal
+  , trOpUnary
+  , trOpBinary
+  , trReference
+  , trType
+  , trFunctionType
+  , trFunction
+  , trApplication
+  , trShow
+  , trOrigin
+  , trApplyVariable
   )
   where
 

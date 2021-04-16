@@ -1,9 +1,9 @@
 module Curios.Core.Declarations
-  (Declarations (..)
-  ,dcEmpty
-  ,dcInsert
-  ,dcLookup
-  ,dcMember
+  ( Declarations (..)
+  , dcEmpty
+  , dcInsert
+  , dcLookup
+  , dcMember
   )
   where
 

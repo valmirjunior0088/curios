@@ -1,8 +1,8 @@
 module Curios.Context.Error
-  (Kind (..)
-  ,Error (..)
-  ,throw
-  ,showError
+  ( Kind (..)
+  , Error (..)
+  , throw
+  , showError
   )
   where
 

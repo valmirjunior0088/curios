@@ -1,5 +1,5 @@
 module Curios.Core.Conversion
-  (trConverts
+  ( trConverts
   )
   where
 

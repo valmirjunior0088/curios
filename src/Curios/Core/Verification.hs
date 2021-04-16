@@ -1,5 +1,5 @@
 module Curios.Core.Verification
-  (trCheck
+  ( trCheck
   )
   where
 
@@ -13,15 +13,15 @@ import Data.Maybe (fromJust)
 import Control.Monad (unless)
 
 import Curios.Core
-  (Literal (..)
-  ,Variable (..)
-  ,Type
-  ,Term (..)
-  ,trType
-  ,trPrText
-  ,trPrInteger 
-  ,trPrReal 
-  ,trOrigin
+  ( Literal (..)
+  , Variable (..)
+  , Type
+  , Term (..)
+  , trType
+  , trPrText
+  , trPrInteger 
+  , trPrReal 
+  , trOrigin
   )
 
 ltInfer :: Literal -> Type

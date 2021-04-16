@@ -1,5 +1,5 @@
 module Curios.Context.Initial
-  (ctInitial
+  ( ctInitial
   )
   where
 

@@ -1,12 +1,12 @@
 module Curios.Source
-  (Literal (..)
-  ,Identifier (..)
-  ,FunctionTypeBinding (..)
-  ,FunctionBinding (..)
-  ,Expression (..)
-  ,Binding (..)
-  ,Statement (..)
-  ,Program (..)
+  ( Literal (..)
+  , Identifier (..)
+  , FunctionTypeBinding (..)
+  , FunctionBinding (..)
+  , Expression (..)
+  , Binding (..)
+  , Statement (..)
+  , Program (..)
   )
   where
 

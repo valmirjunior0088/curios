@@ -1,5 +1,5 @@
 module Curios.Core.Reduction
-  (trReduce
+  ( trReduce
   )
   where
 

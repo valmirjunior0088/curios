@@ -1,22 +1,22 @@
 module Curios.PrettyPrinting.Framed
-  (framed
+  ( framed
   )
   where
   
 import Text.PrettyPrint.Boxes
-  (Box
-  ,char
-  ,text
-  ,(<+>)
-  ,(//)
-  ,hcat
-  ,vcat
-  ,top
-  ,left
-  ,right
-  ,alignHoriz
-  ,cols
-  ,render
+  ( Box
+  , char
+  , text
+  , (<+>)
+  , (//)
+  , hcat
+  , vcat
+  , top
+  , left
+  , right
+  , alignHoriz
+  , cols
+  , render
   )
 
 label :: Int -> Box -> Box

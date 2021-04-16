@@ -1,5 +1,5 @@
 module Curios
-  (run
+  ( run
   )
   where
 

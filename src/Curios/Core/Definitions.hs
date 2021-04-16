@@ -1,9 +1,9 @@
 module Curios.Core.Definitions
-  (Definitions (..)
-  ,dfEmpty
-  ,dfInsert
-  ,dfLookup
-  ,dfMember
+  ( Definitions (..)
+  , dfEmpty
+  , dfInsert
+  , dfLookup
+  , dfMember
   )
   where
 

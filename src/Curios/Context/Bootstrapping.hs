@@ -1,5 +1,5 @@
 module Curios.Context.Bootstrapping
-  (ctFromProgram
+  ( ctFromProgram
   )
   where
 

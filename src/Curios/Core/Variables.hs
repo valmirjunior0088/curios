@@ -1,9 +1,9 @@
 module Curios.Core.Variables
-  (Variables (..)
-  ,vrEmpty
-  ,vrAllocate
-  ,vrLookup
-  ,vrDepth
+  ( Variables (..)
+  , vrEmpty
+  , vrAllocate
+  , vrLookup
+  , vrDepth
   )
   where
 
