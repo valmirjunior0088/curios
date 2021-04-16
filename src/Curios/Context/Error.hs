@@ -1,4 +1,4 @@
-module Curios.Elaboration.Error
+module Curios.Context.Error
   (Kind (..)
   ,Error (..)
   ,throw

@@ -8,11 +8,11 @@ import Curios.Core.Declarations (dcLookup)
 import Curios.Core.Definitions (dfLookup)
 import Curios.Core.Reduction (trReduce)
 import Curios.Context (Context (..))
-import Curios.Elaboration.Execution (pgCheck)
+import Curios.Context.Bootstrapping (ctFromProgram)
 
 import qualified Curios.Source.Parser as Source
 import qualified Curios.Source.Error as Source
-import qualified Curios.Elaboration.Error as Elaboration
+import qualified Curios.Context.Error as Context
 
 evaluate :: Context -> Name -> String
 evaluate (Context { ctDeclarations, ctDefinitions }) name =
@@ -35,8 +35,8 @@ check file name source = do
     Left sourceError -> Left (Source.showError source sourceError)
     Right program -> Right program
 
-  context <- case pgCheck program of
-    Left elaborationError -> Left (Elaboration.showError source elaborationError)
+  context <- case ctFromProgram program of
+    Left contextError -> Left (Context.showError source contextError)
     Right context -> Right context
   
   Right (maybe "Check succeded!\n" (evaluate context) name)

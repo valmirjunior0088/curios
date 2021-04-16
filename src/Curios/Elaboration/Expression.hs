@@ -6,6 +6,7 @@ module Curios.Elaboration.Expression
 import Curios.Source (Identifier (..), FunctionTypeBinding (..), FunctionBinding (..), Expression (..))
 import Curios.Core (Origin (..), Primitive (..), Term (..), trApplyVariable)
 import Text.Megaparsec (SourcePos)
+
 import qualified Curios.Source as Source
 import qualified Curios.Core as Core
 

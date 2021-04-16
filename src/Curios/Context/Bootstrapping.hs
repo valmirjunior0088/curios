@@ -1,18 +1,17 @@
-module Curios.Elaboration.Execution
-  (pgCheck
+module Curios.Context.Bootstrapping
+  (ctFromProgram
   )
   where
 
 import Curios.Source (Program)
-import Curios.Context (Context)
+import Curios.Context (Context, ctHandleDeclaration, ctHandleDefinition)
 import Curios.Context.Initial (ctInitial)
-import Curios.Elaboration (ctHandleDeclaration, ctHandleDefinition)
+import Curios.Context.Error (Error)
 import Curios.Elaboration.Program (pgDeclarations, pgDefinitions)
-import Curios.Elaboration.Error (Error)
 import Data.Foldable (foldlM)
 
-pgCheck :: Program -> Either Error Context
-pgCheck program = do
+ctFromProgram :: Program -> Either Error Context
+ctFromProgram program = do
   let declare context (sourcePos, name, termType) = ctHandleDeclaration sourcePos name termType context
   step <- foldlM declare ctInitial (pgDeclarations program)
 

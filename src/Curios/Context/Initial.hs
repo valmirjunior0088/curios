@@ -3,9 +3,8 @@ module Curios.Context.Initial
   )
   where
 
-import Curios.Context (Context, ctEmpty)
-import Curios.Elaboration (ctHandleDeclaration, ctHandleDefinition)
-import Curios.Elaboration.Error (showError)
+import Curios.Context (Context, ctEmpty, ctHandleDeclaration, ctHandleDefinition)
+import Curios.Context.Error (showError)
 import Text.Megaparsec (SourcePos (..), mkPos)
 import Data.Foldable (foldlM)
 
