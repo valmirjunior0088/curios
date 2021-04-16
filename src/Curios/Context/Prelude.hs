@@ -27,9 +27,9 @@ import Curios.Core
 
 data Entry =
   Entry
-    {enName :: Name
-    ,enType :: Type
-    ,enTerm :: Term
+    { enName :: Name
+    , enType :: Type
+    , enTerm :: Term
     }
 
 enOpUnary :: Name -> Type -> (Literal -> Term) -> Entry
@@ -43,38 +43,38 @@ enOpBinary name termType operator =
 boolean :: Entry
 boolean =
   Entry
-    {enName = "Boolean"
-    ,enType = trType
-    ,enTerm =
-      trFunctionType
-        (trFunctionType (trReference "Boolean") (\_ _ -> trType))
-        (\self input ->
-          (trFunctionType (trApplication (vrUnwrap input) (trReference "true"))
-            (\_ _ ->
-              (trFunctionType (trApplication (vrUnwrap input) (trReference "false"))
-                (\_ _ ->
-                  (trApplication (vrUnwrap input) (vrUnwrap self))
+    { enName = "Boolean"
+    , enType = trType
+    , enTerm =
+        trFunctionType
+          (trFunctionType (trReference "Boolean") (\_ _ -> trType))
+          (\self input ->
+            (trFunctionType (trApplication (vrUnwrap input) (trReference "true"))
+              (\_ _ ->
+                (trFunctionType (trApplication (vrUnwrap input) (trReference "false"))
+                  (\_ _ ->
+                    (trApplication (vrUnwrap input) (vrUnwrap self))
+                  )
                 )
               )
             )
           )
-        )
     }
 
 booleanTrue :: Entry
 booleanTrue =
   Entry
-    {enName = "true"
-    ,enType = trReference "Boolean"
-    ,enTerm = trFunction (\_ -> trFunction (\pTrue -> trFunction (\_ -> vrUnwrap pTrue)))
+    { enName = "true"
+    , enType = trReference "Boolean"
+    , enTerm = trFunction (\_ -> trFunction (\pTrue -> trFunction (\_ -> vrUnwrap pTrue)))
     }
 
 booleanFalse :: Entry
 booleanFalse =
   Entry
-    {enName = "false"
-    ,enType = trReference "Boolean"
-    ,enTerm = trFunction (\_ -> trFunction (\_ -> trFunction (\pFalse -> vrUnwrap pFalse)))
+    { enName = "false"
+    , enType = trReference "Boolean"
+    , enTerm = trFunction (\_ -> trFunction (\_ -> trFunction (\pFalse -> vrUnwrap pFalse)))
     }
 
 textLength :: Entry
