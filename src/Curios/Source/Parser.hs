@@ -109,12 +109,14 @@ exClosed =
     exParens = ExParens <$> getSourcePos <*> (symbol "(" *> exFunction (symbol ")"))
 
 exApplication :: Parser a -> Parser Expression
-exApplication terminator =
-  lexeme (try application <|> exClosed <* terminator) where
-    application =
-      ExApplication <$> getSourcePos
-        <*> exClosed
-        <*> someTill exClosed terminator
+exApplication terminator = do
+  sourcePos <- getSourcePos
+  expressions <- someTill exClosed terminator
+
+  case expressions of
+    [] -> error "empty application"
+    closed : [] -> return closed
+    function : arguments -> return (ExApplication sourcePos function arguments)
 
 exFunctionType :: Parser a -> Parser Expression
 exFunctionType terminator =
@@ -132,15 +134,11 @@ exFunction terminator =
         <*> some (try functionBinding)
         <*> exFunctionType terminator
 
-expression :: Parser a -> Parser Expression
-expression =
-  exFunction
-
 binding :: Parser Binding
 binding =
   lexeme (Binding <$> getSourcePos <*> name <*> declaration) where
     name = symbol "(" *> identifier
-    declaration = symbol ":" *> expression (symbol ")")
+    declaration = symbol ":" *> exFunction (symbol ")")
 
 statement :: Parser Statement
 statement =
@@ -149,8 +147,8 @@ statement =
       StDefn <$> getSourcePos
         <*> (symbol "defn" *> identifier)
         <*> many binding
-        <*> (symbol ":" *> expression (symbol "{"))
-        <*> (expression (symbol "}"))
+        <*> (symbol ":" *> exFunction (symbol "{"))
+        <*> (exFunction (symbol "}"))
 
 program :: Parser Program
 program =
