@@ -90,7 +90,7 @@ functionTypeBinding =
       FunctionTypeBinding <$> getSourcePos
         <*> (symbol "(" *> optional (try (identifier <* symbol "|")))
         <*> optional (try (identifier <* symbol ":"))
-        <*> exFunctionType (symbol ")") <* symbol "->"
+        <*> exFunction (symbol ")") <* symbol "->"
     withoutParens = 
       FunctionTypeBinding <$> getSourcePos
         <*> pure Nothing
@@ -142,13 +142,11 @@ binding =
 
 statement :: Parser Statement
 statement =
-  lexeme (stDefn) where
-    stDefn =
-      StDefn <$> getSourcePos
-        <*> (symbol "defn" *> identifier)
-        <*> many binding
-        <*> (symbol ":" *> exFunction (symbol "{"))
-        <*> (exFunction (symbol "}"))
+  StDefn <$> getSourcePos
+    <*> (symbol "defn" *> identifier)
+    <*> many binding
+    <*> (symbol ":" *> exFunction (symbol "{"))
+    <*> exFunction (symbol "}")
 
 program :: Parser Program
 program =
