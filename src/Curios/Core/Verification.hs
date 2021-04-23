@@ -97,7 +97,6 @@ trCheck declarations definitions =
         (termType', term') -> do
           termType'' <- infer variables term'
 
-          unless (trConverts definitions (vrDepth variables) termType' termType'')
+          unless
+            (trConverts definitions (vrDepth variables) termType' termType'')
             (throw (trOrigin term') variables (KnMismatchedType termType termType''))
-          
-          return ()
