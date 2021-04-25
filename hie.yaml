@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "curios:lib"
+
+    - path: "./app/Main.hs"
+      component: "curios:exe:curios-exe"
+
+    - path: "./app/Paths_curios.hs"
+      component: "curios:exe:curios-exe"
+
+    - path: "./test"
+      component: "curios:test:curios-test"
