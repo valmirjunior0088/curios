@@ -1,11 +1,17 @@
+import System.Environment (getArgs, getProgName)
+import System.Exit (die)
 import Curios (run)
-import System.Environment (getArgs)
+
+usage :: String -> String
+usage name =
+  "USAGE: " ++ name ++ " INPUT"
 
 main :: IO ()
 main = do
   arguments <- getArgs
 
-  case arguments of
-    [file, name] -> readFile file >>= run file (Just name)
-    [file] -> readFile file >>= run file Nothing
-    _ -> putStr ("USAGE: <command> file [name]" ++ "\n")
+  input <- case arguments of
+    input : [] -> return input
+    _ -> getProgName >>= die . usage
+
+  run input

@@ -1,13 +1,15 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 module Curios.Source.Error
   ( Error (..)
-  , erFromMegaparsec
+  , fromErrorBundle
   , showError
   )
   where
 
 import Curios.PrettyPrinting.Megaparsec (showFile, showSource)
 import Data.List (intercalate)
-import Data.Maybe (maybe, isNothing)
+import Data.Maybe (isNothing)
 import Data.Proxy (Proxy (..))
 import Data.Void (Void, absurd)
 import Text.Megaparsec.Pos (unPos)
@@ -26,22 +28,25 @@ import Text.Megaparsec
   , ErrorItem (..)
   , ErrorFancy (..)
   , Stream (..)
+  , PosState (..)
+  , reachOffset
+  , showTokens
   )
 
 data Error =
   Error SourcePos (ParseError String Void)
 
-erFromMegaparsec :: (ParseErrorBundle String Void) -> Error
-erFromMegaparsec (ParseErrorBundle { bundleErrors, bundlePosState }) =
-  Error sourcePos parseError where
-    (parseError :| _) = bundleErrors
-    (sourcePos, _, _) = reachOffset (errorOffset parseError) bundlePosState
+fromErrorBundle :: ParseErrorBundle String Void -> Error
+fromErrorBundle (ParseErrorBundle { bundleErrors, bundlePosState }) =
+  Error pstateSourcePos parseError where
+    parseError :| _ = bundleErrors
+    (_, PosState { pstateSourcePos }) = reachOffset (errorOffset parseError) bundlePosState
 
 orList :: NonEmpty String -> String
 orList tokens =
   case tokens of
-    (item :| []) -> item
-    (item :| [item']) -> item ++ " or " ++ item'
+    item :| [] -> item
+    item :| [item'] -> item ++ " or " ++ item'
     _ -> intercalate ", " (NonEmpty.init tokens) ++ ", or " ++ NonEmpty.last tokens
 
 showParseTokens :: String -> Set String -> String
@@ -99,4 +104,3 @@ showError source (Error sourcePos parseError) =
     ++ showSource sourcePos source
     ++ "\n"
     ++ showParseError parseError
-    ++ "\n"

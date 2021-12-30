@@ -1,10 +1,10 @@
 name: curios
-version: 0.0.2
+version: 0.0.3
 github: "valmirjunior0088/curios"
 license: BSD3
-author: "Valmir Junior"
+author: "Valmir Pretto"
 maintainer: "valmirjunior0088@gmail.com"
-copyright: "2019 Valmir Junior"
+copyright: "2019-present Valmir Pretto"
 
 extra-source-files:
 - README.md
@@ -14,13 +14,11 @@ category: Compiler
 description: Please see the README on GitHub at <https://github.com/valmirjunior0088/curios#readme>
 
 dependencies:
-- base >= 4 && < 5
-- megaparsec >= 7 && < 8
-- containers >= 0 && < 1
-- boxes >= 0 && < 1
-
-default-extensions:
-- NamedFieldPuns
+- base >= 4.7 && < 5
+- mtl >= 2.2 && < 3
+- megaparsec >= 9.0 && < 10
+- boxes >= 0.1 && < 1
+- containers >= 0.6 && < 7
 
 library:
   source-dirs: src

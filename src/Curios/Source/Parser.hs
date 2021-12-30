@@ -3,157 +3,230 @@ module Curios.Source.Parser
   )
   where
 
-import Curios.Source.Error (Error, erFromMegaparsec)
-import Text.Megaparsec.Char (space1)
+import Curios.Source.Error (Error (..), fromErrorBundle)
 import Data.Void (Void)
-
+import Text.Megaparsec.Char (space1)
 import qualified Text.Megaparsec as Megaparsec
+import qualified Text.Megaparsec.Char.Lexer as Lexer
 
-import Curios.Source
+import Curios.Source.Expression
   ( Identifier (..)
-  , Literal (..)
   , FunctionTypeBinding (..)
   , FunctionBinding (..)
-  , Expression (..)
+  , SelfBinding (..)
   , Binding (..)
-  , Statement (..)
+  , Primitive (..)
+  , Literal (..)
+  , Operation (..)
+  , Expression (..)
+  , Item (..)
   , Program (..)
   )
 
 import Text.Megaparsec
   ( Parsec
   , getSourcePos
-  , try
-  , oneOf
-  , single
-  , optional
-  , many
-  , some
-  , manyTill
-  , someTill
-  , eof
   , (<|>)
+  , try
+  , some
+  , many
+  , someTill
+  , oneOf
+  , optional
+  , single
+  , eof
   )
 
-import qualified Text.Megaparsec.Char.Lexer as Lexer
-  ( space
-  , skipLineComment
-  , skipBlockComment
-  , lexeme
-  , symbol
-  , charLiteral
-  , decimal
-  , float
-  )
+type Parser =
+  Parsec Void String
 
-type Parser a =
-  Parsec Void String a
-
-space :: Parser ()
-space =
+psSpace :: Parser ()
+psSpace =
   Lexer.space space1 spLineComment spBlockComment where
     spLineComment = Lexer.skipLineComment "//"
     spBlockComment = Lexer.skipBlockComment "/*" "*/"
 
-lexeme :: Parser a -> Parser a
-lexeme parser =
-  Lexer.lexeme space parser
+psLexeme :: Parser a -> Parser a
+psLexeme parser =
+  Lexer.lexeme psSpace parser
 
-symbol :: String -> Parser String
-symbol string =
-  Lexer.symbol space string
+psSymbol :: String -> Parser String
+psSymbol string =
+  Lexer.symbol psSpace string
 
-identifier :: Parser Identifier
-identifier =
-  lexeme (Identifier <$> getSourcePos <*> some (try (oneOf validCharacters))) where
-    validCharacters =
-      ['a' .. 'z']
-        ++ ['A' .. 'Z']
-        ++ ['0' .. '9']
-        ++ ['+', '-', '*', '/', '=', '>', '<', '\'', '_', '~']
+psIdentifier :: Parser Identifier
+psIdentifier =
+  psLexeme $ Identifier <$> getSourcePos <*> string where
+    validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['_']
+    string = some $ try $ oneOf validCharacters
 
-literal :: Parser Literal
-literal =
-  lexeme (ltText <|> try ltReal <|> ltInteger) where
-    ltText = LtText <$> getSourcePos <*> (single '"' *> manyTill Lexer.charLiteral (single '"'))
-    ltReal = positive <|> negative where
-      positive = LtReal <$> getSourcePos <*> (optional (single '+') *> Lexer.float)
-      negative = LtReal <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.float))
+psFunctionTypeBinding :: Parser FunctionTypeBinding 
+psFunctionTypeBinding =
+  psLexeme $ try dependent <|> nonDependent where
+    dependent =
+      FtDependent <$> getSourcePos
+        <*> (psSymbol "(" *> psIdentifier <* psSymbol ":")
+        <*> psExpression ")" <* psSymbol "->"
+    
+    nonDependent =
+      FtNonDependent <$> getSourcePos
+        <*> psApplication "->"
+
+psFunctionBinding :: Parser FunctionBinding
+psFunctionBinding =
+  psLexeme $ FunctionBinding <$> getSourcePos
+    <*> psIdentifier <* psSymbol "=>"
+
+psSelfBinding :: Parser SelfBinding
+psSelfBinding =
+  psLexeme $ SelfBinding <$> getSourcePos
+    <*> psIdentifier <* psSymbol "@>"
+
+psBinding :: Parser Binding
+psBinding =
+  psLexeme $ Binding <$> getSourcePos
+    <*> (psSymbol "(" *> psIdentifier <* psSymbol ":")
+    <*> psExpression ")"
+
+psPrimitive :: Parser Primitive
+psPrimitive =
+  psLexeme $ try ltInt32 <|> ltFlt32 where
+    ltInt32 = PrInt32 <$> getSourcePos <* psSymbol "Int32"
+    ltFlt32 = PrFlt32 <$> getSourcePos <* psSymbol "Flt32"
+
+psLiteral :: Parser Literal
+psLiteral =
+  psLexeme $ try ltReal <|> ltInteger where
     ltInteger = positive <|> negative where
-      positive = LtInteger <$> getSourcePos <*> (optional (single '+') *> Lexer.decimal)
-      negative = LtInteger <$> getSourcePos <*> (single '-' *> (negate <$> Lexer.decimal))
+      parser = LtInt32 <$> getSourcePos
+      positive = parser <*> (optional (single '+') *> Lexer.decimal)
+      negative = parser <*> (single '-' *> (negate <$> Lexer.decimal))
+    ltReal = positive <|> negative where
+      parser = LtFlt32 <$> getSourcePos
+      positive = parser <*> (optional (single '+') *> Lexer.float)
+      negative = parser <*> (single '-' *> (negate <$> Lexer.float))
 
-functionTypeBinding :: Parser FunctionTypeBinding
-functionTypeBinding =
-  lexeme (withParens <|> withoutParens) where
-    withParens =
-      FunctionTypeBinding <$> getSourcePos
-        <*> (symbol "(" *> optional (try (identifier <* symbol "|")))
-        <*> optional (try (identifier <* symbol ":"))
-        <*> exFunction (symbol ")") <* symbol "->"
-    withoutParens = 
-      FunctionTypeBinding <$> getSourcePos
-        <*> pure Nothing
-        <*> pure Nothing
-        <*> exApplication (symbol "->")
+psOperation :: Parser Operation
+psOperation =
+  psLexeme parser where
+    opInt32Sum =
+      OpInt32Sum <$> getSourcePos
+        <*> (psSymbol "int32_sum" *> psClosed)
+        <*> psClosed
 
-functionBinding :: Parser FunctionBinding
-functionBinding =
-  lexeme (FunctionBinding <$> getSourcePos <*> identifier <* symbol "=>")
+    opFlt32Sum =
+      OpFlt32Sum <$> getSourcePos
+        <*> (psSymbol "flt32_sum" *> psClosed)
+        <*> psClosed
+    
+    parser = try opInt32Sum <|> opFlt32Sum
 
-exClosed :: Parser Expression
-exClosed =
-  lexeme (try exLiteral <|> exIdentifier <|> exParens) where
-    exLiteral = ExLiteral <$> getSourcePos <*> literal
-    exIdentifier = ExIdentifier <$> getSourcePos <*> identifier
-    exParens = ExParens <$> getSourcePos <*> (symbol "(" *> exFunction (symbol ")"))
+psClosed :: Parser Expression
+psClosed =
+  psLexeme parser where
+    exParentheses =
+      ExParentheses <$> getSourcePos
+        <*> (psSymbol "(" *> psExpression ")")
 
-exApplication :: Parser a -> Parser Expression
-exApplication terminator = do
+    exPrimitive =
+      ExPrimitive <$> getSourcePos
+        <*> psPrimitive
+
+    exLiteral =
+      ExLiteral <$> getSourcePos
+        <*> psLiteral
+
+    exOperation =
+      ExOperation <$> getSourcePos
+        <*> (psSymbol "#[" *> psOperation <* psSymbol "]")
+
+    exType =
+      ExType <$> getSourcePos
+        <* psSymbol "Type"
+
+    exIdentifier =
+      ExIdentifier <$> getSourcePos
+        <*> psIdentifier
+
+    parser =
+      try exParentheses
+        <|> try exPrimitive
+        <|> try exLiteral
+        <|> try exOperation
+        <|> try exType
+        <|> exIdentifier
+
+psApplication :: String -> Parser Expression
+psApplication terminator = do
   sourcePos <- getSourcePos
-  expressions <- someTill exClosed terminator
+  terms <- someTill psClosed (psSymbol terminator)
 
-  case expressions of
-    [] -> error "empty application"
-    closed : [] -> return closed
-    function : arguments -> return (ExApplication sourcePos function arguments)
+  case terms of
+    [] ->
+      error "`someTill` should parse at least one occurrence"
 
-exFunctionType :: Parser a -> Parser Expression
-exFunctionType terminator =
-  lexeme (functionType <|> exApplication terminator) where
-    functionType =
+    term : [] ->
+      return term
+
+    function : arguments ->
+      return (ExApplication sourcePos function arguments)
+
+psFunctionType :: String -> Parser Expression
+psFunctionType terminator =
+  psLexeme (try parser) <|> psApplication terminator where
+    parser =
       ExFunctionType <$> getSourcePos
-        <*> some (try functionTypeBinding)
-        <*> exApplication terminator
+        <*> psFunctionTypeBinding
+        <*> psExpression terminator
 
-exFunction :: Parser a -> Parser Expression
-exFunction terminator =
-  lexeme (function <|> exFunctionType terminator) where
-    function =
+psFunction :: String -> Parser Expression
+psFunction terminator =
+  psLexeme (try parser) <|> psFunctionType terminator where
+    parser =
       ExFunction <$> getSourcePos
-        <*> some (try functionBinding)
-        <*> exFunctionType terminator
+        <*> psFunctionBinding
+        <*> psExpression terminator
 
-binding :: Parser Binding
-binding =
-  lexeme (Binding <$> getSourcePos <*> name <*> declaration) where
-    name = symbol "(" *> identifier
-    declaration = symbol ":" *> exFunction (symbol ")")
+psSelf :: String -> Parser Expression
+psSelf terminator =
+  psLexeme (try parser) <|> psFunction terminator where
+    parser =
+      ExSelf <$> getSourcePos
+        <*> psSelfBinding
+        <*> psExpression terminator
 
-statement :: Parser Statement
-statement =
-  StDefn <$> getSourcePos
-    <*> (symbol "defn" *> identifier)
-    <*> many binding
-    <*> (symbol ":" *> exFunction (symbol "{"))
-    <*> exFunction (symbol "}")
+psData :: String -> Parser Expression
+psData terminator =
+  psLexeme (try parser) <|> psSelf terminator where
+    parser =
+      ExData <$> getSourcePos
+        <*> (psSymbol "data" *> psExpression terminator)
 
-program :: Parser Program
-program =
-  lexeme (Program <$> getSourcePos <*> some statement <* eof)
+psCase :: String -> Parser Expression
+psCase terminator =
+  psLexeme (try parser) <|> psData terminator where
+    parser =
+      ExCase <$> getSourcePos
+        <*> (psSymbol "case" *> psExpression terminator)
+
+psExpression :: String -> Parser Expression
+psExpression =
+  psCase
+
+psItem :: Parser Item
+psItem =
+  psLexeme $ Item <$> getSourcePos
+    <*> (psSymbol "defn" *> psIdentifier)
+    <*> many psBinding
+    <*> (psSymbol ":" *> psExpression "{")
+    <*> psExpression "}"
+
+psProgram :: Parser Program
+psProgram =
+  psLexeme $ Program <$> getSourcePos <*> some psItem <* eof
 
 parse :: String -> String -> Either Error Program
-parse file source =
-  case Megaparsec.parse program file source of
-    Left parseErrorBundle -> Left (erFromMegaparsec parseErrorBundle)
-    Right result -> Right result
+parse input source =
+  case Megaparsec.parse psProgram input source of
+    Left errorBundle -> Left (fromErrorBundle errorBundle)
+    Right program -> Right program

@@ -1,56 +1,54 @@
 module Curios.Core.Error
   ( Kind (..)
   , Error (..)
-  , throw
   , showError
   )
   where
 
-import Curios.Core (Origin (..), Name, Type, trShow)
-import Curios.Core.Variables (Variables, vrDepth)
+import Curios.Core.Term (Origin, Name, Index)
 import Curios.PrettyPrinting.Megaparsec (showSource)
 
 data Kind =
-  KnMismatchedFunctionType Type |
-  KnMismatchedType Type Type |
   KnUndeclaredName Name |
-  KnNonInferable
+  KnVariableOutOfBounds Index |
+  KnFunctionsDontHaveAnInferableType |
+  KnFunctionDidntHaveFunctionType |
+  KnConstructorsDontHaveAnInferableType |
+  KnConstructorDidntHaveSelfType |
+  KnFunctionTypeMismatch |
+  KnSelfTypeMismatch |
+  KnTypeMismatch |
+  KnNameAlreadyDeclared Name |
+  KnNameAlreadyDefined Name |
+  KnUndeclaredNameBeingDefined Name
+
+showKind :: Kind -> String
+showKind kind =
+  case kind of
+    KnUndeclaredName name -> "Undeclared name: " ++ name
+    KnVariableOutOfBounds index -> "Variable out of bounds: " ++ show index
+    KnFunctionsDontHaveAnInferableType -> "Functions don't have an inferable type"
+    KnFunctionDidntHaveFunctionType -> "Function didn't have function type"
+    KnConstructorsDontHaveAnInferableType -> "Constructors don't have an inferable type"
+    KnConstructorDidntHaveSelfType -> "Constructor didn't have self type"
+    KnFunctionTypeMismatch -> "Function type mismatch"
+    KnSelfTypeMismatch -> "Self type mismatch"
+    KnTypeMismatch -> "Type mismatch"
+    KnNameAlreadyDeclared name -> "Name already declared: " ++ name
+    KnNameAlreadyDefined name -> "Name already defined: " ++ name
+    KnUndeclaredNameBeingDefined name -> "Undeclared name being define: " ++ name
 
 data Error =
-  Error { erOrigin :: Origin, erVariables :: Variables, erKind :: Kind }
-
-throw :: Origin -> Variables -> Kind -> Either Error a
-throw origin variables kind =
-  Left (Error { erOrigin = origin, erVariables = variables, erKind = kind })
-
-showKind :: (Type -> String) -> Kind -> String
-showKind showType kind =
-  case kind of
-    KnMismatchedFunctionType obtained ->
-      "Type mismatch" ++ "\n"
-        ++ "- Expected: <function type>" ++ "\n"
-        ++ "- Obtained: " ++ showType obtained ++ "\n"
-    KnMismatchedType expected obtained ->
-      "Type mismatch" ++ "\n"
-        ++ "- Expected: " ++ showType expected ++ "\n"
-        ++ "- Obtained: " ++ showType obtained ++ "\n"
-    KnUndeclaredName name ->
-      "The name \"" ++ name ++ "\" is undeclared" ++ "\n"
-    KnNonInferable ->
-      "The term does not have an inferable type without an annotation" ++ "\n"
+  Error Origin Kind
 
 showOrigin ::  String -> Origin -> String
 showOrigin source origin =
   case origin of
-    OrMachine ->
-      "In a machine-generated term..." ++ "\n"
-    OrSource sourcePos ->
-      showSource sourcePos source
+    Nothing -> "In a machine-generated term...\n"
+    Just sourcePos -> showSource sourcePos source
 
 showError :: String -> Error -> String
-showError source (Error { erVariables, erOrigin, erKind }) =
-  showOrigin source erOrigin
+showError source (Error origin kind) =
+  showOrigin source origin
     ++ "\n"
-    ++ showKind showType erKind
-  where
-    showType termType = trShow (vrDepth erVariables) termType
+    ++ showKind kind

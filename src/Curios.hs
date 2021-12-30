@@ -3,44 +3,22 @@ module Curios
   )
   where
 
-import Curios.Core (Name, trShow)
-import Curios.Core.Declarations (dcLookup)
-import Curios.Core.Definitions (dfLookup)
-import Curios.Core.Reduction (trReduce)
-import Curios.Context (Context (..))
-import Curios.Context.Bootstrapping (ctFromProgram)
-
 import qualified Curios.Source.Parser as Source
 import qualified Curios.Source.Error as Source
-import qualified Curios.Context.Error as Context
+import qualified Curios.Core.Elaboration as Core
+import qualified Curios.Core.Error as Core
+import System.Exit (die)
 
-evaluate :: Context -> Name -> String
-evaluate (Context { ctDeclarations, ctDefinitions }) name =
-  case (dcLookup name ctDeclarations, dfLookup name ctDefinitions) of
-    (Just declaration, Just definition) ->
-      "Declaration:" ++ "\n"
-        ++ trShow 0 declaration ++ "\n"
-        ++ "\n"
-        ++ "Definition:" ++ "\n"
-        ++ trShow 0 definition ++ "\n"
-        ++ "\n"
-        ++ "Evaluation:" ++ "\n"
-        ++ trShow 0 (trReduce ctDefinitions definition) ++ "\n"
-    _ ->
-      "An undeclared name was supplied for evaluation" ++ "\n"
+run :: String -> IO ()
+run input = do
+  source <- readFile input
 
-check :: String -> Maybe String -> String -> Either String String
-check file name source = do
-  program <- case Source.parse file source of
-    Left sourceError -> Left (Source.showError source sourceError)
-    Right program -> Right program
-
-  context <- case ctFromProgram program of
-    Left contextError -> Left (Context.showError source contextError)
-    Right context -> Right context
+  program <- case Source.parse input source of
+    Left sourceError -> die (Source.showError source sourceError)
+    Right program -> return program
   
-  Right (maybe "Check succeded!\n" (evaluate context) name)
-
-run :: String -> Maybe String -> String -> IO ()
-run file name =
-  putStr . either id id . check file name
+  _ <- case Core.elaborate program of
+    Left coreError -> die (Core.showError source coreError)
+    Right package -> return package
+  
+  putStrLn "lgtm"

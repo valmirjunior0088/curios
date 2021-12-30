@@ -1,3 +1,5 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 module Curios.PrettyPrinting.Megaparsec
   ( showFile
   , showSource
