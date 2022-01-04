@@ -157,19 +157,12 @@ psClosed =
         <|> exIdentifier
 
 psApplication :: String -> Parser Expression
-psApplication terminator = do
-  sourcePos <- getSourcePos
-  terms <- someTill psClosed (psSymbol terminator)
-
-  case terms of
-    [] ->
-      error "`someTill` should parse at least one occurrence"
-
-    term : [] ->
-      return term
-
-    function : arguments ->
-      return (ExApplication sourcePos function arguments)
+psApplication terminator =
+  psLexeme (try parser) <|> psClosed <* psSymbol terminator where
+    parser =
+      ExApplication <$> getSourcePos
+        <*> psClosed
+        <*> someTill psClosed (psSymbol terminator)
 
 psFunctionType :: String -> Parser Expression
 psFunctionType terminator =
@@ -223,7 +216,7 @@ psItem =
 
 psProgram :: Parser Program
 psProgram =
-  psLexeme $ Program <$> getSourcePos <*> some psItem <* eof
+  psLexeme $ Program <$> getSourcePos <*> many psItem <* eof
 
 parse :: String -> String -> Either Error Program
 parse input source =

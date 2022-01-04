@@ -78,7 +78,7 @@ showErrorFancy errorsFancy =
       in
         "Parsing error: incorrect indentation" ++ "\n"
           ++ "- Expected: " ++ sign ++ show (unPos reference) ++ "\n"
-          ++ "- Obtained: " ++ "  " ++ show (unPos actual) ++ "\n"
+          ++ "- Obtained: " ++ "  " ++ show (unPos actual)
     ErrorCustom void ->
       absurd void
 
@@ -87,15 +87,15 @@ showParseError parseError =
   case parseError of
     TrivialError _ obtained expected ->
       if Set.null expected && isNothing obtained
-        then "Parsing error: unknown trivial error" ++ "\n"
+        then "Parsing error: unknown trivial error"
         else 
           "Parsing error: unexpected token" ++ "\n"
             ++ showParseTokens "- Expected: " (showErrorItem `Set.map` expected) ++ "\n"
-            ++ showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtained) ++ "\n"
+            ++ showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtained)
     FancyError _ errors ->
       if Set.null errors
-        then "Parsing error: unknown fancy error" ++ "\n"
-        else unlines (showErrorFancy <$> Set.toAscList errors) ++ "\n"
+        then "Parsing error: unknown fancy error"
+        else unlines (showErrorFancy <$> Set.toAscList errors)
 
 showError :: String -> Error -> String
 showError source (Error sourcePos parseError) =

@@ -6,7 +6,7 @@ module Curios.Core.Error
   where
 
 import Curios.Core.Term (Origin, Name, Index)
-import Curios.PrettyPrinting.Megaparsec (showSource)
+import Curios.PrettyPrinting.Megaparsec (showFile, showSource)
 
 data Kind =
   KnUndeclaredName Name |
@@ -36,7 +36,7 @@ showKind kind =
     KnTypeMismatch -> "Type mismatch"
     KnNameAlreadyDeclared name -> "Name already declared: " ++ name
     KnNameAlreadyDefined name -> "Name already defined: " ++ name
-    KnUndeclaredNameBeingDefined name -> "Undeclared name being define: " ++ name
+    KnUndeclaredNameBeingDefined name -> "Undeclared name being defined: " ++ name
 
 data Error =
   Error Origin Kind
@@ -44,8 +44,13 @@ data Error =
 showOrigin ::  String -> Origin -> String
 showOrigin source origin =
   case origin of
-    Nothing -> "In a machine-generated term...\n"
-    Just sourcePos -> showSource sourcePos source
+    Nothing ->
+      "In a machine-generated term..." ++ "\n"
+
+    Just sourcePos ->
+      showFile sourcePos
+        ++ "\n"
+        ++ showSource sourcePos source
 
 showError :: String -> Error -> String
 showError source (Error origin kind) =
