@@ -343,7 +343,7 @@ insertDeclaration (origin, name) typ = do
 
   check trType typ
 
-  put (declarations ++ [(name, typ)], definitions)
+  put ((name, typ) : declarations, definitions)
 
 insertDefinition :: (Origin, Name) -> Term -> Context ()
 insertDefinition (origin, name) term = do
@@ -356,6 +356,6 @@ insertDefinition (origin, name) term = do
     Nothing -> abort origin (KnUndeclaredNameBeingDefined name)
     Just declaration -> return declaration
   
-  put (declarations, definitions ++ [(name, term)])
+  put (declarations, (name, term) : definitions)
   
   check typ term
