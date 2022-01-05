@@ -12,7 +12,7 @@ module Curios.Core.Context
   )
   where
 
-import Curios.Core.Error (Kind (..), Error (..))
+import Curios.Core.Error (Cause (..), Error (..))
 import Control.Monad (unless, when)
 import Control.Monad.Trans (lift)
 import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, local)
@@ -224,11 +224,11 @@ bound index =
   at index <$> ask
 
 class MonadAbort m where
-  abort :: Origin -> Kind -> m a
+  abort :: Origin -> Cause -> m a
 
 instance MonadAbort Check where
-  abort origin kind =
-    throwError (Error origin kind)
+  abort origin cause =
+    throwError (Error origin cause)
 
 infer :: Term -> Check Type
 infer term =
@@ -237,14 +237,14 @@ infer term =
       (declarations, _) <- get
 
       case lookup name declarations of
-        Nothing -> abort origin (KnUndeclaredName name)
+        Nothing -> abort origin (CsUndeclaredName name)
         Just declaration -> return declaration
 
     TrVariable origin index -> do
       result <- bound index
 
       case result of
-        Nothing -> abort origin (KnVariableOutOfBounds index)
+        Nothing -> abort origin (CsVariableOutOfBounds index)
         Just variable -> return variable
 
     TrType _ ->
@@ -256,7 +256,7 @@ infer term =
       return trType
 
     TrFunction origin _ ->
-      abort origin KnFunctionsDontHaveAnInferableType
+      abort origin CsFunctionsDontHaveAnInferableType
 
     TrApplication _ function argument -> do
       typ <- infer function >>= whnf
@@ -267,21 +267,21 @@ infer term =
           return (instantiate argument output)
 
         _ ->
-          abort (getOrigin function) KnFunctionDidntHaveFunctionType
+          abort (getOrigin function) CsFunctionDidntHaveFunctionType
 
     TrSelf origin output -> do
       bindIn (TrSelf origin output) (check trType output)
       return trType
     
     TrData origin _ ->
-      abort origin KnConstructorsDontHaveAnInferableType
+      abort origin CsConstructorsDontHaveAnInferableType
     
     TrCase _ scrutinee -> do
       typ <- infer scrutinee >>= whnf
 
       case typ of
         TrSelf _ output -> return (instantiate scrutinee output)
-        _ -> abort (getOrigin scrutinee) KnConstructorDidntHaveSelfType
+        _ -> abort (getOrigin scrutinee) CsConstructorDidntHaveSelfType
     
     TrPrimitive _ _ ->
       return trType
@@ -313,22 +313,22 @@ instance MonadCheck Check where
         bindIn input (check output output')
       
       (_, TrFunction origin _) ->
-        abort origin KnFunctionTypeMismatch
+        abort origin CsFunctionTypeMismatch
       
       (TrSelf _ output, TrData origin constructor) ->
         check (instantiate (TrData origin constructor) output) constructor
 
       (_, TrData origin _) ->
-        abort origin KnConstructorDidntHaveSelfType
+        abort origin CsConstructorDidntHaveSelfType
 
       _ -> do
         typ'' <- infer term
         areConvertible <- converts typ' typ''
-        unless areConvertible (abort (getOrigin term) KnTypeMismatch)
+        unless areConvertible (abort (getOrigin term) CsTypeMismatch)
 
 instance MonadAbort Context where
-  abort origin kind =
-    throwError (Error origin kind)
+  abort origin cause =
+    throwError (Error origin cause)
 
 instance MonadCheck Context where
   check typ term =
@@ -339,7 +339,7 @@ insertDeclaration (origin, name) typ = do
   (declarations, definitions) <- get
 
   when (elem name $ map fst declarations)
-    (abort origin $ KnNameAlreadyDeclared name)
+    (abort origin $ CsNameAlreadyDeclared name)
 
   check trType typ
 
@@ -350,10 +350,10 @@ insertDefinition (origin, name) term = do
   (declarations, definitions) <- get
   
   when (elem name $ map fst definitions)
-    (abort origin $ KnNameAlreadyDefined name)
+    (abort origin $ CsNameAlreadyDefined name)
 
   typ <- case lookup name declarations of
-    Nothing -> abort origin (KnUndeclaredNameBeingDefined name)
+    Nothing -> abort origin (CsUndeclaredNameBeingDefined name)
     Just declaration -> return declaration
   
   put (declarations, (name, term) : definitions)

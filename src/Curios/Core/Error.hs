@@ -1,5 +1,5 @@
 module Curios.Core.Error
-  ( Kind (..)
+  ( Cause (..)
   , Error (..)
   , showError
   )
@@ -8,38 +8,38 @@ module Curios.Core.Error
 import Curios.Core.Term (Origin, Name, Index)
 import Curios.PrettyPrinting.Megaparsec (showFile, showSource)
 
-data Kind =
-  KnUndeclaredName Name |
-  KnVariableOutOfBounds Index |
-  KnFunctionsDontHaveAnInferableType |
-  KnFunctionDidntHaveFunctionType |
-  KnConstructorsDontHaveAnInferableType |
-  KnConstructorDidntHaveSelfType |
-  KnFunctionTypeMismatch |
-  KnSelfTypeMismatch |
-  KnTypeMismatch |
-  KnNameAlreadyDeclared Name |
-  KnNameAlreadyDefined Name |
-  KnUndeclaredNameBeingDefined Name
+data Cause =
+  CsUndeclaredName Name |
+  CsVariableOutOfBounds Index |
+  CsFunctionsDontHaveAnInferableType |
+  CsFunctionDidntHaveFunctionType |
+  CsConstructorsDontHaveAnInferableType |
+  CsConstructorDidntHaveSelfType |
+  CsFunctionTypeMismatch |
+  CsSelfTypeMismatch |
+  CsTypeMismatch |
+  CsNameAlreadyDeclared Name |
+  CsNameAlreadyDefined Name |
+  CsUndeclaredNameBeingDefined Name
 
-showKind :: Kind -> String
-showKind kind =
-  case kind of
-    KnUndeclaredName name -> "Undeclared name: " ++ name
-    KnVariableOutOfBounds index -> "Variable out of bounds: " ++ show index
-    KnFunctionsDontHaveAnInferableType -> "Functions don't have an inferable type"
-    KnFunctionDidntHaveFunctionType -> "Function didn't have function type"
-    KnConstructorsDontHaveAnInferableType -> "Constructors don't have an inferable type"
-    KnConstructorDidntHaveSelfType -> "Constructor didn't have self type"
-    KnFunctionTypeMismatch -> "Function type mismatch"
-    KnSelfTypeMismatch -> "Self type mismatch"
-    KnTypeMismatch -> "Type mismatch"
-    KnNameAlreadyDeclared name -> "Name already declared: " ++ name
-    KnNameAlreadyDefined name -> "Name already defined: " ++ name
-    KnUndeclaredNameBeingDefined name -> "Undeclared name being defined: " ++ name
+showCause :: Cause -> String
+showCause cause =
+  case cause of
+    CsUndeclaredName name -> "Undeclared name: " ++ name
+    CsVariableOutOfBounds index -> "Variable out of bounds: " ++ show index
+    CsFunctionsDontHaveAnInferableType -> "Functions don't have an inferable type"
+    CsFunctionDidntHaveFunctionType -> "Function didn't have function type"
+    CsConstructorsDontHaveAnInferableType -> "Constructors don't have an inferable type"
+    CsConstructorDidntHaveSelfType -> "Constructor didn't have self type"
+    CsFunctionTypeMismatch -> "Function type mismatch"
+    CsSelfTypeMismatch -> "Self type mismatch"
+    CsTypeMismatch -> "Type mismatch"
+    CsNameAlreadyDeclared name -> "Name already declared: " ++ name
+    CsNameAlreadyDefined name -> "Name already defined: " ++ name
+    CsUndeclaredNameBeingDefined name -> "Undeclared name being defined: " ++ name
 
 data Error =
-  Error Origin Kind
+  Error Origin Cause
 
 showOrigin ::  String -> Origin -> String
 showOrigin source origin =
@@ -53,7 +53,7 @@ showOrigin source origin =
         ++ showSource sourcePos source
 
 showError :: String -> Error -> String
-showError source (Error origin kind) =
+showError source (Error origin cause) =
   showOrigin source origin
     ++ "\n"
-    ++ showKind kind
+    ++ showCause cause
