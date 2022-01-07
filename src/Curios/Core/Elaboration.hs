@@ -9,9 +9,9 @@ import qualified Curios.Source.Expression as Source
 
 import Curios.Core.Context
   ( Error
-  , Package
   , Context
-  , execContext
+  , Contextual
+  , execContextual
   , insertDeclaration
   , insertDefinition
   )
@@ -24,7 +24,7 @@ import Curios.Source.Expression
   , Binding (..)
   , Expression (..)
   , Item (..)
-  , Program (..)
+  , Items (..)
   )
 
 abstract :: Name -> Term -> Term
@@ -139,16 +139,16 @@ bindFunction :: Binding -> Term -> Term
 bindFunction (Binding sourcePos (Identifier _ name) _) term =
   TrFunction (Just sourcePos) (abstract name term)
 
-declare :: Item -> Context ()
+declare :: Item -> Contextual ()
 declare (Item _ (Identifier sourcePos name) bindings expression _) =
   insertDeclaration (Just sourcePos, name) 
     (foldr bindFunctionType (translate expression) bindings)
 
-define :: Item -> Context ()
+define :: Item -> Contextual ()
 define (Item _ (Identifier sourcePos name) bindings _ expression) =
   insertDefinition (Just sourcePos, name) 
     (foldr bindFunction (translate expression) bindings)
 
-elaborate :: Program -> Either Error Package
-elaborate (Program _ items) =
-  execContext (mapM_ declare items >> mapM_ define items)
+elaborate :: Items -> Either Error Context
+elaborate (Items _ items) =
+  execContextual (mapM_ declare items >> mapM_ define items)

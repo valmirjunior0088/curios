@@ -9,7 +9,7 @@ module Curios.Source.Expression
   , Operation (..)
   , Expression (..)
   , Item (..)
-  , Program (..)
+  , Items (..)
   )
   where
 
@@ -71,6 +71,6 @@ data Item =
   Item SourcePos Identifier [Binding] Expression Expression
   deriving (Show)
 
-data Program =
-  Program SourcePos [Item]
+data Items =
+  Items SourcePos [Item]
   deriving (Show)

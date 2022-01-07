@@ -20,7 +20,7 @@ import Curios.Source.Expression
   , Operation (..)
   , Expression (..)
   , Item (..)
-  , Program (..)
+  , Items (..)
   )
 
 import Text.Megaparsec
@@ -214,12 +214,12 @@ psItem =
     <*> (psSymbol ":" *> psExpression "{")
     <*> psExpression "}"
 
-psProgram :: Parser Program
-psProgram =
-  psLexeme $ Program <$> getSourcePos <*> many psItem <* eof
+psItems :: Parser Items
+psItems =
+  psLexeme $ Items <$> getSourcePos <*> many psItem <* eof
 
-parse :: String -> String -> Either Error Program
+parse :: String -> String -> Either Error Items
 parse input source =
-  case Megaparsec.parse psProgram input source of
+  case Megaparsec.parse psItems input source of
     Left errorBundle -> Left (fromErrorBundle errorBundle)
     Right program -> Right program

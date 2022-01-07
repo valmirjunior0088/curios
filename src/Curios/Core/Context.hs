@@ -4,9 +4,9 @@ module Curios.Core.Context
   ( Error
   , Declarations
   , Definitions
-  , Package
   , Context
-  , execContext
+  , Contextual
+  , execContextual
   , insertDeclaration
   , insertDefinition
   )
@@ -38,25 +38,25 @@ import Curios.Core.Term
 type Declarations = [(Name, Type)]
 type Definitions = [(Name, Term)]
 
-type Package = (Declarations, Definitions)
+type Context = (Declarations, Definitions)
 
-newtype Context a =
-  ContextT (StateT Package (Except Error) a) deriving
+newtype Contextual a =
+  ContextualT (StateT Context (Except Error) a) deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadState Package
+    , MonadState Context
     , MonadError Error
     )
 
-execContext :: Context () -> Either Error Package
-execContext (ContextT action) =
+execContextual :: Contextual () -> Either Error Context
+execContextual (ContextualT action) =
   runExcept (execStateT action ([], []))
 
 class MonadWhnf m where
   whnf :: Term -> m Term
 
-instance MonadWhnf Context where
+instance MonadWhnf Contextual where
   whnf term =
     case term of
       TrReference origin name -> do
@@ -87,16 +87,16 @@ instance MonadWhnf Context where
 type Equation = (Term, Term)
 
 newtype Converts a =
-  Converts (ReaderT [Equation] Context a) deriving
+  Converts (ReaderT [Equation] Contextual a) deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadState Package
+    , MonadState Context
     , MonadError Error
     , MonadReader [Equation]
     )
 
-runConverts :: Converts a -> Context a
+runConverts :: Converts a -> Contextual a
 runConverts (Converts action) =
   runReaderT action []
 
@@ -187,16 +187,16 @@ instance MonadConverts Converts where
     isEqual .||. isRemembered .||. rememberIn equation isEquirecursive
 
 newtype Check a =
-  Check (ReaderT [Type] Context a) deriving
+  Check (ReaderT [Type] Contextual a) deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadState Package
+    , MonadState Context
     , MonadReader [Type]
     , MonadError Error
     )
 
-runCheck :: Check a -> Context a
+runCheck :: Check a -> Contextual a
 runCheck (Check action) =
   runReaderT action []
 
@@ -326,15 +326,15 @@ instance MonadCheck Check where
         areConvertible <- converts typ' typ''
         unless areConvertible (abort (getOrigin term) CsTypeMismatch)
 
-instance MonadAbort Context where
+instance MonadAbort Contextual where
   abort origin cause =
     throwError (Error origin cause)
 
-instance MonadCheck Context where
+instance MonadCheck Contextual where
   check typ term =
     runCheck (check typ term)
 
-insertDeclaration :: (Origin, Name) -> Type -> Context ()
+insertDeclaration :: (Origin, Name) -> Type -> Contextual ()
 insertDeclaration (origin, name) typ = do
   (declarations, definitions) <- get
 
@@ -345,7 +345,7 @@ insertDeclaration (origin, name) typ = do
 
   put ((name, typ) : declarations, definitions)
 
-insertDefinition :: (Origin, Name) -> Term -> Context ()
+insertDefinition :: (Origin, Name) -> Term -> Contextual ()
 insertDefinition (origin, name) term = do
   (declarations, definitions) <- get
   
