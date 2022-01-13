@@ -68,6 +68,7 @@ showErrorFancy errorsFancy =
     ErrorFail message ->
       "Parsing error: explicit failure" ++ "\n"
         ++ message
+
     ErrorIndentation ordering reference actual ->
       let
         sign =
@@ -79,6 +80,7 @@ showErrorFancy errorsFancy =
         "Parsing error: incorrect indentation" ++ "\n"
           ++ "- Expected: " ++ sign ++ show (unPos reference) ++ "\n"
           ++ "- Obtained: " ++ "  " ++ show (unPos actual)
+
     ErrorCustom void ->
       absurd void
 
@@ -92,6 +94,7 @@ showParseError parseError =
           "Parsing error: unexpected token" ++ "\n"
             ++ showParseTokens "- Expected: " (showErrorItem `Set.map` expected) ++ "\n"
             ++ showParseTokens "- Obtained: " (showErrorItem `Set.map` maybe Set.empty Set.singleton obtained)
+            
     FancyError _ errors ->
       if Set.null errors
         then "Parsing error: unknown fancy error"
