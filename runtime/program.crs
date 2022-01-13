@@ -1,0 +1,3 @@
+defn main : Int32 {
+  #[int32_sum 5 10]
+}

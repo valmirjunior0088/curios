@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Curios.Core.Context
   ( Error
@@ -35,8 +36,14 @@ import Curios.Core.Term
   , trPrimitive
   )
 
-type Declarations = [(Name, Type)]
-type Definitions = [(Name, Term)]
+import Data.Map (Map)
+import qualified Data.Map as Map
+
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
+
+type Declarations = Map Name Type
+type Definitions = Map Name Term
 
 type Context = (Declarations, Definitions)
 
@@ -51,7 +58,7 @@ newtype Contextual a =
 
 execContextual :: Contextual () -> Either Error Context
 execContextual (ContextualT action) =
-  runExcept (execStateT action ([], []))
+  runExcept (execStateT action (Map.empty, Map.empty))
 
 class MonadWhnf m where
   whnf :: Term -> m Term
@@ -62,7 +69,7 @@ instance MonadWhnf Contextual where
       TrReference origin name -> do
         (_, definitions) <- get
 
-        case lookup name definitions of
+        case Map.lookup name definitions of
           Nothing -> return (TrReference origin name)
           Just definition -> whnf definition
 
@@ -87,18 +94,18 @@ instance MonadWhnf Contextual where
 type Equation = (Term, Term)
 
 newtype Converts a =
-  Converts (ReaderT [Equation] Contextual a) deriving
+  Converts (ReaderT (Seq Equation) Contextual a) deriving
     ( Functor
     , Applicative
     , Monad
     , MonadState Context
     , MonadError Error
-    , MonadReader [Equation]
+    , MonadReader (Seq Equation)
     )
 
 runConverts :: Converts a -> Contextual a
 runConverts (Converts action) =
-  runReaderT action []
+  runReaderT action Seq.empty
 
 instance MonadWhnf Converts where
   whnf term =
@@ -110,7 +117,7 @@ remembered equation =
 
 rememberIn :: Equation -> Converts a -> Converts a
 rememberIn equation action =
-  local (equation :) action
+  local (Seq.|> equation) action
 
 (.&&.) :: Monad m => m Bool -> m Bool -> m Bool
 (.&&.) one other = do
@@ -187,18 +194,18 @@ instance MonadConverts Converts where
     isEqual .||. isRemembered .||. rememberIn equation isEquirecursive
 
 newtype Check a =
-  Check (ReaderT [Type] Contextual a) deriving
+  Check (ReaderT (Seq Type) Contextual a) deriving
     ( Functor
     , Applicative
     , Monad
     , MonadState Context
-    , MonadReader [Type]
+    , MonadReader (Seq Type)
     , MonadError Error
     )
 
 runCheck :: Check a -> Contextual a
 runCheck (Check action) =
-  runReaderT action []
+  runReaderT action Seq.empty
 
 instance MonadWhnf Check where
   whnf term =
@@ -210,25 +217,15 @@ instance MonadConverts Check where
 
 bindIn :: Type -> Check a -> Check a
 bindIn typ action =
-  local (map shift . (:) typ) action
-
-at :: Index -> [a] -> Maybe a
-at index values =
-  case values of
-    [] -> Nothing
-    value : _ | index == 0 -> Just value
-    _ : rest -> at (pred index) rest
+  local (fmap shift . (Seq.<|) typ) action
 
 bound :: Index -> Check (Maybe Type)
 bound index =
-  at index <$> ask
+  Seq.lookup index <$> ask
 
-class MonadAbort m where
-  abort :: Origin -> Cause -> m a
-
-instance MonadAbort Check where
-  abort origin cause =
-    throwError (Error origin cause)
+abort :: MonadError Error m => Origin -> Cause -> m a
+abort origin cause =
+  throwError (Error origin cause)
 
 infer :: Term -> Check Type
 infer term =
@@ -236,7 +233,7 @@ infer term =
     TrReference origin name -> do
       (declarations, _) <- get
 
-      case lookup name declarations of
+      case Map.lookup name declarations of
         Nothing -> abort origin (CsUndeclaredName name)
         Just declaration -> return declaration
 
@@ -326,10 +323,6 @@ instance MonadCheck Check where
         areConvertible <- converts typ' typ''
         unless areConvertible (abort (getOrigin term) CsTypeMismatch)
 
-instance MonadAbort Contextual where
-  abort origin cause =
-    throwError (Error origin cause)
-
 instance MonadCheck Contextual where
   check typ term =
     runCheck (check typ term)
@@ -338,24 +331,24 @@ insertDeclaration :: (Origin, Name) -> Type -> Contextual ()
 insertDeclaration (origin, name) typ = do
   (declarations, definitions) <- get
 
-  when (elem name $ map fst declarations)
+  when (Map.member name declarations)
     (abort origin $ CsNameAlreadyDeclared name)
 
   check trType typ
 
-  put ((name, typ) : declarations, definitions)
+  put (Map.insert name typ declarations, definitions)
 
 insertDefinition :: (Origin, Name) -> Term -> Contextual ()
 insertDefinition (origin, name) term = do
   (declarations, definitions) <- get
   
-  when (elem name $ map fst definitions)
+  when (Map.member name definitions)
     (abort origin $ CsNameAlreadyDefined name)
 
-  typ <- case lookup name declarations of
+  typ <- case Map.lookup name declarations of
     Nothing -> abort origin (CsUndeclaredNameBeingDefined name)
     Just declaration -> return declaration
   
-  put (declarations, (name, term) : definitions)
+  put (declarations, Map.insert name term definitions)
   
   check typ term

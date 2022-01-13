@@ -3,11 +3,17 @@ cradle:
     - path: "./src"
       component: "curios:lib"
 
-    - path: "./app/Main.hs"
-      component: "curios:exe:curios-exe"
+    - path: "./compiler/Main.hs"
+      component: "curios:exe:curios-compiler"
 
-    - path: "./app/Paths_curios.hs"
-      component: "curios:exe:curios-exe"
+    - path: "./compiler/Paths_curios.hs"
+      component: "curios:exe:curios-compiler"
+
+    - path: "./server/Main.hs"
+      component: "curios:exe:curios-server"
+
+    - path: "./server/Paths_curios.hs"
+      component: "curios:exe:curios-server"
 
     - path: "./test"
       component: "curios:test:curios-test"

@@ -19,20 +19,33 @@ dependencies:
 - megaparsec >= 9.0 && < 10
 - boxes >= 0.1 && < 1
 - containers >= 0.6 && < 7
+- bytestring >= 0.10 && < 1
 
 library:
   source-dirs: src
 
 executables:
-  curios-exe:
+  curios-compiler:
     main: Main.hs
-    source-dirs: app
+    source-dirs: compiler
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - curios
+
+  curios-server:
+    main: Main.hs
+    source-dirs: server
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - warp >= 3.3 && < 4
+    - wai >= 3.2 && < 4
+    - wai-app-static >= 3.1 && < 4
 
 tests:
   curios-test:

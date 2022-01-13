@@ -4,14 +4,14 @@ import Curios (run)
 
 usage :: String -> String
 usage name =
-  "USAGE: " ++ name ++ " INPUT"
+  "USAGE: " ++ name ++ " INPUT OUTPUT"
 
 main :: IO ()
 main = do
   arguments <- getArgs
 
-  input <- case arguments of
-    input : [] -> return input
+  (input, output) <- case arguments of
+    input : output : [] -> return (input, output)
     _ -> getProgName >>= die . usage
 
-  run input
+  run input output

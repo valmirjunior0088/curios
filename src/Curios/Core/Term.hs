@@ -25,14 +25,13 @@ module Curios.Core.Term
   )
   where
 
-import GHC.Natural (Natural)
 import Data.Int (Int32)
 import Text.Megaparsec (SourcePos)
 
 type Origin = Maybe SourcePos
 
 type Name = String
-type Index = Natural
+type Index = Int
 type Type = Term
 
 data Primitive =

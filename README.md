@@ -8,19 +8,15 @@
 - [x] General and mutual recursion
 - [x] [Self types](https://homepage.divms.uiowa.edu/~astump/papers/fu-stump-rta-tlca-14.pdf)
 - [x] Errors with source positions
-- [ ] WebAssembly generation
-- [ ] Errors with human-readable types and terms
-- [ ] Module system
-- [ ] Data types
-- [ ] Library for state and side-effects
-- [ ] System input and output
-- [ ] Irrelevant arguments
-- [ ] Implicit arguments
-- [ ] Dependency manager
+- [x] WebAssembly generation
 
 ### How do I run this thing?
 
-`stack run ~/example.crs` will typecheck the `~/example.crs` file.
+Inside the `runtime` folder, running `make` will:
+
+1) Typecheck and compile the the `program.crs` file;
+
+2) Open a server in `localhost:8080` to serve the resulting WebAssembly binary.
 
 ### Example source
 
