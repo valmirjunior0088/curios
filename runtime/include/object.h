@@ -8,6 +8,8 @@ typedef struct object *(*abstraction)(struct object *[], struct object *);
 void object_enter(struct object *);
 void object_leave(struct object *);
 
+struct object *object_nil();
+
 struct object *object_int32(int);
 struct object *object_int32_sum(struct object *, struct object *);
 

@@ -9,6 +9,7 @@
 - [x] [Self types](https://homepage.divms.uiowa.edu/~astump/papers/fu-stump-rta-tlca-14.pdf)
 - [x] Errors with source positions
 - [x] WebAssembly generation
+- [ ] Type erasure
 
 ### How do I run this thing?
 

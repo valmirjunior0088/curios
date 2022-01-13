@@ -7,10 +7,13 @@
 #define OBJECT_REF_SIZE sizeof(struct object *)
 
 enum type {
+  NIL,
   INT32,
   FLT32,
   CLOSURE,
 };
+
+struct nil {};
 
 struct int32 {
   int value;
@@ -27,6 +30,7 @@ struct closure {
 };
 
 union payload {
+  struct nil nil;
   struct int32 int32;
   struct flt32 flt32;
   struct closure closure;
@@ -70,6 +74,14 @@ void object_leave(struct object *object) {
   }
 
   dealloc(object);
+}
+
+struct object *object_nil() {
+  struct object *object = alloc(OBJECT_SIZE);
+  object->reference_count = 1;
+  object->type = NIL;
+
+  return object;
 }
 
 struct object *object_int32(int value) {
@@ -332,6 +344,10 @@ void object_debug(struct object *object) {
   io_string("{ ");
 
   switch (object->type) {
+    case NIL:
+      io_string("NIL");
+      break;
+
     case INT32:
       io_string("INT32 ");
       io_int(object->payload.int32.value);

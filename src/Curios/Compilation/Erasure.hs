@@ -10,10 +10,11 @@ module Curios.Compilation.Erasure
   where
 
 import Curios.Core.Context (Context)
-import Data.Map (assocs)
 
 import Curios.Core.Term (Name, Index, Literal (..), Operation (..))
 import qualified Curios.Core.Term as Core
+
+import qualified Data.Map as Map
 
 data Term =
   TrReference Name |
@@ -22,7 +23,7 @@ data Term =
   TrApplication Term Term |
   TrLiteral Literal |
   TrOperation Operation [Term] |
-  TrNull
+  TrNil
 
 unwrap :: Core.Term -> Term
 unwrap term =
@@ -34,10 +35,10 @@ unwrap term =
       TrVariable index
 
     Core.TrType _ ->
-      TrNull
+      TrNil
 
     Core.TrFunctionType _ _ _ ->
-      TrNull
+      TrNil
 
     Core.TrFunction _ output ->
       TrFunction (unwrap output)
@@ -46,7 +47,7 @@ unwrap term =
       TrApplication (unwrap function) (unwrap argument)
 
     Core.TrSelf _ _ ->
-      TrNull
+      TrNil
 
     Core.TrData _ constructor ->
       unwrap constructor
@@ -55,7 +56,7 @@ unwrap term =
       unwrap scrutinee
 
     Core.TrPrimitive _ _ ->
-      TrNull
+      TrNil
     
     Core.TrLiteral _ literal ->
       TrLiteral literal
@@ -66,10 +67,12 @@ unwrap term =
 data Item =
   Item Name Term
 
-process :: (Name, Core.Term) -> Item
-process (name, term) =
-  Item name (unwrap term)
+combine :: Name -> Core.Term -> [Item] -> [Item]
+combine name term items =
+  Item name (unwrap term) : items
 
-erase :: Context -> [Item]
+erase :: Context -> Maybe [Item]
 erase (_, definitions) =
-  fmap process (assocs definitions)
+  if Map.member "main" definitions
+    then Just (Map.foldrWithKey combine [] definitions)
+    else Nothing

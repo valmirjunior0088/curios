@@ -30,8 +30,11 @@ run input output = do
     Left coreError -> die (Core.showError source coreError)
     Right context -> return context
   
-  Compilation.erase context
-    & fmap Compilation.convert
+  items <- case Compilation.erase context of
+    Nothing -> die "Program typechecked but no `main` definition was found"
+    Just items -> return items
+  
+  fmap Compilation.convert items
     & fmap Compilation.flatten
     & Compilation.generate
     & Compilation.serialize

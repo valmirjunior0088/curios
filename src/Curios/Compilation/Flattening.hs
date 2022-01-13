@@ -24,7 +24,7 @@ data Term =
   TrVariable Variable |
   TrClosure Name [Variable] |
   TrApplication Term Term |
-  TrNull
+  TrNil
   deriving (Show)
 
 data Definition =
@@ -83,8 +83,8 @@ unwrap term =
       argument' <- unwrap argument
       return (TrApplication function' argument')
 
-    Conversion.TrNull ->
-      return TrNull
+    Conversion.TrNil ->
+      return TrNil
 
 data Item =
   Item Definition [Abstraction]
