@@ -26,6 +26,7 @@ module Curios.Core.Term
   where
 
 import Data.Int (Int32)
+import Data.List (intercalate)
 import Text.Megaparsec (SourcePos)
 
 type Origin = Maybe SourcePos
@@ -45,8 +46,8 @@ data Literal =
   deriving (Show, Eq)
 
 data Operation =
-  OpInt32Sum Term Term |
-  OpFlt32Sum Term Term
+  OpInt32Sum |
+  OpFlt32Sum
   deriving (Show, Eq)
 
 data Term =
@@ -61,7 +62,7 @@ data Term =
   TrCase Origin Term |
   TrPrimitive Origin Primitive |
   TrLiteral Origin Literal |
-  TrOperation Origin Operation
+  TrOperation Origin Operation [Term]
 
 instance Show Term where
   show term = case term of
@@ -98,8 +99,8 @@ instance Show Term where
     TrLiteral _ literal ->
       "TrLiteral (" ++ show literal ++ ")"
 
-    TrOperation _ operation ->
-      "TrOperation (" ++ show operation ++ ")"
+    TrOperation _ operation arguments ->
+      "TrOperation " ++ show operation ++ " [" ++ intercalate ", " (map show arguments)
 
 instance Eq Term where
   one == other =
@@ -137,8 +138,8 @@ instance Eq Term where
       (TrLiteral _ literal, TrLiteral _ literal') ->
         literal == literal'
       
-      (TrOperation _ operation, TrOperation _ operation') ->
-        operation == operation'
+      (TrOperation _ operation arguments, TrOperation _ operation' arguments') ->
+        operation == operation' && and (zipWith (==) arguments arguments')
 
       _ ->
         False
@@ -156,7 +157,7 @@ getOrigin term = case term of
   TrCase origin _ -> origin
   TrPrimitive origin _ -> origin
   TrLiteral origin _ -> origin
-  TrOperation origin _ -> origin
+  TrOperation origin _ _ -> origin
 
 shift :: Term -> Term
 shift =
@@ -198,10 +199,8 @@ shift =
         TrLiteral origin literal ->
           TrLiteral origin literal
 
-        TrOperation origin operation ->
-          TrOperation origin $ case operation of
-            OpInt32Sum one other -> OpInt32Sum (go depth one) (go depth other)
-            OpFlt32Sum one other -> OpFlt32Sum (go depth one) (go depth other)
+        TrOperation origin operation arguments ->
+          TrOperation origin operation (map (go depth) arguments)
 
 instantiate :: Term -> Term -> Term
 instantiate term =
@@ -244,10 +243,8 @@ instantiate term =
         TrLiteral origin literal ->
           TrLiteral origin literal
 
-        TrOperation origin operation ->
-          TrOperation origin $ case operation of
-            OpInt32Sum one other -> OpInt32Sum (go depth one) (go depth other)
-            OpFlt32Sum one other -> OpFlt32Sum (go depth one) (go depth other)
+        TrOperation origin operation arguments ->
+          TrOperation origin operation (map (go depth) arguments)
 
 trReference :: Name -> Term
 trReference = TrReference Nothing
@@ -282,5 +279,5 @@ trPrimitive = TrPrimitive Nothing
 trLiteral :: Literal -> Term
 trLiteral = TrLiteral Nothing
 
-trOperation :: Operation -> Term
+trOperation :: Operation -> [Term] -> Term
 trOperation = TrOperation Nothing

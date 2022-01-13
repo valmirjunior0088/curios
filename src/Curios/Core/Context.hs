@@ -14,7 +14,7 @@ module Curios.Core.Context
   where
 
 import Curios.Core.Error (Cause (..), Error (..))
-import Control.Monad (unless, when)
+import Control.Monad (unless, when, zipWithM)
 import Control.Monad.Trans (lift)
 import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, local)
 import Control.Monad.State (MonadState, StateT, execStateT, get, put)
@@ -177,16 +177,8 @@ instance MonadConverts Converts where
           (TrCase _ scrutinee, TrCase _ scrutinee') ->
             converts scrutinee scrutinee'
           
-          (TrOperation _ operation, TrOperation _ operation') ->
-            case (operation, operation') of
-              (OpInt32Sum first second, OpInt32Sum first' second') ->
-                converts first first' .&&. converts second second'
-              
-              (OpFlt32Sum first second, OpFlt32Sum first' second') ->
-                converts first first' .&&. converts second second'
-              
-              _ ->
-                return False
+          (TrOperation _ operation arguments, TrOperation _ operation' arguments') ->
+            pure (operation == operation') .&&. and <$> zipWithM converts arguments arguments'
 
           _ ->
             return False
@@ -288,15 +280,18 @@ infer term =
         LtInt32 _ -> return (trPrimitive PrInt32)
         LtFlt32 _ -> return (trPrimitive PrFlt32)
     
-    TrOperation _ (OpInt32Sum one other) -> do
+    TrOperation _ OpInt32Sum [one, other] -> do
       check (trPrimitive PrInt32) one
       check (trPrimitive PrInt32) other
       return (trPrimitive PrInt32)
     
-    TrOperation _ (OpFlt32Sum one other) -> do
+    TrOperation _ OpFlt32Sum [one, other] -> do
       check (trPrimitive PrFlt32) one
       check (trPrimitive PrFlt32) other
       return (trPrimitive PrFlt32)
+    
+    TrOperation origin operation _ ->
+      abort origin (CsWrongNamberOfArgumentsForOperation operation)
 
 class MonadCheck m where
   check :: Type -> Term -> m ()

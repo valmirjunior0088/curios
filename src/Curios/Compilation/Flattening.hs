@@ -14,17 +14,12 @@ import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Writer (Writer, runWriter, tell)
 
-import Curios.Compilation.Conversion (Name, Literal (..), Variable (..))
+import Curios.Compilation.Conversion (Name, Literal (..), Variable (..), Operation (..))
 import qualified Curios.Compilation.Conversion as Conversion
-
-data Operation =
-  OpInt32Sum Term Term |
-  OpFlt32Sum Term Term
-  deriving (Show)
 
 data Term =
   TrLiteral Literal |
-  TrOperation Operation |
+  TrOperation Operation [Term] |
   TrReference Name |
   TrVariable Variable |
   TrClosure Name [Variable] |
@@ -66,27 +61,28 @@ unwrap term =
   case term of
     Conversion.TrLiteral literal ->
       return (TrLiteral literal)
-    Conversion.TrOperation (Conversion.OpInt32Sum left right) -> do
-      left' <- unwrap left
-      right' <- unwrap right
-      return (TrOperation $ OpInt32Sum left' right')
-    Conversion.TrOperation (Conversion.OpFlt32Sum left right) -> do
-      left' <- unwrap left
-      right' <- unwrap right
-      return (TrOperation $ OpFlt32Sum left' right')
+
+    Conversion.TrOperation operation arguments -> do
+      arguments' <- mapM unwrap arguments
+      return (TrOperation operation arguments')
+
     Conversion.TrReference reference ->
       return (TrReference $ mangleDefinition reference)
+
     Conversion.TrVariable variable -> 
       return (TrVariable variable)
+
     Conversion.TrFunction variables scope -> do
       body <- unwrap scope
       name <- fresh
       tell [Abstraction name (length variables) body]
       return (TrClosure name variables)
+
     Conversion.TrApplication function argument -> do
       function' <- unwrap function
       argument' <- unwrap argument
       return (TrApplication function' argument')
+
     Conversion.TrNull ->
       return TrNull
 

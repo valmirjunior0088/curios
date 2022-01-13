@@ -149,17 +149,20 @@ emitTerm term =
       callInstrs <- return <$> call "object_flt32"
       return (constInstrs ++ callInstrs)
 
-    TrOperation (OpInt32Sum left right) -> do
+    TrOperation OpInt32Sum [left, right] -> do
       leftInstrs <- emitTerm left
       rightInstrs <- emitTerm right
       callInstrs <- return <$> call "object_int32_sum"
       return (leftInstrs ++ rightInstrs ++ callInstrs)
 
-    TrOperation (OpFlt32Sum left right) -> do
+    TrOperation OpFlt32Sum [left, right] -> do
       leftInstrs <- emitTerm left
       rightInstrs <- emitTerm right
       callInstrs <- return <$> call "object_flt32_sum"
       return (leftInstrs ++ rightInstrs ++ callInstrs)
+    
+    TrOperation _ _ -> do
+      error "Invalid operation format"
 
     TrReference reference ->
       return <$> call reference

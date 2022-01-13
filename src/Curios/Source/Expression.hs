@@ -48,8 +48,8 @@ data Literal =
   deriving (Show)
 
 data Operation =
-  OpInt32Sum SourcePos Expression Expression |
-  OpFlt32Sum SourcePos Expression Expression
+  OpInt32Sum SourcePos |
+  OpFlt32Sum SourcePos
   deriving (Show)
 
 data Expression =
@@ -64,7 +64,7 @@ data Expression =
   ExCase SourcePos Expression |
   ExPrimitive SourcePos Primitive |
   ExLiteral SourcePos Literal |
-  ExOperation SourcePos Operation
+  ExOperation SourcePos Operation [Expression]
   deriving (Show)
 
 data Item =

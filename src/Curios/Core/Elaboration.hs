@@ -67,13 +67,8 @@ abstract name =
         TrLiteral origin literal ->
           TrLiteral origin literal
 
-        TrOperation origin operation ->
-          TrOperation origin $ case operation of
-            Core.OpInt32Sum one other ->
-              Core.OpInt32Sum (go depth one) (go depth other)
-            
-            Core.OpFlt32Sum one other ->
-              Core.OpFlt32Sum (go depth one) (go depth other)
+        TrOperation origin operation arguments ->
+          TrOperation origin operation (map (go depth) arguments)
 
 translate :: Expression -> Term
 translate expression =
@@ -123,13 +118,11 @@ translate expression =
         Source.LtInt32 _ value -> Core.LtInt32 value
         Source.LtFlt32 _ value -> Core.LtFlt32 value
 
-    ExOperation sourcePos operation ->
-      TrOperation (Just sourcePos) $ case operation of
-        Source.OpInt32Sum _ one other ->
-          Core.OpInt32Sum (translate one) (translate other)
-
-        Source.OpFlt32Sum _ one other ->
-          Core.OpFlt32Sum (translate one) (translate other)
+    ExOperation sourcePos operation arguments ->
+      TrOperation (Just sourcePos) operation' (map translate arguments) where
+        operation' = case operation of
+          Source.OpInt32Sum _ -> Core.OpInt32Sum 
+          Source.OpFlt32Sum _ -> Core.OpFlt32Sum 
 
 bindFunctionType :: Binding -> Term -> Term
 bindFunctionType (Binding sourcePos (Identifier _ name) expression) term =

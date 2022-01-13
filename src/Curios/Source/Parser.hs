@@ -109,15 +109,8 @@ psLiteral =
 psOperation :: Parser Operation
 psOperation =
   psLexeme parser where
-    opInt32Sum =
-      OpInt32Sum <$> getSourcePos
-        <*> (psSymbol "int32_sum" *> psClosed)
-        <*> psClosed
-
-    opFlt32Sum =
-      OpFlt32Sum <$> getSourcePos
-        <*> (psSymbol "flt32_sum" *> psClosed)
-        <*> psClosed
+    opInt32Sum = OpInt32Sum <$> getSourcePos <* psSymbol "int32_sum"
+    opFlt32Sum = OpFlt32Sum <$> getSourcePos <* psSymbol "flt32_sum"
     
     parser = try opInt32Sum <|> opFlt32Sum
 
@@ -138,7 +131,8 @@ psClosed =
 
     exOperation =
       ExOperation <$> getSourcePos
-        <*> (psSymbol "#[" *> psOperation <* psSymbol "]")
+        <*> (psSymbol "#[" *> psOperation)
+        <*> (someTill psClosed $ psSymbol "]")
 
     exType =
       ExType <$> getSourcePos

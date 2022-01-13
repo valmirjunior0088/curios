@@ -12,13 +12,8 @@ module Curios.Compilation.Conversion
 import Data.List (elemIndex)
 import Control.Monad.State (State, runState, evalState, get, put)
 
-import Curios.Compilation.Erasure (Name, Index, Literal (..))
+import Curios.Compilation.Erasure (Name, Index, Literal (..), Operation (..))
 import qualified Curios.Compilation.Erasure as Erasure
-
-data Operation =
-  OpInt32Sum Term Term |
-  OpFlt32Sum Term Term
-  deriving (Show)
 
 data Variable =
   VrEnvironment Int |
@@ -27,7 +22,7 @@ data Variable =
 
 data Term =
   TrLiteral Literal |
-  TrOperation Operation |
+  TrOperation Operation [Term] |
   TrReference String |
   TrVariable Variable |
   TrFunction [Variable] Term |
@@ -65,15 +60,9 @@ unwrap term =
     Erasure.TrLiteral literal ->
       return (TrLiteral literal)
 
-    Erasure.TrOperation (Erasure.OpInt32Sum left right) -> do
-      left' <- unwrap left
-      right' <- unwrap right
-      return (TrOperation $ OpInt32Sum left' right')
-
-    Erasure.TrOperation (Erasure.OpFlt32Sum left right) -> do
-      left' <- unwrap left
-      right' <- unwrap right
-      return (TrOperation $ OpFlt32Sum left' right')
+    Erasure.TrOperation operation arguments -> do
+      arguments' <- mapM unwrap arguments
+      return (TrOperation operation arguments')
 
     Erasure.TrReference reference ->
       return (TrReference reference)

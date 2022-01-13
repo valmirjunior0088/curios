@@ -12,12 +12,8 @@ module Curios.Compilation.Erasure
 import Curios.Core.Context (Context)
 import Data.Map (assocs)
 
-import Curios.Core.Term (Name, Index, Literal (..))
+import Curios.Core.Term (Name, Index, Literal (..), Operation (..))
 import qualified Curios.Core.Term as Core
-
-data Operation =
-  OpInt32Sum Term Term |
-  OpFlt32Sum Term Term
 
 data Term =
   TrReference Name |
@@ -25,7 +21,7 @@ data Term =
   TrFunction Term |
   TrApplication Term Term |
   TrLiteral Literal |
-  TrOperation Operation |
+  TrOperation Operation [Term] |
   TrNull
 
 unwrap :: Core.Term -> Term
@@ -64,10 +60,8 @@ unwrap term =
     Core.TrLiteral _ literal ->
       TrLiteral literal
 
-    Core.TrOperation _ operation ->
-      TrOperation $ case operation of
-        Core.OpInt32Sum one other -> OpInt32Sum (unwrap one) (unwrap other)
-        Core.OpFlt32Sum one other -> OpFlt32Sum (unwrap one) (unwrap other)
+    Core.TrOperation _ operation arguments ->
+      TrOperation operation (map unwrap arguments)
 
 data Item =
   Item Name Term
