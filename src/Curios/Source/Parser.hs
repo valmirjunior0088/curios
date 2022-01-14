@@ -111,7 +111,6 @@ psOperation =
   psLexeme parser where
     opInt32Sum = OpInt32Sum <$> getSourcePos <* psSymbol "int32_sum "
     opFlt32Sum = OpFlt32Sum <$> getSourcePos <* psSymbol "flt32_sum "
-    
     parser = try opInt32Sum <|> opFlt32Sum
 
 psClosed :: Parser Expression

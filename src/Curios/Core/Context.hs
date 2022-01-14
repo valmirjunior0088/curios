@@ -47,7 +47,7 @@ type Definitions = Map Name Term
 type Context = (Declarations, Definitions)
 
 newtype Contextual a =
-  ContextualT (StateT Context (Except Error) a) deriving
+  Contextual (StateT Context (Except Error) a) deriving
     ( Functor
     , Applicative
     , Monad
@@ -56,7 +56,7 @@ newtype Contextual a =
     )
 
 execContextual :: Contextual () -> Either Error Context
-execContextual (ContextualT action) =
+execContextual (Contextual action) =
   runExcept (execStateT action (Map.empty, Map.empty))
 
 class MonadWhnf m where
