@@ -15,7 +15,7 @@ data Cause =
   CsFunctionDidntHaveFunctionType |
   CsConstructorsDontHaveAnInferableType |
   CsConstructorDidntHaveSelfType |
-  CsWrongNamberOfArgumentsForOperation Operation |
+  CsInvalidOperationFormat Operation |
   CsFunctionTypeMismatch |
   CsSelfTypeMismatch |
   CsTypeMismatch |
@@ -32,7 +32,7 @@ showCause cause =
     CsFunctionDidntHaveFunctionType -> "Function didn't have function type"
     CsConstructorsDontHaveAnInferableType -> "Constructors don't have an inferable type"
     CsConstructorDidntHaveSelfType -> "Constructor didn't have self type"
-    CsWrongNamberOfArgumentsForOperation operation -> "Wrong number of arguments for operation: " ++ show operation
+    CsInvalidOperationFormat operation -> "Wrong number of arguments for operation: " ++ show operation
     CsFunctionTypeMismatch -> "Function type mismatch"
     CsSelfTypeMismatch -> "Self type mismatch"
     CsTypeMismatch -> "Type mismatch"

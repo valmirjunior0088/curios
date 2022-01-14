@@ -22,55 +22,46 @@ Inside the `runtime` folder, running `make` will:
 ### Example source
 
 ```
-defn the (A : Type) (a : A) : A {
-  a
+defn int32_sum (left : Int32) (right : Int32) : Int32 {
+  #[int32_sum left right]
 }
 
-defn Unit : Type {
-  self @> (P : Unit -> Type)
-    -> P unit
+defn List (A : Type) : Type {
+  self @> (P : List A -> Type)
+    -> P (nil A)
+    -> ((value : A) -> (rest : List A) -> P (cons A value rest))
     -> P self
 }
 
-defn unit : Unit {
-  data P => p_unit => p_unit
+defn nil (A : Type) : List A {
+  data P => case_nil => case_cons => case_nil
 }
 
-defn Nat : Type {
-  self @> (P : Nat -> Type)
-    -> (P zero)
-    -> ((n : Nat) -> P (succ n))
-    -> P self
+defn cons (A : Type) (value : A) (rest : List A) : List A {
+  data P => case_nil => case_cons => case_cons value rest
 }
 
-defn zero : Nat {
-  data P => p_zero => p_succ => p_zero
+defn foldr
+  (A : Type)
+  (B : Type)
+  (go : A -> B -> B)
+  (initial : B)
+  (list : List A)
+:
+  B
+{
+  (case list) (_ => B)
+    (initial)
+    (value => rest =>
+      go value (foldr A B go initial rest)
+    )
 }
 
-defn succ (n : Nat) : Nat {
-  data P => p_zero => p_succ => p_succ n
+defn int32_list : List Int32 {
+  cons Int32 1 (cons Int32 2 (cons Int32 3 (nil Int32)))
 }
 
-defn Bool : Type {
-  self @> (P : Bool -> Type)
-    -> P true
-    -> P false
-    -> P self
-}
-
-defn true : Bool {
-  data P => p_true => p_false => p_true
-}
-
-defn false : Bool {
-  data P => p_true => p_false => p_false
-}
-
-defn is_zero (n : Nat) : Bool {
-  (case n) (_ => Bool) (true) (_ => false)
-}
-
-defn int32_sum (one : Int32) (other : Int32) : Int32 {
-  #[int32_sum one other]
+defn main : Int32 {
+  foldr Int32 Int32 int32_sum 0 int32_list
 }
 ```

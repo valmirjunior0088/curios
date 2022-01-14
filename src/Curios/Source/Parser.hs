@@ -109,8 +109,8 @@ psLiteral =
 psOperation :: Parser Operation
 psOperation =
   psLexeme parser where
-    opInt32Sum = OpInt32Sum <$> getSourcePos <* psSymbol "int32_sum"
-    opFlt32Sum = OpFlt32Sum <$> getSourcePos <* psSymbol "flt32_sum"
+    opInt32Sum = OpInt32Sum <$> getSourcePos <* psSymbol "int32_sum "
+    opFlt32Sum = OpFlt32Sum <$> getSourcePos <* psSymbol "flt32_sum "
     
     parser = try opInt32Sum <|> opFlt32Sum
 
@@ -187,14 +187,14 @@ psData terminator =
   psLexeme (try parser) <|> psSelf terminator where
     parser =
       ExData <$> getSourcePos
-        <*> (psSymbol "data" *> psExpression terminator)
+        <*> (psSymbol "data " *> psExpression terminator)
 
 psCase :: String -> Parser Expression
 psCase terminator =
   psLexeme (try parser) <|> psData terminator where
     parser =
       ExCase <$> getSourcePos
-        <*> (psSymbol "case" *> psExpression terminator)
+        <*> (psSymbol "case " *> psExpression terminator)
 
 psExpression :: String -> Parser Expression
 psExpression =
@@ -203,7 +203,7 @@ psExpression =
 psItem :: Parser Item
 psItem =
   psLexeme $ Item <$> getSourcePos
-    <*> (psSymbol "defn" *> psIdentifier)
+    <*> (psSymbol "defn " *> psIdentifier)
     <*> many psBinding
     <*> (psSymbol ":" *> psExpression "{")
     <*> psExpression "}"

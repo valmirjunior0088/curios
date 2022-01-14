@@ -8,7 +8,7 @@ module Curios.Core.Term
   , Operation (..)
   , Term (..)
   , getOrigin
-  , shift
+  , weaken
   , instantiate
   , trReference
   , trVariable
@@ -159,8 +159,8 @@ getOrigin term = case term of
   TrLiteral origin _ -> origin
   TrOperation origin _ _ -> origin
 
-shift :: Term -> Term
-shift =
+weaken :: Term -> Term
+weaken =
   go 0 where
     go depth term =
       case term of
@@ -203,9 +203,9 @@ shift =
           TrOperation origin operation (map (go depth) arguments)
 
 instantiate :: Term -> Term -> Term
-instantiate term =
+instantiate =
   go 0 where
-    go depth scope =
+    go depth term scope =
       case scope of
         TrReference origin name ->
           TrReference origin name
@@ -220,22 +220,22 @@ instantiate term =
           TrType origin
 
         TrFunctionType origin input output ->
-          TrFunctionType origin (go depth input) (go (succ depth) output)
+          TrFunctionType origin (go depth term input) (go (succ depth) (weaken term) output)
 
         TrFunction origin output ->
-          TrFunction origin (go (succ depth) output)
+          TrFunction origin (go (succ depth) (weaken term) output)
 
         TrApplication origin function argument ->
-          TrApplication origin (go depth function) (go depth argument)
+          TrApplication origin (go depth term function) (go depth term argument)
 
         TrSelf origin output ->
-          TrSelf origin (go (succ depth) output)
+          TrSelf origin (go (succ depth) (weaken term) output)
         
         TrData origin constructor ->
-          TrData origin (go depth constructor)
+          TrData origin (go depth term constructor)
         
         TrCase origin scrutinee ->
-          TrCase origin (go depth scrutinee)
+          TrCase origin (go depth term scrutinee)
         
         TrPrimitive origin primitive ->
           TrPrimitive origin primitive
@@ -244,7 +244,7 @@ instantiate term =
           TrLiteral origin literal
 
         TrOperation origin operation arguments ->
-          TrOperation origin operation (map (go depth) arguments)
+          TrOperation origin operation (map (go depth term) arguments)
 
 trReference :: Name -> Term
 trReference = TrReference Nothing

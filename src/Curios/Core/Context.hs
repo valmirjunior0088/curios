@@ -30,7 +30,7 @@ import Curios.Core.Term
   , Operation (..)
   , Term (..)
   , getOrigin
-  , shift
+  , weaken
   , instantiate
   , trType
   , trPrimitive
@@ -44,7 +44,6 @@ import qualified Data.Sequence as Seq
 
 type Declarations = Map Name Type
 type Definitions = Map Name Term
-
 type Context = (Declarations, Definitions)
 
 newtype Contextual a =
@@ -209,7 +208,7 @@ instance MonadConverts Check where
 
 bindIn :: Type -> Check a -> Check a
 bindIn typ action =
-  local (fmap shift . (Seq.<|) typ) action
+  let go typs = fmap weaken (typ Seq.<| typs) in local go action
 
 bound :: Index -> Check (Maybe Type)
 bound index =
@@ -291,7 +290,7 @@ infer term =
       return (trPrimitive PrFlt32)
     
     TrOperation origin operation _ ->
-      abort origin (CsWrongNamberOfArgumentsForOperation operation)
+      abort origin (CsInvalidOperationFormat operation)
 
 class MonadCheck m where
   check :: Type -> Term -> m ()
