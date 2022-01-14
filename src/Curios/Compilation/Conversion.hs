@@ -27,7 +27,7 @@ data Term =
   TrVariable Variable |
   TrFunction [Variable] Term |
   TrApplication Term Term |
-  TrNil
+  TrNull
   deriving (Show)
 
 type Conversion =
@@ -81,8 +81,8 @@ unwrap term =
       argument' <- unwrap argument
       return (TrApplication function' argument')
 
-    Erasure.TrNil ->
-      return TrNil
+    Erasure.TrNull ->
+      return TrNull
 
 data Item =
   Item Name Term

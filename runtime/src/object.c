@@ -3,17 +3,15 @@
 #include "io.h"
 #include "memory.h"
 
+#define NULL ((void *) 0)
 #define OBJECT_SIZE sizeof(struct object)
 #define OBJECT_REF_SIZE sizeof(struct object *)
 
 enum type {
-  NIL,
   INT32,
   FLT32,
   CLOSURE,
 };
-
-struct nil {};
 
 struct int32 {
   int value;
@@ -30,7 +28,6 @@ struct closure {
 };
 
 union payload {
-  struct nil nil;
   struct int32 int32;
   struct flt32 flt32;
   struct closure closure;
@@ -42,25 +39,19 @@ struct object {
   union payload payload;
 };
 
-void assert_reference_count(struct object *object) {
-  if (object->reference_count <= 0) {
-    io_panic("object had invalid reference count");
-  }
-}
-
-void assert_type(struct object *object, enum type type) {
-  if (object->type != type) {
-    io_panic("object had wrong type");
-  }
-}
-
 void object_enter(struct object *object) {
-  assert_reference_count(object);
+  if (object == NULL) {
+    return;
+  }
+
   object->reference_count++;
 }
 
 void object_leave(struct object *object) {
-  assert_reference_count(object);
+  if (object == NULL) {
+    return;
+  }
+
   object->reference_count--;
 
   if (object->reference_count > 0) {
@@ -76,12 +67,8 @@ void object_leave(struct object *object) {
   dealloc(object);
 }
 
-struct object *object_nil() {
-  struct object *object = alloc(OBJECT_SIZE);
-  object->reference_count = 1;
-  object->type = NIL;
-
-  return object;
+struct object *object_null() {
+  return NULL;
 }
 
 struct object *object_int32(int value) {
@@ -94,9 +81,6 @@ struct object *object_int32(int value) {
 }
 
 struct object *object_int32_sum(struct object *left, struct object *right) {
-  assert_type(left, INT32);
-  assert_type(right, INT32);
-
   return object_int32(
     left->payload.int32.value + right->payload.int32.value
   );
@@ -112,9 +96,6 @@ struct object *object_flt32(float value) {
 }
 
 struct object *object_flt32_sum(struct object *left, struct object *right) {
-  assert_type(left, FLT32);
-  assert_type(right, FLT32);
-
   return object_flt32(
     left->payload.flt32.value + right->payload.flt32.value
   );
@@ -332,8 +313,6 @@ struct object *object_closure_9(
 }
 
 struct object *object_apply(struct object *function, struct object *argument) {
-  assert_type(function, CLOSURE);
-
   return function->payload.closure.abstraction(
     function->payload.closure.values,
     argument
@@ -343,32 +322,33 @@ struct object *object_apply(struct object *function, struct object *argument) {
 void object_debug(struct object *object) {
   io_string("{ ");
 
-  switch (object->type) {
-    case NIL:
-      io_string("NIL");
-      break;
+  if (object == NULL) {
+    io_string("NULL");
+  }
 
-    case INT32:
-      io_string("INT32 ");
-      io_int(object->payload.int32.value);
-      break;
+  else {
+    switch (object->type) {
+      case INT32:
+        io_string("INT32 ");
+        io_int(object->payload.int32.value);
+        break;
 
-    case FLT32:
-      io_string("FLT32 ");
-      io_float(object->payload.flt32.value);
-      break;
-    
-    case CLOSURE:
-      io_string("CLOSURE [ ");
+      case FLT32:
+        io_string("FLT32 ");
+        io_float(object->payload.flt32.value);
+        break;
+      
+      case CLOSURE:
+        io_string("CLOSURE [ ");
 
-      for (int index = 0; index < object->payload.closure.capacity; index++) {
-        object_debug(object->payload.closure.values[index]);
-      }
+        for (int index = 0; index < object->payload.closure.capacity; index++) {
+          object_debug(object->payload.closure.values[index]);
+        }
 
-      io_string(" ]");
-      break;
+        io_string(" ]");
+        break;
+    }
   }
 
   io_string(" }");
 }
-

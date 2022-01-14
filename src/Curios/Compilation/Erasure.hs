@@ -23,7 +23,7 @@ data Term =
   TrApplication Term Term |
   TrLiteral Literal |
   TrOperation Operation [Term] |
-  TrNil
+  TrNull
 
 unwrap :: Core.Term -> Term
 unwrap term =
@@ -35,10 +35,10 @@ unwrap term =
       TrVariable index
 
     Core.TrType _ ->
-      TrNil
+      TrNull
 
     Core.TrFunctionType _ _ _ ->
-      TrNil
+      TrNull
 
     Core.TrFunction _ output ->
       TrFunction (unwrap output)
@@ -47,7 +47,7 @@ unwrap term =
       TrApplication (unwrap function) (unwrap argument)
 
     Core.TrSelf _ _ ->
-      TrNil
+      TrNull
 
     Core.TrData _ constructor ->
       unwrap constructor
@@ -56,7 +56,7 @@ unwrap term =
       unwrap scrutinee
 
     Core.TrPrimitive _ _ ->
-      TrNil
+      TrNull
     
     Core.TrLiteral _ literal ->
       TrLiteral literal

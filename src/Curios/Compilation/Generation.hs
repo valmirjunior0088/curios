@@ -49,7 +49,7 @@ generateRuntimeFuncImports :: Syntax ()
 generateRuntimeFuncImports = do
   addFuncImport "env" "object_enter" [i32] []
   addFuncImport "env" "object_leave" [i32] []
-  addFuncImport "env" "object_nil" [] [i32]
+  addFuncImport "env" "object_null" [] [i32]
   addFuncImport "env" "object_int32" [i32] [i32]
   addFuncImport "env" "object_int32_sum" [i32, i32] [i32]
   addFuncImport "env" "object_flt32" [f32] [i32]
@@ -189,8 +189,8 @@ emitTerm term =
       callInstrs <- return <$> call "object_apply"
       return (functionInstrs ++ argumentInstrs ++ callInstrs)
     
-    TrNil ->
-      return <$> call "object_nil"
+    TrNull ->
+      return <$> call "object_null"
 
 variablesFromSize :: Int -> [Variable]
 variablesFromSize size =
