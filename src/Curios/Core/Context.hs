@@ -233,7 +233,7 @@ infer term =
 
       case result of
         Nothing -> abort origin (CsVariableOutOfBounds index)
-        Just variable -> return variable
+        Just typ -> return typ
 
     TrType _ ->
       return trType
