@@ -310,7 +310,7 @@ instance MonadCheck Check where
         check (instantiate (TrData origin constructor) output) constructor
 
       (_, TrData origin _) ->
-        abort origin CsConstructorDidntHaveSelfType
+        abort origin CsSelfTypeMismatch 
 
       _ -> do
         typ'' <- infer term
@@ -341,7 +341,7 @@ insertDefinition (origin, name) term = do
 
   typ <- case Map.lookup name declarations of
     Nothing -> abort origin (CsUndeclaredNameBeingDefined name)
-    Just declaration -> return declaration
+    Just typ -> return typ
   
   put (declarations, Map.insert name term definitions)
   
