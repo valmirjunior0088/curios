@@ -30,7 +30,7 @@ import Curios.Core.Term
   , Operation (..)
   , Term (..)
   , getOrigin
-  , weaken
+  , shift
   , instantiate
   , trType
   , trPrimitive
@@ -206,9 +206,9 @@ instance MonadConverts Check where
   converts one other =
     Check (lift $ runConverts $ converts one other)
 
-bindIn :: Type -> Check a -> Check a
-bindIn typ action =
-  let go typs = fmap weaken (typ Seq.<| typs) in local go action
+bind :: Type -> Check a -> Check a
+bind typ action =
+  let go typs = fmap (shift 1) (typ Seq.<| typs) in local go action
 
 bound :: Index -> Check (Maybe Type)
 bound index =
@@ -240,7 +240,7 @@ infer term =
 
     TrFunctionType _ input output -> do
       check trType input
-      bindIn input (check trType output)
+      bind input (check trType output)
       return trType
 
     TrFunction origin _ ->
@@ -258,7 +258,7 @@ infer term =
           abort (getOrigin function) CsFunctionDidntHaveFunctionType
 
     TrSelf origin output -> do
-      bindIn (TrSelf origin output) (check trType output)
+      bind (TrSelf origin output) (check trType output)
       return trType
     
     TrData origin _ ->
@@ -301,7 +301,7 @@ instance MonadCheck Check where
     
     case (typ', term) of
       (TrFunctionType _ input output, TrFunction _ output') ->
-        bindIn input (check output output')
+        bind input (check output output')
       
       (_, TrFunction origin _) ->
         abort origin CsFunctionTypeMismatch
