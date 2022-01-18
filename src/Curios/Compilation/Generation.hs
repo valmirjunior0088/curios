@@ -178,7 +178,6 @@ emitTerm term =
       funcRefInstrs <- return <$> i32FuncRef name
       variablesInstrs <- concat <$> mapM access variables
       callInstrs <- return <$> call ("object_closure_" ++ show (length variables))
-      
       return (enterInstrs ++ funcRefInstrs ++ variablesInstrs ++ callInstrs)
 
     TrApplication function argument -> do

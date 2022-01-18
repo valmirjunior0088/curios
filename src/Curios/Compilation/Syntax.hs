@@ -107,11 +107,6 @@ runSyntax :: Syntax () -> Module
 runSyntax action =
   evalState (execStateT action emptyModule) emptyModuleState
 
-rememberFuncName :: String -> Syntax ()
-rememberFuncName funcName = do
-  modlState @ ModuleState { msFuncs } <- lift get
-  (lift . put) modlState { msFuncs = msFuncs ++ [funcName] }
-
 getType :: [ValueType] -> [ValueType] -> Syntax TypeIdx
 getType inputs outputs = do
   modl @ Module { mdTypes = TypeSec types } <- get
@@ -131,7 +126,9 @@ putFuncImport namespace name inputs outputs = do
   Module { mdFuncs = FuncSec funcs } <- get
   when (length funcs > 0) (error "importing funcs invalidates local func indexes")
 
-  rememberFuncName name
+  modlState @ ModuleState { msFuncs } <- lift get
+  (lift . put) modlState { msFuncs = msFuncs ++ [name] }
+  
   typeIdx <- getType inputs outputs
 
   let
@@ -208,19 +205,21 @@ putGlobalExport name globalIdx = do
   put modl { mdExports = ExportSec (expts ++ [expt]) }
 
 putFunc :: String -> [ValueType] -> [ValueType] -> Syntax ()
-putFunc funcName inputs outputs = do
-  rememberFuncName funcName
+putFunc name inputs outputs = do
+  modlState @ ModuleState { msFuncs } <- lift get
+  (lift . put) modlState { msFuncs = msFuncs ++ [name] }
+
   typeIdx <- getType inputs outputs
 
   modl @ Module { mdFuncs = FuncSec funcs } <- get
   put modl { mdFuncs = FuncSec (funcs ++ [Func typeIdx]) }
 
 getFunc :: String -> Syntax FuncIdx
-getFunc funcName = do
+getFunc name = do
   ModuleState { msFuncs } <- lift get
 
-  case elemIndex funcName msFuncs of
-    Nothing -> error ("no index associated with func '" ++ funcName ++ "'")
+  case elemIndex name msFuncs of
+    Nothing -> error ("no index associated with func '" ++ name ++ "'")
     Just index -> return (fromIntegral index)
 
 putSym :: SymKind -> [SymFlag] -> Syntax ()
@@ -332,8 +331,8 @@ i32Const value =
   return (InI32Const value)
 
 i32FuncRef :: String -> Syntax Instr
-i32FuncRef funcName = do
-  func <- getFunc funcName
+i32FuncRef name = do
+  func <- getFunc name
   funcRef <- getFuncRef func
   funcSym <- getFuncSym func
   return (InI32FuncRef funcRef funcSym)
@@ -367,7 +366,7 @@ localTee localIdx =
   return (InLocalTee localIdx)
 
 call :: String -> Syntax Instr
-call funcName = do
-  func <- getFunc funcName
+call name = do
+  func <- getFunc name
   funcSym <- getFuncSym func
   return (InCall func funcSym)

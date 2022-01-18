@@ -177,7 +177,9 @@ instance MonadConverts Converts where
             converts scrutinee scrutinee'
           
           (TrOperation _ operation arguments, TrOperation _ operation' arguments') ->
-            pure (operation == operation') .&&. and <$> zipWithM converts arguments arguments'
+            pure (operation == operation')
+              .&&. pure (length arguments == length arguments')
+              .&&. and <$> zipWithM converts arguments arguments'
 
           _ ->
             return False
