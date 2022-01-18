@@ -241,7 +241,7 @@ instance Buildable ImportSec where
     wrapSec 2 (bufferedVec imports)
 
 instance Bufferable Func where
-  buffered (Func _ typeIdx) =
+  buffered (Func typeIdx) =
     buffered typeIdx
 
 instance Buildable FuncSec where

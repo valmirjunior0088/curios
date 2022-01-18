@@ -1,11 +1,11 @@
 #include "object.h"
 
-#include "io.h"
 #include "memory.h"
+#include "io.h"
 
 #define NULL ((void *) 0)
-#define OBJECT_SIZE sizeof(struct object)
-#define OBJECT_REF_SIZE sizeof(struct object *)
+#define OBJECT_SIZE (sizeof(struct object))
+#define OBJECT_REF_SIZE (sizeof(struct object *))
 
 enum type {
   INT32,

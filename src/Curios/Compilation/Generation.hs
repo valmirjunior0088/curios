@@ -177,9 +177,7 @@ emitTerm term =
       enterInstrs <- emitEnters variables
       funcRefInstrs <- return <$> i32FuncRef name
       variablesInstrs <- concat <$> mapM access variables
-
-      let funcName = "object_closure_" ++ show (length variables)
-      callInstrs <- return <$> call funcName
+      callInstrs <- return <$> call ("object_closure_" ++ show (length variables))
       
       return (enterInstrs ++ funcRefInstrs ++ variablesInstrs ++ callInstrs)
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 module Curios.Compilation.Syntax
   ( Syntax
   , runSyntax
@@ -34,7 +36,9 @@ module Curios.Compilation.Syntax
 
 import Data.List (findIndex, elemIndex, group)
 import Data.Int (Int32, Int64)
-import Control.Monad.State (State, execState, get, put)
+import Control.Monad (when)
+import Control.Monad.Trans (lift)
+import Control.Monad.State (MonadState (..), StateT, execStateT, State, evalState)
 
 import Curios.Compilation.Module
   ( TypeIdx (..)
@@ -89,30 +93,45 @@ import Curios.Compilation.Module
   , emptyModule
   )
 
-type Syntax =
-  State Module
+data ModuleState =
+  ModuleState
+    { msFuncs :: [String]
+    }
+
+emptyModuleState :: ModuleState
+emptyModuleState = ModuleState []
+
+type Syntax = StateT Module (State ModuleState)
 
 runSyntax :: Syntax () -> Module
 runSyntax action =
-  execState action emptyModule
+  evalState (execStateT action emptyModule) emptyModuleState
+
+rememberFuncName :: String -> Syntax ()
+rememberFuncName funcName = do
+  modlState @ ModuleState { msFuncs } <- lift get
+  (lift . put) modlState { msFuncs = msFuncs ++ [funcName] }
 
 getType :: [ValueType] -> [ValueType] -> Syntax TypeIdx
 getType inputs outputs = do
-  let funcType = FuncType (ResultType inputs) (ResultType outputs)
-
   modl @ Module { mdTypes = TypeSec types } <- get
+
+  let funcType = FuncType (ResultType inputs) (ResultType outputs)
 
   case elemIndex funcType types of
     Nothing -> do
       put modl { mdTypes = TypeSec (types ++ [funcType]) }
       return (fromIntegral $ length types)
+
     Just typeIdx ->
       return (fromIntegral typeIdx)
 
--- IMPORTANT: Importing a function invalidates all function definition
--- indices. Import all functions before adding function definitions.
 putFuncImport :: String -> String -> [ValueType] -> [ValueType] -> Syntax ()
 putFuncImport namespace name inputs outputs = do
+  Module { mdFuncs = FuncSec funcs } <- get
+  when (length funcs > 0) (error "importing funcs invalidates local func indexes")
+
+  rememberFuncName name
   typeIdx <- getType inputs outputs
 
   let
@@ -189,23 +208,20 @@ putGlobalExport name globalIdx = do
   put modl { mdExports = ExportSec (expts ++ [expt]) }
 
 putFunc :: String -> [ValueType] -> [ValueType] -> Syntax ()
-putFunc name inputs outputs = do
+putFunc funcName inputs outputs = do
+  rememberFuncName funcName
   typeIdx <- getType inputs outputs
 
   modl @ Module { mdFuncs = FuncSec funcs } <- get
-  put modl { mdFuncs = FuncSec (funcs ++ [Func name typeIdx]) }
+  put modl { mdFuncs = FuncSec (funcs ++ [Func typeIdx]) }
 
 getFunc :: String -> Syntax FuncIdx
 getFunc funcName = do
-  Module { mdImports = ImportSec impts, mdFuncs = FuncSec funcs } <- get
+  ModuleState { msFuncs } <- lift get
 
-  let
-    imptFuncNames = [name | Import _ name (IdFunc _) <- impts]
-    funcNames = [name | Func name _ <- funcs]
-
-  case elemIndex funcName (imptFuncNames ++ funcNames) of
-    Nothing -> error ("function doesn't exist: " ++ funcName)
-    Just funcIdx -> return (fromIntegral funcIdx)
+  case elemIndex funcName msFuncs of
+    Nothing -> error ("no index associated with func '" ++ funcName ++ "'")
+    Just index -> return (fromIntegral index)
 
 putSym :: SymKind -> [SymFlag] -> Syntax ()
 putSym kind flags = do

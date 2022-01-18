@@ -30,7 +30,6 @@ import Data.List (intercalate)
 import Text.Megaparsec (SourcePos)
 
 type Origin = Maybe SourcePos
-
 type Name = String
 type Index = Int
 type Type = Term

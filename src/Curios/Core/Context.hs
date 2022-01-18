@@ -16,9 +16,9 @@ module Curios.Core.Context
 import Curios.Core.Error (Cause (..), Error (..))
 import Control.Monad (unless, when, zipWithM)
 import Control.Monad.Trans (lift)
-import Control.Monad.Reader (MonadReader, ReaderT, runReaderT, ask, local)
-import Control.Monad.State (MonadState, StateT, execStateT, get, put)
-import Control.Monad.Except (MonadError, Except, runExcept, throwError)
+import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
+import Control.Monad.State (MonadState (..), StateT, execStateT)
+import Control.Monad.Except (MonadError (..), Except, runExcept)
 
 import Curios.Core.Term
   ( Origin
@@ -114,8 +114,8 @@ remembered :: Equation -> Converts Bool
 remembered equation =
   elem equation <$> ask
 
-rememberIn :: Equation -> Converts a -> Converts a
-rememberIn equation action =
+remember :: Equation -> Converts a -> Converts a
+remember equation action =
   local (Seq.|> equation) action
 
 (.&&.) :: Monad m => m Bool -> m Bool -> m Bool
@@ -182,7 +182,7 @@ instance MonadConverts Converts where
           _ ->
             return False
     
-    isEqual .||. isRemembered .||. rememberIn equation isEquirecursive
+    isEqual .||. isRemembered .||. remember equation isEquirecursive
 
 newtype Check a =
   Check (ReaderT (Seq Type) Contextual a) deriving

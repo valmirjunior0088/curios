@@ -200,7 +200,7 @@ emptyImportSec :: ImportSec
 emptyImportSec = ImportSec []
 
 data Func =
-  Func String TypeIdx
+  Func TypeIdx
 
 newtype FuncSec =
   FuncSec [Func]

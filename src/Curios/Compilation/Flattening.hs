@@ -10,9 +10,9 @@ module Curios.Compilation.Flattening
   )
   where
 
-import Control.Monad.Reader (ReaderT, runReaderT, ask)
-import Control.Monad.State (StateT, evalStateT, get, put)
-import Control.Monad.Writer (Writer, runWriter, tell)
+import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
+import Control.Monad.State (MonadState (..), StateT, evalStateT)
+import Control.Monad.Writer (MonadWriter (..), Writer, runWriter)
 
 import Curios.Compilation.Conversion (Name, Literal (..), Variable (..), Operation (..))
 import qualified Curios.Compilation.Conversion as Conversion
@@ -34,8 +34,7 @@ data Abstraction =
   Abstraction Name Int Term
   deriving (Show)
 
-type Flattening =
-  ReaderT Name (StateT Int (Writer [Abstraction]))
+type Flattening = ReaderT Name (StateT Int (Writer [Abstraction]))
 
 runFlattening :: Flattening a -> Name -> (a, [Abstraction])
 runFlattening action name =

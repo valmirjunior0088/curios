@@ -10,7 +10,7 @@ module Curios.Compilation.Conversion
   where
 
 import Data.List (elemIndex)
-import Control.Monad.State (State, runState, evalState, get, put)
+import Control.Monad.State (MonadState (..), State, runState, evalState)
 
 import Curios.Compilation.Erasure (Name, Index, Literal (..), Operation (..))
 import qualified Curios.Compilation.Erasure as Erasure
@@ -30,8 +30,7 @@ data Term =
   TrNull
   deriving (Show)
 
-type Conversion =
-  State [Index]
+type Conversion = State [Index]
 
 runConversion :: Conversion a -> (a, [Index])
 runConversion action =
