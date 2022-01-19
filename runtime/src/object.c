@@ -58,13 +58,23 @@ void object_leave(struct object *object) {
     return;
   }
 
-  if (object->type == CLOSURE) {
-    for (int index = 0; index < object->payload.closure.capacity; index++) {
-      object_leave(object->payload.closure.values[index]);
-    }
-  }
+  switch (object->type) {
+    case INT32:
+      dealloc(object);
+      break;
+    
+    case FLT32:
+      dealloc(object);
+      break;
+    
+    case CLOSURE:
+      for (int index = 0; index < object->payload.closure.capacity; index++) {
+        object_leave(object->payload.closure.values[index]);
+      }
 
-  dealloc(object);
+      dealloc(object);
+      break;
+  }
 }
 
 struct object *object_null() {
