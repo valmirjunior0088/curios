@@ -9,6 +9,12 @@ cradle:
     - path: "./compiler/Paths_curios.hs"
       component: "curios:exe:curios-compiler"
 
+    - path: "./interpreter/Main.hs"
+      component: "curios:exe:curios-interpreter"
+
+    - path: "./interpreter/Paths_curios.hs"
+      component: "curios:exe:curios-interpreter"
+
     - path: "./server/Main.hs"
       component: "curios:exe:curios-server"
 

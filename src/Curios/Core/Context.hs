@@ -8,6 +8,8 @@ module Curios.Core.Context
   , Context
   , Contextual
   , execContextual
+  , evalContextual
+  , whnf
   , insertDeclaration
   , insertDefinition
   )
@@ -17,7 +19,7 @@ import Curios.Core.Error (Cause (..), Error (..))
 import Control.Monad (unless, when, zipWithM)
 import Control.Monad.Trans (lift)
 import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
-import Control.Monad.State (MonadState (..), StateT, execStateT)
+import Control.Monad.State (MonadState (..), StateT, execStateT, evalStateT)
 import Control.Monad.Except (MonadError (..), Except, runExcept)
 
 import Curios.Core.Term
@@ -59,6 +61,10 @@ execContextual :: Contextual () -> Either Error Context
 execContextual (Contextual action) =
   runExcept (execStateT action (Map.empty, Map.empty))
 
+evalContextual :: Contextual a -> Either Error a
+evalContextual (Contextual action) =
+  runExcept (evalStateT action (Map.empty, Map.empty))
+
 class MonadWhnf m where
   whnf :: Term -> m Term
 
@@ -86,6 +92,19 @@ instance MonadWhnf Contextual where
         case scrutinee' of
           TrData _ constructor -> whnf constructor
           _ -> return (TrCase origin scrutinee')
+
+      TrOperation origin operation operands -> do
+        operands' <- mapM whnf operands
+
+        case (operation, operands') of
+          (OpInt32Sum, [TrLiteral _ (LtInt32 one), TrLiteral _ (LtInt32 other)]) ->
+            return (TrLiteral origin (LtInt32 $ one + other))
+          
+          (OpFlt32Sum, [TrLiteral _ (LtFlt32 one), TrLiteral _ (LtFlt32 other)]) ->
+            return (TrLiteral origin (LtFlt32 $ one + other))
+
+          _ ->
+            return (TrOperation origin operation operands')
 
       _ ->
         return term

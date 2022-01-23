@@ -71,8 +71,6 @@ combine :: Name -> Core.Term -> [Item] -> [Item]
 combine name term items =
   Item name (unwrap term) : items
 
-erase :: Context -> Maybe [Item]
+erase :: Context -> [Item]
 erase (_, definitions) =
-  if Map.member "main" definitions
-    then Just (Map.foldrWithKey combine [] definitions)
-    else Nothing
+  Map.foldrWithKey combine [] definitions

@@ -1,5 +1,6 @@
 module Curios.Core.Elaboration
-  ( elaborate
+  ( evaluate
+  , elaborate
   )
   where
 
@@ -12,6 +13,8 @@ import Curios.Core.Context
   , Context
   , Contextual
   , execContextual
+  , evalContextual
+  , whnf
   , insertDeclaration
   , insertDefinition
   )
@@ -142,6 +145,14 @@ define (Item _ (Identifier sourcePos name) bindings _ expression) =
   insertDefinition (Just sourcePos, name) 
     (foldr bindFunction (translate expression) bindings)
 
+process :: Items -> Contextual ()
+process (Items _ items) =
+  mapM_ declare items >> mapM_ define items
+
+evaluate :: Items -> Term -> Either Error Term
+evaluate items term =
+  evalContextual (process items >> whnf term)
+
 elaborate :: Items -> Either Error Context
-elaborate (Items _ items) =
-  execContextual (mapM_ declare items >> mapM_ define items)
+elaborate items =
+  execContextual (process items)

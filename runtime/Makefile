@@ -1,5 +1,10 @@
 .SILENT:
 
+.PHONY: interpret
+
+interpret:
+	stack exec curios-interpreter program.crs
+
 build/index.html: src/index.html
 	cp src/index.html build/index.html
 
@@ -15,8 +20,8 @@ build/program.o: program.crs
 build/output.wasm: build/memory.o build/object.o build/program.o
 	wasm-ld build/memory.o build/object.o build/program.o -o build/output.wasm --allow-undefined --entry main -O3
 
-.DEFAULT_GOAL :=
+.PHONY: compile
 
-default: build/index.html build/output.wasm
+compile: build/index.html build/output.wasm
 	echo "Started server on http://localhost:8080"
 	stack exec curios-server 8080 build

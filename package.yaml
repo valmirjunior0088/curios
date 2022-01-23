@@ -35,6 +35,16 @@ executables:
     dependencies:
     - curios
 
+  curios-interpreter:
+    main: Main.hs
+    source-dirs: interpreter
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - curios
+
   curios-server:
     main: Main.hs
     source-dirs: server

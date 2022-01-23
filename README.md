@@ -11,13 +11,33 @@
 - [x] WebAssembly generation
 - [ ] Type erasure
 
+### System dependencies
+
+1) For the interpreter:
+
+    - [`stack`](https://www.haskellstack.org/).
+
+2) For the compiler:
+
+    - [`stack`](https://www.haskellstack.org/);
+    - [`clang`](https://clang.llvm.org/);
+    - [`lld`](https://lld.llvm.org/).
+
 ### How do I run this thing?
 
-Inside the `runtime` folder, running `make` will:
+Make sure the program has a `main` definition. Then, inside the `runtime` folder:
 
-1) Typecheck and compile the the `program.crs` file;
+1) Running `make interpret` will:
 
-2) Open a server in `localhost:8080` to serve the resulting WebAssembly binary.
+    1) Typecheck and interpret the `program.crs` file;
+
+    2) Print a representation of the resulting term.
+
+2) Running `make compile` will:
+
+    1) Typecheck and compile the the `program.crs` file;
+
+    2) Open a server in `localhost:8080` to serve the resulting WebAssembly binary.
 
 ### Example source
 
