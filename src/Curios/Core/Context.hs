@@ -295,10 +295,11 @@ infer term =
     TrPrimitive _ _ ->
       return trType
     
-    TrLiteral _ literal ->
-      case literal of
-        LtInt32 _ -> return (trPrimitive PrInt32)
-        LtFlt32 _ -> return (trPrimitive PrFlt32)
+    TrLiteral _ (LtInt32 _) ->
+      return (trPrimitive PrInt32)
+    
+    TrLiteral _ (LtFlt32 _) ->
+      return (trPrimitive PrFlt32)
     
     TrOperation _ OpInt32Sum [one, other] -> do
       check (trPrimitive PrInt32) one
