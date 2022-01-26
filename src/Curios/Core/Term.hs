@@ -138,7 +138,9 @@ instance Eq Term where
         literal == literal'
       
       (TrOperation _ operation arguments, TrOperation _ operation' arguments') ->
-        operation == operation' && and (zipWith (==) arguments arguments')
+        operation == operation'
+          && length arguments == length arguments'
+          && and (zipWith (==) arguments arguments')
 
       _ ->
         False
