@@ -20,6 +20,3 @@ cradle:
 
     - path: "./server/Paths_curios.hs"
       component: "curios:exe:curios-server"
-
-    - path: "./test"
-      component: "curios:test:curios-test"

@@ -1,91 +1,79 @@
-defn int32_sum (left : Int32) (right : Int32) : Int32 {
-  #[int32_sum left right]
-}
+Unit : Type.
+Unit = {:unit}.
 
-defn Unit : Type {
-  self @> (P : Unit -> Type)
-    -> P unit
-    -> P self
-}
+unit : Unit.
+unit = :unit.
 
-defn unit : Unit {
-  data P => case_unit => case_unit
-}
+List : Type -> Type.
+List = A =>
+  (label: {:null, :cons}) *> match label {
+    :null = Unit.
+    :cons = A *> List A.
+  }.
 
-defn Nat : Type {
-  self @> (P : Nat -> Type)
-    -> P zero
-    -> ((n : Nat) -> P (succ n))
-    -> P self
-}
+null : (A: Type) -> List A.
+null = A => (:null, unit).
 
-defn zero : Nat {
-  data P => case_zero => case_succ => case_zero
-}
+cons : (A: Type) -> A -> List A -> List A.
+cons = A => a => rest => (:cons, a, rest).
 
-defn succ (n : Nat) : Nat {
-  data P => case_zero => case_succ => case_succ n
-}
+fold : (A: Type) -> (B: Type) -> (B -> A -> B) -> B -> List A -> B.
+fold = A => B => action => initial => list =>
+  let (label, list) = list;
 
-defn List (A : Type) : Type {
-  self @> (P : List A -> Type)
-    -> P (nil A)
-    -> ((value : A) -> (rest : List A) -> P (cons A value rest))
-    -> P self
-}
+  match label {
+    :null = initial.
 
-defn nil (A : Type) : List A {
-  data P => case_nil => case_cons => case_nil
-}
+    :cons =
+      let (value, rest) = list;
+      fold A B action (action initial value) rest.
+  }.
 
-defn cons (A : Type) (value : A) (rest : List A) : List A {
-  data P => case_nil => case_cons => case_cons value rest
-}
+Nat : Type.
+Nat =
+  (label: {:zero, :succ}) *> match label {
+    :zero = Unit.
+    :succ = Nat.
+  }.
 
-defn Stream (A : Type) : Type {
-  self @> (P : Stream A -> Type)
-    -> ((value : A) -> (rest : Unit -> Stream A) -> P (next A value rest))
-    -> P self
-}
+zero : Nat.
+zero = (:zero, unit).
 
-defn next (A : Type) (value : A) (rest : Unit -> Stream A) : Stream A {
-  data P => case_next => case_next value rest
-}
+succ : Nat -> Nat.
+succ = value => (:succ, value).
 
-defn take (A : Type) (quantity : Nat) (stream : Stream A) : List A {
-  (case quantity) (_ => List A)
-    (nil A)
-    (n => (case stream) (_ => List A)
-      (value => rest =>
-        cons A value (take A n (rest unit))
-      )
-    )
-}
+add : Nat -> Nat -> Nat.
+add = one => other =>
+  let (label, one) = one;
 
-defn int32_stream (initial : Int32) : Stream Int32 {
-  next Int32 initial (unit => int32_stream #[int32_sum initial 1])
-}
+  match label {
+    :zero = other.
+    :succ = succ (add one other).
+  }.
 
-defn foldr
-  (A : Type)
-  (B : Type)
-  (go : A -> B -> B)
-  (initial : B)
-  (list : List A)
-:
-  B
-{
-  (case list) (_ => B)
-    (initial)
-    (value => rest =>
-      go value (foldr A B go initial rest)
-    )
-}
+one : Nat.
+one = succ zero.
 
-defn int32_list : List Int32 {
-  take Int32 (succ (succ (succ (succ zero)))) (int32_stream 127)
-}
+two : Nat.
+two = succ one.
 
-defn main : Int32 {
-  foldr Int32 Int32 int32_sum 0 int32_list
-}
+three : Nat.
+three = succ two.
+
+nat_list : List Nat.
+nat_list = cons Nat one (cons Nat two (cons Nat three (null Nat))).
+
+folded_nat_list : Nat.
+folded_nat_list = fold Nat Nat add zero nat_list.
+
+to_int32 : Nat -> Int32.
+to_int32 = value =>
+  let (label, value) = value;
+
+  match label {
+    :zero = 0.
+    :succ = [int32.add 1 (to_int32 value)].
+  }.
+
+start : Int32.
+start = to_int32 folded_nat_list.

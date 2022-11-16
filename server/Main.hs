@@ -14,10 +14,8 @@ app =
 
 main :: IO ()
 main = do
-  arguments <- getArgs
-
-  (port, path) <- case arguments of
-    port : path : [] -> return (port, path)
+  (port, path) <- getArgs >>= \case
+    [port, path] -> return (port, path)
     _ -> getProgName >>= die . usage
 
   run (read port) (app path)

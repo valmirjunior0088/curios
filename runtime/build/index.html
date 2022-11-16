@@ -1,0 +1,13 @@
+<html>
+
+<head>
+    <script type="module">
+        let { instance } = await WebAssembly.instantiateStreaming(fetch("program.wasm"));
+        document.body.innerHTML += instance.exports._start();
+    </script>
+</head>
+
+<body>
+</body>
+
+</html>
