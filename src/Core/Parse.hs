@@ -82,9 +82,9 @@ parseUnboundScope parser = unbound <$> parser
 parsePair :: Parse Term
 parsePair = do
   origin <- parseOrigin
-  left <- parseSymbol "(" *> parseTerm ","
-  terms <- many (try $ parseTerm ",")
-  right <- parseTerm ")"
+  left <- parseSymbol "(" *> parseTerm <* parseSymbol ","
+  terms <- many (try $ parseTerm <* parseSymbol ",")
+  right <- parseTerm <* parseSymbol ")"
   return (Pair origin left $ foldr (Pair origin) right terms)
 
 parseLabelType :: Parse Term
@@ -106,13 +106,13 @@ parseLabel = do
 parseBranch :: Parse (String, Term)
 parseBranch = do
   label <- single ':' *> parseIdentifier
-  body <- parseSymbol "=" *> parseTerm "."
+  body <- parseSymbol "=" *> parseTerm <* parseSymbol "."
   return (label, body)
 
 parseMatch :: Parse Term
 parseMatch = do
   origin <- parseOrigin
-  scrutinee <- parseSymbol "match " *> parseTerm "{"
+  scrutinee <- parseSymbol "match " *> parseTerm <* parseSymbol "{"
   branches <- manyTill parseBranch (parseSymbol "}")
   return (Match origin scrutinee branches)
 
@@ -144,7 +144,7 @@ parseOperate = do
   return (Operate origin operation parameters)
 
 parseParens :: Parse Term
-parseParens = parseSymbol "(" *> parseTerm ")"
+parseParens = parseSymbol "(" *> parseTerm <* parseSymbol ")"
 
 parseName :: Parse Term
 parseName = do
@@ -169,84 +169,87 @@ parseClosed = try parsePair
   <|> try parseParens
   <|> parseName
 
-parseApply :: String -> Parse Term
-parseApply boundary = do
+parseApply :: Parse Term
+parseApply = do
   origin <- parseOrigin
-  terms <- someTill parseClosed (parseSymbol boundary)
+  terms <- some parseClosed
   return (foldl1 (Apply origin) terms)
 
-parsePairType :: String -> Parse Term
-parsePairType boundary = do
+parsePairType :: Parse Term
+parsePairType = do
   origin <- parseOrigin
 
   let
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
-      input <- parseSymbol ":" *> parseTerm ")" <* parseSymbol "*>"
-      scope <- parseScope identifier (parseTerm boundary)
+      input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "*>"
+      scope <- parseScope identifier parseTerm
       return (PairType origin input scope)
 
     parseNonDependent = do
-      input <- parseApply "*>"
-      scope <- parseUnboundScope (parseTerm boundary)
+      input <- parseApply <* parseSymbol "*>"
+      scope <- parseUnboundScope parseTerm
       return (PairType origin input scope)
 
   try parseDependent <|> parseNonDependent
 
-parseSplit :: String -> Parse Term
-parseSplit boundary = do
+parseSplit :: Parse Term
+parseSplit = do
   origin <- parseOrigin
   left <- parseSymbol "let" *> parseSymbol "(" *> parseIdentifier
   right <- parseSymbol "," *> parseIdentifier
-  scrutinee <- parseSymbol ")" *> parseSymbol "=" *> parseTerm ";"
-  body <- parseScope left (parseScope right (parseTerm boundary))
+  scrutinee <- parseSymbol ")" *> parseSymbol "=" *> parseTerm <* parseSymbol ";"
+  body <- parseScope left (parseScope right parseTerm)
   return (Split origin scrutinee body)
 
-parseFunctionType :: String -> Parse Term
-parseFunctionType boundary = do
+parseFunctionType :: Parse Term
+parseFunctionType = do
   origin <- parseOrigin
 
   let
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
-      input <- parseSymbol ":" *> parseTerm ")" <* parseSymbol "->"
-      scope <- parseScope identifier (parseTerm boundary)
+      input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "->"
+      scope <- parseScope identifier parseTerm
       return (FunctionType origin input scope)
 
     parseNonDependent = do
-      input <- parseApply "->"
-      scope <- parseUnboundScope (parseTerm boundary)
+      input <- parseApply <* parseSymbol "->"
+      scope <- parseUnboundScope parseTerm
       return (FunctionType origin input scope)
 
   try parseDependent <|> parseNonDependent
 
-parseFunction :: String -> Parse Term
-parseFunction boundary = do
+parseFunction :: Parse Term
+parseFunction = do
   origin <- parseOrigin
   identifier <- parseIdentifier <* parseSymbol "=>"
-  body <- parseScope identifier (parseTerm boundary)
+  body <- parseScope identifier parseTerm
   return (Function origin body)
 
-parseTerm :: String -> Parse Term
-parseTerm boundary = try (parseFunction boundary)
-  <|> try (parseFunctionType boundary)
-  <|> try (parseSplit boundary)
-  <|> try (parsePairType boundary)
-  <|> parseApply boundary
+parseTerm :: Parse Term
+parseTerm = try parseFunction
+  <|> try parseFunctionType
+  <|> try parseSplit
+  <|> try parsePairType
+  <|> parseApply
 
 parseEntry :: Parse Entry
-parseEntry = try parseDeclaration <|> parseDefinition where
-  parseDeclaration = do
-    sourcePos <- getSourcePos
-    identifier <- parseIdentifier <* parseSymbol ":"
-    declaration <- parseTerm "."
-    return (Declaration sourcePos identifier declaration)
+parseEntry = do
+  let
+    parseDeclaration = do
+      sourcePos <- getSourcePos
+      identifier <- parseIdentifier <* parseSymbol ":"
+      declaration <- parseTerm <* parseSymbol "."
+      return (Declaration sourcePos identifier declaration)
 
-  parseDefinition = do
-    sourcePos <- getSourcePos
-    identifier <- parseIdentifier <* parseSymbol "="
-    definition <- parseTerm "."
-    return (Definition sourcePos identifier definition)
+    parseDefinition = do
+      sourcePos <- getSourcePos
+      identifier <- parseIdentifier <* parseSymbol "="
+      definition <- parseTerm <* parseSymbol "."
+      return (Definition sourcePos identifier definition)
+
+  try parseDeclaration <|> parseDefinition
 
 parseProgram :: Parse Program
 parseProgram = Program <$> someTill parseEntry eof
