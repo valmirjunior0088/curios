@@ -34,10 +34,12 @@ import Text.Megaparsec
 data Origin =
   Machine |
   Source SourcePos
-  deriving (Show)
 
 instance Eq Origin where
   (==) _ _ = True
+
+instance Show Origin where
+  show _ = "|"
 
 data Error = Error
   { origin :: Origin

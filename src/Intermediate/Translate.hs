@@ -3,7 +3,7 @@ module Intermediate.Translate
   )
   where
 
-import Core.Syntax (Variable, unwrap, Scope, Term, open, free)
+import Core.Syntax (Variable (..), Scope, Term, open, free)
 import qualified Core.Syntax as Core
 
 import Core.Bindings (Bindings)
@@ -69,8 +69,8 @@ withDictionary dictionary = local (const dictionary)
 pushDictionary :: [(String, Atom)] -> Translate a -> Translate a
 pushDictionary dictionary = local (++ dictionary)
 
-translateVariable :: String -> Translate Atom
-translateVariable name = asks (name !!!)
+translateLocal :: String -> Translate Atom
+translateLocal name = asks (name !!!)
 
 pushClosure :: String -> [String] -> [String] -> Sequence -> Translate ()
 pushClosure name environment parameters body =
@@ -124,11 +124,11 @@ freshBlock = do
 translateNull :: Translate Sequence
 translateNull = return (Tail $ Pure Null)
 
-translateGlobal :: String -> Translate Sequence
-translateGlobal name = return (Tail $ BlockCall name [])
-
-translateLocal :: Variable -> Translate Sequence
-translateLocal variable = Tail . Pure <$> translateVariable (unwrap variable)
+translateVariable :: Variable -> Translate Sequence
+translateVariable = \case
+  Global name -> return (Tail $ BlockCall name [])
+  LocalFree name -> Tail . Pure <$> translateLocal name
+  _ -> error "bound variable -- should not happen"
 
 translateFunction :: Scope Term -> Translate Sequence
 translateFunction scope = do
@@ -146,7 +146,7 @@ translateFunction scope = do
   body <- withDictionary dictionary (translateTerm output)
   pushClosure closure variables [parameter] body
 
-  environment <- mapM translateVariable variables
+  environment <- mapM translateLocal variables
   return (Tail $ ClosureAlloc closure environment)
 
 translateApply :: Term -> Term -> Translate Sequence
@@ -213,7 +213,7 @@ translateMatch scrutinee branches = do
     pushBlock block variables branchSequence
 
     label <- getLabel name
-    atoms <- mapM translateVariable variables
+    atoms <- mapM translateLocal variables
     return (label, BlockCall block atoms)
 
   let
@@ -259,8 +259,7 @@ translateOperate operation parameters = case (operation, parameters) of
 
 translateTerm :: Term -> Translate Sequence
 translateTerm = \case
-  Core.Global _ name -> translateGlobal name
-  Core.Local _ variable -> translateLocal variable
+  Core.Variable _ variable -> translateVariable variable
   Core.Type {} -> translateNull
   Core.FunctionType {} -> translateNull
   Core.Function _ scope -> translateFunction scope

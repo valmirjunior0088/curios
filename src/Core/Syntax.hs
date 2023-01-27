@@ -1,6 +1,5 @@
 module Core.Syntax
-  ( Variable (Free)
-  , unwrap
+  ( Variable (Global, LocalFree)
   , Scope
   , unbound
   , PrimitiveType (..)
@@ -10,6 +9,7 @@ module Core.Syntax
   , Term (..)
   , originates
   , Walk
+  , capture
   , abstract
   , instantiate
   , open
@@ -19,18 +19,13 @@ module Core.Syntax
 
 import Error (Origin)
 import Data.Int (Int32)
-import Data.List (intercalate)
 import Control.Monad.Reader (Reader, runReader, asks, local)
 
 data Variable =
-  Free String |
-  Bound Int
+  Global String |
+  LocalFree String |
+  LocalBound Int
   deriving (Show, Eq)
-
-unwrap :: Variable -> String
-unwrap = \case
-  Free name -> name
-  Bound _ -> error "bound variable -- should not happen"
 
 newtype Scope a = Scope a
 
@@ -61,8 +56,7 @@ data Operation =
 type Type = Term
 
 data Term =
-  Global Origin String |
-  Local Origin Variable |
+  Variable Origin Variable |
 
   Type Origin |
 
@@ -81,30 +75,11 @@ data Term =
   PrimitiveType Origin PrimitiveType |
   Primitive Origin Primitive |
   Operate Origin Operation [Term]
-  deriving (Eq)
-
-instance Show Term where
-  show = \case
-    Global _ name -> "Global " ++ show name
-    Local _ variable -> "Local (" ++ show variable ++ ")"
-    Type _ -> "Type"
-    FunctionType _ input scope -> "FunctionType (" ++ show input ++ ") " ++ show scope
-    Function _ scope -> "Function " ++ show scope
-    Apply _ function argument -> "Apply (" ++ show function ++ ") (" ++ show argument ++ ")"
-    PairType _ input scope -> "PairType (" ++ show input ++ ") " ++ show scope
-    Pair _ left right -> "Pair (" ++ show left ++ ") (" ++ show right ++ ")"
-    Split _ scrutinee scope -> "Split (" ++ show scrutinee ++ ") " ++ show scope
-    LabelType _ labels -> "LabelType [" ++ intercalate ", " labels ++ "]"
-    Label _ label -> "Label " ++ show label
-    Match _ scrutinee branches -> "Match (" ++ show scrutinee ++ ") [" ++ intercalate ", " (map show branches) ++ "]"
-    PrimitiveType _ primitiveType -> "PrimitiveType " ++ show primitiveType
-    Primitive _ primitive -> "Primitive (" ++ show primitive ++ ")"
-    Operate _ operation operands -> "Operate " ++ show operation ++ " [" ++ intercalate ", " (map show operands) ++ "]"
+  deriving (Show, Eq)
 
 originates :: Term -> Origin
 originates = \case
-  Global origin _ -> origin
-  Local origin _ -> origin
+  Variable origin _ -> origin
   Type origin -> origin
   FunctionType origin _ _ -> origin
   Function origin _ -> origin
@@ -130,8 +105,7 @@ with action subject = runReader (walk go subject) 0 where
 
 instance Walk Term where
   walk action = \case
-    Global origin name -> pure (Global origin name)
-    Local origin variable -> action origin variable
+    Variable origin variable -> action origin variable
     Type origin -> pure (Type origin)
     FunctionType origin input scope -> FunctionType origin <$> walk action input <*> walk action scope
     Function origin body -> Function origin <$> walk action body
@@ -149,29 +123,34 @@ instance Walk Term where
 instance Walk a => Walk (Scope a) where
   walk action (Scope scope) = Scope <$> local succ (walk action scope)
 
+capture :: Walk a => String -> a -> Scope a
+capture target subject = Scope (with go subject) where
+  go depth origin = \case
+    Global name | name == target -> Variable origin (LocalBound depth)
+    variable -> Variable origin variable
+
 abstract :: Walk a => String -> a -> Scope a
 abstract target subject = Scope (with go subject) where
   go depth origin = \case
-    Free name | name == target -> Local origin (Bound depth)
-    variable -> Local origin variable
+    LocalFree name | name == target -> Variable origin (LocalBound depth)
+    variable -> Variable origin variable
 
 instantiate :: Walk a => Term -> Scope a -> a
 instantiate term (Scope subject) = with go subject where
   go depth origin = \case
-    Bound index | index == depth -> term
-    variable -> Local origin variable
+    LocalBound index | index == depth -> term
+    variable -> Variable origin variable
 
 open :: Walk a => String -> Scope a -> a
 open name (Scope subject) = with go subject where
   go depth origin = \case
-    Bound index | index == depth -> Local origin (Free name)
-    variable -> Local origin variable
+    LocalBound index | index == depth -> Variable origin (LocalFree name)
+    variable -> Variable origin variable
 
 free :: Term -> [String]
 free = \case
-  Global _ _ -> []
-  Local _ (Free name) -> [name]
-  Local _ _ -> []
+  Variable _ (LocalFree name) -> [name]
+  Variable _ _ -> []
   Type _ -> []
   FunctionType _ input (Scope output) -> free input ++ free output
   Function _ (Scope body) -> free body

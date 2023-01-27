@@ -171,8 +171,8 @@ parseName = do
     "Flt32" -> return (PrimitiveType origin Flt32Type)
 
     identifier -> asks (elem identifier) <&> \case
-      True -> Local origin (Free identifier)
-      False -> Global origin identifier
+      True -> Variable origin (LocalFree identifier)
+      False -> Variable origin (Global identifier)
 
 parseClosed :: Parse Term
 parseClosed = try parseParens
