@@ -5,14 +5,12 @@ module Core.Parse
 
 import Core.Syntax
   ( Variable (..)
-  , Scope
   , unbound
   , PrimitiveType (..)
   , Primitive (..)
   , Operation (..)
   , Term (..)
-  , Walk
-  , abstract
+  , capture
   )
 
 import Text.Megaparsec
@@ -45,16 +43,14 @@ import Text.Megaparsec.Char.Lexer
 
 import Error (Origin (..), Error, fromParseErrorBundle)
 import Core.Program (Entry (..), Program (..))
-import Data.Functor ((<&>))
 import Text.Megaparsec.Error (ParseErrorBundle)
 import Text.Megaparsec.Char (space1)
 import Control.Monad (when)
-import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT, asks)
 
-type Parse = ReaderT [String] (Parsec String String)
+type Parse = Parsec String String
 
 runParse :: Parse a -> String -> Either (ParseErrorBundle String String) a
-runParse action = runParser (runReaderT action []) ""
+runParse action = runParser action ""
 
 parseSpace :: Parse ()
 parseSpace = space space1 (skipLineComment "//") (skipBlockComment "/*" "*/")
@@ -71,14 +67,6 @@ parseIdentifier = parseLexeme (some $ try $ oneOf validCharacters) where
 
 parseOrigin :: Parse Origin
 parseOrigin = Source <$> getSourcePos
-
-parseScope :: Walk a => String -> Parse a -> Parse (Scope a)
-parseScope identifier parser = do
-  scope <- local (identifier :) parser
-  return (abstract identifier scope)
-
-parseUnboundScope :: Parse a -> Parse (Scope a)
-parseUnboundScope parser = unbound <$> parser
 
 buildNestedPairs :: Origin -> [Term] -> Term
 buildNestedPairs origin = \case
@@ -170,9 +158,7 @@ parseName = do
     "Int32" -> return (PrimitiveType origin Int32Type)
     "Flt32" -> return (PrimitiveType origin Flt32Type)
 
-    identifier -> asks (elem identifier) <&> \case
-      True -> Variable origin (LocalFree identifier)
-      False -> Variable origin (Global identifier)
+    identifier -> return (Variable origin $ Global identifier)
 
 parseClosed :: Parse Term
 parseClosed = try parseParens
@@ -198,12 +184,12 @@ parsePairType = do
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
       input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "*>"
-      scope <- parseScope identifier parseTerm
+      scope <- capture identifier <$> parseTerm
       return (PairType origin input scope)
 
     parseNonDependent = do
       input <- parseApply <* parseSymbol "*>"
-      scope <- parseUnboundScope parseTerm
+      scope <- unbound <$> parseTerm
       return (PairType origin input scope)
 
   try parseDependent <|> parseNonDependent
@@ -214,7 +200,7 @@ parseSplit = do
   left <- parseSymbol "let" *> parseSymbol "(" *> parseIdentifier
   right <- parseSymbol "," *> parseIdentifier
   scrutinee <- parseSymbol ")" *> parseSymbol "=" *> parseTerm <* parseSymbol ";"
-  body <- parseScope left (parseScope right parseTerm)
+  body <- capture left . capture right <$> parseTerm
   return (Split origin scrutinee body)
 
 parseFunctionType :: Parse Term
@@ -225,12 +211,12 @@ parseFunctionType = do
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
       input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "->"
-      scope <- parseScope identifier parseTerm
+      scope <- capture identifier <$> parseTerm
       return (FunctionType origin input scope)
 
     parseNonDependent = do
       input <- parseApply <* parseSymbol "->"
-      scope <- parseUnboundScope parseTerm
+      scope <- unbound <$> parseTerm
       return (FunctionType origin input scope)
 
   try parseDependent <|> parseNonDependent
@@ -239,7 +225,7 @@ parseFunction :: Parse Term
 parseFunction = do
   origin <- parseOrigin
   identifier <- parseIdentifier <* parseSymbol "=>"
-  body <- parseScope identifier parseTerm
+  body <- capture identifier <$> parseTerm
   return (Function origin body)
 
 parseTerm :: Parse Term

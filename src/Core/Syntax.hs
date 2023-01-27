@@ -8,7 +8,6 @@ module Core.Syntax
   , Type
   , Term (..)
   , originates
-  , Walk
   , capture
   , abstract
   , instantiate
