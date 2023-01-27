@@ -18,10 +18,10 @@ import Core.Syntax
 import Text.Megaparsec
   ( Parsec
   , runParser
+  , customFailure
   , some
-  , many
   , someTill
-  , manyTill
+  , many
   , try
   , oneOf
   , (<|>)
@@ -29,6 +29,7 @@ import Text.Megaparsec
   , single
   , optional
   , sepBy
+  , between
   , getSourcePos
   )
 
@@ -44,15 +45,15 @@ import Text.Megaparsec.Char.Lexer
 
 import Error (Origin (..), Error, fromParseErrorBundle)
 import Core.Program (Entry (..), Program (..))
-import Data.Void (Void)
 import Data.Functor ((<&>))
 import Text.Megaparsec.Error (ParseErrorBundle)
 import Text.Megaparsec.Char (space1)
+import Control.Monad (when)
 import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT, asks)
 
-type Parse = ReaderT [String] (Parsec Void String)
+type Parse = ReaderT [String] (Parsec String String)
 
-runParse :: Parse a -> String -> Either (ParseErrorBundle String Void) a
+runParse :: Parse a -> String -> Either (ParseErrorBundle String String) a
 runParse action = runParser (runReaderT action []) ""
 
 parseSpace :: Parse ()
@@ -79,21 +80,35 @@ parseScope identifier parser = do
 parseUnboundScope :: Parse a -> Parse (Scope a)
 parseUnboundScope parser = unbound <$> parser
 
+buildNestedPairs :: Origin -> [Term] -> Term
+buildNestedPairs origin = \case
+  [] -> error "can't build a pair with 0 entries"
+  [_] -> error "can't build a pair with 1 entry"
+  [left, right] -> Pair origin left right
+  term : terms -> Pair origin term (buildNestedPairs origin terms)
+
 parsePair :: Parse Term
 parsePair = do
   origin <- parseOrigin
-  left <- parseSymbol "(" *> parseTerm <* parseSymbol ","
-  terms <- many (try $ parseTerm <* parseSymbol ",")
-  right <- parseTerm <* parseSymbol ")"
-  return (Pair origin left $ foldr (Pair origin) right terms)
+
+  terms <- between
+    (parseSymbol "(")
+    (parseSymbol ")")
+    (sepBy parseTerm (parseSymbol ","))
+
+  when (length terms < 2)
+    (customFailure "Pairs need at least 2 entries")
+
+  return (buildNestedPairs origin terms)
 
 parseLabelType :: Parse Term
 parseLabelType = do
   origin <- parseOrigin
 
-  labels <- parseSymbol "{"
-    *> sepBy (single ':' *> parseIdentifier) (parseSymbol ",")
-    <* parseSymbol "}"
+  labels <- between
+    (parseSymbol "{")
+    (parseSymbol "}")
+    (sepBy (single ':' *> parseIdentifier) (parseSymbol ","))
 
   return (LabelType origin labels)
 
@@ -113,7 +128,7 @@ parseMatch :: Parse Term
 parseMatch = do
   origin <- parseOrigin
   scrutinee <- parseSymbol "match " *> parseTerm <* parseSymbol "{"
-  branches <- manyTill parseBranch (parseSymbol "}")
+  branches <- many parseBranch <* parseSymbol "}"
   return (Match origin scrutinee branches)
 
 parseInt :: Parse Primitive
@@ -144,7 +159,7 @@ parseOperate = do
   return (Operate origin operation parameters)
 
 parseParens :: Parse Term
-parseParens = parseSymbol "(" *> parseTerm <* parseSymbol ")"
+parseParens = between (parseSymbol "(") (parseSymbol ")") parseTerm
 
 parseName :: Parse Term
 parseName = do
@@ -160,13 +175,13 @@ parseName = do
       False -> Global origin identifier
 
 parseClosed :: Parse Term
-parseClosed = try parsePair
+parseClosed = try parseParens
+  <|> try parsePair
   <|> try parseLabelType
   <|> try parseLabel
   <|> try parseMatch
   <|> try parsePrimitive
   <|> try parseOperate
-  <|> try parseParens
   <|> parseName
 
 parseApply :: Parse Term

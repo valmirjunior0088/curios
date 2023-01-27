@@ -10,7 +10,6 @@ import Debug (framed)
 import Data.List (intercalate)
 import Data.Maybe (isNothing)
 import Data.Proxy (Proxy (..))
-import Data.Void (Void, absurd)
 import Text.Megaparsec.Pos (unPos)
 import Text.Megaparsec.Error (ParseErrorBundle (..), errorOffset)
 
@@ -75,7 +74,7 @@ showErrorItem = \case
   Label label -> NonEmpty.toList label
   EndOfInput -> "<end of input>"
 
-showErrorFancy :: ErrorFancy Void -> String
+showErrorFancy :: ErrorFancy String -> String
 showErrorFancy = \case
   ErrorFail message -> "Parsing error: explicit failure" ++ "\n" ++ message
 
@@ -86,9 +85,9 @@ showErrorFancy = \case
       ++ "- Expected: " ++ sign ++ show (unPos reference) ++ "\n"
       ++ "- Obtained: " ++ "  " ++ show (unPos actual)
 
-  ErrorCustom void -> absurd void
+  ErrorCustom message -> "Parsing error: " ++ message
 
-showParseError :: ParseError String Void -> String
+showParseError :: ParseError String String -> String
 showParseError = \case
   TrivialError _ obtained expected -> if Set.null expected && isNothing obtained
     then "Parsing error: unknown trivial error"
@@ -101,7 +100,7 @@ showParseError = \case
     then "Parsing error: unknown fancy error"
     else unlines (showErrorFancy <$> Set.toAscList errors)
 
-fromParseErrorBundle :: ParseErrorBundle String Void -> Error
+fromParseErrorBundle :: ParseErrorBundle String String -> Error
 fromParseErrorBundle (ParseErrorBundle { bundleErrors, bundlePosState }) = do
   let
     parseError :| _ = bundleErrors
