@@ -75,5 +75,11 @@ to_int32 = value =>
     :succ = [int32.add 1 (to_int32 value)].
   }.
 
+numbers_nested_pair : Int32 *> Int32 *> Int32.
+numbers_nested_pair = (1, 2, 3).
+
+third_number : Int32.
+third_number = let (a, b, c) = numbers_nested_pair; c.
+
 start : Int32.
-start = to_int32 folded_nat_list.
+start = third_number.

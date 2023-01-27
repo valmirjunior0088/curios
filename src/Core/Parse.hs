@@ -10,6 +10,7 @@ import Core.Syntax
   , Primitive (..)
   , Operation (..)
   , Term (..)
+  , abstract
   , capture
   )
 
@@ -46,6 +47,7 @@ import Core.Program (Entry (..), Program (..))
 import Text.Megaparsec.Error (ParseErrorBundle)
 import Text.Megaparsec.Char (space1)
 import Control.Monad (when)
+import Data.List (intercalate)
 
 type Parse = Parsec String String
 
@@ -194,14 +196,35 @@ parsePairType = do
 
   try parseDependent <|> parseNonDependent
 
+buildNestedSplits :: Origin -> [String] -> Term -> Term -> Term
+buildNestedSplits origin names scrutinee body = case names of
+  [] -> error "can't build split expression with 0 entries"
+  [_] -> error "can't build split expression with 1 entry"
+
+  [left, right] -> Split origin scrutinee scope where
+    scope = capture left (capture right body)
+
+  name : rest -> Split origin scrutinee scope where
+    scrutineeName = intercalate ", " rest
+    scrutineeVariable = Variable Machine (LocalFree scrutineeName)
+    term = buildNestedSplits origin rest scrutineeVariable body
+    scope = capture name (abstract scrutineeName term)
+
 parseSplit :: Parse Term
 parseSplit = do
   origin <- parseOrigin
-  left <- parseSymbol "let" *> parseSymbol "(" *> parseIdentifier
-  right <- parseSymbol "," *> parseIdentifier
-  scrutinee <- parseSymbol ")" *> parseSymbol "=" *> parseTerm <* parseSymbol ";"
-  body <- capture left . capture right <$> parseTerm
-  return (Split origin scrutinee body)
+
+  names <- parseSymbol "let" *> between
+    (parseSymbol "(")
+    (parseSymbol ")")
+    (sepBy parseIdentifier (parseSymbol ","))
+
+  when (length names < 2)
+    (customFailure "Split expressions need at least 2 entries")
+
+  scrutinee <- parseSymbol "=" *> parseTerm <* parseSymbol ";"
+
+  buildNestedSplits origin names scrutinee <$> parseTerm
 
 parseFunctionType :: Parse Term
 parseFunctionType = do
