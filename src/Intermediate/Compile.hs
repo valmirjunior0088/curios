@@ -4,7 +4,10 @@ module Intermediate.Compile
   where
 
 import Intermediate.Syntax
-  ( Atom (..)
+  ( BinOp (..)
+  , BoolOp (..)
+  , CompOp (..)
+  , Atom (..)
   , Expression (..)
   , Sequence (..)
   , Closure (..)
@@ -27,6 +30,9 @@ import WebAssembly.Construct
   , pushUnreachable
   , pushBlock
   , popBlock
+  , pushIf
+  , pushIfElse
+  , popIfElse
   , pushBr
   , pushBrIf
   , pushCall
@@ -39,11 +45,30 @@ import WebAssembly.Construct
   , pushI32Store
   , pushI32Const
   , pushI32Add
+  , pushI32Sub
+  , pushI32Mul
+  , pushI32And
+  , pushI32Or
+  , pushI32DivS
   , pushI32Eq
+  , pushI32Ne
+  , pushI32LtS
+  , pushI32LeS
+  , pushI32GtS
+  , pushI32GeS
   , pushF32Load
   , pushF32Store
   , pushF32Const
   , pushF32Add
+  , pushF32Sub
+  , pushF32Mul
+  , pushF32Div
+  , pushF32Eq
+  , pushF32Ne
+  , pushF32Lt
+  , pushF32Le
+  , pushF32Gt
+  , pushF32Ge
   , pushI32FuncRef
   )
 
@@ -120,21 +145,128 @@ pushInt32Alloc name value = do
   pushI32Const value
   pushI32Store MemArg { alignment = 2, offset = 0 }
 
-pushInt32Add :: String -> Atom -> Atom -> Emit ()
-pushInt32Add name one other = do
+pushInt32Match :: String -> Atom -> [(Int32, String, [Atom])] -> Emit ()
+pushInt32Match name atom branches = do
+  pushBlock "exit" [] []
+
+  forM_ [label | (label, _, _) <- reverse branches] $ \label -> do
+    pushBlock ("case-" ++ show label) [] []
+
+  pushAtomGet atom
+  pushCall "trunk"
+  pushI32Load MemArg { alignment = 2, offset = 0 }
+  pushLocalSet name
+
+  forM_ [label | (label, _, _) <- branches] $ \label -> do
+    pushLocalGet name
+    pushI32Const label
+    pushI32Eq
+    pushBrIf ("case-" ++ show label)
+
+  pushUnreachable
+
+  forM_ [(block, arguments) | (_, block, arguments) <- branches] $ \(block, arguments) -> do
+    popBlock
+
+    forM_ arguments $ \argument -> do
+      pushAtomGet argument
+      pushCall "enter"
+
+    pushBlockCall name block arguments
+    pushBr "exit"
+
+  popBlock
+
+pushInt32If :: String -> Atom -> (String, [Atom]) -> (String, [Atom]) -> Emit ()
+pushInt32If name atom (truthyBlock, truthyArguments) (falsyBlock, falsyArguments) = do
+  pushAtomGet atom
+  pushCall "trunk"
+  pushI32Load MemArg { alignment = 2, offset = 0 }
+
+  pushIf "" [] []
+
+  forM_ truthyArguments $ \truthyArgument -> do
+    pushAtomGet truthyArgument
+    pushCall "enter"
+
+  pushBlockCall name truthyBlock truthyArguments
+
+  pushIfElse ""
+
+  forM_ falsyArguments $ \falsyArgument -> do
+    pushAtomGet falsyArgument
+    pushCall "enter"
+
+  pushBlockCall name falsyBlock falsyArguments
+
+  popIfElse
+
+pushInt32BinOp :: String -> BinOp -> Atom -> Atom -> Emit ()
+pushInt32BinOp name op left right = do
   pushI32Const 0
   pushI32Const 4
   pushCall "new"
   pushLocalTee name
   pushCall "trunk"
 
-  pushAtomGet one
+  pushAtomGet left
   pushCall "trunk"
   pushI32Load MemArg { alignment = 2, offset = 0 }
-  pushAtomGet other
+  pushAtomGet right
   pushCall "trunk"
   pushI32Load MemArg { alignment = 2, offset = 0 }
-  pushI32Add
+
+  case op of
+    Add -> pushI32Add
+    Sub -> pushI32Sub
+    Mul -> pushI32Mul
+    Div -> pushI32DivS
+
+  pushI32Store MemArg { alignment = 2, offset = 0 }
+
+pushInt32BoolOp :: String -> BoolOp -> Atom -> Atom -> Emit ()
+pushInt32BoolOp name op left right = do
+  pushI32Const 0
+  pushI32Const 4
+  pushCall "new"
+  pushLocalTee name
+  pushCall "trunk"
+
+  pushAtomGet left
+  pushCall "trunk"
+  pushI32Load MemArg { alignment = 2, offset = 0 }
+  pushAtomGet right
+  pushCall "trunk"
+  pushI32Load MemArg { alignment = 2, offset = 0 }
+
+  case op of
+    And -> pushI32And
+    Or -> pushI32Or
+
+  pushI32Store MemArg { alignment = 2, offset = 0 }
+
+pushInt32CompOp :: String -> CompOp -> Atom -> Atom -> Emit ()
+pushInt32CompOp name op left right = do
+  pushI32Const 0
+  pushI32Const 4
+  pushCall "new"
+  pushLocalTee name
+  pushCall "trunk"
+
+  pushAtomGet left
+  pushCall "trunk"
+  pushI32Load MemArg { alignment = 2, offset = 0 }
+  pushAtomGet right
+  pushCall "trunk"
+  pushI32Load MemArg { alignment = 2, offset = 0 }
+
+  case op of
+    Eq -> pushI32Eq
+    Ne -> pushI32Ne
+    Lt -> pushI32LtS
+    Le -> pushI32LeS
+    Gt -> pushI32GtS
+    Ge -> pushI32GeS
 
   pushI32Store MemArg { alignment = 2, offset = 0 }
 
@@ -148,23 +280,53 @@ pushFlt32Alloc name value = do
   pushF32Const value
   pushF32Store MemArg { alignment = 2, offset = 0 }
 
-pushFlt32Add :: String -> Atom -> Atom -> Emit ()
-pushFlt32Add name one other = do
+pushFlt32BinOp :: String -> BinOp -> Atom -> Atom -> Emit ()
+pushFlt32BinOp name op left right = do
   pushI32Const 0
   pushI32Const 4
   pushCall "new"
   pushLocalTee name
   pushCall "trunk"
 
-  pushAtomGet one
+  pushAtomGet left
   pushCall "trunk"
   pushF32Load MemArg { alignment = 2, offset = 0 }
-  pushAtomGet other
+  pushAtomGet right
   pushCall "trunk"
   pushF32Load MemArg { alignment = 2, offset = 0 }
-  pushF32Add
+
+  case op of
+    Add -> pushF32Add
+    Sub -> pushF32Sub
+    Mul -> pushF32Mul
+    Div -> pushF32Div
 
   pushF32Store MemArg { alignment = 2, offset = 0 }
+
+pushFlt32CompOp :: String -> CompOp -> Atom -> Atom -> Emit ()
+pushFlt32CompOp name op left right = do
+  pushI32Const 0
+  pushI32Const 4
+  pushCall "new"
+  pushLocalTee name
+  pushCall "trunk"
+
+  pushAtomGet left
+  pushCall "trunk"
+  pushF32Load MemArg { alignment = 2, offset = 0 }
+  pushAtomGet right
+  pushCall "trunk"
+  pushF32Load MemArg { alignment = 2, offset = 0 }
+
+  case op of
+    Eq -> pushF32Eq
+    Ne -> pushF32Ne
+    Lt -> pushF32Lt
+    Le -> pushF32Le
+    Gt -> pushF32Gt
+    Ge -> pushF32Ge
+
+  pushI32Store MemArg { alignment = 2, offset = 0 }
 
 pushPure :: String -> Atom -> Emit ()
 pushPure name atom = do
@@ -176,38 +338,6 @@ pushBlockCall name function parameters = do
   mapM_ pushAtomGet parameters
   pushCall ("_block_" ++ function)
   pushLocalSet name
-
-pushInt32Match :: String -> Atom -> [(Int32, Expression)] -> Emit ()
-pushInt32Match name atom branches = do
-  pushBlock "exit" [] []
-
-  forM_ [label | (label, _) <- reverse branches] $ \label -> do
-    pushBlock ("case-" ++ show label) [] []
-
-  pushAtomGet atom
-  pushCall "trunk"
-  pushI32Load MemArg { alignment = 2, offset = 0 }
-  pushLocalSet name
-
-  forM_ [label | (label, _) <- branches] $ \label -> do
-    pushLocalGet name
-    pushI32Const label
-    pushI32Eq
-    pushBrIf ("case-" ++ show label)
-
-  pushUnreachable
-
-  forM_ [branch | (_, branch) <- branches] $ \branch -> do
-    popBlock
-
-    forM_ (mentions branch) $ \mention -> do
-      pushAtomGet mention
-      pushCall "enter"
-
-    pushExpression name branch
-    pushBr "exit"
-
-  popBlock
 
 pushClosureAlloc :: String -> String -> [Atom] -> Emit ()
 pushClosureAlloc name closure atoms = do
@@ -259,12 +389,16 @@ pushStructSelect name atom index = do
 pushExpression :: String -> Expression -> Emit ()
 pushExpression name = \case
   Int32Alloc value -> pushInt32Alloc name value
-  Int32Add one other -> pushInt32Add name one other
+  Int32Match atom branches -> pushInt32Match name atom branches
+  Int32If atom truthy falsy -> pushInt32If name atom truthy falsy
+  Int32BinOp op one other -> pushInt32BinOp name op one other
+  Int32BoolOp op one other -> pushInt32BoolOp name op one other
+  Int32CompOp op one other -> pushInt32CompOp name op one other
   Flt32Alloc value -> pushFlt32Alloc name value
-  Flt32Add one other -> pushFlt32Add name one other
+  Flt32BinOp op one other -> pushFlt32BinOp name op one other
+  Flt32CompOp op one other -> pushFlt32CompOp name op one other
   Pure atom -> pushPure name atom
   BlockCall function atoms -> pushBlockCall name function atoms
-  Int32Match atom branches -> pushInt32Match name atom branches
   ClosureAlloc closure atoms -> pushClosureAlloc name closure atoms
   ClosureEnter atom atoms -> pushClosureEnter name atom atoms
   StructAlloc atoms -> pushStructAlloc name atoms

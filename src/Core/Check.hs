@@ -5,9 +5,9 @@ module Core.Check
 
 import Core.Syntax
   ( Variable (..)
-  , PrimitiveType (..)
-  , Primitive (..)
-  , Operation (..)
+  , BoolOp (..)
+  , BinOp (..)
+  , CompOp (..)
   , Type
   , Term (..)
   , originates
@@ -18,10 +18,11 @@ import Core.Syntax
 import Core.Bindings (Bindings)
 import qualified Core.Bindings as Bindings
 
-import Util ((!!!), unique, (<==>), (.&&.))
+import Util ((!!!), unique, (<==>), (.&&.), both)
 import Error (Origin (..), Error (..))
 import Data.Functor ((<&>))
-import Control.Monad (unless, zipWithM)
+import Data.Bits (Bits (..))
+import Control.Monad (unless)
 import Control.Monad.State (MonadState (..), StateT, evalStateT)
 import Control.Monad.Except (MonadError (..), Except, runExcept)
 import GHC.Generics (Generic)
@@ -92,14 +93,56 @@ reduce = \case
     Label _ label -> reduce (label !!! branches)
     _ -> return (Match origin scrutinee branches)
 
-  Operate origin operation operands -> mapM (mapM reduce) (operation, operands) >>= \case
-    (Int32Add, [Primitive _ (Int32 one), Primitive _ (Int32 other)]) ->
-      return (Primitive origin $ Int32 $ one + other)
+  Int32If origin scrutinee truthy falsy -> reduce scrutinee >>= \case
+    Int32 _ value -> reduce (if value /= 0 then truthy else falsy)
+    _ -> return (Int32If origin scrutinee truthy falsy)
 
-    (Flt32Add, [Primitive _ (Flt32 one), Primitive _ (Flt32 other)]) ->
-      return (Primitive origin $ Flt32 $ one + other)
+  Int32BinOp origin op left right -> both (reduce left, reduce right) >>= \case
+    (Int32 _ left', Int32 _ right') -> return $ case op of
+      Add -> Int32 Machine (left' + right')
+      Sub -> Int32 Machine (left' - right')
+      Mul -> Int32 Machine (left' * right')
+      Div -> Int32 Machine (left' `quot` right')
 
-    _ -> return (Operate origin operation operands)
+    _ -> return (Int32BinOp origin op left right)
+
+  Int32BoolOp origin op left right -> both (reduce left, reduce right) >>= \case
+    (Int32 _ left', Int32 _ right') -> return $ case op of
+      And -> Int32 Machine (left' .&. right')
+      Or -> Int32 Machine (left' .|. right')
+
+    _ -> return (Int32BoolOp origin op left right)
+
+  Int32CompOp origin op left right -> both (reduce left, reduce right) >>= \case
+    (Int32 _ left', Int32 _ right') -> return $ case op of
+      Eq -> Int32 Machine (if left' == right' then 1 else 0)
+      Ne -> Int32 Machine (if left' /= right' then 1 else 0)
+      Lt -> Int32 Machine (if left' < right' then 1 else 0)
+      Le -> Int32 Machine (if left' <= right' then 1 else 0)
+      Gt -> Int32 Machine (if left' > right' then 1 else 0)
+      Ge -> Int32 Machine (if left' >= right' then 1 else 0)
+
+    _ -> return (Int32CompOp origin op left right)
+
+  Flt32BinOp origin op left right -> both (reduce left, reduce right) >>= \case
+    (Flt32 _ left', Flt32 _ right') -> return $ case op of
+      Add -> Flt32 Machine (left' + right')
+      Sub -> Flt32 Machine (left' - right')
+      Mul -> Flt32 Machine (left' * right')
+      Div -> Flt32 Machine (left' / right')
+
+    _ -> return (Flt32BinOp origin op left right)
+
+  Flt32CompOp origin op left right -> both (reduce left, reduce right) >>= \case
+    (Flt32 _ left', Flt32 _ right') -> return $ case op of
+      Eq -> Int32 Machine (if left' == right' then 1 else 0)
+      Ne -> Int32 Machine (if left' /= right' then 1 else 0)
+      Lt -> Int32 Machine (if left' < right' then 1 else 0)
+      Le -> Int32 Machine (if left' <= right' then 1 else 0)
+      Gt -> Int32 Machine (if left' > right' then 1 else 0)
+      Ge -> Int32 Machine (if left' >= right' then 1 else 0)
+
+    _ -> return (Flt32CompOp origin op left right)
 
   term -> return term
 
@@ -169,14 +212,25 @@ equals history one other = do
 
       go scrutinee scrutinee' .&&. pure labelsAreEqual .&&. bodiesAreEqual
 
-    (Operate _ operation parameters, Operate _ operation' parameters') -> do
-      let
-        operationsAreEqual = operation == operation'
-        parametersAreEqual = and <$> zipWithM go parameters parameters'
+    (Int32If _ scrutinee truthy falsy, Int32If _ scrutinee' truthy' falsy') ->
+      go scrutinee scrutinee' .&&. go truthy truthy' .&&. go falsy falsy'
 
-      pure operationsAreEqual .&&. parametersAreEqual
+    (Int32BinOp _ _ left right, Int32BinOp _ _ left' right') ->
+      go left left' .&&. go right right'
 
-    (_, _) -> return False
+    (Int32BoolOp _ _ left right, Int32BoolOp _ _ left' right') ->
+      go left left' .&&. go right right'
+
+    (Int32CompOp _ _ left right, Int32CompOp _ _ left' right') ->
+      go left left' .&&. go right right'
+
+    (Flt32BinOp _ _ left right, Flt32BinOp _ _ left' right') ->
+      go left left' .&&. go right right'
+
+    (Flt32CompOp _ _ left right, Flt32CompOp _ _ left' right') ->
+      go left left' .&&. go right right'
+
+    _ -> return False
 
 equal :: Term -> Term -> Check Bool
 equal = equals []
@@ -239,10 +293,10 @@ matchExpressionsDontHaveAnInferableType origin = throwError Error
   , message = "Check error:\nMatch expressions don't have an inferable type"
   }
 
-invalidOperationFormat :: Origin -> Check a
-invalidOperationFormat origin = throwError Error
+ifExpressionsDontHaveAnInferableType :: Origin -> Check a
+ifExpressionsDontHaveAnInferableType origin = throwError Error
   { origin = origin
-  , message = "Check error:\nInvalid operation format"
+  , message = "Check error:\nIf expressions don't have an inferable type"
   }
 
 infers :: Term -> Check Type
@@ -302,23 +356,40 @@ infers = \case
 
   Match origin _ _ -> matchExpressionsDontHaveAnInferableType origin
 
-  PrimitiveType _ _ -> return (Type Machine)
+  Int32Type _ -> return (Type Machine)
 
-  Primitive _ primitive -> case primitive of
-    Int32 _ -> return (PrimitiveType Machine Int32Type)
-    Flt32 _ -> return (PrimitiveType Machine Flt32Type)
+  Int32 _ _ -> return (Int32Type Machine)
 
-  Operate _ Int32Add [one, other] -> do
-    checks (PrimitiveType Machine Int32Type) one
-    checks (PrimitiveType Machine Int32Type) other
-    return (PrimitiveType Machine Int32Type)
+  Int32If origin _ _ _ -> ifExpressionsDontHaveAnInferableType origin
 
-  Operate _ Flt32Add [one, other] -> do
-    checks (PrimitiveType Machine Flt32Type) one
-    checks (PrimitiveType Machine Flt32Type) other
-    return (PrimitiveType Machine Flt32Type)
+  Int32BinOp _ _ left right -> do
+    checks (Int32Type Machine) left
+    checks (Int32Type Machine) right
+    return (Int32Type Machine)
 
-  Operate origin _ _ -> invalidOperationFormat origin
+  Int32BoolOp _ _ left right -> do
+    checks (Int32Type Machine) left
+    checks (Int32Type Machine) right
+    return (Int32Type Machine)
+
+  Int32CompOp _ _ left right -> do
+    checks (Int32Type Machine) left
+    checks (Int32Type Machine) right
+    return (Int32Type Machine)
+
+  Flt32Type _ -> return (Type Machine)
+
+  Flt32 _ _ -> return (Flt32Type Machine)
+
+  Flt32BinOp _ _ left right -> do
+    checks (Flt32Type Machine) left
+    checks (Flt32Type Machine) right
+    return (Flt32Type Machine)
+
+  Flt32CompOp _ _ left right -> do
+    checks (Flt32Type Machine) left
+    checks (Flt32Type Machine) right
+    return (Int32Type Machine)
 
 functionTypeMismatch :: Origin -> Check a
 functionTypeMismatch origin = throwError Error
@@ -434,6 +505,11 @@ checks tipe = \case
         mapM_ go branches
 
       _ -> matchExpressionScrutineeTypeMismatch (originates scrutinee)
+
+  Int32If _ scrutinee truthy falsy -> do
+    checks (Int32Type Machine) scrutinee
+    checks tipe truthy
+    checks tipe falsy
 
   term -> do
     tipe' <- infers term

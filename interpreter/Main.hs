@@ -1,12 +1,13 @@
 import Core.Bindings (Bindings)
 import qualified Core.Bindings as Bindings
 
-import Util ((!!!))
+import Util ((!!!), both)
 import Error (Origin (..), showError)
 import Core.Parse (parse)
 import Core.Program (check)
-import Core.Syntax (Variable (..), Primitive (..), Operation (..), Term (..), instantiate)
+import Core.Syntax (Variable (..), BinOp (..), BoolOp (..), CompOp (..), Term (..), instantiate)
 import Control.Monad.Reader (MonadReader (..), Reader, runReader, asks)
+import Data.Bits (Bits (..))
 import System.Exit (die)
 import System.Environment (getArgs, getProgName)
 
@@ -46,17 +47,62 @@ evaluateTerm = \case
     Label _ label -> evaluateTerm (label !!! branches)
     _ -> Match Machine <$> evaluateTerm scrutinee <*> pure branches
 
-  PrimitiveType _ primitiveType -> return (PrimitiveType Machine primitiveType)
-  Primitive _ primitive -> return (Primitive Machine primitive)
+  Int32Type _ -> return (Int32Type Machine)
+  Int32 _ value -> return (Int32 Machine value)
 
-  Operate _ operation operands -> mapM (mapM evaluateTerm) (operation, operands) >>= \case
-    (Int32Add, [Primitive _ (Int32 one), Primitive _ (Int32 other)]) ->
-      return (Primitive Machine $ Int32 $ one + other)
+  Int32If _ scrutinee truthy falsy -> evaluateTerm scrutinee >>= \case
+    Int32 _ value -> evaluateTerm (if value /= 0 then truthy else falsy)
+    _ -> Int32If Machine <$> evaluateTerm scrutinee <*> evaluateTerm truthy <*> evaluateTerm falsy
 
-    (Flt32Add, [Primitive _ (Flt32 one), Primitive _ (Flt32 other)]) ->
-      return (Primitive Machine $ Flt32 $ one + other)
+  Int32BinOp _ op left right -> both (evaluateTerm left, evaluateTerm right) >>= \case
+    (Int32 _ left', Int32 _ right') -> return $ case op of
+      Add -> Int32 Machine (left' + right')
+      Sub -> Int32 Machine (left' - right')
+      Mul -> Int32 Machine (left' * right')
+      Div -> Int32 Machine (left' `quot` right')
 
-    _ -> return (Operate Machine operation operands)
+    _ -> Int32BinOp Machine op <$> evaluateTerm left <*> evaluateTerm right
+
+  Int32BoolOp _ op left right -> both (evaluateTerm left, evaluateTerm right) >>= \case
+    (Int32 _ left', Int32 _ right') -> return $ case op of
+      And -> Int32 Machine (left' .&. right')
+      Or -> Int32 Machine (left' .|. right')
+
+    _ -> Int32BoolOp Machine op <$> evaluateTerm left <*> evaluateTerm right
+
+  Int32CompOp _ op left right -> both (evaluateTerm left, evaluateTerm right) >>= \case
+    (Int32 _ left', Int32 _ right') -> return $ case op of
+      Eq -> Int32 Machine (if left' == right' then 1 else 0)
+      Ne -> Int32 Machine (if left' /= right' then 1 else 0)
+      Lt -> Int32 Machine (if left' < right' then 1 else 0)
+      Le -> Int32 Machine (if left' <= right' then 1 else 0)
+      Gt -> Int32 Machine (if left' > right' then 1 else 0)
+      Ge -> Int32 Machine (if left' >= right' then 1 else 0)
+
+    _ -> Int32CompOp Machine op <$> evaluateTerm left <*> evaluateTerm right
+
+  Flt32Type _ -> return (Flt32Type Machine)
+  Flt32 _ value -> return (Flt32 Machine value)
+
+  Flt32BinOp _ op left right -> both (evaluateTerm left, evaluateTerm right) >>= \case
+    (Flt32 _ left', Flt32 _ right') -> return $ case op of
+      Add -> Flt32 Machine (left' + right')
+      Sub -> Flt32 Machine (left' - right')
+      Mul -> Flt32 Machine (left' * right')
+      Div -> Flt32 Machine (left' / right')
+
+    _ -> Flt32BinOp Machine op <$> evaluateTerm left <*> evaluateTerm right
+
+  Flt32CompOp _ op left right -> both (evaluateTerm left, evaluateTerm right) >>= \case
+    (Flt32 _ left', Flt32 _ right') -> return $ case op of
+      Eq -> Int32 Machine (if left' == right' then 1 else 0)
+      Ne -> Int32 Machine (if left' /= right' then 1 else 0)
+      Lt -> Int32 Machine (if left' < right' then 1 else 0)
+      Le -> Int32 Machine (if left' <= right' then 1 else 0)
+      Gt -> Int32 Machine (if left' > right' then 1 else 0)
+      Ge -> Int32 Machine (if left' >= right' then 1 else 0)
+
+    _ -> Flt32CompOp Machine op <$> evaluateTerm left <*> evaluateTerm right
 
 evaluate :: Bindings -> Term -> Term
 evaluate bindings term = runEvaluate (evaluateTerm term) bindings

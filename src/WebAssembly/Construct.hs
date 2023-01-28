@@ -27,6 +27,10 @@ module WebAssembly.Construct
   , popBlock
   , pushLoop
   , popLoop
+  , pushIf
+  , popIf
+  , pushIfElse
+  , popIfElse
   , pushBr
   , pushBrIf
   , pushBrTable
@@ -45,25 +49,42 @@ module WebAssembly.Construct
   , pushI32Add
   , pushI32Sub
   , pushI32Mul
+  , pushI32DivS
+  , pushI32And
+  , pushI32Or
   , pushI32Eq
+  , pushI32Ne
+  , pushI32LtS
+  , pushI32LeS
+  , pushI32GtS
+  , pushI32GeS
   , pushI64Load
   , pushI64Store
   , pushI64Const
   , pushI64Add
   , pushI64Sub
   , pushI64Mul
+  , pushI64DivS
   , pushF32Load
   , pushF32Store
   , pushF32Const
   , pushF32Add
   , pushF32Sub
   , pushF32Mul
+  , pushF32Div
+  , pushF32Eq
+  , pushF32Ne
+  , pushF32Lt
+  , pushF32Le
+  , pushF32Gt
+  , pushF32Ge
   , pushF64Load
   , pushF64Store
   , pushF64Const
   , pushF64Add
   , pushF64Sub
   , pushF64Mul
+  , pushF64Div
   , pushI32FuncRef
   , ConstructT
   , runConstructT
@@ -146,7 +167,7 @@ data ModlState = ModlState
   deriving (Show, Generic)
 
 emptyModlState :: ModlState
-emptyModlState = ModlState 
+emptyModlState = ModlState
   { nextTypeIdx = 0
   , nextFuncIdx = 0
   , nextTableIdx = 0
@@ -168,7 +189,9 @@ emptyModlState = ModlState
 data Frame =
   RootFrame |
   BlockFrame BlockType |
-  LoopFrame BlockType
+  LoopFrame BlockType |
+  IfFrame BlockType |
+  IfElseFrame BlockType [Instr]
   deriving (Show)
 
 data CodeState = CodeState
@@ -188,7 +211,7 @@ emptyCodeState names = do
     go (parameters, nextLocalIdx) name =
       ((name, nextLocalIdx) : parameters, succ nextLocalIdx)
 
-    (variables, localIdx) = foldl go ([], 0) names 
+    (variables, localIdx) = foldl go ([], 0) names
 
   CodeState
     { nextLocalIdx = localIdx
@@ -243,7 +266,7 @@ getType funcType = do
       (the @"modlState" . the @"types") %= ((funcType, typeIdx) :)
 
       return typeIdx
-    
+
     Just typeIdx ->
       return typeIdx
 
@@ -275,9 +298,9 @@ importFunc namespace name inputs outputs = do
       , wasm_sym_explicit_name = True
       , wasm_sym_no_strip = False
       }
-    
+
     info = SymInfo (SYMTAB_FUNCTION funcIdx (Just (Name name))) flags
-  
+
   (the @"modl" . the @"importSec") <>= [func]
   (the @"modl" . the @"linkingSec") <>= [info]
   (the @"modlState" . the @"funcs") %= ((name, (funcIdx, symIdx)) :)
@@ -293,7 +316,7 @@ importTable namespace name tableType = do
   (the @"modlState" . the @"nextTableIdx") .= succ tableIdx
 
   let table = Import (Name namespace) (Name name) (ImportTable tableType)
-  
+
   (the @"modl" . the @"importSec") <>= [table]
   (the @"modlState" . the @"tables") %= ((name, tableIdx) :)
 
@@ -308,7 +331,7 @@ importMem namespace name memType = do
   (the @"modlState" . the @"nextMemIdx") .= succ memIdx
 
   let mem = Import (Name namespace) (Name name) (ImportMem memType)
-  
+
   (the @"modl" . the @"importSec") <>= [mem]
   (the @"modlState" . the @"mems") %= ((name, memIdx) :)
 
@@ -337,9 +360,9 @@ importGlobal namespace name globalType = do
       , wasm_sym_explicit_name = True
       , wasm_sym_no_strip = False
       }
-    
+
     info = SymInfo (SYMTAB_GLOBAL globalIdx (Just (Name name))) flags
-  
+
   (the @"modl" . the @"importSec") <>= [global]
   (the @"modl" . the @"linkingSec") <>= [info]
   (the @"modlState" . the @"globals") %= ((name, (globalIdx, symIdx)) :)
@@ -367,7 +390,7 @@ declareFunc name inputs outputs = do
       }
 
     info = SymInfo (SYMTAB_FUNCTION funcIdx (Just (Name name))) flags
-  
+
   (the @"modl" . the @"funcSec") <>= [typeIdx]
   (the @"modl" . the @"linkingSec") <>= [info]
   (the @"modlState" . the @"funcs") %= ((name, (funcIdx, symIdx)) :)
@@ -377,7 +400,7 @@ declareTable :: MonadConstruct m => String -> TableType -> m ()
 declareTable name tableType = do
   tableIdx <- use (the @"modlState" . the @"nextTableIdx")
   (the @"modlState" . the @"nextTableIdx") .= succ tableIdx
-  
+
   (the @"modl" . the @"tableSec") <>= [Table tableType]
   (the @"modlState" . the @"tables") %= ((name, tableIdx) :)
 
@@ -407,9 +430,9 @@ declareGlobal name globalType expr = do
       , wasm_sym_explicit_name = True
       , wasm_sym_no_strip = False
       }
-    
+
     info = SymInfo (SYMTAB_GLOBAL globalIdx (Just (Name name))) flags
-  
+
   (the @"modl" . the @"globalSec") <>= [Global globalType expr]
   (the @"modl" . the @"linkingSec") <>= [info]
   (the @"modlState" . the @"globals") %= ((name, (globalIdx, symIdx)) :)
@@ -491,7 +514,7 @@ commitFuncTable imported = do
 
   tableIdx <- use (the @"modlState" . the @"nextTableIdx")
   (the @"modlState" . the @"nextTableIdx") .= succ tableIdx
-  
+
   funcs <- use (the @"modlState" . the @"funcs")
 
   (the @"modl" . the @"elemSec") <>=
@@ -499,18 +522,18 @@ commitFuncTable imported = do
 
   (the @"modlState" . the @"funcRefs") .=
     [(name, (funcRef, symIdx)) | (name, (_, symIdx)) <- funcs | funcRef <- [1..]]
-  
+
   (the @"modlState" . the @"funcTableIdx") .= Just tableIdx
-  
+
   let
     size = fromIntegral (1 + length funcs)
     limits = Bounded size size
     tableType = TableType FuncRef limits
-  
+
   case imported of
     Nothing ->
       (the @"modl" . the @"tableSec") <>= [Table tableType]
-    
+
     Just (namespace, name) -> do
       tableSec <- use (the @"modl" . the @"tableSec")
 
@@ -524,7 +547,7 @@ startCode :: MonadConstruct m => m ()
 startCode = do
   parameters <- use (the @"modlState" . the @"parameters")
   (the @"modlState" . the @"parameters") .= tail parameters
-  
+
   (the @"codeState") .= emptyCodeState (head parameters)
 
 endCode :: MonadConstruct m => m ()
@@ -536,7 +559,7 @@ endCode = do
       let
         build valTypes = Locals (fromIntegral $ length valTypes) (head valTypes)
         built = [build valTypes | valTypes <- group locals]
-      
+
       (the @"modl" . the @"codeSec") <>= [Code (Func (Vec built) (Expr instrs))]
 
     _ ->
@@ -581,10 +604,10 @@ getBlockType :: MonadConstruct m => ([ValType], [ValType]) -> m BlockType
 getBlockType = \case
   ([], []) ->
     return BlockEmpty
-  
+
   ([], [valType]) ->
     return (BlockValType valType)
-  
+
   (inputs, outputs) -> do
     typeIdx <- getType
       (FuncType (ResultType (Vec inputs)) (ResultType (Vec outputs)))
@@ -608,6 +631,25 @@ popLoop :: MonadConstruct m => m ()
 popLoop = popFrame >>= \case
   (LoopFrame blockType, instrs) -> pushInstr (Loop blockType instrs)
   _ -> error "tried to pop something that was not a loop"
+
+pushIf :: MonadConstruct m => String -> [ValType] -> [ValType] -> m ()
+pushIf name inputs outputs =
+  pushFrame name . IfFrame =<< getBlockType (inputs, outputs)
+
+popIf :: MonadConstruct m => m ()
+popIf = popFrame >>= \case
+  (IfFrame blockType, instrs) -> pushInstr (If blockType instrs)
+  _ -> error "tried to pop something that was not an if"
+
+pushIfElse :: MonadConstruct m => String -> m ()
+pushIfElse name = popFrame >>= \case
+  (IfFrame blockType, instrs) -> pushFrame name (IfElseFrame blockType instrs)
+  _ -> error "tried to push an else frame without an if frame"
+
+popIfElse :: MonadConstruct m => m ()
+popIfElse = popFrame >>= \case
+  (IfElseFrame blockType trueInstrs, falseInstrs) -> pushInstr (IfElse blockType trueInstrs falseInstrs)
+  _ -> error "tried to pop something that was not an if-else frame"
 
 getLabel :: MonadConstruct m => String -> m LabelIdx
 getLabel name = do
@@ -646,7 +688,7 @@ pushCallIndirect inputs outputs = do
 
   typeIdx <- getType
     (FuncType (ResultType (Vec inputs)) (ResultType (Vec outputs)))
-    
+
   pushInstr (CallIndirect typeIdx tableIdx)
 
 pushDrop :: MonadConstruct m => m ()
@@ -703,8 +745,32 @@ pushI32Sub = pushInstr I32Sub
 pushI32Mul :: MonadConstruct m => m ()
 pushI32Mul = pushInstr I32Mul
 
+pushI32DivS :: MonadConstruct m => m ()
+pushI32DivS = pushInstr I32DivS
+
+pushI32And :: MonadConstruct m => m ()
+pushI32And = pushInstr I32And
+
+pushI32Or :: MonadConstruct m => m ()
+pushI32Or = pushInstr I32Or
+
 pushI32Eq :: MonadConstruct m => m ()
 pushI32Eq = pushInstr I32Eq
+
+pushI32Ne :: MonadConstruct m => m ()
+pushI32Ne = pushInstr I32Ne
+
+pushI32LtS :: MonadConstruct m => m ()
+pushI32LtS = pushInstr I32LtS
+
+pushI32LeS :: MonadConstruct m => m ()
+pushI32LeS = pushInstr I32LeS
+
+pushI32GtS :: MonadConstruct m => m ()
+pushI32GtS = pushInstr I32GtS
+
+pushI32GeS :: MonadConstruct m => m ()
+pushI32GeS = pushInstr I32GeS
 
 pushI64Load :: MonadConstruct m => MemArg -> m ()
 pushI64Load memArg = pushInstr (I64Load memArg)
@@ -724,6 +790,9 @@ pushI64Sub = pushInstr I64Sub
 pushI64Mul :: MonadConstruct m => m ()
 pushI64Mul = pushInstr I64Mul
 
+pushI64DivS :: MonadConstruct m => m ()
+pushI64DivS = pushInstr I64DivS
+
 pushF32Load :: MonadConstruct m => MemArg -> m ()
 pushF32Load memArg = pushInstr (F32Load memArg)
 
@@ -742,6 +811,27 @@ pushF32Sub = pushInstr F32Sub
 pushF32Mul :: MonadConstruct m => m ()
 pushF32Mul = pushInstr F32Mul
 
+pushF32Div :: MonadConstruct m => m ()
+pushF32Div = pushInstr F32Div
+
+pushF32Eq :: MonadConstruct m => m ()
+pushF32Eq = pushInstr F32Eq
+
+pushF32Ne :: MonadConstruct m => m ()
+pushF32Ne = pushInstr F32Ne
+
+pushF32Lt :: MonadConstruct m => m ()
+pushF32Lt = pushInstr F32Lt
+
+pushF32Le :: MonadConstruct m => m ()
+pushF32Le = pushInstr F32Le
+
+pushF32Gt :: MonadConstruct m => m ()
+pushF32Gt = pushInstr F32Gt
+
+pushF32Ge :: MonadConstruct m => m ()
+pushF32Ge = pushInstr F32Ge
+
 pushF64Load :: MonadConstruct m => MemArg -> m ()
 pushF64Load memArg = pushInstr (F64Load memArg)
 
@@ -759,6 +849,9 @@ pushF64Sub = pushInstr F64Sub
 
 pushF64Mul :: MonadConstruct m => m ()
 pushF64Mul = pushInstr F64Mul
+
+pushF64Div :: MonadConstruct m => m ()
+pushF64Div = pushInstr F64Div
 
 pushI32FuncRef :: MonadConstruct m => String -> m ()
 pushI32FuncRef name = do

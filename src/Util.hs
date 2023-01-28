@@ -4,6 +4,7 @@ module Util
   , subset
   , (<==>)
   , (.&&.)
+  , both
   )
   where
 
@@ -33,3 +34,9 @@ infixl 1 <==>
   False -> return False
 
 infixl 1 .&&.
+
+both :: Monad m => (m a, m b) -> m (a, b)
+both (left, right) = do
+  left' <- left
+  right' <- right
+  return (left', right')

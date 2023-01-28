@@ -6,9 +6,9 @@ module Core.Parse
 import Core.Syntax
   ( Variable (..)
   , unbound
-  , PrimitiveType (..)
-  , Primitive (..)
-  , Operation (..)
+  , BinOp (..)
+  , BoolOp (..)
+  , CompOp (..)
   , Term (..)
   , abstract
   , capture
@@ -67,8 +67,21 @@ parseIdentifier :: Parse String
 parseIdentifier = parseLexeme (some $ try $ oneOf validCharacters) where
   validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['_']
 
+parseParens :: Parse Term
+parseParens = between (parseSymbol "(") (parseSymbol ")") parseTerm
+
 parseOrigin :: Parse Origin
 parseOrigin = Source <$> getSourcePos
+
+parseInt32 :: Parse Term
+parseInt32 = parseLexeme (positive <|> negative) where
+  positive = Int32 <$> parseOrigin <*> (optional (single '+') *> decimal)
+  negative = Int32 <$> parseOrigin <*> (single '-' *> (negate <$> decimal))
+
+parseFlt32 :: Parse Term
+parseFlt32 = parseLexeme (positive <|> negative) where
+  positive = Flt32 <$> parseOrigin <*> (optional (single '+') *> float)
+  negative = Flt32 <$> parseOrigin <*> (single '-' *> (negate <$> float))
 
 buildNestedPairs :: Origin -> [Term] -> Term
 buildNestedPairs origin = \case
@@ -121,55 +134,98 @@ parseMatch = do
   branches <- many parseBranch <* parseSymbol "}"
   return (Match origin scrutinee branches)
 
-parseInt :: Parse Primitive
-parseInt = parseLexeme (positive <|> negative) where
-  positive = Int32 <$> (optional (single '+') *> decimal)
-  negative = Int32 <$> (single '-' *> (negate <$> decimal))
+parseType :: Parse Term
+parseType = Type <$> parseOrigin <* parseSymbol "Type"
 
-parseFloat :: Parse Primitive
-parseFloat = parseLexeme (positive <|> negative) where
-  positive = Flt32 <$> (optional (single '+') *> float)
-  negative = Flt32 <$> (single '-' *> (negate <$> float))
+parseInt32Type :: Parse Term
+parseInt32Type = Int32Type <$> parseOrigin <* parseSymbol "Int32"
 
-parsePrimitive :: Parse Term
-parsePrimitive = do
+parseFlt32Type :: Parse Term
+parseFlt32Type = Flt32Type <$> parseOrigin <* parseSymbol "Flt32"
+
+parseInt32If :: Parse Term
+parseInt32If = Int32If <$> parseOrigin
+  <*> (parseSymbol "if " *> parseClosed)
+  <*> parseClosed
+  <*> parseClosed
+
+parseInt32BinOp :: Parse Term
+parseInt32BinOp = do
   origin <- parseOrigin
-  primitive <- parseInt <|> parseFloat
-  return (Primitive origin primitive)
 
-parseOperation :: Parse Operation
-parseOperation =
-  Int32Add <$ parseSymbol "int32.add " <|> Flt32Add <$ parseSymbol "flt32.add "
+  op <- Add <$ parseSymbol "+i"
+    <|> Sub <$ parseSymbol "-i"
+    <|> Mul <$ parseSymbol "*i"
+    <|> Div <$ parseSymbol "/i"
 
-parseOperate :: Parse Term
-parseOperate = do
+  Int32BinOp origin op <$> parseClosed <*> parseClosed
+
+parseInt32BoolOp :: Parse Term
+parseInt32BoolOp = do
   origin <- parseOrigin
-  operation <- try (parseSymbol "[" *> parseOperation)
-  parameters <- someTill parseClosed (parseSymbol "]")
-  return (Operate origin operation parameters)
 
-parseParens :: Parse Term
-parseParens = between (parseSymbol "(") (parseSymbol ")") parseTerm
+  op <- And <$ parseSymbol "&&i"
+    <|> Or <$ parseSymbol "||i"
+
+  Int32BoolOp origin op <$> parseClosed <*> parseClosed
+
+parseInt32CompOp :: Parse Term
+parseInt32CompOp = do
+  origin <- parseOrigin
+
+  op <- Eq <$ parseSymbol "==i"
+    <|> Ne <$ parseSymbol "/=i"
+    <|> try (Lt <$ parseSymbol "<i")
+    <|> Le <$ parseSymbol "<=i"
+    <|> try (Gt <$ parseSymbol ">i")
+    <|> Ge <$ parseSymbol ">=i"
+
+  Int32CompOp origin op <$> parseClosed <*> parseClosed
+
+parseFlt32BinOp :: Parse Term
+parseFlt32BinOp = do
+  origin <- parseOrigin
+
+  op <- Add <$ parseSymbol "+i"
+    <|> Sub <$ parseSymbol "-i"
+    <|> Mul <$ parseSymbol "*i"
+    <|> Div <$ parseSymbol "/i"
+
+  Flt32BinOp origin op <$> parseClosed <*> parseClosed
+
+parseFlt32CompOp :: Parse Term
+parseFlt32CompOp = do
+  origin <- parseOrigin
+
+  op <- Eq <$ parseSymbol "==i"
+    <|> Ne <$ parseSymbol "/=i"
+    <|> try (Lt <$ parseSymbol "<i")
+    <|> Le <$ parseSymbol "<=i"
+    <|> try (Gt <$ parseSymbol ">i")
+    <|> Ge <$ parseSymbol ">=i"
+
+  Flt32CompOp origin op <$> parseClosed <*> parseClosed
 
 parseName :: Parse Term
-parseName = do
-  origin <- parseOrigin
-
-  parseIdentifier >>= \case
-    "Type" -> return (Type origin)
-    "Int32" -> return (PrimitiveType origin Int32Type)
-    "Flt32" -> return (PrimitiveType origin Flt32Type)
-
-    identifier -> return (Variable origin $ Global identifier)
+parseName = Variable <$> parseOrigin <*> (Global <$> parseIdentifier)
 
 parseClosed :: Parse Term
 parseClosed = try parseParens
+  <|> try parseInt32
+  <|> try parseFlt32
   <|> try parsePair
   <|> try parseLabelType
   <|> try parseLabel
   <|> try parseMatch
-  <|> try parsePrimitive
-  <|> try parseOperate
+  <|> try parseType
+  <|> try parseInt32Type
+  <|> try parseFlt32Type
+  <|> try parseInt32If
+  <|> try parseInt32BinOp
+  <|> try parseInt32BoolOp
+  <|> try parseInt32CompOp
+  <|> try parseFlt32BinOp
+  <|> try parseFlt32CompOp
   <|> parseName
 
 parseApply :: Parse Term

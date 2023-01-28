@@ -10,7 +10,10 @@ import Core.Bindings (Bindings)
 import qualified Core.Bindings as Core
 
 import Intermediate.Syntax
-  ( Atom (..)
+  ( BinOp (..)
+  , BoolOp (..)
+  , CompOp (..)
+  , Atom (..)
   , Expression (..)
   , Sequence (..)
   , bind
@@ -203,59 +206,131 @@ translateMatch scrutinee branches = do
   scrutineeSequence <- translateTerm scrutinee
   scrutineeName <- freshName
 
-  branchesSequences <- forM branches $ \(name, branch) -> do
+  branchesBlockCalls <- forM branches $ \(name, branch) -> do
     let
-      variables = nub (free branch)
-      dictionary = [(variable, Local variable) | variable <- variables]
+      branchVariables = nub (free branch)
+      branchDictionary = [(variable, Local variable) | variable <- branchVariables]
 
-    branchSequence <- withDictionary dictionary (translateTerm branch)
-    block <- freshBlock
-    pushBlock block variables branchSequence
+    branchBlock <- freshBlock
+    branchSequence <- withDictionary branchDictionary (translateTerm branch)
+    pushBlock branchBlock branchVariables branchSequence
 
-    label <- getLabel name
-    atoms <- mapM translateLocal variables
-    return (label, BlockCall block atoms)
+    branchLabel <- getLabel name
+    branchArguments <- mapM translateLocal branchVariables
+    return (branchLabel, branchBlock, branchArguments)
 
   let
     bindScrutinee = bind scrutineeName scrutineeSequence
-    tailSequence = Tail (Int32Match (Local scrutineeName) branchesSequences)
+    tailSequence = Tail (Int32Match (Local scrutineeName) branchesBlockCalls)
 
   return (bindScrutinee tailSequence)
 
-translatePrimitive :: Core.Primitive -> Translate Sequence
-translatePrimitive = \case
-  Core.Int32 value -> return (Tail $ Int32Alloc value)
-  Core.Flt32 value -> return (Tail $ Flt32Alloc value)
+translateInt32 :: Int32 -> Translate Sequence
+translateInt32 value = return (Tail $ Int32Alloc value)
 
-translateOperate :: Core.Operation -> [Core.Term] -> Translate Sequence
-translateOperate operation parameters = case (operation, parameters) of
-  (Core.Int32Add, [one, other]) -> do
-    oneSequence <- translateTerm one
-    oneName <- freshName
-    otherSequence <- translateTerm other
-    otherName <- freshName
+translateInt32If :: Term -> Term -> Term -> Translate Sequence
+translateInt32If scrutinee truthy falsy = do
+  scrutineeSequence <- translateTerm scrutinee
+  scrutineeName <- freshName
 
-    let
-      bindOne = bind oneName oneSequence
-      bindOther = bind otherName otherSequence
-      tailSequence = Tail (Int32Add (Local oneName) (Local otherName))
+  let
+    truthyVariables = nub (free truthy)
+    truthyDictionary = [(variable, Local variable) | variable <- truthyVariables]
 
-    return (bindOne $ bindOther tailSequence)
+  truthyBlock <- freshBlock
+  truthySequence <- withDictionary truthyDictionary (translateTerm truthy)
+  truthyArguments <- mapM translateLocal truthyVariables
+  pushBlock truthyBlock truthyVariables truthySequence
 
-  (Core.Flt32Add, [one, other]) -> do
-    oneSequence <- translateTerm one
-    oneName <- freshName
-    otherSequence <- translateTerm other
-    otherName <- freshName
+  let
+    falsyVariables = nub (free falsy)
+    falsyDictionary = [(variable, Local variable) | variable <- falsyVariables]
 
-    let
-      bindOne = bind oneName oneSequence
-      bindOther = bind otherName otherSequence
-      tailSequence = Tail (Flt32Add (Local oneName) (Local otherName))
+  falsyBlock <- freshBlock
+  falsySequence <- withDictionary falsyDictionary (translateTerm falsy)
+  falsyArguments <- mapM translateLocal falsyVariables
+  pushBlock falsyBlock falsyVariables falsySequence
 
-    return (bindOne $ bindOther tailSequence)
+  let
+    bindScrutinee = bind scrutineeName scrutineeSequence
+    truthyBlockCall = (truthyBlock, truthyArguments)
+    falsyBlockCall = (falsyBlock, falsyArguments)
+    tailSequence = Tail (Int32If (Local scrutineeName) truthyBlockCall falsyBlockCall)
 
-  _ -> error "invalid format operation"
+  return (bindScrutinee tailSequence)
+
+translateInt32BinOp :: BinOp -> Term -> Term -> Translate Sequence
+translateInt32BinOp op left right = do
+  leftSequence <- translateTerm left
+  leftName <- freshName
+  rightSequence <- translateTerm right
+  rightName <- freshName
+
+  let
+    bindLeft = bind leftName leftSequence
+    bindRight = bind rightName rightSequence
+    tailSequence = Tail (Int32BinOp op (Local leftName) (Local rightName))
+
+  return (bindLeft $ bindRight tailSequence)
+
+translateInt32BoolOp :: BoolOp -> Term -> Term -> Translate Sequence
+translateInt32BoolOp op left right = do
+  leftSequence <- translateTerm left
+  leftName <- freshName
+  rightSequence <- translateTerm right
+  rightName <- freshName
+
+  let
+    bindLeft = bind leftName leftSequence
+    bindRight = bind rightName rightSequence
+    tailSequence = Tail (Int32BoolOp op (Local leftName) (Local rightName))
+
+  return (bindLeft $ bindRight tailSequence)
+
+translateInt32CompOp :: CompOp -> Term -> Term -> Translate Sequence
+translateInt32CompOp op left right = do
+  leftSequence <- translateTerm left
+  leftName <- freshName
+  rightSequence <- translateTerm right
+  rightName <- freshName
+
+  let
+    bindLeft = bind leftName leftSequence
+    bindRight = bind rightName rightSequence
+    tailSequence = Tail (Int32CompOp op (Local leftName) (Local rightName))
+
+  return (bindLeft $ bindRight tailSequence)
+
+translateFlt32 :: Float -> Translate Sequence
+translateFlt32 value = return (Tail $ Flt32Alloc value)
+
+translateFlt32BinOp :: BinOp -> Term -> Term -> Translate Sequence
+translateFlt32BinOp op left right = do
+  leftSequence <- translateTerm left
+  leftName <- freshName
+  rightSequence <- translateTerm right
+  rightName <- freshName
+
+  let
+    bindLeft = bind leftName leftSequence
+    bindRight = bind rightName rightSequence
+    tailSequence = Tail (Flt32BinOp op (Local leftName) (Local rightName))
+
+  return (bindLeft $ bindRight tailSequence)
+
+translateFlt32CompOp :: CompOp -> Term -> Term -> Translate Sequence
+translateFlt32CompOp op left right = do
+  leftSequence <- translateTerm left
+  leftName <- freshName
+  rightSequence <- translateTerm right
+  rightName <- freshName
+
+  let
+    bindLeft = bind leftName leftSequence
+    bindRight = bind rightName rightSequence
+    tailSequence = Tail (Flt32CompOp op (Local leftName) (Local rightName))
+
+  return (bindLeft $ bindRight tailSequence)
 
 translateTerm :: Term -> Translate Sequence
 translateTerm = \case
@@ -270,9 +345,16 @@ translateTerm = \case
   Core.LabelType {} -> translateNull
   Core.Label _ name -> translateLabel name
   Core.Match _ scrutinee branches -> translateMatch scrutinee branches
-  Core.PrimitiveType {} -> translateNull
-  Core.Primitive _ primitive -> translatePrimitive primitive
-  Core.Operate _ operation parameters -> translateOperate operation parameters
+  Core.Int32Type {} -> translateNull
+  Core.Int32 _ value -> translateInt32 value
+  Core.Int32If _ scrutinee truthy falsy -> translateInt32If scrutinee truthy falsy
+  Core.Int32BinOp _ op left right -> translateInt32BinOp op left right
+  Core.Int32BoolOp _ op left right -> translateInt32BoolOp op left right
+  Core.Int32CompOp _ op left right -> translateInt32CompOp op left right
+  Core.Flt32Type {} -> translateNull
+  Core.Flt32 _ value -> translateFlt32 value
+  Core.Flt32BinOp _ op left right -> translateFlt32BinOp op left right
+  Core.Flt32CompOp _ op left right -> translateFlt32CompOp op left right
 
 pushDefinition :: (String, Term) -> Translate ()
 pushDefinition (name, term) = do

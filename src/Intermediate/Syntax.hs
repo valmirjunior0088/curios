@@ -1,5 +1,8 @@
 module Intermediate.Syntax
-  ( Atom (..)
+  ( BinOp (..)
+  , BoolOp (..)
+  , CompOp (..)
+  , Atom (..)
   , Expression (..)
   , Sequence (..)
   , bind
@@ -12,6 +15,7 @@ module Intermediate.Syntax
   )
   where
 
+import Core.Syntax (BinOp (..), BoolOp (..), CompOp (..))
 import Data.Int (Int32)
 import GHC.Generics (Generic)
 
@@ -23,12 +27,16 @@ data Atom =
 
 data Expression =
   Int32Alloc Int32 |
-  Int32Add Atom Atom |
+  Int32Match Atom [(Int32, String, [Atom])] |
+  Int32If Atom (String, [Atom]) (String, [Atom]) |
+  Int32BinOp BinOp Atom Atom |
+  Int32BoolOp BoolOp Atom Atom |
+  Int32CompOp CompOp Atom Atom |
   Flt32Alloc Float |
-  Flt32Add Atom Atom |
+  Flt32BinOp BinOp Atom Atom |
+  Flt32CompOp CompOp Atom Atom |
   Pure Atom |
   BlockCall String [Atom] |
-  Int32Match Atom [(Int32, Expression)] |
   ClosureAlloc String [Atom] |
   ClosureEnter Atom [Atom] |
   StructAlloc [Atom] |
@@ -75,13 +83,17 @@ class Mentions a where
 
 instance Mentions Expression where
   mentions = \case
-    Int32Alloc _ -> []
-    Int32Add _ _ -> []
-    Flt32Alloc _ -> []
-    Flt32Add _ _ -> []
+    Int32Alloc {} -> []
+    Int32Match {} -> []
+    Int32If {} -> []
+    Int32BinOp {} -> []
+    Int32BoolOp {} -> []
+    Int32CompOp {} -> []
+    Flt32Alloc {} -> []
+    Flt32BinOp {} -> []
+    Flt32CompOp {} -> []
     Pure atom -> [atom]
     BlockCall _ atoms -> atoms
-    Int32Match _ _ -> []
     ClosureAlloc _ atoms -> atoms
     ClosureEnter _ atoms -> atoms
     StructAlloc atoms -> atoms

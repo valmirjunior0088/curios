@@ -72,7 +72,7 @@ to_int32 = value =>
 
   match label {
     :zero = 0.
-    :succ = [int32.add 1 (to_int32 value)].
+    :succ = +i 1 (to_int32 value).
   }.
 
 numbers_nested_pair : Int32 *> Int32 *> Int32.
@@ -82,4 +82,4 @@ third_number : Int32.
 third_number = let (a, b, c) = numbers_nested_pair; c.
 
 start : Int32.
-start = third_number.
+start = if (<i 5 10) 20 30.

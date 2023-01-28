@@ -3,26 +3,41 @@ module Intermediate.Debug
   )
   where
 
-import Intermediate.Syntax (Expression (..), Sequence (..), Closure (..), Block (..), Program (..))
+import Intermediate.Syntax
+  ( Atom (..)
+  , Expression (..)
+  , Sequence (..)
+  , Closure (..)
+  , Block (..)
+  , Program (..)
+  )
+
 import Data.List (intercalate)
 import Data.Int (Int32)
 
-debugBranch :: (Int32, Expression) -> String
-debugBranch (label, expression) = "|" ++ show label ++ "| " ++ debugExpression expression
+debugBranch :: (Int32, String, [Atom]) -> String
+debugBranch (label, block, atoms) = "|" ++ show label ++ "| block.Call " ++ block ++ " [" ++ intercalate ", " (map show atoms) ++ "]"
+
+debugCondition :: String -> (String, [Atom]) -> String
+debugCondition condition (block, atoms) = "|" ++ condition ++ "| block.Call " ++ block ++ " [" ++ intercalate ", " (map show atoms) ++ "]"
 
 debugExpression :: Expression -> String
 debugExpression = \case
-  Int32Alloc value -> "int32.alloc " ++ show value
-  Int32Add one other -> "int32.add [" ++ show one ++ ", " ++ show other ++ "]"
-  Flt32Alloc value -> "flt32.alloc " ++ show value
-  Flt32Add one other -> "flt32.add [" ++ show one ++ ", " ++ show other ++ "]"
-  Pure atom -> "pure [" ++ show atom ++ "]"
-  BlockCall block atoms -> "block.call " ++ block ++ " [" ++ intercalate ", " (map show atoms) ++ "]"
-  Int32Match atom branches -> "int32.match [" ++ show atom ++ "]: " ++ unwords (map debugBranch branches)
-  ClosureAlloc closure atoms -> "closure.alloc " ++ closure ++ " {" ++ intercalate ", " (map show atoms) ++ "}"
-  ClosureEnter atom atoms -> "closure.enter [" ++ show atom ++ "] [" ++ intercalate ", " (map show atoms) ++ "]"
-  StructAlloc atoms -> "struct.alloc [" ++ intercalate ", " (map show atoms) ++ "]"
-  StructSelect atom index -> "struct.select [" ++ show atom ++ "] " ++ show index
+  Int32Alloc value -> "int32.Alloc " ++ show value
+  Int32Match atom branches -> "int32.Match [" ++ show atom ++ "]:\n" ++ intercalate "\n" (map debugBranch branches)
+  Int32If atom truthy falsy -> "int32.If [" ++ show atom ++ "]:\n" ++ debugCondition "true" truthy ++ "\n" ++ debugCondition "false" falsy
+  Int32BinOp op one other -> "int32." ++ show op ++ " [" ++ show one ++ "] [" ++ show other ++ "]"
+  Int32BoolOp op one other -> "int32." ++ show op ++ " [" ++ show one ++ "] [" ++ show other ++ "]"
+  Int32CompOp op one other -> "int32." ++ show op ++ " [" ++ show one ++ "] [" ++ show other ++ "]"
+  Flt32Alloc value -> "flt32.Alloc " ++ show value
+  Flt32BinOp op one other -> "flt32." ++ show op ++ " [" ++ show one ++ "] [" ++ show other ++ "]"
+  Flt32CompOp op one other -> "flt32." ++ show op++ " [" ++ show one ++ "] [" ++ show other ++ "]"
+  Pure atom -> "Pure [" ++ show atom ++ "]"
+  BlockCall block atoms -> "block.Call " ++ block ++ " [" ++ intercalate ", " (map show atoms) ++ "]"
+  ClosureAlloc closure atoms -> "closure.Alloc " ++ closure ++ " {" ++ intercalate ", " (map show atoms) ++ "}"
+  ClosureEnter atom atoms -> "closure.Enter [" ++ show atom ++ "] [" ++ intercalate ", " (map show atoms) ++ "]"
+  StructAlloc atoms -> "struct.Alloc [" ++ intercalate ", " (map show atoms) ++ "]"
+  StructSelect atom index -> "struct.Select [" ++ show atom ++ "] " ++ show index
 
 debugSequence :: Sequence -> [String]
 debugSequence = \case

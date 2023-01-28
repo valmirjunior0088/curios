@@ -36,6 +36,8 @@ data Instr =
   Nop |
   Block BlockType [Instr] |
   Loop BlockType [Instr] |
+  If BlockType [Instr] |
+  IfElse BlockType [Instr] [Instr] |
   Br LabelIdx |
   BrIf LabelIdx |
   BrTable (Vec LabelIdx) LabelIdx |
@@ -54,25 +56,42 @@ data Instr =
   I32Add |
   I32Sub |
   I32Mul |
+  I32DivS |
+  I32And |
+  I32Or |
   I32Eq |
+  I32Ne |
+  I32LtS |
+  I32LeS |
+  I32GtS |
+  I32GeS |
   I64Load MemArg |
   I64Store MemArg |
   I64Const Int64 |
   I64Add |
   I64Sub |
   I64Mul |
+  I64DivS |
   F32Load MemArg |
   F32Store MemArg |
   F32Const Float |
   F32Add |
   F32Sub |
   F32Mul |
+  F32Div |
+  F32Eq |
+  F32Ne |
+  F32Lt |
+  F32Le |
+  F32Gt |
+  F32Ge |
   F64Load MemArg |
   F64Store MemArg |
   F64Const Double |
   F64Add |
   F64Sub |
   F64Mul |
+  F64Div |
   I32FuncRef Int32 SymIdx |
   I32DataRef Int32 SymIdx Int32
   deriving (Show)

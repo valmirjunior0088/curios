@@ -89,7 +89,7 @@ to_int32 = value =>
 
   match label {
     :zero = 0.
-    :succ = [int32.add 1 (to_int32 value)].
+    :succ = +i 1 (to_int32 value).
   }.
 
 start : Int32.

@@ -140,7 +140,7 @@ class Build a where
   build :: a -> Builder
 
 section :: Word8 -> Buffer -> Builder
-section identifier Buffer { size, contents } = 
+section identifier Buffer { size, contents } =
   identifierBuilder <> sizeBuilder <> contents where
     identifierBuilder = word8 identifier
     sizeBuilder = mconcat (map word8 (uleb128 size))
@@ -230,7 +230,7 @@ instance Serialize ResultType where
   serialize (ResultType valTypes) = serialize valTypes
 
 instance Serialize FuncType where
-  serialize (FuncType inputs outputs) = 
+  serialize (FuncType inputs outputs) =
     byte 0x60 <> serialize inputs <> serialize outputs
 
 instance Serialize Limits where
@@ -272,12 +272,24 @@ instance Serialize Instr where
       <> serialize blockType
       <> mconcat (map serialize instrs)
       <> byte 0x0B
-    
+
     Loop blockType instrs -> byte 0x03
       <> serialize blockType
       <> mconcat (map serialize instrs)
       <> byte 0x0B
-    
+
+    If blockType instrs -> byte 0x04
+      <> serialize blockType
+      <> mconcat (map serialize instrs)
+      <> byte 0x0B
+
+    IfElse blockType trueInstrs falseInstrs -> byte 0x04
+      <> serialize blockType
+      <> mconcat (map serialize trueInstrs)
+      <> byte 0x05
+      <> mconcat (map serialize falseInstrs)
+      <> byte 0x0B
+
     Br labelIdx -> byte 0x0C <> serialize labelIdx
 
     BrIf labelIdx -> byte 0x0D <> serialize labelIdx
@@ -293,9 +305,9 @@ instance Serialize Instr where
     CallIndirect typeIdx tableIdx -> byte 0x11
       <> serialize typeIdx
       <> serialize tableIdx
-    
+
     Drop -> byte 0x1A
-    
+
     LocalGet localIdx -> byte 0x20 <> serialize localIdx
     LocalSet localIdx -> byte 0x21 <> serialize localIdx
     LocalTee localIdx -> byte 0x22 <> serialize localIdx
@@ -309,7 +321,15 @@ instance Serialize Instr where
     I32Add -> byte 0x6A
     I32Sub -> byte 0x6B
     I32Mul -> byte 0x6C
+    I32DivS -> byte 0x6D
+    I32And -> byte 0x71
+    I32Or -> byte 0x72
     I32Eq -> byte 0x46
+    I32Ne -> byte 0x47
+    I32LtS -> byte 0x48
+    I32LeS -> byte 0x4C
+    I32GtS -> byte 0x4A
+    I32GeS -> byte 0x4E
 
     I64Load memArg -> byte 0x29 <> serialize memArg
     I64Store memArg -> byte 0x37 <> serialize memArg
@@ -317,6 +337,7 @@ instance Serialize Instr where
     I64Add -> byte 0x7C
     I64Sub -> byte 0x7D
     I64Mul -> byte 0x7E
+    I64DivS -> byte 0x7F
 
     F32Load memArg -> byte 0x2A <> serialize memArg
     F32Store memArg -> byte 0x38 <> serialize memArg
@@ -324,6 +345,13 @@ instance Serialize Instr where
     F32Add -> byte 0x92
     F32Sub -> byte 0x93
     F32Mul -> byte 0x94
+    F32Div -> byte 0x95
+    F32Eq -> byte 0x5B
+    F32Ne -> byte 0x5C
+    F32Lt -> byte 0x5D
+    F32Le -> byte 0x5F
+    F32Gt -> byte 0x5E
+    F32Ge -> byte 0x60
 
     F64Load memArg -> byte 0x2B <> serialize memArg
     F64Store memArg -> byte 0x39 <> serialize memArg
@@ -331,6 +359,7 @@ instance Serialize Instr where
     F64Add -> byte 0xA0
     F64Sub -> byte 0xA1
     F64Mul -> byte 0xA2
+    F64Div -> byte 0xA3
 
     I32FuncRef value _ -> byte 0x41 <> signed value
     I32DataRef value _ _ -> byte 0x41 <> signed value
@@ -428,7 +457,19 @@ instance RelocSerialize Instr where
       <> relocEmpty (serialize blockType)
       <> mconcat (map relocSerialize instrs)
       <> relocEmpty (byte 0x0B)
-    
+
+    If blockType instrs -> relocEmpty (byte 0x04)
+      <> relocEmpty (serialize blockType)
+      <> mconcat (map relocSerialize instrs)
+      <> relocEmpty (byte 0x0B)
+
+    IfElse blockType trueInstrs falseInstrs -> relocEmpty (byte 0x04)
+      <> relocEmpty (serialize blockType)
+      <> mconcat (map relocSerialize trueInstrs)
+      <> relocEmpty (byte 0x05)
+      <> mconcat (map relocSerialize falseInstrs)
+      <> relocEmpty (byte 0x0B)
+
     GlobalGet (GlobalIdx globalIdx) symIdx -> relocEmpty (byte 0x23)
       <> relocSingleton (unsignedFixed 5 globalIdx) R_WASM_GLOBAL_INDEX_LEB symIdx
 
@@ -437,14 +478,14 @@ instance RelocSerialize Instr where
 
     Call (FuncIdx funcIdx) symIdx -> relocEmpty (byte 0x10)
       <> relocSingleton (unsignedFixed 5 funcIdx) R_WASM_FUNCTION_INDEX_LEB symIdx
-    
+
     CallIndirect (TypeIdx typeIdx) tableIdx -> relocEmpty (byte 0x11)
       <> relocSingleton (unsignedFixed 5 typeIdx) R_WASM_TYPE_INDEX_LEB (SymIdx typeIdx)
       <> relocEmpty (serialize tableIdx)
 
     I32FuncRef value symIdx -> relocEmpty (byte 0x41)
       <> relocSingleton (signedFixed 5 value) R_WASM_TABLE_INDEX_SLEB symIdx
-    
+
     I32DataRef value symIdx addend -> relocEmpty (byte 0x41)
       <> relocSingleton (signedFixed 5 value) (R_WASM_MEMORY_ADDR_SLEB addend) symIdx
 
