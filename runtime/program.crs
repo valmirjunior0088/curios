@@ -6,9 +6,9 @@ unit = :unit;
 
 List : Type -> Type;
 List = A =>
-  (label: {:null, :cons}) *> match label {
+  (label: {:null, :cons}) * match label {
     :null = Unit;
-    :cons = A *> List A;
+    :cons = A * List A;
   };
 
 null : (A: Type) -> List A;
@@ -31,7 +31,7 @@ fold = A => B => action => initial => list =>
 
 Nat : Type;
 Nat =
-  (label: {:zero, :succ}) *> match label {
+  (label: {:zero, :succ}) * match label {
     :zero = Unit;
     :succ = Nat;
   };
@@ -75,7 +75,7 @@ to_int32 = value =>
     :succ = +i 1 (to_int32 value);
   };
 
-numbers_nested_pair : Int32 *> Int32 *> Int32;
+numbers_nested_pair : Int32 * Int32 * Int32;
 numbers_nested_pair = (1, 2, 3);
 
 third_number : Int32;

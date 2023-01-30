@@ -241,12 +241,12 @@ parsePairType = do
   let
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
-      input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "*>"
+      input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "*"
       scope <- capture identifier <$> parseTerm
       return (PairType origin input scope)
 
     parseNonDependent = do
-      input <- parseApply <* parseSymbol "*>"
+      input <- parseApply <* parseSymbol "*"
       scope <- unbound <$> parseTerm
       return (PairType origin input scope)
 
@@ -308,10 +308,10 @@ parseFunction = do
   return (Function origin body)
 
 parseTerm :: Parse Term
-parseTerm = try parseFunction
-  <|> try parseFunctionType
-  <|> try parseSplit
+parseTerm = try parseFunctionType
   <|> try parsePairType
+  <|> try parseFunction
+  <|> try parseSplit
   <|> parseApply
 
 parseEntry :: Parse Entry
