@@ -1,85 +1,85 @@
-Unit : Type.
-Unit = {:unit}.
+Unit : Type;
+Unit = {:unit};
 
-unit : Unit.
-unit = :unit.
+unit : Unit;
+unit = :unit;
 
-List : Type -> Type.
+List : Type -> Type;
 List = A =>
   (label: {:null, :cons}) *> match label {
-    :null = Unit.
-    :cons = A *> List A.
-  }.
+    :null = Unit;
+    :cons = A *> List A;
+  };
 
-null : (A: Type) -> List A.
-null = A => (:null, unit).
+null : (A: Type) -> List A;
+null = A => (:null, unit);
 
-cons : (A: Type) -> A -> List A -> List A.
-cons = A => a => rest => (:cons, a, rest).
+cons : (A: Type) -> A -> List A -> List A;
+cons = A => a => rest => (:cons, a, rest);
 
-fold : (A: Type) -> (B: Type) -> (B -> A -> B) -> B -> List A -> B.
+fold : (A: Type) -> (B: Type) -> (B -> A -> B) -> B -> List A -> B;
 fold = A => B => action => initial => list =>
   let (label, list) = list;
 
   match label {
-    :null = initial.
+    :null = initial;
 
     :cons =
       let (value, rest) = list;
-      fold A B action (action initial value) rest.
-  }.
+      fold A B action (action initial value) rest;
+  };
 
-Nat : Type.
+Nat : Type;
 Nat =
   (label: {:zero, :succ}) *> match label {
-    :zero = Unit.
-    :succ = Nat.
-  }.
+    :zero = Unit;
+    :succ = Nat;
+  };
 
-zero : Nat.
-zero = (:zero, unit).
+zero : Nat;
+zero = (:zero, unit);
 
-succ : Nat -> Nat.
-succ = value => (:succ, value).
+succ : Nat -> Nat;
+succ = value => (:succ, value);
 
-add : Nat -> Nat -> Nat.
+add : Nat -> Nat -> Nat;
 add = one => other =>
   let (label, one) = one;
 
   match label {
-    :zero = other.
-    :succ = succ (add one other).
-  }.
+    :zero = other;
+    :succ = succ (add one other);
+  };
 
-one : Nat.
-one = succ zero.
+one : Nat;
+one = succ zero;
 
-two : Nat.
-two = succ one.
+two : Nat;
+two = succ one;
 
-three : Nat.
-three = succ two.
+three : Nat;
+three = succ two;
 
-nat_list : List Nat.
-nat_list = cons Nat one (cons Nat two (cons Nat three (null Nat))).
+nat_list : List Nat;
+nat_list = cons Nat one (cons Nat two (cons Nat three (null Nat)));
 
-folded_nat_list : Nat.
-folded_nat_list = fold Nat Nat add zero nat_list.
+folded_nat_list : Nat;
+folded_nat_list = fold Nat Nat add zero nat_list;
 
-to_int32 : Nat -> Int32.
+to_int32 : Nat -> Int32;
 to_int32 = value =>
   let (label, value) = value;
 
   match label {
-    :zero = 0.
-    :succ = +i 1 (to_int32 value).
-  }.
+    :zero = 0;
+    :succ = +i 1 (to_int32 value);
+  };
 
-numbers_nested_pair : Int32 *> Int32 *> Int32.
-numbers_nested_pair = (1, 2, 3).
+numbers_nested_pair : Int32 *> Int32 *> Int32;
+numbers_nested_pair = (1, 2, 3);
 
-third_number : Int32.
-third_number = let (a, b, c) = numbers_nested_pair; c.
+third_number : Int32;
+third_number = let (a, b, c) = numbers_nested_pair; c;
 
-start : Int32.
-start = if (<i 5 10) 20 30.
+start : Int32;
+start = if (<i 5 10) 20 30;

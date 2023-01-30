@@ -124,7 +124,7 @@ parseLabel = do
 parseBranch :: Parse (String, Term)
 parseBranch = do
   label <- single ':' *> parseIdentifier
-  body <- parseSymbol "=" *> parseTerm <* parseSymbol "."
+  body <- parseSymbol "=" *> parseTerm <* parseSymbol ";"
   return (label, body)
 
 parseMatch :: Parse Term
@@ -320,13 +320,13 @@ parseEntry = do
     parseDeclaration = do
       sourcePos <- getSourcePos
       identifier <- parseIdentifier <* parseSymbol ":"
-      declaration <- parseTerm <* parseSymbol "."
+      declaration <- parseTerm <* parseSymbol ";"
       return (Declaration sourcePos identifier declaration)
 
     parseDefinition = do
       sourcePos <- getSourcePos
       identifier <- parseIdentifier <* parseSymbol "="
-      definition <- parseTerm <* parseSymbol "."
+      definition <- parseTerm <* parseSymbol ";"
       return (Definition sourcePos identifier definition)
 
   try parseDeclaration <|> parseDefinition
