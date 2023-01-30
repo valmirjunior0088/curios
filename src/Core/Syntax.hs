@@ -18,7 +18,7 @@ module Core.Syntax
 
 import Error (Origin)
 import Data.Int (Int32)
-import Control.Monad.Reader (Reader, runReader, asks, local)
+import Control.Monad.Reader (Reader, runReader, ask, local)
 
 data Variable =
   Global String |
@@ -121,7 +121,7 @@ class Walk a where
 
 with :: Walk a => (Int -> Origin -> Variable -> Term) -> a -> a
 with action subject = runReader (walk go subject) 0 where
-  go origin variable = asks action <*> pure origin <*> pure variable
+  go origin variable = do depth <- ask; return (action depth origin variable)
 
 instance Walk Term where
   walk action = \case
