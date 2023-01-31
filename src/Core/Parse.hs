@@ -186,10 +186,10 @@ parseFlt32BinOp :: Parse Term
 parseFlt32BinOp = do
   origin <- parseOrigin
 
-  op <- Add <$ parseSymbol "+i"
-    <|> Sub <$ parseSymbol "-i"
-    <|> Mul <$ parseSymbol "*i"
-    <|> Div <$ parseSymbol "/i"
+  op <- Add <$ parseSymbol "+f"
+    <|> Sub <$ parseSymbol "-f"
+    <|> Mul <$ parseSymbol "*f"
+    <|> Div <$ parseSymbol "/f"
 
   Flt32BinOp origin op <$> parseClosed <*> parseClosed
 
@@ -197,12 +197,12 @@ parseFlt32CompOp :: Parse Term
 parseFlt32CompOp = do
   origin <- parseOrigin
 
-  op <- Eq <$ parseSymbol "==i"
-    <|> Ne <$ parseSymbol "/=i"
-    <|> try (Lt <$ parseSymbol "<i")
-    <|> Le <$ parseSymbol "<=i"
-    <|> try (Gt <$ parseSymbol ">i")
-    <|> Ge <$ parseSymbol ">=i"
+  op <- Eq <$ parseSymbol "==f"
+    <|> Ne <$ parseSymbol "/=f"
+    <|> try (Lt <$ parseSymbol "<f")
+    <|> Le <$ parseSymbol "<=f"
+    <|> try (Gt <$ parseSymbol ">f")
+    <|> Ge <$ parseSymbol ">=f"
 
   Flt32CompOp origin op <$> parseClosed <*> parseClosed
 
