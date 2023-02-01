@@ -22,7 +22,7 @@ import Util ((!!!), unique, (<==>), (.&&.), both)
 import Error (Origin (..), Error (..))
 import Data.Functor ((<&>))
 import Data.Bits (Bits (..))
-import Control.Monad (unless)
+import Control.Monad (when, unless)
 import Control.Monad.State (MonadState (..), StateT, evalStateT)
 import Control.Monad.Except (MonadError (..), Except, runExcept)
 import GHC.Generics (Generic)
@@ -49,19 +49,6 @@ newtype Check a =
 
 runCheck :: Check a -> Bindings -> Either Error a
 runCheck (Check action) globals = runExcept (evalStateT action $ emptyState globals)
-
-region :: Check a -> Check a
-region action = do
-  locals <- use (the @"locals")
-  result <- action
-  (the @"locals") .= locals
-  return result
-
-fresh :: Check String
-fresh = do
-  seed <- use (the @"seed")
-  (the @"seed") .= succ seed
-  return (show seed)
 
 reduce :: Term -> Check Term
 reduce = \case
@@ -145,6 +132,12 @@ reduce = \case
     _ -> return (Flt32CompOp origin op left right)
 
   term -> return term
+
+fresh :: Check String
+fresh = do
+  seed <- use (the @"seed")
+  (the @"seed") .= succ seed
+  return (show seed)
 
 equals :: [(Term, Term)] -> Term -> Term -> Check Bool
 equals history one other = do
@@ -235,14 +228,33 @@ equals history one other = do
 equal :: Term -> Term -> Check Bool
 equal = equals []
 
+region :: Check a -> Check a
+region action = do
+  locals <- use (the @"locals")
+  result <- action
+  (the @"locals") .= locals
+  return result
+
 bind :: Type -> Check String
 bind tipe = do
   name <- fresh
+
+  locals <- use (the @"locals")
+
+  when (Bindings.declared name locals)
+    (error "tried to bind fresh local variable that was already declared")
+
   (the @"locals") %= Bindings.declare name tipe
+
   return name
 
 constrain :: String -> Term -> Check ()
 constrain name term = do
+  locals <- use (the @"locals")
+
+  unless (Bindings.declared name locals)
+    (error "tried to constrain local variable that was undeclared")
+
   (the @"locals") %= Bindings.define name term
 
 unknownGlobal :: Origin -> String -> Check a
