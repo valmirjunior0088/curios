@@ -211,11 +211,11 @@ parseName = Variable <$> parseOrigin <*> (Global <$> parseIdentifier)
 
 parseClosed :: Parse Term
 parseClosed = try parseParens
-  <|> try parseInt32
-  <|> try parseFlt32
   <|> try parsePair
   <|> try parseLabelType
   <|> try parseLabel
+  <|> try parseInt32
+  <|> try parseFlt32
   <|> try parseMatch
   <|> try parseType
   <|> try parseInt32Type
@@ -262,8 +262,8 @@ buildNestedSplits origin names scrutinee body = case names of
 
   name : rest -> Split origin scrutinee scope where
     scrutineeName = intercalate ", " rest
-    scrutineeVariable = Variable Machine (LocalFree scrutineeName)
-    term = buildNestedSplits origin rest scrutineeVariable body
+    scrutineeTerm = Variable Machine (LocalFree scrutineeName)
+    term = buildNestedSplits origin rest scrutineeTerm body
     scope = capture name (abstract scrutineeName term)
 
 parseSplit :: Parse Term
