@@ -64,7 +64,7 @@ parseSymbol :: String -> Parse String
 parseSymbol = symbol parseSpace
 
 parseIdentifier :: Parse String
-parseIdentifier = parseLexeme (some $ try $ oneOf validCharacters) where
+parseIdentifier = parseLexeme (some $ oneOf validCharacters) where
   validCharacters = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['_']
 
 parseParens :: Parse Term
@@ -144,10 +144,10 @@ parseFlt32Type :: Parse Term
 parseFlt32Type = Flt32Type <$> parseOrigin <* parseSymbol "Flt32"
 
 parseInt32If :: Parse Term
-parseInt32If = Int32If <$> parseOrigin
-  <*> (parseSymbol "if " *> parseClosed)
-  <*> parseClosed
-  <*> parseClosed
+parseInt32If = do
+  origin <- parseOrigin
+  scrutinee <- parseSymbol "if " *> parseClosed
+  Int32If origin scrutinee <$> parseClosed <*> parseClosed
 
 parseInt32BinOp :: Parse Term
 parseInt32BinOp = do
