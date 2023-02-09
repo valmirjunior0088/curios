@@ -19,13 +19,13 @@ cons = A => a => rest => (:cons, a, rest);
 
 fold : (A: Type) -> (B: Type) -> (B -> A -> B) -> B -> List A -> B;
 fold = A => B => action => initial => list =>
-  let (label, list) = list;
+  let (ll, l_) = list;
 
-  match label {
+  match ll {
     :null = initial;
 
     :cons =
-      let (value, rest) = list;
+      let (value, rest) = l_;
       fold A B action (action initial value) rest;
   };
 
@@ -42,13 +42,31 @@ zero = (:zero, unit);
 succ : Nat -> Nat;
 succ = value => (:succ, value);
 
-add : Nat -> Nat -> Nat;
-add = one => other =>
-  let (label, one) = one;
+from : Nat -> List Nat;
+from = n =>
+  let (nl, n_) = n;
 
-  match label {
-    :zero = other;
-    :succ = succ (add one other);
+  match nl {
+    :zero = null Nat;
+    :succ = cons Nat (succ n_) (from n_);
+  };
+
+add : Nat -> Nat -> Nat;
+add = a => b =>
+  let (al, a_) = a;
+
+  match al {
+    :zero = b;
+    :succ = succ (add a_ b);
+  };
+
+mul : Nat -> Nat -> Nat;
+mul = a => b =>
+  let (al, a_) = a;
+
+  match al {
+    :zero = zero;
+    :succ = add b (mul a_ b);
   };
 
 one : Nat;
@@ -60,11 +78,26 @@ two = succ one;
 three : Nat;
 three = succ two;
 
-nat_list : List Nat;
-nat_list = cons Nat one (cons Nat two (cons Nat three (null Nat)));
+four : Nat;
+four = succ three;
 
-folded_nat_list : Nat;
-folded_nat_list = fold Nat Nat add zero nat_list;
+five : Nat;
+five = succ four;
+
+ten : Nat;
+ten = mul five two;
+
+nine : Nat;
+nine = mul three three;
+
+eighteen : Nat;
+eighteen = add nine nine;
+
+eighty_one : Nat;
+eighty_one = mul nine nine;
+
+six_thousand : Nat;
+six_thousand = mul eighty_one eighty_one;
 
 to_int32 : Nat -> Int32;
 to_int32 = value =>
@@ -75,11 +108,5 @@ to_int32 = value =>
     :succ = +i 1 (to_int32 value);
   };
 
-numbers_nested_pair : Int32 * Int32 * Int32;
-numbers_nested_pair = (1, 2, 3);
-
-third_number : Int32;
-third_number = let (a, b, c) = numbers_nested_pair; c;
-
 start : Int32;
-start = if (<i 5 10) 20 30;
+start = to_int32 (mul eighteen (mul eighteen eighteen));

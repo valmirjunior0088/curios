@@ -1,5 +1,13 @@
 .SILENT:
 
+build/walloc.o: walloc.c
+	clang walloc.c \
+		--output=build/walloc.o \
+		--target=wasm32 \
+		--no-standard-libraries \
+		--compile \
+		--optimize=3
+
 build/memory.o: memory.c
 	clang memory.c \
 		--output=build/memory.o \
@@ -19,10 +27,12 @@ build/object.o: object.c
 build/program.o: program.crs
 	stack run curios-compiler program.crs build/program.o
 
-build/program.wasm: build/memory.o build/object.o build/program.o
-	wasm-ld build/memory.o build/object.o build/program.o \
+build/program.wasm: build/walloc.o build/memory.o build/object.o build/program.o
+	wasm-ld build/walloc.o build/memory.o build/object.o build/program.o \
 		-o build/program.wasm \
-		-O 3
+		-O 3 \
+		--export=allocations \
+		--export=deallocations
 
 .PHONY: clean interpret serve
 

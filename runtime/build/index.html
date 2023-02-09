@@ -3,7 +3,24 @@
 <head>
     <script type="module">
         let { instance } = await WebAssembly.instantiateStreaming(fetch("program.wasm"));
-        document.body.innerHTML += instance.exports._start();
+
+        const start = Date.now();
+        const result = instance.exports._start();
+        const end = Date.now();
+
+        document.body.innerHTML += result + "<hr/>";
+
+        const time = end - start;
+        document.body.innerHTML += "<b>Time:</b> " + time + " ms<br/>";
+
+        const peakMemory = instance.exports.memory.buffer.byteLength;
+        document.body.innerHTML += "<b>Peak memory:</b> " + peakMemory + " bytes<br/>";
+
+        const allocations = instance.exports.allocations();
+        document.body.innerHTML += "<b>Allocations:</b> " + allocations + "<br/>";
+
+        const deallocations = instance.exports.deallocations();
+        document.body.innerHTML += "<b>Deallocations:</b> " + deallocations + "<br/>";
     </script>
 </head>
 

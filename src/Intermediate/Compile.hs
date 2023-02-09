@@ -500,6 +500,10 @@ compile Program { closures, blocks } = runConstruct $ do
   declareFunc "_start" [] [i32]
   startCode
   pushCall "_block_start"
+  pushLocal "object" i32
+  pushLocalTee "object"
   pushCall "trunk"
   pushI32Load MemArg { alignment = 2, offset = 0 }
+  pushLocalGet "object"
+  pushCall "leave"
   endCode
