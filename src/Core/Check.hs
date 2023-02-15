@@ -4,7 +4,8 @@ module Core.Check
   where
 
 import Core.Syntax
-  ( Variable (..)
+  ( wrap
+  , unwrap
   , BoolOp (..)
   , BinOp (..)
   , CompOp (..)
@@ -52,21 +53,19 @@ runCheck (Check action) globals = runExcept (evalStateT action $ emptyState glob
 
 reduce :: Term -> Check Term
 reduce = \case
-  Variable origin (Global name) -> do
+  Global origin name -> do
     definition <- Bindings.definition name <$> use (the @"globals")
 
     case definition of
       Just term -> reduce term
-      _ -> return (Variable origin $ Global name)
+      _ -> return (Global origin name)
 
-  Variable origin (LocalFree name) -> do
-    definition <- Bindings.definition name <$> use (the @"locals")
+  Local origin variable -> do
+    definition <- Bindings.definition (unwrap variable) <$> use (the @"locals")
 
     case definition of
       Just term -> reduce term
-      _ -> return (Variable origin $ LocalFree name)
-
-  Variable _ _ -> error "bound variable -- should not happen"
+      _ -> return (Local origin variable)
 
   Apply origin function argument -> reduce function >>= \case
     Function _ body -> reduce (instantiate argument body)
@@ -313,21 +312,19 @@ ifExpressionsDontHaveAnInferableType origin = throwError Error
 
 infers :: Term -> Check Type
 infers = \case
-  Variable origin (Global name) -> do
+  Global origin name -> do
     declaration <- Bindings.declaration name <$> use (the @"globals")
 
     case declaration of
       Nothing -> unknownGlobal origin name
       Just tipe -> return tipe
 
-  Variable _ (LocalFree variable) -> do
-    declaration <- Bindings.declaration variable <$> use (the @"locals")
+  Local _ variable -> do
+    declaration <- Bindings.declaration (unwrap variable) <$> use (the @"locals")
 
     case declaration of
       Nothing -> error "unknown local variable -- should not happen"
       Just tipe -> return tipe
-
-  Variable _ _ -> error "bound variable -- should not happen"
 
   Type _ -> return (Type Machine)
 
@@ -479,9 +476,9 @@ checks tipe = \case
       right <- bind (open left scope)
 
       reduce scrutinee >>= \case
-        Variable _ (LocalFree variable) -> constrain variable pair where
-          leftComponent = Variable Machine (LocalFree left)
-          rightComponent = Variable Machine (LocalFree right)
+        Local _ variable -> constrain (unwrap variable) pair where
+          leftComponent = Local Machine (wrap left)
+          rightComponent = Local Machine (wrap right)
           pair = Pair Machine leftComponent rightComponent
 
         _ -> return ()
@@ -508,8 +505,8 @@ checks tipe = \case
           (matchExpressionBranchLabelsMismatch origin)
 
         go <- reduce scrutinee <&> \case
-          Variable _ (LocalFree variable) -> \(label, body) -> region $ do
-            constrain variable (Label Machine label)
+          Local _ variable -> \(label, body) -> region $ do
+            constrain (unwrap variable) (Label Machine label)
             checks tipe body
 
           _ -> \(_, body) -> checks tipe body

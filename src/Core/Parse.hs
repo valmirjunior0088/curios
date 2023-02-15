@@ -4,14 +4,14 @@ module Core.Parse
   where
 
 import Core.Syntax
-  ( Variable (..)
+  ( wrap
   , unbound
+  , abstract
+  , commit
   , BinOp (..)
   , BoolOp (..)
   , CompOp (..)
   , Term (..)
-  , abstract
-  , capture
   )
 
 import Text.Megaparsec
@@ -83,12 +83,12 @@ parseFlt32 = parseLexeme (positive <|> negative) where
   positive = Flt32 <$> parseOrigin <*> (optional (single '+') *> float)
   negative = Flt32 <$> parseOrigin <*> (single '-' *> (negate <$> float))
 
-buildNestedPairs :: Origin -> [Term] -> Term
-buildNestedPairs origin = \case
+pairs :: Origin -> [Term] -> Term
+pairs origin = \case
   [] -> error "can't build a pair with 0 entries"
   [_] -> error "can't build a pair with 1 entry"
   [left, right] -> Pair origin left right
-  term : terms -> Pair origin term (buildNestedPairs origin terms)
+  term : terms -> Pair origin term (pairs origin terms)
 
 parsePair :: Parse Term
 parsePair = do
@@ -102,7 +102,7 @@ parsePair = do
   when (length terms < 2)
     (customFailure "Pairs need at least 2 entries")
 
-  return (buildNestedPairs origin terms)
+  return (pairs origin terms)
 
 parseLabelType :: Parse Term
 parseLabelType = do
@@ -207,7 +207,7 @@ parseFlt32CompOp = do
   Flt32CompOp origin op <$> parseClosed <*> parseClosed
 
 parseName :: Parse Term
-parseName = Variable <$> parseOrigin <*> (Global <$> parseIdentifier)
+parseName = Local <$> parseOrigin <*> (wrap <$> parseIdentifier)
 
 parseClosed :: Parse Term
 parseClosed = try parseParens
@@ -242,7 +242,7 @@ parsePairType = do
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
       input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "*"
-      scope <- capture identifier <$> parseTerm
+      scope <- abstract identifier <$> parseTerm
       return (PairType origin input scope)
 
     parseNonDependent = do
@@ -252,19 +252,19 @@ parsePairType = do
 
   try parseDependent <|> parseNonDependent
 
-buildNestedSplits :: Origin -> [String] -> Term -> Term -> Term
-buildNestedSplits origin names scrutinee body = case names of
+splits :: Origin -> [String] -> Term -> Term -> Term
+splits origin names scrutinee body = case names of
   [] -> error "can't build split expression with 0 entries"
   [_] -> error "can't build split expression with 1 entry"
 
   [left, right] -> Split origin scrutinee scope where
-    scope = capture left (capture right body)
+    scope = abstract left (abstract right body)
 
   name : rest -> Split origin scrutinee scope where
     scrutineeName = intercalate ", " rest
-    scrutineeTerm = Variable Machine (LocalFree scrutineeName)
-    term = buildNestedSplits origin rest scrutineeTerm body
-    scope = capture name (abstract scrutineeName term)
+    scrutineeTerm = Local Machine (wrap scrutineeName)
+    term = splits origin rest scrutineeTerm body
+    scope = abstract name (abstract scrutineeName term)
 
 parseSplit :: Parse Term
 parseSplit = do
@@ -280,7 +280,7 @@ parseSplit = do
 
   scrutinee <- parseSymbol "=" *> parseTerm <* parseSymbol ";"
 
-  buildNestedSplits origin names scrutinee <$> parseTerm
+  splits origin names scrutinee <$> parseTerm
 
 parseFunctionType :: Parse Term
 parseFunctionType = do
@@ -290,7 +290,7 @@ parseFunctionType = do
     parseDependent = do
       identifier <- parseSymbol "(" *> parseIdentifier
       input <- parseSymbol ":" *> parseTerm <* parseSymbol ")" <* parseSymbol "->"
-      scope <- capture identifier <$> parseTerm
+      scope <- abstract identifier <$> parseTerm
       return (FunctionType origin input scope)
 
     parseNonDependent = do
@@ -304,7 +304,7 @@ parseFunction :: Parse Term
 parseFunction = do
   origin <- parseOrigin
   identifier <- parseIdentifier <* parseSymbol "=>"
-  body <- capture identifier <$> parseTerm
+  body <- abstract identifier <$> parseTerm
   return (Function origin body)
 
 parseTerm :: Parse Term
@@ -321,13 +321,13 @@ parseEntry = do
       sourcePos <- getSourcePos
       identifier <- parseIdentifier <* parseSymbol ":"
       declaration <- parseTerm <* parseSymbol ";"
-      return (Declaration sourcePos identifier declaration)
+      return (Declaration sourcePos identifier $ commit declaration)
 
     parseDefinition = do
       sourcePos <- getSourcePos
       identifier <- parseIdentifier <* parseSymbol "="
       definition <- parseTerm <* parseSymbol ";"
-      return (Definition sourcePos identifier definition)
+      return (Definition sourcePos identifier $ commit definition)
 
   try parseDeclaration <|> parseDefinition
 

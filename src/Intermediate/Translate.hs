@@ -3,7 +3,7 @@ module Intermediate.Translate
   )
   where
 
-import Core.Syntax (Variable (..), Scope, Term, open, free)
+import Core.Syntax (Variable, unwrap, Scope, Term, open, frees)
 import qualified Core.Syntax as Core
 
 import Core.Bindings (Bindings)
@@ -72,8 +72,8 @@ withDictionary dictionary = local (const dictionary)
 pushDictionary :: [(String, Atom)] -> Translate a -> Translate a
 pushDictionary dictionary = local (++ dictionary)
 
-translateLocal :: String -> Translate Atom
-translateLocal name = asks (name !!!)
+translateName :: String -> Translate Atom
+translateName name = asks (name !!!)
 
 pushClosure :: String -> [String] -> [String] -> Sequence -> Translate ()
 pushClosure name environment parameters body =
@@ -127,11 +127,11 @@ freshBlock = do
 translateNull :: Translate Sequence
 translateNull = return (Tail $ Pure Null)
 
-translateVariable :: Variable -> Translate Sequence
-translateVariable = \case
-  Global name -> return (Tail $ BlockCall name [])
-  LocalFree name -> Tail . Pure <$> translateLocal name
-  _ -> error "bound variable -- should not happen"
+translateGlobal :: String -> Translate Sequence
+translateGlobal name = return (Tail $ BlockCall name [])
+
+translateLocal :: Variable -> Translate Sequence
+translateLocal variable = Tail . Pure <$> translateName (unwrap variable)
 
 translateFunction :: Scope Term -> Translate Sequence
 translateFunction scope = do
@@ -140,7 +140,7 @@ translateFunction scope = do
 
   let
     output = open parameter scope
-    variables = filter (/= parameter) (nub $ free output)
+    variables = filter (/= parameter) (nub $ frees output)
 
     environmentals = [(variable, Environmental variable) | variable <- variables]
     locals = [(parameter, Local parameter)]
@@ -149,7 +149,7 @@ translateFunction scope = do
   body <- withDictionary dictionary (translateTerm output)
   pushClosure closure variables [parameter] body
 
-  environment <- mapM translateLocal variables
+  environment <- mapM translateName variables
   return (Tail $ ClosureAlloc closure environment)
 
 translateApply :: Term -> Term -> Translate Sequence
@@ -208,7 +208,7 @@ translateMatch scrutinee branches = do
 
   branchesBlockCalls <- forM branches $ \(name, branch) -> do
     let
-      branchVariables = nub (free branch)
+      branchVariables = nub (frees branch)
       branchDictionary = [(variable, Local variable) | variable <- branchVariables]
 
     branchBlock <- freshBlock
@@ -216,7 +216,7 @@ translateMatch scrutinee branches = do
     pushBlock branchBlock branchVariables branchSequence
 
     branchLabel <- getLabel name
-    branchArguments <- mapM translateLocal branchVariables
+    branchArguments <- mapM translateName branchVariables
     return (branchLabel, branchBlock, branchArguments)
 
   let
@@ -234,21 +234,21 @@ translateInt32If scrutinee truthy falsy = do
   scrutineeName <- freshName
 
   let
-    truthyVariables = nub (free truthy)
+    truthyVariables = nub (frees truthy)
     truthyDictionary = [(variable, Local variable) | variable <- truthyVariables]
 
   truthyBlock <- freshBlock
   truthySequence <- withDictionary truthyDictionary (translateTerm truthy)
-  truthyArguments <- mapM translateLocal truthyVariables
+  truthyArguments <- mapM translateName truthyVariables
   pushBlock truthyBlock truthyVariables truthySequence
 
   let
-    falsyVariables = nub (free falsy)
+    falsyVariables = nub (frees falsy)
     falsyDictionary = [(variable, Local variable) | variable <- falsyVariables]
 
   falsyBlock <- freshBlock
   falsySequence <- withDictionary falsyDictionary (translateTerm falsy)
-  falsyArguments <- mapM translateLocal falsyVariables
+  falsyArguments <- mapM translateName falsyVariables
   pushBlock falsyBlock falsyVariables falsySequence
 
   let
@@ -334,7 +334,8 @@ translateFlt32CompOp op left right = do
 
 translateTerm :: Term -> Translate Sequence
 translateTerm = \case
-  Core.Variable _ variable -> translateVariable variable
+  Core.Global _ variable -> translateGlobal variable
+  Core.Local _ variable -> translateLocal variable
   Core.Type {} -> translateNull
   Core.FunctionType {} -> translateNull
   Core.Function _ scope -> translateFunction scope

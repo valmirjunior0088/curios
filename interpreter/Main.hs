@@ -5,7 +5,7 @@ import Util ((!!!), both)
 import Error (Origin (..), showError)
 import Core.Parse (parse)
 import Core.Program (check)
-import Core.Syntax (Variable (..), BinOp (..), BoolOp (..), CompOp (..), Term (..), instantiate)
+import Core.Syntax (BinOp (..), BoolOp (..), CompOp (..), Term (..), instantiate)
 import Control.Monad.Reader (MonadReader (..), Reader, runReader, asks)
 import Data.Bits (Bits (..))
 import System.Exit (die)
@@ -20,11 +20,11 @@ runEvaluate (Evaluate action) = runReader action
 
 evaluateTerm :: Term -> Evaluate Term
 evaluateTerm = \case
-  Variable _ (Global name) -> asks (Bindings.definition name) >>= \case
+  Global _ name -> asks (Bindings.definition name) >>= \case
     Nothing -> error "evaluation: unknown global"
     Just term -> evaluateTerm term
 
-  Variable _ variable -> return (Variable Machine variable)
+  Local _ variable -> return (Local Machine variable)
   Type _ -> return (Type Machine)
   FunctionType _ input body -> FunctionType Machine <$> evaluateTerm input <*> pure body
   Function _ body -> return (Function Machine body)
