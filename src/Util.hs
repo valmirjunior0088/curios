@@ -5,6 +5,9 @@ module Util
   , (<==>)
   , (.&&.)
   , both
+  , decompose
+  , add
+  , sub
   )
   where
 
@@ -40,3 +43,14 @@ both (left, right) = do
   left' <- left
   right' <- right
   return (left', right')
+
+decompose :: [a] -> [(a, [a])]
+decompose = \case
+  [] -> []
+  x : xs -> (x, xs) : decompose xs
+
+add :: Num a => a -> a -> a
+add = (+)
+
+sub :: Num a => a -> a -> a
+sub = (-)

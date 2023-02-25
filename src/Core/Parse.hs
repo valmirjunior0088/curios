@@ -43,7 +43,7 @@ import Text.Megaparsec.Char.Lexer
   )
 
 import Error (Origin (..), Error, fromParseErrorBundle)
-import Core.Program (Entry (..), Program (..))
+import Core.Program (Item (..), Program (..))
 import Text.Megaparsec.Error (ParseErrorBundle)
 import Text.Megaparsec.Char (space1)
 import Control.Monad (when)
@@ -314,8 +314,8 @@ parseTerm = try parseFunctionType
   <|> try parseSplit
   <|> parseApply
 
-parseEntry :: Parse Entry
-parseEntry = do
+parseItem :: Parse Item
+parseItem = do
   let
     parseDeclaration = do
       sourcePos <- getSourcePos
@@ -332,7 +332,7 @@ parseEntry = do
   try parseDeclaration <|> parseDefinition
 
 parseProgram :: Parse Program
-parseProgram = Program <$> someTill parseEntry eof
+parseProgram = Program <$> someTill parseItem eof
 
 parse :: String -> Either Error Program
 parse source = case runParse parseProgram source of

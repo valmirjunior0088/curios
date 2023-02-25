@@ -1,12 +1,11 @@
 module Core.Bindings
-  ( Bindings
+  ( Bindings (..)
   , empty
   , declare
   , declaration
   , declared
   , define
   , definition
-  , definitions
   )
   where
 
@@ -41,6 +40,3 @@ define name term = (the @"definitions") <>~ [(name, term)]
 
 definition :: String -> Bindings -> Maybe Term
 definition name = lookup name . view (the @"definitions")
-
-definitions :: Bindings -> [(String, Term)]
-definitions = view (the @"definitions")

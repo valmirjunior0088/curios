@@ -1,5 +1,5 @@
 module Core.Program
-  ( Entry (..)
+  ( Item (..)
   , Program (..)
   , check
   )
@@ -18,13 +18,13 @@ import Control.Monad (when)
 import Data.Foldable (foldlM)
 import Text.Megaparsec (SourcePos)
 
-data Entry =
+data Item =
   Declaration SourcePos String Type |
   Definition SourcePos String Term
   deriving (Show)
 
 newtype Program =
-  Program [Entry]
+  Program [Item]
   deriving (Show)
 
 declaredNameBeingDeclaredAgain :: SourcePos -> String -> Either Error a
@@ -56,7 +56,7 @@ define sourcePos name term globals = do
   Check.check globals tipe term
   Right (Bindings.define name term globals)
 
-process :: Bindings -> Entry -> Either Error Bindings
+process :: Bindings -> Item -> Either Error Bindings
 process globals = \case
   Declaration sourcePos name tipe -> declare sourcePos name tipe globals
   Definition sourcePos name term -> define sourcePos name term globals
