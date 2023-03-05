@@ -11,15 +11,15 @@ import WebAssembly.Syntax.Instructions (MemArg (..))
 import WebAssembly.Syntax.Types (ValType (..), i32, MemType (..), Limits (..))
 
 import Inter.Syntax
-  ( unwrap
+  ( Atom
+  , wrap
+  , unwrap
   , Scope
   , instantiate
   , count
-  , free
   , BinOp (..)
   , BoolOp (..)
   , CompOp (..)
-  , Atom (..)
   , Target (..)
   , Expression (..)
   , Sequence (..)
@@ -155,9 +155,9 @@ pushVariableGet name = do
     Nothing -> pushLocalGet name
 
 pushAtomGet :: Atom -> Emit ()
-pushAtomGet = \case
-  Null -> pushI32Const 0
-  Variable variable -> pushVariableGet (unwrap variable)
+pushAtomGet atom = case unwrap atom of
+  Nothing -> pushI32Const 0
+  Just variable -> pushVariableGet variable
 
 pushPure :: Atom -> Emit String
 pushPure atom = do
@@ -312,8 +312,8 @@ pushInt32Match atom branches = do
   forM_ [target | (_, target) <- branches] $ \target -> do
     popBlock
 
-    forM_ (concatMap consumes $ target ^. the @"atoms") $ \variable -> do
-      pushVariableGet variable
+    forM_ (target ^. the @"atoms") $ \variable -> do
+      pushAtomGet variable
       pushCall "enter"
 
     mapM_ pushAtomGet (target ^. the @"atoms")
@@ -510,7 +510,7 @@ pushSequence Sequence { expression, continuation } = do
   
   name <- pushExpression expression
 
-  case instantiate [free name] <$> continuation of
+  case instantiate [wrap name] <$> continuation of
     Just sequence -> do
       when (name `notElem` consumes sequence) $ do
         pushCleanup name
@@ -536,7 +536,7 @@ prepareBlock :: (String, Scope Sequence) -> Compile ([String], Sequence)
 prepareBlock (name, scope) = do
   let
     args = ["arg_" ++ show arg | arg <- [0 .. pred $ count scope]]
-    body = instantiate (map free args) scope
+    body = instantiate (map wrap args) scope
 
   declareFunc ("_block_" ++ name) [(arg, i32) | arg <- args] [i32]
 
@@ -558,10 +558,10 @@ prepareClosure :: (String, Scope (Scope Target)) -> Compile ([String], [String],
 prepareClosure (name, envScope) = do
   let
     envs = ["env_" ++ show env | env <- [0 .. pred $ count envScope]]
-    argScope = instantiate (map free envs) envScope 
+    argScope = instantiate (map wrap envs) envScope 
 
     args = ["arg_" ++ show arg | arg <- [0 .. pred $ count argScope]]
-    target = instantiate (map free args) argScope
+    target = instantiate (map wrap args) argScope
   
   declareFunc ("_closure_" ++ name) (("envs", i32) : [(arg, i32) | arg <- args]) [i32]
   

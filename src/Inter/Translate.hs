@@ -99,11 +99,11 @@ translateGlobal variable =
 translateLocal :: Core.Variable -> Translate Result
 translateLocal variable =
   let name = Core.unwrap variable
-  in return ([name], [], Inter.Pure $ Inter.free name)
+  in return ([name], [], Inter.Pure $ Inter.wrap name)
 
 translateNull :: Translate Result
 translateNull =
-  return ([], [], Inter.Pure Inter.Null)
+  return ([], [], Inter.Pure Inter.nil)
 
 translateFunction :: Core.Scope Core.Term -> Translate Result
 translateFunction body = do
@@ -118,7 +118,7 @@ translateFunction body = do
 
     abstractEnvironment = Inter.abstract environment
     abstractArgument = Inter.abstract [name]
-    target = Inter.Target { block = blockName, atoms = map Inter.free bodyFrees }
+    target = Inter.Target { block = blockName, atoms = map Inter.wrap bodyFrees }
 
   closureName <- freshClosureName
   pushClosure closureName (abstractEnvironment $ abstractArgument target)
@@ -126,7 +126,7 @@ translateFunction body = do
   let
     frees = environment
     expressions = []
-    expression = Inter.ClosureAlloc closureName (map Inter.free environment)
+    expression = Inter.ClosureAlloc closureName (map Inter.wrap environment)
 
   return (nub frees, expressions, expression)
 
@@ -144,7 +144,7 @@ translateApply function argument = do
     expressions = functionExpressions ++ [(functionName, functionExpression)]
       ++ argumentExpressions ++ [(argumentName, argumentExpression)]
 
-    expression = Inter.ClosureEnter (Inter.free functionName) [Inter.free argumentName]
+    expression = Inter.ClosureEnter (Inter.wrap functionName) [Inter.wrap argumentName]
 
   return (nub frees, expressions, expression)
 
@@ -162,7 +162,7 @@ translatePair left right = do
     expressions = leftExpressions ++ [(leftName, leftExpression)]
       ++ rightExpressions ++ [(rightName, rightExpression)]
     
-    expression = Inter.StructAlloc [Inter.free leftName, Inter.free rightName]
+    expression = Inter.StructAlloc [Inter.wrap leftName, Inter.wrap rightName]
 
   return (nub frees, expressions, expression)
 
@@ -180,8 +180,8 @@ translateSplit scrutinee body = do
 
     expressions = scrutineeExpressions
       ++ [(scrutineeName, scrutineeExpression)]
-      ++ [(leftName, Inter.StructSelect (Inter.free scrutineeName) 0)]
-      ++ [(rightName, Inter.StructSelect (Inter.free scrutineeName) 1)]
+      ++ [(leftName, Inter.StructSelect (Inter.wrap scrutineeName) 0)]
+      ++ [(rightName, Inter.StructSelect (Inter.wrap scrutineeName) 1)]
       ++ bodyExpressions
 
     expression = bodyExpression
@@ -205,14 +205,14 @@ translateMatch scrutinee branches = do
     blockName <- freshBlockName
     pushBlock blockName (Inter.abstract branchFrees $ Inter.construct branchExpressions branchExpression)
 
-    return (branchFrees, (index, Inter.Target { block = blockName, atoms = map Inter.free branchFrees }))
+    return (branchFrees, (index, Inter.Target { block = blockName, atoms = map Inter.wrap branchFrees }))
 
   let
     (branchFrees, branchTargets) = unzip translatedBranches
 
     frees = scrutineeFrees ++ concat branchFrees
     expressions = scrutineeExpressions ++ [(scrutineeName, scrutineeExpression)]
-    expression = Inter.Int32Match (Inter.free scrutineeName) branchTargets
+    expression = Inter.Int32Match (Inter.wrap scrutineeName) branchTargets
 
   return (nub frees, expressions, expression)
 
@@ -233,12 +233,12 @@ translateInt32If scrutinee truthy falsy = do
   pushBlock falsyBlockName (Inter.abstract falsyFrees $ Inter.construct falsyExpressions falsyExpression)
 
   let
-    truthyTarget = Inter.Target { block = truthyBlockName, atoms = map Inter.free truthyFrees }
-    falsyTarget = Inter.Target { block = falsyBlockName, atoms = map Inter.free falsyFrees }
+    truthyTarget = Inter.Target { block = truthyBlockName, atoms = map Inter.wrap truthyFrees }
+    falsyTarget = Inter.Target { block = falsyBlockName, atoms = map Inter.wrap falsyFrees }
 
     frees = scrutineeFrees ++ truthyFrees ++ falsyFrees
     expressions = scrutineeExpressions ++ [(scrutineeName, scrutineeExpression)]
-    expression = Inter.Int32If (Inter.free scrutineeName) truthyTarget falsyTarget
+    expression = Inter.Int32If (Inter.wrap scrutineeName) truthyTarget falsyTarget
   
   return (nub frees, expressions, expression)
 
@@ -256,7 +256,7 @@ translateInt32BinOp op left right = do
     expressions = leftExpressions ++ [(leftName, leftExpression)]
       ++ rightExpressions ++ [(rightName, rightExpression)]
 
-    expression = Inter.Int32BinOp op (Inter.free leftName) (Inter.free rightName)
+    expression = Inter.Int32BinOp op (Inter.wrap leftName) (Inter.wrap rightName)
   
   return (nub frees, expressions, expression)
 
@@ -274,7 +274,7 @@ translateInt32BoolOp op left right = do
     expressions = leftExpressions ++ [(leftName, leftExpression)]
       ++ rightExpressions ++ [(rightName, rightExpression)]
 
-    expression = Inter.Int32BoolOp op (Inter.free leftName) (Inter.free rightName)
+    expression = Inter.Int32BoolOp op (Inter.wrap leftName) (Inter.wrap rightName)
   
   return (nub frees, expressions, expression)
 
@@ -292,7 +292,7 @@ translateInt32CompOp op left right = do
     expressions = leftExpressions ++ [(leftName, leftExpression)]
       ++ rightExpressions ++ [(rightName, rightExpression)]
 
-    expression = Inter.Int32CompOp op (Inter.free leftName) (Inter.free rightName)
+    expression = Inter.Int32CompOp op (Inter.wrap leftName) (Inter.wrap rightName)
   
   return (nub frees, expressions, expression)
 
@@ -313,7 +313,7 @@ translateFlt32BinOp op left right = do
     expressions = leftExpressions ++ [(leftName, leftExpression)]
       ++ rightExpressions ++ [(rightName, rightExpression)]
 
-    expression = Inter.Flt32BinOp op (Inter.free leftName) (Inter.free rightName)
+    expression = Inter.Flt32BinOp op (Inter.wrap leftName) (Inter.wrap rightName)
   
   return (nub frees, expressions, expression)
 
@@ -331,7 +331,7 @@ translateFlt32CompOp op left right = do
     expressions = leftExpressions ++ [(leftName, leftExpression)]
       ++ rightExpressions ++ [(rightName, rightExpression)]
 
-    expression = Inter.Flt32CompOp op (Inter.free leftName) (Inter.free rightName)
+    expression = Inter.Flt32CompOp op (Inter.wrap leftName) (Inter.wrap rightName)
   
   return (nub frees, expressions, expression)
 

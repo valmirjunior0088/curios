@@ -1,5 +1,6 @@
 module Inter.Syntax
-  ( Variable
+  ( Atom
+  , nil
   , wrap
   , unwrap
   , Scope
@@ -7,8 +8,6 @@ module Inter.Syntax
   , abstract
   , instantiate
   , count
-  , Atom (..)
-  , free
   , BinOp (..)
   , BoolOp (..)
   , CompOp (..)
@@ -34,13 +33,22 @@ data Variable =
   Bound Int
   deriving (Show)
 
-wrap :: String -> Variable
-wrap = Free
+data Atom =
+  Nil |
+  Variable Variable
+  deriving (Show)
 
-unwrap :: Variable -> String
+nil :: Atom
+nil = Nil
+
+wrap :: String -> Atom
+wrap = Variable . Free
+
+unwrap :: Atom -> Maybe String
 unwrap = \case
-  Free variable -> variable
-  Bound _ -> error "bound variable"
+  Nil -> Nothing
+  Variable (Free variable) -> Just variable
+  Variable (Bound _) -> error "bound variable"
 
 data Scope a = Scope Int a
 
@@ -68,14 +76,6 @@ instantiate atoms (Scope _ scope) = with scope $ \case
 
 count :: Scope a -> Int
 count (Scope quantity _) = quantity
-
-data Atom =
-  Null |
-  Variable Variable
-  deriving (Show)
-
-free :: String -> Atom
-free = Variable . Free
 
 data Target = Target
   { block :: String
@@ -115,9 +115,9 @@ class Consumes a where
 
 instance Consumes Atom where
   consumes = \case
-    Null -> []
+    Nil -> []
+    Variable (Free variable) -> [variable]
     Variable (Bound _) -> []
-    Variable (Free name) -> [name]
 
 instance Consumes Target where
   consumes Target { atoms } = concatMap consumes atoms
@@ -173,7 +173,7 @@ with subject action = runReader (walk action subject) 0
 
 instance Walk Atom where
   walk action = \case
-    Null -> return Null
+    Nil -> return Nil
     Variable variable -> action variable
 
 instance Walk Target where
