@@ -3,23 +3,26 @@ module Debug
   )
   where
 
+import Data.Ix (inRange)
+
+type Range = (Int, Int)
 type Grid = [(Int, [(Int, Char)])]
 
 decompose :: String -> Grid
 decompose = zip [1..] . map (zip [1..]) . lines
 
-resize :: [Int] -> [Int] -> Grid -> Grid
-resize rows columns grid = do
+resize :: Range -> Range -> Grid -> Grid
+resize rowRange columnRange grid = do
   let
-    keepRow (index, _) = index `elem` rows
-    keepColumn (index, _) = index `elem` columns
+    keepRow (index, _) = inRange rowRange index
+    keepColumn (index, _) = inRange columnRange index
 
   [(index, filter keepColumn column) | (index, column) <- filter keepRow grid]
 
 prepare :: Int -> Int -> Grid -> [(String, String)]
 prepare x y grid = do
   let
-    highlighter column = concat [if index == y then "┴" else "─" | (index, _) <- column]
+    highlighter column = [if index == y then '┴' else '─' | (index, _) <- column]
     highlight (index, column) = (show index, map snd column) : [("", highlighter column) | index == x]
 
   concatMap highlight grid
@@ -38,10 +41,10 @@ assemble rows = do
 framed :: Int -> Int -> Int -> Int -> String -> String
 framed height width x y source = do
   let
+    rowRange = (x - height, x + height)
+    columnRange = (y - width, y + width)
     grid = decompose source
-    rows = [x - height .. x + height]
-    columns = [y - width .. y + width]
-    resized = resize rows columns grid
+    resized = resize rowRange columnRange grid
     prepared = prepare x y resized
 
   assemble prepared
