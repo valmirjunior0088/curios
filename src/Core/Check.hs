@@ -19,10 +19,11 @@ import Core.Syntax
 import Core.Bindings (Bindings)
 import qualified Core.Bindings as Bindings
 
-import Util ((!!!), unique, (<==>), (.&&.), both)
+import Util (unique, (<==>), (.&&.), both)
 import Error (Origin (..), Error (..))
 import Data.Functor ((<&>))
 import Data.Bits (Bits (..))
+import Data.Maybe (fromMaybe)
 import Control.Monad (when, unless)
 import Control.Monad.State (MonadState (..), StateT, evalStateT)
 import Control.Monad.Except (MonadError (..), Except, runExcept)
@@ -76,7 +77,7 @@ reduce = \case
     _ -> return (Split origin scrutinee body)
 
   Match origin scrutinee branches -> reduce scrutinee >>= \case
-    Label _ label -> reduce (label !!! branches)
+    Label _ label -> reduce (fromMaybe (error "unknown label") $ lookup label branches)
     _ -> return (Match origin scrutinee branches)
 
   Int32If origin scrutinee truthy falsy -> reduce scrutinee >>= \case

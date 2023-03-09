@@ -1,6 +1,5 @@
 module Util
-  ( (!!!)
-  , unique
+  ( unique
   , subset
   , (<==>)
   , (.&&.)
@@ -10,13 +9,6 @@ module Util
   , sub
   )
   where
-
-(!!!) :: (Show a, Eq a) => a -> [(a, b)] -> b
-(!!!) target = \case
-  [] -> errorWithoutStackTrace ("(!!!): nonexistent key " ++ show target)
-  (key, value) : rest -> if target == key then value else target !!! rest
-
-infixl 1 !!!
 
 unique :: Eq a => [a] -> Bool
 unique = \case

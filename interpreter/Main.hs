@@ -1,13 +1,14 @@
 import Core.Bindings (Bindings)
 import qualified Core.Bindings as Bindings
 
-import Util ((!!!), both)
+import Util (both)
 import Error (Origin (..), showError)
 import Core.Parse (parse)
 import Core.Program (check)
 import Core.Syntax (BinOp (..), BoolOp (..), CompOp (..), Term (..), instantiate)
 import Control.Monad.Reader (MonadReader (..), Reader, runReader, asks)
 import Data.Bits (Bits (..))
+import Data.Maybe (fromMaybe)
 import System.Exit (die)
 import System.Environment (getArgs, getProgName)
 
@@ -44,7 +45,7 @@ evaluateTerm = \case
   Label _ label -> return (Label Machine label)
 
   Match _ scrutinee branches -> evaluateTerm scrutinee >>= \case
-    Label _ label -> evaluateTerm (label !!! branches)
+    Label _ label -> evaluateTerm (fromMaybe (error "unknown label") $ lookup label branches)
     _ -> Match Machine <$> evaluateTerm scrutinee <*> pure branches
 
   Int32Type _ -> return (Int32Type Machine)
