@@ -207,20 +207,20 @@ equals history one other = do
     (Int32If _ scrutinee truthy falsy, Int32If _ scrutinee' truthy' falsy') ->
       go scrutinee scrutinee' .&&. go truthy truthy' .&&. go falsy falsy'
 
-    (Int32BinOp _ _ left right, Int32BinOp _ _ left' right') ->
-      go left left' .&&. go right right'
+    (Int32BinOp _ op left right, Int32BinOp _ op' left' right') ->
+      pure (op == op') .&&. go left left' .&&. go right right'
 
-    (Int32BoolOp _ _ left right, Int32BoolOp _ _ left' right') ->
-      go left left' .&&. go right right'
+    (Int32BoolOp _ op left right, Int32BoolOp _ op' left' right') ->
+      pure (op == op') .&&. go left left' .&&. go right right'
 
-    (Int32CompOp _ _ left right, Int32CompOp _ _ left' right') ->
-      go left left' .&&. go right right'
+    (Int32CompOp _ op left right, Int32CompOp _ op' left' right') ->
+      pure (op == op') .&&. go left left' .&&. go right right'
 
-    (Flt32BinOp _ _ left right, Flt32BinOp _ _ left' right') ->
-      go left left' .&&. go right right'
+    (Flt32BinOp _ op left right, Flt32BinOp _ op' left' right') ->
+      pure (op == op') .&&. go left left' .&&. go right right'
 
-    (Flt32CompOp _ _ left right, Flt32CompOp _ _ left' right') ->
-      go left left' .&&. go right right'
+    (Flt32CompOp _ op left right, Flt32CompOp _ op' left' right') ->
+      pure (op == op') .&&. go left left' .&&. go right right'
 
     _ -> return False
 
