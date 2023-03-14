@@ -13,6 +13,7 @@ module Core.Syntax
   , Type
   , Term (..)
   , originates
+  , frees
   , commit
   )
   where
@@ -145,6 +146,32 @@ originates = \case
   Flt32 origin _ -> origin
   Flt32BinOp origin _ _ _ -> origin
   Flt32CompOp origin _ _ _ -> origin
+
+frees :: Term -> [String]
+frees = \case
+  Global _ _ -> []
+  Local _ (Free variable) -> [variable]
+  Local _ (Bound _) -> []
+  Type _ -> []
+  FunctionType _ input (Scope output) -> frees input ++ frees output
+  Function _ (Scope body) -> frees body
+  Apply _ function argument -> frees function ++ frees argument
+  PairType _ input (Scope output) -> frees input ++ frees output
+  Pair _ left right -> frees left ++ frees right
+  Split _ scrutinee (Scope (Scope body)) -> frees scrutinee ++ frees body
+  LabelType _ _ -> []
+  Label _ _ -> []
+  Match _ scrutinee branches -> frees scrutinee ++ concatMap (frees . snd) branches
+  Int32Type _ -> []
+  Int32 _ _ -> []
+  Int32If _ scrutinee truthy falsy -> frees scrutinee ++ frees truthy ++ frees falsy
+  Int32BinOp _ _ left right -> frees left ++ frees right
+  Int32BoolOp _ _ left right -> frees left ++ frees right
+  Int32CompOp _ _ left right -> frees left ++ frees right
+  Flt32Type _ -> []
+  Flt32 _ _ -> []
+  Flt32BinOp _ _ left right -> frees left ++ frees right
+  Flt32CompOp _ _ left right -> frees left ++ frees right
 
 commit :: Term -> Term
 commit term = with term $ \origin -> \case

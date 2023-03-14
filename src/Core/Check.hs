@@ -4,7 +4,8 @@ module Core.Check
   where
 
 import Core.Syntax
-  ( wrap
+  ( Variable
+  , wrap
   , unwrap
   , BoolOp (..)
   , BinOp (..)
@@ -24,47 +25,87 @@ import Error (Origin (..), Error (..))
 import Data.Functor ((<&>))
 import Data.Bits (Bits (..))
 import Data.Maybe (fromMaybe)
-import Control.Monad (when, unless)
-import Control.Monad.State (MonadState (..), StateT, evalStateT)
+import Control.Monad (unless)
+import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
 import Control.Monad.Except (MonadError (..), Except, runExcept)
 import GHC.Generics (Generic)
 import Data.Generics.Product (the)
-import Control.Lens (use, (.=), (%=))
+import Control.Lens (view, (.~))
 
 data CheckState = CheckState
-  { seed :: Integer
-  , globals :: Bindings
+  { globals :: Bindings
   , locals :: Bindings
+  , seed :: Int
   }
   deriving (Show, Generic)
 
 emptyState :: Bindings -> CheckState
 emptyState globals = CheckState
-  { seed = 0
-  , globals = globals
+  { globals = globals
   , locals = Bindings.empty
+  , seed = 0
   }
 
 newtype Check a =
-  Check (StateT CheckState (Except Error) a)
-  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError Error)
+  Check (ReaderT CheckState (Except Error) a)
+  deriving (Functor, Applicative, Monad, MonadReader CheckState, MonadError Error)
 
 runCheck :: Check a -> Bindings -> Either Error a
-runCheck (Check action) globals = runExcept (evalStateT action $ emptyState globals)
+runCheck (Check action) globals = runExcept (runReaderT action $ emptyState globals)
+
+declared :: String -> Check (Maybe Type)
+declared name = Bindings.declaration name <$> view (the @"globals")
+
+defined :: String -> Check (Maybe Term)
+defined name = Bindings.definition name <$> view (the @"globals")
+
+fresh :: (String -> Check b) -> Check b
+fresh action = do
+  seed <- view (the @"seed")
+
+  let
+    name = show seed
+    updateSeed = (the @"seed") .~ succ seed
+
+  local updateSeed (action name)
+
+bind :: Type -> (String -> Check a) -> Check a
+bind tipe action = do
+  locals <- view (the @"locals")
+  seed <- view (the @"seed")
+
+  let
+    name = show seed
+    updateLocals = (the @"locals") .~ Bindings.declare name tipe locals
+    updateSeed = (the @"seed") .~ succ seed
+  
+  local (updateLocals . updateSeed) (action name)
+
+bound :: Variable -> Check (Maybe Type)
+bound variable = Bindings.declaration (unwrap variable) <$> view (the @"locals")
+
+constrain :: Variable -> Term -> Check a -> Check a
+constrain variable term action = do
+  locals <- view (the @"locals")
+
+  let
+    name = unwrap variable
+    updateLocals = (the @"locals") .~ Bindings.define name term locals
+
+  local updateLocals action
+
+constrained :: Variable -> Check (Maybe Term)
+constrained variable = Bindings.definition (unwrap variable) <$> view (the @"locals")
 
 reduce :: Term -> Check Term
 reduce = \case
-  Global origin name -> do
-    definition <- Bindings.definition name <$> use (the @"globals")
-
-    case definition of
+  Global origin name ->
+    defined name >>= \case
       Just term -> reduce term
       _ -> return (Global origin name)
 
-  Local origin variable -> do
-    definition <- Bindings.definition (unwrap variable) <$> use (the @"locals")
-
-    case definition of
+  Local origin variable ->
+    constrained variable >>= \case
       Just term -> reduce term
       _ -> return (Local origin variable)
 
@@ -133,12 +174,6 @@ reduce = \case
 
   term -> return term
 
-fresh :: Check String
-fresh = do
-  seed <- use (the @"seed")
-  (the @"seed") .= succ seed
-  return (show seed)
-
 equals :: [(Term, Term)] -> Term -> Term -> Check Bool
 equals history one other = do
   one' <- reduce one
@@ -150,48 +185,43 @@ equals history one other = do
     go = equals ((one', other') : history)
 
   if isEqual || isRemembered then return True else case (one', other') of
-    (FunctionType _ input scope, FunctionType _ input' scope') -> do
-      name <- fresh
+    (FunctionType _ input scope, FunctionType _ input' scope') ->
+      fresh $ \name -> do
+        let
+          output = open name scope
+          output' = open name scope'
 
-      let
-        output = open name scope
-        output' = open name scope'
+        go input input' .&&. go output output'
 
-      go input input' .&&. go output output'
+    (Function _ body, Function _ body') ->
+      fresh $ \name -> do
+        let
+          output = open name body
+          output' = open name body'
 
-    (Function _ body, Function _ body') -> do
-      name <- fresh
-
-      let
-        output = open name body
-        output' = open name body'
-
-      go output output'
+        go output output'
 
     (Apply _ function argument, Apply _ function' argument') ->
       go function function' .&&. go argument argument'
 
-    (PairType _ input scope, PairType _ input' scope') -> do
-      name <- fresh
+    (PairType _ input scope, PairType _ input' scope') ->
+      fresh $ \name -> do
+        let
+          output = open name scope
+          output' = open name scope'
 
-      let
-        output = open name scope
-        output' = open name scope'
-
-      go input input' .&&. go output output'
+        go input input' .&&. go output output'
 
     (Pair _ left right, Pair _ left' right') ->
       go left left' .&&. go right right'
 
-    (Split _ scrutinee body, Split _ scrutinee' body') -> do
-      left <- fresh
-      right <- fresh
+    (Split _ scrutinee body, Split _ scrutinee' body') ->
+      fresh $ \left -> fresh $ \right -> do
+        let
+          output = open right (open left body)
+          output' = open right (open left body')
 
-      let
-        output = open right (open left body)
-        output' = open right (open left body')
-
-      go scrutinee scrutinee' .&&. go output output'
+        go scrutinee scrutinee' .&&. go output output'
 
     (Match _ scrutinee branches, Match _ scrutinee' branches') -> do
       let
@@ -227,35 +257,6 @@ equals history one other = do
 
 equal :: Term -> Term -> Check Bool
 equal = equals []
-
-region :: Check a -> Check a
-region action = do
-  locals <- use (the @"locals")
-  result <- action
-  (the @"locals") .= locals
-  return result
-
-bind :: Type -> Check String
-bind tipe = do
-  name <- fresh
-
-  locals <- use (the @"locals")
-
-  when (Bindings.declared name locals)
-    (error "tried to bind fresh local variable that was already declared")
-
-  (the @"locals") %= Bindings.declare name tipe
-
-  return name
-
-constrain :: String -> Term -> Check ()
-constrain name term = do
-  locals <- use (the @"locals")
-
-  unless (Bindings.declared name locals)
-    (error "tried to constrain local variable that was undeclared")
-
-  (the @"locals") %= Bindings.define name term
 
 unknownGlobal :: Origin -> String -> Check a
 unknownGlobal origin name = throwError Error
@@ -313,29 +314,24 @@ ifExpressionsDontHaveAnInferableType origin = throwError Error
 
 infers :: Term -> Check Type
 infers = \case
-  Global origin name -> do
-    declaration <- Bindings.declaration name <$> use (the @"globals")
-
-    case declaration of
+  Global origin name ->
+    declared name >>= \case
       Nothing -> unknownGlobal origin name
       Just tipe -> return tipe
 
   Local _ variable -> do
-    declaration <- Bindings.declaration (unwrap variable) <$> use (the @"locals")
-
-    case declaration of
+    bound variable >>= \case
       Nothing -> error "unknown local variable -- should not happen"
       Just tipe -> return tipe
 
   Type _ -> return (Type Machine)
 
-  FunctionType _ input scope -> region $ do
+  FunctionType _ input scope -> do
     checks (Type Machine) input
 
-    name <- bind input
-    checks (Type Machine) (open name scope)
-
-    return (Type Machine)
+    bind input $ \name -> do
+      checks (Type Machine) (open name scope)
+      return (Type Machine)
 
   Function origin _ -> functionsDontHaveAnInferableType origin
 
@@ -346,13 +342,12 @@ infers = \case
 
     _ -> applicationTypeMismatch origin
 
-  PairType _ input scope -> region $ do
+  PairType _ input scope -> do
     checks (Type Machine) input
 
-    name <- bind input
-    checks (Type Machine) (open name scope)
-
-    return (Type Machine)
+    bind input $ \name -> do
+      checks (Type Machine) (open name scope)
+      return (Type Machine)
 
   Pair origin _ _ -> pairsDontHaveAnInferableType origin
 
@@ -458,9 +453,8 @@ typeMismatch origin = throwError Error
 checks :: Type -> Term -> Check ()
 checks tipe = \case
   Function origin body -> reduce tipe >>= \case
-    FunctionType _ input scope -> region $ do
-      name <- bind input
-      checks (open name scope) (open name body)
+    FunctionType _ input scope ->
+      bind input $ \name -> checks (open name scope) (open name body)
 
     _ -> functionTypeMismatch origin
 
@@ -472,19 +466,16 @@ checks tipe = \case
     _ -> pairTypeMismatch origin
 
   Split origin scrutinee body -> infers scrutinee >>= reduce >>= \case
-    PairType _ input scope -> region $ do
-      left <- bind input
-      right <- bind (open left scope)
-
-      reduce scrutinee >>= \case
-        Local _ variable -> constrain (unwrap variable) pair where
-          leftComponent = Local Machine (wrap left)
-          rightComponent = Local Machine (wrap right)
-          pair = Pair Machine leftComponent rightComponent
-
-        _ -> return ()
-
-      checks tipe (open right (open left body))
+    PairType _ input scope ->
+      bind input $ \left -> bind (open left scope) $ \right ->
+        reduce scrutinee >>= \case
+          Local _ variable ->
+            constrain variable pair (checks tipe (open right (open left body))) where
+              leftComponent = Local Machine (wrap left)
+              rightComponent = Local Machine (wrap right)
+              pair = Pair Machine leftComponent rightComponent
+            
+          _ -> checks tipe (open right (open left body))
 
     _ -> splitExpressionScrutineeTypeMismatch origin
 
@@ -506,9 +497,8 @@ checks tipe = \case
           (matchExpressionBranchLabelsMismatch origin)
 
         go <- reduce scrutinee <&> \case
-          Local _ variable -> \(label, body) -> region $ do
-            constrain (unwrap variable) (Label Machine label)
-            checks tipe body
+          Local _ variable -> \(label, body) ->
+            constrain variable (Label Machine label) (checks tipe body)
 
           _ -> \(_, body) -> checks tipe body
 

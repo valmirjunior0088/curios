@@ -13,7 +13,7 @@ import Control.Monad (unless, forM)
 import Control.Monad.State (MonadState, State, execState)
 import GHC.Generics (Generic)
 import Data.Generics.Product (the)
-import Control.Lens ((^.), use, (<>=), (.=))
+import Control.Lens (view, use, (<>=), (.=))
 
 data TranslateState = TranslateState
   { program :: Inter.Program
@@ -45,15 +45,13 @@ newtype Translate a = Translate (State TranslateState a)
   deriving (Functor, Applicative, Monad, MonadState TranslateState)
 
 runTranslate :: Translate a -> Inter.Program
-runTranslate (Translate action) = execState action emptyState ^. the @"program"
+runTranslate (Translate action) = view (the @"program") (execState action emptyState) 
 
 pushBlock :: String -> Inter.Scope Inter.Sequence -> Translate ()
-pushBlock name body =
-  (the @"program" . the @"blocks") <>= [(name, body)]
+pushBlock name body = (the @"program" . the @"blocks") <>= [(name, body)]
 
 pushClosure :: String -> Inter.Scope (Inter.Scope Inter.Target) -> Translate ()
-pushClosure name target =
-  (the @"program" . the @"closures") <>= [(name, target)]
+pushClosure name target = (the @"program" . the @"closures") <>= [(name, target)]
 
 getLabel :: String -> Translate Int32
 getLabel name = do
