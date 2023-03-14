@@ -26,7 +26,12 @@ import Control.Monad.Reader (MonadReader (..), Reader, runReader, asks)
 data Variable =
   Free String |
   Bound Int
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show Variable where
+  show = \case
+    Free variable -> '@' : variable
+    Bound variable -> '#' : show variable
 
 wrap :: String -> Variable
 wrap = Free
