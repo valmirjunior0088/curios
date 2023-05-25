@@ -2,6 +2,11 @@
 name = "curios"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [dependencies]
+lalrpop-util = "0.20"
+logos = "0.13"
 
+[build-dependencies]
+lalrpop = "0.20"

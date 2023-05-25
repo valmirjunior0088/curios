@@ -1,0 +1,72 @@
+use crate::{helpers, Item, Term, Token, Unknown};
+
+grammar<'a>;
+
+extern {
+    type Location = usize;
+    type Error = Unknown;
+
+    enum Token<'a> {
+        "," => Token::Comma,
+        ":" => Token::Colon,
+        ";" => Token::Semicolon,
+        "=" => Token::Equals,
+        "*" => Token::Asterisk,
+        "(" => Token::ParenthesesLeft,
+        ")" => Token::ParenthesesRight,
+        "{" => Token::CurlyBracketLeft,
+        "}" => Token::CurlyBracketRight,
+        "->" => Token::ArrowSlim,
+        "=>" => Token::ArrowFat,
+        "Type" => Token::KeywordType,
+        "Int32" => Token::KeywordInt32,
+        "Flt32" => Token::KeywordFlt32,
+        "with" => Token::KeywordWith,
+        "do" => Token::KeywordDo,
+        "when" => Token::KeywordWhen,
+        "unreachable" => Token::KeywordUnreachable,
+        "is" => Token::KeywordIs,
+        innate => Token::Innate(<&'a str>),
+        integer => Token::Integer(<&'a str>),
+        decimal => Token::Decimal(<&'a str>),
+        rune => Token::Rune(<&'a str>),
+        name => Token::Name(<&'a str>),
+    }
+}
+
+Term: Term = {
+    "with" "(" <l: name> "," <r: name> ")" "=" <s: Term> "do" <o: Term> => Term::with(s, l, r, o),
+    "when" <Term> "unreachable" => helpers::when_unreachable(<>),
+    "when" <Term> "is" <(<rune> "=>" <Term> ";")+> => helpers::when_is(<>),
+    "(" <n: name> ":" <i: Term> ")" "->" <o: Term> => Term::function_type(i, n, o),
+    "(" <n: name> ":" <i: Term> ")" "*" <o: Term> => Term::tuple_type(i, n, o),
+    <i: Apply> "->" <o: Term> => Term::function_type_unbound(i, o),
+    <i: Apply> "*" <o: Term> => Term::tuple_type_unbound(i, o),
+    <n: name> "=>" <o: Term> => Term::function(n, o),
+    <Apply>,
+}
+
+Apply: Term = {
+    <Atom> <Atom+> => helpers::apply(<>),
+    <Atom>,
+}
+
+Atom: Term = {
+    "Type" => Term::Type,
+    "(" <Term> ")",
+    "(" <l: Term> "," <r: Term> ","? ")" => Term::tuple(l, r),
+    "{" <(<rune> ","?)*> "}" => helpers::rune_type(<>),
+    <innate> <Atom> <Atom> => helpers::innate(<>),
+    <integer> => helpers::integer(<>),
+    <decimal> => helpers::decimal(<>),
+    <rune> => helpers::rune(<>),
+    <name> => helpers::name(<>),
+}
+
+Item: Item = {
+    <name> ":" <Term> ";" => Item::declaration(<>),
+    <name> "=" <Term> ";" => Item::definition(<>),
+    <name> ":" <Term> "=" <Term> ";" => Item::composite(<>),
+}
+
+pub Module: Vec<Item> = <(Item)*>;
