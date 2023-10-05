@@ -139,19 +139,17 @@ pub mod helpers {
     pub fn when_is(scrutinee: Term, branches: Vec<(&str, Term)>) -> Term {
         let branches = branches
             .into_iter()
-            .map(|(rune, term)| (rune.strip_prefix(":").unwrap(), term));
+            .map(|(rune, term)| (rune.strip_prefix(':').unwrap(), term));
 
         Term::when(scrutinee, branches)
     }
 
     pub fn apply(function: Term, arguments: Vec<Term>) -> Term {
-        arguments
-            .into_iter()
-            .fold(function, |function, argument| Term::apply(function, argument))
+        arguments.into_iter().fold(function, Term::apply)
     }
 
     pub fn rune_type(runes: Vec<&str>) -> Term {
-        Term::rune_type(runes.into_iter().map(|rune| rune.strip_prefix(":").unwrap()))
+        Term::rune_type(runes.into_iter().map(|rune| rune.strip_prefix(':').unwrap()))
     }
 
     pub fn innate(innate: &str, left: Term, right: Term) -> Term {
@@ -201,7 +199,7 @@ pub mod helpers {
     }
 
     pub fn rune(rune: &str) -> Term {
-        Term::rune(rune.strip_prefix(":").unwrap())
+        Term::rune(rune.strip_prefix(':').unwrap())
     }
 
     pub fn name(name: &str) -> Term {
