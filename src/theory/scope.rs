@@ -1,12 +1,12 @@
-use std::{fmt, rc::Rc};
+use std::cell::RefCell;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum Variety {
     Free(String),
-    Bound(usize),
+    Bound(usize, usize),
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Variable {
     variety: Variety,
 }
@@ -18,152 +18,223 @@ impl Variable {
         }
     }
 
-    pub fn unwrap(&self) -> &str {
+    fn bound(index: usize, qualifier: usize) -> Self {
+        Self {
+            variety: Variety::Bound(index, qualifier),
+        }
+    }
+
+    pub fn name(&self) -> &str {
         match &self.variety {
             Variety::Free(name) => name,
-            Variety::Bound(_) => panic!("bound variable -- should not happen"),
-        }
-    }
-
-    fn bound(index: usize) -> Self {
-        Self {
-            variety: Variety::Bound(index),
-        }
-    }
-}
-
-impl fmt::Debug for Variable {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match &self.variety {
-            Variety::Free(name) => write!(formatter, "\"@{name}\""),
-            Variety::Bound(number) => write!(formatter, "\"#{number}\""),
+            Variety::Bound(_, _) => panic!("bound variable -- should not happen"),
         }
     }
 }
 
 impl From<String> for Variable {
     fn from(value: String) -> Self {
-        Variable::free(value)
+        Self::free(value)
     }
 }
 
 impl From<&str> for Variable {
     fn from(value: &str) -> Self {
-        Variable::free(value.to_owned())
+        Self::free(value.to_owned())
     }
 }
 
-pub trait Visit<A> {
-    fn visit(&self, a: A) -> A;
+pub trait Inject {
+    fn inject(variable: Variable) -> Self;
 }
 
-pub trait Visitable: Sized + Clone + 'static {
-    fn pure(variable: Variable) -> Self;
-    fn bind(self, visitor: &Visitor<Self>) -> Self;
-}
-
-pub struct Visitor<V> {
-    action: Rc<dyn Fn(usize, Variable) -> V + 'static>,
+pub struct Visitor<'a, A> {
     depth: usize,
+    apply: &'a dyn Fn(usize, Variable) -> A,
 }
 
-impl<V: Visitable> Visitor<V> {
-    pub fn apply(&self, variable: Variable) -> V {
-        (self.action)(self.depth, variable)
-    }
-
-    fn run(v: V, action: impl Fn(usize, Variable) -> V + 'static) -> V {
-        v.bind(&Self {
-            action: Rc::new(action),
+impl<'a, A> Visitor<'a, A> {
+    fn traverse<B: Accept<A>>(data: B, apply: impl Fn(usize, Variable) -> A) -> B {
+        data.accept(Visitor {
             depth: 0,
+            apply: &apply,
         })
     }
-}
 
-impl<V: Visitable> Visit<Box<V>> for Visitor<V> {
-    fn visit(&self, v: Box<V>) -> Box<V> {
-        v.bind(self).into()
-    }
-}
-
-impl<const N: usize, V: Visitable> Visit<Scope<N, V>> for Visitor<V> {
-    fn visit(&self, scope: Scope<N, V>) -> Scope<N, V> {
-        scope.map(|v| {
-            v.bind(&Self {
-                action: Rc::clone(&self.action),
-                depth: self.depth + N,
-            })
-        })
-    }
-}
-
-impl<K, V: Visitable> Visit<Vec<(K, V)>> for Visitor<V> {
-    fn visit(&self, vs: Vec<(K, V)>) -> Vec<(K, V)> {
-        vs.into_iter().map(|(k, v)| (k, v.bind(self))).collect()
-    }
-}
-
-#[derive(Clone)]
-pub struct Scope<const N: usize, V> {
-    v: Box<V>,
-    unbound: bool,
-}
-
-impl<const N: usize, V: Visitable> Scope<N, V> {
-    pub fn unbound(v: V) -> Self {
+    fn descend(&self) -> Self {
         Self {
-            v: Box::new(v),
-            unbound: true,
+            depth: self.depth + 1,
+            apply: self.apply,
         }
     }
 
-    pub fn bound(v: V, targets: [String; N]) -> Self {
-        let v = Visitor::run(v, move |depth, variable| {
+    pub fn apply(&self, variable: Variable) -> A {
+        (self.apply)(self.depth, variable)
+    }
+}
+
+impl<'a, A> Clone for Visitor<'a, A> {
+    fn clone(&self) -> Self {
+        Self {
+            depth: self.depth,
+            apply: self.apply,
+        }
+    }
+}
+
+impl<'a, A> Copy for Visitor<'a, A> {}
+
+pub trait Accept<A> {
+    fn accept(self, v: Visitor<'_, A>) -> Self;
+}
+
+impl<B, A: Accept<B>> Accept<B> for Box<A> {
+    fn accept(self, visitor: Visitor<'_, B>) -> Self {
+        Self::new((*self).accept(visitor))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Scope<A> {
+    density: Vec<usize>,
+    content: Box<A>,
+}
+
+impl<A: Inject + Accept<A> + Clone> Scope<A> {
+    pub fn construct(targets: impl IntoIterator<Item = impl Into<String>>, content: A) -> Self {
+        let targets = targets.into_iter().map(Into::into).collect::<Vec<_>>();
+
+        if targets.is_empty() {
+            return Self {
+                density: vec![],
+                content: Box::new(content),
+            };
+        }
+
+        let density = RefCell::new(vec![0; targets.len()]);
+
+        let content = Visitor::traverse(content, |depth, variable| {
             let name = match &variable.variety {
                 Variety::Free(name) => name,
-                _ => return V::pure(variable),
+                Variety::Bound(_, _) => return Inject::inject(variable),
             };
 
-            match targets.iter().position(|target| name == target) {
-                Some(index) => V::pure(Variable::bound(index + depth)),
-                None => V::pure(variable),
-            }
+            let qualifier = match targets.iter().position(|target| target == name) {
+                Some(qualifier) => qualifier,
+                None => return Inject::inject(variable),
+            };
+
+            density.borrow_mut()[qualifier] += 1;
+
+            Inject::inject(Variable::bound(depth, qualifier))
         });
 
         Self {
-            v: Box::new(v),
-            unbound: false,
+            density: density.into_inner(),
+            content: Box::new(content),
         }
     }
 
-    pub fn instantiate(self, vs: [V; N]) -> V {
-        if self.unbound {
-            return *self.v;
+    pub fn density(&self) -> &[usize] {
+        &self.density
+    }
+
+    pub fn eliminate(self, sources: impl IntoIterator<Item = A>) -> A {
+        if self.density.into_iter().sum::<usize>() == 0 {
+            return *self.content;
         }
 
-        Visitor::run(*self.v, move |depth, variable| {
-            let index = match variable.variety {
-                Variety::Bound(index) => index,
-                _ => return V::pure(variable),
+        let sources = sources.into_iter().collect::<Vec<_>>();
+
+        Visitor::traverse(*self.content, |depth, variable| {
+            let (index, qualifier) = match variable.variety {
+                Variety::Bound(index, qualifier) => (index, qualifier),
+                Variety::Free(_) => return Inject::inject(variable),
             };
 
-            match index >= depth {
-                true => vs[index - depth].to_owned(),
-                false => V::pure(variable),
-            }
+            let source = match depth == index {
+                true => sources.get(qualifier).unwrap(),
+                false => return Inject::inject(variable),
+            };
+
+            source.clone()
         })
     }
+}
 
-    fn map(self, f: impl Fn(V) -> V) -> Self {
+impl<B, A: Accept<B>> Accept<B> for Scope<A> {
+    fn accept(self, visitor: Visitor<'_, B>) -> Self {
         Self {
-            v: Box::new(f(*self.v)),
-            unbound: self.unbound,
+            density: self.density,
+            content: self.content.accept(visitor.descend()),
         }
     }
 }
 
-impl<const N: usize, V: fmt::Debug> fmt::Debug for Scope<N, V> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(formatter, "{{ {:?} }}", self.v)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    enum Exp {
+        Var(Variable),
+        Abs(Scope<Self>),
+        App(Box<Self>, Box<Self>),
+    }
+
+    impl Inject for Exp {
+        fn inject(variable: Variable) -> Self {
+            Self::Var(variable)
+        }
+    }
+
+    impl Accept<Self> for Exp {
+        fn accept(self, v: Visitor<'_, Self>) -> Self {
+            match self {
+                Self::Var(variable) => v.apply(variable),
+                Self::Abs(output) => Self::Abs(output.accept(v)),
+                Self::App(function, argument) => Self::App(function.accept(v), argument.accept(v)),
+            }
+        }
+    }
+
+    impl Exp {
+        fn var(variable: impl Into<Variable>) -> Self {
+            Self::Var(variable.into())
+        }
+
+        fn abs(target: impl Into<String>, output: Self) -> Self {
+            Self::Abs(Scope::construct([target], output))
+        }
+
+        fn app(function: impl Into<Box<Self>>, argument: impl Into<Box<Self>>) -> Self {
+            Self::App(function.into(), argument.into())
+        }
+
+        fn eval(self) -> Self {
+            match self {
+                Self::Var(variable) => Self::Var(variable),
+                Self::Abs(output) => Self::Abs(output),
+                Self::App(function, argument) => match function.eval() {
+                    Self::Abs(output) => output.eliminate([*argument]).eval(),
+                    function => Self::app(function, argument),
+                },
+            }
+        }
+    }
+
+    #[test]
+    fn it_works() {
+        let identity = (0..3000).fold(Exp::abs("x", Exp::var("x")), |identity, index| {
+            println!("{index} and counting");
+
+            Exp::app(Exp::abs("x", Exp::var("x")), identity)
+        });
+
+        println!("Evaluating...");
+        let result = Exp::app(identity, Exp::var("test")).eval();
+        println!("Done!");
+
+        assert_eq!(result, Exp::var("test"));
     }
 }
