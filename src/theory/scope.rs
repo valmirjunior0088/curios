@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum Variety {
     Free(String),
@@ -50,46 +48,32 @@ pub trait Inject {
 
 pub struct Visitor<'a, A> {
     depth: usize,
-    apply: &'a dyn Fn(usize, Variable) -> A,
+    visit: &'a mut dyn FnMut(usize, Variable) -> A,
 }
 
-impl<'a, A> Visitor<'a, A> {
-    fn traverse<B: Accept<A>>(data: B, apply: impl Fn(usize, Variable) -> A) -> B {
-        data.accept(Visitor {
-            depth: 0,
-            apply: &apply,
-        })
+impl<'a, A: Accept<A>> Visitor<'a, A> {
+    fn run(data: A, visit: &mut impl FnMut(usize, Variable) -> A) -> A {
+        data.accept(&mut Visitor { depth: 0, visit })
     }
 
-    fn descend(&self) -> Self {
-        Self {
+    fn descend(&mut self) -> Visitor<A> {
+        Visitor {
             depth: self.depth + 1,
-            apply: self.apply,
+            visit: self.visit,
         }
     }
 
-    pub fn apply(&self, variable: Variable) -> A {
-        (self.apply)(self.depth, variable)
+    pub fn visit(&mut self, variable: Variable) -> A {
+        (self.visit)(self.depth, variable)
     }
 }
-
-impl<'a, A> Clone for Visitor<'a, A> {
-    fn clone(&self) -> Self {
-        Self {
-            depth: self.depth,
-            apply: self.apply,
-        }
-    }
-}
-
-impl<'a, A> Copy for Visitor<'a, A> {}
 
 pub trait Accept<A> {
-    fn accept(self, v: Visitor<'_, A>) -> Self;
+    fn accept(self, visitor: &mut Visitor<A>) -> Self;
 }
 
-impl<B, A: Accept<B>> Accept<B> for Box<A> {
-    fn accept(self, visitor: Visitor<'_, B>) -> Self {
+impl<A: Accept<A>> Accept<A> for Box<A> {
+    fn accept(self, visitor: &mut Visitor<A>) -> Self {
         Self::new((*self).accept(visitor))
     }
 }
@@ -111,9 +95,9 @@ impl<A: Inject + Accept<A> + Clone> Scope<A> {
             };
         }
 
-        let density = RefCell::new(vec![0; targets.len()]);
+        let mut density = vec![0; targets.len()];
 
-        let content = Visitor::traverse(content, |depth, variable| {
+        let content = Visitor::run(content, &mut |depth, variable| {
             let name = match &variable.variety {
                 Variety::Free(name) => name,
                 Variety::Bound(_, _) => return Inject::inject(variable),
@@ -124,13 +108,13 @@ impl<A: Inject + Accept<A> + Clone> Scope<A> {
                 None => return Inject::inject(variable),
             };
 
-            density.borrow_mut()[qualifier] += 1;
+            density[qualifier] += 1;
 
             Inject::inject(Variable::bound(depth, qualifier))
         });
 
         Self {
-            density: density.into_inner(),
+            density,
             content: Box::new(content),
         }
     }
@@ -146,7 +130,7 @@ impl<A: Inject + Accept<A> + Clone> Scope<A> {
 
         let sources = sources.into_iter().collect::<Vec<_>>();
 
-        Visitor::traverse(*self.content, |depth, variable| {
+        Visitor::run(*self.content, &mut |depth, variable| {
             let (index, qualifier) = match variable.variety {
                 Variety::Bound(index, qualifier) => (index, qualifier),
                 Variety::Free(_) => return Inject::inject(variable),
@@ -162,11 +146,11 @@ impl<A: Inject + Accept<A> + Clone> Scope<A> {
     }
 }
 
-impl<B, A: Accept<B>> Accept<B> for Scope<A> {
-    fn accept(self, visitor: Visitor<'_, B>) -> Self {
+impl<A: Accept<A>> Accept<A> for Scope<A> {
+    fn accept(self, visitor: &mut Visitor<A>) -> Self {
         Self {
             density: self.density,
-            content: self.content.accept(visitor.descend()),
+            content: self.content.accept(&mut visitor.descend()),
         }
     }
 }
@@ -174,6 +158,8 @@ impl<B, A: Accept<B>> Accept<B> for Scope<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::time::Instant;
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     enum Exp {
@@ -189,9 +175,9 @@ mod tests {
     }
 
     impl Accept<Self> for Exp {
-        fn accept(self, v: Visitor<'_, Self>) -> Self {
+        fn accept(self, v: &mut Visitor<Self>) -> Self {
             match self {
-                Self::Var(variable) => v.apply(variable),
+                Self::Var(variable) => v.visit(variable),
                 Self::Abs(output) => Self::Abs(output.accept(v)),
                 Self::App(function, argument) => Self::App(function.accept(v), argument.accept(v)),
             }
@@ -231,9 +217,10 @@ mod tests {
             Exp::app(Exp::abs("x", Exp::var("x")), identity)
         });
 
+        let now = Instant::now();
         println!("Evaluating...");
         let result = Exp::app(identity, Exp::var("test")).eval();
-        println!("Done!");
+        println!("Done in {}ms!", now.elapsed().as_millis());
 
         assert_eq!(result, Exp::var("test"));
     }

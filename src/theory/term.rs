@@ -149,19 +149,19 @@ impl Inject for Term {
     }
 }
 
-impl<K, T: Accept<T>> Accept<T> for Vec<(K, T)> {
-    fn accept(self, v: Visitor<'_, T>) -> Self {
-        self.into_iter().map(|(k, t)| (k, t.accept(v))).collect()
+impl<K, V: Accept<V>> Accept<V> for Vec<(K, V)> {
+    fn accept(self, visitor: &mut Visitor<V>) -> Self {
+        self.into_iter().map(|(k, v)| (k, v.accept(visitor))).collect()
     }
 }
 
 impl Accept<Self> for Term {
-    fn accept(self, v: Visitor<'_, Self>) -> Self {
+    fn accept(self, v: &mut Visitor<Self>) -> Self {
         use Term::*;
 
         match self {
             Global(name) => Global(name),
-            Local(variable) => v.apply(variable),
+            Local(variable) => v.visit(variable),
 
             Type => Type,
 
