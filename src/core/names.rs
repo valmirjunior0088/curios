@@ -1,4 +1,11 @@
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+use {
+    crate::macros::name,
+    std::hash::{Hash, Hasher},
+};
+
+name!(Atom);
+
+#[derive(Debug, Clone)]
 pub struct Name {
     pub index: usize,
     pub label: String,
@@ -16,18 +23,19 @@ impl Name {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct Atom {
-    pub string: String,
+impl PartialEq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
 }
 
-impl<A> From<A> for Atom
-where
-    A: Into<String>,
-{
-    fn from(string: A) -> Self {
-        Self {
-            string: string.into(),
-        }
+impl Eq for Name {}
+
+impl Hash for Name {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.index.hash(state);
     }
 }

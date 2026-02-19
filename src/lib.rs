@@ -1,4 +1,6 @@
-pub mod monads;
+mod macros;
+
+mod monads;
 
 pub mod core;
 

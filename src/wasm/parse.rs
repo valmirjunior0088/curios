@@ -260,12 +260,12 @@ fn parse_global_type<'a>() -> Parser<'a, GlobalType> {
     (catch(parse_literal("(").and_drop(parse_literal("mut")))
         .and_keep(parse_val_type())
         .and_drop(parse_literal(")"))
-        .map(|value_type| GlobalType {
-            val_type: value_type,
+        .map(|val_type| GlobalType {
+            val_type,
             mutability: Mutability::Var,
         }))
-    .or(parse_val_type().map(|value_type| GlobalType {
-        val_type: value_type,
+    .or(parse_val_type().map(|val_type| GlobalType {
+        val_type,
         mutability: Mutability::Const,
     }))
 }

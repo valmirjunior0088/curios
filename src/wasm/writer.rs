@@ -70,8 +70,9 @@ where
     let mut values = values.into_iter();
     let mut counts = Vec::new();
 
-    let Some(mut current) = values.next() else {
-        return counts;
+    let mut current = match values.next() {
+        Some(current) => current,
+        None => return counts,
     };
 
     let mut count = 1;

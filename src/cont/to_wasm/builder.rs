@@ -84,14 +84,6 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     pub fn emit_clsr_envr_types(&mut self) {
-        let special_field_type = wasm::FieldType {
-            storage_type: wasm::StorageType::Val(wasm::ValType::Ref(wasm::RefType {
-                is_nullable: false,
-                heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::Func),
-            })),
-            mutability: wasm::Mutability::Const,
-        };
-
         for data in self.metadata.clsrs() {
             self.module.add_type(
                 data.envr_type(),
@@ -99,18 +91,31 @@ impl<'a, 'b> Builder<'a, 'b> {
                     is_final: true,
                     super_types: vec![self.metadata.envr_type()],
                     comp_type: wasm::CompType::Struct(wasm::StructType::from(
-                        iter::once((self.metadata.special_field(), special_field_type.clone()))
-                            .chain(data.fields().map(|field_name| {
-                                (
-                                    field_name,
-                                    wasm::FieldType {
-                                        storage_type: wasm::StorageType::Val(
-                                            self.metadata.obj_val_type(false),
+                        iter::once((
+                            self.metadata.special_field(),
+                            wasm::FieldType {
+                                storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
+                                    wasm::RefType {
+                                        is_nullable: false,
+                                        heap_type: wasm::HeapType::Abstract(
+                                            wasm::AbsHeapType::Func,
                                         ),
-                                        mutability: wasm::Mutability::Const,
                                     },
-                                )
-                            })),
+                                )),
+                                mutability: wasm::Mutability::Const,
+                            },
+                        ))
+                        .chain(data.fields().map(|field_name| {
+                            (
+                                field_name,
+                                wasm::FieldType {
+                                    storage_type: wasm::StorageType::Val(
+                                        self.metadata.obj_val_type(false),
+                                    ),
+                                    mutability: wasm::Mutability::Const,
+                                },
+                            )
+                        })),
                     )),
                 },
             );
@@ -171,7 +176,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         );
 
         self.module.add_export(
-            format!("const/{}", name.string),
+            self.metadata.find_const(name).string,
             wasm::Export::Global(self.metadata.find_const(name)),
         );
     }
@@ -204,7 +209,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         );
 
         self.module.add_export(
-            format!("clsr/{}", name.string),
+            self.metadata.find_clsr(name).func_name().string,
             wasm::Export::Func(self.metadata.find_clsr(name).func_name()),
         );
     }
@@ -239,7 +244,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         );
 
         self.module.add_export(
-            format!("func/{}", name.string),
+            self.metadata.find_func(name).func_name().string,
             wasm::Export::Func(self.metadata.find_func(name).func_name()),
         );
     }

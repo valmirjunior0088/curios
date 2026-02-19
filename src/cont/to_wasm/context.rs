@@ -1,7 +1,7 @@
 use {
     super::{BlockData, ClsrData, FieldData, FuncData, ModuleData, Scope},
     crate::{cont, wasm},
-    std::{collections::HashMap, mem},
+    std::{collections::HashMap, iter, mem},
 };
 
 pub enum Context<'a, 'b> {
@@ -88,7 +88,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn push_local(&mut self, local_hint: &str, val_type: wasm::ValType) -> wasm::LocalName {
+    pub fn push_local(&mut self, string: &str, val_type: wasm::ValType) -> wasm::LocalName {
         match self {
             Self::Const { .. } => panic!("`Context` lacks locals"),
             Self::Clsr {
@@ -100,7 +100,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 let local_name = wasm::LocalName::from(format!(
                     "{}${}",
                     mem::replace(entropy, *entropy + 1),
-                    local_hint
+                    string
                 ));
 
                 locals.push((local_name.clone(), val_type));
@@ -263,7 +263,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub fn case_instrs(&self, target: &'a cont::CaseTarget) -> Vec<wasm::Instr> {
-        let branches = target
+        let label_names = target
             .targets
             .iter()
             .enumerate()
@@ -275,40 +275,38 @@ impl<'a, 'b> Context<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
-        let dfl_label = wasm::LabelName::from("dfl");
+        let label_name = wasm::LabelName::from("end");
 
-        let dfl_instructions = self.jump_instrs(&target.default);
-
-        let mut instructions =
-            self.load_value_instrs(&target.operand, Some(self.metadata().int_type()));
-
-        instructions.push(wasm::Instr::StructGet {
-            type_name: self.metadata().int_type(),
-            field_name: self.metadata().special_field(),
-        });
-
-        instructions.push(wasm::Instr::BrTable {
-            label_names: branches
-                .iter()
-                .map(|(label_name, _)| label_name.clone())
-                .collect(),
-            label_name: dfl_label.clone(),
-        });
-
-        branches
+        let instructions = self
+            .load_value_instrs(&target.operand, Some(self.metadata().int_type()))
             .into_iter()
-            .chain([(dfl_label, dfl_instructions)])
+            .chain([
+                wasm::Instr::StructGet {
+                    type_name: self.metadata().int_type(),
+                    field_name: self.metadata().special_field(),
+                },
+                wasm::Instr::BrTable {
+                    label_names: label_names
+                        .iter()
+                        .map(|(label_name, _)| label_name.clone())
+                        .collect(),
+                    label_name: label_name.clone(),
+                },
+            ])
+            .collect();
+
+        label_names
+            .into_iter()
+            .chain([(label_name, self.jump_instrs(&target.default))])
             .rev()
             .fold(instructions, |instructions, (block_label, block_body)| {
-                let mut instructions = vec![wasm::Instr::Block {
+                iter::once(wasm::Instr::Block {
                     label_name: block_label,
                     block_type: wasm::BlockType::Empty,
                     instructions,
-                }];
-
-                instructions.extend(block_body);
-
-                instructions
+                })
+                .chain(block_body)
+                .collect()
             })
     }
 
@@ -469,7 +467,7 @@ impl<'a, 'b> Context<'a, 'b> {
         regions: Vec<(wasm::LabelName, Vec<wasm::Instr>)>,
         tail: &'a cont::Tail,
     ) -> Vec<wasm::Instr> {
-        let end_label = wasm::LabelName::from("end");
+        let label_name = wasm::LabelName::from("end");
 
         let instructions = vec![
             wasm::Instr::LocalGet {
@@ -480,24 +478,22 @@ impl<'a, 'b> Context<'a, 'b> {
                     .iter()
                     .map(|(block_label, _)| block_label.clone())
                     .collect(),
-                label_name: end_label.clone(),
+                label_name: label_name.clone(),
             },
         ];
 
         let instructions = regions
             .into_iter()
-            .chain([(end_label, self.tail_instrs(tail))])
+            .chain([(label_name, self.tail_instrs(tail))])
             .rev()
             .fold(instructions, |instructions, (block_label, block_body)| {
-                let mut instructions = vec![wasm::Instr::Block {
+                iter::once(wasm::Instr::Block {
                     label_name: block_label.clone(),
                     block_type: wasm::BlockType::Empty,
                     instructions,
-                }];
-
-                instructions.extend(block_body);
-
-                instructions
+                })
+                .chain(block_body)
+                .collect()
             });
 
         vec![

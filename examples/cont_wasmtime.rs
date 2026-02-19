@@ -7,10 +7,15 @@ fn main() {
     let mut cont_module = cont::Module::new();
 
     cont_module.add_const(cont::ValueName::from("ZERO"), cont::ConstValue::Int(0));
+
     cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+
     cont_module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
+
     cont_module.add_const(cont::ValueName::from("FIVE"), cont::ConstValue::Int(5));
+
     cont_module.add_const(cont::ValueName::from("ANSWER"), cont::ConstValue::Int(42));
+
     cont_module.add_const(cont::ValueName::from("EXPECTED"), cont::ConstValue::Int(84));
 
     cont_module.add_clsr(
@@ -381,17 +386,21 @@ fn main() {
     let run = instance
         .get_typed_func::<(), Rooted<StructRef>>(&mut store, "func/main")
         .expect("expected exported func/main");
+
     let run_zero = instance
         .get_typed_func::<(), Rooted<StructRef>>(&mut store, "func/main_zero")
         .expect("expected exported func/main_zero");
+
     let run_other = instance
         .get_typed_func::<(), Rooted<StructRef>>(&mut store, "func/main_other")
         .expect("expected exported func/main_other");
 
     let result = run.call(&mut store, ()).expect("expected call result");
+
     let zero_result = run_zero
         .call(&mut store, ())
         .expect("expected call result for main_zero");
+
     let other_result = run_other
         .call(&mut store, ())
         .expect("expected call result for main_other");
