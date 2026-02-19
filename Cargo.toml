@@ -1,0 +1,9 @@
+[package]
+name = "curios"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[dev-dependencies]
+wasmtime = "41.0.3"
