@@ -13,16 +13,18 @@ pub struct Name {
     kind: NameKind,
 }
 
-impl Name {
-    pub fn free<A>(free: A) -> Self
-    where
-        A: Into<String>,
-    {
+impl<A> From<A> for Name
+where
+    A: Into<String>,
+{
+    fn from(free: A) -> Self {
         Self {
             kind: NameKind::Free(free.into()),
         }
     }
+}
 
+impl Name {
     pub(super) fn as_free(&self) -> Option<&str> {
         match &self.kind {
             NameKind::Free(free) => Some(free),

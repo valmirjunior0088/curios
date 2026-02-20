@@ -7,12 +7,12 @@ pub struct Bind<const N: usize> {
 
 impl<const N: usize> Bind<N> {
     pub fn open(self, terms: [&Term; N]) -> Term {
-        *self.release(0, terms).body
+        (*self.body).release(0, terms)
     }
 
-    fn apply<F>(self, depth: usize, f: &mut F) -> Bind<N>
+    fn apply<F>(self, depth: usize, f: F) -> Bind<N>
     where
-        F: FnMut(usize, &Name) -> Option<Term>,
+        F: Fn(usize, &Name) -> Option<Term> + Copy,
     {
         Bind {
             body: Box::new((*self.body).apply(depth + N, f)),
@@ -66,9 +66,9 @@ impl Term {
         }
     }
 
-    fn apply<F>(self, depth: usize, f: &mut F) -> Self
+    fn apply<F>(self, depth: usize, f: F) -> Self
     where
-        F: FnMut(usize, &Name) -> Option<Term>,
+        F: Fn(usize, &Name) -> Option<Term> + Copy,
     {
         match self {
             Self::Type => Self::Type,
@@ -101,7 +101,7 @@ impl Term {
     }
 
     fn shift(self, depth: usize, amount: usize) -> Self {
-        self.apply(depth, &mut |depth, name| {
+        self.apply(depth, |depth, name| {
             name.as_bound()
                 .filter(|&index| index >= depth)
                 .map(|index| Self::Name(Name::bound(index + amount)))
@@ -109,7 +109,7 @@ impl Term {
     }
 
     fn capture<const N: usize>(self, depth: usize, names: [&str; N]) -> Self {
-        self.apply(depth, &mut |depth, name| {
+        self.apply(depth, |depth, name| {
             name.as_free()
                 .and_then(|free| {
                     names
@@ -126,7 +126,7 @@ impl Term {
     }
 
     fn release<const N: usize>(self, depth: usize, terms: [&Term; N]) -> Self {
-        self.apply(depth, &mut |depth, name| {
+        self.apply(depth, |depth, name| {
             name.as_bound()
                 .and_then(|index| match index.checked_sub(depth) {
                     Some(delta) if delta < N => Some(terms[delta].clone().shift(0, depth)),
@@ -134,5 +134,50 @@ impl Term {
                     None => None,
                 })
         })
+    }
+}
+
+impl<A> From<A> for Term
+where
+    A: Into<String>,
+{
+    fn from(free: A) -> Self {
+        Self::Name(Name::from(free))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn close_open_substitutes_free_name() {
+        let term = Term::from("x").close(["x"]).open([&Term::from("y")]);
+
+        let name = match term {
+            Term::Name(name) => name,
+            term => panic!("unexpected `{term:?}`"),
+        };
+
+        assert_eq!(name, Name::from("y"));
+    }
+
+    #[test]
+    fn close_open_preserves_nested_bind() {
+        let term = Term::Func(Term::from("x").close(["y"]))
+            .close(["x"])
+            .open([&Term::from("z")]);
+
+        let body = match term {
+            Term::Func(body) => body,
+            term => panic!("unexpected `{term:?}`"),
+        };
+
+        let name = match body.open([&Term::from("w")]) {
+            Term::Name(name) => name,
+            term => panic!("unexpected `{term:?}`"),
+        };
+
+        assert_eq!(name, Name::from("z"));
     }
 }
