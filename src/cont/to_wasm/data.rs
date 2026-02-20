@@ -282,7 +282,10 @@ impl<'a> ModuleData<'a> {
     pub fn find_const(&self, const_name: &cont::ValueName) -> wasm::GlobalName {
         self.consts
             .get(const_name)
-            .expect(&format!("`ModuleData` lacks const `{}`", &const_name.string))
+            .expect(&format!(
+                "`ModuleData` lacks const `{}`",
+                &const_name.string
+            ))
             .clone()
     }
 
@@ -291,9 +294,10 @@ impl<'a> ModuleData<'a> {
     }
 
     pub fn find_clsr(&self, clsr_name: &cont::ClsrName) -> &ClsrData<'a> {
-        self.clsrs
-            .get(clsr_name)
-            .expect(&format!("`ModuleData` lacks closure `{}`", &clsr_name.string))
+        self.clsrs.get(clsr_name).expect(&format!(
+            "`ModuleData` lacks closure `{}`",
+            &clsr_name.string
+        ))
     }
 
     pub fn find_func(&self, func_name: &cont::FuncName) -> &FuncData<'a> {

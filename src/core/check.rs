@@ -1,9 +1,14 @@
 use super::Term;
 
 pub fn check(term: Term, kind: Term) -> bool {
-    infer(term) == kind
+    let _ = term;
+    let _ = kind;
+
+    todo!()
 }
 
 pub fn infer(term: Term) -> Term {
-    term
+    let _ = term;
+
+    todo!()
 }
