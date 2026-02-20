@@ -24,6 +24,13 @@ pub enum Context<'a, 'b> {
     },
 }
 
+pub enum LoadAs {
+    NonNull,
+    Concrete(wasm::TypeName),
+    Int,
+    Flt,
+}
+
 impl<'a, 'b> Context<'a, 'b> {
     pub fn new_const(metadata: &'a ModuleData<'a>) -> Self {
         Self::Const { metadata }
@@ -72,11 +79,19 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn params(&self) -> HashMap<&'a cont::ValueName, wasm::LocalName> {
+    pub fn params(&self) -> HashMap<&'a cont::ValueName, (wasm::LocalName, bool)> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
-            Self::Clsr { data, .. } => data.params(),
-            Self::Func { data, .. } => data.params(),
+            Self::Clsr { data, .. } => data
+                .params()
+                .into_iter()
+                .map(|(value_name, local_name)| (value_name, (local_name, false)))
+                .collect(),
+            Self::Func { data, .. } => data
+                .params()
+                .into_iter()
+                .map(|(value_name, local_name)| (value_name, (local_name, false)))
+                .collect(),
         }
     }
 
@@ -97,11 +112,12 @@ impl<'a, 'b> Context<'a, 'b> {
             | Self::Func {
                 entropy, locals, ..
             } => {
-                let local_name = wasm::LocalName::from(format!(
-                    "{}${}",
-                    mem::replace(entropy, *entropy + 1),
-                    string
-                ));
+                let entropy = mem::replace(entropy, *entropy + 1);
+                let local_name = if string.is_empty() {
+                    wasm::LocalName::from(format!("{entropy}"))
+                } else {
+                    wasm::LocalName::from(format!("{entropy}${string}"))
+                };
 
                 locals.push((local_name.clone(), val_type));
 
@@ -133,7 +149,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn find_local(&self, value_name: &cont::ValueName) -> Option<wasm::LocalName> {
+    pub fn find_local(&self, value_name: &cont::ValueName) -> Option<(wasm::LocalName, bool)> {
         match self {
             Self::Const { .. } => None,
             Self::Clsr { scopes, .. } | Self::Func { scopes, .. } => {
@@ -141,8 +157,8 @@ impl<'a, 'b> Context<'a, 'b> {
                     scope
                         .values
                         .get(value_name)
-                        .or_else(|| scope.params.get(value_name))
-                        .cloned()
+                        .map(|local_name| (local_name.clone(), false))
+                        .or_else(|| scope.params.get(value_name).cloned())
                 })
             }
         }
@@ -166,46 +182,79 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<wasm::Instr> {
+        match load_as {
+            LoadAs::NonNull if is_nullable => vec![wasm::Instr::RefAsNonNull],
+            LoadAs::NonNull => vec![],
+            LoadAs::Concrete(type_name) => {
+                vec![wasm::Instr::RefCast {
+                    ref_type: wasm::RefType {
+                        is_nullable: false,
+                        heap_type: wasm::HeapType::Concrete(type_name),
+                    },
+                }]
+            }
+            LoadAs::Int => {
+                vec![
+                    wasm::Instr::RefCast {
+                        ref_type: self.metadata().int_ref_type(false),
+                    },
+                    wasm::Instr::I31GetS,
+                ]
+            }
+            LoadAs::Flt => {
+                vec![
+                    wasm::Instr::RefCast {
+                        ref_type: wasm::RefType {
+                            is_nullable: false,
+                            heap_type: wasm::HeapType::Concrete(self.metadata().flt_type()),
+                        },
+                    },
+                    wasm::Instr::StructGet {
+                        type_name: self.metadata().flt_type(),
+                        field_name: self.metadata().special_field(),
+                    },
+                ]
+            }
+        }
+    }
+
     pub fn load_value_instrs(
         &self,
         value_name: &'a cont::ValueName,
-        type_name: Option<wasm::TypeName>,
+        load_as: LoadAs,
     ) -> Vec<wasm::Instr> {
         let mut output = Vec::new();
 
-        if let Some(local_name) = self.find_local(value_name) {
-            output.push(wasm::Instr::LocalGet { local_name });
-        } else if let Some(field_data) = self.find_field(value_name) {
-            output.push(wasm::Instr::LocalGet {
-                local_name: self.metadata().special_local(),
-            });
-
-            output.push(wasm::Instr::RefCast {
-                ref_type: wasm::RefType {
-                    is_nullable: false,
-                    heap_type: wasm::HeapType::Concrete(field_data.type_name()),
+        if let Some(field_data) = self.find_field(value_name) {
+            output.extend([
+                wasm::Instr::LocalGet {
+                    local_name: self.metadata().special_local(),
                 },
-            });
+                wasm::Instr::RefCast {
+                    ref_type: wasm::RefType {
+                        is_nullable: false,
+                        heap_type: wasm::HeapType::Concrete(field_data.type_name()),
+                    },
+                },
+                wasm::Instr::StructGet {
+                    type_name: field_data.type_name(),
+                    field_name: field_data.field_name(),
+                },
+            ]);
 
-            output.push(wasm::Instr::StructGet {
-                type_name: field_data.type_name(),
-                field_name: field_data.field_name(),
-            });
+            output.extend(self.load_as_instrs(load_as, false));
+        } else if let Some((local_name, is_nullable)) = self.find_local(value_name) {
+            output.push(wasm::Instr::LocalGet { local_name });
+
+            output.extend(self.load_as_instrs(load_as, is_nullable));
         } else {
             output.push(wasm::Instr::GlobalGet {
                 global_name: self.metadata().find_const(value_name),
             });
-        }
 
-        output.push(match type_name {
-            Some(type_name) => wasm::Instr::RefCast {
-                ref_type: wasm::RefType {
-                    is_nullable: false,
-                    heap_type: wasm::HeapType::Concrete(type_name),
-                },
-            },
-            None => wasm::Instr::RefAsNonNull,
-        });
+            output.extend(self.load_as_instrs(load_as, false));
+        }
 
         output
     }
@@ -214,16 +263,15 @@ impl<'a, 'b> Context<'a, 'b> {
         let mut output = Vec::new();
 
         for value_name in &target.params {
-            output.extend(self.load_value_instrs(value_name, None));
+            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
         }
 
-        let arity = target.params.len();
-
         if self.is_resume(&target.target) {
-            if arity != 1 {
+            if target.params.len() != 1 {
                 panic!(
                     "resume block `{}` expects 1 param, got {}",
-                    target.target.string, arity,
+                    target.target.string,
+                    target.params.len(),
                 );
             }
 
@@ -231,16 +279,16 @@ impl<'a, 'b> Context<'a, 'b> {
         } else {
             let block_data = self.find_block(&target.target);
 
-            if arity != block_data.params.len() {
+            if target.params.len() != block_data.params.len() {
                 panic!(
                     "block `{}` expects {} params, got {}",
                     target.target.string,
                     block_data.params.len(),
-                    arity,
+                    target.params.len(),
                 );
             }
 
-            for (_, local_name) in block_data.params.iter().rev() {
+            for (_, (local_name, _)) in block_data.params.iter().rev() {
                 output.push(wasm::Instr::LocalSet {
                     local_name: local_name.clone(),
                 });
@@ -263,51 +311,65 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub fn case_instrs(&self, target: &'a cont::CaseTarget) -> Vec<wasm::Instr> {
-        let label_names = target
-            .targets
-            .iter()
-            .enumerate()
-            .map(|(index, jump_target)| {
-                (
-                    wasm::LabelName::from(format!("{index}")),
-                    self.jump_instrs(jump_target),
-                )
-            })
-            .collect::<Vec<_>>();
+        let default_instructions = match &target.default {
+            Some(target) => self.jump_instrs(target),
+            None => vec![wasm::Instr::Unreachable],
+        };
 
-        let label_name = wasm::LabelName::from("end");
+        if let [jump_target] = &target.targets[..] {
+            self.load_value_instrs(&target.operand, LoadAs::Int)
+                .into_iter()
+                .chain([
+                    wasm::Instr::I32Eqz,
+                    wasm::Instr::If {
+                        label_name: wasm::LabelName::from("0"),
+                        block_type: wasm::BlockType::Empty,
+                        then_instructions: self.jump_instrs(jump_target),
+                        else_instructions: default_instructions,
+                    },
+                ])
+                .collect()
+        } else {
+            let label_names = target
+                .targets
+                .iter()
+                .enumerate()
+                .map(|(index, jump_target)| {
+                    (
+                        wasm::LabelName::from(format!("{index}")),
+                        self.jump_instrs(jump_target),
+                    )
+                })
+                .collect::<Vec<_>>();
 
-        let instructions = self
-            .load_value_instrs(&target.operand, Some(self.metadata().int_type()))
-            .into_iter()
-            .chain([
-                wasm::Instr::StructGet {
-                    type_name: self.metadata().int_type(),
-                    field_name: self.metadata().special_field(),
-                },
-                wasm::Instr::BrTable {
+            let label_name = wasm::LabelName::from("tail");
+
+            let instructions = self
+                .load_value_instrs(&target.operand, LoadAs::Int)
+                .into_iter()
+                .chain([wasm::Instr::BrTable {
                     label_names: label_names
                         .iter()
                         .map(|(label_name, _)| label_name.clone())
                         .collect(),
                     label_name: label_name.clone(),
-                },
-            ])
-            .collect();
+                }])
+                .collect();
 
-        label_names
-            .into_iter()
-            .chain([(label_name, self.jump_instrs(&target.default))])
-            .rev()
-            .fold(instructions, |instructions, (block_label, block_body)| {
-                iter::once(wasm::Instr::Block {
-                    label_name: block_label,
-                    block_type: wasm::BlockType::Empty,
-                    instructions,
+            label_names
+                .into_iter()
+                .chain([(label_name, default_instructions)])
+                .rev()
+                .fold(instructions, |instructions, (block_label, block_body)| {
+                    iter::once(wasm::Instr::Block {
+                        label_name: block_label,
+                        block_type: wasm::BlockType::Empty,
+                        instructions,
+                    })
+                    .chain(block_body)
+                    .collect()
                 })
-                .chain(block_body)
-                .collect()
-            })
+        }
     }
 
     pub fn call_direct_instrs(
@@ -328,7 +390,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
 
         for value_name in params {
-            output.extend(self.load_value_instrs(value_name, None));
+            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
         }
 
         if self.is_resume(resume) {
@@ -351,7 +413,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            for (_, local_name) in block_data.params.iter().rev() {
+            for (_, (local_name, _)) in block_data.params.iter().rev() {
                 output.push(wasm::Instr::LocalSet {
                     local_name: local_name.clone(),
                 });
@@ -380,34 +442,30 @@ impl<'a, 'b> Context<'a, 'b> {
         resume: &'a cont::BlockName,
     ) -> Vec<wasm::Instr> {
         let mut output = Vec::new();
+        let arity = params.len();
+        let envr_type = self.metadata().find_envr_type(arity);
+        let clsr_type = self.metadata().find_clsr_type(arity);
 
-        output.extend(self.load_value_instrs(target, Some(self.metadata().envr_type())));
+        output.extend(self.load_value_instrs(target, LoadAs::NonNull));
 
         for value_name in params {
-            output.extend(self.load_value_instrs(value_name, None));
+            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
         }
 
-        output.extend(self.load_value_instrs(target, Some(self.metadata().envr_type())));
+        output.extend(self.load_value_instrs(target, LoadAs::Concrete(envr_type.clone())));
 
         output.push(wasm::Instr::StructGet {
-            type_name: self.metadata().envr_type(),
+            type_name: envr_type,
             field_name: self.metadata().special_field(),
-        });
-
-        output.push(wasm::Instr::RefCast {
-            ref_type: wasm::RefType {
-                is_nullable: false,
-                heap_type: wasm::HeapType::Concrete(self.metadata().find_clsr_type(params.len())),
-            },
         });
 
         if self.is_resume(resume) {
             output.push(wasm::Instr::ReturnCallRef {
-                type_name: self.metadata().find_clsr_type(params.len()),
+                type_name: clsr_type,
             });
         } else {
             output.push(wasm::Instr::CallRef {
-                type_name: self.metadata().find_clsr_type(params.len()),
+                type_name: clsr_type,
             });
 
             let block_data = self.find_block(resume);
@@ -421,7 +479,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            for (_, local_name) in block_data.params.iter().rev() {
+            for (_, (local_name, _)) in block_data.params.iter().rev() {
                 output.push(wasm::Instr::LocalSet {
                     local_name: local_name.clone(),
                 });
@@ -467,7 +525,7 @@ impl<'a, 'b> Context<'a, 'b> {
         regions: Vec<(wasm::LabelName, Vec<wasm::Instr>)>,
         tail: &'a cont::Tail,
     ) -> Vec<wasm::Instr> {
-        let label_name = wasm::LabelName::from("end");
+        let label_name = wasm::LabelName::from("tail");
 
         let instructions = vec![
             wasm::Instr::LocalGet {

@@ -29,6 +29,7 @@ impl FieldData {
 #[derive(Debug, Clone)]
 pub struct ClsrData<'a> {
     func_name: wasm::FuncName,
+    clsr_type: wasm::TypeName,
     envr_type: wasm::TypeName,
     fields: Vec<(&'a cont::ValueName, wasm::FieldName)>,
     params: HashMap<&'a cont::ValueName, wasm::LocalName>,
@@ -39,6 +40,7 @@ impl<'a> ClsrData<'a> {
     pub fn new(clsr_name: &'a cont::ClsrName, clsr: &'a cont::Clsr) -> Self {
         Self {
             func_name: wasm::FuncName::from(format!("clsr/{}", clsr_name.string)),
+            clsr_type: wasm::TypeName::from(format!("clsr/{}", clsr_name.string)),
             envr_type: wasm::TypeName::from(format!("envr/{}", clsr_name.string)),
             fields: clsr
                 .fields
@@ -68,6 +70,10 @@ impl<'a> ClsrData<'a> {
         self.func_name.clone()
     }
 
+    pub fn clsr_type(&self) -> wasm::TypeName {
+        self.clsr_type.clone()
+    }
+
     pub fn envr_type(&self) -> wasm::TypeName {
         self.envr_type.clone()
     }
@@ -92,6 +98,10 @@ impl<'a> ClsrData<'a> {
 
     pub fn find_param(&self, value_name: &cont::ValueName) -> Option<wasm::LocalName> {
         self.params.get(value_name).cloned()
+    }
+
+    pub fn arity(&self) -> usize {
+        self.params.len()
     }
 
     pub fn is_resume(&self, block_name: &cont::BlockName) -> bool {
@@ -148,11 +158,8 @@ impl<'a> FuncData<'a> {
 pub struct ModuleData<'a> {
     special_field: wasm::FieldName,
     special_local: wasm::LocalName,
-    special_label: wasm::LabelName,
-    obj_type: wasm::TypeName,
-    int_type: wasm::TypeName,
     flt_type: wasm::TypeName,
-    envr_type: wasm::TypeName,
+    envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
     func_types: BTreeMap<usize, wasm::TypeName>,
     consts: HashMap<&'a cont::ValueName, wasm::GlobalName>,
@@ -165,11 +172,13 @@ impl<'a> ModuleData<'a> {
         Self {
             special_field: wasm::FieldName::from("!"),
             special_local: wasm::LocalName::from("!"),
-            special_label: wasm::LabelName::from("!"),
-            obj_type: wasm::TypeName::from("obj"),
-            int_type: wasm::TypeName::from("int"),
             flt_type: wasm::TypeName::from("flt"),
-            envr_type: wasm::TypeName::from("envr"),
+            envr_types: module
+                .clsrs()
+                .iter()
+                .map(|(_, clsr)| clsr.params.len())
+                .map(|arity| (arity, wasm::TypeName::from(format!("envr/{}", arity))))
+                .collect(),
             clsr_types: module
                 .clsrs()
                 .iter()
@@ -213,38 +222,45 @@ impl<'a> ModuleData<'a> {
         self.special_local.clone()
     }
 
-    pub fn special_label(&self) -> wasm::LabelName {
-        self.special_label.clone()
-    }
-
-    pub fn obj_type(&self) -> wasm::TypeName {
-        self.obj_type.clone()
-    }
-
     pub fn obj_val_type(&self, is_nullable: bool) -> wasm::ValType {
         wasm::ValType::Ref(wasm::RefType {
             is_nullable,
-            heap_type: wasm::HeapType::Concrete(self.obj_type()),
+            heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::Any),
         })
     }
 
-    pub fn int_type(&self) -> wasm::TypeName {
-        self.int_type.clone()
+    pub fn int_val_type(&self, is_nullable: bool) -> wasm::ValType {
+        wasm::ValType::Ref(wasm::RefType {
+            is_nullable,
+            heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::I31),
+        })
+    }
+
+    pub fn int_ref_type(&self, is_nullable: bool) -> wasm::RefType {
+        match self.int_val_type(is_nullable) {
+            wasm::ValType::Ref(ref_type) => ref_type,
+            wasm::ValType::Num(_) => unreachable!("`int_val_type` must be a ref type"),
+        }
     }
 
     pub fn flt_type(&self) -> wasm::TypeName {
         self.flt_type.clone()
     }
 
-    pub fn envr_type(&self) -> wasm::TypeName {
-        self.envr_type.clone()
+    pub fn envr_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {
+        self.envr_types
+            .iter()
+            .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub fn envr_val_type(&self) -> wasm::ValType {
-        wasm::ValType::Ref(wasm::RefType {
-            is_nullable: false,
-            heap_type: wasm::HeapType::Concrete(self.envr_type()),
-        })
+    pub fn find_envr_type(&self, arity: usize) -> wasm::TypeName {
+        self.envr_types
+            .get(&arity)
+            .expect(&format!(
+                "`ModuleData` lacks environment type for arity `{}`",
+                arity
+            ))
+            .clone()
     }
 
     pub fn clsr_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

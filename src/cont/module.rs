@@ -40,7 +40,7 @@ pub struct JumpTarget {
 pub struct CaseTarget {
     pub operand: ValueName,
     pub targets: Vec<JumpTarget>,
-    pub default: JumpTarget,
+    pub default: Option<JumpTarget>,
 }
 
 #[derive(Debug)]

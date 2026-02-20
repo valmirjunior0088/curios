@@ -1,5 +1,5 @@
 use {
-    super::{BlockData, Context, Scope},
+    super::{BlockData, Context, LoadAs, Scope},
     crate::{cont, wasm},
     std::collections::HashMap,
 };
@@ -45,12 +45,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     pub fn emit_const_value(&mut self, value: &cont::ConstValue) {
         match value {
-            &cont::ConstValue::Int(value) => self.emit_instrs([
-                wasm::Instr::I32Const { value },
-                wasm::Instr::StructNew {
-                    type_name: self.context.metadata().int_type(),
-                },
-            ]),
+            &cont::ConstValue::Int(value) => {
+                self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
+            }
             &cont::ConstValue::Flt(value) => self.emit_instrs([
                 wasm::Instr::F32Const { value },
                 wasm::Instr::StructNew {
@@ -63,134 +60,32 @@ impl<'a, 'b> Emitter<'a, 'b> {
     pub fn emit_const_op(&mut self, op: &'a cont::ConstOp, params: &'a [cont::ValueName]) {
         match (op, params) {
             (cont::ConstOp::IntEql, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Eq);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().int_type(),
-                });
+                self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::ConstOp::IntAdd, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Add);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().int_type(),
-                });
+                self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::ConstOp::IntSub, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Sub);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().int_type(),
-                });
+                self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::ConstOp::IntMul, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().int_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().int_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Mul);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().int_type(),
-                });
+                self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::ConstOp::FltAdd, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().flt_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().flt_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().flt_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().flt_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Add);
 
                 self.emit_instr(wasm::Instr::StructNew {
@@ -198,26 +93,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 });
             }
             (cont::ConstOp::FltSub, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().flt_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().flt_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().flt_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().flt_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Sub);
 
                 self.emit_instr(wasm::Instr::StructNew {
@@ -225,33 +102,18 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 });
             }
             (cont::ConstOp::FltMul, [left, right]) => {
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(left, Some(self.context.metadata().flt_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().flt_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(right, Some(self.context.metadata().flt_type())),
-                );
-
-                self.emit_instr(wasm::Instr::StructGet {
-                    type_name: self.context.metadata().flt_type(),
-                    field_name: self.context.metadata().special_field(),
-                });
-
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Mul);
 
                 self.emit_instr(wasm::Instr::StructNew {
                     type_name: self.context.metadata().flt_type(),
                 });
             }
-            (op, _) => panic!("`Emitter` expected valid arity for const op `{op:?}`"),
+            (op, params) => panic!(
+                "`Emitter` did not expect {} params for const op `{op:?}`",
+                params.len()
+            ),
         }
     }
 
@@ -261,7 +123,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }]);
 
         for field in fields {
-            self.emit_instrs(self.context.load_value_instrs(field, None));
+            self.emit_instrs(self.context.load_value_instrs(field, LoadAs::NonNull));
         }
 
         self.emit_instr(wasm::Instr::StructNew {
@@ -285,6 +147,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 local_name: self
                     .context
                     .find_local(value_name)
+                    .map(|(local_name, _)| local_name)
                     .expect(&format!("`Emitter` lacks local `{}`", value_name.string)),
             });
         }
@@ -302,7 +165,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .map(|(_, block_data)| {
                 self.emit_region(
                     block_data.params.iter().cloned().collect(),
-                    wasm::LabelName::from(format!("{}!", dispatcher_label.string)),
                     block_data.region,
                 );
 
@@ -320,15 +182,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     pub fn emit_region(
         &mut self,
-        params: HashMap<&'a cont::ValueName, wasm::LocalName>,
-        dispatcher_label: wasm::LabelName,
+        params: HashMap<&'a cont::ValueName, (wasm::LocalName, bool)>,
         region: &'a cont::Region,
     ) {
-        let dispatcher_local = self.context.push_local(
-            &dispatcher_label.string,
-            wasm::ValType::Num(wasm::NumType::I32),
-        );
-
         let values = region
             .values
             .iter()
@@ -342,50 +198,58 @@ impl<'a, 'b> Emitter<'a, 'b> {
             })
             .collect();
 
-        let blocks = region
-            .blocks
-            .iter()
-            .enumerate()
-            .map(|(index, (block_name, block))| {
-                let block_params = block
-                    .params
-                    .iter()
-                    .map(|value_name| {
-                        let local_name = self.context.push_local(
-                            &value_name.string,
-                            self.context.metadata().obj_val_type(true),
-                        );
+        if region.blocks.is_empty() {
+            self.context.enter_scope(Scope::new(params, values, vec![]));
+            self.emit_let_values(&region.values);
+            self.emit_instrs(self.context.tail_instrs(&region.tail));
+        } else {
+            let dispatcher_local = self
+                .context
+                .push_local("", wasm::ValType::Num(wasm::NumType::I32));
 
-                        (value_name, local_name)
-                    })
-                    .collect();
+            let dispatcher_label = wasm::LabelName::from(&dispatcher_local.string);
 
-                let block_data = BlockData::new(
-                    dispatcher_label.clone(),
-                    dispatcher_local.clone(),
-                    index,
-                    block_name,
-                    block_params,
-                    &block.region,
-                );
+            let blocks = region
+                .blocks
+                .iter()
+                .enumerate()
+                .map(|(index, (block_name, block))| {
+                    let block_params = block
+                        .params
+                        .iter()
+                        .map(|value_name| {
+                            let local_name = self.context.push_local(
+                                &value_name.string,
+                                self.context.metadata().obj_val_type(true),
+                            );
 
-                (block_name, block_data)
-            })
-            .collect::<Vec<_>>();
+                            (value_name, (local_name, true))
+                        })
+                        .collect();
 
-        self.context
-            .enter_scope(Scope::new(params, values, blocks.clone()));
+                    let block_data = BlockData::new(
+                        dispatcher_label.clone(),
+                        dispatcher_local.clone(),
+                        index,
+                        block_name,
+                        block_params,
+                        &block.region,
+                    );
 
-        self.emit_let_values(&region.values);
-        self.emit_let_blocks(dispatcher_local, dispatcher_label, blocks, &region.tail);
+                    (block_name, block_data)
+                })
+                .collect::<Vec<_>>();
+
+            self.context
+                .enter_scope(Scope::new(params, values, blocks.clone()));
+
+            self.emit_let_values(&region.values);
+            self.emit_let_blocks(dispatcher_local, dispatcher_label, blocks, &region.tail);
+        }
     }
 
     pub fn emit_root_region(&mut self, region: &'a cont::Region) {
-        self.emit_region(
-            self.context.params(),
-            self.context.metadata().special_label(),
-            region,
-        );
+        self.emit_region(self.context.params(), region);
 
         self.leave_last_scope();
     }

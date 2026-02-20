@@ -109,8 +109,10 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                     pure("\n"),
                 ])
             })),
-            pure("| _ -> "),
-            print_target(&target.default),
+            match &target.default {
+                Some(default) => flat([pure("| _ -> "), print_target(default)]),
+                None => pure("| _ -> unreachable"),
+            },
         ]),
         Tail::Call(target) => flat(match target {
             CallTarget::Direct {

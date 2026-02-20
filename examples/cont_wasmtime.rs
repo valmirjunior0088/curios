@@ -1,6 +1,6 @@
 use {
     curios::{cont, wasm},
-    wasmtime::{Config, Engine, Instance, Module, Rooted, Store, StructRef},
+    wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
 };
 
 fn main() {
@@ -138,10 +138,10 @@ fn main() {
                                         target: cont::BlockName::from("on_other"),
                                         params: vec![cont::ValueName::from("x")],
                                     }],
-                                    default: cont::JumpTarget {
+                                    default: Some(cont::JumpTarget {
                                         target: cont::BlockName::from("on_expected"),
                                         params: vec![cont::ValueName::from("x")],
-                                    },
+                                    }),
                                 }),
                             },
                         },
@@ -167,10 +167,10 @@ fn main() {
                         target: cont::BlockName::from("on_non_zero"),
                         params: vec![cont::ValueName::from("x")],
                     }],
-                    default: cont::JumpTarget {
+                    default: Some(cont::JumpTarget {
                         target: cont::BlockName::from("on_zero"),
                         params: vec![cont::ValueName::from("x")],
-                    },
+                    }),
                 }),
             },
         },
@@ -273,10 +273,10 @@ fn main() {
                                     target: cont::BlockName::from("fallback"),
                                     params: vec![cont::ValueName::from("out")],
                                 }],
-                                default: cont::JumpTarget {
+                                default: Some(cont::JumpTarget {
                                     target: cont::BlockName::from("invoke_normalize"),
                                     params: vec![cont::ValueName::from("out")],
-                                },
+                                }),
                             }),
                         },
                     },
@@ -384,15 +384,15 @@ fn main() {
     let instance = Instance::new(&mut store, &module, &[]).expect("expected instance");
 
     let run = instance
-        .get_typed_func::<(), Rooted<StructRef>>(&mut store, "func/main")
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
         .expect("expected exported func/main");
 
     let run_zero = instance
-        .get_typed_func::<(), Rooted<StructRef>>(&mut store, "func/main_zero")
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main_zero")
         .expect("expected exported func/main_zero");
 
     let run_other = instance
-        .get_typed_func::<(), Rooted<StructRef>>(&mut store, "func/main_other")
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main_other")
         .expect("expected exported func/main_other");
 
     let result = run.call(&mut store, ()).expect("expected call result");
@@ -406,17 +406,17 @@ fn main() {
         .expect("expected call result for main_other");
 
     let value = result
-        .field(&mut store, 0)
-        .expect("expected struct field")
-        .unwrap_i32();
+        .unwrap_i31(&store)
+        .expect("expected i31 result")
+        .get_i32();
     let zero_value = zero_result
-        .field(&mut store, 0)
-        .expect("expected struct field")
-        .unwrap_i32();
+        .unwrap_i31(&store)
+        .expect("expected i31 result")
+        .get_i32();
     let other_value = other_result
-        .field(&mut store, 0)
-        .expect("expected struct field")
-        .unwrap_i32();
+        .unwrap_i31(&store)
+        .expect("expected i31 result")
+        .get_i32();
 
     assert_eq!(value, 170);
     assert_eq!(zero_value, 2);

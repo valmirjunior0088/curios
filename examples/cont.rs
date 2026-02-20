@@ -85,10 +85,10 @@ fn main() {
                                         target: BlockName::from("Zero"),
                                         params: vec![ValueName::from("out")],
                                     }],
-                                    default: JumpTarget {
+                                    default: Some(JumpTarget {
                                         target: BlockName::from("NonZero"),
                                         params: vec![ValueName::from("out")],
-                                    },
+                                    }),
                                 }),
                             },
                         },

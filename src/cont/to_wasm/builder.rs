@@ -14,42 +14,12 @@ impl<'a, 'b> Builder<'a, 'b> {
         Self { metadata, module }
     }
 
-    pub fn emit_obj_type(&mut self) {
-        self.module.add_type(
-            self.metadata.obj_type(),
-            wasm::SubType {
-                is_final: false,
-                super_types: vec![],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([])),
-            },
-        );
-    }
-
-    pub fn emit_int_type(&mut self) {
-        self.module.add_type(
-            self.metadata.int_type(),
-            wasm::SubType {
-                is_final: true,
-                super_types: vec![self.metadata.obj_type()],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([(
-                    self.metadata.special_field(),
-                    wasm::FieldType {
-                        storage_type: wasm::StorageType::Val(wasm::ValType::Num(
-                            wasm::NumType::I32,
-                        )),
-                        mutability: wasm::Mutability::Const,
-                    },
-                )])),
-            },
-        );
-    }
-
     pub fn emit_flt_type(&mut self) {
         self.module.add_type(
             self.metadata.flt_type(),
             wasm::SubType {
                 is_final: true,
-                super_types: vec![self.metadata.obj_type()],
+                super_types: vec![],
                 comp_type: wasm::CompType::Struct(wasm::StructType::from([(
                     self.metadata.special_field(),
                     wasm::FieldType {
@@ -63,33 +33,39 @@ impl<'a, 'b> Builder<'a, 'b> {
         );
     }
 
-    pub fn emit_envr_type(&mut self) {
-        self.module.add_type(
-            self.metadata.envr_type(),
-            wasm::SubType {
-                is_final: false,
-                super_types: vec![self.metadata.obj_type()],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([(
-                    self.metadata.special_field(),
-                    wasm::FieldType {
-                        storage_type: wasm::StorageType::Val(wasm::ValType::Ref(wasm::RefType {
-                            is_nullable: false,
-                            heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::Func),
-                        })),
-                        mutability: wasm::Mutability::Const,
-                    },
-                )])),
-            },
-        );
+    pub fn emit_envr_arity_types(&mut self) {
+        for (arity, type_name) in self.metadata.envr_types() {
+            self.module.add_type(
+                type_name,
+                wasm::SubType {
+                    is_final: false,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Struct(wasm::StructType::from([(
+                        self.metadata.special_field(),
+                        wasm::FieldType {
+                            storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
+                                wasm::RefType {
+                                    is_nullable: false,
+                                    heap_type: wasm::HeapType::Concrete(
+                                        self.metadata.find_clsr_type(arity),
+                                    ),
+                                },
+                            )),
+                            mutability: wasm::Mutability::Const,
+                        },
+                    )])),
+                },
+            );
+        }
     }
 
-    pub fn emit_clsr_envr_types(&mut self) {
+    pub fn emit_clsr_types(&mut self) {
         for data in self.metadata.clsrs() {
             self.module.add_type(
                 data.envr_type(),
                 wasm::SubType {
                     is_final: true,
-                    super_types: vec![self.metadata.envr_type()],
+                    super_types: vec![self.metadata.find_envr_type(data.arity())],
                     comp_type: wasm::CompType::Struct(wasm::StructType::from(
                         iter::once((
                             self.metadata.special_field(),
@@ -97,8 +73,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                                 storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
                                     wasm::RefType {
                                         is_nullable: false,
-                                        heap_type: wasm::HeapType::Abstract(
-                                            wasm::AbsHeapType::Func,
+                                        heap_type: wasm::HeapType::Concrete(
+                                            self.metadata.find_clsr_type(data.arity()),
                                         ),
                                     },
                                 )),
@@ -122,17 +98,37 @@ impl<'a, 'b> Builder<'a, 'b> {
         }
     }
 
-    pub fn emit_clsr_types(&mut self) {
+    pub fn emit_clsr_arity_types(&mut self) {
         for (arity, type_name) in self.metadata.clsr_types() {
             self.module.add_type(
                 type_name,
                 wasm::SubType {
-                    is_final: true,
+                    is_final: false,
                     super_types: vec![],
                     comp_type: wasm::CompType::Func(wasm::FuncType {
                         inputs: wasm::ResultType::from(
-                            iter::once(self.metadata.envr_val_type())
+                            iter::once(self.metadata.obj_val_type(false))
                                 .chain((0..arity).map(|_| self.metadata.obj_val_type(false))),
+                        ),
+                        outputs: wasm::ResultType::from([self.metadata.obj_val_type(false)]),
+                    }),
+                },
+            );
+        }
+    }
+
+    pub fn emit_clsr_named_types(&mut self) {
+        for data in self.metadata.clsrs() {
+            self.module.add_type(
+                data.clsr_type(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![self.metadata.find_clsr_type(data.arity())],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from(
+                            iter::once(self.metadata.obj_val_type(false)).chain(
+                                (0..data.arity()).map(|_| self.metadata.obj_val_type(false)),
+                            ),
                         ),
                         outputs: wasm::ResultType::from([self.metadata.obj_val_type(false)]),
                     }),
@@ -194,7 +190,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.module.add_func(
             self.metadata.find_clsr(name).func_name(),
             wasm::Func {
-                type_name: self.metadata.find_clsr_type(clsr.params.len()),
+                type_name: self.metadata.find_clsr(name).clsr_type(),
                 params: iter::once(self.metadata.special_local())
                     .chain(clsr.params.iter().map(|value_name| {
                         self.metadata
@@ -250,11 +246,10 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     pub fn emit_module(&mut self, module: &'a cont::Module) {
-        self.emit_obj_type();
-        self.emit_int_type();
         self.emit_flt_type();
-        self.emit_envr_type();
-        self.emit_clsr_envr_types();
+        self.emit_clsr_arity_types();
+        self.emit_clsr_named_types();
+        self.emit_envr_arity_types();
         self.emit_clsr_types();
         self.emit_func_types();
 

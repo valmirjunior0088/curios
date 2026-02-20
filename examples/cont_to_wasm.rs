@@ -76,10 +76,10 @@ fn main() {
                         target: BlockName::from("on_zero"),
                         params: vec![ValueName::from("x")],
                     }],
-                    default: JumpTarget {
+                    default: Some(JumpTarget {
                         target: BlockName::from("on_non_zero"),
                         params: vec![ValueName::from("x")],
-                    },
+                    }),
                 }),
             },
         },
@@ -167,10 +167,10 @@ fn main() {
                                         target: BlockName::from("pick_zero"),
                                         params: vec![ValueName::from("result")],
                                     }],
-                                    default: JumpTarget {
+                                    default: Some(JumpTarget {
                                         target: BlockName::from("pick_one"),
                                         params: vec![ValueName::from("result")],
-                                    },
+                                    }),
                                 }),
                             },
                         },
