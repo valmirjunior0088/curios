@@ -12,12 +12,16 @@ impl<A: Arity> Scope<A> {
     pub fn open<'a>(self, terms: A::Params<'a, Term>) -> Term {
         let terms = terms.as_ref();
 
-        if self.arity.arity() != terms.len() {
-            panic!("mismatched arity");
-        }
+        assert!(self.arity.arity() == terms.len());
 
         self.body.release(terms)
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct Case {
+    pub atom: Atom,
+    pub body: Subterm,
 }
 
 #[derive(Clone, Debug)]
@@ -31,7 +35,7 @@ pub enum Term {
     Split(Subterm, Scope<Two>),
     AtomType(Vec<Atom>),
     Atom(Atom),
-    Match(Subterm, Vec<(Atom, Subterm)>),
+    Match(Subterm, Vec<Case>),
     LetRec(Vec<(Name, Subterm, Scope<One>)>, Scope<Many>),
     Name(Name),
 }
@@ -40,9 +44,7 @@ impl Term {
     pub fn close<'a, A: Arity>(self, arity: A, names: A::Params<'a, str>) -> Scope<A> {
         let names = names.as_ref();
 
-        if arity.arity() != names.len() {
-            panic!("mismatched arity");
-        }
+        assert!(arity.arity() == names.len());
 
         Scope {
             arity,
@@ -60,15 +62,12 @@ impl Term {
                 Self::Pair(left, right) => scope.open([&left, &right]).reduce(),
                 head => Self::Split(head.into(), scope),
             },
-            Self::Match(head, mut cases) => match head.reduce() {
-                Self::Atom(atom) => {
-                    if let Some(index) = cases.iter().position(|(case, _)| &atom == case) {
-                        cases.remove(index).1.reduce()
-                    } else {
-                        Self::Match(Box::new(Self::Atom(atom)), cases)
-                    }
-                }
-                head => Self::Match(Box::new(head), cases),
+            Self::Match(head, cases) => match head.reduce() {
+                Self::Atom(atom) => match cases.iter().position(|case| atom == case.atom) {
+                    Some(index) => cases.into_iter().nth(index).unwrap().body.reduce(),
+                    None => Self::Match(Self::Atom(atom).into(), cases),
+                },
+                head => Self::Match(head.into(), cases),
             },
             term => term,
         }
@@ -169,7 +168,10 @@ where
                 self.visit_node(head),
                 cases
                     .into_iter()
-                    .map(|(atom, body)| (atom, self.visit_node(body)))
+                    .map(|case| Case {
+                        atom: case.atom,
+                        body: self.visit_node(case.body),
+                    })
                     .collect(),
             ),
             Term::LetRec(head, body) => Term::LetRec(
