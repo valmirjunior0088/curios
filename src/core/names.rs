@@ -13,18 +13,16 @@ pub struct Name {
     kind: NameKind,
 }
 
-impl<A> From<A> for Name
-where
-    A: Into<String>,
-{
-    fn from(free: A) -> Self {
+impl Name {
+    pub fn free<A>(free: A) -> Self
+    where
+        A: Into<String>,
+    {
         Self {
             kind: NameKind::Free(free.into()),
         }
     }
-}
 
-impl Name {
     pub(super) fn as_free(&self) -> Option<&str> {
         match &self.kind {
             NameKind::Free(free) => Some(free),
@@ -43,5 +41,9 @@ impl Name {
             NameKind::Free(_) => None,
             &NameKind::Bound(bound) => Some(bound),
         }
+    }
+
+    pub fn unwrap(&self) -> &str {
+        self.as_free().unwrap()
     }
 }

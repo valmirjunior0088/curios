@@ -8,7 +8,7 @@ pub trait Arity {
 pub struct One;
 
 impl Arity for One {
-    type Params<'a, T: ?Sized + 'a> = [&'a T; 1];
+    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; 1];
 
     fn arity(&self) -> usize {
         1
@@ -19,7 +19,7 @@ impl Arity for One {
 pub struct Two;
 
 impl Arity for Two {
-    type Params<'a, T: ?Sized + 'a> = [&'a T; 2];
+    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; 2];
 
     fn arity(&self) -> usize {
         2

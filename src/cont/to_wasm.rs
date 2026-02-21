@@ -1,8 +1,8 @@
 mod data;
 use data::*;
 
-mod scope;
-use scope::*;
+mod frame;
+use frame::*;
 
 mod context;
 use context::*;

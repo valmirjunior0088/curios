@@ -1,5 +1,5 @@
 use {
-    super::{BlockData, Context, LoadAs, Scope},
+    super::{BlockData, Context, LoadAs, Frame},
     crate::{cont, wasm},
     std::collections::HashMap,
 };
@@ -15,8 +15,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     pub fn emit_instr(&mut self, instr: wasm::Instr) {
-        if let Some(scope) = self.context.this_scope() {
-            scope.instrs.push(instr);
+        if let Some(frame) = self.context.this_frame() {
+            frame.instrs.push(instr);
         } else {
             self.expr.push(instr);
         }
@@ -26,18 +26,18 @@ impl<'a, 'b> Emitter<'a, 'b> {
     where
         I: IntoIterator<Item = wasm::Instr>,
     {
-        if let Some(scope) = self.context.this_scope() {
-            scope.instrs.extend(instrs);
+        if let Some(frame) = self.context.this_frame() {
+            frame.instrs.extend(instrs);
         } else {
             self.expr.extend(instrs);
         }
     }
 
-    pub fn leave_last_scope(&mut self) {
-        let instrs = self.context.leave_scope();
+    pub fn leave_last_frame(&mut self) {
+        let instrs = self.context.leave_frame();
 
-        if self.context.this_scope().is_some() {
-            panic!("`Emitter` expected empty scope stack after leaving root");
+        if self.context.this_frame().is_some() {
+            panic!("`Emitter` expected empty frame stack after leaving root");
         }
 
         self.expr.extend(instrs);
@@ -168,7 +168,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     block_data.region,
                 );
 
-                (block_data.label_name.clone(), self.context.leave_scope())
+                (block_data.label_name.clone(), self.context.leave_frame())
             })
             .collect();
 
@@ -199,7 +199,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .collect();
 
         if region.blocks.is_empty() {
-            self.context.enter_scope(Scope::new(params, values, vec![]));
+            self.context.enter_frame(Frame::new(params, values, vec![]));
             self.emit_let_values(&region.values);
             self.emit_instrs(self.context.tail_instrs(&region.tail));
         } else {
@@ -241,7 +241,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 .collect::<Vec<_>>();
 
             self.context
-                .enter_scope(Scope::new(params, values, blocks.clone()));
+                .enter_frame(Frame::new(params, values, blocks.clone()));
 
             self.emit_let_values(&region.values);
             self.emit_let_blocks(dispatcher_local, dispatcher_label, blocks, &region.tail);
@@ -251,6 +251,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
     pub fn emit_root_region(&mut self, region: &'a cont::Region) {
         self.emit_region(self.context.params(), region);
 
-        self.leave_last_scope();
+        self.leave_last_frame();
     }
 }

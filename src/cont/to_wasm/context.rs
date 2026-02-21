@@ -1,5 +1,5 @@
 use {
-    super::{BlockData, ClsrData, FieldData, FuncData, ModuleData, Scope},
+    super::{BlockData, ClsrData, FieldData, Frame, FuncData, ModuleData},
     crate::{cont, wasm},
     std::{collections::HashMap, iter, mem},
 };
@@ -13,14 +13,14 @@ pub enum Context<'a, 'b> {
         data: &'a ClsrData<'a>,
         entropy: usize,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
-        scopes: Vec<Scope<'a>>,
+        frames: Vec<Frame<'a>>,
     },
     Func {
         metadata: &'a ModuleData<'a>,
         data: &'a FuncData<'a>,
         entropy: usize,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
-        scopes: Vec<Scope<'a>>,
+        frames: Vec<Frame<'a>>,
     },
 }
 
@@ -46,7 +46,7 @@ impl<'a, 'b> Context<'a, 'b> {
             data,
             entropy: 0,
             locals,
-            scopes: Vec::new(),
+            frames: Vec::new(),
         }
     }
 
@@ -60,7 +60,7 @@ impl<'a, 'b> Context<'a, 'b> {
             data,
             entropy: 0,
             locals,
-            scopes: Vec::new(),
+            frames: Vec::new(),
         }
     }
 
@@ -126,39 +126,39 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn enter_scope(&mut self, scope: Scope<'a>) {
+    pub fn enter_frame(&mut self, frame: Frame<'a>) {
         match self {
-            Self::Const { .. } => panic!("`Context` lacks scope stack"),
-            Self::Clsr { scopes, .. } | Self::Func { scopes, .. } => scopes.push(scope),
+            Self::Const { .. } => panic!("`Context` lacks frame stack"),
+            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames.push(frame),
         }
     }
 
-    pub fn leave_scope(&mut self) -> Vec<wasm::Instr> {
+    pub fn leave_frame(&mut self) -> Vec<wasm::Instr> {
         match self {
-            Self::Const { .. } => panic!("`Context` lacks scope stack"),
-            Self::Clsr { scopes, .. } | Self::Func { scopes, .. } => {
-                scopes.pop().expect("`Context` lacks scope").instrs
+            Self::Const { .. } => panic!("`Context` lacks frame stack"),
+            Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
+                frames.pop().expect("`Context` lacks frame").instrs
             }
         }
     }
 
-    pub fn this_scope(&mut self) -> Option<&mut Scope<'a>> {
+    pub fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
         match self {
             Self::Const { .. } => None,
-            Self::Clsr { scopes, .. } | Self::Func { scopes, .. } => scopes.last_mut(),
+            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames.last_mut(),
         }
     }
 
     pub fn find_local(&self, value_name: &cont::ValueName) -> Option<(wasm::LocalName, bool)> {
         match self {
             Self::Const { .. } => None,
-            Self::Clsr { scopes, .. } | Self::Func { scopes, .. } => {
-                scopes.iter().rev().find_map(|scope| {
-                    scope
+            Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
+                frames.iter().rev().find_map(|frame| {
+                    frame
                         .values
                         .get(value_name)
                         .map(|local_name| (local_name.clone(), false))
-                        .or_else(|| scope.params.get(value_name).cloned())
+                        .or_else(|| frame.params.get(value_name).cloned())
                 })
             }
         }
@@ -166,16 +166,16 @@ impl<'a, 'b> Context<'a, 'b> {
 
     pub fn find_block(&self, block_name: &cont::BlockName) -> &BlockData<'a> {
         match self {
-            Self::Const { .. } => panic!("`Context` lacks scope stack"),
-            Self::Clsr { scopes, .. } | Self::Func { scopes, .. } => scopes
+            Self::Const { .. } => panic!("`Context` lacks frame stack"),
+            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
                 .iter()
                 .rev()
-                .find_map(|scope| {
-                    scope
+                .find_map(|frame| {
+                    frame
                         .blocks
                         .iter()
-                        .find_map(|(scope_block_name, block_data)| {
-                            (&block_name == scope_block_name).then_some(block_data)
+                        .find_map(|(frame_block_name, block_data)| {
+                            (&block_name == frame_block_name).then_some(block_data)
                         })
                 })
                 .unwrap_or_else(|| panic!("`Context` lacks block `{}`", block_name.string)),

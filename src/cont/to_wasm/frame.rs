@@ -35,14 +35,14 @@ impl<'a> BlockData<'a> {
     }
 }
 
-pub struct Scope<'a> {
+pub struct Frame<'a> {
     pub params: HashMap<&'a cont::ValueName, LocalData>,
     pub values: HashMap<&'a cont::ValueName, wasm::LocalName>,
     pub blocks: Vec<(&'a cont::BlockName, BlockData<'a>)>,
     pub instrs: Vec<wasm::Instr>,
 }
 
-impl<'a> Scope<'a> {
+impl<'a> Frame<'a> {
     pub fn new(
         params: HashMap<&'a cont::ValueName, LocalData>,
         values: HashMap<&'a cont::ValueName, wasm::LocalName>,
