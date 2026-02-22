@@ -55,12 +55,8 @@ impl Comparator {
     }
 
     fn compare(&mut self) -> Result<bool, Undecided> {
-        loop {
+        while let Some((this, that)) = self.dequeue() {
             self.checkpoint()?;
-
-            let Some((this, that)) = self.dequeue() else {
-                return Ok(true);
-            };
 
             match (this.reduce(), that.reduce()) {
                 (Term::Type, Term::Type) => {}
@@ -234,6 +230,8 @@ impl Comparator {
                 (_, _) => return Ok(false),
             }
         }
+
+        Ok(true)
     }
 }
 
