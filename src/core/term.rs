@@ -5,7 +5,7 @@ use {
 
 pub type Subterm = Box<Term>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Scope<A: Arity> {
     arity: A,
     body: Subterm,
@@ -32,7 +32,7 @@ impl<A: Arity> Scope<A> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Type,
     FuncType(Subterm, Scope<One>),

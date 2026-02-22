@@ -1,21 +1,37 @@
 use {
     super::{Name, Term},
     std::collections::{HashSet, VecDeque},
+    std::time::{Duration, Instant},
 };
 
-pub struct Comparator {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Undecided;
+
+struct Comparator {
+    timeout: Option<Instant>,
     entropy: usize,
     history: HashSet<(Term, Term)>,
     pending: VecDeque<(Term, Term)>,
 }
 
 impl Comparator {
-    pub fn new(this: Term, that: Term) -> Self {
+    fn new(timeout: Option<Duration>, this: Term, that: Term) -> Self {
         Self {
+            timeout: timeout.map(|timeout| Instant::now() + timeout),
             entropy: 0,
             history: HashSet::new(),
             pending: VecDeque::from([(this, that)]),
         }
+    }
+
+    fn checkpoint(&self) -> Result<(), Undecided> {
+        if let Some(timeout) = self.timeout {
+            if Instant::now() >= timeout {
+                return Err(Undecided);
+            }
+        }
+
+        Ok(())
     }
 
     fn fresh_name(&mut self) -> Name {
@@ -38,8 +54,14 @@ impl Comparator {
         self.pending.pop_back()
     }
 
-    fn compare(&mut self) -> bool {
-        while let Some((this, that)) = self.dequeue() {
+    fn compare(&mut self) -> Result<bool, Undecided> {
+        loop {
+            self.checkpoint()?;
+
+            let Some((this, that)) = self.dequeue() else {
+                return Ok(true);
+            };
+
             match (this.reduce(), that.reduce()) {
                 (Term::Type, Term::Type) => {}
                 (
@@ -138,12 +160,12 @@ impl Comparator {
                 }
                 (Term::AtomType(this_atoms), Term::AtomType(that_atoms)) => {
                     if this_atoms != that_atoms {
-                        return false;
+                        return Ok(false);
                     }
                 }
                 (Term::Atom(this_atom), Term::Atom(that_atom)) => {
                     if this_atom != that_atom {
-                        return false;
+                        return Ok(false);
                     }
                 }
                 (
@@ -155,7 +177,7 @@ impl Comparator {
                     }
 
                     if this_cases.len() != that_cases.len() {
-                        return false;
+                        return Ok(false);
                     }
 
                     self.enqueue(this_head, that_head);
@@ -164,7 +186,7 @@ impl Comparator {
                         this_cases.iter().zip(that_cases.iter())
                     {
                         if this_atom != that_atom {
-                            return false;
+                            return Ok(false);
                         }
 
                         let atom = Term::Atom(this_atom.clone());
@@ -206,66 +228,40 @@ impl Comparator {
                 }
                 (Term::Name(this_name), Term::Name(that_name)) => {
                     if this_name != that_name {
-                        return false;
+                        return Ok(false);
                     }
                 }
-                (_, _) => return false,
+                (_, _) => return Ok(false),
             }
         }
-
-        true
     }
 }
 
-pub fn compare(this: Term, that: Term) -> bool {
-    Comparator::new(this, that).compare()
+pub fn compare<A>(timeout: A, this: Term, that: Term) -> Result<bool, Undecided>
+where
+    A: Into<Option<Duration>>,
+{
+    Comparator::new(timeout.into(), this, that).compare()
+}
+
+pub fn compare_strict<A>(timeout: A, this: Term, that: Term) -> bool
+where
+    A: Into<Option<Duration>>,
+{
+    compare(timeout, this, that).unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        crate::core::Atom,
-        std::{
-            env,
-            process::{Command, Stdio},
-            thread,
-            time::Duration,
-        },
-    };
+    use super::*;
 
-    const PATHOLOGIC_RECURSION_TIMES_OUT_TIMEOUT: Duration = Duration::from_secs(1);
-
-    #[test]
-    #[ignore]
-    fn pathologic_recursion_times_out_unsafe() {
-        let this = Term::bind(vec![("x", Term::Type, Term::free("x"))], Term::free("x"));
-        let that = Term::bind(vec![("y", Term::Type, Term::free("y"))], Term::free("y"));
-        assert!(compare(this, that));
-    }
+    use {crate::core::Atom, std::time::Duration};
 
     #[test]
     fn pathologic_recursion_times_out() {
-        let test_name = concat!(module_path!(), "::pathologic_recursion_times_out_unsafe");
-
-        let test_name = test_name
-            .strip_prefix(concat!(env!("CARGO_PKG_NAME"), "::"))
-            .unwrap_or(test_name);
-
-        let mut child = Command::new(env::current_exe().unwrap())
-            .arg("--quiet")
-            .arg("--exact")
-            .arg("--ignored")
-            .arg(test_name)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-
-        thread::sleep(PATHOLOGIC_RECURSION_TIMES_OUT_TIMEOUT);
-        child.kill().unwrap();
-
-        assert!(!child.wait().unwrap().success());
+        let this = Term::bind(vec![("x", Term::Type, Term::free("x"))], Term::free("x"));
+        let that = Term::bind(vec![("y", Term::Type, Term::free("y"))], Term::free("y"));
+        assert_eq!(compare(Duration::from_secs(1), this, that), Err(Undecided));
     }
 
     #[test]
@@ -302,7 +298,7 @@ mod tests {
             ),
         );
 
-        assert!(compare(this, that));
+        assert_eq!(compare(None, this, that), Ok(true));
     }
 
     #[test]
@@ -329,7 +325,7 @@ mod tests {
             ),
         );
 
-        assert!(compare(this, that));
+        assert_eq!(compare(None, this, that), Ok(true));
     }
 
     #[test]
@@ -356,14 +352,14 @@ mod tests {
             ),
         );
 
-        assert!(!compare(this, that));
+        assert_eq!(compare(None, this, that), Ok(false));
     }
 
     #[test]
     fn bind_unfolds_against_non_bind_in_both_directions() {
         let this = Term::bind(vec![("x", Term::Type, Term::atom("left"))], Term::free("x"));
         let that = Term::atom("left");
-        assert!(compare(this.clone(), that.clone()));
-        assert!(compare(that, this));
+        assert_eq!(compare(None, this.clone(), that.clone()), Ok(true));
+        assert_eq!(compare(None, that, this), Ok(true));
     }
 }
