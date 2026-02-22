@@ -1,6 +1,6 @@
 use {
     super::{Arity, Atom, Many, Name, One, Two},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 
 pub type Subterm = Box<Term>;
@@ -43,7 +43,7 @@ pub enum Term {
     Split(Subterm, Scope<Two>),
     AtomType(BTreeSet<Atom>),
     Atom(Atom),
-    Match(Subterm, BTreeMap<Atom, Subterm>),
+    Switch(Subterm, BTreeMap<Atom, Subterm>),
     Bind(Vec<(Subterm, Scope<Many>)>, Scope<Many>),
     Name(Name),
 }
@@ -91,11 +91,11 @@ impl Term {
         Self::Atom(Atom::from(atom.into()))
     }
 
-    pub fn r#match<I>(head: Term, cases: I) -> Self
+    pub fn switch<I>(head: Term, cases: I) -> Self
     where
         I: IntoIterator<Item = (Atom, Term)>,
     {
-        Self::Match(
+        Self::Switch(
             head.into(),
             cases
                 .into_iter()
@@ -138,12 +138,12 @@ impl Term {
                 Self::Pair(left, right) => scope.open(&[&*left, &right]).reduce(),
                 head => Self::Split(head.into(), scope),
             },
-            Self::Match(head, cases) => match head.reduce() {
+            Self::Switch(head, cases) => match head.reduce() {
                 Self::Atom(atom) => match cases.get(&atom).cloned() {
                     Some(body) => body.reduce(),
-                    None => Self::Match(Self::Atom(atom).into(), cases),
+                    None => Self::Switch(Self::Atom(atom).into(), cases),
                 },
-                head => Self::Match(head.into(), cases),
+                head => Self::Switch(head.into(), cases),
             },
             term => term,
         }
@@ -156,11 +156,26 @@ impl Term {
         Rewriter::new(f).rewrite_term(self)
     }
 
+    pub fn free_names(&self) -> HashSet<String> {
+        let mut names = HashSet::new();
+
+        Visitor::new(|_, name| {
+            if let Some(free) = name.as_free() {
+                names.insert(free.to_string());
+            }
+
+            None
+        })
+        .visit_term(self.clone());
+
+        names
+    }
+
     fn shift(self, amount: usize) -> Self {
         Visitor::new(|depth, name| {
             name.as_bound()
-                .filter(|&index| index >= depth)
-                .map(|index| Self::Name(Name::bound(index + amount)))
+                .filter(|&bound| bound >= depth)
+                .map(|bound| Self::Name(Name::bound(bound + amount)))
         })
         .visit_term(self)
     }
@@ -172,12 +187,12 @@ impl Term {
                     names
                         .iter()
                         .position(|&bound| free == bound)
-                        .map(|index| Self::Name(Name::bound(depth + index)))
+                        .map(|bound| Self::Name(Name::bound(depth + bound)))
                 })
                 .or_else(|| {
                     name.as_bound()
-                        .filter(|&index| index >= depth)
-                        .map(|index| Self::Name(Name::bound(index + names.len())))
+                        .filter(|&bound| bound >= depth)
+                        .map(|bound| Self::Name(Name::bound(bound + names.len())))
                 })
         })
         .visit_term(self)
@@ -186,9 +201,9 @@ impl Term {
     fn release(self, terms: &[&Term]) -> Self {
         Visitor::new(|depth, name| {
             name.as_bound()
-                .and_then(|index| match index.checked_sub(depth) {
+                .and_then(|bound| match bound.checked_sub(depth) {
                     Some(delta) if delta < terms.len() => Some(terms[delta].clone().shift(depth)),
-                    Some(_) => Some(Self::Name(Name::bound(index - terms.len()))),
+                    Some(_) => Some(Self::Name(Name::bound(bound - terms.len()))),
                     None => None,
                 })
         })
@@ -244,7 +259,7 @@ where
             }
             Term::AtomType(atoms) => Term::AtomType(atoms),
             Term::Atom(atom) => Term::Atom(atom),
-            Term::Match(head, cases) => Term::Match(
+            Term::Switch(head, cases) => Term::Switch(
                 self.visit_subterm(head),
                 cases
                     .into_iter()
@@ -312,7 +327,7 @@ where
             }
             Term::AtomType(atoms) => Term::AtomType(atoms),
             Term::Atom(atom) => Term::Atom(atom),
-            Term::Match(head, cases) => Term::Match(
+            Term::Switch(head, cases) => Term::Switch(
                 self.rewrite_subterm(head),
                 cases
                     .into_iter()
@@ -332,7 +347,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, std::collections::HashSet};
 
     #[test]
     fn close_open_substitutes_free_name() {
@@ -362,5 +377,24 @@ mod tests {
         };
 
         assert_eq!(name, Name::free("z"));
+    }
+
+    #[test]
+    fn free_names_collects_only_free_names() {
+        let term = Term::func(
+            "x",
+            Term::pair(
+                Term::free("x"),
+                Term::bind(
+                    vec![("y", Term::Type, Term::free("z"))],
+                    Term::pair(Term::free("y"), Term::free("w")),
+                ),
+            ),
+        );
+
+        assert_eq!(
+            term.free_names(),
+            HashSet::from([String::from("w"), String::from("z")])
+        );
     }
 }

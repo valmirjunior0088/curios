@@ -1,45 +1,45 @@
 use {
-    super::{Name, Term},
+    super::Term,
     std::collections::{HashSet, VecDeque},
     std::time::{Duration, Instant},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Undecided;
+pub struct Preempted;
 
-struct Comparator {
+struct Compare {
     timeout: Option<Instant>,
     entropy: usize,
+    blocked: HashSet<String>,
     history: HashSet<(Term, Term)>,
     pending: VecDeque<(Term, Term)>,
 }
 
-impl Comparator {
+impl Compare {
     fn new(timeout: Option<Duration>, this: Term, that: Term) -> Self {
         Self {
             timeout: timeout.map(|timeout| Instant::now() + timeout),
             entropy: 0,
+            blocked: this
+                .free_names()
+                .into_iter()
+                .chain(that.free_names())
+                .collect::<HashSet<_>>(),
             history: HashSet::new(),
             pending: VecDeque::from([(this, that)]),
         }
     }
 
-    fn checkpoint(&self) -> Result<(), Undecided> {
-        if let Some(timeout) = self.timeout {
-            if Instant::now() >= timeout {
-                return Err(Undecided);
+    fn fresh_name(&mut self) -> Term {
+        loop {
+            let entropy = self.entropy.to_string();
+
+            self.entropy += 1;
+
+            if self.blocked.insert(entropy.clone()) {
+                return Term::free(entropy);
             }
         }
-
-        Ok(())
-    }
-
-    fn fresh_name(&mut self) -> Name {
-        let fresh = self.entropy.to_string();
-
-        self.entropy += 1;
-
-        Name::free(fresh)
     }
 
     fn in_history(&mut self, this: &Term, that: &Term) -> bool {
@@ -50,14 +50,18 @@ impl Comparator {
         self.pending.push_front((this.clone(), that.clone()))
     }
 
-    fn dequeue(&mut self) -> Option<(Term, Term)> {
-        self.pending.pop_back()
+    fn dequeue(&mut self) -> Result<Option<(Term, Term)>, Preempted> {
+        if let Some(timeout) = self.timeout {
+            if Instant::now() >= timeout {
+                return Err(Preempted);
+            }
+        }
+
+        Ok(self.pending.pop_back())
     }
 
-    fn compare(&mut self) -> Result<bool, Undecided> {
-        while let Some((this, that)) = self.dequeue() {
-            self.checkpoint()?;
-
+    fn compare(mut self) -> Result<bool, Preempted> {
+        while let Some((this, that)) = self.dequeue()? {
             match (this.reduce(), that.reduce()) {
                 (Term::Type, Term::Type) => {}
                 (
@@ -70,7 +74,7 @@ impl Comparator {
 
                     self.enqueue(this_term, that_term);
 
-                    let name = Term::Name(self.fresh_name());
+                    let name = self.fresh_name();
 
                     self.enqueue(
                         &this_scope.clone().open(&[&name]),
@@ -82,7 +86,7 @@ impl Comparator {
                         continue;
                     }
 
-                    let name = Term::Name(self.fresh_name());
+                    let name = self.fresh_name();
 
                     self.enqueue(
                         &this_scope.clone().open(&[&name]),
@@ -110,7 +114,7 @@ impl Comparator {
 
                     self.enqueue(this_term, that_term);
 
-                    let name = Term::Name(self.fresh_name());
+                    let name = self.fresh_name();
 
                     self.enqueue(
                         &this_scope.clone().open(&[&name]),
@@ -138,8 +142,8 @@ impl Comparator {
 
                     self.enqueue(this_head, that_head);
 
-                    let left_name = Term::Name(self.fresh_name());
-                    let right_name = Term::Name(self.fresh_name());
+                    let left_name = self.fresh_name();
+                    let right_name = self.fresh_name();
                     let pair = Term::Pair(left_name.clone().into(), right_name.clone().into());
 
                     let this_term = this_scope
@@ -165,8 +169,8 @@ impl Comparator {
                     }
                 }
                 (
-                    ref this @ Term::Match(ref this_head, ref this_cases),
-                    ref that @ Term::Match(ref that_head, ref that_cases),
+                    ref this @ Term::Switch(ref this_head, ref this_cases),
+                    ref that @ Term::Switch(ref that_head, ref that_cases),
                 ) => {
                     if self.in_history(this, that) {
                         continue;
@@ -235,11 +239,11 @@ impl Comparator {
     }
 }
 
-pub fn compare<A>(timeout: A, this: Term, that: Term) -> Result<bool, Undecided>
+pub fn compare<A>(timeout: A, this: Term, that: Term) -> Result<bool, Preempted>
 where
     A: Into<Option<Duration>>,
 {
-    Comparator::new(timeout.into(), this, that).compare()
+    Compare::new(timeout.into(), this, that).compare()
 }
 
 pub fn compare_strict<A>(timeout: A, this: Term, that: Term) -> bool
@@ -259,7 +263,7 @@ mod tests {
     fn pathologic_recursion_times_out() {
         let this = Term::bind(vec![("x", Term::Type, Term::free("x"))], Term::free("x"));
         let that = Term::bind(vec![("y", Term::Type, Term::free("y"))], Term::free("y"));
-        assert_eq!(compare(Duration::from_secs(1), this, that), Err(Undecided));
+        assert_eq!(compare(Duration::from_secs(1), this, that), Err(Preempted));
     }
 
     #[test]
@@ -270,7 +274,7 @@ mod tests {
                 Term::free("p"),
                 "x",
                 "y",
-                Term::r#match(
+                Term::switch(
                     Term::free("p"),
                     [
                         (Atom::from("left"), Term::free("x")),
@@ -286,7 +290,7 @@ mod tests {
                 Term::free("p"),
                 "x",
                 "y",
-                Term::r#match(
+                Term::switch(
                     Term::pair(Term::free("x"), Term::free("y")),
                     [
                         (Atom::from("left"), Term::free("x")),
@@ -300,10 +304,10 @@ mod tests {
     }
 
     #[test]
-    fn match_rewrites_branch_bodies_with_case_atom() {
+    fn switch_rewrites_branch_bodies_with_case_atom() {
         let this = Term::func(
             "p",
-            Term::r#match(
+            Term::switch(
                 Term::free("p"),
                 [
                     (Atom::from("left"), Term::free("p")),
@@ -314,7 +318,7 @@ mod tests {
 
         let that = Term::func(
             "p",
-            Term::r#match(
+            Term::switch(
                 Term::free("p"),
                 [
                     (Atom::from("left"), Term::atom("left")),
@@ -327,10 +331,10 @@ mod tests {
     }
 
     #[test]
-    fn match_rewrite_detects_wrong_branch() {
+    fn switch_rewrite_detects_wrong_branch() {
         let this = Term::func(
             "p",
-            Term::r#match(
+            Term::switch(
                 Term::free("p"),
                 [
                     (Atom::from("left"), Term::free("p")),
@@ -341,7 +345,7 @@ mod tests {
 
         let that = Term::func(
             "p",
-            Term::r#match(
+            Term::switch(
                 Term::free("p"),
                 [
                     (Atom::from("left"), Term::atom("left")),
