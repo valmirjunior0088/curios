@@ -7,5 +7,5 @@ pub use arity::*;
 mod term;
 pub use term::*;
 
-mod converts;
-pub use converts::*;
+mod compare;
+pub use compare::*;

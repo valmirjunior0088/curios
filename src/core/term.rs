@@ -49,6 +49,85 @@ pub enum Term {
 }
 
 impl Term {
+    pub fn func_type(name: &str, kind: Term, body: Term) -> Self {
+        Self::FuncType(kind.into(), Scope::close(One, &[name], body))
+    }
+
+    pub fn func(name: &str, body: Term) -> Self {
+        Self::Func(Scope::close(One, &[name], body))
+    }
+
+    pub fn apply(head: Term, param: Term) -> Self {
+        Self::Apply(head.into(), param.into())
+    }
+
+    pub fn pair_type(name: &str, kind: Term, body: Term) -> Self {
+        Self::PairType(kind.into(), Scope::close(One, &[name], body))
+    }
+
+    pub fn pair(left: Term, right: Term) -> Self {
+        Self::Pair(left.into(), right.into())
+    }
+
+    pub fn split(head: Term, left_name: &str, right_name: &str, body: Term) -> Self {
+        Self::Split(
+            head.into(),
+            Scope::close(Two, &[left_name, right_name], body),
+        )
+    }
+
+    pub fn atom_type<I, A>(atoms: I) -> Self
+    where
+        I: IntoIterator<Item = A>,
+        A: Into<String>,
+    {
+        Self::AtomType(atoms.into_iter().map(Atom::from).collect())
+    }
+
+    pub fn atom<A>(atom: A) -> Self
+    where
+        A: Into<String>,
+    {
+        Self::Atom(Atom::from(atom.into()))
+    }
+
+    pub fn r#match<I>(head: Term, cases: I) -> Self
+    where
+        I: IntoIterator<Item = (Atom, Term)>,
+    {
+        Self::Match(
+            head.into(),
+            cases
+                .into_iter()
+                .map(|(atom, body)| (atom, body.into()))
+                .collect(),
+        )
+    }
+
+    pub fn bind(bindings: Vec<(&str, Term, Term)>, body: Term) -> Self {
+        let names = bindings
+            .iter()
+            .map(|(name, _, _)| *name)
+            .collect::<Vec<_>>();
+
+        let arity = Many(names.len());
+
+        Self::Bind(
+            bindings
+                .into_iter()
+                .map(|(_, kind, value)| (kind.into(), Scope::close(arity, &names, value)))
+                .collect(),
+            Scope::close(arity, &names, body),
+        )
+    }
+
+    pub fn free<A>(free: A) -> Self
+    where
+        A: Into<String>,
+    {
+        Self::Name(Name::free(free))
+    }
+
     pub fn reduce(self) -> Self {
         match self {
             Self::Apply(head, param) => match head.reduce() {
@@ -114,15 +193,6 @@ impl Term {
                 })
         })
         .visit_term(self)
-    }
-}
-
-impl<A> From<A> for Term
-where
-    A: Into<String>,
-{
-    fn from(free: A) -> Self {
-        Self::Name(Name::free(free))
     }
 }
 
@@ -266,7 +336,7 @@ mod tests {
 
     #[test]
     fn close_open_substitutes_free_name() {
-        let term = Scope::close(One, &["x"], Term::from("x")).open(&[&Term::from("y")]);
+        let term = Scope::close(One, &["x"], Term::free("x")).open(&[&Term::free("y")]);
 
         let name = match term {
             Term::Name(name) => name,
@@ -278,19 +348,15 @@ mod tests {
 
     #[test]
     fn close_open_preserves_nested_bind() {
-        let term = Scope::close(
-            One,
-            &["x"],
-            Term::Func(Scope::close(One, &["y"], Term::from("x"))),
-        )
-        .open(&[&Term::from("z")]);
+        let term =
+            Scope::close(One, &["x"], Term::func("y", Term::free("x"))).open(&[&Term::free("z")]);
 
         let body = match term {
             Term::Func(body) => body,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        let name = match body.open(&[&Term::from("w")]) {
+        let name = match body.open(&[&Term::free("w")]) {
             Term::Name(name) => name,
             term => panic!("unexpected `{term:?}`"),
         };
