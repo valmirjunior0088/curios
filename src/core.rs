@@ -6,6 +6,3 @@ pub use arity::*;
 
 mod term;
 pub use term::*;
-
-mod compare;
-pub use compare::*;

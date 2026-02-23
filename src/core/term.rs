@@ -23,10 +23,14 @@ impl<A: Arity> Scope<A> {
         }
     }
 
+    pub fn arity(&self) -> usize {
+        self.arity.arity()
+    }
+
     pub fn open<'a>(self, terms: A::Params<'a, Term>) -> Term {
         let terms = terms.as_ref();
 
-        assert!(self.arity.arity() == terms.len());
+        assert!(self.arity() == terms.len());
 
         self.body.release(terms)
     }
@@ -40,10 +44,10 @@ pub enum Term {
     Apply(Subterm, Subterm),
     PairType(Subterm, Scope<One>),
     Pair(Subterm, Subterm),
-    Split(Subterm, Scope<Two>),
+    Split(Subterm, Scope<One>, Scope<Two>),
     AtomType(BTreeSet<Atom>),
     Atom(Atom),
-    Switch(Subterm, BTreeMap<Atom, Subterm>),
+    Switch(Subterm, Scope<One>, BTreeMap<Atom, Subterm>),
     Bind(Vec<(Subterm, Scope<Many>)>, Scope<Many>),
     Name(Name),
 }
@@ -69,9 +73,16 @@ impl Term {
         Self::Pair(left.into(), right.into())
     }
 
-    pub fn split(head: Term, left_name: &str, right_name: &str, body: Term) -> Self {
+    pub fn split(
+        head: Term,
+        motive: Scope<One>,
+        left_name: &str,
+        right_name: &str,
+        body: Term,
+    ) -> Self {
         Self::Split(
             head.into(),
+            motive,
             Scope::close(Two, &[left_name, right_name], body),
         )
     }
@@ -91,12 +102,13 @@ impl Term {
         Self::Atom(Atom::from(atom.into()))
     }
 
-    pub fn switch<I>(head: Term, cases: I) -> Self
+    pub fn switch<I>(head: Term, motive: Scope<One>, cases: I) -> Self
     where
         I: IntoIterator<Item = (Atom, Term)>,
     {
         Self::Switch(
             head.into(),
+            motive,
             cases
                 .into_iter()
                 .map(|(atom, body)| (atom, body.into()))
@@ -128,38 +140,10 @@ impl Term {
         Self::Name(Name::free(free))
     }
 
-    pub fn reduce(self) -> Self {
-        match self {
-            Self::Apply(head, param) => match head.reduce() {
-                Self::Func(body) => body.open(&[&*param]).reduce(),
-                head => Self::Apply(head.into(), param),
-            },
-            Self::Split(head, scope) => match head.reduce() {
-                Self::Pair(left, right) => scope.open(&[&*left, &right]).reduce(),
-                head => Self::Split(head.into(), scope),
-            },
-            Self::Switch(head, cases) => match head.reduce() {
-                Self::Atom(atom) => match cases.get(&atom).cloned() {
-                    Some(body) => body.reduce(),
-                    None => Self::Switch(Self::Atom(atom).into(), cases),
-                },
-                head => Self::Switch(head.into(), cases),
-            },
-            term => term,
-        }
-    }
-
-    pub fn rewrite<F>(self, f: F) -> Self
-    where
-        F: FnMut(&Term) -> Option<Term>,
-    {
-        Rewriter::new(f).rewrite_term(self)
-    }
-
     pub fn free_names(&self) -> HashSet<String> {
         let mut names = HashSet::new();
 
-        Visitor::new(|_, name| {
+        Visit::new(|_, name| {
             if let Some(free) = name.as_free() {
                 names.insert(free.to_string());
             }
@@ -172,7 +156,7 @@ impl Term {
     }
 
     fn shift(self, amount: usize) -> Self {
-        Visitor::new(|depth, name| {
+        Visit::new(|depth, name| {
             name.as_bound()
                 .filter(|&bound| bound >= depth)
                 .map(|bound| Self::Name(Name::bound(bound + amount)))
@@ -181,7 +165,7 @@ impl Term {
     }
 
     fn capture(self, names: &[&str]) -> Self {
-        Visitor::new(|depth, name| {
+        Visit::new(|depth, name| {
             name.as_free()
                 .and_then(|free| {
                     names
@@ -199,7 +183,7 @@ impl Term {
     }
 
     fn release(self, terms: &[&Term]) -> Self {
-        Visitor::new(|depth, name| {
+        Visit::new(|depth, name| {
             name.as_bound()
                 .and_then(|bound| match bound.checked_sub(depth) {
                     Some(delta) if delta < terms.len() => Some(terms[delta].clone().shift(depth)),
@@ -211,17 +195,17 @@ impl Term {
     }
 }
 
-struct Visitor<F> {
+struct Visit<F> {
     depth: usize,
-    f: F,
+    visit: F,
 }
 
-impl<F> Visitor<F>
+impl<F> Visit<F>
 where
     F: FnMut(usize, &Name) -> Option<Term>,
 {
-    fn new(f: F) -> Self {
-        Self { depth: 0, f }
+    fn new(visit: F) -> Self {
+        Self { depth: 0, visit }
     }
 
     fn visit_subterm(&mut self, subterm: Subterm) -> Subterm {
@@ -254,13 +238,16 @@ where
             Term::Pair(left, right) => {
                 Term::Pair(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Term::Split(head, scope) => {
-                Term::Split(self.visit_subterm(head), self.visit_scope(scope))
-            }
+            Term::Split(head, motive, scope) => Term::Split(
+                self.visit_subterm(head),
+                self.visit_scope(motive),
+                self.visit_scope(scope),
+            ),
             Term::AtomType(atoms) => Term::AtomType(atoms),
             Term::Atom(atom) => Term::Atom(atom),
-            Term::Switch(head, cases) => Term::Switch(
+            Term::Switch(head, motive, cases) => Term::Switch(
                 self.visit_subterm(head),
+                self.visit_scope(motive),
                 cases
                     .into_iter()
                     .map(|(atom, body)| (atom, self.visit_subterm(body)))
@@ -272,75 +259,7 @@ where
                     .collect(),
                 self.visit_scope(body),
             ),
-            Term::Name(name) => (self.f)(self.depth, &name).unwrap_or(Term::Name(name)),
-        }
-    }
-}
-
-struct Rewriter<F> {
-    f: F,
-}
-
-impl<F> Rewriter<F>
-where
-    F: FnMut(&Term) -> Option<Term>,
-{
-    fn new(f: F) -> Self {
-        Self { f }
-    }
-
-    fn rewrite_subterm(&mut self, subterm: Subterm) -> Subterm {
-        self.rewrite_term(*subterm).into()
-    }
-
-    fn rewrite_scope<A: Arity>(&mut self, scope: Scope<A>) -> Scope<A> {
-        let Scope { arity, body } = scope;
-
-        Scope {
-            arity,
-            body: self.rewrite_subterm(body),
-        }
-    }
-
-    fn rewrite_term(&mut self, term: Term) -> Term {
-        if let Some(term) = (self.f)(&term) {
-            return term;
-        }
-
-        match term {
-            Term::Type => Term::Type,
-            Term::FuncType(term, scope) => {
-                Term::FuncType(self.rewrite_subterm(term), self.rewrite_scope(scope))
-            }
-            Term::Func(term) => Term::Func(self.rewrite_scope(term)),
-            Term::Apply(head, param) => {
-                Term::Apply(self.rewrite_subterm(head), self.rewrite_subterm(param))
-            }
-            Term::PairType(term, scope) => {
-                Term::PairType(self.rewrite_subterm(term), self.rewrite_scope(scope))
-            }
-            Term::Pair(left, right) => {
-                Term::Pair(self.rewrite_subterm(left), self.rewrite_subterm(right))
-            }
-            Term::Split(head, scope) => {
-                Term::Split(self.rewrite_subterm(head), self.rewrite_scope(scope))
-            }
-            Term::AtomType(atoms) => Term::AtomType(atoms),
-            Term::Atom(atom) => Term::Atom(atom),
-            Term::Switch(head, cases) => Term::Switch(
-                self.rewrite_subterm(head),
-                cases
-                    .into_iter()
-                    .map(|(atom, body)| (atom, self.rewrite_subterm(body)))
-                    .collect(),
-            ),
-            Term::Bind(head, body) => Term::Bind(
-                head.into_iter()
-                    .map(|(kind, value)| (self.rewrite_subterm(kind), self.rewrite_scope(value)))
-                    .collect(),
-                self.rewrite_scope(body),
-            ),
-            Term::Name(name) => Term::Name(name),
+            Term::Name(name) => (self.visit)(self.depth, &name).unwrap_or(Term::Name(name)),
         }
     }
 }
