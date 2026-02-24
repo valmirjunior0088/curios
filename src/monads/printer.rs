@@ -2,15 +2,17 @@ use std::fmt::{Error, Formatter, Write};
 
 struct PrinterState<'a, 'b> {
     formatter: &'a mut Formatter<'b>,
-    indentation: usize,
+    indent_step: usize,
+    indent_by: usize,
     should_indent: bool,
 }
 
 impl<'a, 'b> PrinterState<'a, 'b> {
-    fn new(formatter: &'a mut Formatter<'b>) -> Self {
+    fn new(formatter: &'a mut Formatter<'b>, indent_step: usize) -> Self {
         Self {
             formatter,
-            indentation: 0,
+            indent_step,
+            indent_by: 0,
             should_indent: true,
         }
     }
@@ -18,7 +20,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
     fn write(mut self, string: &str) -> Result<Self, Error> {
         for char in string.chars() {
             if self.should_indent {
-                for _ in 0..self.indentation {
+                for _ in 0..self.indent_by {
                     self.formatter.write_str(" ")?;
                 }
 
@@ -40,12 +42,12 @@ impl<'a, 'b> PrinterState<'a, 'b> {
         F: FnOnce(Self) -> Result<Self, Error>,
     {
         let state = f(Self {
-            indentation: self.indentation + 2,
+            indent_by: self.indent_by + self.indent_step,
             ..self
         })?;
 
         Ok(Self {
-            indentation: state.indentation - 2,
+            indent_by: state.indent_by - state.indent_step,
             ..state
         })
     }
@@ -73,8 +75,9 @@ impl<'a> Printer<'a> {
 pub fn run_printer<'a, 'b, 'c>(
     printer: Printer<'a>,
     formatter: &'b mut Formatter<'c>,
+    indent_step: usize,
 ) -> Result<(), Error> {
-    printer.print(PrinterState::new(formatter))?;
+    printer.print(PrinterState::new(formatter, indent_step))?;
 
     Ok(())
 }

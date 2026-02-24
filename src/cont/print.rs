@@ -234,7 +234,7 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
 
 impl Display for Module {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_module(self), formatter)?;
+        run_printer(print_module(self), formatter, 2)?;
 
         Ok(())
     }

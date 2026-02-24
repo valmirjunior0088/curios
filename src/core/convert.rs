@@ -1,13 +1,13 @@
 use {
-    super::{Context, Preempted, Term, reduce},
+    super::{Context, Intrinsic, Preempted, Term, reduce},
     std::{
         collections::{HashSet, VecDeque},
         time::{Duration, Instant},
     },
 };
 
-pub fn convert(context: &mut Context, this: Term, that: Term) -> Result<bool, Preempted> {
-    Convert::new(context.timeout(), this, that).convert(context)
+pub fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Preempted> {
+    Convert::new(context.timeout(), this.into(), that.into()).convert(context)
 }
 
 struct Convert {
@@ -26,7 +26,7 @@ impl Convert {
     }
 
     fn in_history(&mut self, this: &Term, that: &Term) -> bool {
-        !self.history.insert((this.clone(), that.clone()))
+        !self.history.insert((this.into(), that.into()))
     }
 
     fn enqueue(&mut self, this: Term, that: Term) {
@@ -43,14 +43,44 @@ impl Convert {
 
     fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
         while let Some((this, that)) = self.dequeue()? {
-            let this = reduce(context, this)?;
-            let that = reduce(context, that)?;
+            let this = reduce(context, &this)?;
+            let that = reduce(context, &that)?;
 
             if this == that || self.in_history(&this, &that) {
                 continue;
             }
 
             match (this, that) {
+                (
+                    Term::Intrinsic { intrinsic: this },
+                    Term::Intrinsic { intrinsic: that },
+                ) => match (this, that) {
+                    (Intrinsic::IntType, Intrinsic::IntType)
+                    | (Intrinsic::FltType, Intrinsic::FltType) => {}
+                    (Intrinsic::Int(this), Intrinsic::Int(that)) => {
+                        if this != that {
+                            return Ok(false);
+                        }
+                    }
+                    (Intrinsic::Flt(this), Intrinsic::Flt(that)) => {
+                        if this != that {
+                            return Ok(false);
+                        }
+                    }
+                    (Intrinsic::IntEql(this_first, this_second), Intrinsic::IntEql(that_first, that_second))
+                    | (Intrinsic::IntAdd(this_first, this_second), Intrinsic::IntAdd(that_first, that_second))
+                    | (Intrinsic::IntSub(this_first, this_second), Intrinsic::IntSub(that_first, that_second))
+                    | (Intrinsic::IntMul(this_first, this_second), Intrinsic::IntMul(that_first, that_second))
+                    | (Intrinsic::FltAdd(this_first, this_second), Intrinsic::FltAdd(that_first, that_second))
+                    | (Intrinsic::FltSub(this_first, this_second), Intrinsic::FltSub(that_first, that_second))
+                    | (Intrinsic::FltMul(this_first, this_second), Intrinsic::FltMul(that_first, that_second)) => {
+                        self.enqueue(*this_first, *that_first);
+                        self.enqueue(*this_second, *that_second);
+                    }
+                    (_, _) => {
+                        return Ok(false);
+                    }
+                },
                 (
                     Term::FuncType {
                         input: this_input,
@@ -240,7 +270,7 @@ mod tests {
 
         let that = Term::func_type("y", Term::Type, Term::label("y"));
 
-        assert_eq!(convert(&mut context, this, that), Ok(true));
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -251,7 +281,7 @@ mod tests {
 
         let that = Term::func("y", Term::label("y"));
 
-        assert_eq!(convert(&mut context, this, that), Ok(true));
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -263,8 +293,8 @@ mod tests {
             "m",
             Term::Type,
             vec![
-                ("a".into(), Term::atom("yes")),
-                ("b".into(), Term::atom("no")),
+                ("a", Term::atom("yes")),
+                ("b", Term::atom("no")),
             ],
         );
 
@@ -273,12 +303,32 @@ mod tests {
             "n",
             Term::Type,
             vec![
-                ("a".into(), Term::atom("yes")),
-                ("b".into(), Term::atom("no")),
+                ("a", Term::atom("yes")),
+                ("b", Term::atom("no")),
             ],
         );
 
-        assert_eq!(convert(&mut context, this, that), Ok(true));
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_intrinsic_recurses_into_operands() {
+        let mut context = context();
+
+        let this = Term::func("x", Term::int_add(Term::label("x"), Term::int(1)));
+        let that = Term::func("y", Term::int_add(Term::label("y"), Term::int(1)));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_intrinsic_distinguishes_operator_kind() {
+        let mut context = context();
+
+        let this = Term::func("x", Term::int_add(Term::label("x"), Term::int(1)));
+        let that = Term::func("x", Term::int_sub(Term::label("x"), Term::int(1)));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }
 
     #[test]
@@ -289,14 +339,14 @@ mod tests {
 
         let that = Term::let_rec(vec![("y", Term::Type, Term::label("y"))], Term::label("y"));
 
-        assert_eq!(convert(&mut context, this, that), Ok(true));
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
     fn convert_times_out_on_pathological_inputs() {
         let mut context = context();
 
-        context.define("loop", Term::label("loop"));
+        context.define("loop", &Term::label("loop"));
 
         let this = Term::pair_type(
             "x",
@@ -306,6 +356,6 @@ mod tests {
 
         let that = Term::pair_type("y", Term::label("loop"), Term::label("y"));
 
-        assert_eq!(convert(&mut context, this, that), Err(Preempted));
+        assert_eq!(convert(&mut context, &this, &that), Err(Preempted));
     }
 }

@@ -47,3 +47,9 @@ impl Name {
         self.as_label().unwrap()
     }
 }
+
+impl From<&Name> for Name {
+    fn from(name: &Name) -> Self {
+        name.clone()
+    }
+}

@@ -1,4 +1,4 @@
-pub trait Arity {
+pub trait Arity: Copy {
     type Params<'a, T: ?Sized + 'a>: AsRef<[&'a T]>;
 
     fn arity(&self) -> usize;

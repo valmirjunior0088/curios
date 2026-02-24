@@ -1,4 +1,4 @@
-use super::{Context, Preempted, Term, convert, reduce};
+use super::{Context, Intrinsic, Term};
 
 pub enum Error {
     ReducePreempted { term: Term },
@@ -7,72 +7,112 @@ pub enum Error {
     TypeMismatch { term: Term, type_: Term },
 }
 
-fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
+impl Error {
+    fn reduce_preempted(term: &Term) -> Self {
+        Self::ReducePreempted { term: term.into() }
+    }
+
+    fn convert_preempted(this: &Term, that: &Term) -> Self {
+        Self::ConvertPreempted {
+            this: this.into(),
+            that: that.into(),
+        }
+    }
+
+    fn cannot_infer(term: &Term) -> Self {
+        Self::CannotInfer { term: term.into() }
+    }
+
+    fn type_mismatch(term: &Term, type_: &Term) -> Self {
+        Self::TypeMismatch {
+            term: term.into(),
+            type_: type_.into(),
+        }
+    }
+}
+
+fn reduce(context: &mut Context, term: &Term) -> Result<Term, Error> {
+    super::reduce(context, term).map_err(|super::Preempted| Error::reduce_preempted(term))
+}
+
+fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
+    super::convert(context, this, that)
+        .map_err(|super::Preempted| Error::convert_preempted(this, that))
+}
+
+fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     match term {
         Term::Type => Ok(Term::Type),
+        Term::Intrinsic { intrinsic } => match intrinsic {
+            Intrinsic::IntType | Intrinsic::FltType => Ok(Term::Type),
+            Intrinsic::Int(_) => Ok(Term::int_type()),
+            Intrinsic::IntEql(first, second)
+            | Intrinsic::IntAdd(first, second)
+            | Intrinsic::IntSub(first, second)
+            | Intrinsic::IntMul(first, second) => {
+                check(context, first, &Term::int_type())?;
+                check(context, second, &Term::int_type())?;
+
+                Ok(Term::int_type())
+            }
+            Intrinsic::Flt(_) => Ok(Term::flt_type()),
+            Intrinsic::FltAdd(first, second)
+            | Intrinsic::FltSub(first, second)
+            | Intrinsic::FltMul(first, second) => {
+                check(context, first, &Term::flt_type())?;
+                check(context, second, &Term::flt_type())?;
+
+                Ok(Term::flt_type())
+            }
+        },
         Term::FuncType { input, output } => {
-            check(context, (*input).clone(), Term::Type)?;
+            check(context, input, &Term::Type)?;
 
             let label = context.fresh();
 
             context.with_frame(|context| {
-                context.assume(&label, *input);
+                context.assume(&label, input);
 
-                check(context, output.open(&[&Term::label(&label)]), Term::Type)
+                check(context, &output.open(&[&Term::label(label)]), &Term::Type)
             })?;
 
             Ok(Term::Type)
         }
         Term::Apply { head, param } => {
-            let head_type = infer(context, (*head).clone())?;
-
-            let head_type = reduce(context, head_type.clone())
-                .map_err(|Preempted| Error::ReducePreempted { term: head_type })?;
+            let head_type = infer(context, head)?;
+            let head_type = reduce(context, &head_type)?;
 
             let (input, output) = if let Term::FuncType { input, output } = head_type {
                 (input, output)
             } else {
-                return Err(Error::CannotInfer {
-                    term: Term::Apply {
-                        head: head.clone(),
-                        param: param.clone(),
-                    },
-                });
+                return Err(Error::cannot_infer(term));
             };
 
-            check(context, (*param).clone(), *input)?;
+            check(context, param, &input)?;
 
-            Ok(output.open(&[&*param]))
+            Ok(output.open(&[param.as_ref()]))
         }
         Term::PairType { input, output } => {
-            check(context, (*input).clone(), Term::Type)?;
+            check(context, input, &Term::Type)?;
 
             let label = context.fresh();
 
             context.with_frame(|context| {
-                context.assume(&label, *input);
+                context.assume(&label, input);
 
-                check(context, output.open(&[&Term::label(&label)]), Term::Type)
+                check(context, &output.open(&[&Term::label(label)]), &Term::Type)
             })?;
 
             Ok(Term::Type)
         }
         Term::Split { head, motive, tail } => {
-            let head_type = infer(context, (*head).clone())?;
-
-            let head_type = reduce(context, head_type.clone())
-                .map_err(|Preempted| Error::ReducePreempted { term: head_type })?;
+            let head_type = infer(context, head)?;
+            let head_type = reduce(context, &head_type)?;
 
             let (input, output) = if let Term::PairType { input, output } = head_type {
                 (input, output)
             } else {
-                return Err(Error::CannotInfer {
-                    term: Term::Split {
-                        head: head.clone(),
-                        motive: motive.clone(),
-                        tail: tail.clone(),
-                    },
-                });
+                return Err(Error::cannot_infer(term));
             };
 
             let head_label = context.fresh();
@@ -80,7 +120,7 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
             context.with_frame(|context| {
                 context.assume(
                     &head_label,
-                    Term::PairType {
+                    &Term::PairType {
                         input: input.clone(),
                         output: output.clone(),
                     },
@@ -88,30 +128,27 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
 
                 check(
                     context,
-                    motive.clone().open(&[&Term::label(&head_label)]),
-                    Term::Type,
+                    &motive.open(&[&Term::label(head_label)]),
+                    &Term::Type,
                 )
             })?;
 
             let first_label = context.fresh();
             let second_label = context.fresh();
 
-            let type_ = motive.clone().open(&[&*head]);
+            let type_ = motive.open(&[head.as_ref()]);
 
             context.with_frame(|context| {
-                context.assume(&first_label, (*input).clone());
+                context.assume(&first_label, &input);
 
-                context.assume(
-                    &second_label,
-                    output.clone().open(&[&Term::label(&first_label)]),
-                );
+                context.assume(&second_label, &output.open(&[&Term::label(&first_label)]));
 
                 check(
                     context,
-                    tail.open(&[&Term::label(&first_label), &Term::label(&second_label)]),
-                    motive.open(&[&Term::pair(
-                        Term::label(&first_label),
-                        Term::label(&second_label),
+                    &tail.open(&[&Term::label(&first_label), &Term::label(&second_label)]),
+                    &motive.open(&[&Term::pair(
+                        Term::label(first_label),
+                        Term::label(second_label),
                     )]),
                 )
             })?;
@@ -124,82 +161,53 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
             motive,
             cases,
         } => {
-            let head_type = infer(context, (*head).clone())?;
-
-            let head_type = reduce(context, head_type.clone())
-                .map_err(|Preempted| Error::ReducePreempted { term: head_type })?;
+            let head_type = infer(context, head)?;
+            let head_type = reduce(context, &head_type)?;
 
             let atoms = if let Term::AtomType { atoms } = head_type {
                 atoms
             } else {
-                return Err(Error::CannotInfer {
-                    term: Term::Match {
-                        head: head.clone(),
-                        motive: motive.clone(),
-                        cases: cases.clone(),
-                    },
-                });
+                return Err(Error::cannot_infer(term));
             };
 
             let head_label = context.fresh();
 
             context.with_frame(|context| {
-                context.assume(
-                    &head_label,
-                    Term::AtomType {
-                        atoms: atoms.clone(),
-                    },
-                );
+                context.assume(&head_label, &Term::atom_type(&atoms));
 
                 check(
                     context,
-                    motive.clone().open(&[&Term::label(&head_label)]),
-                    Term::Type,
+                    &motive.open(&[&Term::label(head_label)]),
+                    &Term::Type,
                 )
             })?;
 
             if cases.len() != atoms.len() {
-                return Err(Error::CannotInfer {
-                    term: Term::Match {
-                        head: head.clone(),
-                        motive: motive.clone(),
-                        cases: cases.clone(),
-                    },
-                });
+                return Err(Error::cannot_infer(term));
             }
 
             for atom in &atoms {
                 let body = if let Some(body) = cases.get(atom) {
                     body
                 } else {
-                    return Err(Error::CannotInfer {
-                        term: Term::Match {
-                            head: head.clone(),
-                            motive: motive.clone(),
-                            cases: cases.clone(),
-                        },
-                    });
+                    return Err(Error::cannot_infer(term));
                 };
 
-                check(
-                    context,
-                    body.as_ref().clone(),
-                    motive.clone().open(&[&Term::Atom { atom: atom.clone() }]),
-                )?;
+                check(context, body, &motive.open(&[&Term::atom(atom)]))?;
             }
 
-            Ok(motive.open(&[&*head]))
+            Ok(motive.open(&[head.as_ref()]))
         }
         Term::Let { type_, body, tail } => {
-            check(context, (*type_).clone(), Term::Type)?;
-            check(context, (*body).clone(), (*type_).clone())?;
+            check(context, type_, &Term::Type)?;
+            check(context, body, type_)?;
 
             let label = context.fresh();
 
             context.with_frame(|context| {
-                context.define_assuming(&label, (*type_).clone(), (*body).clone());
+                context.define_assuming(&label, type_, body);
 
-                infer(context, tail.open(&[&Term::label(&label)]))
+                infer(context, &tail.open(&[&Term::label(label)]))
             })
         }
         Term::LetRec { items, tail } => {
@@ -211,7 +219,7 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
             let items = items
-                .into_iter()
+                .iter()
                 .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
                 .collect::<Vec<_>>();
 
@@ -219,118 +227,84 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
 
             context.with_frame(|context| {
                 for (label, (type_, _)) in labels.iter().zip(items.iter()) {
-                    context.assume(label, type_.clone());
+                    context.assume(label, type_);
                 }
 
                 for (type_, _) in &items {
-                    check(context, type_.clone(), Term::Type)?;
+                    check(context, type_, &Term::Type)?;
                 }
 
                 for (_, (type_, body)) in labels.iter().zip(items.iter()) {
-                    check(context, body.clone(), type_.clone())?;
+                    check(context, body, type_)?;
                 }
 
                 for (label, (_, body)) in labels.iter().zip(items.iter()) {
-                    context.define(label, body.clone());
+                    context.define(label, body);
                 }
 
-                infer(context, tail)
+                infer(context, &tail)
             })
         }
         Term::Name { name } => match context.assumption(name.unwrap()) {
-            Some(type_) => Ok(type_),
-            None => Err(Error::CannotInfer {
-                term: Term::Name { name },
-            }),
+            Some(type_) => Ok(type_.into()),
+            None => Err(Error::cannot_infer(&name.into())),
         },
-        term => Err(Error::CannotInfer { term }),
+        _ => Err(Error::cannot_infer(term)),
     }
 }
 
-pub fn check(context: &mut Context, term: Term, type_: Term) -> Result<(), Error> {
+pub fn check(context: &mut Context, term: &Term, type_: &Term) -> Result<(), Error> {
     match term {
         Term::Func { body } => {
-            let type_reduced =
-                reduce(context, type_.clone()).map_err(|Preempted| Error::ReducePreempted {
-                    term: type_.clone(),
-                })?;
-
-            let (input, output) = if let Term::FuncType { input, output } = type_reduced {
+            let (input, output) = if let Term::FuncType { input, output } = reduce(context, type_)?
+            {
                 (input, output)
             } else {
-                return Err(Error::TypeMismatch {
-                    term: Term::Func { body },
-                    type_,
-                });
+                return Err(Error::type_mismatch(term, type_));
             };
 
             let label = context.fresh();
 
             context.with_frame(|context| {
-                context.assume(&label, *input);
+                context.assume(&label, &input);
                 check(
                     context,
-                    body.open(&[&Term::label(&label)]),
-                    output.open(&[&Term::label(&label)]),
+                    &body.open(&[&Term::label(&label)]),
+                    &output.open(&[&Term::label(label)]),
                 )
             })
         }
         Term::Pair { first, second } => {
-            let type_reduced =
-                reduce(context, type_.clone()).map_err(|Preempted| Error::ReducePreempted {
-                    term: type_.clone(),
-                })?;
-
-            let (input, output) = if let Term::PairType { input, output } = type_reduced {
+            let (input, output) = if let Term::PairType { input, output } = reduce(context, type_)?
+            {
                 (input, output)
             } else {
-                return Err(Error::TypeMismatch {
-                    term: Term::Pair { first, second },
-                    type_,
-                });
+                return Err(Error::type_mismatch(term, type_));
             };
 
-            check(context, (*first).clone(), *input)?;
-            check(context, *second, output.open(&[&*first]))
+            check(context, first, &input)?;
+            check(context, second, &output.open(&[first.as_ref()]))
         }
         Term::Atom { atom } => {
-            let type_reduced =
-                reduce(context, type_.clone()).map_err(|Preempted| Error::ReducePreempted {
-                    term: type_.clone(),
-                })?;
-
-            let atoms = if let Term::AtomType { atoms } = type_reduced {
+            let atoms = if let Term::AtomType { atoms } = reduce(context, type_)? {
                 atoms
             } else {
-                return Err(Error::TypeMismatch {
-                    term: Term::Atom { atom },
-                    type_,
-                });
+                return Err(Error::type_mismatch(term, type_));
             };
 
             if atoms.contains(&atom) {
                 Ok(())
             } else {
-                Err(Error::TypeMismatch {
-                    term: Term::Atom { atom },
-                    type_,
-                })
+                Err(Error::type_mismatch(term, type_))
             }
         }
-        term => {
-            let type_inferred = infer(context, term.clone())?;
+        _ => {
+            let type_inferred = infer(context, term)?;
+            let type_inferred = convert(context, &type_inferred, type_)?;
 
-            let type_converted =
-                convert(context, type_inferred.clone(), type_.clone()).map_err(|Preempted| {
-                    Error::ConvertPreempted {
-                        this: type_inferred.clone(),
-                        that: type_.clone(),
-                    }
-                })?;
-
-            match type_converted {
+            match type_inferred {
                 true => Ok(()),
-                false => Err(Error::TypeMismatch { term, type_ }),
+                false => Err(Error::type_mismatch(term, type_)),
             }
         }
     }
@@ -356,21 +330,21 @@ mod tests {
                 "m",
                 Term::Type,
                 vec![
-                    ("left".into(), Term::atom_type(["hot"])),
-                    ("right".into(), Term::atom_type(["cold"])),
+                    ("left", Term::atom_type(["hot"])),
+                    ("right", Term::atom_type(["cold"])),
                 ],
             ),
         );
 
-        assert!(check(&mut context, pair_type.clone(), Term::Type).is_ok());
+        assert!(check(&mut context, &pair_type, &Term::Type).is_ok());
 
         let pair = Term::pair(Term::atom("left"), Term::atom("hot"));
 
-        assert!(check(&mut context, pair, pair_type.clone()).is_ok());
+        assert!(check(&mut context, &pair, &pair_type).is_ok());
 
         let pair = Term::pair(Term::atom("right"), Term::atom("cold"));
 
-        assert!(check(&mut context, pair, pair_type).is_ok());
+        assert!(check(&mut context, &pair, &pair_type).is_ok());
     }
 
     #[test]
@@ -385,8 +359,8 @@ mod tests {
                 "m",
                 Term::Type,
                 vec![
-                    ("left".into(), Term::atom_type(["hot"])),
-                    ("right".into(), Term::atom_type(["cold"])),
+                    ("left", Term::atom_type(["hot"])),
+                    ("right", Term::atom_type(["cold"])),
                 ],
             ),
         );
@@ -394,7 +368,7 @@ mod tests {
         let pair = Term::pair(Term::atom("left"), Term::atom("cold"));
 
         assert!(matches!(
-            check(&mut context, pair, pair_type),
+            check(&mut context, &pair, &pair_type),
             Err(Error::TypeMismatch { .. })
         ));
     }
@@ -410,17 +384,17 @@ mod tests {
             Term::label("f"),
         );
 
-        assert!(check(&mut context, term, func_type).is_ok());
+        assert!(check(&mut context, &term, &func_type).is_ok());
     }
 
     #[test]
     fn check_preempts_on_cyclic_expected_type() {
         let mut context = context();
 
-        context.define("loop", Term::label("loop"));
+        context.define("loop", &Term::label("loop"));
 
         assert!(matches!(
-            check(&mut context, Term::Type, Term::label("loop")),
+            check(&mut context, &Term::Type, &Term::label("loop")),
             Err(Error::ConvertPreempted { .. })
         ));
     }
@@ -436,6 +410,43 @@ mod tests {
             Term::label("loop"),
         );
 
-        assert!(check(&mut context, term, type_).is_ok());
+        assert!(check(&mut context, &term, &type_).is_ok());
+    }
+
+    #[test]
+    fn check_intrinsic_ops_typecheck() {
+        let mut context = context();
+
+        assert!(
+            check(
+                &mut context,
+                &Term::int_eql(Term::int(1), Term::int(1)),
+                &Term::int_type(),
+            )
+            .is_ok()
+        );
+
+        assert!(
+            check(
+                &mut context,
+                &Term::flt_add(Term::flt(1.5), Term::flt(2.0)),
+                &Term::flt_type(),
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn check_intrinsic_ops_reject_wrong_operand_types() {
+        let mut context = context();
+
+        assert!(matches!(
+            check(
+                &mut context,
+                &Term::int_add(Term::int(1), Term::flt(2.0)),
+                &Term::int_type(),
+            ),
+            Err(Error::TypeMismatch { .. })
+        ));
     }
 }

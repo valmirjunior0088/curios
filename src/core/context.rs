@@ -49,46 +49,46 @@ impl Context {
         result
     }
 
-    pub fn assume<A>(&mut self, label: A, type_: Term)
+    pub fn assume<A>(&mut self, label: A, type_: &Term)
     where
         A: Into<String>,
     {
         self.assumptions
             .last_mut()
             .unwrap()
-            .insert(label.into(), type_);
+            .insert(label.into(), type_.into());
     }
 
-    pub fn assumption(&self, label: &str) -> Option<Term> {
+    pub fn assumption(&self, label: &str) -> Option<&Term> {
         self.assumptions
             .iter()
             .rev()
-            .find_map(|assumptions| assumptions.get(label).cloned())
+            .find_map(|assumptions| assumptions.get(label))
     }
 
-    pub fn define<A>(&mut self, label: A, term: Term)
+    pub fn define<A>(&mut self, label: A, term: &Term)
     where
         A: Into<String>,
     {
         self.definitions
             .last_mut()
             .unwrap()
-            .insert(label.into(), term);
+            .insert(label.into(), term.into());
     }
 
-    pub fn definition(&self, label: &str) -> Option<Term> {
+    pub fn definition(&self, label: &str) -> Option<&Term> {
         self.definitions
             .iter()
             .rev()
-            .find_map(|definitions| definitions.get(label).cloned())
+            .find_map(|definitions| definitions.get(label))
     }
 
-    pub fn define_assuming<A>(&mut self, label: A, type_: Term, term: Term)
+    pub fn define_assuming<A>(&mut self, label: A, type_: &Term, term: &Term)
     where
         A: Into<String>,
     {
         let label = label.into();
-        self.assume(label.clone(), type_);
+        self.assume(label.as_str(), type_);
         self.define(label, term);
     }
 }
