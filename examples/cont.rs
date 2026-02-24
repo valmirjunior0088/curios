@@ -80,18 +80,18 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::Tpl(
+                                        Value::Tpl2(
                                             ValueName::from("out"),
                                             ValueName::from("ZERO"),
                                         ),
                                     ),
                                     (
                                         ValueName::from("out_again"),
-                                        Value::Fst(ValueName::from("pair")),
+                                        Value::Proj(ValueName::from("pair"), 0),
                                     ),
                                     (
                                         ValueName::from("is_zero"),
-                                        Value::Snd(ValueName::from("pair")),
+                                        Value::Proj(ValueName::from("pair"), 1),
                                     ),
                                 ],
                                 blocks: vec![],

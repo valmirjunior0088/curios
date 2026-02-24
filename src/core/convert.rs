@@ -1,12 +1,12 @@
 use {
-    super::{Context, Term},
+    super::{Context, Preempted, Term, reduce},
     std::{
         collections::{HashSet, VecDeque},
         time::{Duration, Instant},
     },
 };
 
-pub fn convert(context: &mut Context, this: Term, that: Term) -> Result<bool, ()> {
+pub fn convert(context: &mut Context, this: Term, that: Term) -> Result<bool, Preempted> {
     Convert::new(context.timeout(), this, that).convert(context)
 }
 
@@ -33,18 +33,18 @@ impl Convert {
         self.pending.push_back((this, that));
     }
 
-    fn dequeue(&mut self) -> Result<Option<(Term, Term)>, ()> {
+    fn dequeue(&mut self) -> Result<Option<(Term, Term)>, Preempted> {
         if Instant::now() > self.deadline {
-            return Err(());
+            return Err(Preempted);
         }
 
         Ok(self.pending.pop_front())
     }
 
-    fn convert(&mut self, context: &mut Context) -> Result<bool, ()> {
+    fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
         while let Some((this, that)) = self.dequeue()? {
-            let this = super::reduce(context, this)?;
-            let that = super::reduce(context, that)?;
+            let this = reduce(context, this)?;
+            let that = reduce(context, that)?;
 
             if this == that || self.in_history(&this, &that) {
                 continue;
@@ -306,6 +306,6 @@ mod tests {
 
         let that = Term::pair_type("y", Term::label("loop"), Term::label("y"));
 
-        assert_eq!(convert(&mut context, this, that), Err(()));
+        assert_eq!(convert(&mut context, this, that), Err(Preempted));
     }
 }

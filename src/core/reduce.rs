@@ -3,7 +3,10 @@ use {
     std::time::{Duration, Instant},
 };
 
-pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Preempted;
+
+pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
     Reduce::new(context.timeout()).reduce(context, term)
 }
 
@@ -22,10 +25,10 @@ impl Reduce {
         Instant::now() > self.deadline
     }
 
-    fn reduce(&mut self, context: &mut Context, mut term: Term) -> Result<Term, ()> {
+    fn reduce(&mut self, context: &mut Context, mut term: Term) -> Result<Term, Preempted> {
         loop {
             if self.timed_out() {
-                break Err(());
+                break Err(Preempted);
             }
 
             match term {
@@ -166,6 +169,6 @@ mod tests {
 
         context.define("loop", Term::label("loop"));
 
-        assert_eq!(reduce(&mut context, Term::label("loop")), Err(()));
+        assert_eq!(reduce(&mut context, Term::label("loop")), Err(Preempted));
     }
 }

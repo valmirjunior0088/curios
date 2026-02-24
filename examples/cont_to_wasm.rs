@@ -112,16 +112,16 @@ fn main() {
                             region: Region {
                                 values: vec![(
                                     ValueName::from("pair"),
-                                    Value::Tpl(
+                                    Value::Tpl2(
                                         ValueName::from("result"),
                                         ValueName::from("ONE"),
                                     ),
                                 ), (
                                     ValueName::from("result_again"),
-                                    Value::Fst(ValueName::from("pair")),
+                                    Value::Proj(ValueName::from("pair"), 0),
                                 ), (
                                     ValueName::from("fallback_one"),
-                                    Value::Snd(ValueName::from("pair")),
+                                    Value::Proj(ValueName::from("pair"), 1),
                                 ), (
                                     ValueName::from("result_is_zero"),
                                     Value::Eval(

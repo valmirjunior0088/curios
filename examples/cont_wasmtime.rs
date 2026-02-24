@@ -374,10 +374,27 @@ fn main() {
             params: vec![],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
-                values: vec![(
-                    cont::ValueName::from("out"),
-                    cont::Value::Tpl(cont::ValueName::from("ONE"), cont::ValueName::from("TWO")),
-                )],
+                values: vec![
+                    (
+                        cont::ValueName::from("pair"),
+                        cont::Value::Tpl2(cont::ValueName::from("ONE"), cont::ValueName::from("TWO")),
+                    ),
+                    (
+                        cont::ValueName::from("first"),
+                        cont::Value::Proj(cont::ValueName::from("pair"), 0),
+                    ),
+                    (
+                        cont::ValueName::from("second"),
+                        cont::Value::Proj(cont::ValueName::from("pair"), 1),
+                    ),
+                    (
+                        cont::ValueName::from("out"),
+                        cont::Value::Eval(
+                            cont::ConstOp::IntAdd,
+                            vec![cont::ValueName::from("first"), cont::ValueName::from("second")],
+                        ),
+                    ),
+                ],
                 blocks: vec![],
                 tail: cont::Tail::Jump(cont::JumpTarget {
                     target: cont::BlockName::from("r"),
@@ -445,31 +462,13 @@ fn main() {
         .expect("expected i31 result")
         .get_i32();
 
-    let tuple = tuple_result
-        .unwrap_struct(&store)
-        .expect("expected struct result");
-
-    let tuple_first = tuple
-        .field(&mut store, 0)
-        .expect("expected tpl field 0")
-        .unwrap_anyref()
-        .expect("expected anyref field 0")
+    let tuple_value = tuple_result
         .unwrap_i31(&store)
-        .expect("expected i31 in field 0")
-        .get_i32();
-
-    let tuple_second = tuple
-        .field(&mut store, 1)
-        .expect("expected tpl field 1")
-        .unwrap_anyref()
-        .expect("expected anyref field 1")
-        .unwrap_i31(&store)
-        .expect("expected i31 in field 1")
+        .expect("expected i31 result for main_tpl")
         .get_i32();
 
     assert_eq!(value, 170);
     assert_eq!(zero_value, 2);
     assert_eq!(other_value, 8);
-    assert_eq!(tuple_first, 1);
-    assert_eq!(tuple_second, 2);
+    assert_eq!(tuple_value, 3);
 }

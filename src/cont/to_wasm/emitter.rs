@@ -137,17 +137,24 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instrs(self.context.load_value_instrs(second, LoadAs::NonNull));
 
         self.emit_instr(wasm::Instr::StructNew {
-            type_name: self.context.metadata().tpl_type(),
+            type_name: self.context.metadata().tpl2_type(),
         });
     }
 
-    pub fn emit_tpl_proj(&mut self, tuple: &'a cont::ValueName, field_name: wasm::FieldName) {
+    pub fn emit_proj(&mut self, tuple: &'a cont::ValueName, index: usize) {
+        let field_name = match index {
+            0 => self.context.metadata().proj_fst_field(),
+            1 => self.context.metadata().proj_snd_field(),
+            index => panic!("`Emitter` expected tuple projection index 0 or 1, found {index}"),
+        };
+
         self.emit_instrs(
             self.context
-                .load_value_instrs(tuple, LoadAs::Concrete(self.context.metadata().tpl_type())),
+                .load_value_instrs(tuple, LoadAs::Concrete(self.context.metadata().tpl2_type())),
         );
+
         self.emit_instr(wasm::Instr::StructGet {
-            type_name: self.context.metadata().tpl_type(),
+            type_name: self.context.metadata().tpl2_type(),
             field_name,
         });
     }
@@ -157,13 +164,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
             cont::Value::Pure(value) => self.emit_const_value(value),
             cont::Value::Eval(op, params) => self.emit_const_op(op, params),
             cont::Value::Clsr(target, fields) => self.emit_clsr(target, fields),
-            cont::Value::Tpl(first, second) => self.emit_tpl(first, second),
-            cont::Value::Fst(tuple) => {
-                self.emit_tpl_proj(tuple, self.context.metadata().tpl_fst_field())
-            }
-            cont::Value::Snd(tuple) => {
-                self.emit_tpl_proj(tuple, self.context.metadata().tpl_snd_field())
-            }
+            cont::Value::Tpl2(first, second) => self.emit_tpl(first, second),
+            cont::Value::Proj(tuple, index) => self.emit_proj(tuple, *index),
         }
     }
 

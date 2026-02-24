@@ -1,4 +1,4 @@
-use super::{Context, Term};
+use super::{Context, Preempted, Term, convert, reduce};
 
 pub enum Error {
     ReducePreempted { term: Term },
@@ -26,8 +26,8 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
         Term::Apply { head, param } => {
             let head_type = infer(context, (*head).clone())?;
 
-            let head_type = super::reduce(context, head_type.clone())
-                .map_err(|()| Error::ReducePreempted { term: head_type })?;
+            let head_type = reduce(context, head_type.clone())
+                .map_err(|Preempted| Error::ReducePreempted { term: head_type })?;
 
             let (input, output) = if let Term::FuncType { input, output } = head_type {
                 (input, output)
@@ -60,8 +60,8 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
         Term::Split { head, motive, tail } => {
             let head_type = infer(context, (*head).clone())?;
 
-            let head_type = super::reduce(context, head_type.clone())
-                .map_err(|()| Error::ReducePreempted { term: head_type })?;
+            let head_type = reduce(context, head_type.clone())
+                .map_err(|Preempted| Error::ReducePreempted { term: head_type })?;
 
             let (input, output) = if let Term::PairType { input, output } = head_type {
                 (input, output)
@@ -126,8 +126,8 @@ fn infer(context: &mut Context, term: Term) -> Result<Term, Error> {
         } => {
             let head_type = infer(context, (*head).clone())?;
 
-            let head_type = super::reduce(context, head_type.clone())
-                .map_err(|()| Error::ReducePreempted { term: head_type })?;
+            let head_type = reduce(context, head_type.clone())
+                .map_err(|Preempted| Error::ReducePreempted { term: head_type })?;
 
             let atoms = if let Term::AtomType { atoms } = head_type {
                 atoms
@@ -251,7 +251,7 @@ pub fn check(context: &mut Context, term: Term, type_: Term) -> Result<(), Error
     match term {
         Term::Func { body } => {
             let type_reduced =
-                super::reduce(context, type_.clone()).map_err(|()| Error::ReducePreempted {
+                reduce(context, type_.clone()).map_err(|Preempted| Error::ReducePreempted {
                     term: type_.clone(),
                 })?;
 
@@ -277,7 +277,7 @@ pub fn check(context: &mut Context, term: Term, type_: Term) -> Result<(), Error
         }
         Term::Pair { first, second } => {
             let type_reduced =
-                super::reduce(context, type_.clone()).map_err(|()| Error::ReducePreempted {
+                reduce(context, type_.clone()).map_err(|Preempted| Error::ReducePreempted {
                     term: type_.clone(),
                 })?;
 
@@ -295,7 +295,7 @@ pub fn check(context: &mut Context, term: Term, type_: Term) -> Result<(), Error
         }
         Term::Atom { atom } => {
             let type_reduced =
-                super::reduce(context, type_.clone()).map_err(|()| Error::ReducePreempted {
+                reduce(context, type_.clone()).map_err(|Preempted| Error::ReducePreempted {
                     term: type_.clone(),
                 })?;
 
@@ -320,10 +320,12 @@ pub fn check(context: &mut Context, term: Term, type_: Term) -> Result<(), Error
         term => {
             let type_inferred = infer(context, term.clone())?;
 
-            let type_converted = super::convert(context, type_inferred.clone(), type_.clone())
-                .map_err(|()| Error::ConvertPreempted {
-                    this: type_inferred.clone(),
-                    that: type_.clone(),
+            let type_converted =
+                convert(context, type_inferred.clone(), type_.clone()).map_err(|Preempted| {
+                    Error::ConvertPreempted {
+                        this: type_inferred.clone(),
+                        that: type_.clone(),
+                    }
                 })?;
 
             match type_converted {
