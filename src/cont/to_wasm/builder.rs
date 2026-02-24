@@ -33,6 +33,17 @@ impl<'a, 'b> Builder<'a, 'b> {
         );
     }
 
+    pub fn emit_unit_type(&mut self) {
+        self.module.add_type(
+            self.metadata.unit_type(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Struct(wasm::StructType::from([])),
+            },
+        );
+    }
+
     pub fn emit_tpl2_type(&mut self) {
         self.module.add_type(
             self.metadata.tpl2_type(),
@@ -272,6 +283,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     pub fn emit_module(&mut self, module: &'a cont::Module) {
+        self.emit_unit_type();
         self.emit_flt_type();
         self.emit_tpl2_type();
         self.emit_clsr_arity_types();

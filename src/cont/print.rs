@@ -29,6 +29,7 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
 
 fn print_const_value<'a>(value: &'a ConstValue) -> Printer<'a> {
     match value {
+        ConstValue::Unit => pure("()"),
         ConstValue::Int(value) => pure(value.to_string()),
         ConstValue::Flt(value) => pure(value.to_string()),
     }

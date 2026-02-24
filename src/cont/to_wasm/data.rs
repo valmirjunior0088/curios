@@ -158,6 +158,7 @@ impl<'a> FuncData<'a> {
 pub struct ModuleData<'a> {
     special_field: wasm::FieldName,
     special_local: wasm::LocalName,
+    unit_type: wasm::TypeName,
     flt_type: wasm::TypeName,
     tpl2_type: wasm::TypeName,
     proj_fst_field: wasm::FieldName,
@@ -175,6 +176,7 @@ impl<'a> ModuleData<'a> {
         Self {
             special_field: wasm::FieldName::from("!"),
             special_local: wasm::LocalName::from("!"),
+            unit_type: wasm::TypeName::from("unit"),
             flt_type: wasm::TypeName::from("flt"),
             tpl2_type: wasm::TypeName::from("tpl2"),
             proj_fst_field: wasm::FieldName::from("0"),
@@ -226,6 +228,10 @@ impl<'a> ModuleData<'a> {
 
     pub fn special_local(&self) -> wasm::LocalName {
         self.special_local.clone()
+    }
+
+    pub fn unit_type(&self) -> wasm::TypeName {
+        self.unit_type.clone()
     }
 
     pub fn obj_val_type(&self, is_nullable: bool) -> wasm::ValType {

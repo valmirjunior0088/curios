@@ -377,7 +377,10 @@ fn main() {
                 values: vec![
                     (
                         cont::ValueName::from("pair"),
-                        cont::Value::Tpl2(cont::ValueName::from("ONE"), cont::ValueName::from("TWO")),
+                        cont::Value::Tpl2(
+                            cont::ValueName::from("ONE"),
+                            cont::ValueName::from("TWO"),
+                        ),
                     ),
                     (
                         cont::ValueName::from("first"),
@@ -391,10 +394,32 @@ fn main() {
                         cont::ValueName::from("out"),
                         cont::Value::Eval(
                             cont::ConstOp::IntAdd,
-                            vec![cont::ValueName::from("first"), cont::ValueName::from("second")],
+                            vec![
+                                cont::ValueName::from("first"),
+                                cont::ValueName::from("second"),
+                            ],
                         ),
                     ),
                 ],
+                blocks: vec![],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("r"),
+                    params: vec![cont::ValueName::from("out")],
+                }),
+            },
+        },
+    );
+
+    cont_module.add_func(
+        cont::FuncName::from("main_unit"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                values: vec![(
+                    cont::ValueName::from("out"),
+                    cont::Value::Pure(cont::ConstValue::Unit),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Jump(cont::JumpTarget {
                     target: cont::BlockName::from("r"),
@@ -435,6 +460,10 @@ fn main() {
         .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main_tpl")
         .expect("expected exported func/main_tpl");
 
+    let run_unit = instance
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main_unit")
+        .expect("expected exported func/main_unit");
+
     let result = run.call(&mut store, ()).expect("expected call result");
 
     let zero_result = run_zero
@@ -449,14 +478,20 @@ fn main() {
         .call(&mut store, ())
         .expect("expected call result for main_tpl");
 
+    let unit_result = run_unit
+        .call(&mut store, ())
+        .expect("expected call result for main_unit");
+
     let value = result
         .unwrap_i31(&store)
         .expect("expected i31 result")
         .get_i32();
+
     let zero_value = zero_result
         .unwrap_i31(&store)
         .expect("expected i31 result")
         .get_i32();
+
     let other_value = other_result
         .unwrap_i31(&store)
         .expect("expected i31 result")
@@ -466,6 +501,20 @@ fn main() {
         .unwrap_i31(&store)
         .expect("expected i31 result for main_tpl")
         .get_i32();
+
+    let unit_struct = unit_result
+        .unwrap_struct(&store)
+        .expect("expected structref result for main_unit");
+
+    let unit_ty = unit_struct
+        .ty(&store)
+        .expect("expected struct type for main_unit result");
+
+    assert_eq!(
+        unit_ty.fields().len(),
+        0,
+        "expected zero-field struct type for main_unit"
+    );
 
     assert_eq!(value, 170);
     assert_eq!(zero_value, 2);

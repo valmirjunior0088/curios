@@ -2,6 +2,7 @@ use super::{BlockName, ClsrName, FuncName, ValueName};
 
 #[derive(Debug)]
 pub enum ConstValue {
+    Unit,
     Int(i32),
     Flt(f32),
 }

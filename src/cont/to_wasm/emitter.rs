@@ -45,6 +45,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     pub fn emit_const_value(&mut self, value: &cont::ConstValue) {
         match value {
+            cont::ConstValue::Unit => self.emit_instr(wasm::Instr::StructNew {
+                type_name: self.context.metadata().unit_type(),
+            }),
             &cont::ConstValue::Int(value) => {
                 self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
             }
