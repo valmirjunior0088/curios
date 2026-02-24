@@ -111,10 +111,25 @@ fn main() {
                             params: vec![ValueName::from("result")],
                             region: Region {
                                 values: vec![(
+                                    ValueName::from("pair"),
+                                    Value::Tpl(
+                                        ValueName::from("result"),
+                                        ValueName::from("ONE"),
+                                    ),
+                                ), (
+                                    ValueName::from("result_again"),
+                                    Value::Fst(ValueName::from("pair")),
+                                ), (
+                                    ValueName::from("fallback_one"),
+                                    Value::Snd(ValueName::from("pair")),
+                                ), (
                                     ValueName::from("result_is_zero"),
                                     Value::Eval(
                                         ConstOp::IntEql,
-                                        vec![ValueName::from("ZERO"), ValueName::from("ZERO")],
+                                        vec![
+                                            ValueName::from("result_again"),
+                                            ValueName::from("ZERO"),
+                                        ],
                                     ),
                                 )],
                                 blocks: vec![
@@ -141,7 +156,7 @@ fn main() {
                                                 blocks: vec![],
                                                 tail: Tail::Jump(JumpTarget {
                                                     target: BlockName::from("finalize"),
-                                                    params: vec![ValueName::from("ONE")],
+                                                    params: vec![ValueName::from("fallback_one")],
                                                 }),
                                             },
                                         },

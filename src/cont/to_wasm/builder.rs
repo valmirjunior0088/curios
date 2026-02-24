@@ -33,6 +33,32 @@ impl<'a, 'b> Builder<'a, 'b> {
         );
     }
 
+    pub fn emit_tpl_type(&mut self) {
+        self.module.add_type(
+            self.metadata.tpl_type(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Struct(wasm::StructType::from([
+                    (
+                        self.metadata.tpl_fst_field(),
+                        wasm::FieldType {
+                            storage_type: wasm::StorageType::Val(self.metadata.obj_val_type(false)),
+                            mutability: wasm::Mutability::Const,
+                        },
+                    ),
+                    (
+                        self.metadata.tpl_snd_field(),
+                        wasm::FieldType {
+                            storage_type: wasm::StorageType::Val(self.metadata.obj_val_type(false)),
+                            mutability: wasm::Mutability::Const,
+                        },
+                    ),
+                ])),
+            },
+        );
+    }
+
     pub fn emit_envr_arity_types(&mut self) {
         for (arity, type_name) in self.metadata.envr_types() {
             self.module.add_type(
@@ -247,6 +273,7 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     pub fn emit_module(&mut self, module: &'a cont::Module) {
         self.emit_flt_type();
+        self.emit_tpl_type();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types();
         self.emit_envr_arity_types();

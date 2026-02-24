@@ -159,6 +159,9 @@ pub struct ModuleData<'a> {
     special_field: wasm::FieldName,
     special_local: wasm::LocalName,
     flt_type: wasm::TypeName,
+    tpl_type: wasm::TypeName,
+    tpl_fst_field: wasm::FieldName,
+    tpl_snd_field: wasm::FieldName,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
     func_types: BTreeMap<usize, wasm::TypeName>,
@@ -173,6 +176,9 @@ impl<'a> ModuleData<'a> {
             special_field: wasm::FieldName::from("!"),
             special_local: wasm::LocalName::from("!"),
             flt_type: wasm::TypeName::from("flt"),
+            tpl_type: wasm::TypeName::from("tpl"),
+            tpl_fst_field: wasm::FieldName::from("0"),
+            tpl_snd_field: wasm::FieldName::from("1"),
             envr_types: module
                 .clsrs()
                 .iter()
@@ -245,6 +251,18 @@ impl<'a> ModuleData<'a> {
 
     pub fn flt_type(&self) -> wasm::TypeName {
         self.flt_type.clone()
+    }
+
+    pub fn tpl_type(&self) -> wasm::TypeName {
+        self.tpl_type.clone()
+    }
+
+    pub fn tpl_fst_field(&self) -> wasm::FieldName {
+        self.tpl_fst_field.clone()
+    }
+
+    pub fn tpl_snd_field(&self) -> wasm::FieldName {
+        self.tpl_snd_field.clone()
     }
 
     pub fn envr_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

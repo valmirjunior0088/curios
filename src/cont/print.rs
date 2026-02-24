@@ -67,6 +67,15 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
                 print_value_names(fields),
                 pure("}"),
             ]),
+            Value::Tpl(first, second) => flat([
+                pure("("),
+                print_value_name(first),
+                pure(", "),
+                print_value_name(second),
+                pure(")"),
+            ]),
+            Value::Fst(tuple) => flat([pure("fst "), print_value_name(tuple)]),
+            Value::Snd(tuple) => flat([pure("snd "), print_value_name(tuple)]),
         },
         pure(";"),
     ])

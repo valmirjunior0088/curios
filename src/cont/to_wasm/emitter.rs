@@ -1,5 +1,5 @@
 use {
-    super::{BlockData, Context, LoadAs, Frame},
+    super::{BlockData, Context, Frame, LoadAs},
     crate::{cont, wasm},
     std::collections::HashMap,
 };
@@ -131,11 +131,39 @@ impl<'a, 'b> Emitter<'a, 'b> {
         });
     }
 
+    pub fn emit_tpl(&mut self, first: &'a cont::ValueName, second: &'a cont::ValueName) {
+        self.emit_instrs(self.context.load_value_instrs(first, LoadAs::NonNull));
+
+        self.emit_instrs(self.context.load_value_instrs(second, LoadAs::NonNull));
+
+        self.emit_instr(wasm::Instr::StructNew {
+            type_name: self.context.metadata().tpl_type(),
+        });
+    }
+
+    pub fn emit_tpl_proj(&mut self, tuple: &'a cont::ValueName, field_name: wasm::FieldName) {
+        self.emit_instrs(
+            self.context
+                .load_value_instrs(tuple, LoadAs::Concrete(self.context.metadata().tpl_type())),
+        );
+        self.emit_instr(wasm::Instr::StructGet {
+            type_name: self.context.metadata().tpl_type(),
+            field_name,
+        });
+    }
+
     pub fn emit_value(&mut self, value: &'a cont::Value) {
         match value {
             cont::Value::Pure(value) => self.emit_const_value(value),
             cont::Value::Eval(op, params) => self.emit_const_op(op, params),
             cont::Value::Clsr(target, fields) => self.emit_clsr(target, fields),
+            cont::Value::Tpl(first, second) => self.emit_tpl(first, second),
+            cont::Value::Fst(tuple) => {
+                self.emit_tpl_proj(tuple, self.context.metadata().tpl_fst_field())
+            }
+            cont::Value::Snd(tuple) => {
+                self.emit_tpl_proj(tuple, self.context.metadata().tpl_snd_field())
+            }
         }
     }
 

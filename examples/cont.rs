@@ -77,17 +77,33 @@ fn main() {
                         Block {
                             params: vec![ValueName::from("out")],
                             region: Region {
-                                values: vec![],
+                                values: vec![
+                                    (
+                                        ValueName::from("pair"),
+                                        Value::Tpl(
+                                            ValueName::from("out"),
+                                            ValueName::from("ZERO"),
+                                        ),
+                                    ),
+                                    (
+                                        ValueName::from("out_again"),
+                                        Value::Fst(ValueName::from("pair")),
+                                    ),
+                                    (
+                                        ValueName::from("is_zero"),
+                                        Value::Snd(ValueName::from("pair")),
+                                    ),
+                                ],
                                 blocks: vec![],
                                 tail: Tail::Case(CaseTarget {
-                                    operand: ValueName::from("out"),
+                                    operand: ValueName::from("is_zero"),
                                     targets: vec![JumpTarget {
                                         target: BlockName::from("Zero"),
-                                        params: vec![ValueName::from("out")],
+                                        params: vec![ValueName::from("out_again")],
                                     }],
                                     default: Some(JumpTarget {
                                         target: BlockName::from("NonZero"),
-                                        params: vec![ValueName::from("out")],
+                                        params: vec![ValueName::from("out_again")],
                                     }),
                                 }),
                             },

@@ -368,6 +368,25 @@ fn main() {
         },
     );
 
+    cont_module.add_func(
+        cont::FuncName::from("main_tpl"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                values: vec![(
+                    cont::ValueName::from("out"),
+                    cont::Value::Tpl(cont::ValueName::from("ONE"), cont::ValueName::from("TWO")),
+                )],
+                blocks: vec![],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("r"),
+                    params: vec![cont::ValueName::from("out")],
+                }),
+            },
+        },
+    );
+
     let mut config = Config::new();
     config.wasm_reference_types(true);
     config.wasm_function_references(true);
@@ -395,6 +414,10 @@ fn main() {
         .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main_other")
         .expect("expected exported func/main_other");
 
+    let run_tpl = instance
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main_tpl")
+        .expect("expected exported func/main_tpl");
+
     let result = run.call(&mut store, ()).expect("expected call result");
 
     let zero_result = run_zero
@@ -404,6 +427,10 @@ fn main() {
     let other_result = run_other
         .call(&mut store, ())
         .expect("expected call result for main_other");
+
+    let tuple_result = run_tpl
+        .call(&mut store, ())
+        .expect("expected call result for main_tpl");
 
     let value = result
         .unwrap_i31(&store)
@@ -418,7 +445,31 @@ fn main() {
         .expect("expected i31 result")
         .get_i32();
 
+    let tuple = tuple_result
+        .unwrap_struct(&store)
+        .expect("expected struct result");
+
+    let tuple_first = tuple
+        .field(&mut store, 0)
+        .expect("expected tpl field 0")
+        .unwrap_anyref()
+        .expect("expected anyref field 0")
+        .unwrap_i31(&store)
+        .expect("expected i31 in field 0")
+        .get_i32();
+
+    let tuple_second = tuple
+        .field(&mut store, 1)
+        .expect("expected tpl field 1")
+        .unwrap_anyref()
+        .expect("expected anyref field 1")
+        .unwrap_i31(&store)
+        .expect("expected i31 in field 1")
+        .get_i32();
+
     assert_eq!(value, 170);
     assert_eq!(zero_value, 2);
     assert_eq!(other_value, 8);
+    assert_eq!(tuple_first, 1);
+    assert_eq!(tuple_second, 2);
 }
