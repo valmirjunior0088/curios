@@ -1,8 +1,8 @@
 use {
     super::{Atom, Term},
     crate::monads::parser::{
-        Parser, ParserError, catch, fail, lazy, many1, pure, run_parser, sep_by0, sep_by1,
-        take_eof, take_exact, take_while, many_until,
+        Parser, ParserError, catch, fail, lazy, many_until, many1, pure, run_parser, sep_by0,
+        sep_by1, take_eof, take_exact, take_while,
     },
 };
 
@@ -202,7 +202,7 @@ where
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
-    parse_term_until(|| fail("No stop"))
+    parse_term_until(|| fail(""))
 }
 
 fn parse_term_until<'a, G>(g: G) -> Parser<'a, Term>

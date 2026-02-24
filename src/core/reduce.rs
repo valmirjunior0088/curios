@@ -21,13 +21,9 @@ impl Reduce {
         }
     }
 
-    fn timed_out(&self) -> bool {
-        Instant::now() > self.deadline
-    }
-
     fn reduce(&mut self, context: &mut Context, mut term: Term) -> Result<Term, Preempted> {
         loop {
-            if self.timed_out() {
+            if Instant::now() > self.deadline {
                 break Err(Preempted);
             }
 
