@@ -12,14 +12,17 @@ pub struct Scope<A: Arity> {
 }
 
 impl<A: Arity> Scope<A> {
-    pub fn close<'a>(arity: A, names: A::Params<'a, str>, body: Term) -> Self {
-        let names = names.as_ref();
-
-        assert!(arity.arity() == names.len());
+    pub fn close<'a>(arity: A, labels: A::Params<'a, str>, body: Term) -> Self {
+        assert!(
+            arity.arity() == labels.as_ref().len(),
+            "scope arity mismatch in `close`: expected {}, got {}",
+            arity.arity(),
+            labels.as_ref().len()
+        );
 
         Self {
             arity,
-            body: body.capture(names).into(),
+            body: body.capture(labels.as_ref()).into(),
         }
     }
 
@@ -28,63 +31,120 @@ impl<A: Arity> Scope<A> {
     }
 
     pub fn open<'a>(self, terms: A::Params<'a, Term>) -> Term {
-        let terms = terms.as_ref();
+        assert!(
+            self.arity() == terms.as_ref().len(),
+            "scope arity mismatch in `open`: expected {}, got {}",
+            self.arity(),
+            terms.as_ref().len()
+        );
 
-        assert!(self.arity() == terms.len());
-
-        self.body.release(terms)
+        self.body.release(terms.as_ref())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Type,
-    FuncType(Subterm, Scope<One>),
-    Func(Scope<One>),
-    Apply(Subterm, Subterm),
-    PairType(Subterm, Scope<One>),
-    Pair(Subterm, Subterm),
-    Split(Subterm, Scope<One>, Scope<Two>),
-    AtomType(BTreeSet<Atom>),
-    Atom(Atom),
-    Switch(Subterm, Scope<One>, BTreeMap<Atom, Subterm>),
-    Bind(Vec<(Subterm, Scope<Many>)>, Scope<Many>),
-    Name(Name),
+    FuncType {
+        input: Subterm,
+        output: Scope<One>,
+    },
+    Func {
+        body: Scope<One>,
+    },
+    Apply {
+        head: Subterm,
+        param: Subterm,
+    },
+    PairType {
+        input: Subterm,
+        output: Scope<One>,
+    },
+    Pair {
+        first: Subterm,
+        second: Subterm,
+    },
+    Split {
+        head: Subterm,
+        motive: Scope<One>,
+        tail: Scope<Two>,
+    },
+    AtomType {
+        atoms: BTreeSet<Atom>,
+    },
+    Atom {
+        atom: Atom,
+    },
+    Match {
+        head: Subterm,
+        motive: Scope<One>,
+        cases: BTreeMap<Atom, Subterm>,
+    },
+    Let {
+        type_: Subterm,
+        body: Subterm,
+        tail: Scope<One>,
+    },
+    LetRec {
+        items: Vec<(Scope<Many>, Scope<Many>)>,
+        tail: Scope<Many>,
+    },
+    Name {
+        name: Name,
+    },
 }
 
 impl Term {
-    pub fn func_type(name: &str, kind: Term, body: Term) -> Self {
-        Self::FuncType(kind.into(), Scope::close(One, &[name], body))
+    pub fn func_type(label: &str, input: Term, output: Term) -> Self {
+        Self::FuncType {
+            input: input.into(),
+            output: Scope::close(One, &[label], output),
+        }
     }
 
-    pub fn func(name: &str, body: Term) -> Self {
-        Self::Func(Scope::close(One, &[name], body))
+    pub fn func(label: &str, body: Term) -> Self {
+        Self::Func {
+            body: Scope::close(One, &[label], body),
+        }
     }
 
-    pub fn apply(head: Term, param: Term) -> Self {
-        Self::Apply(head.into(), param.into())
+    pub fn apply<I>(head: Term, params: I) -> Self
+    where
+        I: IntoIterator<Item = Term>,
+    {
+        params.into_iter().fold(head, |head, param| Self::Apply {
+            head: head.into(),
+            param: param.into(),
+        })
     }
 
-    pub fn pair_type(name: &str, kind: Term, body: Term) -> Self {
-        Self::PairType(kind.into(), Scope::close(One, &[name], body))
+    pub fn pair_type(label: &str, input: Term, output: Term) -> Self {
+        Self::PairType {
+            input: input.into(),
+            output: Scope::close(One, &[label], output),
+        }
     }
 
-    pub fn pair(left: Term, right: Term) -> Self {
-        Self::Pair(left.into(), right.into())
+    pub fn pair(first: Term, second: Term) -> Self {
+        Self::Pair {
+            first: first.into(),
+            second: second.into(),
+        }
     }
 
     pub fn split(
         head: Term,
-        motive: Scope<One>,
-        left_name: &str,
-        right_name: &str,
-        body: Term,
+        motive_label: &str,
+        motive: Term,
+        first_label: &str,
+        second_label: &str,
+        tail: Term,
     ) -> Self {
-        Self::Split(
-            head.into(),
-            motive,
-            Scope::close(Two, &[left_name, right_name], body),
-        )
+        Self::Split {
+            head: head.into(),
+            motive: Scope::close(One, &[motive_label], motive),
+            tail: Scope::close(Two, &[first_label, second_label], tail),
+        }
     }
 
     pub fn atom_type<I, A>(atoms: I) -> Self
@@ -92,60 +152,74 @@ impl Term {
         I: IntoIterator<Item = A>,
         A: Into<String>,
     {
-        Self::AtomType(atoms.into_iter().map(Atom::from).collect())
+        Self::AtomType {
+            atoms: atoms.into_iter().map(Atom::from).collect(),
+        }
     }
 
     pub fn atom<A>(atom: A) -> Self
     where
         A: Into<String>,
     {
-        Self::Atom(Atom::from(atom.into()))
+        Self::Atom {
+            atom: Atom::from(atom.into()),
+        }
     }
 
-    pub fn switch<I>(head: Term, motive: Scope<One>, cases: I) -> Self
+    pub fn match_<I>(head: Term, motive_label: &str, motive: Term, cases: I) -> Self
     where
         I: IntoIterator<Item = (Atom, Term)>,
     {
-        Self::Switch(
-            head.into(),
-            motive,
-            cases
+        Self::Match {
+            head: head.into(),
+            motive: Scope::close(One, &[motive_label], motive),
+            cases: cases
                 .into_iter()
                 .map(|(atom, body)| (atom, body.into()))
                 .collect(),
-        )
+        }
     }
 
-    pub fn bind(bindings: Vec<(&str, Term, Term)>, body: Term) -> Self {
-        let names = bindings
-            .iter()
-            .map(|(name, _, _)| *name)
-            .collect::<Vec<_>>();
+    pub fn let_(label: &str, type_: Term, body: Term, tail: Term) -> Self {
+        Self::Let {
+            type_: type_.into(),
+            body: body.into(),
+            tail: Scope::close(One, &[label], tail),
+        }
+    }
 
-        let arity = Many(names.len());
+    pub fn let_rec(items: Vec<(&str, Term, Term)>, tail: Term) -> Self {
+        let labels = items.iter().map(|&(label, _, _)| label).collect::<Vec<_>>();
 
-        Self::Bind(
-            bindings
+        Self::LetRec {
+            items: items
                 .into_iter()
-                .map(|(_, kind, value)| (kind.into(), Scope::close(arity, &names, value)))
+                .map(|(_, type_, value)| {
+                    (
+                        Scope::close(Many(labels.len()), &labels, type_),
+                        Scope::close(Many(labels.len()), &labels, value),
+                    )
+                })
                 .collect(),
-            Scope::close(arity, &names, body),
-        )
+            tail: Scope::close(Many(labels.len()), &labels, tail),
+        }
     }
 
-    pub fn free<A>(free: A) -> Self
+    pub fn label<A>(label: A) -> Self
     where
         A: Into<String>,
     {
-        Self::Name(Name::free(free))
+        Self::Name {
+            name: Name::label(label),
+        }
     }
 
-    pub fn free_names(&self) -> HashSet<String> {
+    pub fn collect(&self) -> HashSet<String> {
         let mut names = HashSet::new();
 
         Visit::new(|_, name| {
-            if let Some(free) = name.as_free() {
-                names.insert(free.to_string());
+            if let Some(label) = name.as_label() {
+                names.insert(label.to_string());
             }
 
             None
@@ -157,26 +231,32 @@ impl Term {
 
     fn shift(self, amount: usize) -> Self {
         Visit::new(|depth, name| {
-            name.as_bound()
-                .filter(|&bound| bound >= depth)
-                .map(|bound| Self::Name(Name::bound(bound + amount)))
+            name.as_index()
+                .filter(|&index| index >= depth)
+                .map(|index| Self::Name {
+                    name: Name::index(index + amount),
+                })
         })
         .visit_term(self)
     }
 
-    fn capture(self, names: &[&str]) -> Self {
+    fn capture(self, labels: &[&str]) -> Self {
         Visit::new(|depth, name| {
-            name.as_free()
-                .and_then(|free| {
-                    names
+            name.as_label()
+                .and_then(|label| {
+                    labels
                         .iter()
-                        .position(|&bound| free == bound)
-                        .map(|bound| Self::Name(Name::bound(depth + bound)))
+                        .position(|&candidate_label| label == candidate_label)
+                        .map(|index| Self::Name {
+                            name: Name::index(depth + index),
+                        })
                 })
                 .or_else(|| {
-                    name.as_bound()
-                        .filter(|&bound| bound >= depth)
-                        .map(|bound| Self::Name(Name::bound(bound + names.len())))
+                    name.as_index()
+                        .filter(|&index| index >= depth)
+                        .map(|index| Self::Name {
+                            name: Name::index(index + labels.len()),
+                        })
                 })
         })
         .visit_term(self)
@@ -184,12 +264,16 @@ impl Term {
 
     fn release(self, terms: &[&Term]) -> Self {
         Visit::new(|depth, name| {
-            name.as_bound()
-                .and_then(|bound| match bound.checked_sub(depth) {
-                    Some(delta) if delta < terms.len() => Some(terms[delta].clone().shift(depth)),
-                    Some(_) => Some(Self::Name(Name::bound(bound - terms.len()))),
-                    None => None,
-                })
+            name.as_index().and_then(|index| {
+                index
+                    .checked_sub(depth)
+                    .map(|delta| match delta < terms.len() {
+                        true => terms[delta].clone().shift(depth),
+                        false => Self::Name {
+                            name: Name::index(index - terms.len()),
+                        },
+                    })
+            })
         })
         .visit_term(self)
     }
@@ -225,41 +309,57 @@ where
     fn visit_term(&mut self, term: Term) -> Term {
         match term {
             Term::Type => Term::Type,
-            Term::FuncType(term, scope) => {
-                Term::FuncType(self.visit_subterm(term), self.visit_scope(scope))
-            }
-            Term::Func(term) => Term::Func(self.visit_scope(term)),
-            Term::Apply(head, param) => {
-                Term::Apply(self.visit_subterm(head), self.visit_subterm(param))
-            }
-            Term::PairType(term, scope) => {
-                Term::PairType(self.visit_subterm(term), self.visit_scope(scope))
-            }
-            Term::Pair(left, right) => {
-                Term::Pair(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Term::Split(head, motive, scope) => Term::Split(
-                self.visit_subterm(head),
-                self.visit_scope(motive),
-                self.visit_scope(scope),
-            ),
-            Term::AtomType(atoms) => Term::AtomType(atoms),
-            Term::Atom(atom) => Term::Atom(atom),
-            Term::Switch(head, motive, cases) => Term::Switch(
-                self.visit_subterm(head),
-                self.visit_scope(motive),
-                cases
+            Term::FuncType { input, output } => Term::FuncType {
+                input: self.visit_subterm(input),
+                output: self.visit_scope(output),
+            },
+            Term::Func { body } => Term::Func {
+                body: self.visit_scope(body),
+            },
+            Term::Apply { head, param } => Term::Apply {
+                head: self.visit_subterm(head),
+                param: self.visit_subterm(param),
+            },
+            Term::PairType { input, output } => Term::PairType {
+                input: self.visit_subterm(input),
+                output: self.visit_scope(output),
+            },
+            Term::Pair { first, second } => Term::Pair {
+                first: self.visit_subterm(first),
+                second: self.visit_subterm(second),
+            },
+            Term::Split { head, motive, tail } => Term::Split {
+                head: self.visit_subterm(head),
+                motive: self.visit_scope(motive),
+                tail: self.visit_scope(tail),
+            },
+            Term::AtomType { atoms } => Term::AtomType { atoms },
+            Term::Atom { atom } => Term::Atom { atom },
+            Term::Match {
+                head,
+                motive,
+                cases,
+            } => Term::Match {
+                head: self.visit_subterm(head),
+                motive: self.visit_scope(motive),
+                cases: cases
                     .into_iter()
                     .map(|(atom, body)| (atom, self.visit_subterm(body)))
                     .collect(),
-            ),
-            Term::Bind(head, body) => Term::Bind(
-                head.into_iter()
-                    .map(|(kind, value)| (self.visit_subterm(kind), self.visit_scope(value)))
+            },
+            Term::Let { type_, body, tail } => Term::Let {
+                type_: self.visit_subterm(type_),
+                body: self.visit_subterm(body),
+                tail: self.visit_scope(tail),
+            },
+            Term::LetRec { items, tail } => Term::LetRec {
+                items: items
+                    .into_iter()
+                    .map(|(type_, value)| (self.visit_scope(type_), self.visit_scope(value)))
                     .collect(),
-                self.visit_scope(body),
-            ),
-            Term::Name(name) => (self.visit)(self.depth, &name).unwrap_or(Term::Name(name)),
+                tail: self.visit_scope(tail),
+            },
+            Term::Name { name } => (self.visit)(self.depth, &name).unwrap_or(Term::Name { name }),
         }
     }
 }
@@ -269,50 +369,50 @@ mod tests {
     use {super::*, std::collections::HashSet};
 
     #[test]
-    fn close_open_substitutes_free_name() {
-        let term = Scope::close(One, &["x"], Term::free("x")).open(&[&Term::free("y")]);
+    fn close_open_substitutes_label_name() {
+        let term = Scope::close(One, &["x"], Term::label("x")).open(&[&Term::label("y")]);
 
         let name = match term {
-            Term::Name(name) => name,
+            Term::Name { name } => name,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        assert_eq!(name, Name::free("y"));
+        assert_eq!(name, Name::label("y"));
     }
 
     #[test]
     fn close_open_preserves_nested_bind() {
         let term =
-            Scope::close(One, &["x"], Term::func("y", Term::free("x"))).open(&[&Term::free("z")]);
+            Scope::close(One, &["x"], Term::func("y", Term::label("x"))).open(&[&Term::label("z")]);
 
         let body = match term {
-            Term::Func(body) => body,
+            Term::Func { body } => body,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        let name = match body.open(&[&Term::free("w")]) {
-            Term::Name(name) => name,
+        let name = match body.open(&[&Term::label("w")]) {
+            Term::Name { name } => name,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        assert_eq!(name, Name::free("z"));
+        assert_eq!(name, Name::label("z"));
     }
 
     #[test]
-    fn free_names_collects_only_free_names() {
+    fn collect_ignores_index_names() {
         let term = Term::func(
             "x",
             Term::pair(
-                Term::free("x"),
-                Term::bind(
-                    vec![("y", Term::Type, Term::free("z"))],
-                    Term::pair(Term::free("y"), Term::free("w")),
+                Term::label("x"),
+                Term::let_rec(
+                    vec![("y", Term::Type, Term::label("z"))],
+                    Term::pair(Term::label("y"), Term::label("w")),
                 ),
             ),
         );
 
         assert_eq!(
-            term.free_names(),
+            term.collect(),
             HashSet::from([String::from("w"), String::from("z")])
         );
     }

@@ -202,7 +202,7 @@ where
     }
 }
 
-pub fn parse<'a, A>(parser: Parser<'a, A>, string: &'a str) -> Result<A, ParserError>
+pub fn run_parser<'a, A>(parser: Parser<'a, A>, string: &'a str) -> Result<A, ParserError>
 where
     A: 'a,
 {
@@ -257,6 +257,14 @@ where
     T: 'a,
 {
     Parser::new(move |state| parser.parse(state).map_err(|error| error.catch()))
+}
+
+pub fn lazy<'a, T, F>(f: F) -> Parser<'a, T>
+where
+    T: 'a,
+    F: FnOnce() -> Parser<'a, T> + 'a,
+{
+    Parser::new(move |state| f().parse(state))
 }
 
 pub fn many0<'a, T, F>(mut f: F) -> Parser<'a, Vec<T>>
@@ -320,6 +328,99 @@ where
 
         if error.is_uncaught(state) {
             return Err(error);
+        }
+
+        Ok((items, state))
+    })
+}
+
+pub fn many_until<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
+where
+    T: 'a,
+    S: 'a,
+    F: FnMut() -> Parser<'a, T> + 'a,
+    G: FnMut() -> Parser<'a, S> + 'a,
+{
+    Parser::new(move |mut state| {
+        let mut items = Vec::new();
+
+        loop {
+            if let Ok((_, state)) = g().parse(state) {
+                return Ok((items, state));
+            }
+
+            let offset = state.offset;
+
+            let (item, next_state) = match f().parse(state) {
+                Ok(output) => output,
+                Err(error) if error.is_uncaught(state) => return Err(error),
+                Err(_) => return Ok((items, state)),
+            };
+
+            if offset == next_state.offset {
+                panic!("Infinite repetition");
+            }
+
+            items.push(item);
+            state = next_state;
+        }
+    })
+}
+
+pub fn sep_by0<'a, T, S, F, G>(f: F, g: G) -> Parser<'a, Vec<T>>
+where
+    T: 'a,
+    S: 'a,
+    F: FnMut() -> Parser<'a, T> + 'a,
+    G: FnMut() -> Parser<'a, S> + 'a,
+{
+    sep_by1(f, g).or(pure(Vec::new()))
+}
+
+pub fn sep_by1<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
+where
+    T: 'a,
+    S: 'a,
+    F: FnMut() -> Parser<'a, T> + 'a,
+    G: FnMut() -> Parser<'a, S> + 'a,
+{
+    Parser::new(move |state| {
+        let offset = state.offset;
+        let (item, mut state) = f().parse(state)?;
+
+        if offset == state.offset {
+            panic!("Infinite repetition");
+        }
+
+        let mut items = vec![item];
+
+        loop {
+            let separator_state = match g().parse(state) {
+                Ok((_, next_state)) => {
+                    if state.offset == next_state.offset {
+                        panic!("Infinite repetition");
+                    }
+
+                    next_state
+                }
+                Err(error) => {
+                    if error.is_uncaught(state) {
+                        return Err(error);
+                    }
+
+                    break;
+                }
+            };
+
+            let offset = separator_state.offset;
+            let (item, next_state) = f().parse(separator_state)?;
+
+            if offset == next_state.offset {
+                panic!("Infinite repetition");
+            }
+
+            items.push(item);
+            state = next_state;
         }
 
         Ok((items, state))

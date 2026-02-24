@@ -5,7 +5,7 @@ use {
         LocalName, Module, Mutability, NumType, PackedType, RecType, RefType, ResultType,
         StorageType, StructType, SubType, TypeName, ValType,
     },
-    crate::monads::printer::{Printer, flat, indent, print, pure, sep_flat},
+    crate::monads::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -782,7 +782,7 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
 
 impl Display for Module {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        print(print_module(self), formatter)?;
+        run_printer(print_module(self), formatter)?;
 
         Ok(())
     }

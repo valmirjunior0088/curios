@@ -3,47 +3,47 @@ use crate::macros::name;
 name!(Atom);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum NameKind {
-    Free(String),
-    Bound(usize),
+enum NameType {
+    Label(String),
+    Index(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Name {
-    kind: NameKind,
+    type_: NameType,
 }
 
 impl Name {
-    pub fn free<A>(free: A) -> Self
+    pub fn label<A>(label: A) -> Self
     where
         A: Into<String>,
     {
         Self {
-            kind: NameKind::Free(free.into()),
+            type_: NameType::Label(label.into()),
         }
     }
 
-    pub(super) fn as_free(&self) -> Option<&str> {
-        match &self.kind {
-            NameKind::Free(free) => Some(free),
-            NameKind::Bound(_) => None,
+    pub(super) fn as_label(&self) -> Option<&str> {
+        match &self.type_ {
+            NameType::Label(label) => Some(label),
+            NameType::Index(_) => None,
         }
     }
 
-    pub(super) fn bound(bound: usize) -> Self {
+    pub(super) fn index(index: usize) -> Self {
         Self {
-            kind: NameKind::Bound(bound),
+            type_: NameType::Index(index),
         }
     }
 
-    pub(super) fn as_bound(&self) -> Option<usize> {
-        match &self.kind {
-            NameKind::Free(_) => None,
-            &NameKind::Bound(bound) => Some(bound),
+    pub(super) fn as_index(&self) -> Option<usize> {
+        match &self.type_ {
+            NameType::Label(_) => None,
+            &NameType::Index(index) => Some(index),
         }
     }
 
     pub fn unwrap(&self) -> &str {
-        self.as_free().unwrap()
+        self.as_label().unwrap()
     }
 }

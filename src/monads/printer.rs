@@ -70,7 +70,7 @@ impl<'a> Printer<'a> {
     }
 }
 
-pub fn print<'a, 'b, 'c>(
+pub fn run_printer<'a, 'b, 'c>(
     printer: Printer<'a>,
     formatter: &'b mut Formatter<'c>,
 ) -> Result<(), Error> {

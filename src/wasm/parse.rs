@@ -6,7 +6,7 @@ use {
         StorageType, StructType, SubType, TypeName, ValType,
     },
     crate::monads::parser::{
-        Parser, ParserError, catch, fail, many0, many1, parse, pure, take_eof, take_exact,
+        Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,
         take_while,
     },
     std::str::FromStr,
@@ -820,7 +820,7 @@ impl FromStr for Module {
     type Err = ParserError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse(
+        run_parser(
             parse_whitespace()
                 .and_keep(parse_module())
                 .and_drop(take_eof()),
