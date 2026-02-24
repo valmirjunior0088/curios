@@ -134,7 +134,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         });
     }
 
-    pub fn emit_tpl(&mut self, first: &'a cont::ValueName, second: &'a cont::ValueName) {
+    pub fn emit_tpl2(&mut self, first: &'a cont::ValueName, second: &'a cont::ValueName) {
         self.emit_instrs(self.context.load_value_instrs(first, LoadAs::NonNull));
 
         self.emit_instrs(self.context.load_value_instrs(second, LoadAs::NonNull));
@@ -167,7 +167,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             cont::Value::Pure(value) => self.emit_const_value(value),
             cont::Value::Eval(op, params) => self.emit_const_op(op, params),
             cont::Value::Clsr(target, fields) => self.emit_clsr(target, fields),
-            cont::Value::Tpl2(first, second) => self.emit_tpl(first, second),
+            cont::Value::Tpl2(first, second) => self.emit_tpl2(first, second),
             cont::Value::Proj(tuple, index) => self.emit_proj(tuple, *index),
         }
     }
@@ -283,7 +283,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     pub fn emit_root_region(&mut self, region: &'a cont::Region) {
         self.emit_region(self.context.params(), region);
-
         self.leave_last_frame();
     }
 }
