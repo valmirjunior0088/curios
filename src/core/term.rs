@@ -58,6 +58,10 @@ where
 
         self.body.release(terms.as_ref())
     }
+
+    pub fn collect(&self) -> HashSet<String> {
+        self.body.collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
