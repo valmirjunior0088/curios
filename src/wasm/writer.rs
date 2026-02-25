@@ -313,6 +313,17 @@ impl<'f, 'l> State<'f, 'l> {
         }
     }
 
+    fn scoped<T, F>(&mut self, label_name: &'l LabelName, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut Self) -> Result<T>,
+    {
+        self.enter_scope(label_name);
+        let result = f(self);
+        self.leave_scope();
+
+        result
+    }
+
     fn resolve(&self, target_name: &LabelName) -> usize {
         match self {
             Self::Const => panic!("`State` is const"),
@@ -791,13 +802,13 @@ where
                 self.buffer.push_byte(0x02)?;
                 self.write_block_type(block_type)?;
 
-                state.enter_scope(label_name);
+                state.scoped(label_name, |state| {
+                    for instr in instructions {
+                        self.write_instr(state, instr)?;
+                    }
 
-                for instr in instructions {
-                    self.write_instr(state, instr)?;
-                }
-
-                state.leave_scope();
+                    Ok(())
+                })?;
                 self.buffer.push_byte(0x0b)?;
             }
             Instr::Loop {
@@ -808,13 +819,13 @@ where
                 self.buffer.push_byte(0x03)?;
                 self.write_block_type(block_type)?;
 
-                state.enter_scope(label_name);
+                state.scoped(label_name, |state| {
+                    for instr in instructions {
+                        self.write_instr(state, instr)?;
+                    }
 
-                for instr in instructions {
-                    self.write_instr(state, instr)?;
-                }
-
-                state.leave_scope();
+                    Ok(())
+                })?;
                 self.buffer.push_byte(0x0b)?;
             }
             Instr::If {
@@ -826,24 +837,24 @@ where
                 self.buffer.push_byte(0x04)?;
                 self.write_block_type(block_type)?;
 
-                state.enter_scope(label_name);
+                state.scoped(label_name, |state| {
+                    for instr in then_instructions {
+                        self.write_instr(state, instr)?;
+                    }
 
-                for instr in then_instructions {
-                    self.write_instr(state, instr)?;
-                }
-
-                state.leave_scope();
+                    Ok(())
+                })?;
 
                 if !else_instructions.is_empty() {
                     self.buffer.push_byte(0x05)?;
 
-                    state.enter_scope(label_name);
+                    state.scoped(label_name, |state| {
+                        for instr in else_instructions {
+                            self.write_instr(state, instr)?;
+                        }
 
-                    for instr in else_instructions {
-                        self.write_instr(state, instr)?;
-                    }
-
-                    state.leave_scope();
+                        Ok(())
+                    })?;
                 }
 
                 self.buffer.push_byte(0x0b)?;
