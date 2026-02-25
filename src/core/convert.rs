@@ -1,5 +1,5 @@
 use {
-    super::{Context, Intrinsic, Preempted, Term, reduce},
+    super::{Context, Prim, Preempted, Term, reduce},
     std::{
         collections::{HashSet, VecDeque},
         time::{Duration, Instant},
@@ -52,28 +52,28 @@ impl Convert {
 
             match (this, that) {
                 (
-                    Term::Intrinsic { intrinsic: this },
-                    Term::Intrinsic { intrinsic: that },
+                    Term::Prim { prim: this },
+                    Term::Prim { prim: that },
                 ) => match (this, that) {
-                    (Intrinsic::IntType, Intrinsic::IntType)
-                    | (Intrinsic::FltType, Intrinsic::FltType) => {}
-                    (Intrinsic::Int(this), Intrinsic::Int(that)) => {
+                    (Prim::IntType, Prim::IntType)
+                    | (Prim::FltType, Prim::FltType) => {}
+                    (Prim::Int(this), Prim::Int(that)) => {
                         if this != that {
                             return Ok(false);
                         }
                     }
-                    (Intrinsic::Flt(this), Intrinsic::Flt(that)) => {
+                    (Prim::Flt(this), Prim::Flt(that)) => {
                         if this != that {
                             return Ok(false);
                         }
                     }
-                    (Intrinsic::IntEql(this_first, this_second), Intrinsic::IntEql(that_first, that_second))
-                    | (Intrinsic::IntAdd(this_first, this_second), Intrinsic::IntAdd(that_first, that_second))
-                    | (Intrinsic::IntSub(this_first, this_second), Intrinsic::IntSub(that_first, that_second))
-                    | (Intrinsic::IntMul(this_first, this_second), Intrinsic::IntMul(that_first, that_second))
-                    | (Intrinsic::FltAdd(this_first, this_second), Intrinsic::FltAdd(that_first, that_second))
-                    | (Intrinsic::FltSub(this_first, this_second), Intrinsic::FltSub(that_first, that_second))
-                    | (Intrinsic::FltMul(this_first, this_second), Intrinsic::FltMul(that_first, that_second)) => {
+                    (Prim::IntEql(this_first, this_second), Prim::IntEql(that_first, that_second))
+                    | (Prim::IntAdd(this_first, this_second), Prim::IntAdd(that_first, that_second))
+                    | (Prim::IntSub(this_first, this_second), Prim::IntSub(that_first, that_second))
+                    | (Prim::IntMul(this_first, this_second), Prim::IntMul(that_first, that_second))
+                    | (Prim::FltAdd(this_first, this_second), Prim::FltAdd(that_first, that_second))
+                    | (Prim::FltSub(this_first, this_second), Prim::FltSub(that_first, that_second))
+                    | (Prim::FltMul(this_first, this_second), Prim::FltMul(that_first, that_second)) => {
                         self.enqueue(*this_first, *that_first);
                         self.enqueue(*this_second, *that_second);
                     }
@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn convert_intrinsic_recurses_into_operands() {
+    fn convert_prim_recurses_into_operands() {
         let mut context = context();
 
         let this = Term::func("x", Term::int_add(Term::label("x"), Term::int(1)));
@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn convert_intrinsic_distinguishes_operator_kind() {
+    fn convert_prim_distinguishes_operator_kind() {
         let mut context = context();
 
         let this = Term::func("x", Term::int_add(Term::label("x"), Term::int(1)));

@@ -1,4 +1,4 @@
-use super::{Context, Intrinsic, Term};
+use super::{Context, Prim, Term};
 
 pub enum Error {
     ReducePreempted { term: Term },
@@ -43,22 +43,22 @@ fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Erro
 fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     match term {
         Term::Type => Ok(Term::Type),
-        Term::Intrinsic { intrinsic } => match intrinsic {
-            Intrinsic::IntType | Intrinsic::FltType => Ok(Term::Type),
-            Intrinsic::Int(_) => Ok(Term::int_type()),
-            Intrinsic::IntEql(first, second)
-            | Intrinsic::IntAdd(first, second)
-            | Intrinsic::IntSub(first, second)
-            | Intrinsic::IntMul(first, second) => {
+        Term::Prim { prim } => match prim {
+            Prim::IntType | Prim::FltType => Ok(Term::Type),
+            Prim::Int(_) => Ok(Term::int_type()),
+            Prim::IntEql(first, second)
+            | Prim::IntAdd(first, second)
+            | Prim::IntSub(first, second)
+            | Prim::IntMul(first, second) => {
                 check(context, first, &Term::int_type())?;
                 check(context, second, &Term::int_type())?;
 
                 Ok(Term::int_type())
             }
-            Intrinsic::Flt(_) => Ok(Term::flt_type()),
-            Intrinsic::FltAdd(first, second)
-            | Intrinsic::FltSub(first, second)
-            | Intrinsic::FltMul(first, second) => {
+            Prim::Flt(_) => Ok(Term::flt_type()),
+            Prim::FltAdd(first, second)
+            | Prim::FltSub(first, second)
+            | Prim::FltMul(first, second) => {
                 check(context, first, &Term::flt_type())?;
                 check(context, second, &Term::flt_type())?;
 
@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn check_intrinsic_ops_typecheck() {
+    fn check_prim_ops_typecheck() {
         let mut context = context();
 
         assert!(
@@ -437,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn check_intrinsic_ops_reject_wrong_operand_types() {
+    fn check_prim_ops_reject_wrong_operand_types() {
         let mut context = context();
 
         assert!(matches!(

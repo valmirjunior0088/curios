@@ -92,7 +92,7 @@ fn parse_flt_literal<'a>() -> Parser<'a, Term> {
     parse_flt_literal_value().map(Term::flt)
 }
 
-fn parse_intrinsic_op<'a>() -> Parser<'a, Term> {
+fn parse_prim_op<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Int.eql"))
         .and_keep(lazy(parse_atomic_term))
         .and(lazy(parse_atomic_term))
@@ -269,7 +269,7 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
         .or(parse_flt_type())
         .or(parse_flt_literal())
         .or(parse_int_literal())
-        .or(parse_intrinsic_op())
+        .or(parse_prim_op())
         .or(parse_atom_type())
         .or(parse_atom())
         .or(parse_pair_type())
@@ -382,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_intrinsics() {
+    fn parse_prim() {
         assert_eq!(parse("Int").unwrap(), Term::int_type());
         assert_eq!(parse("Flt").unwrap(), Term::flt_type());
         assert_eq!(parse("42").unwrap(), Term::int(42));

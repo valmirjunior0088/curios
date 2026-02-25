@@ -1,5 +1,5 @@
 use {
-    super::{Context, Intrinsic, Term},
+    super::{Context, Prim, Term},
     std::time::{Duration, Instant},
 };
 
@@ -21,126 +21,126 @@ impl Reduce {
         }
     }
 
-    fn reduce_intrinsic(
+    fn reduce_prim(
         &mut self,
         context: &mut Context,
-        intrinsic: &Intrinsic,
+        prim: &Prim,
     ) -> Result<Term, Preempted> {
-        match intrinsic {
-            Intrinsic::IntType => Ok(Intrinsic::IntType.into()),
-            Intrinsic::Int(value) => Ok(Intrinsic::Int(*value).into()),
-            Intrinsic::IntEql(first, second) => {
+        match prim {
+            Prim::IntType => Ok(Prim::IntType.into()),
+            Prim::Int(value) => Ok(Prim::Int(*value).into()),
+            Prim::IntEql(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(first),
+                        Term::Prim {
+                            prim: Prim::Int(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(second),
+                        Term::Prim {
+                            prim: Prim::Int(second),
                         },
                     ) => Term::int(if first == second { 1 } else { 0 }),
-                    (first, second) => Intrinsic::IntEql(first.into(), second.into()).into(),
+                    (first, second) => Prim::IntEql(first.into(), second.into()).into(),
                 })
             }
-            Intrinsic::IntAdd(first, second) => {
+            Prim::IntAdd(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(first),
+                        Term::Prim {
+                            prim: Prim::Int(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(second),
+                        Term::Prim {
+                            prim: Prim::Int(second),
                         },
                     ) => Term::int(first.wrapping_add(second)),
-                    (first, second) => Intrinsic::IntAdd(first.into(), second.into()).into(),
+                    (first, second) => Prim::IntAdd(first.into(), second.into()).into(),
                 })
             }
-            Intrinsic::IntSub(first, second) => {
+            Prim::IntSub(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(first),
+                        Term::Prim {
+                            prim: Prim::Int(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(second),
+                        Term::Prim {
+                            prim: Prim::Int(second),
                         },
                     ) => Term::int(first.wrapping_sub(second)),
-                    (first, second) => Intrinsic::IntSub(first.into(), second.into()).into(),
+                    (first, second) => Prim::IntSub(first.into(), second.into()).into(),
                 })
             }
-            Intrinsic::IntMul(first, second) => {
+            Prim::IntMul(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(first),
+                        Term::Prim {
+                            prim: Prim::Int(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Int(second),
+                        Term::Prim {
+                            prim: Prim::Int(second),
                         },
                     ) => Term::int(first.wrapping_mul(second)),
-                    (first, second) => Intrinsic::IntMul(first.into(), second.into()).into(),
+                    (first, second) => Prim::IntMul(first.into(), second.into()).into(),
                 })
             }
-            Intrinsic::FltType => Ok(Intrinsic::FltType.into()),
-            Intrinsic::Flt(bits) => Ok(Intrinsic::Flt(*bits).into()),
-            Intrinsic::FltAdd(first, second) => {
+            Prim::FltType => Ok(Prim::FltType.into()),
+            Prim::Flt(bits) => Ok(Prim::Flt(*bits).into()),
+            Prim::FltAdd(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Flt(first),
+                        Term::Prim {
+                            prim: Prim::Flt(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Flt(second),
+                        Term::Prim {
+                            prim: Prim::Flt(second),
                         },
                     ) => Term::flt(f32::from_bits(first) + f32::from_bits(second)),
-                    (first, second) => Intrinsic::FltAdd(first.into(), second.into()).into(),
+                    (first, second) => Prim::FltAdd(first.into(), second.into()).into(),
                 })
             }
-            Intrinsic::FltSub(first, second) => {
+            Prim::FltSub(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Flt(first),
+                        Term::Prim {
+                            prim: Prim::Flt(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Flt(second),
+                        Term::Prim {
+                            prim: Prim::Flt(second),
                         },
                     ) => Term::flt(f32::from_bits(first) - f32::from_bits(second)),
-                    (first, second) => Intrinsic::FltSub(first.into(), second.into()).into(),
+                    (first, second) => Prim::FltSub(first.into(), second.into()).into(),
                 })
             }
-            Intrinsic::FltMul(first, second) => {
+            Prim::FltMul(first, second) => {
                 let first = self.reduce(context, first.as_ref().into())?;
                 let second = self.reduce(context, second.as_ref().into())?;
 
                 Ok(match (first, second) {
                     (
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Flt(first),
+                        Term::Prim {
+                            prim: Prim::Flt(first),
                         },
-                        Term::Intrinsic {
-                            intrinsic: Intrinsic::Flt(second),
+                        Term::Prim {
+                            prim: Prim::Flt(second),
                         },
                     ) => Term::flt(f32::from_bits(first) * f32::from_bits(second)),
-                    (first, second) => Intrinsic::FltMul(first.into(), second.into()).into(),
+                    (first, second) => Prim::FltMul(first.into(), second.into()).into(),
                 })
             }
         }
@@ -210,8 +210,8 @@ impl Reduce {
                 Term::Let { body, tail, .. } => {
                     term = tail.open(&[body.as_ref()]);
                 }
-                Term::Intrinsic { intrinsic } => {
-                    break Ok(self.reduce_intrinsic(context, &intrinsic)?);
+                Term::Prim { prim } => {
+                    break Ok(self.reduce_prim(context, &prim)?);
                 }
                 Term::Name { name } => match context.definition(name.unwrap()) {
                     Some(next) => term = next.into(),

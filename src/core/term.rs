@@ -6,7 +6,7 @@ use {
 pub type Subterm = Box<Term>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Intrinsic {
+pub enum Prim {
     IntType,
     Int(i32),
     IntEql(Subterm, Subterm),
@@ -67,8 +67,8 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Type,
-    Intrinsic {
-        intrinsic: Intrinsic,
+    Prim {
+        prim: Prim,
     },
     FuncType {
         input: Subterm,
@@ -125,11 +125,11 @@ impl Term {
     }
 
     pub fn int_type() -> Self {
-        Intrinsic::IntType.into()
+        Prim::IntType.into()
     }
 
     pub fn int(value: i32) -> Self {
-        Intrinsic::Int(value).into()
+        Prim::Int(value).into()
     }
 
     pub fn int_eql<F, S>(first: F, second: S) -> Self
@@ -137,7 +137,7 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::IntEql(first.into().into(), second.into().into()).into()
+        Prim::IntEql(first.into().into(), second.into().into()).into()
     }
 
     pub fn int_add<F, S>(first: F, second: S) -> Self
@@ -145,7 +145,7 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::IntAdd(first.into().into(), second.into().into()).into()
+        Prim::IntAdd(first.into().into(), second.into().into()).into()
     }
 
     pub fn int_sub<F, S>(first: F, second: S) -> Self
@@ -153,7 +153,7 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::IntSub(first.into().into(), second.into().into()).into()
+        Prim::IntSub(first.into().into(), second.into().into()).into()
     }
 
     pub fn int_mul<F, S>(first: F, second: S) -> Self
@@ -161,15 +161,15 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::IntMul(first.into().into(), second.into().into()).into()
+        Prim::IntMul(first.into().into(), second.into().into()).into()
     }
 
     pub fn flt_type() -> Self {
-        Intrinsic::FltType.into()
+        Prim::FltType.into()
     }
 
     pub fn flt(value: f32) -> Self {
-        Intrinsic::Flt(value.to_bits()).into()
+        Prim::Flt(value.to_bits()).into()
     }
 
     pub fn flt_add<F, S>(first: F, second: S) -> Self
@@ -177,7 +177,7 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::FltAdd(first.into().into(), second.into().into()).into()
+        Prim::FltAdd(first.into().into(), second.into().into()).into()
     }
 
     pub fn flt_sub<F, S>(first: F, second: S) -> Self
@@ -185,7 +185,7 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::FltSub(first.into().into(), second.into().into()).into()
+        Prim::FltSub(first.into().into(), second.into().into()).into()
     }
 
     pub fn flt_mul<F, S>(first: F, second: S) -> Self
@@ -193,7 +193,7 @@ impl Term {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Intrinsic::FltMul(first.into().into(), second.into().into()).into()
+        Prim::FltMul(first.into().into(), second.into().into()).into()
     }
 
     pub fn func_type<L, I, O>(label: L, input: I, output: O) -> Self
@@ -457,9 +457,9 @@ impl From<&Term> for Term {
     }
 }
 
-impl From<Intrinsic> for Term {
-    fn from(intrinsic: Intrinsic) -> Self {
-        Self::Intrinsic { intrinsic }
+impl From<Prim> for Term {
+    fn from(prim: Prim) -> Self {
+        Self::Prim { prim }
     }
 }
 
@@ -492,32 +492,32 @@ where
         self.visit_term(subterm).into()
     }
 
-    fn visit_intrinsic(&mut self, intrinsic: &Intrinsic) -> Intrinsic {
-        match intrinsic {
-            Intrinsic::IntType => Intrinsic::IntType,
-            Intrinsic::Int(value) => Intrinsic::Int(*value),
-            Intrinsic::IntEql(first, second) => {
-                Intrinsic::IntEql(self.visit_subterm(first), self.visit_subterm(second))
+    fn visit_prim(&mut self, prim: &Prim) -> Prim {
+        match prim {
+            Prim::IntType => Prim::IntType,
+            Prim::Int(value) => Prim::Int(*value),
+            Prim::IntEql(first, second) => {
+                Prim::IntEql(self.visit_subterm(first), self.visit_subterm(second))
             }
-            Intrinsic::IntAdd(first, second) => {
-                Intrinsic::IntAdd(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntAdd(first, second) => {
+                Prim::IntAdd(self.visit_subterm(first), self.visit_subterm(second))
             }
-            Intrinsic::IntSub(first, second) => {
-                Intrinsic::IntSub(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntSub(first, second) => {
+                Prim::IntSub(self.visit_subterm(first), self.visit_subterm(second))
             }
-            Intrinsic::IntMul(first, second) => {
-                Intrinsic::IntMul(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntMul(first, second) => {
+                Prim::IntMul(self.visit_subterm(first), self.visit_subterm(second))
             }
-            Intrinsic::FltType => Intrinsic::FltType,
-            Intrinsic::Flt(bits) => Intrinsic::Flt(*bits),
-            Intrinsic::FltAdd(first, second) => {
-                Intrinsic::FltAdd(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::FltType => Prim::FltType,
+            Prim::Flt(bits) => Prim::Flt(*bits),
+            Prim::FltAdd(first, second) => {
+                Prim::FltAdd(self.visit_subterm(first), self.visit_subterm(second))
             }
-            Intrinsic::FltSub(first, second) => {
-                Intrinsic::FltSub(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::FltSub(first, second) => {
+                Prim::FltSub(self.visit_subterm(first), self.visit_subterm(second))
             }
-            Intrinsic::FltMul(first, second) => {
-                Intrinsic::FltMul(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::FltMul(first, second) => {
+                Prim::FltMul(self.visit_subterm(first), self.visit_subterm(second))
             }
         }
     }
@@ -536,7 +536,7 @@ where
     fn visit_term(&mut self, term: &Term) -> Term {
         match term {
             Term::Type => Term::Type,
-            Term::Intrinsic { intrinsic } => self.visit_intrinsic(intrinsic).into(),
+            Term::Prim { prim } => self.visit_prim(prim).into(),
             Term::FuncType { input, output } => Term::FuncType {
                 input: self.visit_subterm(input),
                 output: self.visit_scope(output),

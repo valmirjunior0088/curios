@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Intrinsic, Name, One, Scope, Term, Two},
+    super::{Atom, Prim, Name, One, Scope, Term, Two},
     crate::monads::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
@@ -60,48 +60,48 @@ fn print_flt(bits: u32) -> Printer<'static> {
 fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
-        Term::Intrinsic { intrinsic } => match intrinsic {
-            Intrinsic::IntType => pure("Int"),
-            Intrinsic::Int(value) => pure(value.to_string()),
-            Intrinsic::IntEql(first, second) => flat([
+        Term::Prim { prim } => match prim {
+            Prim::IntType => pure("Int"),
+            Prim::Int(value) => pure(value.to_string()),
+            Prim::IntEql(first, second) => flat([
                 pure("Int.eql "),
                 print_term(*first, depth),
                 pure(" "),
                 print_term(*second, depth),
             ]),
-            Intrinsic::IntAdd(first, second) => flat([
+            Prim::IntAdd(first, second) => flat([
                 pure("Int.add "),
                 print_term(*first, depth),
                 pure(" "),
                 print_term(*second, depth),
             ]),
-            Intrinsic::IntSub(first, second) => flat([
+            Prim::IntSub(first, second) => flat([
                 pure("Int.sub "),
                 print_term(*first, depth),
                 pure(" "),
                 print_term(*second, depth),
             ]),
-            Intrinsic::IntMul(first, second) => flat([
+            Prim::IntMul(first, second) => flat([
                 pure("Int.mul "),
                 print_term(*first, depth),
                 pure(" "),
                 print_term(*second, depth),
             ]),
-            Intrinsic::FltType => pure("Flt"),
-            Intrinsic::Flt(bits) => print_flt(bits),
-            Intrinsic::FltAdd(first, second) => flat([
+            Prim::FltType => pure("Flt"),
+            Prim::Flt(bits) => print_flt(bits),
+            Prim::FltAdd(first, second) => flat([
                 pure("Flt.add "),
                 print_term(*first, depth),
                 pure(" "),
                 print_term(*second, depth),
             ]),
-            Intrinsic::FltSub(first, second) => flat([
+            Prim::FltSub(first, second) => flat([
                 pure("Flt.sub "),
                 print_term(*first, depth),
                 pure(" "),
                 print_term(*second, depth),
             ]),
-            Intrinsic::FltMul(first, second) => flat([
+            Prim::FltMul(first, second) => flat([
                 pure("Flt.mul "),
                 print_term(*first, depth),
                 pure(" "),
