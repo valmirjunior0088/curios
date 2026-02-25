@@ -1,5 +1,8 @@
 use {
-    super::{Atom, Prim, Name, One, Scope, Term, Two},
+    super::{
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, One, Pair, PairType, Prim,
+        Scope, Split, Term, Two,
+    },
     crate::monads::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
@@ -13,12 +16,12 @@ fn labels_from(depth: usize, arity: usize) -> Vec<String> {
 }
 
 fn label_terms(labels: &[String]) -> Vec<Term> {
-    labels.iter().map(Term::label).collect()
+    labels.iter().map(Name::label).map(Into::into).collect()
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
     let label = label_at(depth);
-    let term = Term::label(&label);
+    let term = Name::label(&label).into();
     let body = scope.open(&[&term]);
 
     (label, body)
@@ -27,8 +30,8 @@ fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
     let first = label_at(depth);
     let second = label_at(depth + 1);
-    let first_term = Term::label(&first);
-    let second_term = Term::label(&second);
+    let first_term = Name::label(&first).into();
+    let second_term = Name::label(&second).into();
     let body = scope.open(&[&first_term, &second_term]);
 
     ((first, second), body)
@@ -60,7 +63,7 @@ fn print_flt(bits: u32) -> Printer<'static> {
 fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
-        Term::Prim { prim } => match prim {
+        Term::Prim(prim) => match prim {
             Prim::IntType => pure("Int"),
             Prim::Int(value) => pure(value.to_string()),
             Prim::IntEql(first, second) => flat([
@@ -108,7 +111,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(*second, depth),
             ]),
         },
-        Term::FuncType { input, output } => {
+        Term::FuncType(FuncType { input, output }) => {
             let (label, output) = open_scope_one(output, depth);
 
             flat([
@@ -120,13 +123,17 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(output, depth + 1),
             ])
         }
-        Term::Func { body } => {
+        Term::Func(Func { body }) => {
             let (label, body) = open_scope_one(body, depth);
 
             flat([pure(label), pure(" => "), print_term(body, depth + 1)])
         }
-        Term::Apply { head, param } => flat([print_term(*head, depth), pure(" "), print_term(*param, depth)]),
-        Term::PairType { input, output } => {
+        Term::Apply(Apply { head, param }) => flat([
+            print_term(*head, depth),
+            pure(" "),
+            print_term(*param, depth),
+        ]),
+        Term::PairType(PairType { input, output }) => {
             let (label, output) = open_scope_one(output, depth);
 
             flat([
@@ -139,16 +146,16 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(")"),
             ])
         }
-        Term::Pair { first, second } => flat([
+        Term::Pair(Pair { first, second }) => flat([
             pure("("),
             print_term(*first, depth),
             pure(", "),
             print_term(*second, depth),
             pure(")"),
         ]),
-        Term::Split { head, motive, tail } => {
+        Term::Split(Split { head, motive, tail }) => {
             let motive_label = label_at(depth + 2);
-            let motive_label_term = Term::label(&motive_label);
+            let motive_label_term = Name::label(&motive_label).into();
             let motive = motive.open(&[&motive_label_term]);
             let ((first_label, second_label), tail) = open_scope_two(tail, depth);
 
@@ -173,17 +180,17 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, depth + 2),
             ])
         }
-        Term::AtomType { atoms } => flat([
+        Term::AtomType(AtomType { atoms }) => flat([
             pure("{"),
             sep_flat(atoms.into_iter().map(print_atom), || pure(", ")),
             pure("}"),
         ]),
-        Term::Atom { atom } => print_atom(atom),
-        Term::Match {
+        Term::Atom(atom) => print_atom(atom),
+        Term::Match(Match {
             head,
             motive,
             cases,
-        } => {
+        }) => {
             let (motive_label, motive) = open_scope_one(motive, depth);
 
             let cases = flat(
@@ -215,7 +222,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 ])),
             ])
         }
-        Term::Let { type_, body, tail } => {
+        Term::Let(Let { type_, body, tail }) => {
             let (label, tail) = open_scope_one(tail, depth);
 
             flat([
@@ -229,7 +236,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, depth + 1),
             ])
         }
-        Term::LetRec { items, tail } => {
+        Term::LetRec(LetRec { items, tail }) => {
             let labels = labels_from(depth, items.len());
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
@@ -262,48 +269,48 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Term::Name { name } => print_name(name),
+        Term::Name(name) => print_name(name),
     }
 }
 
 impl Display for Term {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_term(self.into(), 0), formatter, 2)
+        run_printer(print_term(self.clone(), 0), formatter, 2)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::core::parse};
+    use {
+        super::*,
+        crate::core::{Type, parse},
+    };
 
     #[test]
     fn print_parse_roundtrip_closed_terms() {
         let terms = [
-            Term::func_type("x", Term::Type, Term::Type),
-            Term::func("x", Term::label("x")),
-            Term::apply(
-                Term::label("f"),
-                [Term::pair(Term::atom("a"), Term::atom("b"))],
+            FuncType::new("x", Type, Type).into(),
+            Func::new("x", Name::label("x")).into(),
+            Apply::many(
+                Name::label("f"),
+                [Pair::new(Atom::from("a"), Atom::from("b"))],
             ),
-            Term::let_(
+            Let::new(
                 "x",
-                Term::atom_type(["a", "b"]),
-                Term::atom("a"),
-                Term::match_(
-                    Term::label("x"),
-                    "m",
-                    Term::Type,
-                    [("a", Term::Type), ("b", Term::Type)],
-                ),
-            ),
-            Term::let_rec(
+                AtomType::new(["a", "b"]),
+                Atom::from("a"),
+                Match::new(Name::label("x"), "m", Type, [("a", Type), ("b", Type)]),
+            )
+            .into(),
+            LetRec::new(
                 vec![(
                     "id",
-                    Term::func_type("x", Term::Type, Term::Type),
-                    Term::func("x", Term::label("x")),
+                    FuncType::new("x", Type, Type),
+                    Func::new("x", Name::label("x")),
                 )],
-                Term::apply(Term::label("id"), [Term::Type]),
-            ),
+                Apply::many(Name::label("id"), [Type]),
+            )
+            .into(),
         ];
 
         for term in terms {

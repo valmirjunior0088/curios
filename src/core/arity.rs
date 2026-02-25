@@ -7,22 +7,30 @@ pub trait Arity: Copy {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct One;
 
+impl One {
+    pub const ARITY: usize = 1;
+}
+
 impl Arity for One {
-    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; 1];
+    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; Self::ARITY];
 
     fn arity(&self) -> usize {
-        1
+        Self::ARITY
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Two;
 
+impl Two {
+    pub const ARITY: usize = 2;
+}
+
 impl Arity for Two {
-    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; 2];
+    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; Self::ARITY];
 
     fn arity(&self) -> usize {
-        2
+        Self::ARITY
     }
 }
 

@@ -56,7 +56,7 @@ impl Context {
         self.assumptions
             .last_mut()
             .unwrap()
-            .insert(label.into(), type_.into());
+            .insert(label.into(), type_.clone());
     }
 
     pub fn assumption(&self, label: &str) -> Option<&Term> {
@@ -73,7 +73,7 @@ impl Context {
         self.definitions
             .last_mut()
             .unwrap()
-            .insert(label.into(), term.into());
+            .insert(label.into(), term.clone());
     }
 
     pub fn definition(&self, label: &str) -> Option<&Term> {

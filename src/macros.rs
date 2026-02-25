@@ -12,12 +12,6 @@ macro_rules! name {
                 }
             }
         }
-
-        impl From<&$name> for $name {
-            fn from(name: &$name) -> Self {
-                name.clone()
-            }
-        }
     };
 }
 

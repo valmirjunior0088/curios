@@ -1,51 +1,54 @@
-use curios::core::Term;
+use curios::core::{
+    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType, Term, Type,
+};
 
 fn main() {
-    let program = Term::let_rec(
+    let program: Term = LetRec::new(
         vec![(
             "id",
-            Term::func_type("x", Term::Type, Term::Type),
-            Term::func("x", Term::label("x")),
+            FuncType::new("x", Type, Type),
+            Func::new("x", Name::label("x")),
         )],
-        Term::let_(
+        Let::new(
             "pair_ty",
-            Term::Type,
-            Term::pair_type(
+            Type,
+            PairType::new(
                 "tag",
-                Term::atom_type(["left", "right"]),
-                Term::match_(
-                    Term::label("tag"),
+                AtomType::new(["left", "right"]),
+                Match::new(
+                    Name::label("tag"),
                     "m",
-                    Term::Type,
-                    [("left", Term::Type), ("right", Term::Type)],
+                    Type,
+                    [("left", Type), ("right", Type)],
                 ),
             ),
-            Term::let_(
+            Let::new(
                 "p",
-                Term::label("pair_ty"),
-                Term::pair(Term::atom("left"), Term::Type),
-                Term::split(
-                    Term::label("p"),
+                Name::label("pair_ty"),
+                Pair::new(Atom::from("left"), Type),
+                curios::core::Split::new(
+                    Name::label("p"),
                     "q",
-                    Term::Type,
+                    Type,
                     "x",
                     "y",
-                    Term::match_(
-                        Term::label("x"),
+                    Match::new(
+                        Name::label("x"),
                         "k",
-                        Term::Type,
+                        Type,
                         [
                             (
-                                "left".into(),
-                                Term::apply(Term::label("id"), [Term::label("y")]),
+                                "left",
+                                Apply::many(Name::label("id"), [Name::label("y")]),
                             ),
-                            ("right", Term::Type),
+                            ("right", Type.into()),
                         ],
                     ),
                 ),
             ),
         ),
-    );
+    )
+    .into();
 
     println!("{program}");
 }

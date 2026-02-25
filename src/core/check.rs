@@ -1,4 +1,6 @@
-use super::{Context, Prim, Term};
+use super::{
+    AtomType, Context, FltType, Func, FuncType, IntType, Name, Pair, PairType, Prim, Term, Type,
+};
 
 pub enum Error {
     ReducePreempted { term: Term },
@@ -9,24 +11,24 @@ pub enum Error {
 
 impl Error {
     fn reduce_preempted(term: &Term) -> Self {
-        Self::ReducePreempted { term: term.into() }
+        Self::ReducePreempted { term: term.clone() }
     }
 
     fn convert_preempted(this: &Term, that: &Term) -> Self {
         Self::ConvertPreempted {
-            this: this.into(),
-            that: that.into(),
+            this: this.clone(),
+            that: that.clone(),
         }
     }
 
     fn cannot_infer(term: &Term) -> Self {
-        Self::CannotInfer { term: term.into() }
+        Self::CannotInfer { term: term.clone() }
     }
 
     fn type_mismatch(term: &Term, type_: &Term) -> Self {
         Self::TypeMismatch {
-            term: term.into(),
-            type_: type_.into(),
+            term: term.clone(),
+            type_: type_.clone(),
         }
     }
 }
@@ -42,47 +44,51 @@ fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Erro
 
 fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     match term {
-        Term::Type => Ok(Term::Type),
-        Term::Prim { prim } => match prim {
-            Prim::IntType | Prim::FltType => Ok(Term::Type),
-            Prim::Int(_) => Ok(Term::int_type()),
+        Term::Type => Ok(Type.into()),
+        Term::Prim(prim) => match prim {
+            Prim::IntType | Prim::FltType => Ok(Type.into()),
+            Prim::Int(_) => Ok(IntType.into()),
             Prim::IntEql(first, second)
             | Prim::IntAdd(first, second)
             | Prim::IntSub(first, second)
             | Prim::IntMul(first, second) => {
-                check(context, first, &Term::int_type())?;
-                check(context, second, &Term::int_type())?;
+                check(context, first, &IntType.into())?;
+                check(context, second, &IntType.into())?;
 
-                Ok(Term::int_type())
+                Ok(IntType.into())
             }
-            Prim::Flt(_) => Ok(Term::flt_type()),
+            Prim::Flt(_) => Ok(FltType.into()),
             Prim::FltAdd(first, second)
             | Prim::FltSub(first, second)
             | Prim::FltMul(first, second) => {
-                check(context, first, &Term::flt_type())?;
-                check(context, second, &Term::flt_type())?;
+                check(context, first, &FltType.into())?;
+                check(context, second, &FltType.into())?;
 
-                Ok(Term::flt_type())
+                Ok(FltType.into())
             }
         },
-        Term::FuncType { input, output } => {
-            check(context, input, &Term::Type)?;
+        Term::FuncType(FuncType { input, output }) => {
+            check(context, input, &Type.into())?;
 
             let label = context.fresh();
 
             context.with_frame(|context| {
                 context.assume(&label, input);
 
-                check(context, &output.open(&[&Term::label(label)]), &Term::Type)
+                check(
+                    context,
+                    &output.open(&[&Name::label(label).into()]),
+                    &Type.into(),
+                )
             })?;
 
-            Ok(Term::Type)
+            Ok(Type.into())
         }
-        Term::Apply { head, param } => {
+        Term::Apply(super::Apply { head, param }) => {
             let head_type = infer(context, head)?;
             let head_type = reduce(context, &head_type)?;
 
-            let (input, output) = if let Term::FuncType { input, output } = head_type {
+            let (input, output) = if let Term::FuncType(FuncType { input, output }) = head_type {
                 (input, output)
             } else {
                 return Err(Error::cannot_infer(term));
@@ -92,24 +98,28 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
 
             Ok(output.open(&[param.as_ref()]))
         }
-        Term::PairType { input, output } => {
-            check(context, input, &Term::Type)?;
+        Term::PairType(PairType { input, output }) => {
+            check(context, input, &Type.into())?;
 
             let label = context.fresh();
 
             context.with_frame(|context| {
                 context.assume(&label, input);
 
-                check(context, &output.open(&[&Term::label(label)]), &Term::Type)
+                check(
+                    context,
+                    &output.open(&[&Name::label(label).into()]),
+                    &Type.into(),
+                )
             })?;
 
-            Ok(Term::Type)
+            Ok(Type.into())
         }
-        Term::Split { head, motive, tail } => {
+        Term::Split(super::Split { head, motive, tail }) => {
             let head_type = infer(context, head)?;
             let head_type = reduce(context, &head_type)?;
 
-            let (input, output) = if let Term::PairType { input, output } = head_type {
+            let (input, output) = if let Term::PairType(PairType { input, output }) = head_type {
                 (input, output)
             } else {
                 return Err(Error::cannot_infer(term));
@@ -120,16 +130,17 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
             context.with_frame(|context| {
                 context.assume(
                     &head_label,
-                    &Term::PairType {
+                    &PairType {
                         input: input.clone(),
                         output: output.clone(),
-                    },
+                    }
+                    .into(),
                 );
 
                 check(
                     context,
-                    &motive.open(&[&Term::label(head_label)]),
-                    &Term::Type,
+                    &motive.open(&[&Name::label(head_label).into()]),
+                    &Type.into(),
                 )
             })?;
 
@@ -141,30 +152,37 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
             context.with_frame(|context| {
                 context.assume(&first_label, &input);
 
-                context.assume(&second_label, &output.open(&[&Term::label(&first_label)]));
+                context.assume(
+                    &second_label,
+                    &output.open(&[&Name::label(&first_label).into()]),
+                );
 
                 check(
                     context,
-                    &tail.open(&[&Term::label(&first_label), &Term::label(&second_label)]),
-                    &motive.open(&[&Term::pair(
-                        Term::label(first_label),
-                        Term::label(second_label),
-                    )]),
+                    &tail.open(&[
+                        &Name::label(&first_label).into(),
+                        &Name::label(&second_label).into(),
+                    ]),
+                    &motive.open(&[&Pair::new(
+                        Name::label(first_label),
+                        Name::label(second_label),
+                    )
+                    .into()]),
                 )
             })?;
 
             Ok(type_)
         }
-        Term::AtomType { .. } => Ok(Term::Type),
-        Term::Match {
+        Term::AtomType(_) => Ok(Type.into()),
+        Term::Match(super::Match {
             head,
             motive,
             cases,
-        } => {
+        }) => {
             let head_type = infer(context, head)?;
             let head_type = reduce(context, &head_type)?;
 
-            let atoms = if let Term::AtomType { atoms } = head_type {
+            let atoms = if let Term::AtomType(AtomType { atoms }) = head_type {
                 atoms
             } else {
                 return Err(Error::cannot_infer(term));
@@ -173,12 +191,12 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
             let head_label = context.fresh();
 
             context.with_frame(|context| {
-                context.assume(&head_label, &Term::atom_type(&atoms));
+                context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
 
                 check(
                     context,
-                    &motive.open(&[&Term::label(head_label)]),
-                    &Term::Type,
+                    &motive.open(&[&Name::label(head_label).into()]),
+                    &Type.into(),
                 )
             })?;
 
@@ -193,13 +211,13 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
                     return Err(Error::cannot_infer(term));
                 };
 
-                check(context, body, &motive.open(&[&Term::atom(atom)]))?;
+                check(context, body, &motive.open(&[&atom.clone().into()]))?;
             }
 
             Ok(motive.open(&[head.as_ref()]))
         }
-        Term::Let { type_, body, tail } => {
-            check(context, type_, &Term::Type)?;
+        Term::Let(super::Let { type_, body, tail }) => {
+            check(context, type_, &Type.into())?;
             check(context, body, type_)?;
 
             let label = context.fresh();
@@ -207,15 +225,19 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
             context.with_frame(|context| {
                 context.define_assuming(&label, type_, body);
 
-                infer(context, &tail.open(&[&Term::label(label)]))
+                infer(context, &tail.open(&[&Name::label(label).into()]))
             })
         }
-        Term::LetRec { items, tail } => {
+        Term::LetRec(super::LetRec { items, tail }) => {
             let labels = (0..items.len())
                 .map(|_| context.fresh())
                 .collect::<Vec<_>>();
 
-            let label_terms = labels.iter().map(Term::label).collect::<Vec<_>>();
+            let label_terms = labels
+                .iter()
+                .map(Name::label)
+                .map(Into::into)
+                .collect::<Vec<_>>();
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
             let items = items
@@ -231,7 +253,7 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
                 }
 
                 for (type_, _) in &items {
-                    check(context, type_, &Term::Type)?;
+                    check(context, type_, &Type.into())?;
                 }
 
                 for (_, (type_, body)) in labels.iter().zip(items.iter()) {
@@ -245,9 +267,9 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
                 infer(context, &tail)
             })
         }
-        Term::Name { name } => match context.assumption(name.unwrap()) {
-            Some(type_) => Ok(type_.into()),
-            None => Err(Error::cannot_infer(&name.into())),
+        Term::Name(name) => match context.assumption(name.unwrap()) {
+            Some(type_) => Ok(type_.clone()),
+            None => Err(Error::cannot_infer(&name.clone().into())),
         },
         _ => Err(Error::cannot_infer(term)),
     }
@@ -255,13 +277,13 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
 
 pub fn check(context: &mut Context, term: &Term, type_: &Term) -> Result<(), Error> {
     match term {
-        Term::Func { body } => {
-            let (input, output) = if let Term::FuncType { input, output } = reduce(context, type_)?
-            {
-                (input, output)
-            } else {
-                return Err(Error::type_mismatch(term, type_));
-            };
+        Term::Func(Func { body }) => {
+            let (input, output) =
+                if let Term::FuncType(FuncType { input, output }) = reduce(context, type_)? {
+                    (input, output)
+                } else {
+                    return Err(Error::type_mismatch(term, type_));
+                };
 
             let label = context.fresh();
 
@@ -269,24 +291,24 @@ pub fn check(context: &mut Context, term: &Term, type_: &Term) -> Result<(), Err
                 context.assume(&label, &input);
                 check(
                     context,
-                    &body.open(&[&Term::label(&label)]),
-                    &output.open(&[&Term::label(label)]),
+                    &body.open(&[&Name::label(&label).into()]),
+                    &output.open(&[&Name::label(label).into()]),
                 )
             })
         }
-        Term::Pair { first, second } => {
-            let (input, output) = if let Term::PairType { input, output } = reduce(context, type_)?
-            {
-                (input, output)
-            } else {
-                return Err(Error::type_mismatch(term, type_));
-            };
+        Term::Pair(Pair { first, second }) => {
+            let (input, output) =
+                if let Term::PairType(PairType { input, output }) = reduce(context, type_)? {
+                    (input, output)
+                } else {
+                    return Err(Error::type_mismatch(term, type_));
+                };
 
             check(context, first, &input)?;
             check(context, second, &output.open(&[first.as_ref()]))
         }
-        Term::Atom { atom } => {
-            let atoms = if let Term::AtomType { atoms } = reduce(context, type_)? {
+        Term::Atom(atom) => {
+            let atoms = if let Term::AtomType(AtomType { atoms }) = reduce(context, type_)? {
                 atoms
             } else {
                 return Err(Error::type_mismatch(term, type_));
@@ -312,7 +334,13 @@ pub fn check(context: &mut Context, term: &Term, type_: &Term) -> Result<(), Err
 
 #[cfg(test)]
 mod tests {
-    use {super::*, std::time::Duration};
+    use {
+        super::*,
+        crate::core::{
+            Atom, AtomType, Func, FuncType, LetRec, Match, Name, Pair, PairType, Prim, Type,
+        },
+        std::time::Duration,
+    };
 
     fn context() -> Context {
         Context::new(Duration::from_secs(1))
@@ -322,27 +350,28 @@ mod tests {
     fn check_dependent_pair_type_over_atom_match_and_pair_value() {
         let mut context = context();
 
-        let pair_type = Term::pair_type(
+        let pair_type: Term = PairType::new(
             "x",
-            Term::atom_type(["left", "right"]),
-            Term::match_(
-                Term::label("x"),
+            AtomType::new(["left", "right"]),
+            Match::new(
+                Name::label("x"),
                 "m",
-                Term::Type,
+                Type,
                 vec![
-                    ("left", Term::atom_type(["hot"])),
-                    ("right", Term::atom_type(["cold"])),
+                    ("left", AtomType::new(["hot"])),
+                    ("right", AtomType::new(["cold"])),
                 ],
             ),
-        );
+        )
+        .into();
 
-        assert!(check(&mut context, &pair_type, &Term::Type).is_ok());
+        assert!(check(&mut context, &pair_type, &Type.into()).is_ok());
 
-        let pair = Term::pair(Term::atom("left"), Term::atom("hot"));
+        let pair: Term = Pair::new(Atom::from("left"), Atom::from("hot")).into();
 
         assert!(check(&mut context, &pair, &pair_type).is_ok());
 
-        let pair = Term::pair(Term::atom("right"), Term::atom("cold"));
+        let pair: Term = Pair::new(Atom::from("right"), Atom::from("cold")).into();
 
         assert!(check(&mut context, &pair, &pair_type).is_ok());
     }
@@ -351,21 +380,22 @@ mod tests {
     fn check_dependent_pair_type_rejects_wrong_branch_atom() {
         let mut context = context();
 
-        let pair_type = Term::pair_type(
+        let pair_type: Term = PairType::new(
             "x",
-            Term::atom_type(["left", "right"]),
-            Term::match_(
-                Term::label("x"),
+            AtomType::new(["left", "right"]),
+            Match::new(
+                Name::label("x"),
                 "m",
-                Term::Type,
+                Type,
                 vec![
-                    ("left", Term::atom_type(["hot"])),
-                    ("right", Term::atom_type(["cold"])),
+                    ("left", AtomType::new(["hot"])),
+                    ("right", AtomType::new(["cold"])),
                 ],
             ),
-        );
+        )
+        .into();
 
-        let pair = Term::pair(Term::atom("left"), Term::atom("cold"));
+        let pair: Term = Pair::new(Atom::from("left"), Atom::from("cold")).into();
 
         assert!(matches!(
             check(&mut context, &pair, &pair_type),
@@ -377,12 +407,13 @@ mod tests {
     fn check_letrec_single_identity_function() {
         let mut context = context();
 
-        let func_type = Term::func_type("x", Term::atom_type(["a"]), Term::atom_type(["a"]));
+        let func_type: Term = FuncType::new("x", AtomType::new(["a"]), AtomType::new(["a"])).into();
 
-        let term = Term::let_rec(
-            vec![("f", func_type.clone(), Term::func("x", Term::label("x")))],
-            Term::label("f"),
-        );
+        let term: Term = LetRec::new(
+            vec![("f", func_type.clone(), Func::new("x", Name::label("x")))],
+            Name::label("f"),
+        )
+        .into();
 
         assert!(check(&mut context, &term, &func_type).is_ok());
     }
@@ -391,10 +422,10 @@ mod tests {
     fn check_preempts_on_cyclic_expected_type() {
         let mut context = context();
 
-        context.define("loop", &Term::label("loop"));
+        context.define("loop", &Name::label("loop").into());
 
         assert!(matches!(
-            check(&mut context, &Term::Type, &Term::label("loop")),
+            check(&mut context, &Type.into(), &Name::label("loop").into()),
             Err(Error::ConvertPreempted { .. })
         ));
     }
@@ -403,12 +434,13 @@ mod tests {
     fn check_accepts_term_level_loop_with_stable_type() {
         let mut context = context();
 
-        let type_ = Term::atom_type(["a"]);
+        let type_: Term = AtomType::new(["a"]).into();
 
-        let term = Term::let_rec(
-            vec![("loop", type_.clone(), Term::label("loop"))],
-            Term::label("loop"),
-        );
+        let term: Term = LetRec::new(
+            vec![("loop", type_.clone(), Name::label("loop"))],
+            Name::label("loop"),
+        )
+        .into();
 
         assert!(check(&mut context, &term, &type_).is_ok());
     }
@@ -420,8 +452,8 @@ mod tests {
         assert!(
             check(
                 &mut context,
-                &Term::int_eql(Term::int(1), Term::int(1)),
-                &Term::int_type(),
+                &Prim::int_eql(Prim::from(1), Prim::from(1)).into(),
+                &IntType.into(),
             )
             .is_ok()
         );
@@ -429,8 +461,8 @@ mod tests {
         assert!(
             check(
                 &mut context,
-                &Term::flt_add(Term::flt(1.5), Term::flt(2.0)),
-                &Term::flt_type(),
+                &Prim::flt_add(Prim::from(1.5), Prim::from(2.0)).into(),
+                &FltType.into(),
             )
             .is_ok()
         );
@@ -443,8 +475,8 @@ mod tests {
         assert!(matches!(
             check(
                 &mut context,
-                &Term::int_add(Term::int(1), Term::flt(2.0)),
-                &Term::int_type(),
+                &Prim::int_add(Prim::from(1), Prim::from(2.0)).into(),
+                &IntType.into(),
             ),
             Err(Error::TypeMismatch { .. })
         ));

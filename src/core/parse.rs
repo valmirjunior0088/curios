@@ -1,5 +1,8 @@
 use {
-    super::{Atom, Term},
+    super::{
+        Apply, Atom, AtomType, FltType, Func, FuncType, IntType, Let, LetRec, Match, Name, Pair,
+        PairType, Prim, Split, Term, Type,
+    },
     crate::monads::parser::{
         Parser, ParserError, catch, fail, lazy, many_until, many1, pure, run_parser, sep_by0,
         sep_by1, take_eof, take_exact, take_while,
@@ -24,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 }
 
 fn parse_label<'a>() -> Parser<'a, Term> {
-    parse_identifier().map(Term::label)
+    parse_identifier().map(Name::label).map(Into::into)
 }
 
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
@@ -37,15 +40,15 @@ fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
 }
 
 fn parse_type<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Type")).map(|()| Term::Type)
+    catch(parse_keyword("Type")).map(|()| Type.into())
 }
 
 fn parse_int_type<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Int")).map(|()| Term::int_type())
+    catch(parse_keyword("Int")).map(|()| IntType.into())
 }
 
 fn parse_flt_type<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Flt")).map(|()| Term::flt_type())
+    catch(parse_keyword("Flt")).map(|()| FltType.into())
 }
 
 fn parse_int_literal_value<'a>() -> Parser<'a, i32> {
@@ -85,42 +88,42 @@ fn parse_flt_literal_value<'a>() -> Parser<'a, f32> {
 }
 
 fn parse_int_literal<'a>() -> Parser<'a, Term> {
-    parse_int_literal_value().map(Term::int)
+    parse_int_literal_value().map(Prim::from).map(Into::into)
 }
 
 fn parse_flt_literal<'a>() -> Parser<'a, Term> {
-    parse_flt_literal_value().map(Term::flt)
+    parse_flt_literal_value().map(Prim::from).map(Into::into)
 }
 
 fn parse_prim_op<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Int.eql"))
         .and_keep(lazy(parse_atomic_term))
         .and(lazy(parse_atomic_term))
-        .map(|(first, second)| Term::int_eql(first, second))
+        .map(|(first, second)| Prim::int_eql(first, second).into())
         .or(catch(parse_keyword("Int.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Term::int_add(first, second)))
+            .map(|(first, second)| Prim::int_add(first, second).into()))
         .or(catch(parse_keyword("Int.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Term::int_sub(first, second)))
+            .map(|(first, second)| Prim::int_sub(first, second).into()))
         .or(catch(parse_keyword("Int.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Term::int_mul(first, second)))
+            .map(|(first, second)| Prim::int_mul(first, second).into()))
         .or(catch(parse_keyword("Flt.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Term::flt_add(first, second)))
+            .map(|(first, second)| Prim::flt_add(first, second).into()))
         .or(catch(parse_keyword("Flt.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Term::flt_sub(first, second)))
+            .map(|(first, second)| Prim::flt_sub(first, second).into()))
         .or(catch(parse_keyword("Flt.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Term::flt_mul(first, second)))
+            .map(|(first, second)| Prim::flt_mul(first, second).into()))
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
@@ -128,14 +131,14 @@ fn parse_atom_label<'a>() -> Parser<'a, Atom> {
 }
 
 fn parse_atom<'a>() -> Parser<'a, Term> {
-    parse_atom_label().map(Term::atom)
+    parse_atom_label().map(Into::into)
 }
 
 fn parse_atom_type<'a>() -> Parser<'a, Term> {
     parse_literal("{")
         .and_keep(sep_by0(parse_atom_label, || parse_literal(",")))
         .and_drop(parse_literal("}"))
-        .map(Term::atom_type)
+        .map(|atoms| AtomType::new(atoms).into())
 }
 
 fn parse_parens<'a>() -> Parser<'a, Term> {
@@ -154,7 +157,7 @@ fn parse_pair_type<'a>() -> Parser<'a, Term> {
             .and(lazy(parse_term))
             .and_drop(parse_literal(")")),
     )
-    .map(|((label, input), output)| Term::pair_type(label, input, output))
+    .map(|((label, input), output)| PairType::new(label, input, output).into())
 }
 
 fn parse_pair<'a>() -> Parser<'a, Term> {
@@ -165,7 +168,7 @@ fn parse_pair<'a>() -> Parser<'a, Term> {
             .and(lazy(parse_term))
             .and_drop(parse_literal(")")),
     )
-    .map(|(first, second)| Term::pair(first, second))
+    .map(|(first, second)| Pair::new(first, second).into())
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
@@ -178,13 +181,13 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
             .and_drop(parse_literal("->")),
     )
     .and(lazy(parse_term))
-    .map(|((label, input), output)| Term::func_type(label, input, output))
+    .map(|((label, input), output)| FuncType::new(label, input, output).into())
 }
 
 fn parse_func<'a>() -> Parser<'a, Term> {
     catch(parse_identifier().and_drop(parse_literal("=>")))
         .and(lazy(parse_term))
-        .map(|(label, body)| Term::func(label, body))
+        .map(|(label, body)| Func::new(label, body).into())
 }
 
 fn parse_match_case<'a>() -> Parser<'a, (Atom, Term)> {
@@ -207,7 +210,9 @@ fn parse_match<'a>() -> Parser<'a, Term> {
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
     .and(many1(parse_match_case))
-    .map(|(((head, motive_label), motive), cases)| Term::match_(head, motive_label, motive, cases))
+    .map(|(((head, motive_label), motive), cases)| {
+        Match::new(head, motive_label, motive, cases).into()
+    })
 }
 
 fn parse_binding<'a>() -> Parser<'a, (&'a str, Term, Term)> {
@@ -225,7 +230,7 @@ fn parse_let_rec<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal("}"))
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
-        .map(|(items, tail)| Term::let_rec(items, tail))
+        .map(|(items, tail)| LetRec::new(items, tail).into())
 }
 
 fn parse_split<'a>() -> Parser<'a, Term> {
@@ -244,7 +249,7 @@ fn parse_split<'a>() -> Parser<'a, Term> {
         .and(lazy(parse_term))
         .map(
             |(((((first_label, second_label), motive_label), motive), head), tail)| {
-                Term::split(head, motive_label, motive, first_label, second_label, tail)
+                Split::new(head, motive_label, motive, first_label, second_label, tail).into()
             },
         )
 }
@@ -260,7 +265,7 @@ fn parse_let<'a>() -> Parser<'a, Term> {
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
     .and(lazy(parse_term))
-    .map(|(((label, type_), body), tail)| Term::let_(label, type_, body, tail))
+    .map(|(((label, type_), body), tail)| Let::new(label, type_, body, tail).into())
 }
 
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
@@ -284,7 +289,7 @@ where
 {
     parse_atomic_term()
         .and(many_until(parse_atomic_term, g))
-        .map(|(head, params)| Term::apply(head, params))
+        .map(|(head, params)| Apply::many(head, params))
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
@@ -323,14 +328,15 @@ mod tests {
 
         assert_eq!(
             term,
-            Term::let_rec(
+            LetRec::new(
                 vec![(
                     "id",
-                    Term::func_type("x", Term::Type, Term::Type),
-                    Term::func("x", Term::label("x"))
+                    FuncType::new("x", Type, Type),
+                    Func::new("x", Name::label("x"))
                 )],
-                Term::apply(Term::label("id"), [Term::label("a")]),
-            ),
+                Apply::many(Name::label("id"), [Name::label("a")]),
+            )
+            .into(),
         );
     }
 
@@ -340,12 +346,13 @@ mod tests {
 
         assert_eq!(
             term,
-            Term::let_(
+            Let::new(
                 "x",
-                Term::atom_type(["hot", "cold"]),
-                Term::atom("hot"),
-                Term::pair(Term::label("x"), Term::atom("cold")),
-            ),
+                AtomType::new(["hot", "cold"]),
+                Atom::from("hot"),
+                Pair::new(Name::label("x"), Atom::from("cold")),
+            )
+            .into(),
         );
     }
 
@@ -355,14 +362,15 @@ mod tests {
 
         assert_eq!(
             term,
-            Term::split(
-                Term::pair(Term::atom("left"), Term::atom("right")),
+            Split::new(
+                Pair::new(Atom::from("left"), Atom::from("right")),
                 "p",
-                Term::Type,
+                Type,
                 "x",
                 "y",
-                Term::label("p"),
-            ),
+                Name::label("p"),
+            )
+            .into(),
         );
     }
 
@@ -372,28 +380,29 @@ mod tests {
 
         assert_eq!(
             term,
-            Term::match_(
-                Term::atom("foo"),
+            Match::new(
+                Atom::from("foo"),
                 "k",
-                Term::atom_type(["foo"]),
-                [(Atom::from("foo"), Term::atom("foo"))],
-            ),
+                AtomType::new(["foo"]),
+                [(Atom::from("foo"), Atom::from("foo"))],
+            )
+            .into(),
         );
     }
 
     #[test]
     fn parse_prim() {
-        assert_eq!(parse("Int").unwrap(), Term::int_type());
-        assert_eq!(parse("Flt").unwrap(), Term::flt_type());
-        assert_eq!(parse("42").unwrap(), Term::int(42));
-        assert_eq!(parse("1.5").unwrap(), Term::flt(1.5));
+        assert_eq!(parse("Int").unwrap(), IntType.into());
+        assert_eq!(parse("Flt").unwrap(), FltType.into());
+        assert_eq!(parse("42").unwrap(), Prim::from(42).into());
+        assert_eq!(parse("1.5").unwrap(), Prim::from(1.5).into());
         assert_eq!(
             parse("Int.add 1 2").unwrap(),
-            Term::int_add(Term::int(1), Term::int(2))
+            Prim::int_add(Prim::from(1), Prim::from(2)).into()
         );
         assert_eq!(
             parse("Flt.mul 1.5 2.0").unwrap(),
-            Term::flt_mul(Term::flt(1.5), Term::flt(2.0))
+            Prim::flt_mul(Prim::from(1.5), Prim::from(2.0)).into()
         );
     }
 }
