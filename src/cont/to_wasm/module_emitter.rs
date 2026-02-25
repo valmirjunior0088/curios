@@ -1,15 +1,15 @@
 use {
-    super::{Context, Emitter, ModuleData},
+    super::{Context, ExprEmitter, ModuleData},
     crate::{cont, wasm},
     std::iter,
 };
 
-pub struct Builder<'a, 'b> {
+pub struct ModuleEmitter<'a, 'b> {
     metadata: &'a ModuleData<'a>,
     module: &'b mut wasm::Module,
 }
 
-impl<'a, 'b> Builder<'a, 'b> {
+impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn new(metadata: &'a ModuleData<'a>, module: &'b mut wasm::Module) -> Self {
         Self { metadata, module }
     }
@@ -195,7 +195,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     pub fn emit_let_const(&mut self, name: &'a cont::ValueName, value: &'a cont::ConstValue) {
         let mut expr = Default::default();
 
-        Emitter::new(Context::new_const(self.metadata), &mut expr).emit_const_value(value);
+        ExprEmitter::new(Context::new_const(self.metadata), &mut expr).emit_const_value(value);
 
         self.module.add_global(
             self.metadata.find_const(name),
@@ -218,7 +218,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
-        Emitter::new(
+        ExprEmitter::new(
             Context::new_clsr(self.metadata, self.metadata.find_clsr(name), &mut locals),
             &mut expr,
         )
@@ -251,7 +251,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
-        Emitter::new(
+        ExprEmitter::new(
             Context::new_func(self.metadata, self.metadata.find_func(name), &mut locals),
             &mut expr,
         )

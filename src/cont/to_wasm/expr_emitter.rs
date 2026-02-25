@@ -4,12 +4,12 @@ use {
     std::collections::HashMap,
 };
 
-pub struct Emitter<'a, 'b> {
+pub struct ExprEmitter<'a, 'b> {
     context: Context<'a, 'b>,
     expr: &'b mut wasm::Expr,
 }
 
-impl<'a, 'b> Emitter<'a, 'b> {
+impl<'a, 'b> ExprEmitter<'a, 'b> {
     pub fn new(context: Context<'a, 'b>, expr: &'b mut wasm::Expr) -> Self {
         Self { context, expr }
     }
@@ -37,7 +37,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         let instrs = self.context.leave_frame();
 
         if self.context.this_frame().is_some() {
-            panic!("`Emitter` expected empty frame stack after leaving root");
+            panic!("`ExprEmitter` expected empty frame stack after leaving root");
         }
 
         self.expr.extend(instrs);
@@ -114,7 +114,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 });
             }
             (op, params) => panic!(
-                "`Emitter` did not expect {} params for const op `{op:?}`",
+                "`ExprEmitter` did not expect {} params for const op `{op:?}`",
                 params.len()
             ),
         }
@@ -148,7 +148,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         let field_name = match index {
             0 => self.context.metadata().proj_fst_field(),
             1 => self.context.metadata().proj_snd_field(),
-            index => panic!("`Emitter` expected tuple projection index 0 or 1, found {index}"),
+            index => panic!("`ExprEmitter` expected tuple projection index 0 or 1, found {index}"),
         };
 
         self.emit_instrs(
@@ -181,7 +181,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     .context
                     .find_local(value_name)
                     .map(|(local_name, _)| local_name)
-                    .expect(&format!("`Emitter` lacks local `{}`", value_name.string)),
+                    .expect(&format!("`ExprEmitter` lacks local `{}`", value_name.string)),
             });
         }
     }

@@ -7,9 +7,6 @@ pub use arity::*;
 mod term;
 pub use term::*;
 
-mod module;
-pub use module::*;
-
 mod reduce;
 pub use reduce::*;
 

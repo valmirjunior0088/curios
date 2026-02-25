@@ -457,6 +457,12 @@ impl From<&Term> for Term {
     }
 }
 
+impl From<Intrinsic> for Term {
+    fn from(intrinsic: Intrinsic) -> Self {
+        Self::Intrinsic { intrinsic }
+    }
+}
+
 impl From<Name> for Term {
     fn from(name: Name) -> Self {
         Self::Name { name }
@@ -466,12 +472,6 @@ impl From<Name> for Term {
 impl From<&Name> for Term {
     fn from(name: &Name) -> Self {
         name.into()
-    }
-}
-
-impl From<Intrinsic> for Term {
-    fn from(intrinsic: Intrinsic) -> Self {
-        Self::Intrinsic { intrinsic }
     }
 }
 

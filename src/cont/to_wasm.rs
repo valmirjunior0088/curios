@@ -7,18 +7,18 @@ use frame::*;
 mod context;
 use context::*;
 
-mod emitter;
-use emitter::*;
+mod expr_emitter;
+use expr_emitter::*;
 
-mod builder;
-use builder::*;
+mod module_emitter;
+use module_emitter::*;
 
 use crate::{cont, wasm};
 
 pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
     let mut wasm_module = wasm::Module::new("module");
 
-    Builder::new(&ModuleData::new(cont_module), &mut wasm_module).emit_module(cont_module);
+    ModuleEmitter::new(&ModuleData::new(cont_module), &mut wasm_module).emit_module(cont_module);
 
     wasm_module
 }

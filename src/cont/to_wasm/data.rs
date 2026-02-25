@@ -241,17 +241,10 @@ impl<'a> ModuleData<'a> {
         })
     }
 
-    pub fn int_val_type(&self, is_nullable: bool) -> wasm::ValType {
-        wasm::ValType::Ref(wasm::RefType {
+    pub fn int_ref_type(&self, is_nullable: bool) -> wasm::RefType {
+        wasm::RefType {
             is_nullable,
             heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::I31),
-        })
-    }
-
-    pub fn int_ref_type(&self, is_nullable: bool) -> wasm::RefType {
-        match self.int_val_type(is_nullable) {
-            wasm::ValType::Ref(ref_type) => ref_type,
-            wasm::ValType::Num(_) => unreachable!("`int_val_type` must be a ref type"),
         }
     }
 
