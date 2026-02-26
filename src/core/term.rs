@@ -774,7 +774,7 @@ mod tests {
 
     #[test]
     fn collect_ignores_index_names() {
-        let term: Term = Func::new(
+        let term = Term::from(Func::new(
             "x",
             Pair::new(
                 Name::label("x"),
@@ -783,8 +783,7 @@ mod tests {
                     Pair::new(Name::label("y"), Name::label("w")),
                 ),
             ),
-        )
-        .into();
+        ));
 
         assert_eq!(
             term.collect(),

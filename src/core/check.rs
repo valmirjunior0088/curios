@@ -173,7 +173,7 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
 
             Ok(type_)
         }
-        Term::AtomType(_) => Ok(Type.into()),
+        Term::AtomType(AtomType { .. }) => Ok(Type.into()),
         Term::Match(super::Match {
             head,
             motive,
@@ -320,7 +320,7 @@ pub fn check(context: &mut Context, term: &Term, type_: &Term) -> Result<(), Err
                 Err(Error::type_mismatch(term, type_))
             }
         }
-        _ => {
+        term => {
             let type_inferred = infer(context, term)?;
             let type_inferred = convert(context, &type_inferred, type_)?;
 
@@ -350,7 +350,7 @@ mod tests {
     fn check_dependent_pair_type_over_atom_match_and_pair_value() {
         let mut context = context();
 
-        let pair_type: Term = PairType::new(
+        let pair_type = Term::from(PairType::new(
             "x",
             AtomType::new(["left", "right"]),
             Match::new(
@@ -362,16 +362,15 @@ mod tests {
                     ("right", AtomType::new(["cold"])),
                 ],
             ),
-        )
-        .into();
+        ));
 
         assert!(check(&mut context, &pair_type, &Type.into()).is_ok());
 
-        let pair: Term = Pair::new(Atom::from("left"), Atom::from("hot")).into();
+        let pair = Term::from(Pair::new(Atom::from("left"), Atom::from("hot")));
 
         assert!(check(&mut context, &pair, &pair_type).is_ok());
 
-        let pair: Term = Pair::new(Atom::from("right"), Atom::from("cold")).into();
+        let pair = Term::from(Pair::new(Atom::from("right"), Atom::from("cold")));
 
         assert!(check(&mut context, &pair, &pair_type).is_ok());
     }
@@ -380,7 +379,7 @@ mod tests {
     fn check_dependent_pair_type_rejects_wrong_branch_atom() {
         let mut context = context();
 
-        let pair_type: Term = PairType::new(
+        let pair_type = Term::from(PairType::new(
             "x",
             AtomType::new(["left", "right"]),
             Match::new(
@@ -392,10 +391,9 @@ mod tests {
                     ("right", AtomType::new(["cold"])),
                 ],
             ),
-        )
-        .into();
+        ));
 
-        let pair: Term = Pair::new(Atom::from("left"), Atom::from("cold")).into();
+        let pair = Term::from(Pair::new(Atom::from("left"), Atom::from("cold")));
 
         assert!(matches!(
             check(&mut context, &pair, &pair_type),
@@ -407,13 +405,16 @@ mod tests {
     fn check_letrec_single_identity_function() {
         let mut context = context();
 
-        let func_type: Term = FuncType::new("x", AtomType::new(["a"]), AtomType::new(["a"])).into();
+        let func_type = Term::from(FuncType::new(
+            "x",
+            AtomType::new(["a"]),
+            AtomType::new(["a"]),
+        ));
 
-        let term: Term = LetRec::new(
+        let term = Term::from(LetRec::new(
             vec![("f", func_type.clone(), Func::new("x", Name::label("x")))],
             Name::label("f"),
-        )
-        .into();
+        ));
 
         assert!(check(&mut context, &term, &func_type).is_ok());
     }
@@ -434,13 +435,12 @@ mod tests {
     fn check_accepts_term_level_loop_with_stable_type() {
         let mut context = context();
 
-        let type_: Term = AtomType::new(["a"]).into();
+        let type_ = Term::from(AtomType::new(["a"]));
 
-        let term: Term = LetRec::new(
+        let term = Term::from(LetRec::new(
             vec![("loop", type_.clone(), Name::label("loop"))],
             Name::label("loop"),
-        )
-        .into();
+        ));
 
         assert!(check(&mut context, &term, &type_).is_ok());
     }

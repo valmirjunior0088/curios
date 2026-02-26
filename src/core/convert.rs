@@ -293,9 +293,9 @@ mod tests {
     fn convert_func_type_is_alpha_equivalent() {
         let mut context = context();
 
-        let this: Term = FuncType::new("x", Type, Name::label("x")).into();
+        let this = Term::from(FuncType::new("x", Type, Name::label("x")));
 
-        let that: Term = FuncType::new("y", Type, Name::label("y")).into();
+        let that = Term::from(FuncType::new("y", Type, Name::label("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -304,9 +304,9 @@ mod tests {
     fn convert_func_is_alpha_equivalent() {
         let mut context = context();
 
-        let this: Term = Func::new("x", Name::label("x")).into();
+        let this = Term::from(Func::new("x", Name::label("x")));
 
-        let that: Term = Func::new("y", Name::label("y")).into();
+        let that = Term::from(Func::new("y", Name::label("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -315,21 +315,19 @@ mod tests {
     fn convert_match_compares_cases_and_motive() {
         let mut context = context();
 
-        let this: Term = Match::new(
+        let this = Term::from(Match::new(
             Atom::from("a"),
             "m",
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
-        )
-        .into();
+        ));
 
-        let that: Term = Match::new(
+        let that = Term::from(Match::new(
             Atom::from("a"),
             "n",
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
-        )
-        .into();
+        ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -338,8 +336,8 @@ mod tests {
     fn convert_prim_recurses_into_operands() {
         let mut context = context();
 
-        let this: Term = Func::new("x", Prim::int_add(Name::label("x"), Prim::from(1))).into();
-        let that: Term = Func::new("y", Prim::int_add(Name::label("y"), Prim::from(1))).into();
+        let this = Term::from(Func::new("x", Prim::int_add(Name::label("x"), Prim::from(1))));
+        let that = Term::from(Func::new("y", Prim::int_add(Name::label("y"), Prim::from(1))));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -348,8 +346,9 @@ mod tests {
     fn convert_prim_distinguishes_operator_kind() {
         let mut context = context();
 
-        let this: Term = Func::new("x", Prim::int_add(Name::label("x"), Prim::from(1))).into();
-        let that: Term = Func::new("x", Prim::int_sub(Name::label("x"), Prim::from(1))).into();
+        let this = Term::from(Func::new("x", Prim::int_add(Name::label("x"), Prim::from(1))));
+
+        let that = Term::from(Func::new("x", Prim::int_sub(Name::label("x"), Prim::from(1))));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }
@@ -358,9 +357,9 @@ mod tests {
     fn convert_letrec_is_alpha_equivalent() {
         let mut context = context();
 
-        let this: Term = LetRec::new(vec![("x", Type, Name::label("x"))], Name::label("x")).into();
+        let this = Term::from(LetRec::new(vec![("x", Type, Name::label("x"))], Name::label("x")));
 
-        let that: Term = LetRec::new(vec![("y", Type, Name::label("y"))], Name::label("y")).into();
+        let that = Term::from(LetRec::new(vec![("y", Type, Name::label("y"))], Name::label("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -371,14 +370,13 @@ mod tests {
 
         context.define("loop", &Name::label("loop").into());
 
-        let this: Term = PairType::new(
+        let this = Term::from(PairType::new(
             "x",
             Apply::many(Func::new("z", Name::label("z")), [Name::label("loop")]),
             Name::label("x"),
-        )
-        .into();
+        ));
 
-        let that: Term = PairType::new("y", Name::label("loop"), Name::label("y")).into();
+        let that = Term::from(PairType::new("y", Name::label("loop"), Name::label("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Err(Preempted));
     }
