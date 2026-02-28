@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Context, Func, FuncType, LetRec, Match, Name, Pair, PairType, Preempted, Prim,
-        Split, Term, reduce,
+        Apply, AtomType, Context, Func, FuncType, LetRec, Match, Name, Pair, PairType, Preempted,
+        Prim, Split, Term, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -194,8 +194,8 @@ impl Convert {
                     );
                 }
                 (
-                    Term::AtomType(super::AtomType { atoms: this }),
-                    Term::AtomType(super::AtomType { atoms: that }),
+                    Term::AtomType(AtomType { atoms: this }),
+                    Term::AtomType(AtomType { atoms: that }),
                 ) => {
                     if this != that {
                         return Ok(false);
@@ -336,8 +336,15 @@ mod tests {
     fn convert_prim_recurses_into_operands() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Prim::int_add(Name::label("x"), Prim::from(1))));
-        let that = Term::from(Func::new("y", Prim::int_add(Name::label("y"), Prim::from(1))));
+        let this = Term::from(Func::new(
+            "x",
+            Prim::int_add(Name::label("x"), Prim::from(1)),
+        ));
+
+        let that = Term::from(Func::new(
+            "y",
+            Prim::int_add(Name::label("y"), Prim::from(1)),
+        ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -346,9 +353,15 @@ mod tests {
     fn convert_prim_distinguishes_operator_kind() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Prim::int_add(Name::label("x"), Prim::from(1))));
+        let this = Term::from(Func::new(
+            "x",
+            Prim::int_add(Name::label("x"), Prim::from(1)),
+        ));
 
-        let that = Term::from(Func::new("x", Prim::int_sub(Name::label("x"), Prim::from(1))));
+        let that = Term::from(Func::new(
+            "x",
+            Prim::int_sub(Name::label("x"), Prim::from(1)),
+        ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }
@@ -357,9 +370,15 @@ mod tests {
     fn convert_letrec_is_alpha_equivalent() {
         let mut context = context();
 
-        let this = Term::from(LetRec::new(vec![("x", Type, Name::label("x"))], Name::label("x")));
+        let this = Term::from(LetRec::new(
+            vec![("x", Type, Name::label("x"))],
+            Name::label("x"),
+        ));
 
-        let that = Term::from(LetRec::new(vec![("y", Type, Name::label("y"))], Name::label("y")));
+        let that = Term::from(LetRec::new(
+            vec![("y", Type, Name::label("y"))],
+            Name::label("y"),
+        ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }

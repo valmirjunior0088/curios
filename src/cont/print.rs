@@ -3,7 +3,7 @@ use {
         Block, BlockName, CallTarget, Clsr, ClsrName, ConstOp, ConstValue, Func, FuncName,
         JumpTarget, Module, Region, Tail, Value, ValueName,
     },
-    crate::monads::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 

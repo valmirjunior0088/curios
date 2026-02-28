@@ -230,15 +230,15 @@ impl<'a> ModuleData<'a> {
         self.special_local.clone()
     }
 
-    pub fn unit_type(&self) -> wasm::TypeName {
-        self.unit_type.clone()
-    }
-
     pub fn obj_val_type(&self, is_nullable: bool) -> wasm::ValType {
         wasm::ValType::Ref(wasm::RefType {
             is_nullable,
             heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::Any),
         })
+    }
+
+    pub fn unit_type(&self) -> wasm::TypeName {
+        self.unit_type.clone()
     }
 
     pub fn int_ref_type(&self, is_nullable: bool) -> wasm::RefType {

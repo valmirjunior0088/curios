@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomType, FltType, Func, FuncType, IntType, Let, LetRec, Match, Name, Pair,
         PairType, Prim, Split, Term, Type,
     },
-    crate::monads::parser::{
+    crate::parser::{
         Parser, ParserError, catch, fail, lazy, many_until, many1, pure, run_parser, sep_by0,
         sep_by1, take_eof, take_exact, take_while,
     },
@@ -51,7 +51,7 @@ fn parse_flt_type<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Flt")).map(|()| FltType.into())
 }
 
-fn parse_int_literal_value<'a>() -> Parser<'a, i32> {
+fn parse_int_literal<'a>() -> Parser<'a, i32> {
     take_while(|char| char == '-' || char.is_ascii_digit())
         .flat_map(|digits| match digits.parse() {
             Ok(value) => pure(value),
@@ -60,7 +60,7 @@ fn parse_int_literal_value<'a>() -> Parser<'a, i32> {
         .and_drop(parse_whitespace())
 }
 
-fn parse_flt_literal_value<'a>() -> Parser<'a, f32> {
+fn parse_flt_literal<'a>() -> Parser<'a, f32> {
     take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
         .flat_map(|digits| {
             let has_dot = digits.contains('.');
@@ -87,15 +87,15 @@ fn parse_flt_literal_value<'a>() -> Parser<'a, f32> {
         .and_drop(parse_whitespace())
 }
 
-fn parse_int_literal<'a>() -> Parser<'a, Term> {
-    parse_int_literal_value().map(Prim::from).map(Into::into)
+fn parse_int<'a>() -> Parser<'a, Term> {
+    parse_int_literal().map(Prim::from).map(Into::into)
 }
 
-fn parse_flt_literal<'a>() -> Parser<'a, Term> {
-    parse_flt_literal_value().map(Prim::from).map(Into::into)
+fn parse_flt<'a>() -> Parser<'a, Term> {
+    parse_flt_literal().map(Prim::from).map(Into::into)
 }
 
-fn parse_prim_op<'a>() -> Parser<'a, Term> {
+fn parse_prim<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Int.eql"))
         .and_keep(lazy(parse_atomic_term))
         .and(lazy(parse_atomic_term))
@@ -272,9 +272,9 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     parse_type()
         .or(parse_int_type())
         .or(parse_flt_type())
-        .or(parse_flt_literal())
-        .or(parse_int_literal())
-        .or(parse_prim_op())
+        .or(parse_flt())
+        .or(parse_int())
+        .or(parse_prim())
         .or(parse_atom_type())
         .or(parse_atom())
         .or(parse_pair_type())
@@ -283,22 +283,9 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
         .or(parse_label())
 }
 
-fn parse_apply_until<'a, G>(g: G) -> Parser<'a, Term>
+fn parse_term_until<'a, P>(p: P) -> Parser<'a, Term>
 where
-    G: FnMut() -> Parser<'a, ()> + 'a,
-{
-    parse_atomic_term()
-        .and(many_until(parse_atomic_term, g))
-        .map(|(head, params)| Apply::many(head, params))
-}
-
-fn parse_term<'a>() -> Parser<'a, Term> {
-    parse_term_until(|| fail(""))
-}
-
-fn parse_term_until<'a, G>(g: G) -> Parser<'a, Term>
-where
-    G: FnMut() -> Parser<'a, ()> + 'a,
+    P: FnMut() -> Parser<'a, ()> + 'a,
 {
     parse_let_rec()
         .or(parse_split())
@@ -306,7 +293,13 @@ where
         .or(parse_match())
         .or(parse_func_type())
         .or(parse_func())
-        .or(parse_apply_until(g))
+        .or(parse_atomic_term()
+            .and(many_until(parse_atomic_term, p))
+            .map(|(head, params)| Apply::many(head, params)))
+}
+
+fn parse_term<'a>() -> Parser<'a, Term> {
+    parse_term_until(|| fail(""))
 }
 
 pub fn parse(input: &str) -> Result<Term, ParserError> {
@@ -396,10 +389,12 @@ mod tests {
         assert_eq!(parse("Flt").unwrap(), FltType.into());
         assert_eq!(parse("42").unwrap(), Prim::from(42).into());
         assert_eq!(parse("1.5").unwrap(), Prim::from(1.5).into());
+
         assert_eq!(
             parse("Int.add 1 2").unwrap(),
             Prim::int_add(Prim::from(1), Prim::from(2)).into()
         );
+
         assert_eq!(
             parse("Flt.mul 1.5 2.0").unwrap(),
             Prim::flt_mul(Prim::from(1.5), Prim::from(2.0)).into()

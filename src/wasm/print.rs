@@ -5,7 +5,7 @@ use {
         LocalName, Module, Mutability, NumType, PackedType, RecType, RefType, ResultType,
         StorageType, StructType, SubType, TypeName, ValType,
     },
-    crate::monads::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 

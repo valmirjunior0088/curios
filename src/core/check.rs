@@ -238,6 +238,7 @@ fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
                 .map(Name::label)
                 .map(Into::into)
                 .collect::<Vec<_>>();
+
             let label_terms = label_terms.iter().collect::<Vec<_>>();
 
             let items = items

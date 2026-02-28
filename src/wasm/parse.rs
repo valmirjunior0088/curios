@@ -5,7 +5,7 @@ use {
         LocalName, Module, Mutability, NumType, PackedType, RecType, RefType, ResultType,
         StorageType, StructType, SubType, TypeName, ValType,
     },
-    crate::monads::parser::{
+    crate::parser::{
         Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,
         take_while,
     },

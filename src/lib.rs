@@ -1,6 +1,7 @@
 mod macros;
 
 mod monads;
+use monads::*;
 
 pub mod core;
 

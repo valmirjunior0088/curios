@@ -184,8 +184,10 @@ impl<'a, 'b> Context<'a, 'b> {
 
     fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<wasm::Instr> {
         match load_as {
-            LoadAs::NonNull if is_nullable => vec![wasm::Instr::RefAsNonNull],
-            LoadAs::NonNull => vec![],
+            LoadAs::NonNull => match is_nullable {
+                true => vec![wasm::Instr::RefAsNonNull],
+                false => vec![],
+            },
             LoadAs::Concrete(type_name) => {
                 vec![wasm::Instr::RefCast {
                     ref_type: wasm::RefType {

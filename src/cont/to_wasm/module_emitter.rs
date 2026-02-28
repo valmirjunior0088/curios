@@ -14,7 +14,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         Self { metadata, module }
     }
 
-    pub fn emit_flt_type(&mut self) {
+    fn emit_flt_type(&mut self) {
         self.module.add_type(
             self.metadata.flt_type(),
             wasm::SubType {
@@ -33,7 +33,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    pub fn emit_unit_type(&mut self) {
+    fn emit_unit_type(&mut self) {
         self.module.add_type(
             self.metadata.unit_type(),
             wasm::SubType {
@@ -44,7 +44,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    pub fn emit_tpl2_type(&mut self) {
+    fn emit_tpl2_type(&mut self) {
         self.module.add_type(
             self.metadata.tpl2_type(),
             wasm::SubType {
@@ -70,7 +70,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    pub fn emit_envr_arity_types(&mut self) {
+    fn emit_envr_arity_types(&mut self) {
         for (arity, type_name) in self.metadata.envr_types() {
             self.module.add_type(
                 type_name,
@@ -96,7 +96,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_clsr_types(&mut self) {
+    fn emit_clsr_types(&mut self) {
         for data in self.metadata.clsrs() {
             self.module.add_type(
                 data.envr_type(),
@@ -135,7 +135,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_clsr_arity_types(&mut self) {
+    fn emit_clsr_arity_types(&mut self) {
         for (arity, type_name) in self.metadata.clsr_types() {
             self.module.add_type(
                 type_name,
@@ -154,7 +154,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_clsr_named_types(&mut self) {
+    fn emit_clsr_named_types(&mut self) {
         for data in self.metadata.clsrs() {
             self.module.add_type(
                 data.clsr_type(),
@@ -174,7 +174,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_func_types(&mut self) {
+    fn emit_func_types(&mut self) {
         for (arity, type_name) in self.metadata.func_types() {
             self.module.add_type(
                 type_name,
@@ -192,7 +192,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_let_const(&mut self, name: &'a cont::ValueName, value: &'a cont::ConstValue) {
+    fn emit_let_const(&mut self, name: &'a cont::ValueName, value: &'a cont::ConstValue) {
         let mut expr = Default::default();
 
         ExprEmitter::new(Context::new_const(self.metadata), &mut expr).emit_const_value(value);
@@ -214,7 +214,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    pub fn emit_let_clsr(&mut self, name: &'a cont::ClsrName, clsr: &'a cont::Clsr) {
+    fn emit_let_clsr(&mut self, name: &'a cont::ClsrName, clsr: &'a cont::Clsr) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
@@ -247,7 +247,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    pub fn emit_let_func(&mut self, name: &'a cont::FuncName, func: &'a cont::Func) {
+    fn emit_let_func(&mut self, name: &'a cont::FuncName, func: &'a cont::Func) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 

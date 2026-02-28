@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, One, Pair, PairType, Prim,
         Scope, Split, Term, Two,
     },
-    crate::monads::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 

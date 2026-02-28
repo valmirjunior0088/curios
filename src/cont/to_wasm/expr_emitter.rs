@@ -14,7 +14,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         Self { context, expr }
     }
 
-    pub fn emit_instr(&mut self, instr: wasm::Instr) {
+    fn emit_instr(&mut self, instr: wasm::Instr) {
         if let Some(frame) = self.context.this_frame() {
             frame.instrs.push(instr);
         } else {
@@ -22,7 +22,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_instrs<I>(&mut self, instrs: I)
+    fn emit_instrs<I>(&mut self, instrs: I)
     where
         I: IntoIterator<Item = wasm::Instr>,
     {
@@ -33,7 +33,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    pub fn leave_last_frame(&mut self) {
+    fn leave_last_frame(&mut self) {
         let instrs = self.context.leave_frame();
 
         if self.context.this_frame().is_some() {
@@ -60,7 +60,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_const_op(&mut self, op: &'a cont::ConstOp, params: &'a [cont::ValueName]) {
+    fn emit_const_op(&mut self, op: &'a cont::ConstOp, params: &'a [cont::ValueName]) {
         match (op, params) {
             (cont::ConstOp::IntEql, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
@@ -120,7 +120,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_clsr(&mut self, target: &'a cont::ClsrName, fields: &'a [cont::ValueName]) {
+    fn emit_clsr(&mut self, target: &'a cont::ClsrName, fields: &'a [cont::ValueName]) {
         self.emit_instrs([wasm::Instr::RefFunc {
             func_name: self.context.metadata().find_clsr(target).func_name(),
         }]);
@@ -134,7 +134,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    pub fn emit_tpl2(&mut self, first: &'a cont::ValueName, second: &'a cont::ValueName) {
+    fn emit_tpl2(&mut self, first: &'a cont::ValueName, second: &'a cont::ValueName) {
         self.emit_instrs(self.context.load_value_instrs(first, LoadAs::NonNull));
 
         self.emit_instrs(self.context.load_value_instrs(second, LoadAs::NonNull));
@@ -144,7 +144,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    pub fn emit_proj(&mut self, tuple: &'a cont::ValueName, index: usize) {
+    fn emit_proj(&mut self, tuple: &'a cont::ValueName, index: usize) {
         let field_name = match index {
             0 => self.context.metadata().proj_fst_field(),
             1 => self.context.metadata().proj_snd_field(),
@@ -162,7 +162,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    pub fn emit_value(&mut self, value: &'a cont::Value) {
+    fn emit_value(&mut self, value: &'a cont::Value) {
         match value {
             cont::Value::Pure(value) => self.emit_const_value(value),
             cont::Value::Eval(op, params) => self.emit_const_op(op, params),
@@ -172,7 +172,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    pub fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
+    fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             self.emit_value(value);
 
@@ -181,12 +181,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     .context
                     .find_local(value_name)
                     .map(|(local_name, _)| local_name)
-                    .expect(&format!("`ExprEmitter` lacks local `{}`", value_name.string)),
+                    .expect(&format!(
+                        "`ExprEmitter` lacks local `{}`",
+                        value_name.string
+                    )),
             });
         }
     }
 
-    pub fn emit_let_blocks(
+    fn emit_let_blocks(
         &mut self,
         dispatcher_local: wasm::LocalName,
         dispatcher_label: wasm::LabelName,
@@ -213,7 +216,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         ));
     }
 
-    pub fn emit_region(
+    fn emit_region(
         &mut self,
         params: HashMap<&'a cont::ValueName, (wasm::LocalName, bool)>,
         region: &'a cont::Region,
