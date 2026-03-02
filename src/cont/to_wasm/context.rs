@@ -1,5 +1,5 @@
 use {
-    super::{BlockData, ClsrData, FieldData, Frame, FuncData, ModuleData},
+    super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, ModuleData},
     crate::{cont, wasm},
     std::{collections::HashMap, iter, mem},
 };
@@ -25,6 +25,7 @@ pub enum Context<'a, 'b> {
 }
 
 pub enum LoadAs {
+    Raw,
     NonNull,
     Concrete(wasm::TypeName),
     Int,
@@ -79,18 +80,18 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn params(&self) -> HashMap<&'a cont::ValueName, (wasm::LocalName, bool)> {
+    pub fn params(&self) -> HashMap<&'a cont::ValueName, LocalData> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
             Self::Clsr { data, .. } => data
                 .params()
                 .into_iter()
-                .map(|(value_name, local_name)| (value_name, (local_name, false)))
+                .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, false)))
                 .collect(),
             Self::Func { data, .. } => data
                 .params()
                 .into_iter()
-                .map(|(value_name, local_name)| (value_name, (local_name, false)))
+                .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, false)))
                 .collect(),
         }
     }
@@ -149,7 +150,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn find_local(&self, value_name: &cont::ValueName) -> Option<(wasm::LocalName, bool)> {
+    pub fn find_local(&self, value_name: &cont::ValueName) -> Option<LocalData> {
         match self {
             Self::Const { .. } => None,
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
@@ -157,7 +158,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     frame
                         .values
                         .get(value_name)
-                        .map(|local_name| (local_name.clone(), false))
+                        .map(|local_name| LocalData::new(local_name.clone(), true))
                         .or_else(|| frame.params.get(value_name).cloned())
                 })
             }
@@ -184,6 +185,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
     fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<wasm::Instr> {
         match load_as {
+            LoadAs::Raw => vec![],
             LoadAs::NonNull => match is_nullable {
                 true => vec![wasm::Instr::RefAsNonNull],
                 false => vec![],
@@ -245,11 +247,13 @@ impl<'a, 'b> Context<'a, 'b> {
                 },
             ]);
 
-            output.extend(self.load_as_instrs(load_as, false));
-        } else if let Some((local_name, is_nullable)) = self.find_local(value_name) {
-            output.push(wasm::Instr::LocalGet { local_name });
+            output.extend(self.load_as_instrs(load_as, true));
+        } else if let Some(local_data) = self.find_local(value_name) {
+            output.push(wasm::Instr::LocalGet {
+                local_name: local_data.local_name,
+            });
 
-            output.extend(self.load_as_instrs(load_as, is_nullable));
+            output.extend(self.load_as_instrs(load_as, local_data.is_nullable));
         } else {
             output.push(wasm::Instr::GlobalGet {
                 global_name: self.metadata().find_const(value_name),
@@ -290,9 +294,9 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            for (_, (local_name, _)) in block_data.params.iter().rev() {
+            for (_, local_data) in block_data.params.iter().rev() {
                 output.push(wasm::Instr::LocalSet {
-                    local_name: local_name.clone(),
+                    local_name: local_data.local_name.clone(),
                 });
             }
 
@@ -415,9 +419,9 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            for (_, (local_name, _)) in block_data.params.iter().rev() {
+            for (_, local_data) in block_data.params.iter().rev() {
                 output.push(wasm::Instr::LocalSet {
-                    local_name: local_name.clone(),
+                    local_name: local_data.local_name.clone(),
                 });
             }
 
@@ -461,6 +465,8 @@ impl<'a, 'b> Context<'a, 'b> {
             field_name: self.metadata().special_field(),
         });
 
+        output.push(wasm::Instr::RefAsNonNull);
+
         if self.is_resume(resume) {
             output.push(wasm::Instr::ReturnCallRef {
                 type_name: clsr_type,
@@ -481,9 +487,9 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            for (_, (local_name, _)) in block_data.params.iter().rev() {
+            for (_, local_data) in block_data.params.iter().rev() {
                 output.push(wasm::Instr::LocalSet {
-                    local_name: local_name.clone(),
+                    local_name: local_data.local_name.clone(),
                 });
             }
 

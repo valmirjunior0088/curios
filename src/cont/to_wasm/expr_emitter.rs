@@ -1,5 +1,5 @@
 use {
-    super::{BlockData, Context, Frame, LoadAs},
+    super::{BlockData, Context, Frame, LoadAs, LocalData},
     crate::{cont, wasm},
     std::collections::HashMap,
 };
@@ -120,30 +120,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_clsr(&mut self, target: &'a cont::ClsrName, fields: &'a [cont::ValueName]) {
-        self.emit_instrs([wasm::Instr::RefFunc {
-            func_name: self.context.metadata().find_clsr(target).func_name(),
-        }]);
-
-        for field in fields {
-            self.emit_instrs(self.context.load_value_instrs(field, LoadAs::NonNull));
-        }
-
-        self.emit_instr(wasm::Instr::StructNew {
-            type_name: self.context.metadata().find_clsr(target).envr_type(),
-        });
-    }
-
-    fn emit_tpl2(&mut self, first: &'a cont::ValueName, second: &'a cont::ValueName) {
-        self.emit_instrs(self.context.load_value_instrs(first, LoadAs::NonNull));
-
-        self.emit_instrs(self.context.load_value_instrs(second, LoadAs::NonNull));
-
-        self.emit_instr(wasm::Instr::StructNew {
-            type_name: self.context.metadata().tpl2_type(),
-        });
-    }
-
     fn emit_proj(&mut self, tuple: &'a cont::ValueName, index: usize) {
         let field_name = match index {
             0 => self.context.metadata().proj_fst_field(),
@@ -162,30 +138,187 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    fn emit_value(&mut self, value: &'a cont::Value) {
-        match value {
-            cont::Value::Pure(value) => self.emit_const_value(value),
-            cont::Value::Eval(op, params) => self.emit_const_op(op, params),
-            cont::Value::Clsr(target, fields) => self.emit_clsr(target, fields),
-            cont::Value::Tpl2(first, second) => self.emit_tpl2(first, second),
-            cont::Value::Proj(tuple, index) => self.emit_proj(tuple, *index),
+    fn emit_preallocate_tpl2(&mut self, value_name: &'a cont::ValueName) {
+        self.emit_instr(wasm::Instr::StructNewDefault {
+            type_name: self.context.metadata().tpl2_type(),
+        });
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .expect(&format!(
+                    "`ExprEmitter` lacks local `{}`",
+                    value_name.string
+                )),
+        });
+    }
+
+    fn emit_preallocate_clsr(
+        &mut self,
+        value_name: &'a cont::ValueName,
+        target: &'a cont::ClsrName,
+    ) {
+        self.emit_instr(wasm::Instr::StructNewDefault {
+            type_name: self.context.metadata().find_clsr(target).envr_type(),
+        });
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .expect(&format!(
+                    "`ExprEmitter` lacks local `{}`",
+                    value_name.string
+                )),
+        });
+    }
+
+    fn emit_let_pure(&mut self, value_name: &'a cont::ValueName, value: &cont::ConstValue) {
+        self.emit_const_value(value);
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .expect(&format!(
+                    "`ExprEmitter` lacks local `{}`",
+                    value_name.string
+                )),
+        });
+    }
+
+    fn emit_let_eval(
+        &mut self,
+        value_name: &'a cont::ValueName,
+        op: &'a cont::ConstOp,
+        params: &'a [cont::ValueName],
+    ) {
+        self.emit_const_op(op, params);
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .expect(&format!(
+                    "`ExprEmitter` lacks local `{}`",
+                    value_name.string
+                )),
+        });
+    }
+
+    fn emit_backpatch_clsr(
+        &mut self,
+        value_name: &'a cont::ValueName,
+        target: &'a cont::ClsrName,
+        fields: &'a [cont::ValueName],
+    ) {
+        let clsr_data = self.context.metadata().find_clsr(target);
+        let envr_type = clsr_data.envr_type();
+
+        self.emit_instrs(
+            self.context
+                .load_value_instrs(value_name, LoadAs::Concrete(envr_type.clone())),
+        );
+        self.emit_instr(wasm::Instr::RefFunc {
+            func_name: clsr_data.func_name(),
+        });
+
+        self.emit_instr(wasm::Instr::StructSet {
+            type_name: envr_type.clone(),
+            field_name: self.context.metadata().special_field(),
+        });
+
+        for (field, field_name) in fields.iter().zip(clsr_data.fields()) {
+            self.emit_instrs(
+                self.context
+                    .load_value_instrs(value_name, LoadAs::Concrete(envr_type.clone())),
+            );
+
+            self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Raw));
+
+            self.emit_instr(wasm::Instr::StructSet {
+                type_name: envr_type.clone(),
+                field_name,
+            });
         }
+    }
+
+    fn emit_backpatch_tpl2(
+        &mut self,
+        value_name: &'a cont::ValueName,
+        first: &'a cont::ValueName,
+        second: &'a cont::ValueName,
+    ) {
+        self.emit_instrs(self.context.load_value_instrs(
+            value_name,
+            LoadAs::Concrete(self.context.metadata().tpl2_type()),
+        ));
+        self.emit_instrs(self.context.load_value_instrs(first, LoadAs::Raw));
+
+        self.emit_instr(wasm::Instr::StructSet {
+            type_name: self.context.metadata().tpl2_type(),
+            field_name: self.context.metadata().proj_fst_field(),
+        });
+
+        self.emit_instrs(self.context.load_value_instrs(
+            value_name,
+            LoadAs::Concrete(self.context.metadata().tpl2_type()),
+        ));
+
+        self.emit_instrs(self.context.load_value_instrs(second, LoadAs::Raw));
+
+        self.emit_instr(wasm::Instr::StructSet {
+            type_name: self.context.metadata().tpl2_type(),
+            field_name: self.context.metadata().proj_snd_field(),
+        });
+    }
+
+    fn emit_let_proj(
+        &mut self,
+        value_name: &'a cont::ValueName,
+        tuple: &'a cont::ValueName,
+        index: usize,
+    ) {
+        self.emit_proj(tuple, index);
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .expect(&format!(
+                    "`ExprEmitter` lacks local `{}`",
+                    value_name.string
+                )),
+        });
     }
 
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
-            self.emit_value(value);
+            match value {
+                cont::Value::Tpl2(_, _) => self.emit_preallocate_tpl2(value_name),
+                cont::Value::Clsr(target, _) => self.emit_preallocate_clsr(value_name, target),
+                _ => {}
+            }
+        }
 
-            self.emit_instr(wasm::Instr::LocalSet {
-                local_name: self
-                    .context
-                    .find_local(value_name)
-                    .map(|(local_name, _)| local_name)
-                    .expect(&format!(
-                        "`ExprEmitter` lacks local `{}`",
-                        value_name.string
-                    )),
-            });
+        for (value_name, value) in values {
+            match value {
+                cont::Value::Pure(value) => self.emit_let_pure(value_name, value),
+                cont::Value::Eval(op, params) => self.emit_let_eval(value_name, op, params),
+                cont::Value::Clsr(target, fields) => {
+                    self.emit_backpatch_clsr(value_name, target, fields)
+                }
+                cont::Value::Tpl2(first, second) => {
+                    self.emit_backpatch_tpl2(value_name, first, second)
+                }
+                cont::Value::Proj(tuple, index) => self.emit_let_proj(value_name, tuple, *index),
+            }
         }
     }
 
@@ -218,7 +351,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_region(
         &mut self,
-        params: HashMap<&'a cont::ValueName, (wasm::LocalName, bool)>,
+        params: HashMap<&'a cont::ValueName, LocalData>,
         region: &'a cont::Region,
     ) {
         let values = region
@@ -227,7 +360,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .map(|(value_name, _)| {
                 let local_name = self.context.push_local(
                     &value_name.string,
-                    self.context.metadata().obj_val_type(false),
+                    self.context.metadata().obj_val_type(true),
                 );
 
                 (value_name, local_name)
@@ -259,7 +392,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                                 self.context.metadata().obj_val_type(true),
                             );
 
-                            (value_name, (local_name, true))
+                            (value_name, LocalData::new(local_name, true))
                         })
                         .collect();
 

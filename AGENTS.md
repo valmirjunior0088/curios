@@ -1,1 +1,1 @@
-Avoid changing code unless explicitly instructed to do so.
+The agent must avoid changing code unless explicitly instructed to do so; this means that the agent must not implicitly infer whether to change code and that the agent must wait for a direct go-ahead instruction before changing code.

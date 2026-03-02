@@ -54,15 +54,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     (
                         self.metadata.proj_fst_field(),
                         wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(self.metadata.obj_val_type(false)),
-                            mutability: wasm::Mutability::Const,
+                            storage_type: wasm::StorageType::Val(self.metadata.obj_val_type(true)),
+                            mutability: wasm::Mutability::Var,
                         },
                     ),
                     (
                         self.metadata.proj_snd_field(),
                         wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(self.metadata.obj_val_type(false)),
-                            mutability: wasm::Mutability::Const,
+                            storage_type: wasm::StorageType::Val(self.metadata.obj_val_type(true)),
+                            mutability: wasm::Mutability::Var,
                         },
                     ),
                 ])),
@@ -82,13 +82,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         wasm::FieldType {
                             storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
                                 wasm::RefType {
-                                    is_nullable: false,
+                                    is_nullable: true,
                                     heap_type: wasm::HeapType::Concrete(
                                         self.metadata.find_clsr_type(arity),
                                     ),
                                 },
                             )),
-                            mutability: wasm::Mutability::Const,
+                            mutability: wasm::Mutability::Var,
                         },
                     )])),
                 },
@@ -109,13 +109,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                             wasm::FieldType {
                                 storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
                                     wasm::RefType {
-                                        is_nullable: false,
+                                        is_nullable: true,
                                         heap_type: wasm::HeapType::Concrete(
                                             self.metadata.find_clsr_type(data.arity()),
                                         ),
                                     },
                                 )),
-                                mutability: wasm::Mutability::Const,
+                                mutability: wasm::Mutability::Var,
                             },
                         ))
                         .chain(data.fields().map(|field_name| {
@@ -123,9 +123,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                 field_name,
                                 wasm::FieldType {
                                     storage_type: wasm::StorageType::Val(
-                                        self.metadata.obj_val_type(false),
+                                        self.metadata.obj_val_type(true),
                                     ),
-                                    mutability: wasm::Mutability::Const,
+                                    mutability: wasm::Mutability::Var,
                                 },
                             )
                         })),

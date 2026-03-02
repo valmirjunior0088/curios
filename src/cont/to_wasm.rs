@@ -22,3 +22,437 @@ pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
 
     wasm_module
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        super::*,
+        wasmtime::{AnyRef, Config, Engine, Instance, Module, OwnedRooted, Store},
+    };
+
+    fn run_main(cont_module: &cont::Module) -> (Store<()>, OwnedRooted<AnyRef>) {
+        let mut config = Config::new();
+        config.wasm_reference_types(true);
+        config.wasm_function_references(true);
+        config.wasm_gc(true);
+        config.wasm_tail_call(true);
+
+        let engine = Engine::new(&config).expect("expected wasmtime engine");
+
+        let module = Module::from_binary(&engine, &wasm::to_bytes(&to_wasm(cont_module)))
+            .expect("expected wasm module");
+
+        let mut store = Store::new(&engine, ());
+
+        let instance = Instance::new(&mut store, &module, &[]).expect("expected instance");
+
+        let run = instance
+            .get_typed_func::<(), OwnedRooted<AnyRef>>(&mut store, "func/main")
+            .expect("expected exported func/main");
+
+        let result = run.call(&mut store, ()).expect("expected call result");
+
+        (store, result)
+    }
+
+    #[test]
+    fn lowers_and_runs_mutually_recursive_tuple() {
+        let mut cont_module = cont::Module::new();
+
+        cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+
+        cont_module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
+
+        cont_module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![
+                        (
+                            cont::ValueName::from("x"),
+                            cont::Value::Tpl2(
+                                cont::ValueName::from("y"),
+                                cont::ValueName::from("ONE"),
+                            ),
+                        ),
+                        (
+                            cont::ValueName::from("y"),
+                            cont::Value::Tpl2(
+                                cont::ValueName::from("TWO"),
+                                cont::ValueName::from("x"),
+                            ),
+                        ),
+                        (
+                            cont::ValueName::from("left"),
+                            cont::Value::Proj(cont::ValueName::from("x"), 0),
+                        ),
+                        (
+                            cont::ValueName::from("out"),
+                            cont::Value::Proj(cont::ValueName::from("left"), 0),
+                        ),
+                    ],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("out")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&cont_module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn lowers_and_runs_mutually_recursive_closures() {
+        let mut cont_module = cont::Module::new();
+
+        cont_module.add_const(cont::ValueName::from("ZERO"), cont::ConstValue::Int(0));
+        cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+        cont_module.add_const(cont::ValueName::from("EVEN"), cont::ConstValue::Int(11));
+        cont_module.add_const(cont::ValueName::from("ODD"), cont::ConstValue::Int(22));
+
+        cont_module.add_clsr(
+            cont::ClsrName::from("even"),
+            cont::Clsr {
+                fields: vec![cont::ValueName::from("odd")],
+                params: vec![cont::ValueName::from("n")],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("is_zero"),
+                        cont::Value::Eval(
+                            cont::ConstOp::IntEql,
+                            vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
+                        ),
+                    )],
+                    blocks: vec![
+                        (
+                            cont::BlockName::from("on_zero"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Jump(cont::JumpTarget {
+                                        target: cont::BlockName::from("r"),
+                                        params: vec![cont::ValueName::from("EVEN")],
+                                    }),
+                                },
+                            },
+                        ),
+                        (
+                            cont::BlockName::from("on_non_zero"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![(
+                                        cont::ValueName::from("prev"),
+                                        cont::Value::Eval(
+                                            cont::ConstOp::IntSub,
+                                            vec![
+                                                cont::ValueName::from("n"),
+                                                cont::ValueName::from("ONE"),
+                                            ],
+                                        ),
+                                    )],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Call(cont::CallTarget::Indirect {
+                                        target: cont::ValueName::from("odd"),
+                                        params: vec![cont::ValueName::from("prev")],
+                                        resume: cont::BlockName::from("r"),
+                                    }),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: cont::Tail::Case(cont::CaseTarget {
+                        operand: cont::ValueName::from("is_zero"),
+                        targets: vec![cont::JumpTarget {
+                            target: cont::BlockName::from("on_non_zero"),
+                            params: vec![],
+                        }],
+                        default: Some(cont::JumpTarget {
+                            target: cont::BlockName::from("on_zero"),
+                            params: vec![],
+                        }),
+                    }),
+                },
+            },
+        );
+
+        cont_module.add_clsr(
+            cont::ClsrName::from("odd"),
+            cont::Clsr {
+                fields: vec![cont::ValueName::from("even")],
+                params: vec![cont::ValueName::from("n")],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("is_zero"),
+                        cont::Value::Eval(
+                            cont::ConstOp::IntEql,
+                            vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
+                        ),
+                    )],
+                    blocks: vec![
+                        (
+                            cont::BlockName::from("on_zero"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Jump(cont::JumpTarget {
+                                        target: cont::BlockName::from("r"),
+                                        params: vec![cont::ValueName::from("ODD")],
+                                    }),
+                                },
+                            },
+                        ),
+                        (
+                            cont::BlockName::from("on_non_zero"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![(
+                                        cont::ValueName::from("prev"),
+                                        cont::Value::Eval(
+                                            cont::ConstOp::IntSub,
+                                            vec![
+                                                cont::ValueName::from("n"),
+                                                cont::ValueName::from("ONE"),
+                                            ],
+                                        ),
+                                    )],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Call(cont::CallTarget::Indirect {
+                                        target: cont::ValueName::from("even"),
+                                        params: vec![cont::ValueName::from("prev")],
+                                        resume: cont::BlockName::from("r"),
+                                    }),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: cont::Tail::Case(cont::CaseTarget {
+                        operand: cont::ValueName::from("is_zero"),
+                        targets: vec![cont::JumpTarget {
+                            target: cont::BlockName::from("on_non_zero"),
+                            params: vec![],
+                        }],
+                        default: Some(cont::JumpTarget {
+                            target: cont::BlockName::from("on_zero"),
+                            params: vec![],
+                        }),
+                    }),
+                },
+            },
+        );
+
+        cont_module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![
+                        (
+                            cont::ValueName::from("even"),
+                            cont::Value::Clsr(
+                                cont::ClsrName::from("even"),
+                                vec![cont::ValueName::from("odd")],
+                            ),
+                        ),
+                        (
+                            cont::ValueName::from("odd"),
+                            cont::Value::Clsr(
+                                cont::ClsrName::from("odd"),
+                                vec![cont::ValueName::from("even")],
+                            ),
+                        ),
+                    ],
+                    blocks: vec![],
+                    tail: cont::Tail::Call(cont::CallTarget::Indirect {
+                        target: cont::ValueName::from("even"),
+                        params: vec![cont::ValueName::from("ONE")],
+                        resume: cont::BlockName::from("r"),
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&cont_module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 22);
+    }
+
+    #[test]
+    fn lowers_and_runs_direct_call() {
+        let mut cont_module = cont::Module::new();
+
+        cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+        cont_module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
+
+        cont_module.add_func(
+            cont::FuncName::from("add_one"),
+            cont::Func {
+                params: vec![cont::ValueName::from("x")],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("sum"),
+                        cont::Value::Eval(
+                            cont::ConstOp::IntAdd,
+                            vec![cont::ValueName::from("x"), cont::ValueName::from("ONE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("sum")],
+                    }),
+                },
+            },
+        );
+
+        cont_module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![],
+                    blocks: vec![(
+                        cont::BlockName::from("after_call"),
+                        cont::Block {
+                            params: vec![cont::ValueName::from("out")],
+                            region: cont::Region {
+                                values: vec![],
+                                blocks: vec![],
+                                tail: cont::Tail::Jump(cont::JumpTarget {
+                                    target: cont::BlockName::from("r"),
+                                    params: vec![cont::ValueName::from("out")],
+                                }),
+                            },
+                        },
+                    )],
+                    tail: cont::Tail::Call(cont::CallTarget::Direct {
+                        target: cont::FuncName::from("add_one"),
+                        params: vec![cont::ValueName::from("TWO")],
+                        resume: cont::BlockName::from("after_call"),
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&cont_module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn lowers_and_runs_unit_result() {
+        let mut cont_module = cont::Module::new();
+
+        cont_module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("unit"),
+                        cont::Value::Pure(cont::ConstValue::Unit),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("unit")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&cont_module);
+
+        let result = result.to_rooted(&mut store);
+
+        let result = result.unwrap_struct(&store).expect("expected unit struct");
+
+        assert_eq!(
+            result
+                .ty(&store)
+                .expect("expected struct type")
+                .fields()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn lowers_and_runs_float_result() {
+        let mut cont_module = cont::Module::new();
+
+        cont_module.add_const(cont::ValueName::from("LEFT"), cont::ConstValue::Flt(1.25));
+
+        cont_module.add_const(cont::ValueName::from("RIGHT"), cont::ConstValue::Flt(2.5));
+
+        cont_module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("sum"),
+                        cont::Value::Eval(
+                            cont::ConstOp::FltAdd,
+                            vec![
+                                cont::ValueName::from("LEFT"),
+                                cont::ValueName::from("RIGHT"),
+                            ],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("sum")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&cont_module);
+
+        let result = result.to_rooted(&mut store);
+
+        let result = result.unwrap_struct(&store).expect("expected float struct");
+
+        let result = result
+            .field(&mut store, 0)
+            .expect("expected float field")
+            .unwrap_f32();
+
+        assert_eq!(result, 3.75);
+    }
+}

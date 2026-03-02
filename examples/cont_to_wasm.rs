@@ -110,28 +110,33 @@ fn main() {
                         Block {
                             params: vec![ValueName::from("result")],
                             region: Region {
-                                values: vec![(
-                                    ValueName::from("pair"),
-                                    Value::Tpl2(
-                                        ValueName::from("result"),
-                                        ValueName::from("ONE"),
+                                values: vec![
+                                    (
+                                        ValueName::from("pair"),
+                                        Value::Tpl2(
+                                            ValueName::from("result"),
+                                            ValueName::from("ONE"),
+                                        ),
                                     ),
-                                ), (
-                                    ValueName::from("result_again"),
-                                    Value::Proj(ValueName::from("pair"), 0),
-                                ), (
-                                    ValueName::from("fallback_one"),
-                                    Value::Proj(ValueName::from("pair"), 1),
-                                ), (
-                                    ValueName::from("result_is_zero"),
-                                    Value::Eval(
-                                        ConstOp::IntEql,
-                                        vec![
-                                            ValueName::from("result_again"),
-                                            ValueName::from("ZERO"),
-                                        ],
+                                    (
+                                        ValueName::from("result_again"),
+                                        Value::Proj(ValueName::from("pair"), 0),
                                     ),
-                                )],
+                                    (
+                                        ValueName::from("fallback_one"),
+                                        Value::Proj(ValueName::from("pair"), 1),
+                                    ),
+                                    (
+                                        ValueName::from("result_is_zero"),
+                                        Value::Eval(
+                                            ConstOp::IntEql,
+                                            vec![
+                                                ValueName::from("result_again"),
+                                                ValueName::from("ZERO"),
+                                            ],
+                                        ),
+                                    ),
+                                ],
                                 blocks: vec![
                                     (
                                         BlockName::from("pick_zero"),
