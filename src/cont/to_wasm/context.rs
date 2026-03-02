@@ -1,22 +1,22 @@
 use {
-    super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, ModuleData},
+    super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
     crate::{cont, wasm},
     std::{collections::HashMap, iter, mem},
 };
 
 pub enum Context<'a, 'b> {
     Const {
-        metadata: &'a ModuleData<'a>,
+        table: &'a Table<'a>,
     },
     Clsr {
-        metadata: &'a ModuleData<'a>,
+        table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
         entropy: usize,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
         frames: Vec<Frame<'a>>,
     },
     Func {
-        metadata: &'a ModuleData<'a>,
+        table: &'a Table<'a>,
         data: &'a FuncData<'a>,
         entropy: usize,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
@@ -33,17 +33,17 @@ pub enum LoadAs {
 }
 
 impl<'a, 'b> Context<'a, 'b> {
-    pub fn new_const(metadata: &'a ModuleData<'a>) -> Self {
-        Self::Const { metadata }
+    pub fn new_const(table: &'a Table<'a>) -> Self {
+        Self::Const { table }
     }
 
     pub fn new_clsr(
-        metadata: &'a ModuleData<'a>,
+        table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
     ) -> Self {
         Self::Clsr {
-            metadata,
+            table,
             data,
             entropy: 0,
             locals,
@@ -52,12 +52,12 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub fn new_func(
-        metadata: &'a ModuleData<'a>,
+        table: &'a Table<'a>,
         data: &'a FuncData<'a>,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
     ) -> Self {
         Self::Func {
-            metadata,
+            table,
             data,
             entropy: 0,
             locals,
@@ -65,11 +65,9 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn metadata(&self) -> &'a ModuleData<'a> {
+    pub fn table(&self) -> &'a Table<'a> {
         match self {
-            Self::Const { metadata }
-            | Self::Clsr { metadata, .. }
-            | Self::Func { metadata, .. } => metadata,
+            Self::Const { table } | Self::Clsr { table, .. } | Self::Func { table, .. } => table,
         }
     }
 
@@ -201,7 +199,7 @@ impl<'a, 'b> Context<'a, 'b> {
             LoadAs::Int => {
                 vec![
                     wasm::Instr::RefCast {
-                        ref_type: self.metadata().int_ref_type(false),
+                        ref_type: self.table().int_ref_type(false),
                     },
                     wasm::Instr::I31GetS,
                 ]
@@ -211,12 +209,12 @@ impl<'a, 'b> Context<'a, 'b> {
                     wasm::Instr::RefCast {
                         ref_type: wasm::RefType {
                             is_nullable: false,
-                            heap_type: wasm::HeapType::Concrete(self.metadata().flt_type()),
+                            heap_type: wasm::HeapType::Concrete(self.table().flt_type()),
                         },
                     },
                     wasm::Instr::StructGet {
-                        type_name: self.metadata().flt_type(),
-                        field_name: self.metadata().special_field(),
+                        type_name: self.table().flt_type(),
+                        field_name: self.table().special_field(),
                     },
                 ]
             }
@@ -233,7 +231,7 @@ impl<'a, 'b> Context<'a, 'b> {
         if let Some(field_data) = self.find_field(value_name) {
             output.extend([
                 wasm::Instr::LocalGet {
-                    local_name: self.metadata().special_local(),
+                    local_name: self.table().special_local(),
                 },
                 wasm::Instr::RefCast {
                     ref_type: wasm::RefType {
@@ -256,7 +254,7 @@ impl<'a, 'b> Context<'a, 'b> {
             output.extend(self.load_as_instrs(load_as, local_data.is_nullable));
         } else {
             output.push(wasm::Instr::GlobalGet {
-                global_name: self.metadata().find_const(value_name),
+                global_name: self.table().find_const(value_name),
             });
 
             output.extend(self.load_as_instrs(load_as, false));
@@ -386,11 +384,11 @@ impl<'a, 'b> Context<'a, 'b> {
     ) -> Vec<wasm::Instr> {
         let mut output = Vec::new();
 
-        if params.len() != self.metadata().find_func(target).arity() {
+        if params.len() != self.table().find_func(target).arity() {
             panic!(
                 "call to `{}` expects {} params, got {}",
                 target.string,
-                self.metadata().find_func(target).arity(),
+                self.table().find_func(target).arity(),
                 params.len(),
             );
         }
@@ -401,11 +399,11 @@ impl<'a, 'b> Context<'a, 'b> {
 
         if self.is_resume(resume) {
             output.push(wasm::Instr::ReturnCall {
-                func_name: self.metadata().find_func(target).func_name(),
+                func_name: self.table().find_func(target).func_name(),
             });
         } else {
             output.push(wasm::Instr::Call {
-                func_name: self.metadata().find_func(target).func_name(),
+                func_name: self.table().find_func(target).func_name(),
             });
 
             let block_data = self.find_block(resume);
@@ -449,8 +447,8 @@ impl<'a, 'b> Context<'a, 'b> {
     ) -> Vec<wasm::Instr> {
         let mut output = Vec::new();
         let arity = params.len();
-        let envr_type = self.metadata().find_envr_type(arity);
-        let clsr_type = self.metadata().find_clsr_type(arity);
+        let envr_type = self.table().find_envr_type(arity);
+        let clsr_type = self.table().find_clsr_type(arity);
 
         output.extend(self.load_value_instrs(target, LoadAs::NonNull));
 
@@ -462,7 +460,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output.push(wasm::Instr::StructGet {
             type_name: envr_type,
-            field_name: self.metadata().special_field(),
+            field_name: self.table().special_field(),
         });
 
         output.push(wasm::Instr::RefAsNonNull);

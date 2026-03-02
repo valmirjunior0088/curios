@@ -155,7 +155,7 @@ impl<'a> FuncData<'a> {
     }
 }
 
-pub struct ModuleData<'a> {
+pub struct Table<'a> {
     special_field: wasm::FieldName,
     special_local: wasm::LocalName,
     unit_type: wasm::TypeName,
@@ -171,7 +171,7 @@ pub struct ModuleData<'a> {
     funcs: HashMap<&'a cont::FuncName, FuncData<'a>>,
 }
 
-impl<'a> ModuleData<'a> {
+impl<'a> Table<'a> {
     pub fn new(module: &'a cont::Module) -> Self {
         Self {
             special_field: wasm::FieldName::from("!"),
@@ -274,7 +274,7 @@ impl<'a> ModuleData<'a> {
         self.envr_types
             .get(&arity)
             .expect(&format!(
-                "`ModuleData` lacks environment type for arity `{}`",
+                "`Table` lacks environment type for arity `{}`",
                 arity
             ))
             .clone()
@@ -289,10 +289,7 @@ impl<'a> ModuleData<'a> {
     pub fn find_clsr_type(&self, arity: usize) -> wasm::TypeName {
         self.clsr_types
             .get(&arity)
-            .expect(&format!(
-                "`ModuleData` lacks closure type for arity `{}`",
-                arity
-            ))
+            .expect(&format!("`Table` lacks closure type for arity `{}`", arity))
             .clone()
     }
 
@@ -306,7 +303,7 @@ impl<'a> ModuleData<'a> {
         self.func_types
             .get(&arity)
             .expect(&format!(
-                "`ModuleData` lacks function type for arity `{}`",
+                "`Table` lacks function type for arity `{}`",
                 arity
             ))
             .clone()
@@ -315,10 +312,7 @@ impl<'a> ModuleData<'a> {
     pub fn find_const(&self, const_name: &cont::ValueName) -> wasm::GlobalName {
         self.consts
             .get(const_name)
-            .expect(&format!(
-                "`ModuleData` lacks const `{}`",
-                &const_name.string
-            ))
+            .expect(&format!("`Table` lacks const `{}`", &const_name.string))
             .clone()
     }
 
@@ -327,15 +321,14 @@ impl<'a> ModuleData<'a> {
     }
 
     pub fn find_clsr(&self, clsr_name: &cont::ClsrName) -> &ClsrData<'a> {
-        self.clsrs.get(clsr_name).expect(&format!(
-            "`ModuleData` lacks closure `{}`",
-            &clsr_name.string
-        ))
+        self.clsrs
+            .get(clsr_name)
+            .expect(&format!("`Table` lacks closure `{}`", &clsr_name.string))
     }
 
     pub fn find_func(&self, func_name: &cont::FuncName) -> &FuncData<'a> {
         self.funcs
             .get(func_name)
-            .expect(&format!("`ModuleData` lacks func `{}`", &func_name.string))
+            .expect(&format!("`Table` lacks func `{}`", &func_name.string))
     }
 }

@@ -46,7 +46,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     pub fn emit_const_value(&mut self, value: &cont::ConstValue) {
         match value {
             cont::ConstValue::Unit => self.emit_instr(wasm::Instr::StructNew {
-                type_name: self.context.metadata().unit_type(),
+                type_name: self.context.table().unit_type(),
             }),
             &cont::ConstValue::Int(value) => {
                 self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
@@ -54,7 +54,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             &cont::ConstValue::Flt(value) => self.emit_instrs([
                 wasm::Instr::F32Const { value },
                 wasm::Instr::StructNew {
-                    type_name: self.context.metadata().flt_type(),
+                    type_name: self.context.table().flt_type(),
                 },
             ]),
         }
@@ -92,7 +92,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::F32Add);
 
                 self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().flt_type(),
+                    type_name: self.context.table().flt_type(),
                 });
             }
             (cont::ConstOp::FltSub, [left, right]) => {
@@ -101,7 +101,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::F32Sub);
 
                 self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().flt_type(),
+                    type_name: self.context.table().flt_type(),
                 });
             }
             (cont::ConstOp::FltMul, [left, right]) => {
@@ -110,7 +110,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::F32Mul);
 
                 self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.metadata().flt_type(),
+                    type_name: self.context.table().flt_type(),
                 });
             }
             (op, params) => panic!(
@@ -122,25 +122,25 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_proj(&mut self, tuple: &'a cont::ValueName, index: usize) {
         let field_name = match index {
-            0 => self.context.metadata().proj_fst_field(),
-            1 => self.context.metadata().proj_snd_field(),
+            0 => self.context.table().proj_fst_field(),
+            1 => self.context.table().proj_snd_field(),
             index => panic!("`ExprEmitter` expected tuple projection index 0 or 1, found {index}"),
         };
 
         self.emit_instrs(
             self.context
-                .load_value_instrs(tuple, LoadAs::Concrete(self.context.metadata().tpl2_type())),
+                .load_value_instrs(tuple, LoadAs::Concrete(self.context.table().tpl2_type())),
         );
 
         self.emit_instr(wasm::Instr::StructGet {
-            type_name: self.context.metadata().tpl2_type(),
+            type_name: self.context.table().tpl2_type(),
             field_name,
         });
     }
 
     fn emit_preallocate_tpl2(&mut self, value_name: &'a cont::ValueName) {
         self.emit_instr(wasm::Instr::StructNewDefault {
-            type_name: self.context.metadata().tpl2_type(),
+            type_name: self.context.table().tpl2_type(),
         });
 
         self.emit_instr(wasm::Instr::LocalSet {
@@ -161,7 +161,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         target: &'a cont::ClsrName,
     ) {
         self.emit_instr(wasm::Instr::StructNewDefault {
-            type_name: self.context.metadata().find_clsr(target).envr_type(),
+            type_name: self.context.table().find_clsr(target).envr_type(),
         });
 
         self.emit_instr(wasm::Instr::LocalSet {
@@ -217,7 +217,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         target: &'a cont::ClsrName,
         fields: &'a [cont::ValueName],
     ) {
-        let clsr_data = self.context.metadata().find_clsr(target);
+        let clsr_data = self.context.table().find_clsr(target);
         let envr_type = clsr_data.envr_type();
 
         self.emit_instrs(
@@ -230,7 +230,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
         self.emit_instr(wasm::Instr::StructSet {
             type_name: envr_type.clone(),
-            field_name: self.context.metadata().special_field(),
+            field_name: self.context.table().special_field(),
         });
 
         for (field, field_name) in fields.iter().zip(clsr_data.fields()) {
@@ -256,25 +256,26 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     ) {
         self.emit_instrs(self.context.load_value_instrs(
             value_name,
-            LoadAs::Concrete(self.context.metadata().tpl2_type()),
+            LoadAs::Concrete(self.context.table().tpl2_type()),
         ));
+
         self.emit_instrs(self.context.load_value_instrs(first, LoadAs::Raw));
 
         self.emit_instr(wasm::Instr::StructSet {
-            type_name: self.context.metadata().tpl2_type(),
-            field_name: self.context.metadata().proj_fst_field(),
+            type_name: self.context.table().tpl2_type(),
+            field_name: self.context.table().proj_fst_field(),
         });
 
         self.emit_instrs(self.context.load_value_instrs(
             value_name,
-            LoadAs::Concrete(self.context.metadata().tpl2_type()),
+            LoadAs::Concrete(self.context.table().tpl2_type()),
         ));
 
         self.emit_instrs(self.context.load_value_instrs(second, LoadAs::Raw));
 
         self.emit_instr(wasm::Instr::StructSet {
-            type_name: self.context.metadata().tpl2_type(),
-            field_name: self.context.metadata().proj_snd_field(),
+            type_name: self.context.table().tpl2_type(),
+            field_name: self.context.table().proj_snd_field(),
         });
     }
 
@@ -358,10 +359,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .values
             .iter()
             .map(|(value_name, _)| {
-                let local_name = self.context.push_local(
-                    &value_name.string,
-                    self.context.metadata().obj_val_type(true),
-                );
+                let local_name = self
+                    .context
+                    .push_local(&value_name.string, self.context.table().obj_val_type(true));
 
                 (value_name, local_name)
             })
@@ -389,7 +389,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                         .map(|value_name| {
                             let local_name = self.context.push_local(
                                 &value_name.string,
-                                self.context.metadata().obj_val_type(true),
+                                self.context.table().obj_val_type(true),
                             );
 
                             (value_name, LocalData::new(local_name, true))

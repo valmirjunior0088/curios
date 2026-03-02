@@ -1,5 +1,5 @@
-mod data;
-use data::*;
+mod table;
+use table::*;
 
 mod frame;
 use frame::*;
@@ -18,7 +18,7 @@ use crate::{cont, wasm};
 pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
     let mut wasm_module = wasm::Module::new("module");
 
-    ModuleEmitter::new(&ModuleData::new(cont_module), &mut wasm_module).emit_module(cont_module);
+    ModuleEmitter::new(&Table::new(cont_module), &mut wasm_module).emit_module(cont_module);
 
     wasm_module
 }
@@ -30,7 +30,7 @@ mod tests {
         wasmtime::{AnyRef, Config, Engine, Instance, Module, OwnedRooted, Store},
     };
 
-    fn run_main(cont_module: &cont::Module) -> (Store<()>, OwnedRooted<AnyRef>) {
+    fn run_main(module: &cont::Module) -> (Store<()>, OwnedRooted<AnyRef>) {
         let mut config = Config::new();
         config.wasm_reference_types(true);
         config.wasm_function_references(true);
@@ -39,7 +39,7 @@ mod tests {
 
         let engine = Engine::new(&config).expect("expected wasmtime engine");
 
-        let module = Module::from_binary(&engine, &wasm::to_bytes(&to_wasm(cont_module)))
+        let module = Module::from_binary(&engine, &wasm::to_bytes(&to_wasm(module)))
             .expect("expected wasm module");
 
         let mut store = Store::new(&engine, ());
@@ -57,13 +57,12 @@ mod tests {
 
     #[test]
     fn lowers_and_runs_mutually_recursive_tuple() {
-        let mut cont_module = cont::Module::new();
+        let mut module = cont::Module::new();
 
-        cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+        module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+        module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
 
-        cont_module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
-
-        cont_module.add_func(
+        module.add_func(
             cont::FuncName::from("main"),
             cont::Func {
                 params: vec![],
@@ -102,7 +101,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&cont_module);
+        let (store, result) = run_main(&module);
 
         let result = result
             .unwrap_i31(&store)
@@ -114,14 +113,14 @@ mod tests {
 
     #[test]
     fn lowers_and_runs_mutually_recursive_closures() {
-        let mut cont_module = cont::Module::new();
+        let mut module = cont::Module::new();
 
-        cont_module.add_const(cont::ValueName::from("ZERO"), cont::ConstValue::Int(0));
-        cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
-        cont_module.add_const(cont::ValueName::from("EVEN"), cont::ConstValue::Int(11));
-        cont_module.add_const(cont::ValueName::from("ODD"), cont::ConstValue::Int(22));
+        module.add_const(cont::ValueName::from("ZERO"), cont::ConstValue::Int(0));
+        module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+        module.add_const(cont::ValueName::from("EVEN"), cont::ConstValue::Int(11));
+        module.add_const(cont::ValueName::from("ODD"), cont::ConstValue::Int(22));
 
-        cont_module.add_clsr(
+        module.add_clsr(
             cont::ClsrName::from("even"),
             cont::Clsr {
                 fields: vec![cont::ValueName::from("odd")],
@@ -190,7 +189,7 @@ mod tests {
             },
         );
 
-        cont_module.add_clsr(
+        module.add_clsr(
             cont::ClsrName::from("odd"),
             cont::Clsr {
                 fields: vec![cont::ValueName::from("even")],
@@ -259,7 +258,7 @@ mod tests {
             },
         );
 
-        cont_module.add_func(
+        module.add_func(
             cont::FuncName::from("main"),
             cont::Func {
                 params: vec![],
@@ -291,7 +290,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&cont_module);
+        let (store, result) = run_main(&module);
 
         let result = result
             .unwrap_i31(&store)
@@ -303,12 +302,12 @@ mod tests {
 
     #[test]
     fn lowers_and_runs_direct_call() {
-        let mut cont_module = cont::Module::new();
+        let mut module = cont::Module::new();
 
-        cont_module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
-        cont_module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
+        module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
+        module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
 
-        cont_module.add_func(
+        module.add_func(
             cont::FuncName::from("add_one"),
             cont::Func {
                 params: vec![cont::ValueName::from("x")],
@@ -330,7 +329,7 @@ mod tests {
             },
         );
 
-        cont_module.add_func(
+        module.add_func(
             cont::FuncName::from("main"),
             cont::Func {
                 params: vec![],
@@ -360,7 +359,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&cont_module);
+        let (store, result) = run_main(&module);
 
         let result = result
             .unwrap_i31(&store)
@@ -372,9 +371,9 @@ mod tests {
 
     #[test]
     fn lowers_and_runs_unit_result() {
-        let mut cont_module = cont::Module::new();
+        let mut module = cont::Module::new();
 
-        cont_module.add_func(
+        module.add_func(
             cont::FuncName::from("main"),
             cont::Func {
                 params: vec![],
@@ -393,11 +392,12 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&cont_module);
+        let (mut store, result) = run_main(&module);
 
-        let result = result.to_rooted(&mut store);
-
-        let result = result.unwrap_struct(&store).expect("expected unit struct");
+        let result = result
+            .to_rooted(&mut store)
+            .unwrap_struct(&store)
+            .expect("expected unit struct");
 
         assert_eq!(
             result
@@ -444,11 +444,10 @@ mod tests {
 
         let (mut store, result) = run_main(&cont_module);
 
-        let result = result.to_rooted(&mut store);
-
-        let result = result.unwrap_struct(&store).expect("expected float struct");
-
         let result = result
+            .to_rooted(&mut store)
+            .unwrap_struct(&store)
+            .expect("expected float struct")
             .field(&mut store, 0)
             .expect("expected float field")
             .unwrap_f32();
