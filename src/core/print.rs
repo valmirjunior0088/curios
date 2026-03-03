@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, One, Pair, PairType, Prim,
         Scope, Split, Term, Two,
     },
-    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    crate::printer::{flat, indent, pure, run_printer, sep_flat, Printer},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -28,13 +28,13 @@ fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
-    let first = label_at(depth);
-    let second = label_at(depth + 1);
-    let first_term = Name::label(&first).into();
-    let second_term = Name::label(&second).into();
-    let body = scope.open(&[&first_term, &second_term]);
+    let fst = label_at(depth);
+    let snd = label_at(depth + 1);
+    let fst_term = Name::label(&fst).into();
+    let snd_term = Name::label(&snd).into();
+    let body = scope.open(&[&fst_term, &snd_term]);
 
-    ((first, second), body)
+    ((fst, snd), body)
 }
 
 fn print_name(name: Name) -> Printer<'static> {
@@ -66,49 +66,49 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         Term::Prim(prim) => match prim {
             Prim::IntType => pure("Int"),
             Prim::Int(value) => pure(value.to_string()),
-            Prim::IntEql(first, second) => flat([
+            Prim::IntEql(left, right) => flat([
                 pure("Int.eql "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
-            Prim::IntAdd(first, second) => flat([
+            Prim::IntAdd(left, right) => flat([
                 pure("Int.add "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
-            Prim::IntSub(first, second) => flat([
+            Prim::IntSub(left, right) => flat([
                 pure("Int.sub "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
-            Prim::IntMul(first, second) => flat([
+            Prim::IntMul(left, right) => flat([
                 pure("Int.mul "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
             Prim::FltType => pure("Flt"),
             Prim::Flt(bits) => print_flt(bits),
-            Prim::FltAdd(first, second) => flat([
+            Prim::FltAdd(left, right) => flat([
                 pure("Flt.add "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
-            Prim::FltSub(first, second) => flat([
+            Prim::FltSub(left, right) => flat([
                 pure("Flt.sub "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
-            Prim::FltMul(first, second) => flat([
+            Prim::FltMul(left, right) => flat([
                 pure("Flt.mul "),
-                print_term(*first, depth),
+                print_term(*left, depth),
                 pure(" "),
-                print_term(*second, depth),
+                print_term(*right, depth),
             ]),
         },
         Term::FuncType(FuncType { input, output }) => {
@@ -146,24 +146,24 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(")"),
             ])
         }
-        Term::Pair(Pair { first, second }) => flat([
+        Term::Pair(Pair { fst, snd }) => flat([
             pure("("),
-            print_term(*first, depth),
+            print_term(*fst, depth),
             pure(", "),
-            print_term(*second, depth),
+            print_term(*snd, depth),
             pure(")"),
         ]),
         Term::Split(Split { head, motive, tail }) => {
             let motive_label = label_at(depth + 2);
             let motive_label_term = Name::label(&motive_label).into();
             let motive = motive.open(&[&motive_label_term]);
-            let ((first_label, second_label), tail) = open_scope_two(tail, depth);
+            let ((fst_label, snd_label), tail) = open_scope_two(tail, depth);
 
             flat([
                 pure("let ("),
-                pure(first_label),
+                pure(fst_label),
                 pure(", "),
-                pure(second_label),
+                pure(snd_label),
                 pure(")"),
                 pure("\n"),
                 indent(flat([
@@ -283,7 +283,7 @@ impl Display for Term {
 mod tests {
     use {
         super::*,
-        crate::core::{Type, parse},
+        crate::core::{parse, Type},
     };
 
     #[test]

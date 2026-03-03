@@ -4,8 +4,8 @@ use {
         PairType, Prim, Split, Term, Type,
     },
     crate::parser::{
-        Parser, ParserError, catch, fail, lazy, many_until, many1, pure, run_parser, sep_by0,
-        sep_by1, take_eof, take_exact, take_while,
+        catch, fail, lazy, many1, many_until, pure, run_parser, sep_by0, sep_by1, take_eof,
+        take_exact, take_while, Parser, ParserError,
     },
 };
 
@@ -99,31 +99,31 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Int.eql"))
         .and_keep(lazy(parse_atomic_term))
         .and(lazy(parse_atomic_term))
-        .map(|(first, second)| Prim::int_eql(first, second).into())
+        .map(|(left, right)| Prim::int_eql(left, right).into())
         .or(catch(parse_keyword("Int.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Prim::int_add(first, second).into()))
+            .map(|(left, right)| Prim::int_add(left, right).into()))
         .or(catch(parse_keyword("Int.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Prim::int_sub(first, second).into()))
+            .map(|(left, right)| Prim::int_sub(left, right).into()))
         .or(catch(parse_keyword("Int.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Prim::int_mul(first, second).into()))
+            .map(|(left, right)| Prim::int_mul(left, right).into()))
         .or(catch(parse_keyword("Flt.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Prim::flt_add(first, second).into()))
+            .map(|(left, right)| Prim::flt_add(left, right).into()))
         .or(catch(parse_keyword("Flt.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Prim::flt_sub(first, second).into()))
+            .map(|(left, right)| Prim::flt_sub(left, right).into()))
         .or(catch(parse_keyword("Flt.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(first, second)| Prim::flt_mul(first, second).into()))
+            .map(|(left, right)| Prim::flt_mul(left, right).into()))
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
@@ -168,7 +168,7 @@ fn parse_pair<'a>() -> Parser<'a, Term> {
             .and(lazy(parse_term))
             .and_drop(parse_literal(")")),
     )
-    .map(|(first, second)| Pair::new(first, second).into())
+    .map(|(fst, snd)| Pair::new(fst, snd).into())
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
@@ -248,8 +248,8 @@ fn parse_split<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
         .map(
-            |(((((first_label, second_label), motive_label), motive), head), tail)| {
-                Split::new(head, motive_label, motive, first_label, second_label, tail).into()
+            |(((((fst_label, snd_label), motive_label), motive), head), tail)| {
+                Split::new(head, motive_label, motive, fst_label, snd_label, tail).into()
             },
         )
 }

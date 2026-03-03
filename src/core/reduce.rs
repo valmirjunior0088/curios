@@ -25,83 +25,83 @@ impl Reduce {
         match prim {
             Prim::IntType => Ok(Prim::IntType.into()),
             Prim::Int(value) => Ok(Prim::Int(*value).into()),
-            Prim::IntEql(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::IntEql(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Int(first)), Term::Prim(Prim::Int(second))) => {
-                        Prim::from(if first == second { 1 } else { 0 }).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
+                        Prim::from(if left == right { 1 } else { 0 }).into()
                     }
-                    (first, second) => Prim::IntEql(first.into(), second.into()).into(),
+                    (left, right) => Prim::IntEql(left.into(), right.into()).into(),
                 })
             }
-            Prim::IntAdd(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::IntAdd(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Int(first)), Term::Prim(Prim::Int(second))) => {
-                        Prim::from(first.wrapping_add(second)).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
+                        Prim::from(left.wrapping_add(right)).into()
                     }
-                    (first, second) => Prim::IntAdd(first.into(), second.into()).into(),
+                    (left, right) => Prim::IntAdd(left.into(), right.into()).into(),
                 })
             }
-            Prim::IntSub(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::IntSub(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Int(first)), Term::Prim(Prim::Int(second))) => {
-                        Prim::from(first.wrapping_sub(second)).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
+                        Prim::from(left.wrapping_sub(right)).into()
                     }
-                    (first, second) => Prim::IntSub(first.into(), second.into()).into(),
+                    (left, right) => Prim::IntSub(left.into(), right.into()).into(),
                 })
             }
-            Prim::IntMul(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::IntMul(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Int(first)), Term::Prim(Prim::Int(second))) => {
-                        Prim::from(first.wrapping_mul(second)).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
+                        Prim::from(left.wrapping_mul(right)).into()
                     }
-                    (first, second) => Prim::IntMul(first.into(), second.into()).into(),
+                    (left, right) => Prim::IntMul(left.into(), right.into()).into(),
                 })
             }
             Prim::FltType => Ok(Prim::FltType.into()),
             Prim::Flt(bits) => Ok(Prim::Flt(*bits).into()),
-            Prim::FltAdd(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::FltAdd(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Flt(first)), Term::Prim(Prim::Flt(second))) => {
-                        Prim::from(f32::from_bits(first) + f32::from_bits(second)).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
+                        Prim::from(f32::from_bits(left) + f32::from_bits(right)).into()
                     }
-                    (first, second) => Prim::FltAdd(first.into(), second.into()).into(),
+                    (left, right) => Prim::FltAdd(left.into(), right.into()).into(),
                 })
             }
-            Prim::FltSub(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::FltSub(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Flt(first)), Term::Prim(Prim::Flt(second))) => {
-                        Prim::from(f32::from_bits(first) - f32::from_bits(second)).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
+                        Prim::from(f32::from_bits(left) - f32::from_bits(right)).into()
                     }
-                    (first, second) => Prim::FltSub(first.into(), second.into()).into(),
+                    (left, right) => Prim::FltSub(left.into(), right.into()).into(),
                 })
             }
-            Prim::FltMul(first, second) => {
-                let first = self.reduce(context, first.as_ref().clone())?;
-                let second = self.reduce(context, second.as_ref().clone())?;
+            Prim::FltMul(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match (first, second) {
-                    (Term::Prim(Prim::Flt(first)), Term::Prim(Prim::Flt(second))) => {
-                        Prim::from(f32::from_bits(first) * f32::from_bits(second)).into()
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
+                        Prim::from(f32::from_bits(left) * f32::from_bits(right)).into()
                     }
-                    (first, second) => Prim::FltMul(first.into(), second.into()).into(),
+                    (left, right) => Prim::FltMul(left.into(), right.into()).into(),
                 })
             }
         }
@@ -129,8 +129,8 @@ impl Reduce {
                     term = body.open(&[param.as_ref()]);
                 }
                 Term::Split(Split { head, motive, tail }) => {
-                    let (first, second) = match self.reduce(context, *head)? {
-                        Term::Pair(Pair { first, second }) => (first, second),
+                    let (fst, snd) = match self.reduce(context, *head)? {
+                        Term::Pair(Pair { fst, snd }) => (fst, snd),
                         head => {
                             break Ok(Split {
                                 head: head.into(),
@@ -141,7 +141,7 @@ impl Reduce {
                         }
                     };
 
-                    term = tail.open(&[first.as_ref(), second.as_ref()]);
+                    term = tail.open(&[fst.as_ref(), snd.as_ref()]);
                 }
                 Term::Match(Match {
                     head,

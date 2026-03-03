@@ -1,7 +1,56 @@
 use {
-    super::{Arity, Atom, Many, Name, One, Two},
+    super::{Arity, Many, One, Two},
+    crate::macros::name,
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
+
+name!(Atom);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum NameType {
+    Label(String),
+    Index(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Name {
+    type_: NameType,
+}
+
+impl Name {
+    pub fn label<A>(label: A) -> Self
+    where
+        A: Into<String>,
+    {
+        Self {
+            type_: NameType::Label(label.into()),
+        }
+    }
+
+    fn as_label(&self) -> Option<&str> {
+        match &self.type_ {
+            NameType::Label(label) => Some(label),
+            NameType::Index(_) => None,
+        }
+    }
+
+    fn index(index: usize) -> Self {
+        Self {
+            type_: NameType::Index(index),
+        }
+    }
+
+    fn as_index(&self) -> Option<usize> {
+        match &self.type_ {
+            NameType::Label(_) => None,
+            &NameType::Index(index) => Some(index),
+        }
+    }
+
+    pub fn unwrap(&self) -> &str {
+        self.as_label().unwrap()
+    }
+}
 
 pub type Subterm = Box<Term>;
 
@@ -27,60 +76,60 @@ pub enum Prim {
 }
 
 impl Prim {
-    pub fn int_eql<F, S>(first: F, second: S) -> Self
+    pub fn int_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntEql(first.into().into(), second.into().into())
+        Self::IntEql(left.into().into(), right.into().into())
     }
 
-    pub fn int_add<F, S>(first: F, second: S) -> Self
+    pub fn int_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntAdd(first.into().into(), second.into().into())
+        Self::IntAdd(left.into().into(), right.into().into())
     }
 
-    pub fn int_sub<F, S>(first: F, second: S) -> Self
+    pub fn int_sub<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntSub(first.into().into(), second.into().into())
+        Self::IntSub(left.into().into(), right.into().into())
     }
 
-    pub fn int_mul<F, S>(first: F, second: S) -> Self
+    pub fn int_mul<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntMul(first.into().into(), second.into().into())
+        Self::IntMul(left.into().into(), right.into().into())
     }
 
-    pub fn flt_add<F, S>(first: F, second: S) -> Self
+    pub fn flt_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltAdd(first.into().into(), second.into().into())
+        Self::FltAdd(left.into().into(), right.into().into())
     }
 
-    pub fn flt_sub<F, S>(first: F, second: S) -> Self
+    pub fn flt_sub<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltSub(first.into().into(), second.into().into())
+        Self::FltSub(left.into().into(), right.into().into())
     }
 
-    pub fn flt_mul<F, S>(first: F, second: S) -> Self
+    pub fn flt_mul<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltMul(first.into().into(), second.into().into())
+        Self::FltMul(left.into().into(), right.into().into())
     }
 }
 
@@ -253,19 +302,19 @@ impl PairType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Pair {
-    pub first: Subterm,
-    pub second: Subterm,
+    pub fst: Subterm,
+    pub snd: Subterm,
 }
 
 impl Pair {
-    pub fn new<F, S>(first: F, second: S) -> Self
+    pub fn new<F, S>(fst: F, snd: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
         Self {
-            first: first.into().into(),
-            second: second.into().into(),
+            fst: fst.into().into(),
+            snd: snd.into().into(),
         }
     }
 }
@@ -282,8 +331,8 @@ impl Split {
         head: H,
         motive_label: ML,
         motive: M,
-        first_label: FL,
-        second_label: SL,
+        fst_label: FL,
+        snd_label: SL,
         tail: T,
     ) -> Self
     where
@@ -295,13 +344,13 @@ impl Split {
         T: Into<Term>,
     {
         let motive_label = motive_label.into();
-        let first_label = first_label.into();
-        let second_label = second_label.into();
+        let fst_label = fst_label.into();
+        let snd_label = snd_label.into();
 
         Self {
             head: head.into().into(),
             motive: Scope::close(One, &[motive_label.as_str()], motive),
-            tail: Scope::close(Two, &[first_label.as_str(), second_label.as_str()], tail),
+            tail: Scope::close(Two, &[fst_label.as_str(), snd_label.as_str()], tail),
         }
     }
 }
@@ -628,28 +677,28 @@ where
         match prim {
             Prim::IntType => Prim::IntType,
             Prim::Int(value) => Prim::Int(*value),
-            Prim::IntEql(first, second) => {
-                Prim::IntEql(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntEql(left, right) => {
+                Prim::IntEql(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntAdd(first, second) => {
-                Prim::IntAdd(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntAdd(left, right) => {
+                Prim::IntAdd(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntSub(first, second) => {
-                Prim::IntSub(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntSub(left, right) => {
+                Prim::IntSub(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntMul(first, second) => {
-                Prim::IntMul(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::IntMul(left, right) => {
+                Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::FltType => Prim::FltType,
             Prim::Flt(bits) => Prim::Flt(*bits),
-            Prim::FltAdd(first, second) => {
-                Prim::FltAdd(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::FltAdd(left, right) => {
+                Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::FltSub(first, second) => {
-                Prim::FltSub(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::FltSub(left, right) => {
+                Prim::FltSub(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::FltMul(first, second) => {
-                Prim::FltMul(self.visit_subterm(first), self.visit_subterm(second))
+            Prim::FltMul(left, right) => {
+                Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
             }
         }
     }
@@ -688,9 +737,9 @@ where
                 output: self.visit_scope(output),
             }
             .into(),
-            Term::Pair(Pair { first, second }) => Pair {
-                first: self.visit_subterm(first),
-                second: self.visit_subterm(second),
+            Term::Pair(Pair { fst, snd }) => Pair {
+                fst: self.visit_subterm(fst),
+                snd: self.visit_subterm(snd),
             }
             .into(),
             Term::Split(Split { head, motive, tail }) => Split {

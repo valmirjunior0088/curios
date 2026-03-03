@@ -153,16 +153,16 @@ impl Convert {
                 }
                 (
                     Term::Pair(Pair {
-                        first: this_first,
-                        second: this_second,
+                        fst: this_fst,
+                        snd: this_snd,
                     }),
                     Term::Pair(Pair {
-                        first: that_first,
-                        second: that_second,
+                        fst: that_fst,
+                        snd: that_snd,
                     }),
                 ) => {
-                    self.enqueue(*this_first, *that_first);
-                    self.enqueue(*this_second, *that_second);
+                    self.enqueue(*this_fst, *that_fst);
+                    self.enqueue(*this_snd, *that_snd);
                 }
                 (
                     Term::Split(Split {
@@ -185,12 +185,12 @@ impl Convert {
                         that_motive.open(&[&motive_label]),
                     );
 
-                    let first_label = Name::label(context.fresh()).into();
-                    let second_label = Name::label(context.fresh()).into();
+                    let fst_label = Name::label(context.fresh()).into();
+                    let snd_label = Name::label(context.fresh()).into();
 
                     self.enqueue(
-                        this_tail.open(&[&first_label, &second_label]),
-                        that_tail.open(&[&first_label, &second_label]),
+                        this_tail.open(&[&fst_label, &snd_label]),
+                        that_tail.open(&[&fst_label, &snd_label]),
                     );
                 }
                 (
