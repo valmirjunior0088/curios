@@ -4,6 +4,7 @@ use {
     std::{collections::HashMap, iter, mem},
 };
 
+#[derive(Debug)]
 pub enum Context<'a, 'b> {
     Const {
         table: &'a Table<'a>,
@@ -24,6 +25,7 @@ pub enum Context<'a, 'b> {
     },
 }
 
+#[derive(Debug)]
 pub enum LoadAs {
     Raw,
     NonNull,

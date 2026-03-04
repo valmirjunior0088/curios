@@ -3,6 +3,7 @@ use {
     std::{collections::HashMap, time::Duration},
 };
 
+#[derive(Debug)]
 pub struct Context {
     entropy: usize,
     timeout: Duration,

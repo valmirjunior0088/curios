@@ -27,10 +27,10 @@ pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
 mod tests {
     use {
         super::*,
-        wasmtime::{AnyRef, Config, Engine, Instance, Module, OwnedRooted, Store},
+        wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
     };
 
-    fn run_main(module: &cont::Module) -> (Store<()>, OwnedRooted<AnyRef>) {
+    fn run_main(module: &cont::Module) -> (Store<()>, Rooted<AnyRef>) {
         let mut config = Config::new();
         config.wasm_reference_types(true);
         config.wasm_function_references(true);
@@ -47,7 +47,7 @@ mod tests {
         let instance = Instance::new(&mut store, &module, &[]).expect("expected instance");
 
         let run = instance
-            .get_typed_func::<(), OwnedRooted<AnyRef>>(&mut store, "func/main")
+            .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
             .expect("expected exported func/main");
 
         let result = run.call(&mut store, ()).expect("expected call result");
@@ -392,12 +392,9 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
+        let (store, result) = run_main(&module);
 
-        let result = result
-            .to_rooted(&mut store)
-            .unwrap_struct(&store)
-            .expect("expected unit struct");
+        let result = result.unwrap_struct(&store).expect("expected unit struct");
 
         assert_eq!(
             result
@@ -445,7 +442,6 @@ mod tests {
         let (mut store, result) = run_main(&cont_module);
 
         let result = result
-            .to_rooted(&mut store)
             .unwrap_struct(&store)
             .expect("expected float struct")
             .field(&mut store, 0)

@@ -155,6 +155,7 @@ impl<'a> FuncData<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Table<'a> {
     special_field: wasm::FieldName,
     special_local: wasm::LocalName,

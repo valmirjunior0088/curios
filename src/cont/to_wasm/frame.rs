@@ -3,7 +3,7 @@ use {
     std::collections::HashMap,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalData {
     pub local_name: wasm::LocalName,
     pub is_nullable: bool,
@@ -18,7 +18,7 @@ impl LocalData {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BlockData<'a> {
     pub dispatcher_label: wasm::LabelName,
     pub dispatcher_local: wasm::LocalName,
@@ -48,6 +48,7 @@ impl<'a> BlockData<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Frame<'a> {
     pub params: HashMap<&'a cont::ValueName, LocalData>,
     pub values: HashMap<&'a cont::ValueName, wasm::LocalName>,

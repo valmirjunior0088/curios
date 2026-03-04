@@ -4,6 +4,7 @@ use {
     std::iter,
 };
 
+#[derive(Debug)]
 pub struct ModuleEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut wasm::Module,

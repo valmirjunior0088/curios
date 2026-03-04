@@ -13,6 +13,7 @@ pub fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, 
     Convert::new(context.timeout(), this.clone(), that.clone()).convert(context)
 }
 
+#[derive(Debug)]
 struct Convert {
     deadline: Instant,
     history: HashSet<(Term, Term)>,

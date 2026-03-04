@@ -4,7 +4,7 @@ pub trait Arity: Copy {
     fn arity(&self) -> usize;
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct One;
 
 impl One {
@@ -19,7 +19,7 @@ impl Arity for One {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Two;
 
 impl Two {
@@ -34,7 +34,7 @@ impl Arity for Two {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Many(pub usize);
 
 impl Arity for Many {

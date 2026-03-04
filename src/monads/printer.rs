@@ -1,4 +1,7 @@
-use std::fmt::{Error, Formatter, Write};
+use std::{
+    cell::RefCell,
+    fmt::{Display, Error, Formatter, Write},
+};
 
 struct PrinterState<'a, 'b> {
     formatter: &'a mut Formatter<'b>,
@@ -55,20 +58,44 @@ impl<'a, 'b> PrinterState<'a, 'b> {
 
 type PrinterResult<'a, 'b> = Result<PrinterState<'a, 'b>, Error>;
 
-pub struct Printer<'a>(
-    Box<dyn for<'b, 'c> FnOnce(PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> + 'a>,
-);
+type PrinterInner<'a> =
+    Box<dyn for<'b, 'c> FnOnce(PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> + 'a>;
+
+pub struct Printer<'a>(RefCell<Option<PrinterInner<'a>>>);
 
 impl<'a> Printer<'a> {
     fn new<F>(f: F) -> Self
     where
         F: for<'b, 'c> FnOnce(PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> + 'a,
     {
-        Printer(Box::new(f))
+        Printer(RefCell::new(Some(Box::new(f))))
     }
 
     fn print<'b, 'c>(self, state: PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> {
-        (self.0)(state)
+        let inner = self
+            .0
+            .into_inner()
+            .expect("`Printer` printed more than once");
+
+        inner(state)
+    }
+
+    fn print_ref<'b, 'c>(&self, state: PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> {
+        let inner = self
+            .0
+            .borrow_mut()
+            .take()
+            .expect("`Printer` printed more than once");
+
+        inner(state)
+    }
+}
+
+impl Display for Printer<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), Error> {
+        self.print_ref(PrinterState::new(formatter, 2))?;
+
+        Ok(())
     }
 }
 

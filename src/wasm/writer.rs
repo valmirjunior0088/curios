@@ -264,6 +264,7 @@ where
     }
 }
 
+#[derive(Debug)]
 enum State<'f, 'l> {
     Const,
     Func {
@@ -336,6 +337,7 @@ impl<'f, 'l> State<'f, 'l> {
     }
 }
 
+#[derive(Debug)]
 struct Writer<'t, 'w, W> {
     table: &'t Table<'t>,
     buffer: Buffer<'w, W>,

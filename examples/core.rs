@@ -1,5 +1,6 @@
 use curios::core::{
-    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType, Term, Type,
+    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType, Split, Term,
+    Type,
 };
 
 fn main() {
@@ -26,7 +27,7 @@ fn main() {
                 "p",
                 Name::label("pair_ty"),
                 Pair::new(Atom::from("left"), Type),
-                curios::core::Split::new(
+                Split::new(
                     Name::label("p"),
                     "q",
                     Type,
@@ -37,10 +38,7 @@ fn main() {
                         "k",
                         Type,
                         [
-                            (
-                                "left",
-                                Apply::many(Name::label("id"), [Name::label("y")]),
-                            ),
+                            ("left", Apply::many(Name::label("id"), [Name::label("y")])),
                             ("right", Type.into()),
                         ],
                     ),

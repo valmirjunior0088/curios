@@ -4,6 +4,7 @@ use {
     std::collections::HashMap,
 };
 
+#[derive(Debug)]
 pub struct ExprEmitter<'a, 'b> {
     context: Context<'a, 'b>,
     expr: &'b mut wasm::Expr,

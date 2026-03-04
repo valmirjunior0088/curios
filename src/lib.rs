@@ -1,10 +1,13 @@
 mod macros;
 
 mod monads;
-use monads::*;
+pub use monads::*;
 
 pub mod core;
 
 pub mod cont;
+
+mod execute;
+pub use execute::*;
 
 pub mod wasm;

@@ -10,6 +10,7 @@ pub fn reduce(context: &mut Context, term: &Term) -> Result<Term, Preempted> {
     Reduce::new(context.timeout()).reduce(context, term.clone())
 }
 
+#[derive(Debug)]
 struct Reduce {
     deadline: Instant,
 }

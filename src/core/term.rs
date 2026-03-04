@@ -1,7 +1,7 @@
 use {
     super::{Arity, Many, One, Two},
     crate::macros::name,
-    std::collections::{BTreeMap, BTreeSet, HashSet},
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 name!(Atom);
@@ -199,7 +199,7 @@ where
         self.body.release(terms.as_ref())
     }
 
-    pub fn collect(&self) -> HashSet<String> {
+    pub fn collect(&self) -> BTreeSet<String> {
         self.body.collect()
     }
 }
@@ -491,8 +491,8 @@ pub enum Term {
 }
 
 impl Term {
-    pub fn collect(&self) -> HashSet<String> {
-        let mut names = HashSet::new();
+    pub fn collect(&self) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
 
         Visit::new(|_, name| {
             if let Some(label) = name.as_label() {
@@ -656,6 +656,7 @@ impl From<Name> for Term {
     }
 }
 
+#[derive(Debug)]
 struct Visit<F> {
     depth: usize,
     visit: F,
@@ -789,7 +790,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use {super::*, std::collections::HashSet};
+    use super::*;
 
     #[test]
     fn close_open_substitutes_label_name() {
@@ -836,7 +837,7 @@ mod tests {
 
         assert_eq!(
             term.collect(),
-            HashSet::from([String::from("w"), String::from("z")])
+            BTreeSet::from([String::from("w"), String::from("z")])
         );
     }
 }
