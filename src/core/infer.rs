@@ -1,7 +1,6 @@
 use super::{
     AtomType, Context, Error, FltType, FuncType, IntType, Name, Pair, PairType, Prim, Term, Type,
-    erase,
-    typing::reduce,
+    erase, typing::reduce,
 };
 
 pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {

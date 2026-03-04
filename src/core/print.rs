@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, One, Pair, PairType, Prim,
         Scope, Split, Term, Two,
     },
-    crate::printer::{flat, indent, pure, run_printer, sep_flat, Printer},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -281,10 +281,7 @@ impl Display for Term {
 
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        crate::core::{parse, Type},
-    };
+    use {super::*, crate::core::Type};
 
     #[test]
     fn print_parse_roundtrip_closed_terms() {
@@ -315,7 +312,7 @@ mod tests {
 
         for term in terms {
             let printed = term.to_string();
-            let reparsed = parse(&printed).unwrap();
+            let reparsed = printed.parse::<Term>().unwrap();
             assert_eq!(reparsed, term);
         }
     }

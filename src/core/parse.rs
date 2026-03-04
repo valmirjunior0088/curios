@@ -4,9 +4,10 @@ use {
         PairType, Prim, Split, Term, Type,
     },
     crate::parser::{
-        catch, fail, lazy, many1, many_until, pure, run_parser, sep_by0, sep_by1, take_eof,
-        take_exact, take_while, Parser, ParserError,
+        Parser, ParserError, catch, fail, lazy, many_until, many1, pure, run_parser, sep_by0,
+        sep_by1, take_eof, take_exact, take_while,
     },
+    std::str::FromStr,
 };
 
 fn parse_whitespace<'a>() -> Parser<'a, &'a str> {
@@ -302,13 +303,17 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     parse_term_until(|| fail(""))
 }
 
-pub fn parse(input: &str) -> Result<Term, ParserError> {
-    run_parser(
-        parse_whitespace()
-            .and_keep(parse_term())
-            .and_drop(take_eof()),
-        input,
-    )
+impl FromStr for Term {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(parse_term())
+                .and_drop(take_eof()),
+            input,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -317,7 +322,9 @@ mod tests {
 
     #[test]
     fn parse_let_rec_func_and_apply() {
-        let term = parse("let { id : (x : Type) -> Type = x => x }; id a").unwrap();
+        let term = "let { id : (x : Type) -> Type = x => x }; id a"
+            .parse::<Term>()
+            .unwrap();
 
         assert_eq!(
             term,
@@ -335,7 +342,9 @@ mod tests {
 
     #[test]
     fn parse_let_pair_and_atoms() {
-        let term = parse("let x : {:hot, :cold} = :hot; (x, :cold)").unwrap();
+        let term = "let x : {:hot, :cold} = :hot; (x, :cold)"
+            .parse::<Term>()
+            .unwrap();
 
         assert_eq!(
             term,
@@ -351,7 +360,9 @@ mod tests {
 
     #[test]
     fn parse_split_with_motive() {
-        let term = parse("let (x, y) with p => Type = (:left, :right); p").unwrap();
+        let term = "let (x, y) with p => Type = (:left, :right); p"
+            .parse::<Term>()
+            .unwrap();
 
         assert_eq!(
             term,
@@ -369,7 +380,9 @@ mod tests {
 
     #[test]
     fn parse_match_single_case() {
-        let term = parse("match :foo with k => {:foo}; case :foo => :foo;").unwrap();
+        let term = "match :foo with k => {:foo}; case :foo => :foo;"
+            .parse::<Term>()
+            .unwrap();
 
         assert_eq!(
             term,
@@ -385,18 +398,18 @@ mod tests {
 
     #[test]
     fn parse_prim() {
-        assert_eq!(parse("Int").unwrap(), IntType.into());
-        assert_eq!(parse("Flt").unwrap(), FltType.into());
-        assert_eq!(parse("42").unwrap(), Prim::from(42).into());
-        assert_eq!(parse("1.5").unwrap(), Prim::from(1.5).into());
+        assert_eq!("Int".parse::<Term>().unwrap(), IntType.into());
+        assert_eq!("Flt".parse::<Term>().unwrap(), FltType.into());
+        assert_eq!("42".parse::<Term>().unwrap(), Prim::from(42).into());
+        assert_eq!("1.5".parse::<Term>().unwrap(), Prim::from(1.5).into());
 
         assert_eq!(
-            parse("Int.add 1 2").unwrap(),
+            "Int.add 1 2".parse::<Term>().unwrap(),
             Prim::int_add(Prim::from(1), Prim::from(2)).into()
         );
 
         assert_eq!(
-            parse("Flt.mul 1.5 2.0").unwrap(),
+            "Flt.mul 1.5 2.0".parse::<Term>().unwrap(),
             Prim::flt_mul(Prim::from(1.5), Prim::from(2.0)).into()
         );
     }

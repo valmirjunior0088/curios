@@ -168,7 +168,7 @@ fn print_region<'a>(region: &'a Region) -> Printer<'a> {
                 .map(|(name, block)| print_let_block(name, block)),
         )
         .chain([print_tail(&region.tail)]),
-        || pure("\n\n"),
+        || pure("\n"),
     )
 }
 
@@ -228,7 +228,7 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
                 .iter()
                 .map(|(name, func)| print_let_func(name, func)),
         ),
-        || pure("\n\n"),
+        || pure("\n"),
     )
 }
 

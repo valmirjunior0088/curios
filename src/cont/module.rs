@@ -74,6 +74,36 @@ pub struct Region {
     pub tail: Tail,
 }
 
+pub(crate) struct RegionBuilder {
+    values: Vec<(ValueName, Value)>,
+    blocks: Vec<(BlockName, Block)>,
+}
+
+impl RegionBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            values: vec![],
+            blocks: vec![],
+        }
+    }
+
+    pub(crate) fn add_value(&mut self, name: ValueName, value: Value) {
+        self.values.push((name, value));
+    }
+
+    pub(crate) fn add_block(&mut self, name: BlockName, block: Block) {
+        self.blocks.push((name, block));
+    }
+
+    pub(crate) fn finish(self, tail: Tail) -> Region {
+        Region {
+            values: self.values,
+            blocks: self.blocks,
+            tail,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Clsr {
     pub fields: Vec<ValueName>,

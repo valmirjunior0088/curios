@@ -37,10 +37,7 @@ fn main() {
                         "k",
                         Type,
                         [
-                            (
-                                "left",
-                                Apply::many(Name::label("id"), [Name::label("y")]),
-                            ),
+                            ("left", Apply::many(Name::label("id"), [Name::label("y")])),
                             ("right", Type.into()),
                         ],
                     ),

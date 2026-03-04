@@ -382,7 +382,7 @@ mod tests {
         super::*,
         crate::core::{
             Atom, AtomType, ErasedAtom, ErasedFunc, ErasedLet, ErasedMatch, ErasedName, ErasedTerm,
-            Func, FuncType, LetRec, Match, Pair, PairType, Prim, Term, Type, parse,
+            Func, FuncType, LetRec, Match, Pair, PairType, Prim, Term, Type,
         },
         std::time::Duration,
     };
@@ -555,10 +555,9 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = parse("{:zeta, :alpha, :mu}").unwrap();
+        let type_ = "{:zeta, :alpha, :mu}".parse().unwrap();
 
-        let term = parse(
-            r#"
+        let term = r#"
                 let outer : {:zeta, :alpha, :mu} = :mu;
                 let alpha_case : {:zeta, :alpha, :mu} = :alpha;
                 let mu_case : {:zeta, :alpha, :mu} = :mu;
@@ -579,8 +578,8 @@ mod tests {
                     case :zeta => :zeta;
                     case :alpha => :alpha;
                     case :mu => :mu;;
-            "#,
-        )
+            "#
+        .parse()
         .unwrap();
 
         erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
