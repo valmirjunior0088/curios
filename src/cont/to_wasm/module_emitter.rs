@@ -55,14 +55,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     (
                         self.table.proj_fst_field(),
                         wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(self.table.obj_val_type(true)),
+                            storage_type: wasm::StorageType::Val(self.table.top_type(true)),
                             mutability: wasm::Mutability::Var,
                         },
                     ),
                     (
                         self.table.proj_snd_field(),
                         wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(self.table.obj_val_type(true)),
+                            storage_type: wasm::StorageType::Val(self.table.top_type(true)),
                             mutability: wasm::Mutability::Var,
                         },
                     ),
@@ -124,7 +124,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                 field_name,
                                 wasm::FieldType {
                                     storage_type: wasm::StorageType::Val(
-                                        self.table.obj_val_type(true),
+                                        self.table.top_type(true),
                                     ),
                                     mutability: wasm::Mutability::Var,
                                 },
@@ -145,10 +145,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     super_types: vec![],
                     comp_type: wasm::CompType::Func(wasm::FuncType {
                         inputs: wasm::ResultType::from(
-                            iter::once(self.table.obj_val_type(false))
-                                .chain((0..arity).map(|_| self.table.obj_val_type(false))),
+                            iter::once(self.table.top_type(false))
+                                .chain((0..arity).map(|_| self.table.top_type(false))),
                         ),
-                        outputs: wasm::ResultType::from([self.table.obj_val_type(false)]),
+                        outputs: wasm::ResultType::from([self.table.top_type(false)]),
                     }),
                 },
             );
@@ -164,10 +164,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     super_types: vec![self.table.find_clsr_type(data.arity())],
                     comp_type: wasm::CompType::Func(wasm::FuncType {
                         inputs: wasm::ResultType::from(
-                            iter::once(self.table.obj_val_type(false))
-                                .chain((0..data.arity()).map(|_| self.table.obj_val_type(false))),
+                            iter::once(self.table.top_type(false))
+                                .chain((0..data.arity()).map(|_| self.table.top_type(false))),
                         ),
-                        outputs: wasm::ResultType::from([self.table.obj_val_type(false)]),
+                        outputs: wasm::ResultType::from([self.table.top_type(false)]),
                     }),
                 },
             );
@@ -183,9 +183,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     super_types: vec![],
                     comp_type: wasm::CompType::Func(wasm::FuncType {
                         inputs: wasm::ResultType::from(
-                            (0..arity).map(|_| self.table.obj_val_type(false)),
+                            (0..arity).map(|_| self.table.top_type(false)),
                         ),
-                        outputs: wasm::ResultType::from([self.table.obj_val_type(false)]),
+                        outputs: wasm::ResultType::from([self.table.top_type(false)]),
                     }),
                 },
             );
@@ -201,7 +201,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.table.find_const(name),
             wasm::Global {
                 global_type: wasm::GlobalType {
-                    val_type: self.table.obj_val_type(false),
+                    val_type: self.table.top_type(false),
                     mutability: wasm::Mutability::Const,
                 },
                 expr,

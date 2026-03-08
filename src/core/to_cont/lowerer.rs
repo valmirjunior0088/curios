@@ -360,7 +360,9 @@ impl<'a> Lowerer<'a> {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
                 self.lower_letrec_item(&letrec.tail, target, &frame, state, builder);
             }
-            core::ErasedTerm::Name(_) => unsupported_letrec_item(term),
+            core::ErasedTerm::Name(name) => {
+                builder.add_value(target, cont::Value::Alias(frame.find(&name.string)));
+            }
             core::ErasedTerm::Apply(_)
             | core::ErasedTerm::Split(_)
             | core::ErasedTerm::Match(_) => unsupported_letrec_item(term),

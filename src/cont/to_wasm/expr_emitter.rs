@@ -300,6 +300,21 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
+    fn emit_let_alias(&mut self, value_name: &'a cont::ValueName, source: &'a cont::ValueName) {
+        self.emit_instrs(self.context.load_value_instrs(source, LoadAs::Raw));
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .expect(&format!(
+                    "`ExprEmitter` lacks local `{}`",
+                    value_name.string
+                )),
+        });
+    }
+
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             match value {
@@ -320,6 +335,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     self.emit_backpatch_tpl2(value_name, first, second)
                 }
                 cont::Value::Proj(tuple, index) => self.emit_let_proj(value_name, tuple, *index),
+                cont::Value::Alias(source) => self.emit_let_alias(value_name, source),
             }
         }
     }
@@ -362,7 +378,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .map(|(value_name, _)| {
                 let local_name = self
                     .context
-                    .push_local(&value_name.string, self.context.table().obj_val_type(true));
+                    .push_local(&value_name.string, self.context.table().top_type(true));
 
                 (value_name, local_name)
             })
@@ -390,7 +406,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                         .map(|value_name| {
                             let local_name = self.context.push_local(
                                 &value_name.string,
-                                self.context.table().obj_val_type(true),
+                                self.context.table().top_type(true),
                             );
 
                             (value_name, LocalData::new(local_name, true))

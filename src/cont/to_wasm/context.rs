@@ -201,7 +201,7 @@ impl<'a, 'b> Context<'a, 'b> {
             LoadAs::Int => {
                 vec![
                     wasm::Instr::RefCast {
-                        ref_type: self.table().int_ref_type(false),
+                        ref_type: self.table().int_type(false),
                     },
                     wasm::Instr::I31GetS,
                 ]

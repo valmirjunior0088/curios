@@ -1,315 +1,134 @@
-# curios
+# Curios
 
-`curios` is an MVP compiler/runtime experiment for a small dependently typed core language. Source terms are checked and erased into a runtime term language, lowered into a continuation-style IR, emitted as Wasm using GC/reference-types/tail-call features, and executed with Wasmtime.
+Curios is a functional language with dependent types and algebraic effects that compiles to WebAssembly. Most languages with dependent types evolved from proof assistants, where non-determinism is a property to be excluded rather than embraced - Curios inverts this, aiming to bring dependent function types (Π-types, λ-abstractions), dependent tuple types (Σ-types, dependent pairs), and dependent enumeration types (disjoint sets of atoms with dependent elimination semantics) to a programming context where non-determinism is simply part of daily life.
 
-Most of the complexity sits in language semantics, binder handling, erasure and checking, continuation-style lowering, and the handwritten Wasm surface/backend.
+Dependent types pay off most in a handful of recurring patterns. Length-indexed collections rule out bounds errors by construction, replacing runtime panics with type-level guarantees. Typed format strings derive their argument list directly from the format value, eliminating a whole class of variadic bugs. Dependent records encode protocol state in the type itself, turning invalid transitions into compile-time errors rather than runtime failures.
 
-## Status
+Algebraic effects bring composability to side effects: I/O, exceptions, and async/await all layer naturally without monad transformer stacks, and handlers can be swapped out - mocking I/O in tests, for instance, without touching call sites. Dependent effects extend this further, allowing an effect's return type to depend on the request value. This enables typed interaction protocols where each response's shape is statically determined by what was asked, catching mismatches that untyped effect systems leave to runtime.
 
-This project is still an MVP.
+## Prototype
+
+The prototype establishes end-to-end correctness across the full compilation pipeline, with each pass implemented to the minimum extent needed. Tooling, error quality, standard library, and documentation are deferred to later stages.
 
-That matters in two ways:
+- [x] CLI (`curios <file>`)
 
-- The feature set is intentionally narrow.
-- The implementation already includes multiple compiler stages and a custom Wasm backend.
+### `String` -> `Core`
 
-The current backend assumes modern Wasm features:
+The front-end of the pipeline. Elaborates user-written source text into the internal typed representation, resolving names, desugaring constructs, and filling in implicit arguments.
 
-- reference types
-- function references
-- GC
-- tail calls
-
-## End-to-end pipeline
-
-The executable path is:
-
-1. Parse source text into `core::Term`
-2. Infer the term's type
-3. Erase the term against that type into `core::ErasedTerm`
-4. Lower the erased term into `cont::Module`
-5. Emit a `wasm::Module`
-6. Serialize Wasm to bytes
-7. Run the generated module with Wasmtime
-8. Pretty-print the resulting heap reference / `anyref`
-
-Conceptually, inference precedes erasure. In the current implementation, however, checking and erasure are also used internally while validating terms, so those phases are distinct but not completely isolated.
-
-The CLI in `src/main.rs` is a direct implementation of that pipeline via `execute`.
-
-## Architecture
-
-### 1. Core language
-
-The `src/core/` tree defines the source language and most of its semantics.
-
-Main responsibilities:
-
-- `term.rs`
-  Defines the typed AST, names, binders, scopes, and substitution-style open/close operations.
-- `parse.rs`
-  Parses surface syntax into `core::Term`.
-- `print.rs`
-  Pretty-prints core terms and round-trips with the parser for closed terms.
-- `context.rs`
-  Tracks assumptions, definitions, fresh names, and timeout configuration.
-- `infer.rs`
-  Infers types for terms that can synthesize them.
-- `reduce.rs`
-  Normalizes terms with timeout-based preemption.
-- `convert.rs`
-  Implements definitional equality / conversion checking with cycle and timeout protection.
-- `erase.rs`
-  Checks terms against expected types, removes type-level structure, and produces the runtime-facing erased term.
-- `erased_term.rs`
-  Defines the runtime term language after erasure.
-
-The parser and printer layers here are shared infrastructure rather than one-off utilities: the project also carries handwritten parser/printer combinators in `src/monads/` that are reused by both the core language and Wasm layers.
-
-### 2. Continuation IR
-
-The `src/cont/` tree defines a continuation-oriented intermediate representation.
-
-This IR makes control flow explicit:
-
-- values are named
-- blocks have parameters
-- regions contain local values and nested blocks
-- tails end in `jump`, `case`, or `call`
-
-The key types live in `src/cont/module.rs`:
-
-- `Value`
-- `Block`
-- `Region`
-- `Tail`
-- `Clsr`
-- `Func`
-- `Module`
-
-This is the bridge between expression-oriented source terms and explicit control-flow code generation.
-
-### 3. Core to cont lowering
-
-`src/core/to_cont/` lowers erased core terms into the continuation IR.
-
-This stage is where:
-
-- closures become explicit closure values
-- tail calls become explicit call tails
-- non-tail computations become join blocks
-- recursive bindings are turned into backpatchable IR values
-
-Important MVP boundary:
-
-- Recursive `let rec` lowering currently supports only recursive RHSs that can be represented directly as first-order `cont::Value`s.
-- More general recursive knot tying is not implemented yet; unsupported recursive shapes currently fail during lowering rather than lowering through a more general fixpoint/cell mechanism.
-
-### 4. Wasm IR
-
-The `src/wasm/` tree defines a handwritten Wasm representation.
-
-It includes:
-
-- a Wasm AST (`expr.rs`, `types.rs`, `module.rs`)
-- a text printer (`print.rs`)
-- a text parser (`parse.rs`)
-- a binary encoder (`writer.rs`)
-
-The project owns its own Wasm surface and serializer.
-
-### 5. Cont to Wasm lowering
-
-`src/cont/to_wasm/` emits Wasm GC code from the continuation IR.
-
-Main responsibilities:
-
-- `table.rs`
-  Builds the naming/type lookup tables used during emission.
-- `context.rs`
-  Tracks locals, frames, blocks, captured fields, and loading strategies.
-- `module_emitter.rs`
-  Defines synthetic Wasm types and emits globals/functions.
-- `expr_emitter.rs`
-  Emits Wasm instructions for values, control flow, closure layout, tuple projection, and backpatching.
-
-The backend models runtime values as heap references:
-
-- unit is represented as an empty struct
-- integers and atom tags are represented with `i31ref`
-- floats are boxed in a single-field struct
-- pairs are boxed in a 2-field struct
-- closures are represented as environment structs carrying a function reference and captured fields
-
-### 6. Runtime inspection
-
-`src/execute.rs` inspects Wasmtime `anyref` results and pretty-prints:
-
-- `i31`
-- structs
-- arrays
-- recursive/back-referenced object graphs
-
-Generated programs return heap references rather than plain Rust-native values.
-
-## Language snapshot
-
-The current core language includes:
-
-- `Type`
-- `Int` and `Flt`
-- integer and float primitives
-- dependent function types and functions
-- dependent pair types and pairs
-- atom enums
-- atom-enum case analysis via `match`
-- `let`
-- `let rec`
-
-The erased runtime language includes:
-
-- unit, primitives, and names
-- functions and applications
-- pairs and projection via split lowering
-- atom tags and matches
-- `let` and `let rec`
-
-## Examples
-
-The examples are the current executable documentation for the project.
-
-- `examples/core.rs`
-  Builds a typed core program directly with the Rust API.
-- `examples/core_to_wasm.rs`
-  Parses source text, erases it, lowers it, and prints the resulting Wasm.
-- `examples/end_to_end.rs`
-  Runs the full pipeline and asserts a concrete runtime result.
-- `examples/execute.rs`
-  Demonstrates a richer source program and prints the runtime heap result.
-- `examples/core_erased_to_cont.rs`
-  Shows the erased term language lowering into continuation IR.
-- `examples/core_erased_to_wasm.rs`
-  Shows erased terms going all the way to Wasm.
-- `examples/cont.rs`
-  Builds continuation IR directly.
-- `examples/cont_to_wasm.rs`
-  Emits Wasm from hand-written continuation IR.
-- `examples/wasm.rs`
-  Builds and prints the handwritten Wasm AST directly.
-
-If you want to understand the project quickly, start with:
-
-1. `examples/end_to_end.rs`
-2. `examples/execute.rs`
-3. `examples/core_erased_to_cont.rs`
-4. `examples/cont_to_wasm.rs`
-
-## Tests
-
-The test suite is concentrated in `src/` modules rather than a separate `tests/` directory.
-
-It covers:
-
-- core parsing
-- core print/parse round-tripping
-- reduction
-- conversion / alpha-equivalence
-- erasure
-- core-to-cont lowering
-- cont-to-wasm execution, including direct calls, recursive tuples, recursive closures, unit results, and float results
-- Wasm parse/print round-tripping
-
-Run the test suite with:
-
-```bash
-cargo test
-```
-
-## Complexity assessment
-
-### High-level verdict
-
-This is a high-complexity MVP.
-
-Why:
-
-- The repository is not large, but it spans several non-trivial compiler phases.
-- The source language already includes dependent typing machinery.
-- The backend targets advanced Wasm GC features directly.
-- The Wasm representation, text parser/printer, and binary writer are all handwritten.
-
-### Where the complexity sits
-
-Conceptual complexity is highest in:
-
-- binder handling and scope opening/closing
-- type inference for dependent constructs
-- normalization and conversion
-- erasure and checking
-- CPS-style lowering into explicit control flow
-
-Implementation complexity is highest in:
-
-- `src/core/erase.rs`
-- `src/core/convert.rs`
-- `src/core/to_cont/lowerer.rs`
-- `src/cont/to_wasm/expr_emitter.rs`
-- `src/cont/to_wasm/module_emitter.rs`
-- `src/wasm/writer.rs`
-- `src/wasm/parse.rs`
-
-### Practical interpretation
-
-This project is:
-
-- small in surface area
-- medium in total size
-- high in semantic density
-- high in maintenance risk per line of code
-
-In other words, the feature set is still narrow, but the implementation already contains most of the major pieces of a compiler pipeline.
-
-## Current constraints and MVP limits
-
-The current design is intentionally constrained.
-
-Notable limits:
-
-- very little top-level documentation outside examples
-- no optimizer
-- no package/module system
-- no separate external test corpus
-- recursive lowering only supports recursive RHSs that can become direct `cont::Value`s; unsupported recursive shapes currently fail during lowering
-- runtime representation is tightly coupled to Wasm GC features and Wasmtime behavior
-
-These are reasonable MVP tradeoffs, but they are real boundaries rather than accidental omissions.
-
-## Running the CLI
-
-The binary expects a file containing a core-language program.
-
-Example:
-
-```bash
-cargo run -- path/to/program.curios
-```
-
-Optional timeout:
-
-```bash
-cargo run -- --timeout 1000 path/to/program.curios
-```
-
-The timeout is in milliseconds and is used to preempt normalization/conversion work that may diverge.
-
-## Summary
-
-`curios` is best understood as a compact compiler stack:
-
-- a typed core language
-- an erasure/checking pass into a runtime term language
-- a continuation IR
-- a Wasm GC backend
-- a Wasmtime execution path
-
-The feature set is still narrow, but the project already includes most major stages of a compiler pipeline.
+- [x] Dependent function types (Π-types), functions (λ-abstractions) and applications
+- [x] Dependent tuple types (Σ-types), dependent pairs and let-split
+- [x] Dependent enumeration types, atoms and match
+- [x] Let, let-rec
+- [-] Int type, int literals, operations and comparisons
+- [-] Float type, float literals, operations and comparisons
+- [ ] String type and operations
+- [ ] Vector type and operations
+- [ ] Multi-param function syntactic sugar
+- [ ] Expand dependent tuple types (Σ-types, dependent pairs) to full dependent struct types
+- [ ] Enum syntax
+- [ ] Algebraic effects (syntax for effects and handlers)
+- [ ] FFI (foreign import declarations with host function types)
+- [ ] Non-dependent type inference (Hindley-Milner style)
+- [ ] Non-dependent implicit arguments
+- [ ] Error messages (parse errors)
+- [ ] Source maps (attach source spans to nodes)
+
+### `Core` -> `Erased`
+
+Traverses typed Core terms against expected types, type-checking them and producing a runtime-only representation where types erase to unit and are discarded, and values are lowered to their runtime forms guided by type information.
+
+- [x] Bidirectional dependent type checking
+- [x] Beta-reduction during type checking
+- [x] Closure capture collection via free-variable analysis
+- [x] Atom-to-index conversion
+- [x] Timeout enforcement
+- [ ] Eta-equality for dependent function types (Π-types, λ-abstractions) and dependent tuple types (Σ-types, dependent pairs)
+- [ ] Algebraic effects (effect typing and handler elaboration)
+- [ ] FFI (type-check imported functions against declared Core types)
+- [ ] Error messages (type errors)
+- [ ] Source maps (preserve spans through erasure)
+
+### `Erased` -> `Cont`
+
+Lowers erased terms into a region-based intermediate representation that makes control flow and tail positions fully explicit. Each function body becomes a flat list of SSA-like value bindings, a set of labeled join blocks, and a single tail instruction.
+
+- [x] Flat SSA-like value bindings
+- [x] Labeled join blocks
+- [x] Tail instructions: Jump, Case, Call
+- [x] Non-tail Apply, Match, Split via join blocks
+- [x] Fresh name generation
+- [ ] Algebraic effects (lower effects to continuation passing; unwind stack with tag and arguments to handler)
+- [ ] FFI (represent imported functions as opaque call targets in Cont IR)
+- [ ] Source maps (preserve spans through lowering)
+
+### `Cont` -> `Cont`
+
+Applies optimization passes over the continuation IR between lowering and code generation, improving program structure without changing its semantics.
+
+- [ ] Constant folding
+- [ ] Dead value/block elimination
+- [ ] Known-atom case collapsing (statically resolve case on known atom to matching branch)
+- [ ] Known-closure inlining (inline statically known call targets)
+- [ ] Arity raising (uncurry known multi-arg calls)
+- [ ] Source maps (preserve spans through optimization)
+
+### `Cont` -> `Wasm`
+
+Generates WebAssembly from the continuation IR using the GC, function references, and tail call proposals.
+
+- [x] GC struct closures with typed function references
+- [x] Uniform arity dispatch via abstract struct/funcref supertypes
+- [x] i31ref for integers, single-field struct for floats
+- [x] Uniform (ref any) value representation
+- [x] Three-phase value emission (preallocate, initialize, backpatch)
+- [x] Tail calls via return_call_ref
+- [x] Binary WASM serialization
+- [ ] Algebraic effects (emit handler dispatch)
+- [ ] FFI (WASM imports for host functions)
+- [ ] Source maps (emit bytecode-to-source mappings)
+
+### `Wasm` -> `()`
+
+Loads the serialized WASM module into Wasmtime and executes it, producing output through side effects.
+
+- [x] Wasmtime with GC, function references, and tail calls
+- [x] Stopgap output via anyref introspection with cycle detection
+- [ ] Proper output via algebraic effects (replaces anyref introspection stopgap)
+- [ ] FFI (register host function implementations at instantiation)
+
+## Pre-release
+
+Pre-release targets feature-completeness, adding the tooling, error reporting, and documentation needed for external use. Ecosystem infrastructure, including the module system, package manager, and language tooling, is deferred to Release.
+
+- [ ] CLI (`curios run`, `curios fmt`, `curios check`)
+- [ ] Standard library (primitives via FFI, higher-level in Curios)
+- [ ] Error messages (usable quality across all stages)
+- [ ] Source maps (end-to-end, from source to bytecode)
+- [ ] Formatter
+- [ ] Documentation (syntax overview, examples, short tutorial)
+- [ ] Test suite (golden-file or snapshot tests covering end-to-end pipeline correctness)
+
+## Release
+
+Release marks the delivery of a production-ready distribution with full ecosystem infrastructure.
+
+- [ ] CLI (build, project management, package commands)
+- [ ] Module system
+- [ ] Error recovery (multiple errors, continue after failure)
+- [ ] REPL / browser playground
+- [ ] LSP (hover types, go-to-definition, syntax highlighting)
+- [ ] Package manager
+- [ ] Documentation (full language reference)
+- [ ] Test suite (comprehensive coverage of language features, edge cases, and error messages)
+- [ ] Benchmarks (vs. C, Rust, OCaml, Haskell, Lean 4, Agda, Python, JavaScript/TypeScript)
+- [ ] Self-bootstrapping (compiler written in Curios, compiled by itself)
+
+## Post-release
+
+Post-release opens the language to advanced type-theoretic research and features beyond the initial release.
+
+- [ ] Universe hierarchy
+- [ ] Dependent type inference and goal solving (higher-order pattern unification)
+- [ ] Dependent implicit arguments
+- [ ] Termination checking for a sound subset

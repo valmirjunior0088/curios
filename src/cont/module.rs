@@ -25,6 +25,7 @@ pub enum Value {
     Clsr(ClsrName, Vec<ValueName>),
     Tpl2(ValueName, ValueName),
     Proj(ValueName, usize),
+    Alias(ValueName),
 }
 
 #[derive(Debug)]

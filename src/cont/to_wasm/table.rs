@@ -231,7 +231,7 @@ impl<'a> Table<'a> {
         self.special_local.clone()
     }
 
-    pub fn obj_val_type(&self, is_nullable: bool) -> wasm::ValType {
+    pub fn top_type(&self, is_nullable: bool) -> wasm::ValType {
         wasm::ValType::Ref(wasm::RefType {
             is_nullable,
             heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::Any),
@@ -242,7 +242,7 @@ impl<'a> Table<'a> {
         self.unit_type.clone()
     }
 
-    pub fn int_ref_type(&self, is_nullable: bool) -> wasm::RefType {
+    pub fn int_type(&self, is_nullable: bool) -> wasm::RefType {
         wasm::RefType {
             is_nullable,
             heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::I31),

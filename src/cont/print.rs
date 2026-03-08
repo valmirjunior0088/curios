@@ -81,6 +81,7 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
                 pure(" "),
                 print_value_name(tuple),
             ]),
+            Value::Alias(source) => print_value_name(source),
         },
         pure(";"),
     ])
