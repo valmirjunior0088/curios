@@ -772,7 +772,7 @@ fn parse_export<'a>() -> Parser<'a, (String, Export)> {
 fn parse_module<'a>() -> Parser<'a, Module> {
     catch(parse_literal("(").and_drop(parse_literal("module")))
         .and_keep(parse_name())
-        .map(|name| Module::new(name))
+        .map(Module::new)
         .and(many0(parse_rec_type))
         .map(|(mut module, rec_types)| {
             for rec_type in rec_types {

@@ -274,10 +274,7 @@ impl<'a> Table<'a> {
     pub fn find_envr_type(&self, arity: usize) -> wasm::TypeName {
         self.envr_types
             .get(&arity)
-            .expect(&format!(
-                "`Table` lacks environment type for arity `{}`",
-                arity
-            ))
+            .unwrap_or_else(|| panic!("`Table` lacks environment type for arity `{}`", arity))
             .clone()
     }
 
@@ -290,7 +287,7 @@ impl<'a> Table<'a> {
     pub fn find_clsr_type(&self, arity: usize) -> wasm::TypeName {
         self.clsr_types
             .get(&arity)
-            .expect(&format!("`Table` lacks closure type for arity `{}`", arity))
+            .unwrap_or_else(|| panic!("`Table` lacks closure type for arity `{}`", arity))
             .clone()
     }
 
@@ -303,17 +300,14 @@ impl<'a> Table<'a> {
     pub fn find_func_type(&self, arity: usize) -> wasm::TypeName {
         self.func_types
             .get(&arity)
-            .expect(&format!(
-                "`Table` lacks function type for arity `{}`",
-                arity
-            ))
+            .unwrap_or_else(|| panic!("`Table` lacks function type for arity `{}`", arity))
             .clone()
     }
 
     pub fn find_const(&self, const_name: &cont::ValueName) -> wasm::GlobalName {
         self.consts
             .get(const_name)
-            .expect(&format!("`Table` lacks const `{}`", &const_name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks const `{}`", const_name.string))
             .clone()
     }
 
@@ -324,12 +318,12 @@ impl<'a> Table<'a> {
     pub fn find_clsr(&self, clsr_name: &cont::ClsrName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)
-            .expect(&format!("`Table` lacks closure `{}`", &clsr_name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks closure `{}`", clsr_name.string))
     }
 
     pub fn find_func(&self, func_name: &cont::FuncName) -> &FuncData<'a> {
         self.funcs
             .get(func_name)
-            .expect(&format!("`Table` lacks func `{}`", &func_name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name.string))
     }
 }

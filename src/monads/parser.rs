@@ -90,13 +90,14 @@ impl ParserError {
             .filter(|&byte| byte == b'\n')
             .count();
 
+        let caret = format!("{}^", " ".repeat(self.offset - start));
+
         format!(
             "{message}\n\n{number:>5} | {line}\n{padding:>5} | {caret}",
             message = self.message,
             number = number,
             line = &string[start..end],
             padding = "",
-            caret = format!("{}^", " ".repeat(self.offset - start)),
         )
     }
 }

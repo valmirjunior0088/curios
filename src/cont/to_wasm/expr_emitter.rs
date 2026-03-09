@@ -149,10 +149,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .expect(&format!(
-                    "`ExprEmitter` lacks local `{}`",
-                    value_name.string
-                )),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
         });
     }
 
@@ -170,10 +167,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .expect(&format!(
-                    "`ExprEmitter` lacks local `{}`",
-                    value_name.string
-                )),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
         });
     }
 
@@ -185,10 +179,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .expect(&format!(
-                    "`ExprEmitter` lacks local `{}`",
-                    value_name.string
-                )),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
         });
     }
 
@@ -205,10 +196,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .expect(&format!(
-                    "`ExprEmitter` lacks local `{}`",
-                    value_name.string
-                )),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
         });
     }
 
@@ -293,10 +281,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .expect(&format!(
-                    "`ExprEmitter` lacks local `{}`",
-                    value_name.string
-                )),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
         });
     }
 
@@ -308,10 +293,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .expect(&format!(
-                    "`ExprEmitter` lacks local `{}`",
-                    value_name.string
-                )),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
         });
     }
 

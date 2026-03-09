@@ -130,7 +130,7 @@ where
 }
 
 impl StructType {
-    pub fn field_names(&self) -> impl Iterator<Item = &FieldName> + ExactSizeIterator {
+    pub fn field_names(&self) -> impl ExactSizeIterator<Item = &FieldName> {
         self.fields.iter().map(|(field_name, _)| field_name)
     }
 }

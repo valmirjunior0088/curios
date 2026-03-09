@@ -169,41 +169,45 @@ impl<'a> Table<'a> {
         self.types
             .get(name)
             .cloned()
-            .expect(&format!("`Table` lacks type `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks type `{}`", name.string))
     }
 
     fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
         self.fields
             .get(&(parent_name, name))
-            .expect(&format!(
-                "`Table` lacks field `{}` of type `{}`",
-                name.string, parent_name.string
-            ))
-            .clone()
+            .copied()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`Table` lacks field `{}` of type `{}`",
+                    name.string, parent_name.string
+                )
+            })
     }
 
     fn resolve_func(&self, name: &'a FuncName) -> usize {
         self.funcs
             .get(name)
             .cloned()
-            .expect(&format!("`Table` lacks func `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", name.string))
     }
 
     fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
         self.locals
             .get(&(parent_name, name))
-            .expect(&format!(
-                "`Table` lacks local `{}` of func `{}`",
-                name.string, parent_name.string
-            ))
-            .clone()
+            .copied()
+            .unwrap_or_else(|| {
+                panic!(
+                    "`Table` lacks local `{}` of func `{}`",
+                    name.string, parent_name.string
+                )
+            })
     }
 
     fn resolve_global(&self, name: &'a GlobalName) -> usize {
         self.globals
             .get(name)
             .cloned()
-            .expect(&format!("`Table` lacks global `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name.string))
     }
 }
 
@@ -332,7 +336,7 @@ impl<'f, 'l> State<'f, 'l> {
                 .iter()
                 .rev()
                 .position(|&label_name| target_name == label_name)
-                .expect(&format!("`State` lacks label `{}`", target_name.string)),
+                .unwrap_or_else(|| panic!("`State` lacks label `{}`", target_name.string)),
         }
     }
 }
@@ -472,7 +476,7 @@ where
     }
 
     fn write_magic(&mut self) -> Result<()> {
-        self.buffer.push_bytes(&[b'\0', b'a', b's', b'm'])?;
+        self.buffer.push_bytes(b"\0asm")?;
 
         Ok(())
     }
@@ -545,7 +549,7 @@ where
                 self.write_abs_heap_type(abs_heap_type)?;
             }
             HeapType::Concrete(name) => {
-                self.write_type_name_signed(&name)?;
+                self.write_type_name_signed(name)?;
             }
         }
 
@@ -559,7 +563,7 @@ where
             }
             (true, HeapType::Concrete(type_name)) => {
                 self.buffer.push_byte(0x63)?;
-                self.write_type_name_signed(&type_name)?;
+                self.write_type_name_signed(type_name)?;
             }
             (false, HeapType::Abstract(abs_heap_type)) => {
                 self.buffer.push_byte(0x64)?;
@@ -567,7 +571,7 @@ where
             }
             (false, HeapType::Concrete(type_name)) => {
                 self.buffer.push_byte(0x64)?;
-                self.write_type_name_signed(&type_name)?;
+                self.write_type_name_signed(type_name)?;
             }
         }
 
@@ -690,7 +694,7 @@ where
             self.buffer.push_byte(0x50)?;
 
             self.write_vec(&sub_type.super_types, |writer, type_name| {
-                writer.write_type_name(&type_name)?;
+                writer.write_type_name(type_name)?;
 
                 Ok(())
             })?;
@@ -700,7 +704,7 @@ where
             self.buffer.push_byte(0x4f)?;
 
             self.write_vec(&sub_type.super_types, |writer, type_name| {
-                writer.write_type_name(&type_name)?;
+                writer.write_type_name(type_name)?;
 
                 Ok(())
             })?;

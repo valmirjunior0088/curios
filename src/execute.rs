@@ -183,5 +183,7 @@ pub fn execute(timeout: Duration, source: &str) -> Result<String, String> {
         .call(&mut store, ())
         .map_err(|error| format!("execution failed: {error}"))?;
 
-    Ok(print_ref(&mut RefIds::new(), &mut store, &result).display().to_string())
+    Ok(print_ref(&mut RefIds::new(), &mut store, &result)
+        .display()
+        .to_string())
 }

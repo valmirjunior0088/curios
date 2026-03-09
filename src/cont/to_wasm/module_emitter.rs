@@ -123,9 +123,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                             (
                                 field_name,
                                 wasm::FieldType {
-                                    storage_type: wasm::StorageType::Val(
-                                        self.table.top_type(true),
-                                    ),
+                                    storage_type: wasm::StorageType::Val(self.table.top_type(true)),
                                     mutability: wasm::Mutability::Var,
                                 },
                             )
@@ -233,7 +231,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         self.table
                             .find_clsr(name)
                             .find_param(value_name)
-                            .expect(&format!("`ClsrData` lacks param `{}`", value_name.string))
+                            .unwrap_or_else(|| {
+                                panic!("`ClsrData` lacks param `{}`", value_name.string)
+                            })
                     }))
                     .collect(),
                 locals,
@@ -268,7 +268,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         self.table
                             .find_func(name)
                             .find_param(value_name)
-                            .expect(&format!("`FuncData` lacks param `{}`", value_name.string))
+                            .unwrap_or_else(|| {
+                                panic!("`FuncData` lacks param `{}`", value_name.string)
+                            })
                     })
                     .collect(),
                 locals,

@@ -645,10 +645,12 @@ fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -
     let func_type = module
         .get_type(&func.type_name)
         .and_then(|sub_type| sub_type.func_type())
-        .expect(&format!(
-            "Unexpected error while getting func type `{}`",
-            &func_name.string
-        ));
+        .unwrap_or_else(|| {
+            panic!(
+                "Unexpected error while getting func type `{}`",
+                func_name.string
+            )
+        });
 
     flat([
         pure("(func "),
