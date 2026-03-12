@@ -7,3 +7,9 @@ Dependent types pay off most in a handful of recurring patterns. Length-indexed 
 Algebraic effects bring composability to side effects: I/O, exceptions, and async/await all layer naturally without monad transformer stacks, and handlers can be swapped out - mocking I/O in tests, for instance, without touching call sites. Dependent effects extend this further, allowing an effect's return type to depend on the request value. This enables typed interaction protocols where each response's shape is statically determined by what was asked, catching mismatches that untyped effect systems leave to runtime.
 
 The project's progress is being tracked [here](https://github.com/users/valmirjunior0088/projects/3/views/1).
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — full architectural overview of the compiler pipeline, from parsing through type checking, erasure, CPS lowering, and WebAssembly code generation, including a "Start Here" guide for newcomers.
+
+- [EFFECTS.md](EFFECTS.md) — design specification for algebraic effects, covering the type system extensions, runtime strategy (trampoline-based state machines with multi-value WASM returns), and phased implementation plan.
