@@ -27,17 +27,19 @@ An effect declaration defines a named effect with one or more operations, each
 with a typed signature:
 
 ```
-effect State
+effect State {
   get : () -> S;
   put : S -> ();
+}
 ```
 
 Parameterized effects are expressed via type-level lambdas:
 
 ```
-let State : (S : Type) -> Type = S => effect
+let State : (S : Type) -> Type = S => effect {
   get : () -> S;
-  put : S -> ();;
+  put : S -> ();
+};
 ```
 
 ### Yield
@@ -56,24 +58,33 @@ yield put 42
 ### Handle
 
 A `handle` block installs a handler around a computation. Each arm matches an
-effect operation and receives two bindings: the operation's argument and `k`,
-the continuation representing the rest of the computation after the yield site.
+effect operation and binds the operation's argument. The keyword `resume`
+represents the continuation — the rest of the computation after the yield site.
 
-To resume the computation, apply `k` to the value the operation should return:
+`resume` is second-class: it is an expression that is only complete when applied
+to a value, and cannot be stored, returned, or passed as an argument on its own.
+This, in effect, enforces that `resume` is single-shot — it can only be invoked
+once, at the point where it appears.
 
-```
-handle computation
-  get () k => k current_state;
-  put s k => k ();
-```
-
-To abort instead of resuming — for exception-like behavior — discard `k` and
-evaluate to a bare value, which becomes the result of the entire `handle`
-expression:
+To resume the computation, apply `resume` to the value the operation should
+return:
 
 ```
-handle computation
-  fail msg k => Error msg;
+let run_state = state => computation => handle computation {
+  get () => resume state;
+  put next_state => run_state next_state (resume ());
+  x => (state, x)
+};
+```
+
+To abort instead of resuming — for exception-like behavior — do not call
+`resume` and evaluate to a bare value, which becomes the result of the entire
+`handle` expression:
+
+```
+handle computation {
+  fail msg => Error msg;
+}
 ```
 
 An optional final arm transforms the computation's return value when it
@@ -81,10 +92,12 @@ completes without performing any further effects. When omitted, it defaults to
 the identity function:
 
 ```
-handle computation
-  get () k => k current_state;
-  put s k => k ();
-  x => x + 1
+let run_state = state => computation =>
+  handle computation {
+    get () => resume state;
+    put next_state => run_state next_state (resume ());
+    x => (state, x + 1)
+  };
 ```
 
 ## Semantics
@@ -109,13 +122,13 @@ unhandled effects:
 An effect type with an empty row reduces to its output type:
 
 ```
-[] B ~> B
+[] A ~> A
 ```
 
 Nested effect types flatten by row union:
 
 ```
-[R] ([S] B) ~> [R | S] B
+[T] ([U] A) ~> [T | U] A
 ```
 
 ### Handler Obligations
@@ -124,13 +137,14 @@ For every operation declared as `op : A -> B` in an effect `E`, a handler arm
 must satisfy:
 
 ```
-op : A -> (B -> [R] C) -> [R] C
+op : A -> [R] C
 ```
 
-Where `A` is the operation argument type, `B -> [R] C` is the continuation `k`,
-and `[R] C` is the type of the entire handle expression. The handler arm either
-applies `k` to a value of type `B` to resume, or discards `k` and evaluates
-directly to a value of type `C` to abort.
+Where `A` is the operation argument type and `[R] C` is the type of the entire
+handle expression. Within the arm, the keyword `resume` is bound with type
+`B -> [R] C`. The handler arm either applies `resume` to a value of type `B` to
+continue the computation, or ignores `resume` and evaluates directly to a value
+of type `C` to abort.
 
 ### Handle Typing
 
