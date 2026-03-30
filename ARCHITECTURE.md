@@ -1,6 +1,6 @@
 # Curios — Architectural Overview
 
-Curios is a compiler for a dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
+Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
 **Codebase size:** ~12,600 lines of Rust.
 
@@ -96,6 +96,10 @@ Every reduction operation receives an `Instant` deadline. This prevents infinite
 ### Two-Level Context
 
 `src/core/context.rs` maintains separate stacks for **assumptions** (name → type) and **definitions** (name → value). Scoped frames via `with_frame(f)` handle nested contexts. Fresh name generation uses an entropy counter.
+
+### Impure Terms and Type-Level Reduction
+
+Curios is an impure language: effectful operations (IO, etc.) are ordinary expressions at the term level. When the type checker needs to normalize a term — for instance, to check type equality or to compute a dependent return type — and that term contains an effectful operation, reduction raises a type error. This keeps the type checker pure and predictable without restricting what programs can do at runtime.
 
 ---
 
@@ -252,5 +256,3 @@ For anyone wanting to understand this project:
 8. **Read `src/cont/to_wasm/expr_emitter.rs`** and **`src/cont/to_wasm/module_emitter.rs`** — see how CPS maps to WASM instructions.
 
 9. **Read `src/execute.rs`** — the top-level pipeline that ties everything together. Run `cargo test` to see the end-to-end tests execute.
-
-For the planned algebraic effects system, see [EFFECTS.md](EFFECTS.md).
