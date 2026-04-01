@@ -521,7 +521,7 @@ impl Term {
                 .and_then(|label| {
                     labels
                         .iter()
-                        .position(|&candidate_label| label == candidate_label)
+                        .position(|&candidate| label == candidate)
                         .map(|index| Name::index(depth + index).into())
                 })
                 .or_else(|| {

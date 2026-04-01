@@ -1,10 +1,7 @@
 use {
-    super::{Apply, Context, Func, Match, Pair, Prim, Split, Term},
+    super::{Apply, Context, Func, Match, Pair, Preempted, Prim, Split, Term},
     std::time::{Duration, Instant},
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Preempted;
 
 pub fn reduce(context: &mut Context, term: &Term) -> Result<Term, Preempted> {
     Reduce::new(context.timeout()).reduce(context, term.clone())

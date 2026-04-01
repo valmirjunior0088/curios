@@ -1,3 +1,6 @@
+mod erased;
+pub use erased::*;
+
 mod entropy;
 use entropy::*;
 
