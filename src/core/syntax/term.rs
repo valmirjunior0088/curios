@@ -1,5 +1,5 @@
 use {
-    super::{Arity, FltType, IntType, Many, One, Prim, Two},
+    super::{Arity, FltPrim, FltType, IntPrim, IntType, Many, One, Prim, Two},
     crate::macros::name,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -457,27 +457,39 @@ impl From<Prim> for Term {
     }
 }
 
+impl From<IntPrim> for Term {
+    fn from(value: IntPrim) -> Self {
+        Self::Prim(Prim::Int(value))
+    }
+}
+
 impl From<IntType> for Term {
     fn from(IntType: IntType) -> Self {
-        Self::Prim(Prim::IntType)
+        Self::Prim(Prim::Int(IntPrim::Type))
     }
 }
 
 impl From<i32> for Term {
     fn from(value: i32) -> Self {
-        Self::Prim(value.into())
+        Self::Prim(IntPrim::Value(value).into())
+    }
+}
+
+impl From<FltPrim> for Term {
+    fn from(value: FltPrim) -> Self {
+        Self::Prim(Prim::Flt(value))
     }
 }
 
 impl From<FltType> for Term {
     fn from(FltType: FltType) -> Self {
-        Self::Prim(Prim::FltType)
+        Self::Prim(Prim::Flt(FltPrim::Type))
     }
 }
 
 impl From<f32> for Term {
     fn from(value: f32) -> Self {
-        Self::Prim(value.into())
+        Self::Prim(FltPrim::Value(value.to_bits()).into())
     }
 }
 
@@ -573,30 +585,42 @@ where
 
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
         match prim {
-            Prim::IntType => Prim::IntType,
-            Prim::Int(value) => Prim::Int(*value),
-            Prim::IntEql(left, right) => {
-                Prim::IntEql(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::Int(int_prim) => Prim::Int(self.visit_int_prim(int_prim)),
+            Prim::Flt(flt_prim) => Prim::Flt(self.visit_flt_prim(flt_prim)),
+        }
+    }
+
+    fn visit_int_prim(&mut self, int_prim: &IntPrim) -> IntPrim {
+        match int_prim {
+            IntPrim::Type => IntPrim::Type,
+            IntPrim::Value(value) => IntPrim::Value(*value),
+            IntPrim::Eql(left, right) => {
+                IntPrim::Eql(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntAdd(left, right) => {
-                Prim::IntAdd(self.visit_subterm(left), self.visit_subterm(right))
+            IntPrim::Add(left, right) => {
+                IntPrim::Add(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntSub(left, right) => {
-                Prim::IntSub(self.visit_subterm(left), self.visit_subterm(right))
+            IntPrim::Sub(left, right) => {
+                IntPrim::Sub(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntMul(left, right) => {
-                Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
+            IntPrim::Mul(left, right) => {
+                IntPrim::Mul(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::FltType => Prim::FltType,
-            Prim::Flt(bits) => Prim::Flt(*bits),
-            Prim::FltAdd(left, right) => {
-                Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
+        }
+    }
+
+    fn visit_flt_prim(&mut self, flt_prim: &FltPrim) -> FltPrim {
+        match flt_prim {
+            FltPrim::Type => FltPrim::Type,
+            FltPrim::Value(bits) => FltPrim::Value(*bits),
+            FltPrim::Add(left, right) => {
+                FltPrim::Add(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::FltSub(left, right) => {
-                Prim::FltSub(self.visit_subterm(left), self.visit_subterm(right))
+            FltPrim::Sub(left, right) => {
+                FltPrim::Sub(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::FltMul(left, right) => {
-                Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
+            FltPrim::Mul(left, right) => {
+                FltPrim::Mul(self.visit_subterm(left), self.visit_subterm(right))
             }
         }
     }
@@ -612,72 +636,94 @@ where
         }
     }
 
+    fn visit_func_type(&mut self, ft: &FuncType) -> FuncType {
+        FuncType {
+            input: self.visit_subterm(&ft.input),
+            output: self.visit_scope(&ft.output),
+        }
+    }
+
+    fn visit_func(&mut self, func: &Func) -> Func {
+        Func {
+            body: self.visit_scope(&func.body),
+        }
+    }
+
+    fn visit_apply(&mut self, apply: &Apply) -> Apply {
+        Apply {
+            head: self.visit_subterm(&apply.head),
+            param: self.visit_subterm(&apply.param),
+        }
+    }
+
+    fn visit_pair_type(&mut self, pt: &PairType) -> PairType {
+        PairType {
+            input: self.visit_subterm(&pt.input),
+            output: self.visit_scope(&pt.output),
+        }
+    }
+
+    fn visit_pair(&mut self, pair: &Pair) -> Pair {
+        Pair {
+            fst: self.visit_subterm(&pair.fst),
+            snd: self.visit_subterm(&pair.snd),
+        }
+    }
+
+    fn visit_split(&mut self, split: &Split) -> Split {
+        Split {
+            head: self.visit_subterm(&split.head),
+            motive: self.visit_scope(&split.motive),
+            tail: self.visit_scope(&split.tail),
+        }
+    }
+
+    fn visit_match(&mut self, match_: &Match) -> Match {
+        Match {
+            head: self.visit_subterm(&match_.head),
+            motive: self.visit_scope(&match_.motive),
+            cases: match_
+                .cases
+                .iter()
+                .map(|(atom, body)| (atom.clone(), self.visit_subterm(body)))
+                .collect(),
+        }
+    }
+
+    fn visit_let(&mut self, let_: &Let) -> Let {
+        Let {
+            type_: self.visit_subterm(&let_.type_),
+            body: self.visit_subterm(&let_.body),
+            tail: self.visit_scope(&let_.tail),
+        }
+    }
+
+    fn visit_letrec(&mut self, letrec: &LetRec) -> LetRec {
+        LetRec {
+            items: letrec
+                .items
+                .iter()
+                .map(|(type_, value)| (self.visit_scope(type_), self.visit_scope(value)))
+                .collect(),
+            tail: self.visit_scope(&letrec.tail),
+        }
+    }
+
     fn visit_term(&mut self, term: &Term) -> Term {
         match term {
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
-            Term::FuncType(FuncType { input, output }) => FuncType {
-                input: self.visit_subterm(input),
-                output: self.visit_scope(output),
-            }
-            .into(),
-            Term::Func(Func { body }) => Func {
-                body: self.visit_scope(body),
-            }
-            .into(),
-            Term::Apply(Apply { head, param }) => Apply {
-                head: self.visit_subterm(head),
-                param: self.visit_subterm(param),
-            }
-            .into(),
-            Term::PairType(PairType { input, output }) => PairType {
-                input: self.visit_subterm(input),
-                output: self.visit_scope(output),
-            }
-            .into(),
-            Term::Pair(Pair { fst, snd }) => Pair {
-                fst: self.visit_subterm(fst),
-                snd: self.visit_subterm(snd),
-            }
-            .into(),
-            Term::Split(Split { head, motive, tail }) => Split {
-                head: self.visit_subterm(head),
-                motive: self.visit_scope(motive),
-                tail: self.visit_scope(tail),
-            }
-            .into(),
-            Term::AtomType(AtomType { atoms }) => AtomType {
-                atoms: atoms.clone(),
-            }
-            .into(),
+            Term::FuncType(ft) => self.visit_func_type(ft).into(),
+            Term::Func(func) => self.visit_func(func).into(),
+            Term::Apply(apply) => self.visit_apply(apply).into(),
+            Term::PairType(pt) => self.visit_pair_type(pt).into(),
+            Term::Pair(pair) => self.visit_pair(pair).into(),
+            Term::Split(split) => self.visit_split(split).into(),
+            Term::AtomType(at) => at.clone().into(),
             Term::Atom(atom) => atom.clone().into(),
-            Term::Match(Match {
-                head,
-                motive,
-                cases,
-            }) => Match {
-                head: self.visit_subterm(head),
-                motive: self.visit_scope(motive),
-                cases: cases
-                    .iter()
-                    .map(|(atom, body)| (atom.clone(), self.visit_subterm(body)))
-                    .collect(),
-            }
-            .into(),
-            Term::Let(Let { type_, body, tail }) => Let {
-                type_: self.visit_subterm(type_),
-                body: self.visit_subterm(body),
-                tail: self.visit_scope(tail),
-            }
-            .into(),
-            Term::LetRec(LetRec { items, tail }) => LetRec {
-                items: items
-                    .iter()
-                    .map(|(type_, value)| (self.visit_scope(type_), self.visit_scope(value)))
-                    .collect(),
-                tail: self.visit_scope(tail),
-            }
-            .into(),
+            Term::Match(match_) => self.visit_match(match_).into(),
+            Term::Let(let_) => self.visit_let(let_).into(),
+            Term::LetRec(letrec) => self.visit_letrec(letrec).into(),
             Term::Name(name) => {
                 (self.visit)(self.depth, name).unwrap_or_else(|| name.clone().into())
             }

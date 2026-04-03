@@ -1,50 +1,17 @@
 use super::{
     Apply, AtomType, Context, ErasedApply, ErasedAtom, ErasedFunc, ErasedLet, ErasedLetRec,
-    ErasedMatch, ErasedName, ErasedPair, ErasedPrim, ErasedSplit, ErasedTerm, FltType, Func,
-    FuncType, IntType, Let, LetRec, Match, Name, Pair, PairType, Prim, Split, Term, Type,
+    ErasedMatch, ErasedName, ErasedPair, ErasedPrim, ErasedSplit, ErasedTerm, Error, FltPrim,
+    FltType, Func, FuncType, IntPrim, IntType, Let, LetRec, Match, Name, Pair, PairType, Preempted,
+    Prim, Split, Term, Type,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Preempted;
-
 fn reduce(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    super::reduce(context, term).map_err(|Preempted| Error::reduce_preempted(term))
+    super::reduce(context, term).map_err(|Preempted| Error::reduce_preempted(term.clone()))
 }
 
 fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
-    super::convert(context, this, that).map_err(|Preempted| Error::convert_preempted(this, that))
-}
-
-#[derive(Debug)]
-pub enum Error {
-    ReducePreempted { term: Term },
-    ConvertPreempted { this: Term, that: Term },
-    CannotInfer { term: Term },
-    TypeMismatch { term: Term, type_: Term },
-}
-
-impl Error {
-    pub fn reduce_preempted(term: &Term) -> Self {
-        Self::ReducePreempted { term: term.clone() }
-    }
-
-    pub fn convert_preempted(this: &Term, that: &Term) -> Self {
-        Self::ConvertPreempted {
-            this: this.clone(),
-            that: that.clone(),
-        }
-    }
-
-    pub fn cannot_infer(term: impl Into<Term>) -> Self {
-        Self::CannotInfer { term: term.into() }
-    }
-
-    pub fn type_mismatch(term: &Term, type_: &Term) -> Self {
-        Self::TypeMismatch {
-            term: term.clone(),
-            type_: type_.clone(),
-        }
-    }
+    super::convert(context, this, that)
+        .map_err(|Preempted| Error::convert_preempted(this.clone(), that.clone()))
 }
 
 fn expect(
@@ -55,233 +22,277 @@ fn expect(
 ) -> Result<(), Error> {
     match convert(context, inferred, expected)? {
         true => Ok(()),
-        false => Err(Error::type_mismatch(term, expected)),
+        false => Err(Error::type_mismatch(term.clone(), expected.clone())),
     }
+}
+
+fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
+    match prim {
+        Prim::Int(int_prim) => infer_int_prim(context, int_prim),
+        Prim::Flt(flt_prim) => infer_flt_prim(context, flt_prim),
+    }
+}
+
+fn infer_int_prim(context: &mut Context, int_prim: &IntPrim) -> Result<Term, Error> {
+    match int_prim {
+        IntPrim::Type => Ok(Type.into()),
+        IntPrim::Value(_) => Ok(IntType.into()),
+        IntPrim::Eql(left, right)
+        | IntPrim::Add(left, right)
+        | IntPrim::Sub(left, right)
+        | IntPrim::Mul(left, right) => {
+            erase(context, left, &IntType.into())?;
+            erase(context, right, &IntType.into())?;
+
+            Ok(IntType.into())
+        }
+    }
+}
+
+fn infer_flt_prim(context: &mut Context, flt_prim: &FltPrim) -> Result<Term, Error> {
+    match flt_prim {
+        FltPrim::Type => Ok(Type.into()),
+        FltPrim::Value(_) => Ok(FltType.into()),
+        FltPrim::Add(left, right) | FltPrim::Sub(left, right) | FltPrim::Mul(left, right) => {
+            erase(context, left, &FltType.into())?;
+            erase(context, right, &FltType.into())?;
+
+            Ok(FltType.into())
+        }
+    }
+}
+
+fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> {
+    let FuncType { input, output } = ft;
+
+    erase(context, input, &Type.into())?;
+
+    let label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&label, input);
+
+        erase(
+            context,
+            &output.open(&[&Name::label(label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    Ok(Type.into())
+}
+
+fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term, Error> {
+    let Apply { head, param } = apply;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    let (input, output) = if let Term::FuncType(FuncType { input, output }) = head_type {
+        (input, output)
+    } else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+
+    erase(context, param, &input)?;
+
+    Ok(output.open(&[param.as_ref()]))
+}
+
+fn infer_pair_type(context: &mut Context, pt: &PairType) -> Result<Term, Error> {
+    let PairType { input, output } = pt;
+
+    erase(context, input, &Type.into())?;
+
+    let label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&label, input);
+
+        erase(
+            context,
+            &output.open(&[&Name::label(label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    Ok(Type.into())
+}
+
+fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term, Error> {
+    let Split { head, motive, tail } = split;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    let (input, output) = if let Term::PairType(PairType { input, output }) = head_type {
+        (input, output)
+    } else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(
+            &head_label,
+            &PairType {
+                input: input.clone(),
+                output: output.clone(),
+            }
+            .into(),
+        );
+
+        erase(
+            context,
+            &motive.open(&[&Name::label(head_label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    let fst_label = context.fresh();
+    let snd_label = context.fresh();
+
+    let type_ = motive.open(&[head.as_ref()]);
+
+    context.with_frame(|context| {
+        context.assume(&fst_label, &input);
+
+        context.assume(&snd_label, &output.open(&[&Name::label(&fst_label).into()]));
+
+        erase(
+            context,
+            &tail.open(&[
+                &Name::label(&fst_label).into(),
+                &Name::label(&snd_label).into(),
+            ]),
+            &motive.open(&[&Pair::new(Name::label(fst_label), Name::label(snd_label)).into()]),
+        )
+        .map(|_| ())
+    })?;
+
+    Ok(type_)
+}
+
+fn infer_match(context: &mut Context, match_: &Match, term: &Term) -> Result<Term, Error> {
+    let Match {
+        head,
+        motive,
+        cases,
+    } = match_;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    let atoms = if let Term::AtomType(AtomType { atoms }) = head_type {
+        atoms
+    } else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
+
+        erase(
+            context,
+            &motive.open(&[&Name::label(head_label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    if cases.len() != atoms.len() {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    for atom in &atoms {
+        let body = if let Some(body) = cases.get(atom) {
+            body
+        } else {
+            return Err(Error::cannot_infer(term.clone()));
+        };
+
+        erase(context, body, &motive.open(&[&atom.clone().into()]))?;
+    }
+
+    Ok(motive.open(&[head.as_ref()]))
+}
+
+fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
+    let Let { type_, body, tail } = let_;
+
+    erase(context, type_, &Type.into())?;
+    erase(context, body, type_)?;
+
+    let label = context.fresh();
+
+    context.with_frame(|context| {
+        context.define_assuming(&label, type_, body);
+
+        infer(context, &tail.open(&[&Name::label(label).into()]))
+    })
+}
+
+fn infer_letrec(context: &mut Context, letrec: &LetRec) -> Result<Term, Error> {
+    let LetRec { items, tail } = letrec;
+
+    let labels = (0..items.len())
+        .map(|_| context.fresh())
+        .collect::<Vec<_>>();
+
+    let label_terms = labels
+        .iter()
+        .map(Name::label)
+        .map(Into::into)
+        .collect::<Vec<_>>();
+
+    let label_terms = label_terms.iter().collect::<Vec<_>>();
+
+    let items = items
+        .iter()
+        .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
+        .collect::<Vec<_>>();
+
+    let tail = tail.open(&label_terms);
+
+    context.with_frame(|context| {
+        for (label, (type_, _)) in labels.iter().zip(items.iter()) {
+            context.assume(label, type_);
+        }
+
+        for (type_, _) in &items {
+            erase(context, type_, &Type.into())?;
+        }
+
+        for (_, (type_, body)) in labels.iter().zip(items.iter()) {
+            erase(context, body, type_)?;
+        }
+
+        for (label, (_, body)) in labels.iter().zip(items.iter()) {
+            context.define(label, body);
+        }
+
+        infer(context, &tail)
+    })
 }
 
 pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     match term {
         Term::Type => Ok(Type.into()),
-        Term::Prim(prim) => match prim {
-            Prim::IntType | Prim::FltType => Ok(Type.into()),
-            Prim::Int(_) => Ok(IntType.into()),
-            Prim::IntEql(left, right)
-            | Prim::IntAdd(left, right)
-            | Prim::IntSub(left, right)
-            | Prim::IntMul(left, right) => {
-                erase(context, left, &IntType.into())?;
-                erase(context, right, &IntType.into())?;
-
-                Ok(IntType.into())
-            }
-            Prim::Flt(_) => Ok(FltType.into()),
-            Prim::FltAdd(left, right) | Prim::FltSub(left, right) | Prim::FltMul(left, right) => {
-                erase(context, left, &FltType.into())?;
-                erase(context, right, &FltType.into())?;
-
-                Ok(FltType.into())
-            }
-        },
-        Term::FuncType(FuncType { input, output }) => {
-            erase(context, input, &Type.into())?;
-
-            let label = context.fresh();
-
-            context.with_frame(|context| {
-                context.assume(&label, input);
-
-                erase(
-                    context,
-                    &output.open(&[&Name::label(label).into()]),
-                    &Type.into(),
-                )
-                .map(|_| ())
-            })?;
-
-            Ok(Type.into())
-        }
-        Term::Apply(Apply { head, param }) => {
-            let head_type = infer(context, head)?;
-            let head_type = reduce(context, &head_type)?;
-
-            let (input, output) = if let Term::FuncType(FuncType { input, output }) = head_type {
-                (input, output)
-            } else {
-                return Err(Error::cannot_infer(term.clone()));
-            };
-
-            erase(context, param, &input)?;
-
-            Ok(output.open(&[param.as_ref()]))
-        }
-        Term::PairType(PairType { input, output }) => {
-            erase(context, input, &Type.into())?;
-
-            let label = context.fresh();
-
-            context.with_frame(|context| {
-                context.assume(&label, input);
-
-                erase(
-                    context,
-                    &output.open(&[&Name::label(label).into()]),
-                    &Type.into(),
-                )
-                .map(|_| ())
-            })?;
-
-            Ok(Type.into())
-        }
-        Term::Split(Split { head, motive, tail }) => {
-            let head_type = infer(context, head)?;
-            let head_type = reduce(context, &head_type)?;
-
-            let (input, output) = if let Term::PairType(PairType { input, output }) = head_type {
-                (input, output)
-            } else {
-                return Err(Error::cannot_infer(term.clone()));
-            };
-
-            let head_label = context.fresh();
-
-            context.with_frame(|context| {
-                context.assume(
-                    &head_label,
-                    &PairType {
-                        input: input.clone(),
-                        output: output.clone(),
-                    }
-                    .into(),
-                );
-
-                erase(
-                    context,
-                    &motive.open(&[&Name::label(head_label).into()]),
-                    &Type.into(),
-                )
-                .map(|_| ())
-            })?;
-
-            let fst_label = context.fresh();
-            let snd_label = context.fresh();
-
-            let type_ = motive.open(&[head.as_ref()]);
-
-            context.with_frame(|context| {
-                context.assume(&fst_label, &input);
-
-                context.assume(&snd_label, &output.open(&[&Name::label(&fst_label).into()]));
-
-                erase(
-                    context,
-                    &tail.open(&[
-                        &Name::label(&fst_label).into(),
-                        &Name::label(&snd_label).into(),
-                    ]),
-                    &motive
-                        .open(&[&Pair::new(Name::label(fst_label), Name::label(snd_label)).into()]),
-                )
-                .map(|_| ())
-            })?;
-
-            Ok(type_)
-        }
-        Term::AtomType(AtomType { .. }) => Ok(Type.into()),
-        Term::Match(Match {
-            head,
-            motive,
-            cases,
-        }) => {
-            let head_type = infer(context, head)?;
-            let head_type = reduce(context, &head_type)?;
-
-            let atoms = if let Term::AtomType(AtomType { atoms }) = head_type {
-                atoms
-            } else {
-                return Err(Error::cannot_infer(term.clone()));
-            };
-
-            let head_label = context.fresh();
-
-            context.with_frame(|context| {
-                context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
-
-                erase(
-                    context,
-                    &motive.open(&[&Name::label(head_label).into()]),
-                    &Type.into(),
-                )
-                .map(|_| ())
-            })?;
-
-            if cases.len() != atoms.len() {
-                return Err(Error::cannot_infer(term.clone()));
-            }
-
-            for atom in &atoms {
-                let body = if let Some(body) = cases.get(atom) {
-                    body
-                } else {
-                    return Err(Error::cannot_infer(term.clone()));
-                };
-
-                erase(context, body, &motive.open(&[&atom.clone().into()]))?;
-            }
-
-            Ok(motive.open(&[head.as_ref()]))
-        }
-        Term::Let(Let { type_, body, tail }) => {
-            erase(context, type_, &Type.into())?;
-            erase(context, body, type_)?;
-
-            let label = context.fresh();
-
-            context.with_frame(|context| {
-                context.define_assuming(&label, type_, body);
-
-                infer(context, &tail.open(&[&Name::label(label).into()]))
-            })
-        }
-        Term::LetRec(LetRec { items, tail }) => {
-            let labels = (0..items.len())
-                .map(|_| context.fresh())
-                .collect::<Vec<_>>();
-
-            let label_terms = labels
-                .iter()
-                .map(Name::label)
-                .map(Into::into)
-                .collect::<Vec<_>>();
-
-            let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-            let items = items
-                .iter()
-                .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
-                .collect::<Vec<_>>();
-
-            let tail = tail.open(&label_terms);
-
-            context.with_frame(|context| {
-                for (label, (type_, _)) in labels.iter().zip(items.iter()) {
-                    context.assume(label, type_);
-                }
-
-                for (type_, _) in &items {
-                    erase(context, type_, &Type.into())?;
-                }
-
-                for (_, (type_, body)) in labels.iter().zip(items.iter()) {
-                    erase(context, body, type_)?;
-                }
-
-                for (label, (_, body)) in labels.iter().zip(items.iter()) {
-                    context.define(label, body);
-                }
-
-                infer(context, &tail)
-            })
-        }
+        Term::Prim(prim) => infer_prim(context, prim),
+        Term::FuncType(ft) => infer_func_type(context, ft),
+        Term::Apply(apply) => infer_apply(context, apply, term),
+        Term::PairType(pt) => infer_pair_type(context, pt),
+        Term::Split(split) => infer_split(context, split, term),
+        Term::AtomType(_) => Ok(Type.into()),
+        Term::Match(match_) => infer_match(context, match_, term),
+        Term::Let(let_) => infer_let(context, let_),
+        Term::LetRec(letrec) => infer_letrec(context, letrec),
         Term::Name(name) => match context.assumption(name.unwrap()) {
             Some(type_) => Ok(type_.clone()),
             None => Err(Error::cannot_infer(name.clone())),
@@ -297,17 +308,29 @@ fn erase_prim(
     expected: &Term,
 ) -> Result<ErasedPrim, Error> {
     match prim {
-        Prim::IntType => {
+        Prim::Int(int_prim) => erase_int_prim(context, term, int_prim, expected),
+        Prim::Flt(flt_prim) => erase_flt_prim(context, term, flt_prim, expected),
+    }
+}
+
+fn erase_int_prim(
+    context: &mut Context,
+    term: &Term,
+    int_prim: &IntPrim,
+    expected: &Term,
+) -> Result<ErasedPrim, Error> {
+    match int_prim {
+        IntPrim::Type => {
             expect(context, term, &Type.into(), expected)?;
 
             Ok(().into())
         }
-        &Prim::Int(value) => {
+        &IntPrim::Value(value) => {
             expect(context, term, &IntType.into(), expected)?;
 
             Ok(value.into())
         }
-        Prim::IntEql(left, right) => {
+        IntPrim::Eql(left, right) => {
             expect(context, term, &IntType.into(), expected)?;
 
             Ok(ErasedPrim::IntEql(
@@ -315,7 +338,7 @@ fn erase_prim(
                 erase(context, right, &IntType.into())?.into(),
             ))
         }
-        Prim::IntAdd(left, right) => {
+        IntPrim::Add(left, right) => {
             expect(context, term, &IntType.into(), expected)?;
 
             Ok(ErasedPrim::IntAdd(
@@ -323,7 +346,7 @@ fn erase_prim(
                 erase(context, right, &IntType.into())?.into(),
             ))
         }
-        Prim::IntSub(left, right) => {
+        IntPrim::Sub(left, right) => {
             expect(context, term, &IntType.into(), expected)?;
 
             Ok(ErasedPrim::IntSub(
@@ -331,7 +354,7 @@ fn erase_prim(
                 erase(context, right, &IntType.into())?.into(),
             ))
         }
-        Prim::IntMul(left, right) => {
+        IntPrim::Mul(left, right) => {
             expect(context, term, &IntType.into(), expected)?;
 
             Ok(ErasedPrim::IntMul(
@@ -339,17 +362,27 @@ fn erase_prim(
                 erase(context, right, &IntType.into())?.into(),
             ))
         }
-        Prim::FltType => {
+    }
+}
+
+fn erase_flt_prim(
+    context: &mut Context,
+    term: &Term,
+    flt_prim: &FltPrim,
+    expected: &Term,
+) -> Result<ErasedPrim, Error> {
+    match flt_prim {
+        FltPrim::Type => {
             expect(context, term, &Type.into(), expected)?;
 
             Ok(().into())
         }
-        &Prim::Flt(bits) => {
+        &FltPrim::Value(bits) => {
             expect(context, term, &FltType.into(), expected)?;
 
             Ok(f32::from_bits(bits).into())
         }
-        Prim::FltAdd(left, right) => {
+        FltPrim::Add(left, right) => {
             expect(context, term, &FltType.into(), expected)?;
 
             Ok(ErasedPrim::FltAdd(
@@ -357,7 +390,7 @@ fn erase_prim(
                 erase(context, right, &FltType.into())?.into(),
             ))
         }
-        Prim::FltSub(left, right) => {
+        FltPrim::Sub(left, right) => {
             expect(context, term, &FltType.into(), expected)?;
 
             Ok(ErasedPrim::FltSub(
@@ -365,7 +398,7 @@ fn erase_prim(
                 erase(context, right, &FltType.into())?.into(),
             ))
         }
-        Prim::FltMul(left, right) => {
+        FltPrim::Mul(left, right) => {
             expect(context, term, &FltType.into(), expected)?;
 
             Ok(ErasedPrim::FltMul(
@@ -376,274 +409,328 @@ fn erase_prim(
     }
 }
 
+fn erase_func(
+    context: &mut Context,
+    func: &Func,
+    term: &Term,
+    expected: &Term,
+) -> Result<ErasedTerm, Error> {
+    let Func { body } = func;
+
+    let Term::FuncType(FuncType { input, output }) = reduce(context, expected)? else {
+        return Err(Error::type_mismatch(term.clone(), expected.clone()));
+    };
+
+    let captures = body.collect().into_iter().collect::<Vec<_>>();
+    let param = context.fresh();
+    let param_term = Name::label(&param).into();
+    let body = body.open(&[&param_term]);
+
+    let body = context.with_frame(|context| {
+        context.assume(&param, &input);
+
+        erase(context, &body, &output.open(&[&param_term]))
+    })?;
+
+    Ok(ErasedFunc {
+        captures,
+        param,
+        body: body.into(),
+    }
+    .into())
+}
+
+fn erase_apply(
+    context: &mut Context,
+    apply: &Apply,
+    term: &Term,
+    expected: &Term,
+) -> Result<ErasedTerm, Error> {
+    let Apply { head, param } = apply;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    let Term::FuncType(FuncType { input, output }) = &head_type else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+
+    let erased = ErasedApply {
+        head: erase(context, head, &head_type)?.into(),
+        param: erase(context, param, input)?.into(),
+    };
+
+    expect(context, term, &output.open(&[param.as_ref()]), expected)?;
+
+    Ok(erased.into())
+}
+
+fn erase_pair(context: &mut Context, pair: &Pair, expected: &Term) -> Result<ErasedTerm, Error> {
+    let Pair { fst, snd } = pair;
+
+    let Term::PairType(PairType { input, output }) = reduce(context, expected)? else {
+        return Err(Error::type_mismatch(pair.clone(), expected.clone()));
+    };
+
+    Ok(ErasedPair {
+        fst: erase(context, fst, &input)?.into(),
+        snd: erase(context, snd, &output.open(&[fst.as_ref()]))?.into(),
+    }
+    .into())
+}
+
+fn erase_split(
+    context: &mut Context,
+    split: &Split,
+    term: &Term,
+    expected: &Term,
+) -> Result<ErasedTerm, Error> {
+    let Split { head, motive, tail } = split;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    let (input, output) = if let Term::PairType(PairType { input, output }) = &head_type {
+        (input.clone(), output.clone())
+    } else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(
+            &head_label,
+            &PairType {
+                input: input.clone(),
+                output: output.clone(),
+            }
+            .into(),
+        );
+
+        erase(
+            context,
+            &motive.open(&[&Name::label(head_label).into()]),
+            &Type.into(),
+        )
+    })?;
+
+    let fst = context.fresh();
+    let snd = context.fresh();
+    let fst_term = Term::from(Name::label(&fst));
+    let snd_term = Term::from(Name::label(&snd));
+    let tail = tail.open(&[&fst_term, &snd_term]);
+    let tail_type = motive.open(&[&Pair::new(Name::label(&fst), Name::label(&snd)).into()]);
+
+    let erased = context.with_frame(|context| {
+        context.assume(&fst, &input);
+        context.assume(&snd, &output.open(&[&fst_term]));
+
+        Ok::<_, Error>(ErasedSplit {
+            head: erase(context, head, &head_type)?.into(),
+            fst,
+            snd,
+            tail: erase(context, &tail, &tail_type)?.into(),
+        })
+    })?;
+
+    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
+
+    Ok(erased.into())
+}
+
+fn erase_atom(
+    context: &mut Context,
+    atom: &super::Atom,
+    term: &Term,
+    expected: &Term,
+) -> Result<ErasedTerm, Error> {
+    let Term::AtomType(AtomType { atoms }) = reduce(context, expected)? else {
+        return Err(Error::type_mismatch(term.clone(), expected.clone()));
+    };
+
+    let index = atoms
+        .iter()
+        .position(|candidate| candidate == atom)
+        .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone()))?;
+
+    Ok(ErasedAtom { index }.into())
+}
+
+fn erase_match(
+    context: &mut Context,
+    match_: &Match,
+    term: &Term,
+    expected: &Term,
+) -> Result<ErasedTerm, Error> {
+    let Match {
+        head,
+        motive,
+        cases,
+    } = match_;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    let atoms = if let Term::AtomType(AtomType { atoms }) = &head_type {
+        atoms.clone()
+    } else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
+
+        erase(
+            context,
+            &motive.open(&[&Name::label(head_label).into()]),
+            &Type.into(),
+        )
+    })?;
+
+    if cases.len() != atoms.len() {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let cases = atoms
+        .iter()
+        .map(|atom| {
+            let body = if let Some(body) = cases.get(atom) {
+                body
+            } else {
+                return Err(Error::cannot_infer(term.clone()));
+            };
+
+            erase(context, body, &motive.open(&[&atom.clone().into()])).map(Into::into)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
+
+    Ok(ErasedMatch {
+        head: erase(context, head, &head_type)?.into(),
+        cases,
+    }
+    .into())
+}
+
+fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ErasedTerm, Error> {
+    let Let {
+        type_: body_type,
+        body,
+        tail,
+    } = let_;
+
+    erase(context, body_type, &Type.into())?;
+
+    let name = context.fresh();
+    let erased_body = erase(context, body, body_type)?;
+    let name_term = Name::label(&name).into();
+    let tail = tail.open(&[&name_term]);
+
+    let tail = context.with_frame(|context| {
+        context.define_assuming(&name, body_type, body);
+
+        erase(context, &tail, expected)
+    })?;
+
+    Ok(ErasedLet {
+        name,
+        body: erased_body.into(),
+        tail: tail.into(),
+    }
+    .into())
+}
+
+fn erase_letrec(
+    context: &mut Context,
+    letrec: &LetRec,
+    expected: &Term,
+) -> Result<ErasedTerm, Error> {
+    let LetRec { items, tail } = letrec;
+
+    let names = (0..items.len())
+        .map(|_| context.fresh())
+        .collect::<Vec<_>>();
+
+    let label_terms = names
+        .iter()
+        .map(Name::label)
+        .map(Into::into)
+        .collect::<Vec<_>>();
+
+    let label_terms = label_terms.iter().collect::<Vec<_>>();
+
+    let items = items
+        .iter()
+        .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
+        .collect::<Vec<_>>();
+
+    let tail = tail.open(&label_terms);
+
+    let erased = context.with_frame(|context| {
+        for (name, (type_, _)) in names.iter().zip(items.iter()) {
+            context.assume(name, type_);
+        }
+
+        for (type_, _) in &items {
+            erase(context, type_, &Type.into())?;
+        }
+
+        let erased_items = items
+            .iter()
+            .map(|(type_, body)| erase(context, body, type_).map(Into::into))
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        for (name, (_, body)) in names.iter().zip(items.iter()) {
+            context.define(name, body);
+        }
+
+        Ok(ErasedLetRec {
+            names,
+            items: erased_items,
+            tail: erase(context, &tail, expected)?.into(),
+        })
+    })?;
+
+    Ok(erased.into())
+}
+
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ErasedTerm, Error> {
     match term {
         Term::Prim(prim) => Ok(erase_prim(context, term, prim, expected)?.into()),
         Term::Type => {
             expect(context, term, &Type.into(), expected)?;
-
             Ok(().into())
         }
         Term::FuncType(_) => {
-            let inferred = infer(context, term)?;
-            expect(context, term, &inferred, expected)?;
-
+            let t = infer(context, term)?;
+            expect(context, term, &t, expected)?;
             Ok(().into())
         }
-        Term::Func(Func { body }) => {
-            let Term::FuncType(FuncType { input, output }) = reduce(context, expected)? else {
-                return Err(Error::type_mismatch(term, expected));
-            };
-
-            let captures = body.collect().into_iter().collect::<Vec<_>>();
-            let param = context.fresh();
-            let param_term = Name::label(&param).into();
-            let body = body.open(&[&param_term]);
-
-            let body = context.with_frame(|context| {
-                context.assume(&param, &input);
-
-                erase(context, &body, &output.open(&[&param_term]))
-            })?;
-
-            Ok(ErasedFunc {
-                captures,
-                param,
-                body: body.into(),
-            }
-            .into())
-        }
-        Term::Apply(Apply { head, param }) => {
-            let head_type = infer(context, head)?;
-            let head_type = reduce(context, &head_type)?;
-
-            let Term::FuncType(FuncType { input, output }) = &head_type else {
-                return Err(Error::cannot_infer(term.clone()));
-            };
-
-            let erased = ErasedApply {
-                head: erase(context, head, &head_type)?.into(),
-                param: erase(context, param, input)?.into(),
-            };
-
-            expect(context, term, &output.open(&[param.as_ref()]), expected)?;
-
-            Ok(erased.into())
-        }
+        Term::Func(func) => erase_func(context, func, term, expected),
+        Term::Apply(apply) => erase_apply(context, apply, term, expected),
         Term::PairType(_) => {
-            let inferred = infer(context, term)?;
-            expect(context, term, &inferred, expected)?;
-
+            let t = infer(context, term)?;
+            expect(context, term, &t, expected)?;
             Ok(().into())
         }
-        Term::Pair(Pair { fst, snd }) => {
-            let Term::PairType(PairType { input, output }) = reduce(context, expected)? else {
-                return Err(Error::type_mismatch(term, expected));
-            };
-
-            Ok(ErasedPair {
-                fst: erase(context, fst, &input)?.into(),
-                snd: erase(context, snd, &output.open(&[fst.as_ref()]))?.into(),
-            }
-            .into())
-        }
-        Term::Split(Split { head, motive, tail }) => {
-            let head_type = infer(context, head)?;
-            let head_type = reduce(context, &head_type)?;
-
-            let (input, output) = if let Term::PairType(PairType { input, output }) = &head_type {
-                (input.clone(), output.clone())
-            } else {
-                return Err(Error::cannot_infer(term.clone()));
-            };
-
-            let head_label = context.fresh();
-
-            context.with_frame(|context| {
-                context.assume(
-                    &head_label,
-                    &PairType {
-                        input: input.clone(),
-                        output: output.clone(),
-                    }
-                    .into(),
-                );
-
-                erase(
-                    context,
-                    &motive.open(&[&Name::label(head_label).into()]),
-                    &Type.into(),
-                )
-            })?;
-
-            let fst = context.fresh();
-            let snd = context.fresh();
-            let fst_term = Term::from(Name::label(&fst));
-            let snd_term = Term::from(Name::label(&snd));
-            let tail = tail.open(&[&fst_term, &snd_term]);
-            let tail_type = motive.open(&[&Pair::new(Name::label(&fst), Name::label(&snd)).into()]);
-
-            let erased = context.with_frame(|context| {
-                context.assume(&fst, &input);
-                context.assume(&snd, &output.open(&[&fst_term]));
-
-                Ok::<_, Error>(ErasedSplit {
-                    head: erase(context, head, &head_type)?.into(),
-                    fst,
-                    snd,
-                    tail: erase(context, &tail, &tail_type)?.into(),
-                })
-            })?;
-
-            expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-            Ok(erased.into())
-        }
+        Term::Pair(pair) => erase_pair(context, pair, expected),
+        Term::Split(split) => erase_split(context, split, term, expected),
         Term::AtomType(_) => {
-            let inferred = infer(context, term)?;
-            expect(context, term, &inferred, expected)?;
-
+            let t = infer(context, term)?;
+            expect(context, term, &t, expected)?;
             Ok(().into())
         }
-        Term::Atom(atom) => {
-            let Term::AtomType(AtomType { atoms }) = reduce(context, expected)? else {
-                return Err(Error::type_mismatch(term, expected));
-            };
-
-            let atom = atoms
-                .iter()
-                .position(|candidate| candidate == atom)
-                .ok_or_else(|| Error::type_mismatch(term, expected))?;
-
-            Ok(ErasedAtom { index: atom }.into())
-        }
-        Term::Match(Match {
-            head,
-            motive,
-            cases,
-        }) => {
-            let head_type = infer(context, head)?;
-            let head_type = reduce(context, &head_type)?;
-
-            let atoms = if let Term::AtomType(AtomType { atoms }) = &head_type {
-                atoms.clone()
-            } else {
-                return Err(Error::cannot_infer(term.clone()));
-            };
-
-            let head_label = context.fresh();
-
-            context.with_frame(|context| {
-                context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
-
-                erase(
-                    context,
-                    &motive.open(&[&Name::label(head_label).into()]),
-                    &Type.into(),
-                )
-            })?;
-
-            if cases.len() != atoms.len() {
-                return Err(Error::cannot_infer(term.clone()));
-            }
-
-            let cases = atoms
-                .iter()
-                .map(|atom| {
-                    let body = if let Some(body) = cases.get(atom) {
-                        body
-                    } else {
-                        return Err(Error::cannot_infer(term.clone()));
-                    };
-
-                    erase(context, body, &motive.open(&[&atom.clone().into()])).map(Into::into)
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-
-            expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-            Ok(ErasedMatch {
-                head: erase(context, head, &head_type)?.into(),
-                cases,
-            }
-            .into())
-        }
-        Term::Let(Let {
-            type_: body_type,
-            body,
-            tail,
-        }) => {
-            erase(context, body_type, &Type.into())?;
-
-            let name = context.fresh();
-            let erased_body = erase(context, body, body_type)?;
-            let name_term = Name::label(&name).into();
-            let tail = tail.open(&[&name_term]);
-
-            let tail = context.with_frame(|context| {
-                context.define_assuming(&name, body_type, body);
-
-                erase(context, &tail, expected)
-            })?;
-
-            Ok(ErasedLet {
-                name,
-                body: erased_body.into(),
-                tail: tail.into(),
-            }
-            .into())
-        }
-        Term::LetRec(LetRec { items, tail }) => {
-            let names = (0..items.len())
-                .map(|_| context.fresh())
-                .collect::<Vec<_>>();
-
-            let label_terms = names
-                .iter()
-                .map(Name::label)
-                .map(Into::into)
-                .collect::<Vec<_>>();
-
-            let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-            let items = items
-                .iter()
-                .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
-                .collect::<Vec<_>>();
-
-            let tail = tail.open(&label_terms);
-
-            let erased = context.with_frame(|context| {
-                for (name, (type_, _)) in names.iter().zip(items.iter()) {
-                    context.assume(name, type_);
-                }
-
-                for (type_, _) in &items {
-                    erase(context, type_, &Type.into())?;
-                }
-
-                let erased_items = items
-                    .iter()
-                    .map(|(type_, body)| erase(context, body, type_).map(Into::into))
-                    .collect::<Result<Vec<_>, Error>>()?;
-
-                for (name, (_, body)) in names.iter().zip(items.iter()) {
-                    context.define(name, body);
-                }
-
-                Ok(ErasedLetRec {
-                    names,
-                    items: erased_items,
-                    tail: erase(context, &tail, expected)?.into(),
-                })
-            })?;
-
-            Ok(erased.into())
-        }
+        Term::Atom(atom) => erase_atom(context, atom, term, expected),
+        Term::Match(match_) => erase_match(context, match_, term, expected),
+        Term::Let(let_) => erase_let(context, let_, expected),
+        Term::LetRec(lr) => erase_letrec(context, lr, expected),
         Term::Name(name) => {
-            let inferred = infer(context, term)?;
-            expect(context, term, &inferred, expected)?;
-
+            let t = infer(context, term)?;
+            expect(context, term, &t, expected)?;
             Ok(ErasedName::from(name.unwrap()).into())
         }
     }
@@ -655,7 +742,7 @@ mod tests {
         super::*,
         crate::core::{
             Atom, AtomType, ErasedAtom, ErasedFunc, ErasedLet, ErasedMatch, ErasedName, ErasedTerm,
-            Func, FuncType, LetRec, Match, Pair, PairType, Prim, Term, Type,
+            Func, FuncType, LetRec, Match, Pair, PairType, Term, Type,
         },
         std::time::Duration,
     };
@@ -767,19 +854,12 @@ mod tests {
     fn erase_prim_ops_typecheck() {
         let mut context = context();
 
-        assert!(
-            erase(
-                &mut context,
-                &Prim::int_eql(Prim::from(1), Prim::from(1)).into(),
-                &IntType.into(),
-            )
-            .is_ok()
-        );
+        assert!(erase(&mut context, &IntPrim::eql(1, 1).into(), &IntType.into(),).is_ok());
 
         assert!(
             erase(
                 &mut context,
-                &Prim::flt_add(Prim::from(1.5), Prim::from(2.0)).into(),
+                &FltPrim::add(1.5_f32, 2.0_f32).into(),
                 &FltType.into(),
             )
             .is_ok()
@@ -819,7 +899,7 @@ mod tests {
         assert!(matches!(
             erase(
                 &mut Context::new(Duration::from_secs(1)),
-                &Prim::int_add(Prim::from(1), Prim::from(2.0)).into(),
+                &IntPrim::add(1, 2.0_f32).into(),
                 &IntType.into(),
             ),
             Err(Error::TypeMismatch { .. })

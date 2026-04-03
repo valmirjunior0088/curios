@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, AtomType, Context, Func, FuncType, LetRec, Match, Name, Pair, PairType, Preempted,
-        Prim, Split, Term, reduce,
+        Apply, Atom, AtomType, Context, FltPrim, Func, FuncType, IntPrim, LetRec, Match, Name,
+        Pair, PairType, Preempted, Prim, Split, Term, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -45,6 +45,192 @@ impl Convert {
         Ok(self.pending.pop_front())
     }
 
+    fn compare_prim(&mut self, this: Prim, that: Prim) -> Result<bool, Preempted> {
+        match (this, that) {
+            (Prim::Int(this), Prim::Int(that)) => self.compare_int_prim(this, that),
+            (Prim::Flt(this), Prim::Flt(that)) => self.compare_flt_prim(this, that),
+            (_, _) => Ok(false),
+        }
+    }
+
+    fn compare_int_prim(&mut self, this: IntPrim, that: IntPrim) -> Result<bool, Preempted> {
+        match (this, that) {
+            (IntPrim::Type, IntPrim::Type) => {}
+            (IntPrim::Value(this), IntPrim::Value(that)) => {
+                if this != that {
+                    return Ok(false);
+                }
+            }
+            (IntPrim::Eql(this_first, this_second), IntPrim::Eql(that_first, that_second))
+            | (IntPrim::Add(this_first, this_second), IntPrim::Add(that_first, that_second))
+            | (IntPrim::Sub(this_first, this_second), IntPrim::Sub(that_first, that_second))
+            | (IntPrim::Mul(this_first, this_second), IntPrim::Mul(that_first, that_second)) => {
+                self.enqueue(*this_first, *that_first);
+                self.enqueue(*this_second, *that_second);
+            }
+            (_, _) => {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn compare_flt_prim(&mut self, this: FltPrim, that: FltPrim) -> Result<bool, Preempted> {
+        match (this, that) {
+            (FltPrim::Type, FltPrim::Type) => {}
+            (FltPrim::Value(this), FltPrim::Value(that)) => {
+                if this != that {
+                    return Ok(false);
+                }
+            }
+            (FltPrim::Add(this_first, this_second), FltPrim::Add(that_first, that_second))
+            | (FltPrim::Sub(this_first, this_second), FltPrim::Sub(that_first, that_second))
+            | (FltPrim::Mul(this_first, this_second), FltPrim::Mul(that_first, that_second)) => {
+                self.enqueue(*this_first, *that_first);
+                self.enqueue(*this_second, *that_second);
+            }
+            (_, _) => {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn compare_func_type(
+        &mut self,
+        context: &mut Context,
+        this: FuncType,
+        that: FuncType,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(*this.input, *that.input);
+        let label = Name::label(context.fresh()).into();
+        self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
+        Ok(true)
+    }
+
+    fn compare_func(
+        &mut self,
+        context: &mut Context,
+        this: Func,
+        that: Func,
+    ) -> Result<bool, Preempted> {
+        let label = Name::label(context.fresh()).into();
+        self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
+        Ok(true)
+    }
+
+    fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, Preempted> {
+        self.enqueue(*this.head, *that.head);
+        self.enqueue(*this.param, *that.param);
+        Ok(true)
+    }
+
+    fn compare_pair_type(
+        &mut self,
+        context: &mut Context,
+        this: PairType,
+        that: PairType,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(*this.input, *that.input);
+        let label = Name::label(context.fresh()).into();
+        self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
+        Ok(true)
+    }
+
+    fn compare_pair(&mut self, this: Pair, that: Pair) -> Result<bool, Preempted> {
+        self.enqueue(*this.fst, *that.fst);
+        self.enqueue(*this.snd, *that.snd);
+        Ok(true)
+    }
+
+    fn compare_split(
+        &mut self,
+        context: &mut Context,
+        this: Split,
+        that: Split,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(*this.head, *that.head);
+
+        let motive_label = Name::label(context.fresh()).into();
+        self.enqueue(
+            this.motive.open(&[&motive_label]),
+            that.motive.open(&[&motive_label]),
+        );
+
+        let fst_label = Name::label(context.fresh()).into();
+        let snd_label = Name::label(context.fresh()).into();
+        self.enqueue(
+            this.tail.open(&[&fst_label, &snd_label]),
+            that.tail.open(&[&fst_label, &snd_label]),
+        );
+
+        Ok(true)
+    }
+
+    fn compare_atom_type(&mut self, this: AtomType, that: AtomType) -> Result<bool, Preempted> {
+        Ok(this == that)
+    }
+
+    fn compare_atom(&mut self, this: Atom, that: Atom) -> Result<bool, Preempted> {
+        Ok(this == that)
+    }
+
+    fn compare_match(
+        &mut self,
+        context: &mut Context,
+        this: Match,
+        that: Match,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(*this.head, *that.head);
+
+        let label = Name::label(context.fresh()).into();
+        self.enqueue(this.motive.open(&[&label]), that.motive.open(&[&label]));
+
+        if this.cases.len() != that.cases.len() {
+            return Ok(false);
+        }
+
+        for ((this_atom, this_body), (that_atom, that_body)) in
+            this.cases.into_iter().zip(that.cases)
+        {
+            if this_atom != that_atom {
+                return Ok(false);
+            }
+
+            self.enqueue(*this_body, *that_body);
+        }
+
+        Ok(true)
+    }
+
+    fn compare_letrec(
+        &mut self,
+        context: &mut Context,
+        this: LetRec,
+        that: LetRec,
+    ) -> Result<bool, Preempted> {
+        if this.items.len() != that.items.len() {
+            return Ok(false);
+        }
+
+        let labels = (0..this.items.len())
+            .map(|_| Name::label(context.fresh()).into())
+            .collect::<Vec<_>>();
+
+        let labels = labels.iter().collect::<Vec<_>>();
+
+        for ((this_type, this_body), (that_type, that_body)) in
+            this.items.into_iter().zip(that.items)
+        {
+            self.enqueue(this_type.open(&labels), that_type.open(&labels));
+            self.enqueue(this_body.open(&labels), that_body.open(&labels));
+        }
+
+        self.enqueue(this.tail.open(&labels), that.tail.open(&labels));
+
+        Ok(true)
+    }
+
     fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
         while let Some((this, that)) = self.dequeue()? {
             let this = reduce(context, &this)?;
@@ -54,223 +240,35 @@ impl Convert {
                 continue;
             }
 
-            match (this, that) {
-                (Term::Prim(this), Term::Prim(that)) => match (this, that) {
-                    (Prim::IntType, Prim::IntType) | (Prim::FltType, Prim::FltType) => {}
-                    (Prim::Int(this), Prim::Int(that)) => {
-                        if this != that {
-                            return Ok(false);
-                        }
-                    }
-                    (Prim::Flt(this), Prim::Flt(that)) => {
-                        if this != that {
-                            return Ok(false);
-                        }
-                    }
-                    (
-                        Prim::IntEql(this_first, this_second),
-                        Prim::IntEql(that_first, that_second),
-                    )
-                    | (
-                        Prim::IntAdd(this_first, this_second),
-                        Prim::IntAdd(that_first, that_second),
-                    )
-                    | (
-                        Prim::IntSub(this_first, this_second),
-                        Prim::IntSub(that_first, that_second),
-                    )
-                    | (
-                        Prim::IntMul(this_first, this_second),
-                        Prim::IntMul(that_first, that_second),
-                    )
-                    | (
-                        Prim::FltAdd(this_first, this_second),
-                        Prim::FltAdd(that_first, that_second),
-                    )
-                    | (
-                        Prim::FltSub(this_first, this_second),
-                        Prim::FltSub(that_first, that_second),
-                    )
-                    | (
-                        Prim::FltMul(this_first, this_second),
-                        Prim::FltMul(that_first, that_second),
-                    ) => {
-                        self.enqueue(*this_first, *that_first);
-                        self.enqueue(*this_second, *that_second);
-                    }
-                    (_, _) => {
-                        return Ok(false);
-                    }
-                },
-                (
-                    Term::FuncType(FuncType {
-                        input: this_input,
-                        output: this_output,
-                    }),
-                    Term::FuncType(FuncType {
-                        input: that_input,
-                        output: that_output,
-                    }),
-                ) => {
-                    self.enqueue(*this_input, *that_input);
-
-                    let label = Name::label(context.fresh()).into();
-
-                    self.enqueue(this_output.open(&[&label]), that_output.open(&[&label]));
+            let ok = match (this, that) {
+                (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
+                (Term::FuncType(this), Term::FuncType(that)) => {
+                    self.compare_func_type(context, this, that)?
                 }
-                (Term::Func(Func { body: this }), Term::Func(Func { body: that })) => {
-                    let label = Name::label(context.fresh()).into();
-
-                    self.enqueue(this.open(&[&label]), that.open(&[&label]));
+                (Term::Func(this), Term::Func(that)) => self.compare_func(context, this, that)?,
+                (Term::Apply(this), Term::Apply(that)) => self.compare_apply(this, that)?,
+                (Term::PairType(this), Term::PairType(that)) => {
+                    self.compare_pair_type(context, this, that)?
                 }
-                (
-                    Term::Apply(Apply {
-                        head: this_head,
-                        param: this_param,
-                    }),
-                    Term::Apply(Apply {
-                        head: that_head,
-                        param: that_param,
-                    }),
-                ) => {
-                    self.enqueue(*this_head, *that_head);
-                    self.enqueue(*this_param, *that_param);
+                (Term::Pair(this), Term::Pair(that)) => self.compare_pair(this, that)?,
+                (Term::Split(this), Term::Split(that)) => {
+                    self.compare_split(context, this, that)?
                 }
-                (
-                    Term::PairType(PairType {
-                        input: this_input,
-                        output: this_output,
-                    }),
-                    Term::PairType(PairType {
-                        input: that_input,
-                        output: that_output,
-                    }),
-                ) => {
-                    self.enqueue(*this_input, *that_input);
-
-                    let label = Name::label(context.fresh()).into();
-
-                    self.enqueue(this_output.open(&[&label]), that_output.open(&[&label]));
+                (Term::AtomType(this), Term::AtomType(that)) => {
+                    self.compare_atom_type(this, that)?
                 }
-                (
-                    Term::Pair(Pair {
-                        fst: this_fst,
-                        snd: this_snd,
-                    }),
-                    Term::Pair(Pair {
-                        fst: that_fst,
-                        snd: that_snd,
-                    }),
-                ) => {
-                    self.enqueue(*this_fst, *that_fst);
-                    self.enqueue(*this_snd, *that_snd);
+                (Term::Atom(this), Term::Atom(that)) => self.compare_atom(this, that)?,
+                (Term::Match(this), Term::Match(that)) => {
+                    self.compare_match(context, this, that)?
                 }
-                (
-                    Term::Split(Split {
-                        head: this_head,
-                        motive: this_motive,
-                        tail: this_tail,
-                    }),
-                    Term::Split(Split {
-                        head: that_head,
-                        motive: that_motive,
-                        tail: that_tail,
-                    }),
-                ) => {
-                    self.enqueue(*this_head, *that_head);
-
-                    let motive_label = Name::label(context.fresh()).into();
-
-                    self.enqueue(
-                        this_motive.open(&[&motive_label]),
-                        that_motive.open(&[&motive_label]),
-                    );
-
-                    let fst_label = Name::label(context.fresh()).into();
-                    let snd_label = Name::label(context.fresh()).into();
-
-                    self.enqueue(
-                        this_tail.open(&[&fst_label, &snd_label]),
-                        that_tail.open(&[&fst_label, &snd_label]),
-                    );
+                (Term::LetRec(this), Term::LetRec(that)) => {
+                    self.compare_letrec(context, this, that)?
                 }
-                (
-                    Term::AtomType(AtomType { atoms: this }),
-                    Term::AtomType(AtomType { atoms: that }),
-                ) => {
-                    if this != that {
-                        return Ok(false);
-                    }
-                }
-                (Term::Atom(this), Term::Atom(that)) => {
-                    if this != that {
-                        return Ok(false);
-                    }
-                }
-                (
-                    Term::Match(Match {
-                        head: this_head,
-                        motive: this_motive,
-                        cases: this_cases,
-                    }),
-                    Term::Match(Match {
-                        head: that_head,
-                        motive: that_motive,
-                        cases: that_cases,
-                    }),
-                ) => {
-                    self.enqueue(*this_head, *that_head);
+                (_, _) => return Ok(false),
+            };
 
-                    let label = Name::label(context.fresh()).into();
-
-                    self.enqueue(this_motive.open(&[&label]), that_motive.open(&[&label]));
-
-                    if this_cases.len() != that_cases.len() {
-                        return Ok(false);
-                    }
-
-                    for ((this_atom, this_body), (that_atom, that_body)) in
-                        this_cases.into_iter().zip(that_cases)
-                    {
-                        if this_atom != that_atom {
-                            return Ok(false);
-                        }
-
-                        self.enqueue(*this_body, *that_body);
-                    }
-                }
-                (
-                    Term::LetRec(LetRec {
-                        items: this_items,
-                        tail: this_tail,
-                    }),
-                    Term::LetRec(LetRec {
-                        items: that_items,
-                        tail: that_tail,
-                    }),
-                ) => {
-                    if this_items.len() != that_items.len() {
-                        return Ok(false);
-                    }
-
-                    let labels = (0..this_items.len())
-                        .map(|_| Name::label(context.fresh()).into())
-                        .collect::<Vec<_>>();
-
-                    let labels = labels.iter().collect::<Vec<_>>();
-
-                    for ((this_type, this_body), (that_type, that_body)) in
-                        this_items.into_iter().zip(that_items)
-                    {
-                        self.enqueue(this_type.open(&labels), that_type.open(&labels));
-                        self.enqueue(this_body.open(&labels), that_body.open(&labels));
-                    }
-
-                    self.enqueue(this_tail.open(&labels), that_tail.open(&labels));
-                }
-                (_, _) => {
-                    return Ok(false);
-                }
+            if !ok {
+                return Ok(false);
             }
         }
 
@@ -282,7 +280,7 @@ impl Convert {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Func, FuncType, LetRec, Match, Name, PairType, Prim, Type},
+        crate::core::{Atom, Func, FuncType, LetRec, Match, Name, PairType, Type},
         std::time::Duration,
     };
 
@@ -337,15 +335,9 @@ mod tests {
     fn convert_prim_recurses_into_operands() {
         let mut context = context();
 
-        let this = Term::from(Func::new(
-            "x",
-            Prim::int_add(Name::label("x"), Prim::from(1)),
-        ));
+        let this = Term::from(Func::new("x", IntPrim::add(Name::label("x"), 1)));
 
-        let that = Term::from(Func::new(
-            "y",
-            Prim::int_add(Name::label("y"), Prim::from(1)),
-        ));
+        let that = Term::from(Func::new("y", IntPrim::add(Name::label("y"), 1)));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -354,15 +346,9 @@ mod tests {
     fn convert_prim_distinguishes_operator_kind() {
         let mut context = context();
 
-        let this = Term::from(Func::new(
-            "x",
-            Prim::int_add(Name::label("x"), Prim::from(1)),
-        ));
+        let this = Term::from(Func::new("x", IntPrim::add(Name::label("x"), 1)));
 
-        let that = Term::from(Func::new(
-            "x",
-            Prim::int_sub(Name::label("x"), Prim::from(1)),
-        ));
+        let that = Term::from(Func::new("x", IntPrim::sub(Name::label("x"), 1)));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }

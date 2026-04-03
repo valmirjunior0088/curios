@@ -3,102 +3,150 @@ use super::{Subterm, Term};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IntType;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IntPrim {
+    Type,
+    Value(i32),
+    Eql(Subterm, Subterm),
+    Add(Subterm, Subterm),
+    Sub(Subterm, Subterm),
+    Mul(Subterm, Subterm),
+}
+
+impl IntPrim {
+    pub fn eql<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::Eql(left.into().into(), right.into().into())
+    }
+
+    pub fn add<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::Add(left.into().into(), right.into().into())
+    }
+
+    pub fn sub<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::Sub(left.into().into(), right.into().into())
+    }
+
+    pub fn mul<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::Mul(left.into().into(), right.into().into())
+    }
+}
+
+impl From<IntType> for IntPrim {
+    fn from(IntType: IntType) -> Self {
+        Self::Type
+    }
+}
+
+impl From<i32> for IntPrim {
+    fn from(value: i32) -> Self {
+        Self::Value(value)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FltType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Prim {
-    IntType,
-    Int(i32),
-    IntEql(Subterm, Subterm),
-    IntAdd(Subterm, Subterm),
-    IntSub(Subterm, Subterm),
-    IntMul(Subterm, Subterm),
-    FltType,
-    Flt(u32),
-    FltAdd(Subterm, Subterm),
-    FltSub(Subterm, Subterm),
-    FltMul(Subterm, Subterm),
+pub enum FltPrim {
+    Type,
+    Value(u32),
+    Add(Subterm, Subterm),
+    Sub(Subterm, Subterm),
+    Mul(Subterm, Subterm),
 }
 
-impl Prim {
-    pub fn int_eql<F, S>(left: F, right: S) -> Self
+impl FltPrim {
+    pub fn add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntEql(left.into().into(), right.into().into())
+        Self::Add(left.into().into(), right.into().into())
     }
 
-    pub fn int_add<F, S>(left: F, right: S) -> Self
+    pub fn sub<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntAdd(left.into().into(), right.into().into())
+        Self::Sub(left.into().into(), right.into().into())
     }
 
-    pub fn int_sub<F, S>(left: F, right: S) -> Self
+    pub fn mul<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntSub(left.into().into(), right.into().into())
+        Self::Mul(left.into().into(), right.into().into())
     }
+}
 
-    pub fn int_mul<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntMul(left.into().into(), right.into().into())
+impl From<FltType> for FltPrim {
+    fn from(FltType: FltType) -> Self {
+        Self::Type
     }
+}
 
-    pub fn flt_add<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltAdd(left.into().into(), right.into().into())
+impl From<f32> for FltPrim {
+    fn from(value: f32) -> Self {
+        Self::Value(value.to_bits())
     }
+}
 
-    pub fn flt_sub<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltSub(left.into().into(), right.into().into())
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Prim {
+    Int(IntPrim),
+    Flt(FltPrim),
+}
 
-    pub fn flt_mul<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltMul(left.into().into(), right.into().into())
+impl From<IntPrim> for Prim {
+    fn from(value: IntPrim) -> Self {
+        Self::Int(value)
     }
 }
 
 impl From<IntType> for Prim {
-    fn from(IntType: IntType) -> Self {
-        Self::IntType
+    fn from(value: IntType) -> Self {
+        IntPrim::from(value).into()
     }
 }
 
 impl From<i32> for Prim {
     fn from(value: i32) -> Self {
-        Self::Int(value)
+        IntPrim::from(value).into()
+    }
+}
+
+impl From<FltPrim> for Prim {
+    fn from(value: FltPrim) -> Self {
+        Self::Flt(value)
     }
 }
 
 impl From<FltType> for Prim {
-    fn from(FltType: FltType) -> Self {
-        Self::FltType
+    fn from(value: FltType) -> Self {
+        FltPrim::from(value).into()
     }
 }
 
 impl From<f32> for Prim {
     fn from(value: f32) -> Self {
-        Self::Flt(value.to_bits())
+        FltPrim::from(value).into()
     }
 }
