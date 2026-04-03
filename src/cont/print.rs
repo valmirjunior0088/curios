@@ -1,7 +1,7 @@
 use {
     super::{
-        Block, BlockName, CallTarget, Clsr, ClsrName, ConstOp, ConstValue, Func, FuncName,
-        JumpTarget, Module, Region, Tail, Value, ValueName,
+        Block, BlockName, CallTarget, Clsr, ClsrName, ConstOp, ConstValue, FltOp, Func, FuncName,
+        IntOp, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -37,13 +37,13 @@ fn print_const_value<'a>(value: &'a ConstValue) -> Printer<'a> {
 
 fn print_const_op<'a>(op: &'a ConstOp) -> Printer<'a> {
     pure(match op {
-        ConstOp::IntEql => "int.eql",
-        ConstOp::IntAdd => "int.add",
-        ConstOp::IntSub => "int.sub",
-        ConstOp::IntMul => "int.mul",
-        ConstOp::FltAdd => "flt.add",
-        ConstOp::FltSub => "flt.sub",
-        ConstOp::FltMul => "flt.mul",
+        ConstOp::Int(IntOp::Eql) => "int.eql",
+        ConstOp::Int(IntOp::Add) => "int.add",
+        ConstOp::Int(IntOp::Sub) => "int.sub",
+        ConstOp::Int(IntOp::Mul) => "int.mul",
+        ConstOp::Flt(FltOp::Add) => "flt.add",
+        ConstOp::Flt(FltOp::Sub) => "flt.sub",
+        ConstOp::Flt(FltOp::Mul) => "flt.mul",
     })
 }
 
@@ -81,7 +81,7 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
                 pure(" "),
                 print_value_name(tuple),
             ]),
-            Value::Alias(source) => print_value_name(source),
+            Value::Name(source) => print_value_name(source),
         },
         pure(";"),
     ])

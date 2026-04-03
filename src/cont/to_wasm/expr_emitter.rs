@@ -63,31 +63,31 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_const_op(&mut self, op: &'a cont::ConstOp, params: &'a [cont::ValueName]) {
         match (op, params) {
-            (cont::ConstOp::IntEql, [left, right]) => {
+            (cont::ConstOp::Int(cont::IntOp::Eql), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Eq);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::IntAdd, [left, right]) => {
+            (cont::ConstOp::Int(cont::IntOp::Add), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Add);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::IntSub, [left, right]) => {
+            (cont::ConstOp::Int(cont::IntOp::Sub), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::IntMul, [left, right]) => {
+            (cont::ConstOp::Int(cont::IntOp::Mul), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Mul);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::FltAdd, [left, right]) => {
+            (cont::ConstOp::Flt(cont::FltOp::Add), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Add);
@@ -96,7 +96,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::ConstOp::FltSub, [left, right]) => {
+            (cont::ConstOp::Flt(cont::FltOp::Sub), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Sub);
@@ -105,7 +105,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::ConstOp::FltMul, [left, right]) => {
+            (cont::ConstOp::Flt(cont::FltOp::Mul), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Mul);
@@ -317,7 +317,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     self.emit_backpatch_tpl2(value_name, first, second)
                 }
                 cont::Value::Proj(tuple, index) => self.emit_let_proj(value_name, tuple, *index),
-                cont::Value::Alias(source) => self.emit_let_alias(value_name, source),
+                cont::Value::Name(source) => self.emit_let_alias(value_name, source),
             }
         }
     }

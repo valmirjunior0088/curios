@@ -8,14 +8,24 @@ pub enum ConstValue {
 }
 
 #[derive(Debug)]
+pub enum IntOp {
+    Eql,
+    Add,
+    Sub,
+    Mul,
+}
+
+#[derive(Debug)]
+pub enum FltOp {
+    Add,
+    Sub,
+    Mul,
+}
+
+#[derive(Debug)]
 pub enum ConstOp {
-    IntEql,
-    IntAdd,
-    IntSub,
-    IntMul,
-    FltAdd,
-    FltSub,
-    FltMul,
+    Int(IntOp),
+    Flt(FltOp),
 }
 
 #[derive(Debug)]
@@ -25,7 +35,7 @@ pub enum Value {
     Clsr(ClsrName, Vec<ValueName>),
     Tpl2(ValueName, ValueName),
     Proj(ValueName, usize),
-    Alias(ValueName),
+    Name(ValueName),
 }
 
 #[derive(Debug)]

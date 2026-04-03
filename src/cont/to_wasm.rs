@@ -130,7 +130,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(
-                            cont::ConstOp::IntEql,
+                            cont::ConstOp::Int(cont::IntOp::Eql),
                             vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
                         ),
                     )],
@@ -157,7 +157,7 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(
-                                            cont::ConstOp::IntSub,
+                                            cont::ConstOp::Int(cont::IntOp::Sub),
                                             vec![
                                                 cont::ValueName::from("n"),
                                                 cont::ValueName::from("ONE"),
@@ -199,7 +199,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(
-                            cont::ConstOp::IntEql,
+                            cont::ConstOp::Int(cont::IntOp::Eql),
                             vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
                         ),
                     )],
@@ -226,7 +226,7 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(
-                                            cont::ConstOp::IntSub,
+                                            cont::ConstOp::Int(cont::IntOp::Sub),
                                             vec![
                                                 cont::ValueName::from("n"),
                                                 cont::ValueName::from("ONE"),
@@ -316,7 +316,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(
-                            cont::ConstOp::IntAdd,
+                            cont::ConstOp::Int(cont::IntOp::Add),
                             vec![cont::ValueName::from("x"), cont::ValueName::from("ONE")],
                         ),
                     )],
@@ -423,7 +423,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(
-                            cont::ConstOp::FltAdd,
+                            cont::ConstOp::Flt(cont::FltOp::Add),
                             vec![
                                 cont::ValueName::from("LEFT"),
                                 cont::ValueName::from("RIGHT"),

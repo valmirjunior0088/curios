@@ -139,7 +139,7 @@ Module
               └── tail:   terminator (Jump | Case | Call)
 ```
 
-**Values** include: `Pure` (constants), `Eval` (primitive ops), `Clsr` (closure allocation with captures), `Tpl2` (pairs), `Proj` (projection), `Alias`.
+**Values** include: `Pure` (constants), `Eval` (primitive ops), `Clsr` (closure allocation with captures), `Tpl2` (pairs), `Proj` (projection), `Name`.
 
 **Tails** (terminators) include: `Jump` (unconditional branch to block), `Case` (dispatch on atom index via `br_table`), `Call` (direct or indirect function call with resume target).
 

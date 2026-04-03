@@ -1,6 +1,6 @@
 use curios::cont::{
-    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, ConstOp, ConstValue, Func, FuncName,
-    JumpTarget, Module, Region, Tail, Value, ValueName, to_wasm,
+    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, ConstOp, ConstValue, FltOp, Func,
+    FuncName, IntOp, JumpTarget, Module, Region, Tail, Value, ValueName, to_wasm,
 };
 
 fn main() {
@@ -22,7 +22,7 @@ fn main() {
                 values: vec![(
                     ValueName::from("is_zero"),
                     Value::Eval(
-                        ConstOp::IntEql,
+                        ConstOp::Int(IntOp::Eql),
                         vec![ValueName::from("x"), ValueName::from("ZERO")],
                     ),
                 )],
@@ -99,7 +99,7 @@ fn main() {
                     (
                         ValueName::from("scale"),
                         Value::Eval(
-                            ConstOp::FltMul,
+                            ConstOp::Flt(FltOp::Mul),
                             vec![ValueName::from("ONE_HALF"), ValueName::from("ONE_HALF")],
                         ),
                     ),
@@ -129,7 +129,7 @@ fn main() {
                                     (
                                         ValueName::from("result_is_zero"),
                                         Value::Eval(
-                                            ConstOp::IntEql,
+                                            ConstOp::Int(IntOp::Eql),
                                             vec![
                                                 ValueName::from("result_again"),
                                                 ValueName::from("ZERO"),

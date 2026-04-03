@@ -1,6 +1,6 @@
 use curios::cont::{
     Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, ConstOp, ConstValue, Func, FuncName,
-    JumpTarget, Module, Region, Tail, Value, ValueName,
+    IntOp, JumpTarget, Module, Region, Tail, Value, ValueName,
 };
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
                 values: vec![(
                     ValueName::from("y"),
                     Value::Eval(
-                        ConstOp::IntAdd,
+                        ConstOp::Int(IntOp::Add),
                         vec![ValueName::from("x"), ValueName::from("bias")],
                     ),
                 )],
