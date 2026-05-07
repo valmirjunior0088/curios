@@ -71,17 +71,17 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("x"),
-                            cont::Value::Tpl2(
+                            cont::Value::TplN(vec![
                                 cont::ValueName::from("y"),
                                 cont::ValueName::from("ONE"),
-                            ),
+                            ]),
                         ),
                         (
                             cont::ValueName::from("y"),
-                            cont::Value::Tpl2(
+                            cont::Value::TplN(vec![
                                 cont::ValueName::from("TWO"),
                                 cont::ValueName::from("x"),
-                            ),
+                            ]),
                         ),
                         (
                             cont::ValueName::from("left"),

@@ -113,10 +113,10 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::Tpl2(
+                                        Value::TplN(vec![
                                             ValueName::from("result"),
                                             ValueName::from("ONE"),
-                                        ),
+                                        ]),
                                     ),
                                     (
                                         ValueName::from("result_again"),

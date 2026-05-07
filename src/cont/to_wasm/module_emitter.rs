@@ -45,30 +45,32 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_tpl2_type(&mut self) {
-        self.module.add_type(
-            self.table.tpl2_type(),
-            wasm::SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([
-                    (
-                        self.table.proj_fst_field(),
-                        wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                            mutability: wasm::Mutability::Var,
-                        },
-                    ),
-                    (
-                        self.table.proj_snd_field(),
-                        wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                            mutability: wasm::Mutability::Var,
-                        },
-                    ),
-                ])),
-            },
-        );
+    fn emit_tpl_n_types(&mut self) {
+        for (arity, type_name) in self.table.tpl_n_types() {
+            let super_types = match arity {
+                1 => vec![],
+                n => vec![self.table.find_tpl_n_type(n - 1)],
+            };
+
+            self.module.add_type(
+                type_name,
+                wasm::SubType {
+                    is_final: false,
+                    super_types,
+                    comp_type: wasm::CompType::Struct(wasm::StructType::from(
+                        (0..arity).map(|index| {
+                            (
+                                self.table.tpl_n_field(index),
+                                wasm::FieldType {
+                                    storage_type: wasm::StorageType::Val(self.table.top_type(true)),
+                                    mutability: wasm::Mutability::Var,
+                                },
+                            )
+                        }),
+                    )),
+                },
+            );
+        }
     }
 
     fn emit_envr_arity_types(&mut self) {
@@ -287,7 +289,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn emit_module(&mut self, module: &'a cont::Module) {
         self.emit_unit_type();
         self.emit_flt_type();
-        self.emit_tpl2_type();
+        self.emit_tpl_n_types();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types();
         self.emit_envr_arity_types();

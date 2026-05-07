@@ -68,7 +68,9 @@ mod tests {
             .values
             .iter()
             .filter_map(|(name, value)| match value {
-                cont::Value::Tpl2(left, right) => Some((name.clone(), left.clone(), right.clone())),
+                cont::Value::TplN(elems) if elems.len() == 2 => {
+                    Some((name.clone(), elems[0].clone(), elems[1].clone()))
+                }
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -153,7 +155,7 @@ mod tests {
                 .region
                 .values
                 .iter()
-                .any(|(_, value)| matches!(value, cont::Value::Tpl2(_, _)))
+                .any(|(_, value)| matches!(value, cont::Value::TplN(_)))
         );
     }
 }

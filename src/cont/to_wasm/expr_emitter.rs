@@ -122,26 +122,23 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 
     fn emit_proj(&mut self, tuple: &'a cont::ValueName, index: usize) {
-        let field_name = match index {
-            0 => self.context.table().proj_fst_field(),
-            1 => self.context.table().proj_snd_field(),
-            index => panic!("`ExprEmitter` expected tuple projection index 0 or 1, found {index}"),
-        };
+        let tpl_n_type = self.context.table().find_tpl_n_type(index + 1);
+        let field_name = self.context.table().tpl_n_field(index);
 
         self.emit_instrs(
             self.context
-                .load_value_instrs(tuple, LoadAs::Concrete(self.context.table().tpl2_type())),
+                .load_value_instrs(tuple, LoadAs::Concrete(tpl_n_type.clone())),
         );
 
         self.emit_instr(wasm::Instr::StructGet {
-            type_name: self.context.table().tpl2_type(),
+            type_name: tpl_n_type,
             field_name,
         });
     }
 
-    fn emit_preallocate_tpl2(&mut self, value_name: &'a cont::ValueName) {
+    fn emit_preallocate_tpl_n(&mut self, value_name: &'a cont::ValueName, arity: usize) {
         self.emit_instr(wasm::Instr::StructNewDefault {
-            type_name: self.context.table().tpl2_type(),
+            type_name: self.context.table().find_tpl_n_type(arity),
         });
 
         self.emit_instr(wasm::Instr::LocalSet {
@@ -237,35 +234,22 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_backpatch_tpl2(
-        &mut self,
-        value_name: &'a cont::ValueName,
-        first: &'a cont::ValueName,
-        second: &'a cont::ValueName,
-    ) {
-        self.emit_instrs(self.context.load_value_instrs(
-            value_name,
-            LoadAs::Concrete(self.context.table().tpl2_type()),
-        ));
+    fn emit_backpatch_tpl_n(&mut self, value_name: &'a cont::ValueName, elems: &'a [cont::ValueName]) {
+        let tpl_n_type = self.context.table().find_tpl_n_type(elems.len());
 
-        self.emit_instrs(self.context.load_value_instrs(first, LoadAs::Raw));
+        for (index, element) in elems.iter().enumerate() {
+            self.emit_instrs(self.context.load_value_instrs(
+                value_name,
+                LoadAs::Concrete(tpl_n_type.clone()),
+            ));
 
-        self.emit_instr(wasm::Instr::StructSet {
-            type_name: self.context.table().tpl2_type(),
-            field_name: self.context.table().proj_fst_field(),
-        });
+            self.emit_instrs(self.context.load_value_instrs(element, LoadAs::Raw));
 
-        self.emit_instrs(self.context.load_value_instrs(
-            value_name,
-            LoadAs::Concrete(self.context.table().tpl2_type()),
-        ));
-
-        self.emit_instrs(self.context.load_value_instrs(second, LoadAs::Raw));
-
-        self.emit_instr(wasm::Instr::StructSet {
-            type_name: self.context.table().tpl2_type(),
-            field_name: self.context.table().proj_snd_field(),
-        });
+            self.emit_instr(wasm::Instr::StructSet {
+                type_name: tpl_n_type.clone(),
+                field_name: self.context.table().tpl_n_field(index),
+            });
+        }
     }
 
     fn emit_let_proj(
@@ -300,7 +284,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             match value {
-                cont::Value::Tpl2(_, _) => self.emit_preallocate_tpl2(value_name),
+                cont::Value::TplN(elems) => self.emit_preallocate_tpl_n(value_name, elems.len()),
                 cont::Value::Clsr(target, _) => self.emit_preallocate_clsr(value_name, target),
                 _ => {}
             }
@@ -313,10 +297,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 cont::Value::Clsr(target, fields) => {
                     self.emit_backpatch_clsr(value_name, target, fields)
                 }
-                cont::Value::Tpl2(first, second) => {
-                    self.emit_backpatch_tpl2(value_name, first, second)
+                cont::Value::TplN(elems) => self.emit_backpatch_tpl_n(value_name, elems),
+                cont::Value::Proj(tuple, index) => {
+                    self.emit_let_proj(value_name, tuple, *index)
                 }
-                cont::Value::Proj(tuple, index) => self.emit_let_proj(value_name, tuple, *index),
                 cont::Value::Name(source) => self.emit_let_alias(value_name, source),
             }
         }
