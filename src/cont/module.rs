@@ -1,7 +1,7 @@
 use super::{BlockName, ClsrName, FuncName, ValueName};
 
 #[derive(Debug)]
-pub enum ConstValue {
+pub enum Data {
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
     Unit,
@@ -25,7 +25,7 @@ pub enum FltOp {
 }
 
 #[derive(Debug)]
-pub enum ConstOp {
+pub enum Code {
     Proj(usize),
     Int(IntOp),
     Flt(FltOp),
@@ -33,8 +33,8 @@ pub enum ConstOp {
 
 #[derive(Debug)]
 pub enum Value {
-    Pure(ConstValue),
-    Eval(ConstOp, Vec<ValueName>),
+    Pure(Data),
+    Eval(Code, Vec<ValueName>),
     Name(ValueName),
 }
 
@@ -115,7 +115,7 @@ impl Func {
 
 #[derive(Debug, Default)]
 pub struct Module {
-    consts: Vec<(ValueName, ConstValue)>,
+    consts: Vec<(ValueName, Data)>,
     clsrs: Vec<(ClsrName, Clsr)>,
     funcs: Vec<(FuncName, Func)>,
 }
@@ -125,11 +125,11 @@ impl Module {
         Self::default()
     }
 
-    pub fn consts(&self) -> &[(ValueName, ConstValue)] {
+    pub fn consts(&self) -> &[(ValueName, Data)] {
         &self.consts
     }
 
-    pub fn add_const(&mut self, value_name: ValueName, value: ConstValue) {
+    pub fn add_const(&mut self, value_name: ValueName, value: Data) {
         self.consts.push((value_name, value));
     }
 

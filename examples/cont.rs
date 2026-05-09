@@ -1,14 +1,14 @@
 use curios::cont::{
-    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, ConstOp, ConstValue, Func, FuncName,
+    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
     IntOp, JumpTarget, Module, Region, Tail, Value, ValueName,
 };
 
 fn main() {
     let mut module = Module::new();
 
-    module.add_const(ValueName::from("BIAS"), ConstValue::Int(10));
+    module.add_const(ValueName::from("BIAS"), Data::Int(10));
 
-    module.add_const(ValueName::from("ZERO"), ConstValue::Int(0));
+    module.add_const(ValueName::from("ZERO"), Data::Int(0));
 
     module.add_clsr(
         ClsrName::from("AddBias"),
@@ -20,7 +20,7 @@ fn main() {
                 values: vec![(
                     ValueName::from("y"),
                     Value::Eval(
-                        ConstOp::Int(IntOp::Add),
+                        Code::Int(IntOp::Add),
                         vec![ValueName::from("x"), ValueName::from("bias")],
                     ),
                 )],
@@ -41,7 +41,7 @@ fn main() {
             region: Region {
                 values: vec![(
                     ValueName::from("k"),
-                    Value::Pure(ConstValue::Clsr(
+                    Value::Pure(Data::Clsr(
                         ClsrName::from("AddBias"),
                         vec![ValueName::from("BIAS")],
                     )),
@@ -83,7 +83,7 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::Pure(ConstValue::Tpl(vec![
+                                        Value::Pure(Data::Tpl(vec![
                                             ValueName::from("out"),
                                             ValueName::from("ZERO"),
                                         ])),
@@ -91,14 +91,14 @@ fn main() {
                                     (
                                         ValueName::from("out_again"),
                                         Value::Eval(
-                                            ConstOp::Proj(0),
+                                            Code::Proj(0),
                                             vec![ValueName::from("pair")],
                                         ),
                                     ),
                                     (
                                         ValueName::from("is_zero"),
                                         Value::Eval(
-                                            ConstOp::Proj(1),
+                                            Code::Proj(1),
                                             vec![ValueName::from("pair")],
                                         ),
                                     ),

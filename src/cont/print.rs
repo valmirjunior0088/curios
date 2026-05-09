@@ -1,6 +1,6 @@
 use {
     super::{
-        Block, BlockName, CallTarget, Clsr, ClsrName, ConstOp, ConstValue, FltOp, Func, FuncName,
+        Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, FltOp, Func, FuncName,
         IntOp, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -27,31 +27,31 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
     pure(&name.string)
 }
 
-fn print_const_value<'a>(value: &'a ConstValue) -> Printer<'a> {
+fn print_data<'a>(value: &'a Data) -> Printer<'a> {
     match value {
-        ConstValue::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
-        ConstValue::Clsr(target, fields) => flat([
+        Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
+        Data::Clsr(target, fields) => flat([
             print_clsr_name(target),
             pure("{"),
             print_value_names(fields),
             pure("}"),
         ]),
-        ConstValue::Unit => pure("()"),
-        ConstValue::Int(value) => pure(value.to_string()),
-        ConstValue::Flt(value) => pure(value.to_string()),
+        Data::Unit => pure("()"),
+        Data::Int(value) => pure(value.to_string()),
+        Data::Flt(value) => pure(value.to_string()),
     }
 }
 
-fn print_const_op<'a>(op: &'a ConstOp) -> Printer<'a> {
+fn print_code<'a>(op: &'a Code) -> Printer<'a> {
     match op {
-        ConstOp::Proj(index) => flat([pure("proj "), pure(index.to_string())]),
-        ConstOp::Int(IntOp::Eql) => pure("int.eql"),
-        ConstOp::Int(IntOp::Add) => pure("int.add"),
-        ConstOp::Int(IntOp::Sub) => pure("int.sub"),
-        ConstOp::Int(IntOp::Mul) => pure("int.mul"),
-        ConstOp::Flt(FltOp::Add) => pure("flt.add"),
-        ConstOp::Flt(FltOp::Sub) => pure("flt.sub"),
-        ConstOp::Flt(FltOp::Mul) => pure("flt.mul"),
+        Code::Proj(index) => flat([pure("proj "), pure(index.to_string())]),
+        Code::Int(IntOp::Eql) => pure("int.eql"),
+        Code::Int(IntOp::Add) => pure("int.add"),
+        Code::Int(IntOp::Sub) => pure("int.sub"),
+        Code::Int(IntOp::Mul) => pure("int.mul"),
+        Code::Flt(FltOp::Add) => pure("flt.add"),
+        Code::Flt(FltOp::Sub) => pure("flt.sub"),
+        Code::Flt(FltOp::Mul) => pure("flt.mul"),
     }
 }
 
@@ -61,9 +61,9 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
         print_value_name(name),
         pure(" = "),
         match value {
-            Value::Pure(value) => print_const_value(value),
+            Value::Pure(value) => print_data(value),
             Value::Eval(op, params) => flat([
-                print_const_op(op),
+                print_code(op),
                 if params.is_empty() {
                     pure("")
                 } else {
@@ -162,12 +162,12 @@ fn print_region<'a>(region: &'a Region) -> Printer<'a> {
     )
 }
 
-fn print_let_const<'a>(name: &'a ValueName, value: &'a ConstValue) -> Printer<'a> {
+fn print_let_const<'a>(name: &'a ValueName, value: &'a Data) -> Printer<'a> {
     flat([
         pure("let "),
         print_value_name(name),
         pure(" = "),
-        print_const_value(value),
+        print_data(value),
         pure(";"),
     ])
 }

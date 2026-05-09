@@ -59,8 +59,8 @@ mod tests {
     fn lowers_and_runs_mutually_recursive_tuple() {
         let mut module = cont::Module::new();
 
-        module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
-        module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
 
         module.add_func(
             cont::FuncName::from("main"),
@@ -71,25 +71,25 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("x"),
-                            cont::Value::Pure(cont::ConstValue::Tpl(vec![
+                            cont::Value::Pure(cont::Data::Tpl(vec![
                                 cont::ValueName::from("y"),
                                 cont::ValueName::from("ONE"),
                             ])),
                         ),
                         (
                             cont::ValueName::from("y"),
-                            cont::Value::Pure(cont::ConstValue::Tpl(vec![
+                            cont::Value::Pure(cont::Data::Tpl(vec![
                                 cont::ValueName::from("TWO"),
                                 cont::ValueName::from("x"),
                             ])),
                         ),
                         (
                             cont::ValueName::from("left"),
-                            cont::Value::Eval(cont::ConstOp::Proj(0), vec![cont::ValueName::from("x")]),
+                            cont::Value::Eval(cont::Code::Proj(0), vec![cont::ValueName::from("x")]),
                         ),
                         (
                             cont::ValueName::from("out"),
-                            cont::Value::Eval(cont::ConstOp::Proj(0), vec![cont::ValueName::from("left")]),
+                            cont::Value::Eval(cont::Code::Proj(0), vec![cont::ValueName::from("left")]),
                         ),
                     ],
                     blocks: vec![],
@@ -115,10 +115,10 @@ mod tests {
     fn lowers_and_runs_mutually_recursive_closures() {
         let mut module = cont::Module::new();
 
-        module.add_const(cont::ValueName::from("ZERO"), cont::ConstValue::Int(0));
-        module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
-        module.add_const(cont::ValueName::from("EVEN"), cont::ConstValue::Int(11));
-        module.add_const(cont::ValueName::from("ODD"), cont::ConstValue::Int(22));
+        module.add_const(cont::ValueName::from("ZERO"), cont::Data::Int(0));
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
+        module.add_const(cont::ValueName::from("EVEN"), cont::Data::Int(11));
+        module.add_const(cont::ValueName::from("ODD"), cont::Data::Int(22));
 
         module.add_clsr(
             cont::ClsrName::from("even"),
@@ -130,7 +130,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(
-                            cont::ConstOp::Int(cont::IntOp::Eql),
+                            cont::Code::Int(cont::IntOp::Eql),
                             vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
                         ),
                     )],
@@ -157,7 +157,7 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(
-                                            cont::ConstOp::Int(cont::IntOp::Sub),
+                                            cont::Code::Int(cont::IntOp::Sub),
                                             vec![
                                                 cont::ValueName::from("n"),
                                                 cont::ValueName::from("ONE"),
@@ -199,7 +199,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(
-                            cont::ConstOp::Int(cont::IntOp::Eql),
+                            cont::Code::Int(cont::IntOp::Eql),
                             vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
                         ),
                     )],
@@ -226,7 +226,7 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(
-                                            cont::ConstOp::Int(cont::IntOp::Sub),
+                                            cont::Code::Int(cont::IntOp::Sub),
                                             vec![
                                                 cont::ValueName::from("n"),
                                                 cont::ValueName::from("ONE"),
@@ -267,14 +267,14 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("even"),
-                            cont::Value::Pure(cont::ConstValue::Clsr(
+                            cont::Value::Pure(cont::Data::Clsr(
                                 cont::ClsrName::from("even"),
                                 vec![cont::ValueName::from("odd")],
                             )),
                         ),
                         (
                             cont::ValueName::from("odd"),
-                            cont::Value::Pure(cont::ConstValue::Clsr(
+                            cont::Value::Pure(cont::Data::Clsr(
                                 cont::ClsrName::from("odd"),
                                 vec![cont::ValueName::from("even")],
                             )),
@@ -304,8 +304,8 @@ mod tests {
     fn lowers_and_runs_direct_call() {
         let mut module = cont::Module::new();
 
-        module.add_const(cont::ValueName::from("ONE"), cont::ConstValue::Int(1));
-        module.add_const(cont::ValueName::from("TWO"), cont::ConstValue::Int(2));
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
 
         module.add_func(
             cont::FuncName::from("add_one"),
@@ -316,7 +316,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(
-                            cont::ConstOp::Int(cont::IntOp::Add),
+                            cont::Code::Int(cont::IntOp::Add),
                             vec![cont::ValueName::from("x"), cont::ValueName::from("ONE")],
                         ),
                     )],
@@ -381,7 +381,7 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("unit"),
-                        cont::Value::Pure(cont::ConstValue::Unit),
+                        cont::Value::Pure(cont::Data::Unit),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -410,9 +410,9 @@ mod tests {
     fn lowers_and_runs_float_result() {
         let mut cont_module = cont::Module::new();
 
-        cont_module.add_const(cont::ValueName::from("LEFT"), cont::ConstValue::Flt(1.25));
+        cont_module.add_const(cont::ValueName::from("LEFT"), cont::Data::Flt(1.25));
 
-        cont_module.add_const(cont::ValueName::from("RIGHT"), cont::ConstValue::Flt(2.5));
+        cont_module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Flt(2.5));
 
         cont_module.add_func(
             cont::FuncName::from("main"),
@@ -423,7 +423,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(
-                            cont::ConstOp::Flt(cont::FltOp::Add),
+                            cont::Code::Flt(cont::FltOp::Add),
                             vec![
                                 cont::ValueName::from("LEFT"),
                                 cont::ValueName::from("RIGHT"),

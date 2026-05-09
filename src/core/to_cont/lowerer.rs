@@ -166,17 +166,17 @@ impl<'a> Lowerer<'a> {
         match term {
             core::ErasedTerm::Name(name) => frame.find(&name.string),
             core::ErasedTerm::Prim(core::ErasedPrim::Unit) => {
-                emit_fresh_value(state, builder, cont::Value::Pure(cont::ConstValue::Unit))
+                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit))
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => emit_fresh_value(
                 state,
                 builder,
-                cont::Value::Pure(cont::ConstValue::Int(*value)),
+                cont::Value::Pure(cont::Data::Int(*value)),
             ),
             core::ErasedTerm::Prim(core::ErasedPrim::Flt(value)) => emit_fresh_value(
                 state,
                 builder,
-                cont::Value::Pure(cont::ConstValue::Flt(*value)),
+                cont::Value::Pure(cont::Data::Flt(*value)),
             ),
             core::ErasedTerm::Prim(core::ErasedPrim::IntEql(left, right)) => {
                 let left = self.lower_letrec_name(left, frame, state, builder);
@@ -185,7 +185,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Eql), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Eql), vec![left, right]),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntAdd(left, right)) => {
@@ -195,7 +195,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Add), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Add), vec![left, right]),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntSub(left, right)) => {
@@ -205,7 +205,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Sub), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Sub), vec![left, right]),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntMul(left, right)) => {
@@ -215,7 +215,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Mul), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Mul), vec![left, right]),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltAdd(left, right)) => {
@@ -225,7 +225,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Add), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Flt(cont::FltOp::Add), vec![left, right]),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltSub(left, right)) => {
@@ -235,7 +235,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Sub), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Flt(cont::FltOp::Sub), vec![left, right]),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltMul(left, right)) => {
@@ -245,7 +245,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Mul), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Flt(cont::FltOp::Mul), vec![left, right]),
                 )
             }
             core::ErasedTerm::Func(func) => {
@@ -254,19 +254,19 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::ConstValue::Clsr(clsr_name, captured_values)),
+                    cont::Value::Pure(cont::Data::Clsr(clsr_name, captured_values)),
                 )
             }
             core::ErasedTerm::Pair(pair) => {
                 let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
                 let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
 
-                emit_fresh_value(state, builder, cont::Value::Pure(cont::ConstValue::Tpl(vec![fst, snd])))
+                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![fst, snd])))
             }
             core::ErasedTerm::Atom(atom) => emit_fresh_value(
                 state,
                 builder,
-                cont::Value::Pure(cont::ConstValue::Int(atom.index as i32)),
+                cont::Value::Pure(cont::Data::Int(atom.index as i32)),
             ),
             core::ErasedTerm::Let(let_) => {
                 let body = self.lower_letrec_name(&let_.body, frame, state, builder);
@@ -295,13 +295,13 @@ impl<'a> Lowerer<'a> {
     ) {
         match term {
             core::ErasedTerm::Prim(core::ErasedPrim::Unit) => {
-                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Unit));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Unit));
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => {
-                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Int(*value)));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Int(*value)));
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Flt(value)) => {
-                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Flt(*value)));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Flt(*value)));
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntEql(left, right)) => {
                 let left = self.lower_letrec_name(left, frame, state, builder);
@@ -309,7 +309,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Eql), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Eql), vec![left, right]),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntAdd(left, right)) => {
@@ -318,7 +318,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Add), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Add), vec![left, right]),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntSub(left, right)) => {
@@ -327,7 +327,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Sub), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Sub), vec![left, right]),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntMul(left, right)) => {
@@ -336,7 +336,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Mul), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Int(cont::IntOp::Mul), vec![left, right]),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltAdd(left, right)) => {
@@ -345,7 +345,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Add), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Flt(cont::FltOp::Add), vec![left, right]),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltSub(left, right)) => {
@@ -354,7 +354,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Sub), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Flt(cont::FltOp::Sub), vec![left, right]),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltMul(left, right)) => {
@@ -363,22 +363,22 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Mul), vec![left, right]),
+                    cont::Value::Eval(cont::Code::Flt(cont::FltOp::Mul), vec![left, right]),
                 );
             }
             core::ErasedTerm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
-                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Clsr(clsr_name, captured_values)));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Clsr(clsr_name, captured_values)));
             }
             core::ErasedTerm::Pair(pair) => {
                 let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
                 let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
-                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Tpl(vec![fst, snd])));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![fst, snd])));
             }
             core::ErasedTerm::Atom(atom) => {
                 builder.add_value(
                     target,
-                    cont::Value::Pure(cont::ConstValue::Int(atom.index as i32)),
+                    cont::Value::Pure(cont::Data::Int(atom.index as i32)),
                 );
             }
             core::ErasedTerm::Let(let_) => {
@@ -423,7 +423,7 @@ impl<'a> Lowerer<'a> {
             core::ErasedTerm::Name(name) => cont(self, state, builder, frame.find(&name.string)),
             core::ErasedTerm::Prim(core::ErasedPrim::Unit) => {
                 let value =
-                    emit_fresh_value(state, builder, cont::Value::Pure(cont::ConstValue::Unit));
+                    emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit));
 
                 cont(self, state, builder, value)
             }
@@ -431,7 +431,7 @@ impl<'a> Lowerer<'a> {
                 let value = emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::ConstValue::Int(*value)),
+                    cont::Value::Pure(cont::Data::Int(*value)),
                 );
 
                 cont(self, state, builder, value)
@@ -440,7 +440,7 @@ impl<'a> Lowerer<'a> {
                 let value = emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::ConstValue::Flt(*value)),
+                    cont::Value::Pure(cont::Data::Flt(*value)),
                 );
 
                 cont(self, state, builder, value)
@@ -460,7 +460,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Eql), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Int(cont::IntOp::Eql), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -483,7 +483,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Add), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Int(cont::IntOp::Add), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -506,7 +506,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Sub), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Int(cont::IntOp::Sub), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -529,7 +529,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Int(cont::IntOp::Mul), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Int(cont::IntOp::Mul), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -552,7 +552,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Add), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Flt(cont::FltOp::Add), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -575,7 +575,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Sub), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Flt(cont::FltOp::Sub), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -598,7 +598,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::ConstOp::Flt(cont::FltOp::Mul), vec![left, right]),
+                                cont::Value::Eval(cont::Code::Flt(cont::FltOp::Mul), vec![left, right]),
                             );
 
                             cont(this, state, builder, value)
@@ -611,7 +611,7 @@ impl<'a> Lowerer<'a> {
                 let value = emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::ConstValue::Clsr(clsr_name, captured_values)),
+                    cont::Value::Pure(cont::Data::Clsr(clsr_name, captured_values)),
                 );
 
                 cont(self, state, builder, value)
@@ -629,7 +629,7 @@ impl<'a> Lowerer<'a> {
                         builder,
                         Box::new(move |this, state, builder, snd| {
                             let value =
-                                emit_fresh_value(state, builder, cont::Value::Pure(cont::ConstValue::Tpl(vec![fst, snd])));
+                                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![fst, snd])));
 
                             cont(this, state, builder, value)
                         }),
@@ -640,7 +640,7 @@ impl<'a> Lowerer<'a> {
                 let value = emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::ConstValue::Int(atom.index as i32)),
+                    cont::Value::Pure(cont::Data::Int(atom.index as i32)),
                 );
 
                 cont(self, state, builder, value)
@@ -756,10 +756,10 @@ impl<'a> Lowerer<'a> {
                 builder,
                 Box::new(move |this, state, builder, head| {
                     let fst = state.fresh_value();
-                    builder.add_value(fst.clone(), cont::Value::Eval(cont::ConstOp::Proj(0), vec![head.clone()]));
+                    builder.add_value(fst.clone(), cont::Value::Eval(cont::Code::Proj(0), vec![head.clone()]));
 
                     let snd = state.fresh_value();
-                    builder.add_value(snd.clone(), cont::Value::Eval(cont::ConstOp::Proj(1), vec![head]));
+                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::Proj(1), vec![head]));
 
                     let frame =
                         frame.extended([(split.fst.clone(), fst), (split.snd.clone(), snd)]);

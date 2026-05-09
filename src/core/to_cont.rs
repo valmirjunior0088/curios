@@ -68,7 +68,7 @@ mod tests {
             .values
             .iter()
             .filter_map(|(name, value)| match value {
-                cont::Value::Pure(cont::ConstValue::Tpl(elems)) if elems.len() == 2 => {
+                cont::Value::Pure(cont::Data::Tpl(elems)) if elems.len() == 2 => {
                     Some((name.clone(), elems[0].clone(), elems[1].clone()))
                 }
                 _ => None,
@@ -155,7 +155,7 @@ mod tests {
                 .region
                 .values
                 .iter()
-                .any(|(_, value)| matches!(value, cont::Value::Pure(cont::ConstValue::Tpl(_))))
+                .any(|(_, value)| matches!(value, cont::Value::Pure(cont::Data::Tpl(_))))
         );
     }
 }

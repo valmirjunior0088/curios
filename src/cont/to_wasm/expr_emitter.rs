@@ -44,9 +44,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         self.expr.extend(instrs);
     }
 
-    pub fn emit_const_value(&mut self, value: &'a cont::ConstValue) {
+    pub fn emit_data(&mut self, value: &'a cont::Data) {
         match value {
-            cont::ConstValue::Tpl(elems) => {
+            cont::Data::Tpl(elems) => {
                 let tpl_n_type = self.context.table().find_tpl_type(elems.len());
 
                 for elem in elems {
@@ -57,7 +57,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: tpl_n_type,
                 });
             }
-            cont::ConstValue::Clsr(target, fields) => {
+            cont::Data::Clsr(target, fields) => {
                 let clsr_data = self.context.table().find_clsr(target);
                 let envr_type = clsr_data.envr_type();
 
@@ -73,13 +73,13 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: envr_type,
                 });
             }
-            cont::ConstValue::Unit => self.emit_instr(wasm::Instr::StructNew {
+            cont::Data::Unit => self.emit_instr(wasm::Instr::StructNew {
                 type_name: self.context.table().unit_type(),
             }),
-            &cont::ConstValue::Int(value) => {
+            &cont::Data::Int(value) => {
                 self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
             }
-            &cont::ConstValue::Flt(value) => self.emit_instrs([
+            &cont::Data::Flt(value) => self.emit_instrs([
                 wasm::Instr::F32Const { value },
                 wasm::Instr::StructNew {
                     type_name: self.context.table().flt_type(),
@@ -88,34 +88,34 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_const_op(&mut self, op: &'a cont::ConstOp, params: &'a [cont::ValueName]) {
+    fn emit_code(&mut self, op: &'a cont::Code, params: &'a [cont::ValueName]) {
         match (op, params) {
-            (cont::ConstOp::Proj(index), [tuple]) => self.emit_proj(tuple, *index),
-            (cont::ConstOp::Int(cont::IntOp::Eql), [left, right]) => {
+            (cont::Code::Proj(index), [tuple]) => self.emit_proj(tuple, *index),
+            (cont::Code::Int(cont::IntOp::Eql), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Eq);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::Int(cont::IntOp::Add), [left, right]) => {
+            (cont::Code::Int(cont::IntOp::Add), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Add);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::Int(cont::IntOp::Sub), [left, right]) => {
+            (cont::Code::Int(cont::IntOp::Sub), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::Int(cont::IntOp::Mul), [left, right]) => {
+            (cont::Code::Int(cont::IntOp::Mul), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Mul);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::ConstOp::Flt(cont::FltOp::Add), [left, right]) => {
+            (cont::Code::Flt(cont::FltOp::Add), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Add);
@@ -124,7 +124,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::ConstOp::Flt(cont::FltOp::Sub), [left, right]) => {
+            (cont::Code::Flt(cont::FltOp::Sub), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Sub);
@@ -133,7 +133,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::ConstOp::Flt(cont::FltOp::Mul), [left, right]) => {
+            (cont::Code::Flt(cont::FltOp::Mul), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Mul);
@@ -196,8 +196,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    fn emit_let_pure(&mut self, value_name: &'a cont::ValueName, value: &'a cont::ConstValue) {
-        self.emit_const_value(value);
+    fn emit_let_pure(&mut self, value_name: &'a cont::ValueName, value: &'a cont::Data) {
+        self.emit_data(value);
 
         self.emit_instr(wasm::Instr::LocalSet {
             local_name: self
@@ -211,10 +211,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_eval(
         &mut self,
         value_name: &'a cont::ValueName,
-        op: &'a cont::ConstOp,
+        op: &'a cont::Code,
         params: &'a [cont::ValueName],
     ) {
-        self.emit_const_op(op, params);
+        self.emit_code(op, params);
 
         self.emit_instr(wasm::Instr::LocalSet {
             local_name: self
@@ -295,10 +295,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             match value {
-                cont::Value::Pure(cont::ConstValue::Tpl(elems)) => {
+                cont::Value::Pure(cont::Data::Tpl(elems)) => {
                     self.emit_preallocate_tpl(value_name, elems.len())
                 }
-                cont::Value::Pure(cont::ConstValue::Clsr(target, _)) => {
+                cont::Value::Pure(cont::Data::Clsr(target, _)) => {
                     self.emit_preallocate_clsr(value_name, target)
                 }
                 _ => {}
@@ -307,10 +307,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
         for (value_name, value) in values {
             match value {
-                cont::Value::Pure(cont::ConstValue::Tpl(elems)) => {
+                cont::Value::Pure(cont::Data::Tpl(elems)) => {
                     self.emit_backpatch_tpl(value_name, elems)
                 }
-                cont::Value::Pure(cont::ConstValue::Clsr(target, fields)) => {
+                cont::Value::Pure(cont::Data::Clsr(target, fields)) => {
                     self.emit_backpatch_clsr(value_name, target, fields)
                 }
                 cont::Value::Pure(value) => self.emit_let_pure(value_name, value),

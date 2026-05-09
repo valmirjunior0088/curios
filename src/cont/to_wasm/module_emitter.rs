@@ -192,10 +192,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_const(&mut self, name: &'a cont::ValueName, value: &'a cont::ConstValue) {
+    fn emit_let_data(&mut self, name: &'a cont::ValueName, value: &'a cont::Data) {
         let mut expr = Default::default();
 
-        ExprEmitter::new(Context::new_const(self.table), &mut expr).emit_const_value(value);
+        ExprEmitter::new(Context::new_const(self.table), &mut expr).emit_data(value);
 
         self.module.add_global(
             self.table.find_const(name),
@@ -297,7 +297,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_func_types();
 
         for (name, value) in module.consts() {
-            self.emit_let_const(name, value);
+            self.emit_let_data(name, value);
         }
 
         for (name, clsr) in module.clsrs() {

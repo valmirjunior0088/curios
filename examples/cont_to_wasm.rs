@@ -1,16 +1,16 @@
 use curios::cont::{
-    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, ConstOp, ConstValue, FltOp, Func,
+    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, Code, Data, FltOp, Func,
     FuncName, IntOp, JumpTarget, Module, Region, Tail, Value, ValueName, to_wasm,
 };
 
 fn main() {
     let mut module = Module::new();
 
-    module.add_const(ValueName::from("ZERO"), ConstValue::Int(0));
+    module.add_const(ValueName::from("ZERO"), Data::Int(0));
 
-    module.add_const(ValueName::from("ONE"), ConstValue::Int(1));
+    module.add_const(ValueName::from("ONE"), Data::Int(1));
 
-    module.add_const(ValueName::from("ONE_HALF"), ConstValue::Flt(0.5));
+    module.add_const(ValueName::from("ONE_HALF"), Data::Flt(0.5));
 
     module.add_clsr(
         ClsrName::from("RouteByZero"),
@@ -22,7 +22,7 @@ fn main() {
                 values: vec![(
                     ValueName::from("is_zero"),
                     Value::Eval(
-                        ConstOp::Int(IntOp::Eql),
+                        Code::Int(IntOp::Eql),
                         vec![ValueName::from("x"), ValueName::from("ZERO")],
                     ),
                 )],
@@ -94,12 +94,12 @@ fn main() {
                 values: vec![
                     (
                         ValueName::from("thk"),
-                        Value::Pure(ConstValue::Clsr(ClsrName::from("RouteByZero"), vec![])),
+                        Value::Pure(Data::Clsr(ClsrName::from("RouteByZero"), vec![])),
                     ),
                     (
                         ValueName::from("scale"),
                         Value::Eval(
-                            ConstOp::Flt(FltOp::Mul),
+                            Code::Flt(FltOp::Mul),
                             vec![ValueName::from("ONE_HALF"), ValueName::from("ONE_HALF")],
                         ),
                     ),
@@ -113,23 +113,23 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::Pure(ConstValue::Tpl(vec![
+                                        Value::Pure(Data::Tpl(vec![
                                             ValueName::from("result"),
                                             ValueName::from("ONE"),
                                         ])),
                                     ),
                                     (
                                         ValueName::from("result_again"),
-                                        Value::Eval(ConstOp::Proj(0), vec![ValueName::from("pair")]),
+                                        Value::Eval(Code::Proj(0), vec![ValueName::from("pair")]),
                                     ),
                                     (
                                         ValueName::from("fallback_one"),
-                                        Value::Eval(ConstOp::Proj(1), vec![ValueName::from("pair")]),
+                                        Value::Eval(Code::Proj(1), vec![ValueName::from("pair")]),
                                     ),
                                     (
                                         ValueName::from("result_is_zero"),
                                         Value::Eval(
-                                            ConstOp::Int(IntOp::Eql),
+                                            Code::Int(IntOp::Eql),
                                             vec![
                                                 ValueName::from("result_again"),
                                                 ValueName::from("ZERO"),
