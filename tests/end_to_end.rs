@@ -4,7 +4,8 @@ use {
     wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
 };
 
-fn main() {
+#[test]
+fn pipeline_lowers_and_runs_core_term() {
     let term = "
         let pair_ty : Type =
           (tag : '{left, right},

@@ -239,7 +239,7 @@ Tests exist at each layer:
 
 For anyone wanting to understand this project:
 
-1. **Browse `examples/`** — the example files (`examples/core.rs`, `examples/end_to_end.rs`, `examples/execute.rs`, etc.) show the language in action at each compilation stage. They are the fastest way to see what Curios programs look like and how the pipeline behaves end to end.
+1. **Browse `examples/`** — the example files (`examples/core.rs`, `examples/execute.rs`, etc.) show the language in action at each compilation stage. They are the fastest way to see what Curios programs look like and how the pipeline behaves. For a full pipeline execution test, see `tests/end_to_end.rs`.
 
 2. **Read `src/core/term.rs`** — the `Term` enum is the central data structure. Everything else transforms it or consumes it. Understanding the variants (especially `Scope`, `FuncType`, `PairType`, `AtomType`) is prerequisite to everything.
 
