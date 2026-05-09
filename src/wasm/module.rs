@@ -73,6 +73,7 @@ pub struct Module {
     globals: Vec<(GlobalName, Global)>,
     datas: Vec<(DataName, DataSegment)>,
     exports: Vec<(String, Export)>,
+    start: Option<FuncName>,
 }
 
 impl Module {
@@ -88,6 +89,7 @@ impl Module {
             globals: Default::default(),
             datas: Default::default(),
             exports: Default::default(),
+            start: None,
         }
     }
 
@@ -159,6 +161,14 @@ impl Module {
         N: Into<String>,
     {
         self.exports.push((name.into(), export));
+    }
+
+    pub fn start(&self) -> Option<&FuncName> {
+        self.start.as_ref()
+    }
+
+    pub fn set_start(&mut self, func_name: FuncName) {
+        self.start = Some(func_name);
     }
 }
 

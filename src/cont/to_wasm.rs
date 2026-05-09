@@ -1720,4 +1720,90 @@ mod tests {
             .unwrap_f32();
         assert_eq!(result, 2.5);
     }
+
+    #[test]
+    fn lowers_and_runs_bin_len() {
+        let mut module = cont::Module::new();
+
+        module.add_const(
+            cont::ValueName::from("HELLO"),
+            cont::Data::Bin(b"hello".to_vec()),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::BinLen,
+                            vec![cont::ValueName::from("HELLO")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn lowers_and_runs_bin_get() {
+        let mut module = cont::Module::new();
+
+        module.add_const(
+            cont::ValueName::from("HELLO"),
+            cont::Data::Bin(b"hello".to_vec()),
+        );
+        module.add_const(cont::ValueName::from("IDX"), cont::Data::Nat(1));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::BinGet,
+                            vec![
+                                cont::ValueName::from("HELLO"),
+                                cont::ValueName::from("IDX"),
+                            ],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, b'e' as i32);
+    }
 }

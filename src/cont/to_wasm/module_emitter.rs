@@ -8,11 +8,30 @@ use {
 pub struct ModuleEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut wasm::Module,
+    start_expr: wasm::Expr,
 }
 
 impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn new(table: &'a Table<'a>, module: &'b mut wasm::Module) -> Self {
-        Self { table, module }
+        Self {
+            table,
+            module,
+            start_expr: Default::default(),
+        }
+    }
+
+    fn emit_bin_type(&mut self) {
+        self.module.add_type(
+            self.table.bin_type(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Array(wasm::ArrayType::from(wasm::FieldType {
+                    storage_type: wasm::StorageType::Packed(wasm::PackedType::I8),
+                    mutability: wasm::Mutability::Var,
+                })),
+            },
+        );
     }
 
     fn emit_lst_type(&mut self) {
@@ -71,8 +90,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 wasm::SubType {
                     is_final: false,
                     super_types,
-                    comp_type: wasm::CompType::Struct(wasm::StructType::from(
-                        (0..arity).map(|index| {
+                    comp_type: wasm::CompType::Struct(wasm::StructType::from((0..arity).map(
+                        |index| {
                             (
                                 self.table.tpl_field(index),
                                 wasm::FieldType {
@@ -80,8 +99,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                     mutability: wasm::Mutability::Var,
                                 },
                             )
-                        }),
-                    )),
+                        },
+                    ))),
                 },
             );
         }
@@ -206,10 +225,64 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    fn emit_let_bin_data(&mut self, name: &'a cont::ValueName, bytes: &[u8]) {
+        let bin_type = self.table.bin_type();
+        let global_name = self.table.find_const(name);
+        let data_name = wasm::DataName::from(name.string.clone());
+
+        self.module.add_data(
+            data_name.clone(),
+            wasm::DataSegment {
+                bytes: bytes.to_vec(),
+            },
+        );
+
+        let mut init_expr: wasm::Expr = Default::default();
+        init_expr.push(wasm::Instr::I32Const { value: 0 });
+        init_expr.push(wasm::Instr::ArrayNewDefault {
+            type_name: bin_type.clone(),
+        });
+
+        self.module.add_global(
+            global_name.clone(),
+            wasm::Global {
+                global_type: wasm::GlobalType {
+                    val_type: wasm::ValType::Ref(wasm::RefType {
+                        is_nullable: false,
+                        heap_type: wasm::HeapType::Concrete(bin_type.clone()),
+                    }),
+                    mutability: wasm::Mutability::Var,
+                },
+                expr: init_expr,
+            },
+        );
+
+        self.module.add_export(
+            global_name.string.clone(),
+            wasm::Export::Global(global_name.clone()),
+        );
+
+        self.start_expr.push(wasm::Instr::I32Const { value: 0 });
+        self.start_expr.push(wasm::Instr::I32Const {
+            value: bytes.len() as i32,
+        });
+        self.start_expr.push(wasm::Instr::ArrayNewData {
+            type_name: bin_type,
+            data_name,
+        });
+        self.start_expr.push(wasm::Instr::GlobalSet { global_name });
+    }
+
     fn emit_let_data(&mut self, name: &'a cont::ValueName, value: &'a cont::Data) {
+        if let cont::Data::Bin(bytes) = value {
+            self.emit_let_bin_data(name, bytes);
+            return;
+        }
+
         let mut expr = Default::default();
 
-        ExprEmitter::new(Context::new_const(self.table), &mut expr).emit_data(value);
+        ExprEmitter::new(Context::new_const(self.table), self.module, &mut expr)
+            .emit_data(name, value);
 
         self.module.add_global(
             self.table.find_const(name),
@@ -234,6 +307,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         ExprEmitter::new(
             Context::new_clsr(self.table, self.table.find_clsr(name), &mut locals),
+            self.module,
             &mut expr,
         )
         .emit_root_region(&clsr.region);
@@ -269,6 +343,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         ExprEmitter::new(
             Context::new_func(self.table, self.table.find_func(name), &mut locals),
+            self.module,
             &mut expr,
         )
         .emit_root_region(&func.region);
@@ -303,6 +378,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn emit_module(&mut self, module: &'a cont::Module) {
         self.emit_unit_type();
         self.emit_flt_type();
+        self.emit_bin_type();
         self.emit_lst_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
@@ -321,6 +397,36 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);
+        }
+
+        if !self.start_expr.instrs.is_empty() {
+            let start_type_name = wasm::TypeName::from("start");
+
+            self.module.add_type(
+                start_type_name.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([]),
+                        outputs: wasm::ResultType::from([]),
+                    }),
+                },
+            );
+
+            let start_func_name = wasm::FuncName::from("start");
+
+            self.module.add_func(
+                start_func_name.clone(),
+                wasm::Func {
+                    type_name: start_type_name,
+                    params: vec![],
+                    locals: vec![],
+                    expr: self.start_expr.clone(),
+                },
+            );
+
+            self.module.set_start(start_func_name);
         }
     }
 }

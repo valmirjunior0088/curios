@@ -32,6 +32,7 @@ pub enum LoadAs {
     Concrete(wasm::TypeName),
     Int,
     Flt,
+    Bin,
     Lst,
 }
 
@@ -220,6 +221,14 @@ impl<'a, 'b> Context<'a, 'b> {
                         field_name: self.table().special_field(),
                     },
                 ]
+            }
+            LoadAs::Bin => {
+                vec![wasm::Instr::RefCast {
+                    ref_type: wasm::RefType {
+                        is_nullable: false,
+                        heap_type: wasm::HeapType::Concrete(self.table().bin_type()),
+                    },
+                }]
             }
             LoadAs::Lst => {
                 vec![wasm::Instr::RefCast {

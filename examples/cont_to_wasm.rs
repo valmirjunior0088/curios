@@ -12,6 +12,8 @@ fn main() {
 
     module.add_const(ValueName::from("ONE_HALF"), Data::Flt(0.5));
 
+    module.add_const(ValueName::from("HELLO"), Data::Bin(b"hello".to_vec()));
+
     module.add_clsr(
         ClsrName::from("RouteByZero"),
         Clsr {

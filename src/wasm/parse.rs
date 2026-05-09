@@ -816,6 +816,12 @@ fn parse_export<'a>() -> Parser<'a, (String, Export)> {
         .and_drop(parse_literal(")"))
 }
 
+fn parse_start<'a>() -> Parser<'a, FuncName> {
+    catch(parse_literal("(").and_drop(parse_literal("start")))
+        .and_keep(parse_func_name())
+        .and_drop(parse_literal(")"))
+}
+
 fn parse_module<'a>() -> Parser<'a, Module> {
     catch(parse_literal("(").and_drop(parse_literal("module")))
         .and_keep(parse_name())
@@ -864,6 +870,14 @@ fn parse_module<'a>() -> Parser<'a, Module> {
         .map(|(mut module, exports)| {
             for (name, export) in exports {
                 module.add_export(name, export);
+            }
+
+            module
+        })
+        .and(parse_start().map(Some).or(pure(None)))
+        .map(|(mut module, start)| {
+            if let Some(start) = start {
+                module.set_start(start);
             }
 
             module

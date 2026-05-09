@@ -3,7 +3,7 @@ use super::{
     TypeName, ValType,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instr {
     Unreachable,
     Nop,
@@ -307,7 +307,7 @@ pub enum Instr {
     I64TruncSatF64U,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Expr {
     pub instrs: Vec<Instr>,
 }

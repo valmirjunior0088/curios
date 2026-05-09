@@ -1770,6 +1770,19 @@ where
         Ok(())
     }
 
+    fn write_start_section(&mut self, start: &FuncName) -> Result<()> {
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = self.fork(&mut bytes);
+            writer.write_func_name(start)?;
+        }
+
+        self.write_section(8, bytes)?;
+
+        Ok(())
+    }
+
     fn write_code_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
         let mut bytes = Vec::new();
 
@@ -1986,6 +1999,9 @@ where
         self.write_func_section(module.funcs())?;
         self.write_global_section(module.globals())?;
         self.write_export_section(module.exports())?;
+        if let Some(start) = module.start() {
+            self.write_start_section(start)?;
+        }
         self.write_data_count_section(module.datas())?;
         self.write_code_section(module.funcs())?;
         self.write_data_section(module.datas())?;

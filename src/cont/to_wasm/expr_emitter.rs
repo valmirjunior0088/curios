@@ -7,12 +7,13 @@ use {
 #[derive(Debug)]
 pub struct ExprEmitter<'a, 'b> {
     context: Context<'a, 'b>,
+    module: &'b mut wasm::Module,
     expr: &'b mut wasm::Expr,
 }
 
 impl<'a, 'b> ExprEmitter<'a, 'b> {
-    pub fn new(context: Context<'a, 'b>, expr: &'b mut wasm::Expr) -> Self {
-        Self { context, expr }
+    pub fn new(context: Context<'a, 'b>, module: &'b mut wasm::Module, expr: &'b mut wasm::Expr) -> Self {
+        Self { context, module, expr }
     }
 
     fn emit_instr(&mut self, instr: wasm::Instr) {
@@ -44,7 +45,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         self.expr.extend(instrs);
     }
 
-    pub fn emit_data(&mut self, value: &'a cont::Data) {
+    pub fn emit_data(&mut self, value_name: &'a cont::ValueName, value: &'a cont::Data) {
         match value {
             cont::Data::Unit => self.emit_instr(wasm::Instr::StructNew {
                 type_name: self.context.table().unit_type(),
@@ -86,6 +87,14 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::StructNew {
                     type_name: tpl_n_type,
                 });
+            }
+            cont::Data::Bin(bytes) => {
+                let bin_type = self.context.table().bin_type();
+                let data_name = wasm::DataName::from(value_name.string.clone());
+                self.module.add_data(data_name.clone(), wasm::DataSegment { bytes: bytes.clone() });
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instr(wasm::Instr::I32Const { value: bytes.len() as i32 });
+                self.emit_instr(wasm::Instr::ArrayNewData { type_name: bin_type, data_name });
             }
             cont::Data::Clsr(target, fields) => {
                 let clsr_data = self.context.table().find_clsr(target);
@@ -439,6 +448,78 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::I32TruncSatF32U);
                 self.emit_instr(wasm::Instr::RefI31);
             }
+            (cont::Code::BinLen, [bin]) => {
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::BinGet, [bin, idx]) => {
+                let bin_type = self.context.table().bin_type();
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
+                self.emit_instr(wasm::Instr::ArrayGetU { type_name: bin_type });
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::BinSlice, [bin, start, end]) => {
+                let bin_type = self.context.table().bin_type();
+                let result_local = self
+                    .context
+                    .find_local(value_name)
+                    .map(|local_data| local_data.local_name)
+                    .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string));
+
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::ArrayNewDefault { type_name: bin_type.clone() });
+                self.emit_instr(wasm::Instr::LocalSet { local_name: result_local.clone() });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::ArrayCopy { source_name: bin_type.clone(), target_name: bin_type });
+
+                self.emit_instr(wasm::Instr::LocalGet { local_name: result_local });
+            }
+            (cont::Code::BinConcat, [b1, b2]) => {
+                let bin_type = self.context.table().bin_type();
+                let result_local = self
+                    .context
+                    .find_local(value_name)
+                    .map(|local_data| local_data.local_name)
+                    .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string));
+
+                self.emit_instrs(self.context.load_value_instrs(b1, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instrs(self.context.load_value_instrs(b2, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::ArrayNewDefault { type_name: bin_type.clone() });
+                self.emit_instr(wasm::Instr::LocalSet { local_name: result_local.clone() });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(b1, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(b1, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::ArrayCopy { source_name: bin_type.clone(), target_name: bin_type.clone() });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(b1, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instrs(self.context.load_value_instrs(b2, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(b2, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::ArrayCopy { source_name: bin_type.clone(), target_name: bin_type });
+
+                self.emit_instr(wasm::Instr::LocalGet { local_name: result_local });
+            }
             (cont::Code::LstLen, [lst]) => {
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
                 self.emit_instr(wasm::Instr::ArrayLen);
@@ -573,7 +654,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 
     fn emit_let_pure(&mut self, value_name: &'a cont::ValueName, value: &'a cont::Data) {
-        self.emit_data(value);
+        self.emit_data(value_name, value);
 
         self.emit_instr(wasm::Instr::LocalSet {
             local_name: self

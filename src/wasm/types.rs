@@ -165,7 +165,7 @@ impl SubType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RecType {
     pub sub_types: Vec<(TypeName, SubType)>,
 }
@@ -181,13 +181,13 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GlobalType {
     pub val_type: ValType,
     pub mutability: Mutability,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BlockType {
     Empty,
     Inline(ValType),

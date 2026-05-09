@@ -803,7 +803,10 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
                     .exports()
                     .iter()
                     .map(|(name, export)| flat([pure("\n"), print_export(name, export)])),
-            ),
+            )
+            .chain(module.start().map(|start| {
+                flat([pure("\n(start "), print_func_name(start), pure(")")])
+            })),
         )),
         pure(")"),
     ])
