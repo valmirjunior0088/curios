@@ -450,4 +450,131 @@ mod tests {
 
         assert_eq!(result, 3.75);
     }
+
+    #[test]
+    fn lowers_and_runs_global_tuple() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
+        module.add_const(
+            cont::ValueName::from("PAIR"),
+            cont::Data::Tpl(vec![
+                cont::ValueName::from("ONE"),
+                cont::ValueName::from("TWO"),
+            ]),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("out"),
+                        cont::Value::Eval(
+                            cont::Code::Proj(1),
+                            vec![cont::ValueName::from("PAIR")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("out")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn lowers_and_runs_global_closure() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("BIAS"), cont::Data::Int(5));
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Int(3));
+
+        module.add_clsr(
+            cont::ClsrName::from("add_bias"),
+            cont::Clsr {
+                fields: vec![cont::ValueName::from("bias")],
+                params: vec![cont::ValueName::from("x")],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::Int(cont::IntOp::Add),
+                            vec![
+                                cont::ValueName::from("x"),
+                                cont::ValueName::from("bias"),
+                            ],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        module.add_const(
+            cont::ValueName::from("K"),
+            cont::Data::Clsr(
+                cont::ClsrName::from("add_bias"),
+                vec![cont::ValueName::from("BIAS")],
+            ),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![],
+                    blocks: vec![(
+                        cont::BlockName::from("after"),
+                        cont::Block {
+                            params: vec![cont::ValueName::from("out")],
+                            region: cont::Region {
+                                values: vec![],
+                                blocks: vec![],
+                                tail: cont::Tail::Jump(cont::JumpTarget {
+                                    target: cont::BlockName::from("r"),
+                                    params: vec![cont::ValueName::from("out")],
+                                }),
+                            },
+                        },
+                    )],
+                    tail: cont::Tail::Call(cont::CallTarget::Indirect {
+                        target: cont::ValueName::from("K"),
+                        params: vec![cont::ValueName::from("THREE")],
+                        resume: cont::BlockName::from("after"),
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 8);
+    }
 }
