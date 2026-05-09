@@ -755,7 +755,7 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_lst_join() {
+    fn lowers_and_runs_lst_concat() {
         let mut module = cont::Module::new();
 
         module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
@@ -781,9 +781,9 @@ mod tests {
                 region: cont::Region {
                     values: vec![
                         (
-                            cont::ValueName::from("joined"),
+                            cont::ValueName::from("concat"),
                             cont::Value::Eval(
-                                cont::Code::LstJoin,
+                                cont::Code::LstConcat,
                                 vec![
                                     cont::ValueName::from("LST1"),
                                     cont::ValueName::from("LST2"),
@@ -794,7 +794,7 @@ mod tests {
                             cont::ValueName::from("result"),
                             cont::Value::Eval(
                                 cont::Code::LstLen,
-                                vec![cont::ValueName::from("joined")],
+                                vec![cont::ValueName::from("concat")],
                             ),
                         ),
                     ],
@@ -815,5 +815,773 @@ mod tests {
             .get_i32();
 
         assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_floor() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.9));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltFloor,
+                            vec![cont::ValueName::from("X")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 2.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_ceil() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.1));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltCeil,
+                            vec![cont::ValueName::from("X")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 3.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_trunc() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("X"), cont::Data::Flt(-2.9));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltTrunc,
+                            vec![cont::ValueName::from("X")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, -2.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_nearest() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltNearest,
+                            vec![cont::ValueName::from("X")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 2.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_div() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("TEN"), cont::Data::Nat(10));
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatDiv,
+                            vec![cont::ValueName::from("TEN"), cont::ValueName::from("THREE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_rem() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("TEN"), cont::Data::Nat(10));
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatRem,
+                            vec![cont::ValueName::from("TEN"), cont::ValueName::from("THREE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_lt() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatLt,
+                            vec![cont::ValueName::from("THREE"), cont::ValueName::from("FIVE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_int_neg() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("FIVE"), cont::Data::Int(5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::IntNeg,
+                            vec![cont::ValueName::from("FIVE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, -5);
+    }
+
+    #[test]
+    fn lowers_and_runs_int_div() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("NEG7"), cont::Data::Int(-7));
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::IntDiv,
+                            vec![cont::ValueName::from("NEG7"), cont::ValueName::from("TWO")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, -3);
+    }
+
+    #[test]
+    fn lowers_and_runs_int_lt() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("NEG1"), cont::Data::Int(-1));
+        module.add_const(cont::ValueName::from("ZERO"), cont::Data::Int(0));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::IntLt,
+                            vec![cont::ValueName::from("NEG1"), cont::ValueName::from("ZERO")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_div() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Flt(1.0));
+        module.add_const(cont::ValueName::from("FOUR"), cont::Data::Flt(4.0));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltDiv,
+                            vec![cont::ValueName::from("ONE"), cont::ValueName::from("FOUR")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 0.25);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_eql() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
+        module.add_const(cont::ValueName::from("B"), cont::Data::Flt(1.5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltEql,
+                            vec![cont::ValueName::from("A"), cont::ValueName::from("B")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_sqrt() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("FOUR"), cont::Data::Flt(4.0));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltSqrt,
+                            vec![cont::ValueName::from("FOUR")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 2.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_int_to_flt() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Int(3));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::IntToFlt,
+                            vec![cont::ValueName::from("THREE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 3.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_to_flt() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatToFlt,
+                            vec![cont::ValueName::from("FIVE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 5.0);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_to_int() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE_SEVEN"), cont::Data::Flt(3.7));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltToInt,
+                            vec![cont::ValueName::from("THREE_SEVEN")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_to_int() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatToInt,
+                            vec![cont::ValueName::from("SEVEN")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_neq() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatNeq,
+                            vec![cont::ValueName::from("THREE"), cont::ValueName::from("FIVE")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_int_neq() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("NEG1"), cont::Data::Int(-1));
+        module.add_const(cont::ValueName::from("NEG1B"), cont::Data::Int(-1));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::IntNeq,
+                            vec![cont::ValueName::from("NEG1"), cont::ValueName::from("NEG1B")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_neq() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Flt(1.0));
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Flt(2.0));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltNeq,
+                            vec![cont::ValueName::from("ONE"), cont::ValueName::from("TWO")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_min() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
+        module.add_const(cont::ValueName::from("B"), cont::Data::Flt(2.5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltMin,
+                            vec![cont::ValueName::from("A"), cont::ValueName::from("B")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 1.5);
+    }
+
+    #[test]
+    fn lowers_and_runs_flt_max() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
+        module.add_const(cont::ValueName::from("B"), cont::Data::Flt(2.5));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::FltMax,
+                            vec![cont::ValueName::from("A"), cont::ValueName::from("B")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (mut store, result) = run_main(&module);
+        let result = result
+            .unwrap_struct(&store).expect("expected float struct")
+            .field(&mut store, 0).expect("expected float field")
+            .unwrap_f32();
+        assert_eq!(result, 2.5);
     }
 }

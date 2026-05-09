@@ -131,6 +131,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::I32Eq);
                 self.emit_instr(wasm::Instr::RefI31);
             }
+            (cont::Code::NatNeq, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Ne);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
             (cont::Code::NatAdd, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
@@ -159,6 +165,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Eq);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntNeq, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Ne);
                 self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::Code::IntAdd, [left, right]) => {
@@ -206,6 +218,215 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
+            (cont::Code::NatDiv, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32DivU);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatRem, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32RemU);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatGt, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32GtU);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatLte, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32LeU);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatGte, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32GeU);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntNeg, [operand]) => {
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntDiv, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32DivS);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntRem, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32RemS);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntLt, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32LtS);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntGt, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32GtS);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntLte, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32LeS);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntGte, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32GeS);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltDiv, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Div);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltEql, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Eq);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltNeq, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Ne);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltLt, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Lt);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltGt, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Gt);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltLte, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Le);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltGte, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Ge);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltMin, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Min);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltMax, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Max);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltNeg, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Neg);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltAbs, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Abs);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltSqrt, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Sqrt);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltFloor, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Floor);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltCeil, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Ceil);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltTrunc, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Trunc);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltNearest, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Nearest);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::NatToInt | cont::Code::IntToNat, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::IntToFlt, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::F32ConvertI32S);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::NatToFlt, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::F32ConvertI32U);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+            }
+            (cont::Code::FltToInt, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::I32TruncSatF32S);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::FltToNat, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::I32TruncSatF32U);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
             (cont::Code::LstGet, [lst, idx]) => {
                 let lst_type = self.context.table().lst_type();
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
@@ -217,7 +438,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::ArrayLen);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::Code::LstJoin, [l1, l2]) => {
+            (cont::Code::LstConcat, [l1, l2]) => {
                 let lst_type = self.context.table().lst_type();
                 let result_local = self
                     .context
