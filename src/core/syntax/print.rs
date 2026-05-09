@@ -42,7 +42,7 @@ fn print_name(name: Name) -> Printer<'static> {
 }
 
 fn print_atom(atom: Atom) -> Printer<'static> {
-    flat([pure("!"), pure(atom.string)])
+    flat([pure("'"), pure(atom.string)])
 }
 
 fn print_flt(bits: u32) -> Printer<'static> {
@@ -185,7 +185,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Term::AtomType(AtomType { atoms }) => flat([
-            pure("!{"),
+            pure("'{"),
             sep_flat(atoms.into_iter().map(|atom| pure(atom.string)), || {
                 pure(", ")
             }),

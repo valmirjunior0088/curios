@@ -7,16 +7,16 @@ use {
 fn main() {
     let term = "
         let pair_ty : Type =
-          (tag : {:left, :right},
+          (tag : '{left, right},
             match tag with k => Type;
-            case :left => Int;
-            case :right => Flt;);
-        let pair : pair_ty = (:left, 42);
+            case 'left => Int;
+            case 'right => Flt;);
+        let pair : pair_ty = ('left, 42);
         let score : (p : pair_ty) -> Int = p =>
             let (tag, payload) with q => Int = p;
             match tag with k => Int;
-            case :left => 42;
-            case :right => 7;;
+            case 'left => 42;
+            case 'right => 7;;
         score pair
         "
     .parse()

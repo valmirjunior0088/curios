@@ -908,29 +908,29 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = "!{zeta, alpha, mu}".parse().unwrap();
+        let type_ = "'{zeta, alpha, mu}".parse().unwrap();
 
         let term = r#"
-                let outer : !{zeta, alpha, mu} = !mu;
-                let alpha_case : !{zeta, alpha, mu} = !alpha;
-                let mu_case : !{zeta, alpha, mu} = !mu;
-                let zeta_case : !{zeta, alpha, mu} = !zeta;
-                match outer with subject => !{zeta, alpha, mu};
-                case !zeta =>
-                    match alpha_case with nested => !{zeta, alpha, mu};
-                    case !zeta => !alpha;
-                    case !alpha => !mu;
-                    case !mu => !zeta;;
-                case !alpha =>
-                    match zeta_case with nested => !{zeta, alpha, mu};
-                    case !zeta => !mu;
-                    case !alpha => !zeta;
-                    case !mu => !alpha;;
-                case !mu =>
-                    match mu_case with nested => !{zeta, alpha, mu};
-                    case !zeta => !zeta;
-                    case !alpha => !alpha;
-                    case !mu => !mu;;
+                let outer : '{zeta, alpha, mu} = 'mu;
+                let alpha_case : '{zeta, alpha, mu} = 'alpha;
+                let mu_case : '{zeta, alpha, mu} = 'mu;
+                let zeta_case : '{zeta, alpha, mu} = 'zeta;
+                match outer with subject => '{zeta, alpha, mu};
+                case 'zeta =>
+                    match alpha_case with nested => '{zeta, alpha, mu};
+                    case 'zeta => 'alpha;
+                    case 'alpha => 'mu;
+                    case 'mu => 'zeta;;
+                case 'alpha =>
+                    match zeta_case with nested => '{zeta, alpha, mu};
+                    case 'zeta => 'mu;
+                    case 'alpha => 'zeta;
+                    case 'mu => 'alpha;;
+                case 'mu =>
+                    match mu_case with nested => '{zeta, alpha, mu};
+                    case 'zeta => 'zeta;
+                    case 'alpha => 'alpha;
+                    case 'mu => 'mu;;
             "#
         .parse()
         .unwrap();
@@ -1014,7 +1014,7 @@ mod tests {
             cases: alpha_cases,
         }) = &*cases[0]
         else {
-            panic!("expected nested match for !alpha case");
+            panic!("expected nested match for 'alpha case");
         };
 
         assert!(matches!(
@@ -1041,7 +1041,7 @@ mod tests {
             cases: mu_cases,
         }) = &*cases[1]
         else {
-            panic!("expected nested match for !mu case");
+            panic!("expected nested match for 'mu case");
         };
 
         assert!(matches!(
@@ -1071,7 +1071,7 @@ mod tests {
             cases: zeta_cases,
         }) = &*cases[2]
         else {
-            panic!("expected nested match for !zeta case");
+            panic!("expected nested match for 'zeta case");
         };
 
         assert!(matches!(

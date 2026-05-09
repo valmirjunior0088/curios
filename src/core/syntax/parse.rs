@@ -130,7 +130,7 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
-    take_exact("!").and_keep(parse_identifier()).map(Atom::from)
+    take_exact("'").and_keep(parse_identifier()).map(Atom::from)
 }
 
 fn parse_atom<'a>() -> Parser<'a, Term> {
@@ -138,7 +138,7 @@ fn parse_atom<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_atom_type<'a>() -> Parser<'a, Term> {
-    parse_literal("!{")
+    parse_literal("'{")
         .and_keep(sep_by0(
             || parse_identifier().map(Atom::from),
             || parse_literal(","),
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn parse_let_pair_and_atoms() {
-        let term = "let x : !{hot, cold} = !hot; (x, !cold)"
+        let term = "let x : '{hot, cold} = 'hot; (x, 'cold)"
             .parse::<Term>()
             .unwrap();
 
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn parse_split_with_motive() {
-        let term = "let (x, y) with p => Type = (!left, !right); p"
+        let term = "let (x, y) with p => Type = ('left, 'right); p"
             .parse::<Term>()
             .unwrap();
 
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn parse_match_single_case() {
-        let term = "match !foo with k => !{foo}; case !foo => !foo;"
+        let term = "match 'foo with k => '{foo}; case 'foo => 'foo;"
             .parse::<Term>()
             .unwrap();
 
