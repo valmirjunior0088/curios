@@ -577,4 +577,84 @@ mod tests {
 
         assert_eq!(result, 8);
     }
+
+    #[test]
+    fn lowers_and_runs_bln_not() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("T"), cont::Data::Bln(true));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::BlnNot,
+                            vec![cont::ValueName::from("T")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn lowers_and_runs_nat_add() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("FOUR"), cont::Data::Nat(4));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::NatAdd,
+                            vec![
+                                cont::ValueName::from("THREE"),
+                                cont::ValueName::from("FOUR"),
+                            ],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 7);
+    }
 }

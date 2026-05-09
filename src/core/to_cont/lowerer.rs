@@ -168,6 +168,95 @@ impl<'a> Lowerer<'a> {
             core::ErasedTerm::Prim(core::ErasedPrim::Unit) => {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit))
             }
+            core::ErasedTerm::Prim(core::ErasedPrim::Bln(value)) => emit_fresh_value(
+                state,
+                builder,
+                cont::Value::Pure(cont::Data::Bln(*value)),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnNot(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BlnNot, vec![operand]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnAnd(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BlnAnd, vec![left, right]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnOr(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BlnOr, vec![left, right]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::Nat(value)) => emit_fresh_value(
+                state,
+                builder,
+                cont::Value::Pure(cont::Data::Nat(*value)),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::NatEql(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatEql, vec![left, right]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatAdd(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatAdd, vec![left, right]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatSub(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatSub, vec![left, right]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatMul(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatMul, vec![left, right]),
+                )
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatLt(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatLt, vec![left, right]),
+                )
+            }
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => emit_fresh_value(
                 state,
                 builder,
@@ -296,6 +385,83 @@ impl<'a> Lowerer<'a> {
         match term {
             core::ErasedTerm::Prim(core::ErasedPrim::Unit) => {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Unit));
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::Bln(value)) => {
+                builder.add_value(target, cont::Value::Pure(cont::Data::Bln(*value)));
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnNot(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::BlnNot, vec![operand]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnAnd(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::BlnAnd, vec![left, right]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnOr(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::BlnOr, vec![left, right]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::Nat(value)) => {
+                builder.add_value(target, cont::Value::Pure(cont::Data::Nat(*value)));
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatEql(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::NatEql, vec![left, right]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatAdd(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::NatAdd, vec![left, right]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatSub(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::NatSub, vec![left, right]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatMul(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::NatMul, vec![left, right]),
+                );
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatLt(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::NatLt, vec![left, right]),
+                );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Int(*value)));
@@ -427,6 +593,200 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
+            core::ErasedTerm::Prim(core::ErasedPrim::Bln(value)) => {
+                let value = emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Pure(cont::Data::Bln(*value)),
+                );
+
+                cont(self, state, builder, value)
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnNot(operand)) => self.lower_to_name(
+                operand,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, operand| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::BlnNot, vec![operand]),
+                    );
+
+                    cont(this, state, builder, value)
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnAnd(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::BlnAnd, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::BlnOr(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::BlnOr, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::Nat(value)) => {
+                let value = emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Pure(cont::Data::Nat(*value)),
+                );
+
+                cont(self, state, builder, value)
+            }
+            core::ErasedTerm::Prim(core::ErasedPrim::NatEql(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::NatEql, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::NatAdd(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::NatAdd, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::NatSub(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::NatSub, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::NatMul(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::NatMul, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            core::ErasedTerm::Prim(core::ErasedPrim::NatLt(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::NatLt, vec![left, right]),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => {
                 let value = emit_fresh_value(
                     state,

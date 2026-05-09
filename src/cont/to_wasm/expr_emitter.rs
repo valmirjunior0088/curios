@@ -49,6 +49,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             cont::Data::Unit => self.emit_instr(wasm::Instr::StructNew {
                 type_name: self.context.table().unit_type(),
             }),
+            &cont::Data::Bln(value) => {
+                self.emit_instrs([wasm::Instr::I32Const { value: value as i32 }, wasm::Instr::RefI31])
+            }
+            &cont::Data::Nat(value) => {
+                self.emit_instrs([wasm::Instr::I32Const { value: value as i32 }, wasm::Instr::RefI31])
+            }
             &cont::Data::Int(value) => {
                 self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
             }
@@ -90,6 +96,53 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_code(&mut self, op: &'a cont::Code, params: &'a [cont::ValueName]) {
         match (op, params) {
+            (cont::Code::BlnNot, [operand]) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Eqz);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::BlnAnd, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32And);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::BlnOr, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Or);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatEql, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Eq);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatAdd, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatSub, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatMul, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Mul);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::NatLt, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32LtU);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
             (cont::Code::IntEql, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));

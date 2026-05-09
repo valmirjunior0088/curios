@@ -30,6 +30,8 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
 fn print_data<'a>(value: &'a Data) -> Printer<'a> {
     match value {
         Data::Unit => pure("()"),
+        Data::Bln(value) => pure(value.to_string()),
+        Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
@@ -44,6 +46,14 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
 
 fn print_code<'a>(op: &'a Code) -> Printer<'a> {
     match op {
+        Code::BlnNot => pure("bln.not"),
+        Code::BlnAnd => pure("bln.and"),
+        Code::BlnOr => pure("bln.or"),
+        Code::NatEql => pure("nat.eql"),
+        Code::NatAdd => pure("nat.add"),
+        Code::NatSub => pure("nat.sub"),
+        Code::NatMul => pure("nat.mul"),
+        Code::NatLt => pure("nat.lt"),
         Code::IntEql => pure("int.eql"),
         Code::IntAdd => pure("int.add"),
         Code::IntSub => pure("int.sub"),

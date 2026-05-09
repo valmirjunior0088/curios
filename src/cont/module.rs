@@ -3,6 +3,8 @@ use super::{BlockName, ClsrName, FuncName, ValueName};
 #[derive(Debug)]
 pub enum Data {
     Unit,
+    Bln(bool),
+    Nat(u32),
     Int(i32),
     Flt(f32),
     Tpl(Vec<ValueName>),
@@ -11,6 +13,14 @@ pub enum Data {
 
 #[derive(Debug)]
 pub enum Code {
+    BlnNot,
+    BlnAnd,
+    BlnOr,
+    NatEql,
+    NatAdd,
+    NatSub,
+    NatMul,
+    NatLt,
     IntEql,
     IntAdd,
     IntSub,
