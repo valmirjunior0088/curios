@@ -755,6 +755,64 @@ mod tests {
     }
 
     #[test]
+    fn lowers_and_runs_lst_slice() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+        module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+        module.add_const(cont::ValueName::from("THREE_IDX"), cont::Data::Nat(3));
+        module.add_const(
+            cont::ValueName::from("LST"),
+            cont::Data::Lst(vec![
+                cont::ValueName::from("THREE"),
+                cont::ValueName::from("SEVEN"),
+                cont::ValueName::from("FIVE"),
+            ]),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![
+                        (
+                            cont::ValueName::from("slice"),
+                            cont::Value::Eval(
+                                cont::Code::LstSlice,
+                                vec![
+                                    cont::ValueName::from("LST"),
+                                    cont::ValueName::from("ONE"),
+                                    cont::ValueName::from("THREE_IDX"),
+                                ],
+                            ),
+                        ),
+                        (
+                            cont::ValueName::from("result"),
+                            cont::Value::Eval(
+                                cont::Code::LstLen,
+                                vec![cont::ValueName::from("slice")],
+                            ),
+                        ),
+                    ],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
+        assert_eq!(result, 2);
+    }
+
+    #[test]
     fn lowers_and_runs_lst_concat() {
         let mut module = cont::Module::new();
 

@@ -65,8 +65,9 @@ pub enum Code {
     NatToFlt,
     FltToInt,
     FltToNat,
-    LstGet,
     LstLen,
+    LstGet,
+    LstSlice,
     LstConcat,
     TplProj(usize),
 }

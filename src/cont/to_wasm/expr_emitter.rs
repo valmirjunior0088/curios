@@ -427,16 +427,44 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::I32TruncSatF32U);
                 self.emit_instr(wasm::Instr::RefI31);
             }
+            (cont::Code::LstLen, [lst]) => {
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
             (cont::Code::LstGet, [lst, idx]) => {
                 let lst_type = self.context.table().lst_type();
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
                 self.emit_instr(wasm::Instr::ArrayGet { type_name: lst_type });
             }
-            (cont::Code::LstLen, [lst]) => {
+            (cont::Code::LstSlice, [lst, start, end]) => {
+                let lst_type = self.context.table().lst_type();
+                let result_local = self
+                    .context
+                    .find_local(value_name)
+                    .map(|local_data| local_data.local_name)
+                    .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string));
+
+                // length = end - start → ArrayNewDefault → LocalSet $result
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::ArrayNewDefault { type_name: lst_type.clone() });
+                self.emit_instr(wasm::Instr::LocalSet { local_name: result_local.clone() });
+
+                // ArrayCopy result[0..length] ← lst[start..end]
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
-                self.emit_instr(wasm::Instr::ArrayLen);
-                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::ArrayCopy { source_name: lst_type.clone(), target_name: lst_type.clone() });
+
+                // Leave $result on stack for emit_let_eval's LocalSet
+                self.emit_instr(wasm::Instr::LocalGet { local_name: result_local });
             }
             (cont::Code::LstConcat, [l1, l2]) => {
                 let lst_type = self.context.table().lst_type();

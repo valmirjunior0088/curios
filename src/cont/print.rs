@@ -98,8 +98,9 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::NatToFlt => pure("nat_to_flt"),
         Code::FltToInt => pure("flt_to_int"),
         Code::FltToNat => pure("flt_to_nat"),
-        Code::LstGet => pure("lst.get"),
         Code::LstLen => pure("lst.len"),
+        Code::LstGet => pure("lst.get"),
+        Code::LstSlice => pure("lst.slice"),
         Code::LstConcat => pure("lst.concat"),
         Code::TplProj(index) => flat([pure("tpl.proj "), pure(index.to_string())]),
     }
