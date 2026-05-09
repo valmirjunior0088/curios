@@ -1,7 +1,7 @@
 use {
     super::{
-        Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, FltOp, Func, FuncName,
-        IntOp, JumpTarget, Module, Region, Tail, Value, ValueName,
+        Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
+        JumpTarget, Module, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -44,14 +44,14 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
 
 fn print_code<'a>(op: &'a Code) -> Printer<'a> {
     match op {
-        Code::Int(IntOp::Eql) => pure("int.eql"),
-        Code::Int(IntOp::Add) => pure("int.add"),
-        Code::Int(IntOp::Sub) => pure("int.sub"),
-        Code::Int(IntOp::Mul) => pure("int.mul"),
-        Code::Flt(FltOp::Add) => pure("flt.add"),
-        Code::Flt(FltOp::Sub) => pure("flt.sub"),
-        Code::Flt(FltOp::Mul) => pure("flt.mul"),
-        Code::Proj(index) => flat([pure("proj "), pure(index.to_string())]),
+        Code::IntEql => pure("int.eql"),
+        Code::IntAdd => pure("int.add"),
+        Code::IntSub => pure("int.sub"),
+        Code::IntMul => pure("int.mul"),
+        Code::FltAdd => pure("flt.add"),
+        Code::FltSub => pure("flt.sub"),
+        Code::FltMul => pure("flt.mul"),
+        Code::TplProj(index) => flat([pure("tpl.proj "), pure(index.to_string())]),
     }
 }
 

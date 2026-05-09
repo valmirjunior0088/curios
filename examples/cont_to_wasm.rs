@@ -1,6 +1,6 @@
 use curios::cont::{
-    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, Code, Data, FltOp, Func,
-    FuncName, IntOp, JumpTarget, Module, Region, Tail, Value, ValueName, to_wasm,
+    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, Code, Data, Func,
+    FuncName, JumpTarget, Module, Region, Tail, Value, ValueName, to_wasm,
 };
 
 fn main() {
@@ -22,7 +22,7 @@ fn main() {
                 values: vec![(
                     ValueName::from("is_zero"),
                     Value::Eval(
-                        Code::Int(IntOp::Eql),
+                        Code::IntEql,
                         vec![ValueName::from("x"), ValueName::from("ZERO")],
                     ),
                 )],
@@ -99,7 +99,7 @@ fn main() {
                     (
                         ValueName::from("scale"),
                         Value::Eval(
-                            Code::Flt(FltOp::Mul),
+                            Code::FltMul,
                             vec![ValueName::from("ONE_HALF"), ValueName::from("ONE_HALF")],
                         ),
                     ),
@@ -120,16 +120,16 @@ fn main() {
                                     ),
                                     (
                                         ValueName::from("result_again"),
-                                        Value::Eval(Code::Proj(0), vec![ValueName::from("pair")]),
+                                        Value::Eval(Code::TplProj(0), vec![ValueName::from("pair")]),
                                     ),
                                     (
                                         ValueName::from("fallback_one"),
-                                        Value::Eval(Code::Proj(1), vec![ValueName::from("pair")]),
+                                        Value::Eval(Code::TplProj(1), vec![ValueName::from("pair")]),
                                     ),
                                     (
                                         ValueName::from("result_is_zero"),
                                         Value::Eval(
-                                            Code::Int(IntOp::Eql),
+                                            Code::IntEql,
                                             vec![
                                                 ValueName::from("result_again"),
                                                 ValueName::from("ZERO"),

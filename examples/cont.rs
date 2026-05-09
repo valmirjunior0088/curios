@@ -1,6 +1,6 @@
 use curios::cont::{
     Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
-    IntOp, JumpTarget, Module, Region, Tail, Value, ValueName,
+    JumpTarget, Module, Region, Tail, Value, ValueName,
 };
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
                 values: vec![(
                     ValueName::from("y"),
                     Value::Eval(
-                        Code::Int(IntOp::Add),
+                        Code::IntAdd,
                         vec![ValueName::from("x"), ValueName::from("bias")],
                     ),
                 )],
@@ -91,14 +91,14 @@ fn main() {
                                     (
                                         ValueName::from("out_again"),
                                         Value::Eval(
-                                            Code::Proj(0),
+                                            Code::TplProj(0),
                                             vec![ValueName::from("pair")],
                                         ),
                                     ),
                                     (
                                         ValueName::from("is_zero"),
                                         Value::Eval(
-                                            Code::Proj(1),
+                                            Code::TplProj(1),
                                             vec![ValueName::from("pair")],
                                         ),
                                     ),

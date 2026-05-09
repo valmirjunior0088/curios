@@ -90,31 +90,31 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_code(&mut self, op: &'a cont::Code, params: &'a [cont::ValueName]) {
         match (op, params) {
-            (cont::Code::Int(cont::IntOp::Eql), [left, right]) => {
+            (cont::Code::IntEql, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Eq);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::Code::Int(cont::IntOp::Add), [left, right]) => {
+            (cont::Code::IntAdd, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Add);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::Code::Int(cont::IntOp::Sub), [left, right]) => {
+            (cont::Code::IntSub, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::Code::Int(cont::IntOp::Mul), [left, right]) => {
+            (cont::Code::IntMul, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Mul);
                 self.emit_instr(wasm::Instr::RefI31);
             }
-            (cont::Code::Flt(cont::FltOp::Add), [left, right]) => {
+            (cont::Code::FltAdd, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Add);
@@ -123,7 +123,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::Code::Flt(cont::FltOp::Sub), [left, right]) => {
+            (cont::Code::FltSub, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Sub);
@@ -132,7 +132,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::Code::Flt(cont::FltOp::Mul), [left, right]) => {
+            (cont::Code::FltMul, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::F32Mul);
@@ -141,7 +141,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
-            (cont::Code::Proj(index), [tuple]) => self.emit_proj(tuple, *index),
+            (cont::Code::TplProj(index), [tuple]) => self.emit_proj(tuple, *index),
             (op, params) => panic!(
                 "`ExprEmitter` did not expect {} params for const op `{op:?}`",
                 params.len()

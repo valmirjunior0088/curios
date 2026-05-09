@@ -10,25 +10,15 @@ pub enum Data {
 }
 
 #[derive(Debug)]
-pub enum IntOp {
-    Eql,
-    Add,
-    Sub,
-    Mul,
-}
-
-#[derive(Debug)]
-pub enum FltOp {
-    Add,
-    Sub,
-    Mul,
-}
-
-#[derive(Debug)]
 pub enum Code {
-    Int(IntOp),
-    Flt(FltOp),
-    Proj(usize),
+    IntEql,
+    IntAdd,
+    IntSub,
+    IntMul,
+    FltAdd,
+    FltSub,
+    FltMul,
+    TplProj(usize),
 }
 
 #[derive(Debug)]

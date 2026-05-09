@@ -85,11 +85,11 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("left"),
-                            cont::Value::Eval(cont::Code::Proj(0), vec![cont::ValueName::from("x")]),
+                            cont::Value::Eval(cont::Code::TplProj(0), vec![cont::ValueName::from("x")]),
                         ),
                         (
                             cont::ValueName::from("out"),
-                            cont::Value::Eval(cont::Code::Proj(0), vec![cont::ValueName::from("left")]),
+                            cont::Value::Eval(cont::Code::TplProj(0), vec![cont::ValueName::from("left")]),
                         ),
                     ],
                     blocks: vec![],
@@ -130,7 +130,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(
-                            cont::Code::Int(cont::IntOp::Eql),
+                            cont::Code::IntEql,
                             vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
                         ),
                     )],
@@ -157,7 +157,7 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(
-                                            cont::Code::Int(cont::IntOp::Sub),
+                                            cont::Code::IntSub,
                                             vec![
                                                 cont::ValueName::from("n"),
                                                 cont::ValueName::from("ONE"),
@@ -199,7 +199,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(
-                            cont::Code::Int(cont::IntOp::Eql),
+                            cont::Code::IntEql,
                             vec![cont::ValueName::from("n"), cont::ValueName::from("ZERO")],
                         ),
                     )],
@@ -226,7 +226,7 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(
-                                            cont::Code::Int(cont::IntOp::Sub),
+                                            cont::Code::IntSub,
                                             vec![
                                                 cont::ValueName::from("n"),
                                                 cont::ValueName::from("ONE"),
@@ -316,7 +316,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(
-                            cont::Code::Int(cont::IntOp::Add),
+                            cont::Code::IntAdd,
                             vec![cont::ValueName::from("x"), cont::ValueName::from("ONE")],
                         ),
                     )],
@@ -423,7 +423,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(
-                            cont::Code::Flt(cont::FltOp::Add),
+                            cont::Code::FltAdd,
                             vec![
                                 cont::ValueName::from("LEFT"),
                                 cont::ValueName::from("RIGHT"),
@@ -474,7 +474,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("out"),
                         cont::Value::Eval(
-                            cont::Code::Proj(1),
+                            cont::Code::TplProj(1),
                             vec![cont::ValueName::from("PAIR")],
                         ),
                     )],
@@ -514,7 +514,7 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(
-                            cont::Code::Int(cont::IntOp::Add),
+                            cont::Code::IntAdd,
                             vec![
                                 cont::ValueName::from("x"),
                                 cont::ValueName::from("bias"),
