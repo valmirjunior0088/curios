@@ -94,7 +94,7 @@ fn main() {
                 values: vec![
                     (
                         ValueName::from("thk"),
-                        Value::Clsr(ClsrName::from("RouteByZero"), vec![]),
+                        Value::Pure(ConstValue::Clsr(ClsrName::from("RouteByZero"), vec![])),
                     ),
                     (
                         ValueName::from("scale"),
@@ -113,18 +113,18 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::Tpl(vec![
+                                        Value::Pure(ConstValue::Tpl(vec![
                                             ValueName::from("result"),
                                             ValueName::from("ONE"),
-                                        ]),
+                                        ])),
                                     ),
                                     (
                                         ValueName::from("result_again"),
-                                        Value::Proj(ValueName::from("pair"), 0),
+                                        Value::Eval(ConstOp::Proj(0), vec![ValueName::from("pair")]),
                                     ),
                                     (
                                         ValueName::from("fallback_one"),
-                                        Value::Proj(ValueName::from("pair"), 1),
+                                        Value::Eval(ConstOp::Proj(1), vec![ValueName::from("pair")]),
                                     ),
                                     (
                                         ValueName::from("result_is_zero"),

@@ -44,8 +44,35 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         self.expr.extend(instrs);
     }
 
-    pub fn emit_const_value(&mut self, value: &cont::ConstValue) {
+    pub fn emit_const_value(&mut self, value: &'a cont::ConstValue) {
         match value {
+            cont::ConstValue::Tpl(elems) => {
+                let tpl_n_type = self.context.table().find_tpl_type(elems.len());
+
+                for elem in elems {
+                    self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Raw));
+                }
+
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: tpl_n_type,
+                });
+            }
+            cont::ConstValue::Clsr(target, fields) => {
+                let clsr_data = self.context.table().find_clsr(target);
+                let envr_type = clsr_data.envr_type();
+
+                self.emit_instr(wasm::Instr::RefFunc {
+                    func_name: clsr_data.func_name(),
+                });
+
+                for field in fields {
+                    self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Raw));
+                }
+
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: envr_type,
+                });
+            }
             cont::ConstValue::Unit => self.emit_instr(wasm::Instr::StructNew {
                 type_name: self.context.table().unit_type(),
             }),
@@ -63,6 +90,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_const_op(&mut self, op: &'a cont::ConstOp, params: &'a [cont::ValueName]) {
         match (op, params) {
+            (cont::ConstOp::Proj(index), [tuple]) => self.emit_proj(tuple, *index),
             (cont::ConstOp::Int(cont::IntOp::Eql), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
@@ -168,7 +196,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    fn emit_let_pure(&mut self, value_name: &'a cont::ValueName, value: &cont::ConstValue) {
+    fn emit_let_pure(&mut self, value_name: &'a cont::ValueName, value: &'a cont::ConstValue) {
         self.emit_const_value(value);
 
         self.emit_instr(wasm::Instr::LocalSet {
@@ -252,23 +280,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_proj(
-        &mut self,
-        value_name: &'a cont::ValueName,
-        tuple: &'a cont::ValueName,
-        index: usize,
-    ) {
-        self.emit_proj(tuple, index);
-
-        self.emit_instr(wasm::Instr::LocalSet {
-            local_name: self
-                .context
-                .find_local(value_name)
-                .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
-        });
-    }
-
     fn emit_let_alias(&mut self, value_name: &'a cont::ValueName, source: &'a cont::ValueName) {
         self.emit_instrs(self.context.load_value_instrs(source, LoadAs::Raw));
 
@@ -284,23 +295,26 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             match value {
-                cont::Value::Tpl(elems) => self.emit_preallocate_tpl(value_name, elems.len()),
-                cont::Value::Clsr(target, _) => self.emit_preallocate_clsr(value_name, target),
+                cont::Value::Pure(cont::ConstValue::Tpl(elems)) => {
+                    self.emit_preallocate_tpl(value_name, elems.len())
+                }
+                cont::Value::Pure(cont::ConstValue::Clsr(target, _)) => {
+                    self.emit_preallocate_clsr(value_name, target)
+                }
                 _ => {}
             }
         }
 
         for (value_name, value) in values {
             match value {
-                cont::Value::Pure(value) => self.emit_let_pure(value_name, value),
-                cont::Value::Eval(op, params) => self.emit_let_eval(value_name, op, params),
-                cont::Value::Clsr(target, fields) => {
+                cont::Value::Pure(cont::ConstValue::Tpl(elems)) => {
+                    self.emit_backpatch_tpl(value_name, elems)
+                }
+                cont::Value::Pure(cont::ConstValue::Clsr(target, fields)) => {
                     self.emit_backpatch_clsr(value_name, target, fields)
                 }
-                cont::Value::Tpl(elems) => self.emit_backpatch_tpl(value_name, elems),
-                cont::Value::Proj(tuple, index) => {
-                    self.emit_let_proj(value_name, tuple, *index)
-                }
+                cont::Value::Pure(value) => self.emit_let_pure(value_name, value),
+                cont::Value::Eval(op, params) => self.emit_let_eval(value_name, op, params),
                 cont::Value::Name(source) => self.emit_let_alias(value_name, source),
             }
         }

@@ -160,7 +160,7 @@ fn max_tpl_arity(region: &cont::Region) -> usize {
         .values
         .iter()
         .filter_map(|(_, value)| match value {
-            cont::Value::Tpl(fields) => Some(fields.len()),
+            cont::Value::Pure(cont::ConstValue::Tpl(fields)) => Some(fields.len()),
             _ => None,
         })
         .max()

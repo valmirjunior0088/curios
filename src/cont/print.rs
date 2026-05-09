@@ -29,6 +29,13 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
 
 fn print_const_value<'a>(value: &'a ConstValue) -> Printer<'a> {
     match value {
+        ConstValue::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
+        ConstValue::Clsr(target, fields) => flat([
+            print_clsr_name(target),
+            pure("{"),
+            print_value_names(fields),
+            pure("}"),
+        ]),
         ConstValue::Unit => pure("()"),
         ConstValue::Int(value) => pure(value.to_string()),
         ConstValue::Flt(value) => pure(value.to_string()),
@@ -36,15 +43,16 @@ fn print_const_value<'a>(value: &'a ConstValue) -> Printer<'a> {
 }
 
 fn print_const_op<'a>(op: &'a ConstOp) -> Printer<'a> {
-    pure(match op {
-        ConstOp::Int(IntOp::Eql) => "int.eql",
-        ConstOp::Int(IntOp::Add) => "int.add",
-        ConstOp::Int(IntOp::Sub) => "int.sub",
-        ConstOp::Int(IntOp::Mul) => "int.mul",
-        ConstOp::Flt(FltOp::Add) => "flt.add",
-        ConstOp::Flt(FltOp::Sub) => "flt.sub",
-        ConstOp::Flt(FltOp::Mul) => "flt.mul",
-    })
+    match op {
+        ConstOp::Proj(index) => flat([pure("proj "), pure(index.to_string())]),
+        ConstOp::Int(IntOp::Eql) => pure("int.eql"),
+        ConstOp::Int(IntOp::Add) => pure("int.add"),
+        ConstOp::Int(IntOp::Sub) => pure("int.sub"),
+        ConstOp::Int(IntOp::Mul) => pure("int.mul"),
+        ConstOp::Flt(FltOp::Add) => pure("flt.add"),
+        ConstOp::Flt(FltOp::Sub) => pure("flt.sub"),
+        ConstOp::Flt(FltOp::Mul) => pure("flt.mul"),
+    }
 }
 
 fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
@@ -61,23 +69,6 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
                 } else {
                     flat([pure(" "), print_value_names(params)])
                 },
-            ]),
-            Value::Clsr(target, fields) => flat([
-                print_clsr_name(target),
-                pure("{"),
-                print_value_names(fields),
-                pure("}"),
-            ]),
-            Value::Tpl(elems) => flat([
-                pure("("),
-                print_value_names(elems),
-                pure(")"),
-            ]),
-            Value::Proj(tuple, index) => flat([
-                pure("proj "),
-                pure(index.to_string()),
-                pure(" "),
-                print_value_name(tuple),
             ]),
             Value::Name(source) => print_value_name(source),
         },

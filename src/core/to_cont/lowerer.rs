@@ -14,13 +14,43 @@ fn unsupported_letrec_item(term: &core::ErasedTerm) -> ! {
 
 fn emit_fresh_value(
     state: &mut FrameEntropy,
-    builder: &mut cont::RegionBuilder,
+    builder: &mut RegionBuilder,
     value: cont::Value,
 ) -> cont::ValueName {
     let name = state.fresh_value();
     builder.add_value(name.clone(), value);
 
     name
+}
+
+struct RegionBuilder {
+    values: Vec<(cont::ValueName, cont::Value)>,
+    blocks: Vec<(cont::BlockName, cont::Block)>,
+}
+
+impl RegionBuilder {
+    fn new() -> Self {
+        Self {
+            values: vec![],
+            blocks: vec![],
+        }
+    }
+
+    fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
+        self.values.push((name, value));
+    }
+
+    fn add_block(&mut self, name: cont::BlockName, block: cont::Block) {
+        self.blocks.push((name, block));
+    }
+
+    fn finish(self, tail: cont::Tail) -> cont::Region {
+        cont::Region {
+            values: self.values,
+            blocks: self.blocks,
+            tail,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -60,7 +90,7 @@ impl<'a> Lowerer<'a> {
         let param = entry.fresh_value();
         clsr_frame.push(func.param.clone(), param.clone());
 
-        let mut builder = cont::RegionBuilder::new();
+        let mut builder = RegionBuilder::new();
         let tail = self.lower_tail(&func.body, &clsr_frame, &resume, &mut entry, &mut builder);
 
         self.module.add_clsr(
@@ -88,7 +118,7 @@ impl<'a> Lowerer<'a> {
         frame: &Frame,
     ) -> (cont::BlockName, cont::Region) {
         let (mut entry, resume) = FrameEntropy::new();
-        let mut builder = cont::RegionBuilder::new();
+        let mut builder = RegionBuilder::new();
         let tail = self.lower_tail(term, frame, &resume, &mut entry, &mut builder);
 
         (resume, builder.finish(tail))
@@ -96,12 +126,12 @@ impl<'a> Lowerer<'a> {
 }
 
 impl<'a> Lowerer<'a> {
-    pub fn lower_letrec_bindings(
+    fn lower_letrec_bindings(
         &mut self,
         letrec: &core::ErasedLetRec,
         frame: &Frame,
         state: &mut FrameEntropy,
-        builder: &mut cont::RegionBuilder,
+        builder: &mut RegionBuilder,
     ) -> Frame {
         let mut frame = frame.clone();
         let reserved = letrec
@@ -126,12 +156,12 @@ impl<'a> Lowerer<'a> {
         frame
     }
 
-    pub fn lower_letrec_name(
+    fn lower_letrec_name(
         &mut self,
         term: &core::ErasedTerm,
         frame: &Frame,
         state: &mut FrameEntropy,
-        builder: &mut cont::RegionBuilder,
+        builder: &mut RegionBuilder,
     ) -> cont::ValueName {
         match term {
             core::ErasedTerm::Name(name) => frame.find(&name.string),
@@ -224,14 +254,14 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Clsr(clsr_name, captured_values),
+                    cont::Value::Pure(cont::ConstValue::Clsr(clsr_name, captured_values)),
                 )
             }
             core::ErasedTerm::Pair(pair) => {
                 let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
                 let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
 
-                emit_fresh_value(state, builder, cont::Value::Tpl(vec![fst, snd]))
+                emit_fresh_value(state, builder, cont::Value::Pure(cont::ConstValue::Tpl(vec![fst, snd])))
             }
             core::ErasedTerm::Atom(atom) => emit_fresh_value(
                 state,
@@ -255,13 +285,13 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub fn lower_letrec_item(
+    fn lower_letrec_item(
         &mut self,
         term: &core::ErasedTerm,
         target: cont::ValueName,
         frame: &Frame,
         state: &mut FrameEntropy,
-        builder: &mut cont::RegionBuilder,
+        builder: &mut RegionBuilder,
     ) {
         match term {
             core::ErasedTerm::Prim(core::ErasedPrim::Unit) => {
@@ -338,12 +368,12 @@ impl<'a> Lowerer<'a> {
             }
             core::ErasedTerm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
-                builder.add_value(target, cont::Value::Clsr(clsr_name, captured_values));
+                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Clsr(clsr_name, captured_values)));
             }
             core::ErasedTerm::Pair(pair) => {
                 let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
                 let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
-                builder.add_value(target, cont::Value::Tpl(vec![fst, snd]));
+                builder.add_value(target, cont::Value::Pure(cont::ConstValue::Tpl(vec![fst, snd])));
             }
             core::ErasedTerm::Atom(atom) => {
                 builder.add_value(
@@ -374,19 +404,19 @@ type Cont<'a> = Box<
     dyn FnOnce(
             &mut Lowerer<'_>,
             &mut FrameEntropy,
-            &mut cont::RegionBuilder,
+            &mut RegionBuilder,
             cont::ValueName,
         ) -> cont::Tail
         + 'a,
 >;
 
 impl<'a> Lowerer<'a> {
-    pub fn lower_to_name(
+    fn lower_to_name(
         &mut self,
         term: &core::ErasedTerm,
         frame: &Frame,
         state: &mut FrameEntropy,
-        builder: &mut cont::RegionBuilder,
+        builder: &mut RegionBuilder,
         cont: Cont<'_>,
     ) -> cont::Tail {
         match term {
@@ -581,7 +611,7 @@ impl<'a> Lowerer<'a> {
                 let value = emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Clsr(clsr_name, captured_values),
+                    cont::Value::Pure(cont::ConstValue::Clsr(clsr_name, captured_values)),
                 );
 
                 cont(self, state, builder, value)
@@ -599,7 +629,7 @@ impl<'a> Lowerer<'a> {
                         builder,
                         Box::new(move |this, state, builder, snd| {
                             let value =
-                                emit_fresh_value(state, builder, cont::Value::Tpl(vec![fst, snd]));
+                                emit_fresh_value(state, builder, cont::Value::Pure(cont::ConstValue::Tpl(vec![fst, snd])));
 
                             cont(this, state, builder, value)
                         }),
@@ -639,7 +669,7 @@ impl<'a> Lowerer<'a> {
             | core::ErasedTerm::Match(_) => {
                 let block = state.fresh_block();
                 let param = state.fresh_value();
-                let mut join_builder = cont::RegionBuilder::new();
+                let mut join_builder = RegionBuilder::new();
                 let join_tail = cont(self, state, &mut join_builder, param.clone());
 
                 builder.add_block(
@@ -655,13 +685,13 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub fn lower_tail(
+    fn lower_tail(
         &mut self,
         term: &core::ErasedTerm,
         frame: &Frame,
         resume: &cont::BlockName,
         state: &mut FrameEntropy,
-        builder: &mut cont::RegionBuilder,
+        builder: &mut RegionBuilder,
     ) -> cont::Tail {
         match term {
             core::ErasedTerm::Apply(apply) => self.lower_to_name(
@@ -695,7 +725,7 @@ impl<'a> Lowerer<'a> {
 
                     for case in &match_.cases {
                         let block = state.fresh_block();
-                        let mut case_builder = cont::RegionBuilder::new();
+                        let mut case_builder = RegionBuilder::new();
                         let tail = this.lower_tail(case, frame, resume, state, &mut case_builder);
 
                         builder.add_block(
@@ -726,10 +756,10 @@ impl<'a> Lowerer<'a> {
                 builder,
                 Box::new(move |this, state, builder, head| {
                     let fst = state.fresh_value();
-                    builder.add_value(fst.clone(), cont::Value::Proj(head.clone(), 0));
+                    builder.add_value(fst.clone(), cont::Value::Eval(cont::ConstOp::Proj(0), vec![head.clone()]));
 
                     let snd = state.fresh_value();
-                    builder.add_value(snd.clone(), cont::Value::Proj(head, 1));
+                    builder.add_value(snd.clone(), cont::Value::Eval(cont::ConstOp::Proj(1), vec![head]));
 
                     let frame =
                         frame.extended([(split.fst.clone(), fst), (split.snd.clone(), snd)]);

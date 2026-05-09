@@ -71,25 +71,25 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("x"),
-                            cont::Value::Tpl(vec![
+                            cont::Value::Pure(cont::ConstValue::Tpl(vec![
                                 cont::ValueName::from("y"),
                                 cont::ValueName::from("ONE"),
-                            ]),
+                            ])),
                         ),
                         (
                             cont::ValueName::from("y"),
-                            cont::Value::Tpl(vec![
+                            cont::Value::Pure(cont::ConstValue::Tpl(vec![
                                 cont::ValueName::from("TWO"),
                                 cont::ValueName::from("x"),
-                            ]),
+                            ])),
                         ),
                         (
                             cont::ValueName::from("left"),
-                            cont::Value::Proj(cont::ValueName::from("x"), 0),
+                            cont::Value::Eval(cont::ConstOp::Proj(0), vec![cont::ValueName::from("x")]),
                         ),
                         (
                             cont::ValueName::from("out"),
-                            cont::Value::Proj(cont::ValueName::from("left"), 0),
+                            cont::Value::Eval(cont::ConstOp::Proj(0), vec![cont::ValueName::from("left")]),
                         ),
                     ],
                     blocks: vec![],
@@ -267,17 +267,17 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("even"),
-                            cont::Value::Clsr(
+                            cont::Value::Pure(cont::ConstValue::Clsr(
                                 cont::ClsrName::from("even"),
                                 vec![cont::ValueName::from("odd")],
-                            ),
+                            )),
                         ),
                         (
                             cont::ValueName::from("odd"),
-                            cont::Value::Clsr(
+                            cont::Value::Pure(cont::ConstValue::Clsr(
                                 cont::ClsrName::from("odd"),
                                 vec![cont::ValueName::from("even")],
-                            ),
+                            )),
                         ),
                     ],
                     blocks: vec![],

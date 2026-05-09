@@ -41,7 +41,10 @@ fn main() {
             region: Region {
                 values: vec![(
                     ValueName::from("k"),
-                    Value::Clsr(ClsrName::from("AddBias"), vec![ValueName::from("BIAS")]),
+                    Value::Pure(ConstValue::Clsr(
+                        ClsrName::from("AddBias"),
+                        vec![ValueName::from("BIAS")],
+                    )),
                 )],
                 blocks: vec![
                     (
@@ -80,18 +83,24 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::Tpl(vec![
+                                        Value::Pure(ConstValue::Tpl(vec![
                                             ValueName::from("out"),
                                             ValueName::from("ZERO"),
-                                        ]),
+                                        ])),
                                     ),
                                     (
                                         ValueName::from("out_again"),
-                                        Value::Proj(ValueName::from("pair"), 0),
+                                        Value::Eval(
+                                            ConstOp::Proj(0),
+                                            vec![ValueName::from("pair")],
+                                        ),
                                     ),
                                     (
                                         ValueName::from("is_zero"),
-                                        Value::Proj(ValueName::from("pair"), 1),
+                                        Value::Eval(
+                                            ConstOp::Proj(1),
+                                            vec![ValueName::from("pair")],
+                                        ),
                                     ),
                                 ],
                                 blocks: vec![],
