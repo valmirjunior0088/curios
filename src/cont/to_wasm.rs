@@ -617,6 +617,84 @@ mod tests {
     }
 
     #[test]
+    fn lowers_and_runs_bln_eql() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("T"), cont::Data::Bln(true));
+        module.add_const(cont::ValueName::from("T2"), cont::Data::Bln(true));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::BlnEql,
+                            vec![cont::ValueName::from("T"), cont::ValueName::from("T2")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_bln_neq() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("T"), cont::Data::Bln(true));
+        module.add_const(cont::ValueName::from("F"), cont::Data::Bln(false));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::BlnNeq,
+                            vec![cont::ValueName::from("T"), cont::ValueName::from("F")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn lowers_and_runs_nat_add() {
         let mut module = cont::Module::new();
 

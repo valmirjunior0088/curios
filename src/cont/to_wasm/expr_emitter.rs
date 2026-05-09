@@ -125,6 +125,18 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::I32Or);
                 self.emit_instr(wasm::Instr::RefI31);
             }
+            (cont::Code::BlnEql, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Eq);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::BlnNeq, [left, right]) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Ne);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
             (cont::Code::NatEql, [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));

@@ -17,6 +17,8 @@ pub enum Code {
     BlnNot,
     BlnAnd,
     BlnOr,
+    BlnEql,
+    BlnNeq,
     NatEql,
     NatNeq,
     NatAdd,
