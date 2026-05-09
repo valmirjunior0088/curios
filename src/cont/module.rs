@@ -33,7 +33,7 @@ pub enum Value {
     Pure(ConstValue),
     Eval(ConstOp, Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
-    TplN(Vec<ValueName>),
+    Tpl(Vec<ValueName>),
     Proj(ValueName, usize),
     Name(ValueName),
 }

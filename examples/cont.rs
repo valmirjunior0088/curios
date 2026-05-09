@@ -80,7 +80,7 @@ fn main() {
                                 values: vec![
                                     (
                                         ValueName::from("pair"),
-                                        Value::TplN(vec![
+                                        Value::Tpl(vec![
                                             ValueName::from("out"),
                                             ValueName::from("ZERO"),
                                         ]),

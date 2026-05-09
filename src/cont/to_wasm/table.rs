@@ -155,12 +155,12 @@ impl<'a> FuncData<'a> {
     }
 }
 
-fn max_tpl_n_arity(region: &cont::Region) -> usize {
+fn max_tpl_arity(region: &cont::Region) -> usize {
     let local = region
         .values
         .iter()
         .filter_map(|(_, value)| match value {
-            cont::Value::TplN(fields) => Some(fields.len()),
+            cont::Value::Tpl(fields) => Some(fields.len()),
             _ => None,
         })
         .max()
@@ -169,7 +169,7 @@ fn max_tpl_n_arity(region: &cont::Region) -> usize {
     let nested = region
         .blocks
         .iter()
-        .map(|(_, block)| max_tpl_n_arity(&block.region))
+        .map(|(_, block)| max_tpl_arity(&block.region))
         .max()
         .unwrap_or(0);
 
@@ -182,7 +182,7 @@ pub struct Table<'a> {
     special_local: wasm::LocalName,
     unit_type: wasm::TypeName,
     flt_type: wasm::TypeName,
-    tpl_n_types: BTreeMap<usize, wasm::TypeName>,
+    tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
     func_types: BTreeMap<usize, wasm::TypeName>,
@@ -198,17 +198,17 @@ impl<'a> Table<'a> {
             special_local: wasm::LocalName::from("!"),
             unit_type: wasm::TypeName::from("unit"),
             flt_type: wasm::TypeName::from("flt"),
-            tpl_n_types: {
+            tpl_types: {
                 let max = module
                     .clsrs()
                     .iter()
-                    .map(|(_, clsr)| max_tpl_n_arity(&clsr.region))
-                    .chain(module.funcs().iter().map(|(_, func)| max_tpl_n_arity(&func.region)))
+                    .map(|(_, clsr)| max_tpl_arity(&clsr.region))
+                    .chain(module.funcs().iter().map(|(_, func)| max_tpl_arity(&func.region)))
                     .max()
                     .unwrap_or(0);
 
                 (1..=max)
-                    .map(|arity| (arity, wasm::TypeName::from(format!("tpl_n/{}", arity))))
+                    .map(|arity| (arity, wasm::TypeName::from(format!("tpl/{}", arity))))
                     .collect()
             },
             envr_types: module
@@ -282,20 +282,20 @@ impl<'a> Table<'a> {
         self.flt_type.clone()
     }
 
-    pub fn tpl_n_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {
-        self.tpl_n_types
+    pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {
+        self.tpl_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub fn find_tpl_n_type(&self, arity: usize) -> wasm::TypeName {
-        self.tpl_n_types
+    pub fn find_tpl_type(&self, arity: usize) -> wasm::TypeName {
+        self.tpl_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks tuple type for arity `{}`", arity))
             .clone()
     }
 
-    pub fn tpl_n_field(&self, index: usize) -> wasm::FieldName {
+    pub fn tpl_field(&self, index: usize) -> wasm::FieldName {
         wasm::FieldName::from(index.to_string())
     }
 

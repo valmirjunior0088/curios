@@ -231,7 +231,7 @@ impl<'a> Lowerer<'a> {
                 let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
                 let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
 
-                emit_fresh_value(state, builder, cont::Value::TplN(vec![fst, snd]))
+                emit_fresh_value(state, builder, cont::Value::Tpl(vec![fst, snd]))
             }
             core::ErasedTerm::Atom(atom) => emit_fresh_value(
                 state,
@@ -343,7 +343,7 @@ impl<'a> Lowerer<'a> {
             core::ErasedTerm::Pair(pair) => {
                 let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
                 let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
-                builder.add_value(target, cont::Value::TplN(vec![fst, snd]));
+                builder.add_value(target, cont::Value::Tpl(vec![fst, snd]));
             }
             core::ErasedTerm::Atom(atom) => {
                 builder.add_value(
@@ -599,7 +599,7 @@ impl<'a> Lowerer<'a> {
                         builder,
                         Box::new(move |this, state, builder, snd| {
                             let value =
-                                emit_fresh_value(state, builder, cont::Value::TplN(vec![fst, snd]));
+                                emit_fresh_value(state, builder, cont::Value::Tpl(vec![fst, snd]));
 
                             cont(this, state, builder, value)
                         }),

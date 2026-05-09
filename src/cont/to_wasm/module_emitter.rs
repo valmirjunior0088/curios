@@ -45,11 +45,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_tpl_n_types(&mut self) {
-        for (arity, type_name) in self.table.tpl_n_types() {
+    fn emit_tpl_types(&mut self) {
+        for (arity, type_name) in self.table.tpl_types() {
             let super_types = match arity {
                 1 => vec![],
-                n => vec![self.table.find_tpl_n_type(n - 1)],
+                n => vec![self.table.find_tpl_type(n - 1)],
             };
 
             self.module.add_type(
@@ -60,7 +60,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     comp_type: wasm::CompType::Struct(wasm::StructType::from(
                         (0..arity).map(|index| {
                             (
-                                self.table.tpl_n_field(index),
+                                self.table.tpl_field(index),
                                 wasm::FieldType {
                                     storage_type: wasm::StorageType::Val(self.table.top_type(true)),
                                     mutability: wasm::Mutability::Var,
@@ -289,7 +289,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn emit_module(&mut self, module: &'a cont::Module) {
         self.emit_unit_type();
         self.emit_flt_type();
-        self.emit_tpl_n_types();
+        self.emit_tpl_types();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types();
         self.emit_envr_arity_types();
