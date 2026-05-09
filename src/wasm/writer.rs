@@ -1,9 +1,9 @@
 use {
     super::{
-        AbsHeapType, ArrayType, BlockType, CompType, Export, Expr, FieldName, FieldType, Func,
-        FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
-        LocalName, Module, Mutability, NumType, PackedType, RecType, RefType, ResultType,
-        StorageType, StructType, SubType, TypeName, ValType,
+        AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,
+        FieldName, FieldType, Func, FuncName, FuncType, Global, GlobalName, GlobalType, HeapType,
+        Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
+        RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
     std::{
         collections::HashMap,
@@ -99,6 +99,7 @@ struct Table<'a> {
     funcs: HashMap<&'a FuncName, usize>,
     locals: HashMap<(&'a FuncName, &'a LocalName), usize>,
     globals: HashMap<&'a GlobalName, usize>,
+    datas: HashMap<&'a DataName, usize>,
 }
 
 impl<'a> Table<'a> {
@@ -156,12 +157,19 @@ impl<'a> Table<'a> {
             globals.insert(global_name, index);
         }
 
+        let mut datas = HashMap::new();
+
+        for (index, (data_name, _)) in module.datas().iter().enumerate() {
+            datas.insert(data_name, index);
+        }
+
         Self {
             types,
             fields,
             funcs,
             locals,
             globals,
+            datas,
         }
     }
 
@@ -208,6 +216,13 @@ impl<'a> Table<'a> {
             .get(name)
             .cloned()
             .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name.string))
+    }
+
+    fn resolve_data(&self, name: &'a DataName) -> usize {
+        self.datas
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| panic!("`Table` lacks data `{}`", name.string))
     }
 }
 
@@ -427,6 +442,13 @@ where
     fn write_global_name(&mut self, global_name: &GlobalName) -> Result<()> {
         self.buffer
             .push_leb128_unsigned(self.table.resolve_global(global_name) as u64)?;
+
+        Ok(())
+    }
+
+    fn write_data_name(&mut self, data_name: &DataName) -> Result<()> {
+        self.buffer
+            .push_leb128_unsigned(self.table.resolve_data(data_name) as u64)?;
 
         Ok(())
     }
@@ -1031,6 +1053,12 @@ where
                 self.buffer.push_leb128_unsigned(8)?;
                 self.write_type_name(type_name)?;
                 self.buffer.push_leb128_unsigned(*length as u64)?;
+            }
+            Instr::ArrayNewData { type_name, data_name } => {
+                self.buffer.push_byte(0xfb)?;
+                self.buffer.push_leb128_unsigned(9)?;
+                self.write_type_name(type_name)?;
+                self.write_data_name(data_name)?;
             }
             Instr::ArrayGet { type_name } => {
                 self.buffer.push_byte(0xfb)?;
@@ -1760,6 +1788,42 @@ where
         Ok(())
     }
 
+    fn write_data_count_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = self.fork(&mut bytes);
+            writer.buffer.push_leb128_unsigned(datas.len() as u64)?;
+        }
+
+        self.write_section(12, bytes)?;
+
+        Ok(())
+    }
+
+    fn write_data_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = self.fork(&mut bytes);
+
+            writer.write_vec(datas, |writer, (_, segment)| {
+                writer.buffer.push_byte(0x01)?; // passive flag
+                writer.buffer.push_leb128_unsigned(segment.bytes.len() as u64)?;
+
+                for byte in &segment.bytes {
+                    writer.buffer.push_byte(*byte)?;
+                }
+
+                Ok(())
+            })?;
+        }
+
+        self.write_section(11, bytes)?;
+
+        Ok(())
+    }
+
     fn write_module_name_subsection(&mut self, module_name: &str) -> Result<()> {
         let mut bytes = Vec::new();
 
@@ -1922,7 +1986,9 @@ where
         self.write_func_section(module.funcs())?;
         self.write_global_section(module.globals())?;
         self.write_export_section(module.exports())?;
+        self.write_data_count_section(module.datas())?;
         self.write_code_section(module.funcs())?;
+        self.write_data_section(module.datas())?;
         self.write_name_section(module)?;
 
         Ok(())
@@ -1937,4 +2003,51 @@ pub fn to_bytes(module: &Module) -> Vec<u8> {
         .unwrap();
 
     bytes
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        super::*,
+        wasmtime::{Config, Engine, Instance, Module as WasmtimeModule, Store},
+    };
+
+    #[test]
+    fn data_segment_is_recognized_by_wasmtime() {
+        let module = r#"
+            (module $test
+                (type $bytes (array (mut i8)))
+                (type $main_fn (func (result i32)))
+                (func $main (type $main_fn)
+                    i32.const 0
+                    i32.const 5
+                    array.new_data $bytes $hello
+                    array.len)
+                (data $hello "\68\65\6c\6c\6f")
+                (export "main" (func $main)))
+        "#
+        .parse::<Module>()
+        .expect("expected module");
+
+        let mut config = Config::new();
+        config.wasm_reference_types(true);
+        config.wasm_function_references(true);
+        config.wasm_gc(true);
+
+        let engine = Engine::new(&config).expect("expected engine");
+
+        let wasmtime_module = WasmtimeModule::from_binary(&engine, &to_bytes(&module))
+            .expect("expected wasmtime module");
+
+        let mut store = Store::new(&engine, ());
+
+        let instance = Instance::new(&mut store, &wasmtime_module, &[])
+            .expect("expected instance");
+
+        let main = instance
+            .get_typed_func::<(), i32>(&mut store, "main")
+            .expect("expected main");
+
+        assert_eq!(main.call(&mut store, ()).expect("expected result"), 5);
+    }
 }

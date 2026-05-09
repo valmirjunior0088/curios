@@ -6,3 +6,4 @@ name!(FuncName);
 name!(LocalName);
 name!(GlobalName);
 name!(LabelName);
+name!(DataName);

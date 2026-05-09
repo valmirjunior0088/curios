@@ -1,9 +1,9 @@
 use {
     super::{
-        AbsHeapType, ArrayType, BlockType, CompType, Export, Expr, FieldName, FieldType, Func,
-        FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
-        LocalName, Module, Mutability, NumType, PackedType, RecType, RefType, ResultType,
-        StorageType, StructType, SubType, TypeName, ValType,
+        AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,
+        FieldName, FieldType, Func, FuncName, FuncType, Global, GlobalName, GlobalType, HeapType,
+        Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
+        RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,
@@ -108,6 +108,42 @@ fn parse_func_name<'a>() -> Parser<'a, FuncName> {
 
 fn parse_field_name<'a>() -> Parser<'a, FieldName> {
     parse_name().map(FieldName::from)
+}
+
+fn parse_data_name<'a>() -> Parser<'a, DataName> {
+    parse_name().map(DataName::from)
+}
+
+fn parse_bytes<'a>() -> Parser<'a, Vec<u8>> {
+    take_exact("\"")
+        .and_keep(take_while(|c| c != '"').flat_map(|s: &str| {
+            let mut bytes = Vec::new();
+            let mut chars = s.chars();
+
+            while let Some(c) = chars.next() {
+                match c {
+                    '\\' => {
+                        let hi = match chars.next().and_then(|c| c.to_digit(16)) {
+                            Some(d) => d,
+                            None => return fail("expected hex digit after '\\'"),
+                        };
+                        let lo = match chars.next().and_then(|c| c.to_digit(16)) {
+                            Some(d) => d,
+                            None => return fail("expected second hex digit"),
+                        };
+                        bytes.push((hi * 16 + lo) as u8);
+                    }
+                    c => {
+                        let mut buf = [0u8; 4];
+                        bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+                    }
+                }
+            }
+
+            pure(bytes)
+        }))
+        .and_drop(take_exact("\""))
+        .and_drop(parse_whitespace())
 }
 
 fn parse_num_type<'a>() -> Parser<'a, NumType> {
@@ -430,6 +466,10 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
         .and_keep(parse_type_name())
         .and(parse_u32())
         .map(|(type_name, length)| Instr::ArrayNewFixed { type_name, length }))
+    .or(parse_literal("array.new_data")
+        .and_keep(parse_type_name())
+        .and(parse_data_name())
+        .map(|(type_name, data_name)| Instr::ArrayNewData { type_name, data_name }))
     .or(parse_literal("array.new_default")
         .and_keep(parse_type_name())
         .map(|type_name| Instr::ArrayNewDefault { type_name }))
@@ -739,6 +779,13 @@ fn parse_func<'a>() -> Parser<'a, (FuncName, Func)> {
         })
 }
 
+fn parse_data_segment<'a>() -> Parser<'a, (DataName, DataSegment)> {
+    catch(parse_literal("(").and_drop(parse_literal("data")))
+        .and_keep(parse_data_name())
+        .and(parse_bytes().map(|bytes| DataSegment { bytes }))
+        .and_drop(parse_literal(")"))
+}
+
 fn parse_global<'a>() -> Parser<'a, (GlobalName, Global)> {
     catch(parse_literal("(").and_drop(parse_literal("global")))
         .and_keep(parse_global_name())
@@ -805,6 +852,14 @@ fn parse_module<'a>() -> Parser<'a, Module> {
 
             module
         })
+        .and(many0(parse_data_segment))
+        .map(|(mut module, datas)| {
+            for (data_name, data_segment) in datas {
+                module.add_data(data_name, data_segment);
+            }
+
+            module
+        })
         .and(many0(parse_export))
         .map(|(mut module, exports)| {
             for (name, export) in exports {
@@ -857,6 +912,7 @@ mod tests {
                     local.get $tmp)
                 (global $answer (mut i32)
                     i32.const 41)
+                (data $greeting "\68\65\6c\6c\6f")
                 (export "demo" (func $demo))
                 (export "answer" (global $answer)))
         "#
@@ -1022,5 +1078,12 @@ mod tests {
             )),
             "expected global export"
         );
+
+        let [(data_name, data_segment)] = module.datas() else {
+            panic!("expected one data segment");
+        };
+
+        assert_eq!(data_name.string, "greeting");
+        assert_eq!(data_segment.bytes, b"hello");
     }
 }

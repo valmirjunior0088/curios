@@ -1,6 +1,6 @@
 use super::{
-    BlockType, FieldName, FuncName, GlobalName, HeapType, LabelName, LocalName, RefType, TypeName,
-    ValType,
+    BlockType, DataName, FieldName, FuncName, GlobalName, HeapType, LabelName, LocalName, RefType,
+    TypeName, ValType,
 };
 
 #[derive(Debug)]
@@ -102,6 +102,10 @@ pub enum Instr {
     ArrayNewFixed {
         type_name: TypeName,
         length: u32,
+    },
+    ArrayNewData {
+        type_name: TypeName,
+        data_name: DataName,
     },
     ArrayGet {
         type_name: TypeName,

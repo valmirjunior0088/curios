@@ -1,5 +1,6 @@
 use super::{
-    Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName, ValType,
+    DataName, Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName,
+    ValType,
 };
 
 #[derive(Debug)]
@@ -28,6 +29,11 @@ impl Import {
             _ => None,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct DataSegment {
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -65,6 +71,7 @@ pub struct Module {
     imports: Vec<(String, String, Import)>,
     funcs: Vec<(FuncName, Func)>,
     globals: Vec<(GlobalName, Global)>,
+    datas: Vec<(DataName, DataSegment)>,
     exports: Vec<(String, Export)>,
 }
 
@@ -79,6 +86,7 @@ impl Module {
             imports: Default::default(),
             funcs: Default::default(),
             globals: Default::default(),
+            datas: Default::default(),
             exports: Default::default(),
         }
     }
@@ -134,6 +142,14 @@ impl Module {
         self.globals.push((global_name, global));
     }
 
+    pub fn datas(&self) -> &[(DataName, DataSegment)] {
+        &self.datas
+    }
+
+    pub fn add_data(&mut self, data_name: DataName, data_segment: DataSegment) {
+        self.datas.push((data_name, data_segment));
+    }
+
     pub fn exports(&self) -> &[(String, Export)] {
         &self.exports
     }
@@ -171,9 +187,14 @@ mod tests {
                 i32.const 3
                 array.new_fixed $bytes 1
                 drop
+                i32.const 0
+                i32.const 5
+                array.new_data $bytes $greeting
+                drop
                 local.get $tmp)
             (global $answer (mut i32)
                 i32.const 41)
+            (data $greeting "\68\65\6c\6c\6f")
             (export "demo" (func $demo))
             (export "answer" (global $answer)))
     "#;

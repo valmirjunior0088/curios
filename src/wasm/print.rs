@@ -1,9 +1,9 @@
 use {
     super::{
-        AbsHeapType, ArrayType, BlockType, CompType, Export, Expr, FieldName, FieldType, Func,
-        FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
-        LocalName, Module, Mutability, NumType, PackedType, RecType, RefType, ResultType,
-        StorageType, StructType, SubType, TypeName, ValType,
+        AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,
+        FieldName, FieldType, Func, FuncName, FuncType, Global, GlobalName, GlobalType, HeapType,
+        Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
+        RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -35,6 +35,10 @@ fn print_local_name<'a>(local_name: &'a LocalName) -> Printer<'a> {
 
 fn print_label_name<'a>(label_name: &'a LabelName) -> Printer<'a> {
     print_dollar_ident(&label_name.string)
+}
+
+fn print_data_name<'a>(data_name: &'a DataName) -> Printer<'a> {
+    print_dollar_ident(&data_name.string)
 }
 
 fn print_quoted_ident<'a>(string: &'a str) -> Printer<'a> {
@@ -410,6 +414,12 @@ fn print_instr<'a>(instr: &'a Instr) -> Printer<'a> {
             pure(" "),
             pure(length.to_string()),
         ]),
+        Instr::ArrayNewData { type_name, data_name } => flat([
+            pure("array.new_data "),
+            print_type_name(type_name),
+            pure(" "),
+            print_data_name(data_name),
+        ]),
         Instr::ArrayGet { type_name } => flat([pure("array.get "), print_type_name(type_name)]),
         Instr::ArrayGetS { type_name } => flat([pure("array.get_s "), print_type_name(type_name)]),
         Instr::ArrayGetU { type_name } => flat([pure("array.get_u "), print_type_name(type_name)]),
@@ -733,6 +743,17 @@ fn print_global<'a>(global_name: &'a GlobalName, global: &'a Global) -> Printer<
     ])
 }
 
+fn print_data_segment<'a>(name: &'a DataName, segment: &'a DataSegment) -> Printer<'a> {
+    let encoded: String = segment.bytes.iter().map(|b| format!("\\{:02x}", b)).collect();
+    flat([
+        pure("(data "),
+        print_data_name(name),
+        pure(" \""),
+        pure(encoded),
+        pure("\")"),
+    ])
+}
+
 fn print_export<'a>(name: &'a str, export: &'a Export) -> Printer<'a> {
     flat([
         pure("(export "),
@@ -770,6 +791,12 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
                 module.globals().iter().map(|(global_name, global)| {
                     flat([pure("\n"), print_global(global_name, global)])
                 }),
+            )
+            .chain(
+                module
+                    .datas()
+                    .iter()
+                    .map(|(name, segment)| flat([pure("\n"), print_data_segment(name, segment)])),
             )
             .chain(
                 module
