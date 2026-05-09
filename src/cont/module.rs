@@ -7,6 +7,7 @@ pub enum Data {
     Nat(u32),
     Int(i32),
     Flt(f32),
+    Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
 }
@@ -28,6 +29,9 @@ pub enum Code {
     FltAdd,
     FltSub,
     FltMul,
+    LstGet,
+    LstLen,
+    LstJoin,
     TplProj(usize),
 }
 

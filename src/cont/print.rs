@@ -34,6 +34,7 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
         Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
+        Data::Lst(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
             print_clsr_name(target),
@@ -61,6 +62,9 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::FltAdd => pure("flt.add"),
         Code::FltSub => pure("flt.sub"),
         Code::FltMul => pure("flt.mul"),
+        Code::LstGet => pure("lst.get"),
+        Code::LstLen => pure("lst.len"),
+        Code::LstJoin => pure("lst.join"),
         Code::TplProj(index) => flat([pure("tpl.proj "), pure(index.to_string())]),
     }
 }

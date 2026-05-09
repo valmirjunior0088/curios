@@ -64,11 +64,23 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 },
             ]),
+            cont::Data::Lst(elems) => {
+                let lst_type = self.context.table().lst_type();
+
+                for elem in elems {
+                    self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
+                }
+
+                self.emit_instr(wasm::Instr::ArrayNewFixed {
+                    type_name: lst_type,
+                    length: elems.len() as u32,
+                });
+            }
             cont::Data::Tpl(elems) => {
                 let tpl_n_type = self.context.table().find_tpl_type(elems.len());
 
                 for elem in elems {
-                    self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Raw));
+                    self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
                 }
 
                 self.emit_instr(wasm::Instr::StructNew {
@@ -84,7 +96,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
 
                 for field in fields {
-                    self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Raw));
+                    self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Null));
                 }
 
                 self.emit_instr(wasm::Instr::StructNew {
@@ -94,7 +106,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_code(&mut self, op: &'a cont::Code, params: &'a [cont::ValueName]) {
+    fn emit_code(&mut self, value_name: &'a cont::ValueName, op: &'a cont::Code, params: &'a [cont::ValueName]) {
         match (op, params) {
             (cont::Code::BlnNot, [operand]) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
@@ -194,6 +206,56 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
+            (cont::Code::LstGet, [lst, idx]) => {
+                let lst_type = self.context.table().lst_type();
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
+                self.emit_instr(wasm::Instr::ArrayGet { type_name: lst_type });
+            }
+            (cont::Code::LstLen, [lst]) => {
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::RefI31);
+            }
+            (cont::Code::LstJoin, [l1, l2]) => {
+                let lst_type = self.context.table().lst_type();
+                let result_local = self
+                    .context
+                    .find_local(value_name)
+                    .map(|local_data| local_data.local_name)
+                    .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string));
+
+                // total = len(l1) + len(l2) → ArrayNewDefault → LocalSet $result
+                self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::ArrayNewDefault { type_name: lst_type.clone() });
+                self.emit_instr(wasm::Instr::LocalSet { local_name: result_local.clone() });
+
+                // ArrayCopy result[0..len(l1)] ← l1
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::ArrayCopy { source_name: lst_type.clone(), target_name: lst_type.clone() });
+
+                // ArrayCopy result[len(l1)..] ← l2
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::ArrayCopy { source_name: lst_type.clone(), target_name: lst_type.clone() });
+
+                // Leave $result on stack for emit_let_eval's LocalSet
+                self.emit_instr(wasm::Instr::LocalGet { local_name: result_local });
+            }
             (cont::Code::TplProj(index), [tuple]) => self.emit_proj(tuple, *index),
             (op, params) => panic!(
                 "`ExprEmitter` did not expect {} params for const op `{op:?}`",
@@ -267,7 +329,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         op: &'a cont::Code,
         params: &'a [cont::ValueName],
     ) {
-        self.emit_code(op, params);
+        self.emit_code(value_name, op, params);
 
         self.emit_instr(wasm::Instr::LocalSet {
             local_name: self
@@ -306,11 +368,42 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     .load_value_instrs(value_name, LoadAs::Concrete(envr_type.clone())),
             );
 
-            self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Raw));
+            self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Null));
 
             self.emit_instr(wasm::Instr::StructSet {
                 type_name: envr_type.clone(),
                 field_name,
+            });
+        }
+    }
+
+    fn emit_preallocate_lst(&mut self, value_name: &'a cont::ValueName, len: usize) {
+        self.emit_instr(wasm::Instr::I32Const { value: len as i32 });
+
+        self.emit_instr(wasm::Instr::ArrayNewDefault {
+            type_name: self.context.table().lst_type(),
+        });
+
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: self
+                .context
+                .find_local(value_name)
+                .map(|local_data| local_data.local_name)
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
+        });
+    }
+
+    fn emit_backpatch_lst(&mut self, value_name: &'a cont::ValueName, elems: &'a [cont::ValueName]) {
+        let lst_type = self.context.table().lst_type();
+
+        for (index, elem) in elems.iter().enumerate() {
+            self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+
+            self.emit_instr(wasm::Instr::I32Const { value: index as i32 });
+            self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
+
+            self.emit_instr(wasm::Instr::ArraySet {
+                type_name: lst_type.clone(),
             });
         }
     }
@@ -324,7 +417,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 LoadAs::Concrete(tpl_n_type.clone()),
             ));
 
-            self.emit_instrs(self.context.load_value_instrs(element, LoadAs::Raw));
+            self.emit_instrs(self.context.load_value_instrs(element, LoadAs::Null));
 
             self.emit_instr(wasm::Instr::StructSet {
                 type_name: tpl_n_type.clone(),
@@ -334,7 +427,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 
     fn emit_let_alias(&mut self, value_name: &'a cont::ValueName, source: &'a cont::ValueName) {
-        self.emit_instrs(self.context.load_value_instrs(source, LoadAs::Raw));
+        self.emit_instrs(self.context.load_value_instrs(source, LoadAs::Null));
 
         self.emit_instr(wasm::Instr::LocalSet {
             local_name: self
@@ -348,6 +441,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             match value {
+                cont::Value::Pure(cont::Data::Lst(elems)) => {
+                    self.emit_preallocate_lst(value_name, elems.len())
+                }
                 cont::Value::Pure(cont::Data::Tpl(elems)) => {
                     self.emit_preallocate_tpl(value_name, elems.len())
                 }
@@ -360,6 +456,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
         for (value_name, value) in values {
             match value {
+                cont::Value::Pure(cont::Data::Lst(elems)) => {
+                    self.emit_backpatch_lst(value_name, elems)
+                }
                 cont::Value::Pure(cont::Data::Tpl(elems)) => {
                     self.emit_backpatch_tpl(value_name, elems)
                 }

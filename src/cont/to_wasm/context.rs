@@ -27,11 +27,12 @@ pub enum Context<'a, 'b> {
 
 #[derive(Debug)]
 pub enum LoadAs {
-    Raw,
+    Null,
     NonNull,
     Concrete(wasm::TypeName),
     Int,
     Flt,
+    Lst,
 }
 
 impl<'a, 'b> Context<'a, 'b> {
@@ -185,7 +186,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
     fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<wasm::Instr> {
         match load_as {
-            LoadAs::Raw => vec![],
+            LoadAs::Null => vec![],
             LoadAs::NonNull => match is_nullable {
                 true => vec![wasm::Instr::RefAsNonNull],
                 false => vec![],
@@ -219,6 +220,14 @@ impl<'a, 'b> Context<'a, 'b> {
                         field_name: self.table().special_field(),
                     },
                 ]
+            }
+            LoadAs::Lst => {
+                vec![wasm::Instr::RefCast {
+                    ref_type: wasm::RefType {
+                        is_nullable: false,
+                        heap_type: wasm::HeapType::Concrete(self.table().lst_type()),
+                    },
+                }]
             }
         }
     }

@@ -657,4 +657,163 @@ mod tests {
 
         assert_eq!(result, 7);
     }
+
+    #[test]
+    fn lowers_and_runs_lst_len() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+        module.add_const(
+            cont::ValueName::from("LST"),
+            cont::Data::Lst(vec![
+                cont::ValueName::from("THREE"),
+                cont::ValueName::from("SEVEN"),
+            ]),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::LstLen,
+                            vec![cont::ValueName::from("LST")],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn lowers_and_runs_lst_get() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+        module.add_const(
+            cont::ValueName::from("LST"),
+            cont::Data::Lst(vec![
+                cont::ValueName::from("THREE"),
+                cont::ValueName::from("SEVEN"),
+            ]),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(
+                            cont::Code::LstGet,
+                            vec![
+                                cont::ValueName::from("LST"),
+                                cont::ValueName::from("ONE"),
+                            ],
+                        ),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn lowers_and_runs_lst_join() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Nat(2));
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(
+            cont::ValueName::from("LST1"),
+            cont::Data::Lst(vec![cont::ValueName::from("ONE")]),
+        );
+        module.add_const(
+            cont::ValueName::from("LST2"),
+            cont::Data::Lst(vec![
+                cont::ValueName::from("TWO"),
+                cont::ValueName::from("THREE"),
+            ]),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![
+                        (
+                            cont::ValueName::from("joined"),
+                            cont::Value::Eval(
+                                cont::Code::LstJoin,
+                                vec![
+                                    cont::ValueName::from("LST1"),
+                                    cont::ValueName::from("LST2"),
+                                ],
+                            ),
+                        ),
+                        (
+                            cont::ValueName::from("result"),
+                            cont::Value::Eval(
+                                cont::Code::LstLen,
+                                vec![cont::ValueName::from("joined")],
+                            ),
+                        ),
+                    ],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 3);
+    }
 }

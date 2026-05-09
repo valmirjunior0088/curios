@@ -15,6 +15,20 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         Self { table, module }
     }
 
+    fn emit_lst_type(&mut self) {
+        self.module.add_type(
+            self.table.lst_type(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Array(wasm::ArrayType::from(wasm::FieldType {
+                    storage_type: wasm::StorageType::Val(self.table.top_type(true)),
+                    mutability: wasm::Mutability::Var,
+                })),
+            },
+        );
+    }
+
     fn emit_flt_type(&mut self) {
         self.module.add_type(
             self.table.flt_type(),
@@ -289,6 +303,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn emit_module(&mut self, module: &'a cont::Module) {
         self.emit_unit_type();
         self.emit_flt_type();
+        self.emit_lst_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types();

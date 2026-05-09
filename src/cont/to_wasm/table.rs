@@ -181,6 +181,7 @@ pub struct Table<'a> {
     special_local: wasm::LocalName,
     unit_type: wasm::TypeName,
     flt_type: wasm::TypeName,
+    lst_type: wasm::TypeName,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -197,6 +198,7 @@ impl<'a> Table<'a> {
             special_local: wasm::LocalName::from("!"),
             unit_type: wasm::TypeName::from("unit"),
             flt_type: wasm::TypeName::from("flt"),
+            lst_type: wasm::TypeName::from("lst"),
             tpl_types: {
                 let max = module.consts().iter().map(|(_, data)| max_tpl_arity(data))
                     .chain(module.clsrs().iter().map(|(_, clsr)| max_region_tpl_arity(&clsr.region)))
@@ -277,6 +279,10 @@ impl<'a> Table<'a> {
 
     pub fn flt_type(&self) -> wasm::TypeName {
         self.flt_type.clone()
+    }
+
+    pub fn lst_type(&self) -> wasm::TypeName {
+        self.lst_type.clone()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {
