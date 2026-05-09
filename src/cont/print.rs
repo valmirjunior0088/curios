@@ -29,6 +29,9 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
 
 fn print_data<'a>(value: &'a Data) -> Printer<'a> {
     match value {
+        Data::Unit => pure("()"),
+        Data::Int(value) => pure(value.to_string()),
+        Data::Flt(value) => pure(value.to_string()),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
             print_clsr_name(target),
@@ -36,15 +39,11 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
             print_value_names(fields),
             pure("}"),
         ]),
-        Data::Unit => pure("()"),
-        Data::Int(value) => pure(value.to_string()),
-        Data::Flt(value) => pure(value.to_string()),
     }
 }
 
 fn print_code<'a>(op: &'a Code) -> Printer<'a> {
     match op {
-        Code::Proj(index) => flat([pure("proj "), pure(index.to_string())]),
         Code::Int(IntOp::Eql) => pure("int.eql"),
         Code::Int(IntOp::Add) => pure("int.add"),
         Code::Int(IntOp::Sub) => pure("int.sub"),
@@ -52,6 +51,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::Flt(FltOp::Add) => pure("flt.add"),
         Code::Flt(FltOp::Sub) => pure("flt.sub"),
         Code::Flt(FltOp::Mul) => pure("flt.mul"),
+        Code::Proj(index) => flat([pure("proj "), pure(index.to_string())]),
     }
 }
 

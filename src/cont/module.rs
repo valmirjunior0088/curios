@@ -2,11 +2,11 @@ use super::{BlockName, ClsrName, FuncName, ValueName};
 
 #[derive(Debug)]
 pub enum Data {
-    Tpl(Vec<ValueName>),
-    Clsr(ClsrName, Vec<ValueName>),
     Unit,
     Int(i32),
     Flt(f32),
+    Tpl(Vec<ValueName>),
+    Clsr(ClsrName, Vec<ValueName>),
 }
 
 #[derive(Debug)]
@@ -26,9 +26,9 @@ pub enum FltOp {
 
 #[derive(Debug)]
 pub enum Code {
-    Proj(usize),
     Int(IntOp),
     Flt(FltOp),
+    Proj(usize),
 }
 
 #[derive(Debug)]

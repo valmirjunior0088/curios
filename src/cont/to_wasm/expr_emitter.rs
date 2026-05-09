@@ -46,6 +46,18 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     pub fn emit_data(&mut self, value: &'a cont::Data) {
         match value {
+            cont::Data::Unit => self.emit_instr(wasm::Instr::StructNew {
+                type_name: self.context.table().unit_type(),
+            }),
+            &cont::Data::Int(value) => {
+                self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
+            }
+            &cont::Data::Flt(value) => self.emit_instrs([
+                wasm::Instr::F32Const { value },
+                wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                },
+            ]),
             cont::Data::Tpl(elems) => {
                 let tpl_n_type = self.context.table().find_tpl_type(elems.len());
 
@@ -73,24 +85,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: envr_type,
                 });
             }
-            cont::Data::Unit => self.emit_instr(wasm::Instr::StructNew {
-                type_name: self.context.table().unit_type(),
-            }),
-            &cont::Data::Int(value) => {
-                self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
-            }
-            &cont::Data::Flt(value) => self.emit_instrs([
-                wasm::Instr::F32Const { value },
-                wasm::Instr::StructNew {
-                    type_name: self.context.table().flt_type(),
-                },
-            ]),
         }
     }
 
     fn emit_code(&mut self, op: &'a cont::Code, params: &'a [cont::ValueName]) {
         match (op, params) {
-            (cont::Code::Proj(index), [tuple]) => self.emit_proj(tuple, *index),
             (cont::Code::Int(cont::IntOp::Eql), [left, right]) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
@@ -142,6 +141,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 });
             }
+            (cont::Code::Proj(index), [tuple]) => self.emit_proj(tuple, *index),
             (op, params) => panic!(
                 "`ExprEmitter` did not expect {} params for const op `{op:?}`",
                 params.len()
