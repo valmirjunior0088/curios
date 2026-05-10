@@ -19,10 +19,7 @@ fn main() {
             region: Region {
                 values: vec![(
                     ValueName::from("y"),
-                    Value::Eval(
-                        Code::IntAdd,
-                        vec![ValueName::from("x"), ValueName::from("bias")],
-                    ),
+                    Value::Eval(Code::IntAdd(ValueName::from("x"), ValueName::from("bias"))),
                 )],
                 blocks: vec![],
                 tail: Tail::Jump(JumpTarget {
@@ -90,17 +87,11 @@ fn main() {
                                     ),
                                     (
                                         ValueName::from("out_again"),
-                                        Value::Eval(
-                                            Code::TplProj(0),
-                                            vec![ValueName::from("pair")],
-                                        ),
+                                        Value::Eval(Code::TplProj(0, ValueName::from("pair"))),
                                     ),
                                     (
                                         ValueName::from("is_zero"),
-                                        Value::Eval(
-                                            Code::TplProj(1),
-                                            vec![ValueName::from("pair")],
-                                        ),
+                                        Value::Eval(Code::TplProj(1, ValueName::from("pair"))),
                                     ),
                                 ],
                                 blocks: vec![],

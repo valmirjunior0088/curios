@@ -179,7 +179,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BlnNot, vec![operand]),
+                    cont::Value::Eval(cont::Code::BlnNot(operand)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::BlnAnd(left, right)) => {
@@ -189,7 +189,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BlnAnd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::BlnAnd(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::BlnOr(left, right)) => {
@@ -199,7 +199,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BlnOr, vec![left, right]),
+                    cont::Value::Eval(cont::Code::BlnOr(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Nat(value)) => emit_fresh_value(
@@ -214,7 +214,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::NatEql, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatEql(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatAdd(left, right)) => {
@@ -224,7 +224,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::NatAdd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatAdd(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatSub(left, right)) => {
@@ -234,7 +234,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::NatSub, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatSub(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatMul(left, right)) => {
@@ -244,7 +244,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::NatMul, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatMul(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatLt(left, right)) => {
@@ -254,7 +254,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::NatLt, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatLt(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => emit_fresh_value(
@@ -274,7 +274,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::IntEql, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntEql(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntAdd(left, right)) => {
@@ -284,7 +284,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::IntAdd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntAdd(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntSub(left, right)) => {
@@ -294,7 +294,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::IntSub, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntSub(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntMul(left, right)) => {
@@ -304,7 +304,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::IntMul, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntMul(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltAdd(left, right)) => {
@@ -314,7 +314,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::FltAdd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::FltAdd(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltSub(left, right)) => {
@@ -324,7 +324,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::FltSub, vec![left, right]),
+                    cont::Value::Eval(cont::Code::FltSub(left, right)),
                 )
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltMul(left, right)) => {
@@ -334,7 +334,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::FltMul, vec![left, right]),
+                    cont::Value::Eval(cont::Code::FltMul(left, right)),
                 )
             }
             core::ErasedTerm::Func(func) => {
@@ -394,7 +394,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::BlnNot, vec![operand]),
+                    cont::Value::Eval(cont::Code::BlnNot(operand)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::BlnAnd(left, right)) => {
@@ -403,7 +403,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::BlnAnd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::BlnAnd(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::BlnOr(left, right)) => {
@@ -412,7 +412,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::BlnOr, vec![left, right]),
+                    cont::Value::Eval(cont::Code::BlnOr(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Nat(value)) => {
@@ -424,7 +424,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::NatEql, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatEql(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatAdd(left, right)) => {
@@ -433,7 +433,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::NatAdd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatAdd(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatSub(left, right)) => {
@@ -442,7 +442,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::NatSub, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatSub(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatMul(left, right)) => {
@@ -451,7 +451,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::NatMul, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatMul(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::NatLt(left, right)) => {
@@ -460,7 +460,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::NatLt, vec![left, right]),
+                    cont::Value::Eval(cont::Code::NatLt(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::Int(value)) => {
@@ -475,7 +475,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::IntEql, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntEql(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntAdd(left, right)) => {
@@ -484,7 +484,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::IntAdd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntAdd(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntSub(left, right)) => {
@@ -493,7 +493,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::IntSub, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntSub(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::IntMul(left, right)) => {
@@ -502,7 +502,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::IntMul, vec![left, right]),
+                    cont::Value::Eval(cont::Code::IntMul(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltAdd(left, right)) => {
@@ -511,7 +511,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::FltAdd, vec![left, right]),
+                    cont::Value::Eval(cont::Code::FltAdd(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltSub(left, right)) => {
@@ -520,7 +520,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::FltSub, vec![left, right]),
+                    cont::Value::Eval(cont::Code::FltSub(left, right)),
                 );
             }
             core::ErasedTerm::Prim(core::ErasedPrim::FltMul(left, right)) => {
@@ -529,7 +529,7 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::FltMul, vec![left, right]),
+                    cont::Value::Eval(cont::Code::FltMul(left, right)),
                 );
             }
             core::ErasedTerm::Func(func) => {
@@ -611,7 +611,7 @@ impl<'a> Lowerer<'a> {
                     let value = emit_fresh_value(
                         state,
                         builder,
-                        cont::Value::Eval(cont::Code::BlnNot, vec![operand]),
+                        cont::Value::Eval(cont::Code::BlnNot(operand)),
                     );
 
                     cont(this, state, builder, value)
@@ -632,7 +632,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::BlnAnd, vec![left, right]),
+                                cont::Value::Eval(cont::Code::BlnAnd(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -655,7 +655,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::BlnOr, vec![left, right]),
+                                cont::Value::Eval(cont::Code::BlnOr(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -687,7 +687,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::NatEql, vec![left, right]),
+                                cont::Value::Eval(cont::Code::NatEql(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -710,7 +710,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::NatAdd, vec![left, right]),
+                                cont::Value::Eval(cont::Code::NatAdd(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -733,7 +733,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::NatSub, vec![left, right]),
+                                cont::Value::Eval(cont::Code::NatSub(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -756,7 +756,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::NatMul, vec![left, right]),
+                                cont::Value::Eval(cont::Code::NatMul(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -779,7 +779,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::NatLt, vec![left, right]),
+                                cont::Value::Eval(cont::Code::NatLt(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -820,7 +820,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::IntEql, vec![left, right]),
+                                cont::Value::Eval(cont::Code::IntEql(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -843,7 +843,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::IntAdd, vec![left, right]),
+                                cont::Value::Eval(cont::Code::IntAdd(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -866,7 +866,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::IntSub, vec![left, right]),
+                                cont::Value::Eval(cont::Code::IntSub(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -889,7 +889,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::IntMul, vec![left, right]),
+                                cont::Value::Eval(cont::Code::IntMul(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -912,7 +912,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::FltAdd, vec![left, right]),
+                                cont::Value::Eval(cont::Code::FltAdd(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -935,7 +935,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::FltSub, vec![left, right]),
+                                cont::Value::Eval(cont::Code::FltSub(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -958,7 +958,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::FltMul, vec![left, right]),
+                                cont::Value::Eval(cont::Code::FltMul(left, right)),
                             );
 
                             cont(this, state, builder, value)
@@ -1116,10 +1116,10 @@ impl<'a> Lowerer<'a> {
                 builder,
                 Box::new(move |this, state, builder, head| {
                     let fst = state.fresh_value();
-                    builder.add_value(fst.clone(), cont::Value::Eval(cont::Code::TplProj(0), vec![head.clone()]));
+                    builder.add_value(fst.clone(), cont::Value::Eval(cont::Code::TplProj(0, head.clone())));
 
                     let snd = state.fresh_value();
-                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplProj(1), vec![head]));
+                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplProj(1, head)));
 
                     let frame =
                         frame.extended([(split.fst.clone(), fst), (split.snd.clone(), snd)]);

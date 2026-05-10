@@ -23,10 +23,7 @@ fn main() {
             region: Region {
                 values: vec![(
                     ValueName::from("is_zero"),
-                    Value::Eval(
-                        Code::IntEql,
-                        vec![ValueName::from("x"), ValueName::from("ZERO")],
-                    ),
+                    Value::Eval(Code::IntEql(ValueName::from("x"), ValueName::from("ZERO"))),
                 )],
                 blocks: vec![
                     (
@@ -100,10 +97,7 @@ fn main() {
                     ),
                     (
                         ValueName::from("scale"),
-                        Value::Eval(
-                            Code::FltMul,
-                            vec![ValueName::from("ONE_HALF"), ValueName::from("ONE_HALF")],
-                        ),
+                        Value::Eval(Code::FltMul(ValueName::from("ONE_HALF"), ValueName::from("ONE_HALF"))),
                     ),
                 ],
                 blocks: vec![
@@ -122,21 +116,18 @@ fn main() {
                                     ),
                                     (
                                         ValueName::from("result_again"),
-                                        Value::Eval(Code::TplProj(0), vec![ValueName::from("pair")]),
+                                        Value::Eval(Code::TplProj(0, ValueName::from("pair"))),
                                     ),
                                     (
                                         ValueName::from("fallback_one"),
-                                        Value::Eval(Code::TplProj(1), vec![ValueName::from("pair")]),
+                                        Value::Eval(Code::TplProj(1, ValueName::from("pair"))),
                                     ),
                                     (
                                         ValueName::from("result_is_zero"),
-                                        Value::Eval(
-                                            Code::IntEql,
-                                            vec![
+                                        Value::Eval(Code::IntEql(
                                                 ValueName::from("result_again"),
                                                 ValueName::from("ZERO"),
-                                            ],
-                                        ),
+                                            )),
                                     ),
                                 ],
                                 blocks: vec![
