@@ -440,12 +440,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             }
             (cont::Code::FltToInt, [operand]) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::I32TruncSatF32S);
+                self.emit_instr(wasm::Instr::I32TruncF32S);
                 self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::Code::FltToNat, [operand]) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::I32TruncSatF32U);
+                self.emit_instr(wasm::Instr::I32TruncF32U);
                 self.emit_instr(wasm::Instr::RefI31);
             }
             (cont::Code::BinLen, [bin]) => {
