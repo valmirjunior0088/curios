@@ -399,34 +399,32 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.emit_let_func(name, func);
         }
 
-        if !self.start_expr.instrs.is_empty() {
-            let start_type_name = wasm::TypeName::from("start");
+        let start_type_name = wasm::TypeName::from("start");
 
-            self.module.add_type(
-                start_type_name.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([]),
-                        outputs: wasm::ResultType::from([]),
-                    }),
-                },
-            );
+        self.module.add_type(
+            start_type_name.clone(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Func(wasm::FuncType {
+                    inputs: wasm::ResultType::from([]),
+                    outputs: wasm::ResultType::from([]),
+                }),
+            },
+        );
 
-            let start_func_name = wasm::FuncName::from("start");
+        let start_func_name = wasm::FuncName::from("start");
 
-            self.module.add_func(
-                start_func_name.clone(),
-                wasm::Func {
-                    type_name: start_type_name,
-                    params: vec![],
-                    locals: vec![],
-                    expr: self.start_expr.clone(),
-                },
-            );
+        self.module.add_func(
+            start_func_name.clone(),
+            wasm::Func {
+                type_name: start_type_name,
+                params: vec![],
+                locals: vec![],
+                expr: self.start_expr.clone(),
+            },
+        );
 
-            self.module.set_start(start_func_name);
-        }
+        self.module.set_start(start_func_name);
     }
 }
