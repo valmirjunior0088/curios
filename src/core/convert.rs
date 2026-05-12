@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, FltPrim, Func, FuncType, IntPrim, LetRec, Match, Name,
-        Pair, PairType, Preempted, Prim, Split, Term, reduce,
+        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, Name, Pair, PairType,
+        Preempted, Prim, Split, Term, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -47,53 +47,22 @@ impl Convert {
 
     fn compare_prim(&mut self, this: Prim, that: Prim) -> Result<bool, Preempted> {
         match (this, that) {
-            (Prim::Int(this), Prim::Int(that)) => self.compare_int_prim(this, that),
-            (Prim::Flt(this), Prim::Flt(that)) => self.compare_flt_prim(this, that),
+            (Prim::IntType, Prim::IntType) | (Prim::FltType, Prim::FltType) => Ok(true),
+            (Prim::IntValue(this), Prim::IntValue(that)) => Ok(this == that),
+            (Prim::FltValue(this), Prim::FltValue(that)) => Ok(this == that),
+            (Prim::IntEql(this_l, this_r), Prim::IntEql(that_l, that_r))
+            | (Prim::IntAdd(this_l, this_r), Prim::IntAdd(that_l, that_r))
+            | (Prim::IntSub(this_l, this_r), Prim::IntSub(that_l, that_r))
+            | (Prim::IntMul(this_l, this_r), Prim::IntMul(that_l, that_r))
+            | (Prim::FltAdd(this_l, this_r), Prim::FltAdd(that_l, that_r))
+            | (Prim::FltSub(this_l, this_r), Prim::FltSub(that_l, that_r))
+            | (Prim::FltMul(this_l, this_r), Prim::FltMul(that_l, that_r)) => {
+                self.enqueue(*this_l, *that_l);
+                self.enqueue(*this_r, *that_r);
+                Ok(true)
+            }
             (_, _) => Ok(false),
         }
-    }
-
-    fn compare_int_prim(&mut self, this: IntPrim, that: IntPrim) -> Result<bool, Preempted> {
-        match (this, that) {
-            (IntPrim::Type, IntPrim::Type) => {}
-            (IntPrim::Value(this), IntPrim::Value(that)) => {
-                if this != that {
-                    return Ok(false);
-                }
-            }
-            (IntPrim::Eql(this_first, this_second), IntPrim::Eql(that_first, that_second))
-            | (IntPrim::Add(this_first, this_second), IntPrim::Add(that_first, that_second))
-            | (IntPrim::Sub(this_first, this_second), IntPrim::Sub(that_first, that_second))
-            | (IntPrim::Mul(this_first, this_second), IntPrim::Mul(that_first, that_second)) => {
-                self.enqueue(*this_first, *that_first);
-                self.enqueue(*this_second, *that_second);
-            }
-            (_, _) => {
-                return Ok(false);
-            }
-        }
-        Ok(true)
-    }
-
-    fn compare_flt_prim(&mut self, this: FltPrim, that: FltPrim) -> Result<bool, Preempted> {
-        match (this, that) {
-            (FltPrim::Type, FltPrim::Type) => {}
-            (FltPrim::Value(this), FltPrim::Value(that)) => {
-                if this != that {
-                    return Ok(false);
-                }
-            }
-            (FltPrim::Add(this_first, this_second), FltPrim::Add(that_first, that_second))
-            | (FltPrim::Sub(this_first, this_second), FltPrim::Sub(that_first, that_second))
-            | (FltPrim::Mul(this_first, this_second), FltPrim::Mul(that_first, that_second)) => {
-                self.enqueue(*this_first, *that_first);
-                self.enqueue(*this_second, *that_second);
-            }
-            (_, _) => {
-                return Ok(false);
-            }
-        }
-        Ok(true)
     }
 
     fn compare_func_type(
@@ -337,12 +306,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             "x",
-            Term::Prim(IntPrim::add(Name::label("x"), Term::Prim(IntPrim::Value(1).into())).into()),
+            Term::Prim(Prim::int_add(Name::label("x"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         let that = Term::from(Func::new(
             "y",
-            Term::Prim(IntPrim::add(Name::label("y"), Term::Prim(IntPrim::Value(1).into())).into()),
+            Term::Prim(Prim::int_add(Name::label("y"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
@@ -354,12 +323,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             "x",
-            Term::Prim(IntPrim::add(Name::label("x"), Term::Prim(IntPrim::Value(1).into())).into()),
+            Term::Prim(Prim::int_add(Name::label("x"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         let that = Term::from(Func::new(
             "x",
-            Term::Prim(IntPrim::sub(Name::label("x"), Term::Prim(IntPrim::Value(1).into())).into()),
+            Term::Prim(Prim::int_sub(Name::label("x"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));

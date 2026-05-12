@@ -1,5 +1,5 @@
 use {
-    super::{Arity, FltPrim, IntPrim, Many, One, Prim, Two},
+    super::{Arity, Many, One, Prim, Two},
     crate::macros::name,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -549,42 +549,30 @@ where
 
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
         match prim {
-            Prim::Int(int_prim) => Prim::Int(self.visit_int_prim(int_prim)),
-            Prim::Flt(flt_prim) => Prim::Flt(self.visit_flt_prim(flt_prim)),
-        }
-    }
-
-    fn visit_int_prim(&mut self, int_prim: &IntPrim) -> IntPrim {
-        match int_prim {
-            IntPrim::Type => IntPrim::Type,
-            IntPrim::Value(value) => IntPrim::Value(*value),
-            IntPrim::Eql(left, right) => {
-                IntPrim::Eql(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::IntType => Prim::IntType,
+            Prim::IntValue(value) => Prim::IntValue(*value),
+            Prim::IntEql(left, right) => {
+                Prim::IntEql(self.visit_subterm(left), self.visit_subterm(right))
             }
-            IntPrim::Add(left, right) => {
-                IntPrim::Add(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::IntAdd(left, right) => {
+                Prim::IntAdd(self.visit_subterm(left), self.visit_subterm(right))
             }
-            IntPrim::Sub(left, right) => {
-                IntPrim::Sub(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::IntSub(left, right) => {
+                Prim::IntSub(self.visit_subterm(left), self.visit_subterm(right))
             }
-            IntPrim::Mul(left, right) => {
-                IntPrim::Mul(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::IntMul(left, right) => {
+                Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
             }
-        }
-    }
-
-    fn visit_flt_prim(&mut self, flt_prim: &FltPrim) -> FltPrim {
-        match flt_prim {
-            FltPrim::Type => FltPrim::Type,
-            FltPrim::Value(bits) => FltPrim::Value(*bits),
-            FltPrim::Add(left, right) => {
-                FltPrim::Add(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::FltType => Prim::FltType,
+            Prim::FltValue(bits) => Prim::FltValue(*bits),
+            Prim::FltAdd(left, right) => {
+                Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
             }
-            FltPrim::Sub(left, right) => {
-                FltPrim::Sub(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::FltSub(left, right) => {
+                Prim::FltSub(self.visit_subterm(left), self.visit_subterm(right))
             }
-            FltPrim::Mul(left, right) => {
-                FltPrim::Mul(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::FltMul(left, right) => {
+                Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
             }
         }
     }

@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, FltPrim, FltType, Func, FuncType, IntPrim, IntType, Let, LetRec,
-        Match, Name, Pair, PairType, Split, Term, Type,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType, Prim, Split,
+        Term, Type,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0,
@@ -50,14 +50,6 @@ fn parse_type<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Type")).map(|()| Type.into())
 }
 
-fn parse_int_type<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Int")).map(|()| Term::Prim(IntType.into()))
-}
-
-fn parse_flt_type<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Flt")).map(|()| Term::Prim(FltType.into()))
-}
-
 fn parse_int_value<'a>() -> Parser<'a, Term> {
     take_while(|char| char == '-' || char.is_ascii_digit())
         .flat_map::<i32, _>(|digits| match digits.parse() {
@@ -65,7 +57,7 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
             Err(_) => fail("Expected integer literal"),
         })
         .and_drop(parse_whitespace())
-        .map(|value| Term::Prim(IntPrim::Value(value).into()))
+        .map(|value| Term::Prim(Prim::IntValue(value)))
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -93,45 +85,47 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
             }
         })
         .and_drop(parse_whitespace())
-        .map(|value| Term::Prim(FltPrim::Value(value.to_bits()).into()))
+        .map(|value: f32| Term::Prim(Prim::FltValue(value.to_bits())))
 }
 
 fn parse_int_prim<'a>() -> Parser<'a, Term> {
-    parse_int_type()
+    catch(parse_keyword("Int"))
+        .map(|()| Term::Prim(Prim::IntType))
         .or(parse_int_value())
         .or(catch(parse_keyword("Int.eql"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(IntPrim::eql(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::int_eql(left, right))))
         .or(catch(parse_keyword("Int.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(IntPrim::add(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::int_add(left, right))))
         .or(catch(parse_keyword("Int.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(IntPrim::sub(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::int_sub(left, right))))
         .or(catch(parse_keyword("Int.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(IntPrim::mul(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::int_mul(left, right))))
 }
 
 fn parse_flt_prim<'a>() -> Parser<'a, Term> {
-    parse_flt_type()
+    catch(parse_keyword("Flt"))
+        .map(|()| Term::Prim(Prim::FltType))
         .or(parse_flt_value())
         .or(catch(parse_keyword("Flt.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(FltPrim::add(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::flt_add(left, right))))
         .or(catch(parse_keyword("Flt.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(FltPrim::sub(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::flt_sub(left, right))))
         .or(catch(parse_keyword("Flt.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(left, right)| Term::Prim(FltPrim::mul(left, right).into())))
+            .map(|(left, right)| Term::Prim(Prim::flt_mul(left, right))))
 }
 
 fn parse_prim<'a>() -> Parser<'a, Term> {
@@ -404,48 +398,42 @@ mod tests {
     fn parse_int_literal_and_flt_literal_are_disambiguated() {
         assert_eq!(
             "42".parse::<Term>().unwrap(),
-            Term::Prim(IntPrim::Value(42).into())
+            Term::Prim(Prim::IntValue(42))
         );
 
         assert_eq!(
             "42.0".parse::<Term>().unwrap(),
-            Term::Prim(FltPrim::Value(42.0_f32.to_bits()).into())
+            Term::Prim(Prim::FltValue(42.0_f32.to_bits()))
         );
     }
 
     #[test]
     fn parse_prim() {
-        assert_eq!("Int".parse::<Term>().unwrap(), Term::Prim(IntType.into()));
-        assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(FltType.into()));
+        assert_eq!("Int".parse::<Term>().unwrap(), Term::Prim(Prim::IntType));
+        assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(Prim::FltType));
         assert_eq!(
             "42".parse::<Term>().unwrap(),
-            Term::Prim(IntPrim::Value(42).into())
+            Term::Prim(Prim::IntValue(42))
         );
         assert_eq!(
             "1.5".parse::<Term>().unwrap(),
-            Term::Prim(FltPrim::Value(1.5_f32.to_bits()).into())
+            Term::Prim(Prim::FltValue(1.5_f32.to_bits()))
         );
 
         assert_eq!(
             "Int.add 1 2".parse::<Term>().unwrap(),
-            Term::Prim(
-                IntPrim::add(
-                    Term::Prim(IntPrim::Value(1).into()),
-                    Term::Prim(IntPrim::Value(2).into())
-                )
-                .into()
-            )
+            Term::Prim(Prim::int_add(
+                Term::Prim(Prim::IntValue(1)),
+                Term::Prim(Prim::IntValue(2))
+            ))
         );
 
         assert_eq!(
             "Flt.mul 1.5 2.0".parse::<Term>().unwrap(),
-            Term::Prim(
-                FltPrim::mul(
-                    Term::Prim(FltPrim::Value(1.5_f32.to_bits()).into()),
-                    Term::Prim(FltPrim::Value(2.0_f32.to_bits()).into())
-                )
-                .into()
-            )
+            Term::Prim(Prim::flt_mul(
+                Term::Prim(Prim::FltValue(1.5_f32.to_bits())),
+                Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+            ))
         );
     }
 }

@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, FltPrim, Func, FuncType, IntPrim, Let, LetRec, Match, Name, One,
-        Pair, PairType, Prim, Scope, Split, Term, Two,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, One, Pair, PairType, Prim,
+        Scope, Split, Term, Two,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -60,61 +60,61 @@ fn print_flt(bits: u32) -> Printer<'static> {
     pure(string)
 }
 
+fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
+    match prim {
+        Prim::IntType => pure("Int"),
+        Prim::IntValue(value) => pure(value.to_string()),
+        Prim::IntEql(left, right) => flat([
+            pure("Int.eql "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::IntAdd(left, right) => flat([
+            pure("Int.add "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::IntSub(left, right) => flat([
+            pure("Int.sub "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::IntMul(left, right) => flat([
+            pure("Int.mul "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltType => pure("Flt"),
+        Prim::FltValue(bits) => print_flt(bits),
+        Prim::FltAdd(left, right) => flat([
+            pure("Flt.add "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltSub(left, right) => flat([
+            pure("Flt.sub "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltMul(left, right) => flat([
+            pure("Flt.mul "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+    }
+}
+
 fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
-        Term::Prim(prim) => match prim {
-            Prim::Int(int_prim) => match int_prim {
-                IntPrim::Type => pure("Int"),
-                IntPrim::Value(value) => pure(value.to_string()),
-                IntPrim::Eql(left, right) => flat([
-                    pure("Int.eql "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-                IntPrim::Add(left, right) => flat([
-                    pure("Int.add "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-                IntPrim::Sub(left, right) => flat([
-                    pure("Int.sub "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-                IntPrim::Mul(left, right) => flat([
-                    pure("Int.mul "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-            },
-            Prim::Flt(flt_prim) => match flt_prim {
-                FltPrim::Type => pure("Flt"),
-                FltPrim::Value(bits) => print_flt(bits),
-                FltPrim::Add(left, right) => flat([
-                    pure("Flt.add "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-                FltPrim::Sub(left, right) => flat([
-                    pure("Flt.sub "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-                FltPrim::Mul(left, right) => flat([
-                    pure("Flt.mul "),
-                    print_term(*left, depth),
-                    pure(" "),
-                    print_term(*right, depth),
-                ]),
-            },
-        },
+        Term::Prim(prim) => print_prim(prim, depth),
         Term::FuncType(FuncType { input, output }) => {
             let (label, output) = open_scope_one(output, depth);
 

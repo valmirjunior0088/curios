@@ -1,7 +1,6 @@
 use {
     super::{
-        Apply, Context, FltPrim, Func, IntPrim, Let, Match, Name, Pair, Preempted, Prim, Split,
-        Term,
+        Apply, Context, Func, Let, Match, Name, Pair, Preempted, Prim, Split, Term,
     },
     std::time::{Duration, Instant},
 };
@@ -27,125 +26,95 @@ impl Reduce {
         }
     }
 
-    fn reduce_int_prim(
-        &mut self,
-        context: &mut Context,
-        int_prim: &IntPrim,
-    ) -> Result<Term, Preempted> {
-        match int_prim {
-            IntPrim::Type => Ok(Term::Prim(Prim::Int(IntPrim::Type))),
-            IntPrim::Value(value) => Ok(Term::Prim(Prim::Int(IntPrim::Value(*value)))),
-            IntPrim::Eql(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Int(IntPrim::Value(left))),
-                        Term::Prim(Prim::Int(IntPrim::Value(right))),
-                    ) => Term::Prim(IntPrim::Value(if left == right { 1 } else { 0 }).into()),
-                    (left, right) => Term::Prim(IntPrim::eql(left, right).into()),
-                })
-            }
-            IntPrim::Add(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Int(IntPrim::Value(left))),
-                        Term::Prim(Prim::Int(IntPrim::Value(right))),
-                    ) => Term::Prim(IntPrim::Value(left.wrapping_add(right)).into()),
-                    (left, right) => Term::Prim(IntPrim::add(left, right).into()),
-                })
-            }
-            IntPrim::Sub(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Int(IntPrim::Value(left))),
-                        Term::Prim(Prim::Int(IntPrim::Value(right))),
-                    ) => Term::Prim(IntPrim::Value(left.wrapping_sub(right)).into()),
-                    (left, right) => Term::Prim(IntPrim::sub(left, right).into()),
-                })
-            }
-            IntPrim::Mul(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Int(IntPrim::Value(left))),
-                        Term::Prim(Prim::Int(IntPrim::Value(right))),
-                    ) => Term::Prim(IntPrim::Value(left.wrapping_mul(right)).into()),
-                    (left, right) => Term::Prim(IntPrim::mul(left, right).into()),
-                })
-            }
-        }
-    }
-
-    fn reduce_flt_prim(
-        &mut self,
-        context: &mut Context,
-        flt_prim: &FltPrim,
-    ) -> Result<Term, Preempted> {
-        match flt_prim {
-            FltPrim::Type => Ok(Term::Prim(Prim::Flt(FltPrim::Type))),
-            FltPrim::Value(bits) => Ok(Term::Prim(Prim::Flt(FltPrim::Value(*bits)))),
-            FltPrim::Add(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Flt(FltPrim::Value(left))),
-                        Term::Prim(Prim::Flt(FltPrim::Value(right))),
-                    ) => Term::Prim(
-                        FltPrim::Value((f32::from_bits(left) + f32::from_bits(right)).to_bits())
-                            .into(),
-                    ),
-                    (left, right) => Term::Prim(FltPrim::add(left, right).into()),
-                })
-            }
-            FltPrim::Sub(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Flt(FltPrim::Value(left))),
-                        Term::Prim(Prim::Flt(FltPrim::Value(right))),
-                    ) => Term::Prim(
-                        FltPrim::Value((f32::from_bits(left) - f32::from_bits(right)).to_bits())
-                            .into(),
-                    ),
-                    (left, right) => Term::Prim(FltPrim::sub(left, right).into()),
-                })
-            }
-            FltPrim::Mul(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (
-                        Term::Prim(Prim::Flt(FltPrim::Value(left))),
-                        Term::Prim(Prim::Flt(FltPrim::Value(right))),
-                    ) => Term::Prim(
-                        FltPrim::Value((f32::from_bits(left) * f32::from_bits(right)).to_bits())
-                            .into(),
-                    ),
-                    (left, right) => Term::Prim(FltPrim::mul(left, right).into()),
-                })
-            }
-        }
-    }
-
     fn reduce_prim(&mut self, context: &mut Context, prim: &Prim) -> Result<Term, Preempted> {
         match prim {
-            Prim::Int(int_prim) => self.reduce_int_prim(context, int_prim),
-            Prim::Flt(flt_prim) => self.reduce_flt_prim(context, flt_prim),
+            Prim::IntType => Ok(Term::Prim(Prim::IntType)),
+            Prim::IntValue(value) => Ok(Term::Prim(Prim::IntValue(*value))),
+            Prim::IntEql(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::IntValue(left)), Term::Prim(Prim::IntValue(right))) => {
+                        Term::Prim(Prim::IntValue(if left == right { 1 } else { 0 }))
+                    }
+                    (left, right) => Term::Prim(Prim::int_eql(left, right)),
+                })
+            }
+            Prim::IntAdd(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::IntValue(left)), Term::Prim(Prim::IntValue(right))) => {
+                        Term::Prim(Prim::IntValue(left.wrapping_add(right)))
+                    }
+                    (left, right) => Term::Prim(Prim::int_add(left, right)),
+                })
+            }
+            Prim::IntSub(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::IntValue(left)), Term::Prim(Prim::IntValue(right))) => {
+                        Term::Prim(Prim::IntValue(left.wrapping_sub(right)))
+                    }
+                    (left, right) => Term::Prim(Prim::int_sub(left, right)),
+                })
+            }
+            Prim::IntMul(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::IntValue(left)), Term::Prim(Prim::IntValue(right))) => {
+                        Term::Prim(Prim::IntValue(left.wrapping_mul(right)))
+                    }
+                    (left, right) => Term::Prim(Prim::int_mul(left, right)),
+                })
+            }
+            Prim::FltType => Ok(Term::Prim(Prim::FltType)),
+            Prim::FltValue(bits) => Ok(Term::Prim(Prim::FltValue(*bits))),
+            Prim::FltAdd(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
+                        Term::Prim(Prim::FltValue(
+                            (f32::from_bits(left) + f32::from_bits(right)).to_bits(),
+                        ))
+                    }
+                    (left, right) => Term::Prim(Prim::flt_add(left, right)),
+                })
+            }
+            Prim::FltSub(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
+                        Term::Prim(Prim::FltValue(
+                            (f32::from_bits(left) - f32::from_bits(right)).to_bits(),
+                        ))
+                    }
+                    (left, right) => Term::Prim(Prim::flt_sub(left, right)),
+                })
+            }
+            Prim::FltMul(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
+                        Term::Prim(Prim::FltValue(
+                            (f32::from_bits(left) * f32::from_bits(right)).to_bits(),
+                        ))
+                    }
+                    (left, right) => Term::Prim(Prim::flt_mul(left, right)),
+                })
+            }
         }
     }
 
@@ -334,15 +303,12 @@ mod tests {
         assert_eq!(
             reduce(
                 &mut context,
-                &Term::Prim(
-                    IntPrim::add(
-                        Term::Prim(IntPrim::Value(1).into()),
-                        Term::Prim(IntPrim::Value(2).into())
-                    )
-                    .into()
-                )
+                &Term::Prim(Prim::int_add(
+                    Term::Prim(Prim::IntValue(1)),
+                    Term::Prim(Prim::IntValue(2))
+                ))
             ),
-            Ok(Term::Prim(IntPrim::Value(3).into()))
+            Ok(Term::Prim(Prim::IntValue(3)))
         );
     }
 
@@ -353,28 +319,22 @@ mod tests {
         assert_eq!(
             reduce(
                 &mut context,
-                &Term::Prim(
-                    IntPrim::eql(
-                        Term::Prim(IntPrim::Value(4).into()),
-                        Term::Prim(IntPrim::Value(4).into())
-                    )
-                    .into()
-                )
+                &Term::Prim(Prim::int_eql(
+                    Term::Prim(Prim::IntValue(4)),
+                    Term::Prim(Prim::IntValue(4))
+                ))
             ),
-            Ok(Term::Prim(IntPrim::Value(1).into()))
+            Ok(Term::Prim(Prim::IntValue(1)))
         );
         assert_eq!(
             reduce(
                 &mut context,
-                &Term::Prim(
-                    IntPrim::eql(
-                        Term::Prim(IntPrim::Value(4).into()),
-                        Term::Prim(IntPrim::Value(5).into())
-                    )
-                    .into()
-                )
+                &Term::Prim(Prim::int_eql(
+                    Term::Prim(Prim::IntValue(4)),
+                    Term::Prim(Prim::IntValue(5))
+                ))
             ),
-            Ok(Term::Prim(IntPrim::Value(0).into()))
+            Ok(Term::Prim(Prim::IntValue(0)))
         );
     }
 
@@ -385,15 +345,12 @@ mod tests {
         assert_eq!(
             reduce(
                 &mut context,
-                &Term::Prim(
-                    FltPrim::mul(
-                        Term::Prim(FltPrim::Value(1.5_f32.to_bits()).into()),
-                        Term::Prim(FltPrim::Value(2.0_f32.to_bits()).into())
-                    )
-                    .into()
-                )
+                &Term::Prim(Prim::flt_mul(
+                    Term::Prim(Prim::FltValue(1.5_f32.to_bits())),
+                    Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+                ))
             ),
-            Ok(Term::Prim(FltPrim::Value(3.0_f32.to_bits()).into()))
+            Ok(Term::Prim(Prim::FltValue(3.0_f32.to_bits())))
         );
     }
 }

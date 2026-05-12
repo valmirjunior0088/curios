@@ -1,8 +1,7 @@
 use super::{
     Apply, AtomType, Context, ErasedApply, ErasedAtom, ErasedFunc, ErasedLet, ErasedLetRec,
-    ErasedMatch, ErasedName, ErasedPair, ErasedPrim, ErasedSplit, ErasedTerm, Error, FltPrim,
-    FltType, Func, FuncType, IntPrim, IntType, Let, LetRec, Match, Name, Pair, PairType, Preempted,
-    Prim, Split, Term, Type,
+    ErasedMatch, ErasedName, ErasedPair, ErasedPrim, ErasedSplit, ErasedTerm, Error, Func,
+    FuncType, Let, LetRec, Match, Name, Pair, PairType, Preempted, Prim, Split, Term, Type,
 };
 
 fn reduce(context: &mut Context, term: &Term) -> Result<Term, Error> {
@@ -28,36 +27,24 @@ fn expect(
 
 fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
     match prim {
-        Prim::Int(int_prim) => infer_int_prim(context, int_prim),
-        Prim::Flt(flt_prim) => infer_flt_prim(context, flt_prim),
-    }
-}
+        Prim::IntType => Ok(Type.into()),
+        Prim::IntValue(_) => Ok(Term::Prim(Prim::IntType)),
+        Prim::IntEql(left, right)
+        | Prim::IntAdd(left, right)
+        | Prim::IntSub(left, right)
+        | Prim::IntMul(left, right) => {
+            erase(context, left, &Term::Prim(Prim::IntType))?;
+            erase(context, right, &Term::Prim(Prim::IntType))?;
 
-fn infer_int_prim(context: &mut Context, int_prim: &IntPrim) -> Result<Term, Error> {
-    match int_prim {
-        IntPrim::Type => Ok(Type.into()),
-        IntPrim::Value(_) => Ok(Term::Prim(IntType.into())),
-        IntPrim::Eql(left, right)
-        | IntPrim::Add(left, right)
-        | IntPrim::Sub(left, right)
-        | IntPrim::Mul(left, right) => {
-            erase(context, left, &Term::Prim(IntType.into()))?;
-            erase(context, right, &Term::Prim(IntType.into()))?;
-
-            Ok(Term::Prim(IntType.into()))
+            Ok(Term::Prim(Prim::IntType))
         }
-    }
-}
+        Prim::FltType => Ok(Type.into()),
+        Prim::FltValue(_) => Ok(Term::Prim(Prim::FltType)),
+        Prim::FltAdd(left, right) | Prim::FltSub(left, right) | Prim::FltMul(left, right) => {
+            erase(context, left, &Term::Prim(Prim::FltType))?;
+            erase(context, right, &Term::Prim(Prim::FltType))?;
 
-fn infer_flt_prim(context: &mut Context, flt_prim: &FltPrim) -> Result<Term, Error> {
-    match flt_prim {
-        FltPrim::Type => Ok(Type.into()),
-        FltPrim::Value(_) => Ok(Term::Prim(FltType.into())),
-        FltPrim::Add(left, right) | FltPrim::Sub(left, right) | FltPrim::Mul(left, right) => {
-            erase(context, left, &Term::Prim(FltType.into()))?;
-            erase(context, right, &Term::Prim(FltType.into()))?;
-
-            Ok(Term::Prim(FltType.into()))
+            Ok(Term::Prim(Prim::FltType))
         }
     }
 }
@@ -308,102 +295,69 @@ fn erase_prim(
     expected: &Term,
 ) -> Result<ErasedPrim, Error> {
     match prim {
-        Prim::Int(int_prim) => erase_int_prim(context, term, int_prim, expected),
-        Prim::Flt(flt_prim) => erase_flt_prim(context, term, flt_prim, expected),
-    }
-}
-
-fn erase_int_prim(
-    context: &mut Context,
-    term: &Term,
-    int_prim: &IntPrim,
-    expected: &Term,
-) -> Result<ErasedPrim, Error> {
-    match int_prim {
-        IntPrim::Type => {
+        Prim::IntType => {
             expect(context, term, &Type.into(), expected)?;
-
             Ok(().into())
         }
-        &IntPrim::Value(value) => {
-            expect(context, term, &Term::Prim(IntType.into()), expected)?;
-
+        &Prim::IntValue(value) => {
+            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
             Ok(value.into())
         }
-        IntPrim::Eql(left, right) => {
-            expect(context, term, &Term::Prim(IntType.into()), expected)?;
-
+        Prim::IntEql(left, right) => {
+            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
             Ok(ErasedPrim::IntEql(
-                erase(context, left, &Term::Prim(IntType.into()))?.into(),
-                erase(context, right, &Term::Prim(IntType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
+                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
             ))
         }
-        IntPrim::Add(left, right) => {
-            expect(context, term, &Term::Prim(IntType.into()), expected)?;
-
+        Prim::IntAdd(left, right) => {
+            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
             Ok(ErasedPrim::IntAdd(
-                erase(context, left, &Term::Prim(IntType.into()))?.into(),
-                erase(context, right, &Term::Prim(IntType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
+                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
             ))
         }
-        IntPrim::Sub(left, right) => {
-            expect(context, term, &Term::Prim(IntType.into()), expected)?;
-
+        Prim::IntSub(left, right) => {
+            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
             Ok(ErasedPrim::IntSub(
-                erase(context, left, &Term::Prim(IntType.into()))?.into(),
-                erase(context, right, &Term::Prim(IntType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
+                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
             ))
         }
-        IntPrim::Mul(left, right) => {
-            expect(context, term, &Term::Prim(IntType.into()), expected)?;
-
+        Prim::IntMul(left, right) => {
+            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
             Ok(ErasedPrim::IntMul(
-                erase(context, left, &Term::Prim(IntType.into()))?.into(),
-                erase(context, right, &Term::Prim(IntType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
+                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
             ))
         }
-    }
-}
-
-fn erase_flt_prim(
-    context: &mut Context,
-    term: &Term,
-    flt_prim: &FltPrim,
-    expected: &Term,
-) -> Result<ErasedPrim, Error> {
-    match flt_prim {
-        FltPrim::Type => {
+        Prim::FltType => {
             expect(context, term, &Type.into(), expected)?;
-
             Ok(().into())
         }
-        &FltPrim::Value(bits) => {
-            expect(context, term, &Term::Prim(FltType.into()), expected)?;
-
+        &Prim::FltValue(bits) => {
+            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
             Ok(f32::from_bits(bits).into())
         }
-        FltPrim::Add(left, right) => {
-            expect(context, term, &Term::Prim(FltType.into()), expected)?;
-
+        Prim::FltAdd(left, right) => {
+            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
             Ok(ErasedPrim::FltAdd(
-                erase(context, left, &Term::Prim(FltType.into()))?.into(),
-                erase(context, right, &Term::Prim(FltType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
+                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
             ))
         }
-        FltPrim::Sub(left, right) => {
-            expect(context, term, &Term::Prim(FltType.into()), expected)?;
-
+        Prim::FltSub(left, right) => {
+            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
             Ok(ErasedPrim::FltSub(
-                erase(context, left, &Term::Prim(FltType.into()))?.into(),
-                erase(context, right, &Term::Prim(FltType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
+                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
             ))
         }
-        FltPrim::Mul(left, right) => {
-            expect(context, term, &Term::Prim(FltType.into()), expected)?;
-
+        Prim::FltMul(left, right) => {
+            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
             Ok(ErasedPrim::FltMul(
-                erase(context, left, &Term::Prim(FltType.into()))?.into(),
-                erase(context, right, &Term::Prim(FltType.into()))?.into(),
+                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
+                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
             ))
         }
     }
@@ -857,14 +811,11 @@ mod tests {
         assert!(
             erase(
                 &mut context,
-                &Term::Prim(
-                    IntPrim::eql(
-                        Term::Prim(IntPrim::Value(1).into()),
-                        Term::Prim(IntPrim::Value(1).into())
-                    )
-                    .into()
-                ),
-                &Term::Prim(IntType.into()),
+                &Term::Prim(Prim::int_eql(
+                    Term::Prim(Prim::IntValue(1)),
+                    Term::Prim(Prim::IntValue(1))
+                )),
+                &Term::Prim(Prim::IntType),
             )
             .is_ok()
         );
@@ -872,14 +823,11 @@ mod tests {
         assert!(
             erase(
                 &mut context,
-                &Term::Prim(
-                    FltPrim::add(
-                        Term::Prim(FltPrim::Value(1.5_f32.to_bits()).into()),
-                        Term::Prim(FltPrim::Value(2.0_f32.to_bits()).into())
-                    )
-                    .into()
-                ),
-                &Term::Prim(FltType.into()),
+                &Term::Prim(Prim::flt_add(
+                    Term::Prim(Prim::FltValue(1.5_f32.to_bits())),
+                    Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+                )),
+                &Term::Prim(Prim::FltType),
             )
             .is_ok()
         );
@@ -918,14 +866,11 @@ mod tests {
         assert!(matches!(
             erase(
                 &mut Context::new(Duration::from_secs(1)),
-                &Term::Prim(
-                    IntPrim::add(
-                        Term::Prim(IntPrim::Value(1).into()),
-                        Term::Prim(FltPrim::Value(2.0_f32.to_bits()).into())
-                    )
-                    .into()
-                ),
-                &Term::Prim(IntType.into()),
+                &Term::Prim(Prim::int_add(
+                    Term::Prim(Prim::IntValue(1)),
+                    Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+                )),
+                &Term::Prim(Prim::IntType),
             ),
             Err(Error::TypeMismatch { .. })
         ));
