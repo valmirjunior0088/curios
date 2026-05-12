@@ -2,7 +2,7 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~18,700 lines of Rust.
+**Codebase size:** ~19,500 lines of Rust.
 
 ---
 
@@ -14,7 +14,7 @@ Source text flows through five distinct phases, each with a clean handoff:
 Source Text
    │
    ▼
-Parsing          → core::Term (full AST with types)
+Parsing           → core::Term (full AST with types)
    │
    ▼
 Type Inference    → core::Term (annotated, type-checked)
