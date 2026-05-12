@@ -321,7 +321,7 @@ impl<'a> Lowerer<'a> {
             core::ErasedTerm::Atom(atom) => emit_fresh_value(
                 state,
                 builder,
-                cont::Value::Pure(cont::Data::Int(atom.index as i32)),
+                cont::Value::Pure(cont::Data::Nat(atom.index as u32)),
             ),
             core::ErasedTerm::Let(let_) => {
                 let body = self.lower_letrec_name(&let_.body, frame, state, builder);
@@ -481,7 +481,7 @@ impl<'a> Lowerer<'a> {
             core::ErasedTerm::Atom(atom) => {
                 builder.add_value(
                     target,
-                    cont::Value::Pure(cont::Data::Int(atom.index as i32)),
+                    cont::Value::Pure(cont::Data::Nat(atom.index as u32)),
                 );
             }
             core::ErasedTerm::Let(let_) => {
@@ -867,7 +867,7 @@ impl<'a> Lowerer<'a> {
                 let value = emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::Data::Int(atom.index as i32)),
+                    cont::Value::Pure(cont::Data::Nat(atom.index as u32)),
                 );
 
                 cont(self, state, builder, value)
