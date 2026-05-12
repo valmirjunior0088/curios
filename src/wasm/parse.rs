@@ -469,7 +469,10 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("array.new_data")
         .and_keep(parse_type_name())
         .and(parse_data_name())
-        .map(|(type_name, data_name)| Instr::ArrayNewData { type_name, data_name }))
+        .map(|(type_name, data_name)| Instr::ArrayNewData {
+            type_name,
+            data_name,
+        }))
     .or(parse_literal("array.new_default")
         .and_keep(parse_type_name())
         .map(|type_name| Instr::ArrayNewDefault { type_name }))

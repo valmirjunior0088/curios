@@ -170,7 +170,12 @@ fn max_region_tpl_arity(region: &cont::Region) -> usize {
             cont::Value::Pure(data) => Some(max_tpl_arity(data)),
             _ => None,
         })
-        .chain(region.blocks.iter().map(|(_, block)| max_region_tpl_arity(&block.region)))
+        .chain(
+            region
+                .blocks
+                .iter()
+                .map(|(_, block)| max_region_tpl_arity(&block.region)),
+        )
         .max()
         .unwrap_or(0)
 }
@@ -202,9 +207,22 @@ impl<'a> Table<'a> {
             bin_type: wasm::TypeName::from("bin"),
             lst_type: wasm::TypeName::from("lst"),
             tpl_types: {
-                let max = module.consts().iter().map(|(_, data)| max_tpl_arity(data))
-                    .chain(module.clsrs().iter().map(|(_, clsr)| max_region_tpl_arity(&clsr.region)))
-                    .chain(module.funcs().iter().map(|(_, func)| max_region_tpl_arity(&func.region)))
+                let max = module
+                    .consts()
+                    .iter()
+                    .map(|(_, data)| max_tpl_arity(data))
+                    .chain(
+                        module
+                            .clsrs()
+                            .iter()
+                            .map(|(_, clsr)| max_region_tpl_arity(&clsr.region)),
+                    )
+                    .chain(
+                        module
+                            .funcs()
+                            .iter()
+                            .map(|(_, func)| max_region_tpl_arity(&func.region)),
+                    )
                     .max()
                     .unwrap_or(0);
 

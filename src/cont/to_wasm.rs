@@ -129,7 +129,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
-                        cont::Value::Eval(cont::Code::IntEql(cont::ValueName::from("n"), cont::ValueName::from("ZERO"))),
+                        cont::Value::Eval(cont::Code::IntEql(
+                            cont::ValueName::from("n"),
+                            cont::ValueName::from("ZERO"),
+                        )),
                     )],
                     blocks: vec![
                         (
@@ -154,9 +157,9 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(cont::Code::IntSub(
-                                                cont::ValueName::from("n"),
-                                                cont::ValueName::from("ONE"),
-                                            )),
+                                            cont::ValueName::from("n"),
+                                            cont::ValueName::from("ONE"),
+                                        )),
                                     )],
                                     blocks: vec![],
                                     tail: cont::Tail::Call(cont::CallTarget::Indirect {
@@ -192,7 +195,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("is_zero"),
-                        cont::Value::Eval(cont::Code::IntEql(cont::ValueName::from("n"), cont::ValueName::from("ZERO"))),
+                        cont::Value::Eval(cont::Code::IntEql(
+                            cont::ValueName::from("n"),
+                            cont::ValueName::from("ZERO"),
+                        )),
                     )],
                     blocks: vec![
                         (
@@ -217,9 +223,9 @@ mod tests {
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(cont::Code::IntSub(
-                                                cont::ValueName::from("n"),
-                                                cont::ValueName::from("ONE"),
-                                            )),
+                                            cont::ValueName::from("n"),
+                                            cont::ValueName::from("ONE"),
+                                        )),
                                     )],
                                     blocks: vec![],
                                     tail: cont::Tail::Call(cont::CallTarget::Indirect {
@@ -303,7 +309,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("sum"),
-                        cont::Value::Eval(cont::Code::IntAdd(cont::ValueName::from("x"), cont::ValueName::from("ONE"))),
+                        cont::Value::Eval(cont::Code::IntAdd(
+                            cont::ValueName::from("x"),
+                            cont::ValueName::from("ONE"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -408,9 +417,9 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(cont::Code::FltAdd(
-                                cont::ValueName::from("LEFT"),
-                                cont::ValueName::from("RIGHT"),
-                            )),
+                            cont::ValueName::from("LEFT"),
+                            cont::ValueName::from("RIGHT"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -493,9 +502,9 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::IntAdd(
-                                cont::ValueName::from("x"),
-                                cont::ValueName::from("bias"),
-                            )),
+                            cont::ValueName::from("x"),
+                            cont::ValueName::from("bias"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -570,9 +579,9 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::NatAdd(
-                                cont::ValueName::from("THREE"),
-                                cont::ValueName::from("FOUR"),
-                            )),
+                            cont::ValueName::from("THREE"),
+                            cont::ValueName::from("FOUR"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -660,9 +669,9 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::LstGet(
-                                cont::ValueName::from("ONE"),
-                                cont::ValueName::from("LST"),
-                            )),
+                            cont::ValueName::from("ONE"),
+                            cont::ValueName::from("LST"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -711,10 +720,10 @@ mod tests {
                         (
                             cont::ValueName::from("slice"),
                             cont::Value::Eval(cont::Code::LstSlice(
-                                    cont::ValueName::from("ONE"),
-                                    cont::ValueName::from("THREE_IDX"),
-                                    cont::ValueName::from("LST"),
-                                )),
+                                cont::ValueName::from("ONE"),
+                                cont::ValueName::from("THREE_IDX"),
+                                cont::ValueName::from("LST"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("result"),
@@ -764,9 +773,9 @@ mod tests {
                         (
                             cont::ValueName::from("concat"),
                             cont::Value::Eval(cont::Code::LstConcat(
-                                    cont::ValueName::from("LST1"),
-                                    cont::ValueName::from("LST2"),
-                                )),
+                                cont::ValueName::from("LST1"),
+                                cont::ValueName::from("LST2"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("result"),
@@ -819,8 +828,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 2.0);
     }
@@ -852,8 +863,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 3.0);
     }
@@ -885,8 +898,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, -2.0);
     }
@@ -918,8 +933,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 2.0);
     }
@@ -939,7 +956,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatDiv(cont::ValueName::from("TEN"), cont::ValueName::from("THREE"))),
+                        cont::Value::Eval(cont::Code::NatDiv(
+                            cont::ValueName::from("TEN"),
+                            cont::ValueName::from("THREE"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -970,7 +990,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatRem(cont::ValueName::from("TEN"), cont::ValueName::from("THREE"))),
+                        cont::Value::Eval(cont::Code::NatRem(
+                            cont::ValueName::from("TEN"),
+                            cont::ValueName::from("THREE"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1001,7 +1024,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatLt(cont::ValueName::from("THREE"), cont::ValueName::from("FIVE"))),
+                        cont::Value::Eval(cont::Code::NatLt(
+                            cont::ValueName::from("THREE"),
+                            cont::ValueName::from("FIVE"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1062,7 +1088,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntDiv(cont::ValueName::from("NEG7"), cont::ValueName::from("TWO"))),
+                        cont::Value::Eval(cont::Code::IntDiv(
+                            cont::ValueName::from("NEG7"),
+                            cont::ValueName::from("TWO"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1093,7 +1122,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntLt(cont::ValueName::from("NEG1"), cont::ValueName::from("ZERO"))),
+                        cont::Value::Eval(cont::Code::IntLt(
+                            cont::ValueName::from("NEG1"),
+                            cont::ValueName::from("ZERO"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1124,7 +1156,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltDiv(cont::ValueName::from("ONE"), cont::ValueName::from("FOUR"))),
+                        cont::Value::Eval(cont::Code::FltDiv(
+                            cont::ValueName::from("ONE"),
+                            cont::ValueName::from("FOUR"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1137,8 +1172,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 0.25);
     }
@@ -1158,7 +1195,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltEql(cont::ValueName::from("A"), cont::ValueName::from("B"))),
+                        cont::Value::Eval(cont::Code::FltEql(
+                            cont::ValueName::from("A"),
+                            cont::ValueName::from("B"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1201,8 +1241,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 2.0);
     }
@@ -1234,8 +1276,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 3.0);
     }
@@ -1267,8 +1311,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 5.0);
     }
@@ -1287,7 +1333,9 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("THREE_SEVEN"))),
+                        cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from(
+                            "THREE_SEVEN",
+                        ))),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1348,7 +1396,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatNeq(cont::ValueName::from("THREE"), cont::ValueName::from("FIVE"))),
+                        cont::Value::Eval(cont::Code::NatNeq(
+                            cont::ValueName::from("THREE"),
+                            cont::ValueName::from("FIVE"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1379,7 +1430,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntNeq(cont::ValueName::from("NEG1"), cont::ValueName::from("NEG1B"))),
+                        cont::Value::Eval(cont::Code::IntNeq(
+                            cont::ValueName::from("NEG1"),
+                            cont::ValueName::from("NEG1B"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1410,7 +1464,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltNeq(cont::ValueName::from("ONE"), cont::ValueName::from("TWO"))),
+                        cont::Value::Eval(cont::Code::FltNeq(
+                            cont::ValueName::from("ONE"),
+                            cont::ValueName::from("TWO"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1441,7 +1498,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltMin(cont::ValueName::from("A"), cont::ValueName::from("B"))),
+                        cont::Value::Eval(cont::Code::FltMin(
+                            cont::ValueName::from("A"),
+                            cont::ValueName::from("B"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1454,8 +1514,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 1.5);
     }
@@ -1475,7 +1537,10 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltMax(cont::ValueName::from("A"), cont::ValueName::from("B"))),
+                        cont::Value::Eval(cont::Code::FltMax(
+                            cont::ValueName::from("A"),
+                            cont::ValueName::from("B"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -1488,8 +1553,10 @@ mod tests {
 
         let (mut store, result) = run_main(&module);
         let result = result
-            .unwrap_struct(&store).expect("expected float struct")
-            .field(&mut store, 0).expect("expected float field")
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
             .unwrap_f32();
         assert_eq!(result, 2.5);
     }
@@ -1551,9 +1618,9 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::BinGet(
-                                cont::ValueName::from("IDX"),
-                                cont::ValueName::from("HELLO"),
-                            )),
+                            cont::ValueName::from("IDX"),
+                            cont::ValueName::from("HELLO"),
+                        )),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {

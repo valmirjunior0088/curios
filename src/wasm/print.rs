@@ -414,7 +414,10 @@ fn print_instr<'a>(instr: &'a Instr) -> Printer<'a> {
             pure(" "),
             pure(length.to_string()),
         ]),
-        Instr::ArrayNewData { type_name, data_name } => flat([
+        Instr::ArrayNewData {
+            type_name,
+            data_name,
+        } => flat([
             pure("array.new_data "),
             print_type_name(type_name),
             pure(" "),
@@ -744,7 +747,11 @@ fn print_global<'a>(global_name: &'a GlobalName, global: &'a Global) -> Printer<
 }
 
 fn print_data_segment<'a>(name: &'a DataName, segment: &'a DataSegment) -> Printer<'a> {
-    let encoded: String = segment.bytes.iter().map(|b| format!("\\{:02x}", b)).collect();
+    let encoded: String = segment
+        .bytes
+        .iter()
+        .map(|b| format!("\\{:02x}", b))
+        .collect();
     flat([
         pure("(data "),
         print_data_name(name),
@@ -804,9 +811,11 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
                     .iter()
                     .map(|(name, export)| flat([pure("\n"), print_export(name, export)])),
             )
-            .chain(module.start().map(|start| {
-                flat([pure("\n(start "), print_func_name(start), pure(")")])
-            })),
+            .chain(
+                module
+                    .start()
+                    .map(|start| flat([pure("\n(start "), print_func_name(start), pure(")")])),
+            ),
         )),
         pure(")"),
     ])

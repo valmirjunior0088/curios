@@ -1054,7 +1054,10 @@ where
                 self.write_type_name(type_name)?;
                 self.buffer.push_leb128_unsigned(*length as u64)?;
             }
-            Instr::ArrayNewData { type_name, data_name } => {
+            Instr::ArrayNewData {
+                type_name,
+                data_name,
+            } => {
                 self.buffer.push_byte(0xfb)?;
                 self.buffer.push_leb128_unsigned(9)?;
                 self.write_type_name(type_name)?;
@@ -1822,7 +1825,9 @@ where
 
             writer.write_vec(datas, |writer, (_, segment)| {
                 writer.buffer.push_byte(0x01)?; // passive flag
-                writer.buffer.push_leb128_unsigned(segment.bytes.len() as u64)?;
+                writer
+                    .buffer
+                    .push_leb128_unsigned(segment.bytes.len() as u64)?;
 
                 for byte in &segment.bytes {
                     writer.buffer.push_byte(*byte)?;
@@ -2057,8 +2062,7 @@ mod tests {
 
         let mut store = Store::new(&engine, ());
 
-        let instance = Instance::new(&mut store, &wasmtime_module, &[])
-            .expect("expected instance");
+        let instance = Instance::new(&mut store, &wasmtime_module, &[]).expect("expected instance");
 
         let main = instance
             .get_typed_func::<(), i32>(&mut store, "main")
