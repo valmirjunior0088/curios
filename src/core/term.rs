@@ -770,9 +770,7 @@ where
             Term::Match(match_) => self.visit_match(match_).into(),
             Term::Let(let_) => self.visit_let(let_).into(),
             Term::LetRec(letrec) => self.visit_letrec(letrec).into(),
-            Term::Var(var) => {
-                (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into())
-            }
+            Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),
         }
     }
 }

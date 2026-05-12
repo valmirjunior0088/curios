@@ -72,4 +72,3 @@ impl From<f32> for Prim {
         Self::Flt(value)
     }
 }
-

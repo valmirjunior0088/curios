@@ -1,7 +1,5 @@
 use {
-    super::{
-        Apply, Context, Func, Let, Match, Pair, Preempted, Prim, Split, Term, Var,
-    },
+    super::{Apply, Context, Func, Let, Match, Pair, Preempted, Prim, Split, Term, Var},
     std::time::{Duration, Instant},
 };
 
@@ -387,11 +385,9 @@ impl Reduce {
                 let inner = self.reduce(context, inner.as_ref().clone())?;
 
                 Ok(match inner {
-                    Term::Prim(Prim::FltValue(bits)) => {
-                        Term::Prim(Prim::FltValue(
-                            f32::from_bits(bits).round_ties_even().to_bits(),
-                        ))
-                    }
+                    Term::Prim(Prim::FltValue(bits)) => Term::Prim(Prim::FltValue(
+                        f32::from_bits(bits).round_ties_even().to_bits(),
+                    )),
                     inner => Term::Prim(Prim::flt_nearest(inner)),
                 })
             }
@@ -441,7 +437,11 @@ impl Reduce {
                 Ok(match (left, right) {
                     (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
                         Term::Prim(Prim::NatValue(
-                            if f32::from_bits(left) == f32::from_bits(right) { 1 } else { 0 },
+                            if f32::from_bits(left) == f32::from_bits(right) {
+                                1
+                            } else {
+                                0
+                            },
                         ))
                     }
                     (left, right) => Term::Prim(Prim::flt_eql(left, right)),
@@ -454,7 +454,11 @@ impl Reduce {
                 Ok(match (left, right) {
                     (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
                         Term::Prim(Prim::NatValue(
-                            if f32::from_bits(left) != f32::from_bits(right) { 1 } else { 0 },
+                            if f32::from_bits(left) != f32::from_bits(right) {
+                                1
+                            } else {
+                                0
+                            },
                         ))
                     }
                     (left, right) => Term::Prim(Prim::flt_neq(left, right)),
@@ -467,7 +471,11 @@ impl Reduce {
                 Ok(match (left, right) {
                     (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
                         Term::Prim(Prim::NatValue(
-                            if f32::from_bits(left) < f32::from_bits(right) { 1 } else { 0 },
+                            if f32::from_bits(left) < f32::from_bits(right) {
+                                1
+                            } else {
+                                0
+                            },
                         ))
                     }
                     (left, right) => Term::Prim(Prim::flt_lt(left, right)),
@@ -480,7 +488,11 @@ impl Reduce {
                 Ok(match (left, right) {
                     (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
                         Term::Prim(Prim::NatValue(
-                            if f32::from_bits(left) > f32::from_bits(right) { 1 } else { 0 },
+                            if f32::from_bits(left) > f32::from_bits(right) {
+                                1
+                            } else {
+                                0
+                            },
                         ))
                     }
                     (left, right) => Term::Prim(Prim::flt_gt(left, right)),
@@ -493,7 +505,11 @@ impl Reduce {
                 Ok(match (left, right) {
                     (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
                         Term::Prim(Prim::NatValue(
-                            if f32::from_bits(left) <= f32::from_bits(right) { 1 } else { 0 },
+                            if f32::from_bits(left) <= f32::from_bits(right) {
+                                1
+                            } else {
+                                0
+                            },
                         ))
                     }
                     (left, right) => Term::Prim(Prim::flt_lte(left, right)),
@@ -506,7 +522,11 @@ impl Reduce {
                 Ok(match (left, right) {
                     (Term::Prim(Prim::FltValue(left)), Term::Prim(Prim::FltValue(right))) => {
                         Term::Prim(Prim::NatValue(
-                            if f32::from_bits(left) >= f32::from_bits(right) { 1 } else { 0 },
+                            if f32::from_bits(left) >= f32::from_bits(right) {
+                                1
+                            } else {
+                                0
+                            },
                         ))
                     }
                     (left, right) => Term::Prim(Prim::flt_gte(left, right)),

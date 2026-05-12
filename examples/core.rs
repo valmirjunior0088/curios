@@ -1,6 +1,6 @@
 use curios::core::{
-    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Split, Term, Var,
-    Type,
+    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Split, Term, Type,
+    Var,
 };
 
 fn main() {

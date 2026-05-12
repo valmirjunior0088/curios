@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Prim, Split, Var,
-        Term, Type,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Prim, Split,
+        Term, Type, Var,
     },
     crate::parser::{
-        Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0,
-        sep_by1, take_eof, take_exact, take_while,
+        Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
+        take_eof, take_exact, take_while,
     },
     std::str::FromStr,
 };
@@ -30,11 +30,10 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 const KEYWORDS: &[&str] = &["let", "match", "with", "case"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
-    parse_identifier()
-        .flat_map(|identifier| match KEYWORDS.contains(&identifier) {
-            true => fail(format!("'{identifier}' is a reserved keyword")),
-            false => pure(Var::free(identifier).into()),
-        })
+    parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
+        true => fail(format!("'{identifier}' is a reserved keyword")),
+        false => pure(Var::free(identifier).into()),
+    })
 }
 
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {

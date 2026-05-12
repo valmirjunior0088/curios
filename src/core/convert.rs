@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, Pair, PairType, Var,
-        Preempted, Prim, Split, Term, reduce,
+        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, Pair, PairType, Preempted,
+        Prim, Split, Term, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
