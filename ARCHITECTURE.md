@@ -2,7 +2,7 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~12,600 lines of Rust.
+**Codebase size:** ~18,700 lines of Rust.
 
 ---
 
@@ -12,27 +12,27 @@ Source text flows through five distinct phases, each with a clean handoff:
 
 ```
 Source Text
-    │
-    ▼
- Parsing          → core::Term (full AST with types)
-    │
-    ▼
- Type Inference    → core::Term (annotated, type-checked)
-    │
-    ▼
- Type Erasure      → ersd::Term (runtime-only structure)
-    │
-    ▼
- CPS Lowering      → cont::Module (blocks, closures, jumps)
-    │
-    ▼
- WASM Codegen      → wasm::Module (structs, functions, instructions)
-    │
-    ▼
- Binary Writer     → raw WebAssembly bytes
-    │
-    ▼
- Wasmtime          → execution and result printing
+   │
+   ▼
+Parsing          → core::Term (full AST with types)
+   │
+   ▼
+Type Inference    → core::Term (annotated, type-checked)
+   │
+   ▼
+Type Erasure      → ersd::Term (runtime-only structure)
+   │
+   ▼
+CPS Lowering      → cont::Module (blocks, closures, jumps)
+   │
+   ▼
+WASM Codegen      → wasm::Module (structs, functions, instructions)
+   │
+   ▼
+Binary Writer     → raw WebAssembly bytes
+   │
+   ▼
+Wasmtime          → execution and result printing
 ```
 
 ---
@@ -51,7 +51,7 @@ The grammar covers:
 - Pair elimination `let (x, y) with m => motive = pair; tail`
 - Pattern matching `match x with k => Type; case :tag => body;`
 - Let bindings and recursive groups `let { f : T = body; }; tail`
-- Primitive types (`Int`, `Flt`) and built-in operations (`Int.add`, `Int.eql`, etc.)
+- Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions for all three — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to-flt`)
 
 ---
 
