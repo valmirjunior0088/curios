@@ -58,7 +58,7 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
             })
             .and_drop(parse_keyword("i")),
     )
-    .map(|value| Term::Prim(Prim::IntValue(value)))
+    .map(|value| Term::Prim(Prim::Int(value)))
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
@@ -70,7 +70,7 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
             })
             .and_drop(parse_keyword("n")),
     )
-    .map(|value| Term::Prim(Prim::NatValue(value)))
+    .map(|value| Term::Prim(Prim::Nat(value)))
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -98,7 +98,7 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
             }
         })
         .and_drop(parse_whitespace())
-        .map(|value: f32| Term::Prim(Prim::FltValue(value.to_bits())))
+        .map(|value: f32| Term::Prim(Prim::Flt(value.to_bits())))
 }
 
 fn parse_nat_prim<'a>() -> Parser<'a, Term> {
@@ -571,19 +571,13 @@ mod tests {
 
     #[test]
     fn parse_int_literal_and_flt_literal_are_disambiguated() {
-        assert_eq!(
-            "42i".parse::<Term>().unwrap(),
-            Term::Prim(Prim::IntValue(42))
-        );
+        assert_eq!("42i".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
 
-        assert_eq!(
-            "42n".parse::<Term>().unwrap(),
-            Term::Prim(Prim::NatValue(42))
-        );
+        assert_eq!("42n".parse::<Term>().unwrap(), Term::Prim(Prim::Nat(42)));
 
         assert_eq!(
             "42.0".parse::<Term>().unwrap(),
-            Term::Prim(Prim::FltValue(42.0_f32.to_bits()))
+            Term::Prim(Prim::Flt(42.0_f32.to_bits()))
         );
     }
 
@@ -592,40 +586,34 @@ mod tests {
         assert_eq!("Int".parse::<Term>().unwrap(), Term::Prim(Prim::IntType));
         assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(Prim::FltType));
         assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
-        assert_eq!(
-            "42i".parse::<Term>().unwrap(),
-            Term::Prim(Prim::IntValue(42))
-        );
-        assert_eq!(
-            "42n".parse::<Term>().unwrap(),
-            Term::Prim(Prim::NatValue(42))
-        );
+        assert_eq!("42i".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
+        assert_eq!("42n".parse::<Term>().unwrap(), Term::Prim(Prim::Nat(42)));
         assert_eq!(
             "1.5".parse::<Term>().unwrap(),
-            Term::Prim(Prim::FltValue(1.5_f32.to_bits()))
+            Term::Prim(Prim::Flt(1.5_f32.to_bits()))
         );
 
         assert_eq!(
             "Int.add 1i 2i".parse::<Term>().unwrap(),
             Term::Prim(Prim::int_add(
-                Term::Prim(Prim::IntValue(1)),
-                Term::Prim(Prim::IntValue(2))
+                Term::Prim(Prim::Int(1)),
+                Term::Prim(Prim::Int(2))
             ))
         );
 
         assert_eq!(
             "Nat.add 1n 2n".parse::<Term>().unwrap(),
             Term::Prim(Prim::nat_add(
-                Term::Prim(Prim::NatValue(1)),
-                Term::Prim(Prim::NatValue(2))
+                Term::Prim(Prim::Nat(1)),
+                Term::Prim(Prim::Nat(2))
             ))
         );
 
         assert_eq!(
             "Flt.mul 1.5 2.0".parse::<Term>().unwrap(),
             Term::Prim(Prim::flt_mul(
-                Term::Prim(Prim::FltValue(1.5_f32.to_bits())),
-                Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+                Term::Prim(Prim::Flt(1.5_f32.to_bits())),
+                Term::Prim(Prim::Flt(2.0_f32.to_bits()))
             ))
         );
     }

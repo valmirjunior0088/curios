@@ -48,8 +48,8 @@ impl Convert {
     fn compare_prim(&mut self, this: Prim, that: Prim) -> Result<bool, Preempted> {
         match (this, that) {
             (Prim::IntType, Prim::IntType) | (Prim::FltType, Prim::FltType) => Ok(true),
-            (Prim::IntValue(this), Prim::IntValue(that)) => Ok(this == that),
-            (Prim::FltValue(this), Prim::FltValue(that)) => Ok(this == that),
+            (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
+            (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
             (Prim::IntEql(this_l, this_r), Prim::IntEql(that_l, that_r))
             | (Prim::IntAdd(this_l, this_r), Prim::IntAdd(that_l, that_r))
             | (Prim::IntSub(this_l, this_r), Prim::IntSub(that_l, that_r))
@@ -306,12 +306,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             "x",
-            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
         let that = Term::from(Func::new(
             "y",
-            Term::Prim(Prim::int_add(Var::free("y"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_add(Var::free("y"), Term::Prim(Prim::Int(1)))),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
@@ -323,12 +323,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             "x",
-            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
         let that = Term::from(Func::new(
             "x",
-            Term::Prim(Prim::int_sub(Var::free("x"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_sub(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));

@@ -30,7 +30,7 @@ fn expect(
 fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
     match prim {
         Prim::NatType => Ok(Type.into()),
-        Prim::NatValue(_) => Ok(Term::Prim(Prim::NatType)),
+        Prim::Nat(_) => Ok(Term::Prim(Prim::NatType)),
         Prim::NatEql(left, right)
         | Prim::NatNeq(left, right)
         | Prim::NatAdd(left, right)
@@ -48,7 +48,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             Ok(Term::Prim(Prim::NatType))
         }
         Prim::IntType => Ok(Type.into()),
-        Prim::IntValue(_) => Ok(Term::Prim(Prim::IntType)),
+        Prim::Int(_) => Ok(Term::Prim(Prim::IntType)),
         Prim::IntEql(left, right)
         | Prim::IntNeq(left, right)
         | Prim::IntLt(left, right)
@@ -76,7 +76,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             Ok(Term::Prim(Prim::IntType))
         }
         Prim::FltType => Ok(Type.into()),
-        Prim::FltValue(_) => Ok(Term::Prim(Prim::FltType)),
+        Prim::Flt(_) => Ok(Term::Prim(Prim::FltType)),
         Prim::FltAdd(left, right)
         | Prim::FltSub(left, right)
         | Prim::FltMul(left, right)
@@ -391,7 +391,7 @@ fn erase_prim(
 
             Ok(ersd::Term::Erased)
         }
-        &Prim::NatValue(value) => {
+        &Prim::Nat(value) => {
             expect(context, term, &Term::Prim(Prim::NatType), expected)?;
 
             Ok(ersd::Prim::Nat(value).into())
@@ -500,7 +500,7 @@ fn erase_prim(
 
             Ok(ersd::Term::Erased)
         }
-        &Prim::IntValue(value) => {
+        &Prim::Int(value) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;
 
             Ok(ersd::Prim::Int(value).into())
@@ -617,7 +617,7 @@ fn erase_prim(
 
             Ok(ersd::Term::Erased)
         }
-        &Prim::FltValue(bits) => {
+        &Prim::Flt(bits) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
 
             Ok(ersd::Prim::Flt(f32::from_bits(bits)).into())
@@ -1286,8 +1286,8 @@ mod tests {
             erase(
                 &mut context,
                 &Term::Prim(Prim::int_eql(
-                    Term::Prim(Prim::IntValue(1)),
-                    Term::Prim(Prim::IntValue(1))
+                    Term::Prim(Prim::Int(1)),
+                    Term::Prim(Prim::Int(1))
                 )),
                 &Term::Prim(Prim::NatType),
             )
@@ -1298,8 +1298,8 @@ mod tests {
             erase(
                 &mut context,
                 &Term::Prim(Prim::flt_add(
-                    Term::Prim(Prim::FltValue(1.5_f32.to_bits())),
-                    Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+                    Term::Prim(Prim::Flt(1.5_f32.to_bits())),
+                    Term::Prim(Prim::Flt(2.0_f32.to_bits()))
                 )),
                 &Term::Prim(Prim::FltType),
             )
@@ -1338,8 +1338,8 @@ mod tests {
             erase(
                 &mut Context::new(Duration::from_secs(1)),
                 &Term::Prim(Prim::int_add(
-                    Term::Prim(Prim::IntValue(1)),
-                    Term::Prim(Prim::FltValue(2.0_f32.to_bits()))
+                    Term::Prim(Prim::Int(1)),
+                    Term::Prim(Prim::Flt(2.0_f32.to_bits()))
                 )),
                 &Term::Prim(Prim::IntType),
             ),

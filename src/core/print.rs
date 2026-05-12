@@ -63,7 +63,7 @@ fn print_flt(bits: u32) -> Printer<'static> {
 fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     match prim {
         Prim::NatType => pure("Nat"),
-        Prim::NatValue(value) => pure(format!("{value}n")),
+        Prim::Nat(value) => pure(format!("{value}n")),
         Prim::NatEql(left, right) => flat([
             pure("Nat.eql "),
             print_term(*left, depth),
@@ -131,7 +131,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(*right, depth),
         ]),
         Prim::IntType => pure("Int"),
-        Prim::IntValue(value) => pure(format!("{value}i")),
+        Prim::Int(value) => pure(format!("{value}i")),
         Prim::IntEql(left, right) => flat([
             pure("Int.eql "),
             print_term(*left, depth),
@@ -157,7 +157,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(*right, depth),
         ]),
         Prim::FltType => pure("Flt"),
-        Prim::FltValue(bits) => print_flt(bits),
+        Prim::Flt(bits) => print_flt(bits),
         Prim::FltAdd(left, right) => flat([
             pure("Flt.add "),
             print_term(*left, depth),

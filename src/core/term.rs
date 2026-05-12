@@ -547,7 +547,7 @@ where
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
         match prim {
             Prim::NatType => Prim::NatType,
-            Prim::NatValue(value) => Prim::NatValue(*value),
+            Prim::Nat(value) => Prim::Nat(*value),
             Prim::NatEql(left, right) => {
                 Prim::NatEql(self.visit_subterm(left), self.visit_subterm(right))
             }
@@ -582,7 +582,7 @@ where
                 Prim::NatGte(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::IntType => Prim::IntType,
-            Prim::IntValue(value) => Prim::IntValue(*value),
+            Prim::Int(value) => Prim::Int(*value),
             Prim::IntEql(left, right) => {
                 Prim::IntEql(self.visit_subterm(left), self.visit_subterm(right))
             }
@@ -596,7 +596,7 @@ where
                 Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::FltType => Prim::FltType,
-            Prim::FltValue(bits) => Prim::FltValue(*bits),
+            Prim::Flt(bits) => Prim::Flt(*bits),
             Prim::FltAdd(left, right) => {
                 Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
             }

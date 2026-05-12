@@ -3,7 +3,7 @@ use super::{Subterm, Term};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
     NatType,
-    NatValue(u32),
+    Nat(u32),
     NatEql(Subterm, Subterm),
     NatNeq(Subterm, Subterm),
     NatAdd(Subterm, Subterm),
@@ -16,7 +16,7 @@ pub enum Prim {
     NatLte(Subterm, Subterm),
     NatGte(Subterm, Subterm),
     IntType,
-    IntValue(i32),
+    Int(i32),
     IntEql(Subterm, Subterm),
     IntAdd(Subterm, Subterm),
     IntSub(Subterm, Subterm),
@@ -30,7 +30,7 @@ pub enum Prim {
     IntLte(Subterm, Subterm),
     IntGte(Subterm, Subterm),
     FltType,
-    FltValue(u32),
+    Flt(u32),
     FltAdd(Subterm, Subterm),
     FltSub(Subterm, Subterm),
     FltMul(Subterm, Subterm),
