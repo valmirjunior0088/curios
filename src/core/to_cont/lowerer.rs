@@ -494,7 +494,7 @@ impl<'a> Lowerer<'a> {
                 self.lower_letrec_item(&letrec.tail, target, &frame, state, builder);
             }
             core::ErasedTerm::Name(name) => {
-                builder.add_value(target, cont::Value::Name(frame.find(&name.string)));
+                builder.add_value(target, cont::Value::Alias(frame.find(&name.string)));
             }
             core::ErasedTerm::Apply(_)
             | core::ErasedTerm::Split(_)

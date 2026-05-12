@@ -77,7 +77,7 @@ pub enum Code {
 pub enum Value {
     Pure(Data),
     Eval(Code),
-    Name(ValueName),
+    Alias(ValueName),
 }
 
 #[derive(Debug)]

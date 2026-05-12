@@ -952,7 +952,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 }
                 cont::Value::Pure(value) => self.emit_let_pure(value_name, value),
                 cont::Value::Eval(op) => self.emit_code(value_name, op),
-                cont::Value::Name(source) => self.emit_let_alias(value_name, source),
+                cont::Value::Alias(source) => self.emit_let_alias(value_name, source),
             }
         }
     }

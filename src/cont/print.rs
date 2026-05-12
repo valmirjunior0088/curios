@@ -124,7 +124,7 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
         match value {
             Value::Pure(value) => print_data(value),
             Value::Eval(op) => print_code(op),
-            Value::Name(source) => print_value_name(source),
+            Value::Alias(source) => print_value_name(source),
         },
         pure(";"),
     ])
