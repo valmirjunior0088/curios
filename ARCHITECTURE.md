@@ -20,7 +20,7 @@ Source Text
  Type Inference    → core::Term (annotated, type-checked)
     │
     ▼
- Type Erasure      → core::ErasedTerm (runtime-only structure)
+ Type Erasure      → ersd::Term (runtime-only structure)
     │
     ▼
  CPS Lowering      → cont::Module (blocks, closures, jumps)
@@ -57,7 +57,7 @@ The grammar covers:
 
 ## 2. Core Type System
 
-**Files:** `src/core/term.rs`, `src/core/infer.rs`, `src/core/reduce.rs`, `src/core/convert.rs`, `src/core/context.rs`
+**Files:** `src/core/term.rs`, `src/core/typing.rs`, `src/core/reduce.rs`, `src/core/convert.rs`, `src/core/context.rs`
 
 The central `Term` enum represents the full surface language:
 
@@ -105,9 +105,9 @@ Curios is an impure language: effectful operations (IO, etc.) are ordinary expre
 
 ## 3. Type Erasure
 
-**Files:** `src/core/erase.rs`, `src/core/erased_term.rs`
+**Files:** `src/ersd/term.rs`, `src/ersd/prim.rs`
 
-Transforms `Term` into `ErasedTerm`, stripping everything that exists only at the type level:
+Transforms `core::Term` into `ersd::Term`, stripping everything that exists only at the type level:
 
 | Erased (removed)                           | Preserved                                 |
 | ------------------------------------------ | ----------------------------------------- |
@@ -118,13 +118,13 @@ Transforms `Term` into `ErasedTerm`, stripping everything that exists only at th
 
 **Atom index translation:** During erasure, atom labels (`:left`, `:right`) are replaced with numeric indices matching case order in `Match`. This enables efficient dispatch without string comparison at runtime.
 
-**Explicit closure captures:** `ErasedFunc` carries a `captures: Vec<String>` listing exactly which free variables the function closes over, resolved to concrete values during CPS lowering.
+**Explicit closure captures:** `ersd::Func` carries a `captures: Vec<String>` listing exactly which free variables the function closes over, resolved to concrete values during CPS lowering.
 
 ---
 
 ## 4. CPS Lowering
 
-**Files:** `src/cont/module.rs`, `src/core/to_cont/lowerer.rs`, `src/core/to_cont/entropy.rs`, `src/core/to_cont/frame.rs`
+**Files:** `src/cont/module.rs`, `src/ersd/to_cont/lowerer.rs`, `src/ersd/to_cont/entropy.rs`, `src/ersd/to_cont/frame.rs`
 
 The CPS IR is the heart of the compiler's control flow representation:
 
@@ -245,13 +245,13 @@ For anyone wanting to understand this project:
 
 3. **Read `src/core/parse.rs`** — see what the surface syntax looks like. The test cases at the bottom are concrete examples.
 
-4. **Read `src/core/infer.rs`** — follow how each `Term` variant gets its type. Notice the bidirectional flow and where reduction is invoked.
+4. **Read `src/core/typing.rs`** — follow how each `Term` variant gets its type. Notice the bidirectional flow and where reduction is invoked.
 
-5. **Read `src/core/erase.rs`** — see exactly what disappears and what survives into runtime.
+5. **Read `src/ersd/term.rs`** — see exactly what disappears and what survives into runtime.
 
 6. **Read `src/cont/module.rs`** — the CPS IR types. Understand `Region`, `Value`, `Tail`, and especially how `Call` specifies a `resume` block.
 
-7. **Read `src/core/to_cont/lowerer.rs`** — follow how `ErasedTerm` becomes CPS. The `lower_tail` and `lower_value` distinction (tail position vs. value position) is the key insight.
+7. **Read `src/ersd/to_cont/lowerer.rs`** — follow how `ersd::Term` becomes CPS. The `lower_tail` and `lower_value` distinction (tail position vs. value position) is the key insight.
 
 8. **Read `src/cont/to_wasm/expr_emitter.rs`** and **`src/cont/to_wasm/module_emitter.rs`** — see how CPS maps to WASM instructions.
 
