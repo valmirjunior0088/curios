@@ -335,9 +335,15 @@ mod tests {
     fn convert_prim_recurses_into_operands() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", IntPrim::add(Name::label("x"), 1)));
+        let this = Term::from(Func::new(
+            "x",
+            Term::Prim(IntPrim::add(Name::label("x"), Term::Prim(IntPrim::Value(1).into())).into()),
+        ));
 
-        let that = Term::from(Func::new("y", IntPrim::add(Name::label("y"), 1)));
+        let that = Term::from(Func::new(
+            "y",
+            Term::Prim(IntPrim::add(Name::label("y"), Term::Prim(IntPrim::Value(1).into())).into()),
+        ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -346,9 +352,15 @@ mod tests {
     fn convert_prim_distinguishes_operator_kind() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", IntPrim::add(Name::label("x"), 1)));
+        let this = Term::from(Func::new(
+            "x",
+            Term::Prim(IntPrim::add(Name::label("x"), Term::Prim(IntPrim::Value(1).into())).into()),
+        ));
 
-        let that = Term::from(Func::new("x", IntPrim::sub(Name::label("x"), 1)));
+        let that = Term::from(Func::new(
+            "x",
+            Term::Prim(IntPrim::sub(Name::label("x"), Term::Prim(IntPrim::Value(1).into())).into()),
+        ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }

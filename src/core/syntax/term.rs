@@ -457,42 +457,6 @@ impl From<Prim> for Term {
     }
 }
 
-impl From<IntPrim> for Term {
-    fn from(value: IntPrim) -> Self {
-        Self::Prim(Prim::Int(value))
-    }
-}
-
-impl From<IntType> for Term {
-    fn from(IntType: IntType) -> Self {
-        Self::Prim(Prim::Int(IntPrim::Type))
-    }
-}
-
-impl From<i32> for Term {
-    fn from(value: i32) -> Self {
-        Self::Prim(IntPrim::Value(value).into())
-    }
-}
-
-impl From<FltPrim> for Term {
-    fn from(value: FltPrim) -> Self {
-        Self::Prim(Prim::Flt(value))
-    }
-}
-
-impl From<FltType> for Term {
-    fn from(FltType: FltType) -> Self {
-        Self::Prim(Prim::Flt(FltPrim::Type))
-    }
-}
-
-impl From<f32> for Term {
-    fn from(value: f32) -> Self {
-        Self::Prim(FltPrim::Value(value.to_bits()).into())
-    }
-}
-
 impl From<FuncType> for Term {
     fn from(value: FuncType) -> Self {
         Self::FuncType(value)
