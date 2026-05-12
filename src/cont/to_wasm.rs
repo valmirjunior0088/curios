@@ -85,11 +85,11 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("left"),
-                            cont::Value::Eval(cont::Code::TplProj(0, cont::ValueName::from("x"))),
+                            cont::Value::Eval(cont::Code::TplGet(0, cont::ValueName::from("x"))),
                         ),
                         (
                             cont::ValueName::from("out"),
-                            cont::Value::Eval(cont::Code::TplProj(0, cont::ValueName::from("left"))),
+                            cont::Value::Eval(cont::Code::TplGet(0, cont::ValueName::from("left"))),
                         ),
                     ],
                     blocks: vec![],
@@ -455,7 +455,7 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("out"),
-                        cont::Value::Eval(cont::Code::TplProj(1, cont::ValueName::from("PAIR"))),
+                        cont::Value::Eval(cont::Code::TplGet(1, cont::ValueName::from("PAIR"))),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {

@@ -747,7 +747,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     target_name: lst_type.clone(),
                 });
             }
-            cont::Code::TplProj(index, tuple) => {
+            cont::Code::TplGet(index, tuple) => {
                 self.emit_proj(tuple, *index);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local,

@@ -983,10 +983,10 @@ impl<'a> Lowerer<'a> {
                 builder,
                 Box::new(move |this, state, builder, head| {
                     let fst = state.fresh_value();
-                    builder.add_value(fst.clone(), cont::Value::Eval(cont::Code::TplProj(0, head.clone())));
+                    builder.add_value(fst.clone(), cont::Value::Eval(cont::Code::TplGet(0, head.clone())));
 
                     let snd = state.fresh_value();
-                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplProj(1, head)));
+                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplGet(1, head)));
 
                     let frame =
                         frame.extended([(split.fst.clone(), fst), (split.snd.clone(), snd)]);

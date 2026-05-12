@@ -87,11 +87,11 @@ fn main() {
                                     ),
                                     (
                                         ValueName::from("out_again"),
-                                        Value::Eval(Code::TplProj(0, ValueName::from("pair"))),
+                                        Value::Eval(Code::TplGet(0, ValueName::from("pair"))),
                                     ),
                                     (
                                         ValueName::from("is_zero"),
-                                        Value::Eval(Code::TplProj(1, ValueName::from("pair"))),
+                                        Value::Eval(Code::TplGet(1, ValueName::from("pair"))),
                                     ),
                                 ],
                                 blocks: vec![],

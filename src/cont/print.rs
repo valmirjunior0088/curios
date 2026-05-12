@@ -112,7 +112,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::LstGet(idx, lst) => flat([pure("lst.get"), pure(" "), print_value_name(idx), pure(", "), print_value_name(lst)]),
         Code::LstSlice(start, end, lst) => flat([pure("lst.slice"), pure(" "), print_value_name(start), pure(", "), print_value_name(end), pure(", "), print_value_name(lst)]),
         Code::LstConcat(l1, l2) => flat([pure("lst.concat"), pure(" "), print_value_name(l1), pure(", "), print_value_name(l2)]),
-        Code::TplProj(index, tuple) => flat([pure("tpl.proj "), pure(index.to_string()), pure(" "), print_value_name(tuple)]),
+        Code::TplGet(index, tuple) => flat([pure("tpl.get "), pure(index.to_string()), pure(" "), print_value_name(tuple)]),
     }
 }
 

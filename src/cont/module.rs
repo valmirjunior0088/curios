@@ -70,7 +70,7 @@ pub enum Code {
     LstGet(ValueName, ValueName),
     LstSlice(ValueName, ValueName, ValueName),
     LstConcat(ValueName, ValueName),
-    TplProj(usize, ValueName),
+    TplGet(usize, ValueName),
 }
 
 #[derive(Debug)]
