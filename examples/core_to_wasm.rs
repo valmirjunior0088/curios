@@ -1,5 +1,5 @@
 use {
-    curios::{cont, core},
+    curios::{cont, core, ersd},
     std::time::Duration,
 };
 
@@ -23,7 +23,7 @@ fn main() {
 
     println!(
         "{}",
-        cont::to_wasm(&core::to_cont(
+        cont::to_wasm(&ersd::to_cont(
             &core::erase(
                 &mut core::Context::new(Duration::from_secs(1)),
                 &term,

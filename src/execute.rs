@@ -1,6 +1,6 @@
 use {
     crate::{
-        cont, core,
+        cont, core, ersd,
         printer::{Printer, flat, indent, pure, sep_flat},
         wasm,
     },
@@ -166,7 +166,7 @@ pub fn execute(timeout: Duration, source: &str) -> Result<String, String> {
 
     let module = Module::from_binary(
         &engine,
-        &wasm::to_bytes(&cont::to_wasm(&core::to_cont(&term))),
+        &wasm::to_bytes(&cont::to_wasm(&ersd::to_cont(&term))),
     )
     .map_err(|error| format!("failed to load wasm module: {error}"))?;
 

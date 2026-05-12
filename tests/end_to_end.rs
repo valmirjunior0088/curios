@@ -1,5 +1,5 @@
 use {
-    curios::{cont, core, wasm},
+    curios::{cont, core, ersd, wasm},
     std::time::Duration,
     wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
 };
@@ -23,7 +23,7 @@ fn pipeline_lowers_and_runs_core_term() {
     .parse()
     .expect("expected core term");
 
-    let wasm_module = cont::to_wasm(&core::to_cont(
+    let wasm_module = cont::to_wasm(&ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(1)),
             &term,

@@ -1,70 +1,67 @@
-use curios::core::{
-    self, ErasedApply, ErasedAtom, ErasedFunc, ErasedLet, ErasedLetRec, ErasedMatch, ErasedName,
-    ErasedPair, ErasedPrim, ErasedSplit, ErasedTerm,
-};
+use curios::ersd;
 
 fn main() {
-    let term = ErasedTerm::Let(ErasedLet {
+    let term = ersd::Term::Let(ersd::Let {
         name: "bias".into(),
-        body: ErasedTerm::Prim(ErasedPrim::IntMul(
-            ErasedTerm::Prim(ErasedPrim::IntAdd(
-                ErasedTerm::Prim(ErasedPrim::Int(2)).into(),
-                ErasedTerm::Prim(ErasedPrim::Int(3)).into(),
+        body: ersd::Term::Prim(ersd::Prim::IntMul(
+            ersd::Term::Prim(ersd::Prim::IntAdd(
+                ersd::Term::Prim(ersd::Prim::Int(2)).into(),
+                ersd::Term::Prim(ersd::Prim::Int(3)).into(),
             ))
             .into(),
-            ErasedTerm::Prim(ErasedPrim::IntSub(
-                ErasedTerm::Prim(ErasedPrim::Int(10)).into(),
-                ErasedTerm::Prim(ErasedPrim::Int(5)).into(),
+            ersd::Term::Prim(ersd::Prim::IntSub(
+                ersd::Term::Prim(ersd::Prim::Int(10)).into(),
+                ersd::Term::Prim(ersd::Prim::Int(5)).into(),
             ))
             .into(),
         ))
         .into(),
-        tail: ErasedTerm::Let(ErasedLet {
+        tail: ersd::Term::Let(ersd::Let {
             name: "scaled".into(),
-            body: ErasedTerm::Prim(ErasedPrim::FltAdd(
-                ErasedTerm::Prim(ErasedPrim::FltMul(
-                    ErasedTerm::Prim(ErasedPrim::Flt(1.5)).into(),
-                    ErasedTerm::Prim(ErasedPrim::Flt(2.0)).into(),
+            body: ersd::Term::Prim(ersd::Prim::FltAdd(
+                ersd::Term::Prim(ersd::Prim::FltMul(
+                    ersd::Term::Prim(ersd::Prim::Flt(1.5)).into(),
+                    ersd::Term::Prim(ersd::Prim::Flt(2.0)).into(),
                 ))
                 .into(),
-                ErasedTerm::Prim(ErasedPrim::FltSub(
-                    ErasedTerm::Prim(ErasedPrim::Flt(4.0)).into(),
-                    ErasedTerm::Prim(ErasedPrim::Flt(1.0)).into(),
+                ersd::Term::Prim(ersd::Prim::FltSub(
+                    ersd::Term::Prim(ersd::Prim::Flt(4.0)).into(),
+                    ersd::Term::Prim(ersd::Prim::Flt(1.0)).into(),
                 ))
                 .into(),
             ))
             .into(),
-            tail: ErasedTerm::Let(ErasedLet {
+            tail: ersd::Term::Let(ersd::Let {
                 name: "unit".into(),
-                body: ErasedTerm::Prim(ErasedPrim::Unit).into(),
-                tail: ErasedTerm::LetRec(ErasedLetRec {
+                body: ersd::Term::Erased.into(),
+                tail: ersd::Term::LetRec(ersd::LetRec {
                     names: vec!["self_pair".into(), "make".into()],
                     items: vec![
-                        ErasedTerm::Pair(ErasedPair {
-                            fst: ErasedTerm::Name(ErasedName::from("self_pair")).into(),
-                            snd: ErasedTerm::Name(ErasedName::from("bias")).into(),
+                        ersd::Term::Pair(ersd::Pair {
+                            fst: ersd::Term::Name(ersd::Name::from("self_pair")).into(),
+                            snd: ersd::Term::Name(ersd::Name::from("bias")).into(),
                         })
                         .into(),
-                        ErasedTerm::Func(ErasedFunc {
+                        ersd::Term::Func(ersd::Func {
                             captures: vec!["bias".into(), "self_pair".into()],
                             param: "input".into(),
-                            body: ErasedTerm::Let(ErasedLet {
+                            body: ersd::Term::Let(ersd::Let {
                                 name: "sum".into(),
-                                body: ErasedTerm::Prim(ErasedPrim::IntAdd(
-                                    ErasedTerm::Name(ErasedName::from("input")).into(),
-                                    ErasedTerm::Name(ErasedName::from("bias")).into(),
+                                body: ersd::Term::Prim(ersd::Prim::IntAdd(
+                                    ersd::Term::Name(ersd::Name::from("input")).into(),
+                                    ersd::Term::Name(ersd::Name::from("bias")).into(),
                                 ))
                                 .into(),
-                                tail: ErasedTerm::Let(ErasedLet {
+                                tail: ersd::Term::Let(ersd::Let {
                                     name: "is_bias".into(),
-                                    body: ErasedTerm::Prim(ErasedPrim::IntEql(
-                                        ErasedTerm::Name(ErasedName::from("sum")).into(),
-                                        ErasedTerm::Name(ErasedName::from("bias")).into(),
+                                    body: ersd::Term::Prim(ersd::Prim::IntEql(
+                                        ersd::Term::Name(ersd::Name::from("sum")).into(),
+                                        ersd::Term::Name(ersd::Name::from("bias")).into(),
                                     ))
                                     .into(),
-                                    tail: ErasedTerm::Pair(ErasedPair {
-                                        fst: ErasedTerm::Name(ErasedName::from("sum")).into(),
-                                        snd: ErasedTerm::Name(ErasedName::from("self_pair")).into(),
+                                    tail: ersd::Term::Pair(ersd::Pair {
+                                        fst: ersd::Term::Name(ersd::Name::from("sum")).into(),
+                                        snd: ersd::Term::Name(ersd::Name::from("self_pair")).into(),
                                     })
                                     .into(),
                                 })
@@ -74,29 +71,29 @@ fn main() {
                         })
                         .into(),
                     ],
-                    tail: ErasedTerm::Let(ErasedLet {
+                    tail: ersd::Term::Let(ersd::Let {
                         name: "applied".into(),
-                        body: ErasedTerm::Apply(ErasedApply {
-                            head: ErasedTerm::Name(ErasedName::from("make")).into(),
-                            param: ErasedTerm::Prim(ErasedPrim::Int(2)).into(),
+                        body: ersd::Term::Apply(ersd::Apply {
+                            head: ersd::Term::Name(ersd::Name::from("make")).into(),
+                            param: ersd::Term::Prim(ersd::Prim::Int(2)).into(),
                         })
                         .into(),
-                        tail: ErasedTerm::Split(ErasedSplit {
-                            head: ErasedTerm::Name(ErasedName::from("applied")).into(),
+                        tail: ersd::Term::Split(ersd::Split {
+                            head: ersd::Term::Name(ersd::Name::from("applied")).into(),
                             fst: "sum".into(),
                             snd: "pair".into(),
-                            tail: ErasedTerm::Match(ErasedMatch {
-                                head: ErasedTerm::Atom(ErasedAtom { index: 0 }).into(),
+                            tail: ersd::Term::Match(ersd::Match {
+                                head: ersd::Term::Atom(ersd::Atom { index: 0 }).into(),
                                 cases: vec![
-                                    ErasedTerm::Split(ErasedSplit {
-                                        head: ErasedTerm::Name(ErasedName::from("pair")).into(),
+                                    ersd::Term::Split(ersd::Split {
+                                        head: ersd::Term::Name(ersd::Name::from("pair")).into(),
                                         fst: "loop".into(),
                                         snd: "captured_bias".into(),
-                                        tail: ErasedTerm::Name(ErasedName::from("captured_bias"))
+                                        tail: ersd::Term::Name(ersd::Name::from("captured_bias"))
                                             .into(),
                                     })
                                     .into(),
-                                    ErasedTerm::Prim(ErasedPrim::Int(0)).into(),
+                                    ersd::Term::Prim(ersd::Prim::Int(0)).into(),
                                 ],
                             })
                             .into(),
@@ -112,5 +109,5 @@ fn main() {
         .into(),
     });
 
-    println!("{}", core::to_cont(&term));
+    println!("{}", ersd::to_cont(&term));
 }

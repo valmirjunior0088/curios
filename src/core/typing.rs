@@ -1,7 +1,9 @@
-use super::{
-    Apply, AtomType, Context, ErasedApply, ErasedAtom, ErasedFunc, ErasedLet, ErasedLetRec,
-    ErasedMatch, ErasedName, ErasedPair, ErasedPrim, ErasedSplit, ErasedTerm, Error, Func,
-    FuncType, Let, LetRec, Match, Name, Pair, PairType, Preempted, Prim, Split, Term, Type,
+use {
+    super::{
+        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType,
+        Preempted, Prim, Split, Term, Type,
+    },
+    crate::ersd,
 };
 
 fn reduce(context: &mut Context, term: &Term) -> Result<Term, Error> {
@@ -293,72 +295,72 @@ fn erase_prim(
     term: &Term,
     prim: &Prim,
     expected: &Term,
-) -> Result<ErasedPrim, Error> {
+) -> Result<ersd::Term, Error> {
     match prim {
         Prim::IntType => {
             expect(context, term, &Type.into(), expected)?;
-            Ok(().into())
+            Ok(ersd::Term::Erased)
         }
         &Prim::IntValue(value) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-            Ok(value.into())
+            Ok(ersd::Prim::Int(value).into())
         }
         Prim::IntEql(left, right) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-            Ok(ErasedPrim::IntEql(
+            Ok(ersd::Prim::IntEql(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
                 erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            ))
+            ).into())
         }
         Prim::IntAdd(left, right) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-            Ok(ErasedPrim::IntAdd(
+            Ok(ersd::Prim::IntAdd(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
                 erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            ))
+            ).into())
         }
         Prim::IntSub(left, right) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-            Ok(ErasedPrim::IntSub(
+            Ok(ersd::Prim::IntSub(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
                 erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            ))
+            ).into())
         }
         Prim::IntMul(left, right) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-            Ok(ErasedPrim::IntMul(
+            Ok(ersd::Prim::IntMul(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
                 erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            ))
+            ).into())
         }
         Prim::FltType => {
             expect(context, term, &Type.into(), expected)?;
-            Ok(().into())
+            Ok(ersd::Term::Erased)
         }
         &Prim::FltValue(bits) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-            Ok(f32::from_bits(bits).into())
+            Ok(ersd::Prim::Flt(f32::from_bits(bits)).into())
         }
         Prim::FltAdd(left, right) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-            Ok(ErasedPrim::FltAdd(
+            Ok(ersd::Prim::FltAdd(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
                 erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            ))
+            ).into())
         }
         Prim::FltSub(left, right) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-            Ok(ErasedPrim::FltSub(
+            Ok(ersd::Prim::FltSub(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
                 erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            ))
+            ).into())
         }
         Prim::FltMul(left, right) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-            Ok(ErasedPrim::FltMul(
+            Ok(ersd::Prim::FltMul(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
                 erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            ))
+            ).into())
         }
     }
 }
@@ -368,7 +370,7 @@ fn erase_func(
     func: &Func,
     term: &Term,
     expected: &Term,
-) -> Result<ErasedTerm, Error> {
+) -> Result<ersd::Term, Error> {
     let Func { body } = func;
 
     let Term::FuncType(FuncType { input, output }) = reduce(context, expected)? else {
@@ -386,7 +388,7 @@ fn erase_func(
         erase(context, &body, &output.open(&[&param_term]))
     })?;
 
-    Ok(ErasedFunc {
+    Ok(ersd::Func {
         captures,
         param,
         body: body.into(),
@@ -399,7 +401,7 @@ fn erase_apply(
     apply: &Apply,
     term: &Term,
     expected: &Term,
-) -> Result<ErasedTerm, Error> {
+) -> Result<ersd::Term, Error> {
     let Apply { head, param } = apply;
 
     let head_type = infer(context, head)?;
@@ -409,7 +411,7 @@ fn erase_apply(
         return Err(Error::cannot_infer(term.clone()));
     };
 
-    let erased = ErasedApply {
+    let erased = ersd::Apply {
         head: erase(context, head, &head_type)?.into(),
         param: erase(context, param, input)?.into(),
     };
@@ -419,14 +421,14 @@ fn erase_apply(
     Ok(erased.into())
 }
 
-fn erase_pair(context: &mut Context, pair: &Pair, expected: &Term) -> Result<ErasedTerm, Error> {
+fn erase_pair(context: &mut Context, pair: &Pair, expected: &Term) -> Result<ersd::Term, Error> {
     let Pair { fst, snd } = pair;
 
     let Term::PairType(PairType { input, output }) = reduce(context, expected)? else {
         return Err(Error::type_mismatch(pair.clone(), expected.clone()));
     };
 
-    Ok(ErasedPair {
+    Ok(ersd::Pair {
         fst: erase(context, fst, &input)?.into(),
         snd: erase(context, snd, &output.open(&[fst.as_ref()]))?.into(),
     }
@@ -438,7 +440,7 @@ fn erase_split(
     split: &Split,
     term: &Term,
     expected: &Term,
-) -> Result<ErasedTerm, Error> {
+) -> Result<ersd::Term, Error> {
     let Split { head, motive, tail } = split;
 
     let head_type = infer(context, head)?;
@@ -480,7 +482,7 @@ fn erase_split(
         context.assume(&fst, &input);
         context.assume(&snd, &output.open(&[&fst_term]));
 
-        Ok::<_, Error>(ErasedSplit {
+        Ok::<_, Error>(ersd::Split {
             head: erase(context, head, &head_type)?.into(),
             fst,
             snd,
@@ -498,7 +500,7 @@ fn erase_atom(
     atom: &super::Atom,
     term: &Term,
     expected: &Term,
-) -> Result<ErasedTerm, Error> {
+) -> Result<ersd::Term, Error> {
     let Term::AtomType(AtomType { atoms }) = reduce(context, expected)? else {
         return Err(Error::type_mismatch(term.clone(), expected.clone()));
     };
@@ -508,7 +510,7 @@ fn erase_atom(
         .position(|candidate| candidate == atom)
         .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone()))?;
 
-    Ok(ErasedAtom { index }.into())
+    Ok(ersd::Atom { index }.into())
 }
 
 fn erase_match(
@@ -516,7 +518,7 @@ fn erase_match(
     match_: &Match,
     term: &Term,
     expected: &Term,
-) -> Result<ErasedTerm, Error> {
+) -> Result<ersd::Term, Error> {
     let Match {
         head,
         motive,
@@ -563,14 +565,14 @@ fn erase_match(
 
     expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
 
-    Ok(ErasedMatch {
+    Ok(ersd::Match {
         head: erase(context, head, &head_type)?.into(),
         cases,
     }
     .into())
 }
 
-fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ErasedTerm, Error> {
+fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd::Term, Error> {
     let Let {
         type_: body_type,
         body,
@@ -590,7 +592,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<Erase
         erase(context, &tail, expected)
     })?;
 
-    Ok(ErasedLet {
+    Ok(ersd::Let {
         name,
         body: erased_body.into(),
         tail: tail.into(),
@@ -602,7 +604,7 @@ fn erase_letrec(
     context: &mut Context,
     letrec: &LetRec,
     expected: &Term,
-) -> Result<ErasedTerm, Error> {
+) -> Result<ersd::Term, Error> {
     let LetRec { items, tail } = letrec;
 
     let names = (0..items.len())
@@ -642,7 +644,7 @@ fn erase_letrec(
             context.define(name, body);
         }
 
-        Ok(ErasedLetRec {
+        Ok(ersd::LetRec {
             names,
             items: erased_items,
             tail: erase(context, &tail, expected)?.into(),
@@ -652,31 +654,31 @@ fn erase_letrec(
     Ok(erased.into())
 }
 
-pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ErasedTerm, Error> {
+pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
     match term {
-        Term::Prim(prim) => Ok(erase_prim(context, term, prim, expected)?.into()),
+        Term::Prim(prim) => erase_prim(context, term, prim, expected),
         Term::Type => {
             expect(context, term, &Type.into(), expected)?;
-            Ok(().into())
+            Ok(ersd::Term::Erased)
         }
         Term::FuncType(_) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
-            Ok(().into())
+            Ok(ersd::Term::Erased)
         }
         Term::Func(func) => erase_func(context, func, term, expected),
         Term::Apply(apply) => erase_apply(context, apply, term, expected),
         Term::PairType(_) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
-            Ok(().into())
+            Ok(ersd::Term::Erased)
         }
         Term::Pair(pair) => erase_pair(context, pair, expected),
         Term::Split(split) => erase_split(context, split, term, expected),
         Term::AtomType(_) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
-            Ok(().into())
+            Ok(ersd::Term::Erased)
         }
         Term::Atom(atom) => erase_atom(context, atom, term, expected),
         Term::Match(match_) => erase_match(context, match_, term, expected),
@@ -685,7 +687,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<Eras
         Term::Name(name) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
-            Ok(ErasedName::from(name.unwrap()).into())
+            Ok(ersd::Name::from(name.unwrap()).into())
         }
     }
 }
@@ -694,9 +696,9 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<Eras
 mod tests {
     use {
         super::*,
-        crate::core::{
-            Atom, AtomType, ErasedAtom, ErasedFunc, ErasedLet, ErasedMatch, ErasedName, ErasedTerm,
-            Func, FuncType, LetRec, Match, Pair, PairType, Term, Type,
+        crate::{
+            core::{Atom, AtomType, Func, FuncType, LetRec, Match, Pair, PairType, Term, Type},
+            ersd,
         },
         std::time::Duration,
     };
@@ -853,7 +855,7 @@ mod tests {
 
         let erased = erase(&mut context, &term, &type_).unwrap();
 
-        let ErasedTerm::Func(ErasedFunc { captures, .. }) = erased else {
+        let ersd::Term::Func(ersd::Func { captures, .. }) = erased else {
             panic!("expected erased func");
         };
 
@@ -908,7 +910,7 @@ mod tests {
         erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
         let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 
-        let ErasedTerm::Let(ErasedLet {
+        let ersd::Term::Let(ersd::Let {
             name: outer_name,
             body: outer_body,
             tail,
@@ -920,10 +922,10 @@ mod tests {
         assert_eq!(outer_name, "0");
         assert!(matches!(
             *outer_body,
-            ErasedTerm::Atom(ErasedAtom { index: 1 })
+            ersd::Term::Atom(ersd::Atom { index: 1 })
         ));
 
-        let ErasedTerm::Let(ErasedLet {
+        let ersd::Term::Let(ersd::Let {
             name: alpha_name,
             body: alpha_body,
             tail,
@@ -935,10 +937,10 @@ mod tests {
         assert_eq!(alpha_name, "1");
         assert!(matches!(
             *alpha_body,
-            ErasedTerm::Atom(ErasedAtom { index: 0 })
+            ersd::Term::Atom(ersd::Atom { index: 0 })
         ));
 
-        let ErasedTerm::Let(ErasedLet {
+        let ersd::Term::Let(ersd::Let {
             name: mu_name,
             body: mu_body,
             tail,
@@ -950,10 +952,10 @@ mod tests {
         assert_eq!(mu_name, "2");
         assert!(matches!(
             *mu_body,
-            ErasedTerm::Atom(ErasedAtom { index: 1 })
+            ersd::Term::Atom(ersd::Atom { index: 1 })
         ));
 
-        let ErasedTerm::Let(ErasedLet {
+        let ersd::Term::Let(ersd::Let {
             name: zeta_name,
             body: zeta_body,
             tail,
@@ -965,21 +967,21 @@ mod tests {
         assert_eq!(zeta_name, "3");
         assert!(matches!(
             *zeta_body,
-            ErasedTerm::Atom(ErasedAtom { index: 2 })
+            ersd::Term::Atom(ersd::Atom { index: 2 })
         ));
 
-        let ErasedTerm::Match(ErasedMatch { head, cases }) = *tail else {
+        let ersd::Term::Match(ersd::Match { head, cases }) = *tail else {
             panic!("expected outer erased match");
         };
 
         assert!(matches!(
             *head,
-            ErasedTerm::Name(ErasedName { string }) if string == "0"
+            ersd::Term::Name(ersd::Name { string }) if string == "0"
         ));
 
         assert_eq!(cases.len(), 3);
 
-        let ErasedTerm::Match(ErasedMatch {
+        let ersd::Term::Match(ersd::Match {
             head: alpha_head,
             cases: alpha_cases,
         }) = &*cases[0]
@@ -989,24 +991,24 @@ mod tests {
 
         assert!(matches!(
             &**alpha_head,
-            ErasedTerm::Name(ErasedName { string }) if string == "3"
+            ersd::Term::Name(ersd::Name { string }) if string == "3"
         ));
 
         assert_eq!(alpha_cases.len(), 3);
         assert!(matches!(
             *alpha_cases[0],
-            ErasedTerm::Atom(ErasedAtom { index: 2 })
+            ersd::Term::Atom(ersd::Atom { index: 2 })
         ));
         assert!(matches!(
             *alpha_cases[1],
-            ErasedTerm::Atom(ErasedAtom { index: 0 })
+            ersd::Term::Atom(ersd::Atom { index: 0 })
         ));
         assert!(matches!(
             *alpha_cases[2],
-            ErasedTerm::Atom(ErasedAtom { index: 1 })
+            ersd::Term::Atom(ersd::Atom { index: 1 })
         ));
 
-        let ErasedTerm::Match(ErasedMatch {
+        let ersd::Term::Match(ersd::Match {
             head: mu_head,
             cases: mu_cases,
         }) = &*cases[1]
@@ -1016,27 +1018,27 @@ mod tests {
 
         assert!(matches!(
             &**mu_head,
-            ErasedTerm::Name(ErasedName { string }) if string == "2"
+            ersd::Term::Name(ersd::Name { string }) if string == "2"
         ));
 
         assert_eq!(mu_cases.len(), 3);
 
         assert!(matches!(
             *mu_cases[0],
-            ErasedTerm::Atom(ErasedAtom { index: 0 })
+            ersd::Term::Atom(ersd::Atom { index: 0 })
         ));
 
         assert!(matches!(
             *mu_cases[1],
-            ErasedTerm::Atom(ErasedAtom { index: 1 })
+            ersd::Term::Atom(ersd::Atom { index: 1 })
         ));
 
         assert!(matches!(
             *mu_cases[2],
-            ErasedTerm::Atom(ErasedAtom { index: 2 })
+            ersd::Term::Atom(ersd::Atom { index: 2 })
         ));
 
-        let ErasedTerm::Match(ErasedMatch {
+        let ersd::Term::Match(ersd::Match {
             head: zeta_head,
             cases: zeta_cases,
         }) = &*cases[2]
@@ -1046,24 +1048,24 @@ mod tests {
 
         assert!(matches!(
             &**zeta_head,
-            ErasedTerm::Name(ErasedName { string }) if string == "1"
+            ersd::Term::Name(ersd::Name { string }) if string == "1"
         ));
 
         assert_eq!(zeta_cases.len(), 3);
 
         assert!(matches!(
             *zeta_cases[0],
-            ErasedTerm::Atom(ErasedAtom { index: 1 })
+            ersd::Term::Atom(ersd::Atom { index: 1 })
         ));
 
         assert!(matches!(
             *zeta_cases[1],
-            ErasedTerm::Atom(ErasedAtom { index: 2 })
+            ersd::Term::Atom(ersd::Atom { index: 2 })
         ));
 
         assert!(matches!(
             *zeta_cases[2],
-            ErasedTerm::Atom(ErasedAtom { index: 0 })
+            ersd::Term::Atom(ersd::Atom { index: 0 })
         ));
     }
 }

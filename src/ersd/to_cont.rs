@@ -1,6 +1,3 @@
-mod erased;
-pub use erased::*;
-
 mod entropy;
 use entropy::*;
 
@@ -10,12 +7,12 @@ use frame::*;
 mod lowerer;
 use lowerer::*;
 
-use crate::{cont, core};
+use crate::{cont, ersd};
 
-pub fn to_cont(core_term: &core::ErasedTerm) -> cont::Module {
+pub fn to_cont(erased_term: &ersd::Term) -> cont::Module {
     let mut cont_module = cont::Module::new();
 
-    let (resume, region) = Lowerer::new(&mut cont_module).lower_entry(core_term, &Frame::new());
+    let (resume, region) = Lowerer::new(&mut cont_module).lower_entry(erased_term, &Frame::new());
 
     cont_module.add_func(
         cont::FuncName::from("main"),
@@ -31,25 +28,34 @@ pub fn to_cont(core_term: &core::ErasedTerm) -> cont::Module {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {
+        super::to_cont,
+        crate::{
+            cont,
+            ersd::{
+                Apply, Func, LetRec, Name, Pair, Prim,
+                Term,
+            },
+        },
+    };
 
     #[test]
     fn lowers_recursive_pairs_into_main_region_values() {
-        let term = core::ErasedTerm::LetRec(core::ErasedLetRec {
+        let term = Term::LetRec(LetRec {
             names: vec!["x".into(), "y".into()],
             items: vec![
-                core::ErasedTerm::from(core::ErasedPair {
-                    fst: core::ErasedTerm::Name(core::ErasedName::from("y")).into(),
-                    snd: core::ErasedTerm::Prim(core::ErasedPrim::Int(1)).into(),
+                Term::from(Pair {
+                    fst: Term::Name(Name::from("y")).into(),
+                    snd: Term::Prim(Prim::Int(1)).into(),
                 })
                 .into(),
-                core::ErasedTerm::from(core::ErasedPair {
-                    fst: core::ErasedTerm::Prim(core::ErasedPrim::Int(2)).into(),
-                    snd: core::ErasedTerm::Name(core::ErasedName::from("x")).into(),
+                Term::from(Pair {
+                    fst: Term::Prim(Prim::Int(2)).into(),
+                    snd: Term::Name(Name::from("x")).into(),
                 })
                 .into(),
             ],
-            tail: core::ErasedTerm::Name(core::ErasedName::from("x")).into(),
+            tail: Term::Name(Name::from("x")).into(),
         });
 
         let module = to_cont(&term);
@@ -98,14 +104,14 @@ mod tests {
 
     #[test]
     fn lowers_tail_apply_as_indirect_call_to_resume() {
-        let term = core::ErasedTerm::Apply(core::ErasedApply {
-            head: core::ErasedTerm::Func(core::ErasedFunc {
+        let term = Term::Apply(Apply {
+            head: Term::Func(Func {
                 captures: vec![],
                 param: "x".into(),
-                body: core::ErasedTerm::Name(core::ErasedName::from("x")).into(),
+                body: Term::Name(Name::from("x")).into(),
             })
             .into(),
-            param: core::ErasedTerm::Prim(core::ErasedPrim::Int(7)).into(),
+            param: Term::Prim(Prim::Int(7)).into(),
         });
 
         let module = to_cont(&term);
@@ -124,18 +130,18 @@ mod tests {
 
     #[test]
     fn lowers_apply_in_value_position_through_join_block() {
-        let term = core::ErasedTerm::Pair(core::ErasedPair {
-            fst: core::ErasedTerm::Apply(core::ErasedApply {
-                head: core::ErasedTerm::Func(core::ErasedFunc {
+        let term = Term::Pair(Pair {
+            fst: Term::Apply(Apply {
+                head: Term::Func(Func {
                     captures: vec![],
                     param: "x".into(),
-                    body: core::ErasedTerm::Name(core::ErasedName::from("x")).into(),
+                    body: Term::Name(Name::from("x")).into(),
                 })
                 .into(),
-                param: core::ErasedTerm::Prim(core::ErasedPrim::Int(7)).into(),
+                param: Term::Prim(Prim::Int(7)).into(),
             })
             .into(),
-            snd: core::ErasedTerm::Prim(core::ErasedPrim::Int(1)).into(),
+            snd: Term::Prim(Prim::Int(1)).into(),
         });
 
         let module = to_cont(&term);
