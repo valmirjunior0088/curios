@@ -47,7 +47,7 @@ The grammar covers:
 
 - Dependent function types `(x: A) -> B`, lambdas `x => body`
 - Dependent pair types `(x: A, B)`, pair values `(a, b)`
-- Atom types `{:left, :right}`, atom values `:left`
+- Atom types `'[left, right]`, atom values `'left`
 - Pair elimination `let (x, y) with m => motive = pair; tail`
 - Pattern matching `match x with k => Type; case :tag => body;`
 - Let bindings and recursive groups `let { f : T = body; }; tail`
@@ -69,7 +69,7 @@ The central `Term` enum represents the full surface language:
 | `AtomType` / `Atom` / `Match` | Labeled unions, tags, pattern matching           |
 | `Let` / `LetRec`              | Bindings, mutual recursion                       |
 | `Prim`                        | Built-in values and operations                   |
-| `Name`                        | Bound variables                                  |
+| `Var`                         | Bound variables                                  |
 
 **Key techniques employed:**
 
