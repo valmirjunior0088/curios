@@ -1,6 +1,4 @@
-use {super::Prim, crate::macros::name};
-
-name!(Name);
+use super::{Name, Prim};
 
 pub type Subterm = Box<Term>;
 

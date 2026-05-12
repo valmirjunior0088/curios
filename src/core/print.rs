@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, One, Pair, PairType, Prim,
-        Scope, Split, Term, Two,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, One, Pair, PairType, Prim,
+        Scope, Split, Term, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -16,12 +16,12 @@ fn labels_from(depth: usize, arity: usize) -> Vec<String> {
 }
 
 fn label_terms(labels: &[String]) -> Vec<Term> {
-    labels.iter().map(Name::label).map(Into::into).collect()
+    labels.iter().map(Var::free).map(Into::into).collect()
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
     let label = label_at(depth);
-    let term = Name::label(&label).into();
+    let term = Var::free(&label).into();
     let body = scope.open(&[&term]);
 
     (label, body)
@@ -30,15 +30,15 @@ fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
     let fst = label_at(depth);
     let snd = label_at(depth + 1);
-    let fst_term = Name::label(&fst).into();
-    let snd_term = Name::label(&snd).into();
+    let fst_term = Var::free(&fst).into();
+    let snd_term = Var::free(&snd).into();
     let body = scope.open(&[&fst_term, &snd_term]);
 
     ((fst, snd), body)
 }
 
-fn print_name(name: Name) -> Printer<'static> {
-    pure(name.unwrap().to_string())
+fn print_var(var: Var) -> Printer<'static> {
+    pure(var.unwrap().to_string())
 }
 
 fn print_atom(atom: Atom) -> Printer<'static> {
@@ -337,7 +337,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         ]),
         Term::Split(Split { head, motive, tail }) => {
             let motive_label = label_at(depth + 2);
-            let motive_label_term = Name::label(&motive_label).into();
+            let motive_label_term = Var::free(&motive_label).into();
             let motive = motive.open(&[&motive_label_term]);
             let ((fst_label, snd_label), tail) = open_scope_two(tail, depth);
 
@@ -453,7 +453,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Term::Name(name) => print_name(name),
+        Term::Var(var) => print_var(var),
     }
 }
 
@@ -471,25 +471,25 @@ mod tests {
     fn print_parse_roundtrip_closed_terms() {
         let terms = [
             FuncType::new("x", Type, Type).into(),
-            Func::new("x", Name::label("x")).into(),
+            Func::new("x", Var::free("x")).into(),
             Apply::many(
-                Name::label("f"),
+                Var::free("f"),
                 [Pair::new(Atom::from("a"), Atom::from("b"))],
             ),
             Let::new(
                 "x",
                 AtomType::new(["a", "b"]),
                 Atom::from("a"),
-                Match::new(Name::label("x"), "m", Type, [("a", Type), ("b", Type)]),
+                Match::new(Var::free("x"), "m", Type, [("a", Type), ("b", Type)]),
             )
             .into(),
             LetRec::new(
                 vec![(
                     "id",
                     FuncType::new("x", Type, Type),
-                    Func::new("x", Name::label("x")),
+                    Func::new("x", Var::free("x")),
                 )],
-                Apply::many(Name::label("id"), [Type]),
+                Apply::many(Var::free("id"), [Type]),
             )
             .into(),
         ];

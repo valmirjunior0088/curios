@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Context, Func, Let, Match, Name, Pair, Preempted, Prim, Split, Term,
+        Apply, Context, Func, Let, Match, Pair, Preempted, Prim, Split, Term, Var,
     },
     std::time::{Duration, Instant},
 };
@@ -639,10 +639,10 @@ impl Reduce {
         Step::Continue(let_.tail.open(&[let_.body.as_ref()]))
     }
 
-    fn reduce_name(&self, context: &Context, name: Name) -> Step {
-        match context.definition(name.unwrap()) {
+    fn reduce_var(&self, context: &Context, var: Var) -> Step {
+        match context.definition(var.unwrap()) {
             Some(next) => Step::Continue(next.clone()),
-            None => Step::Break(name.into()),
+            None => Step::Break(var.into()),
         }
     }
 
@@ -658,7 +658,7 @@ impl Reduce {
                 Term::Match(match_) => self.reduce_match(context, match_)?,
                 Term::Let(let_) => self.reduce_let(let_),
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
-                Term::Name(name) => self.reduce_name(context, name),
+                Term::Var(var) => self.reduce_var(context, var),
                 term => Step::Break(term),
             };
 
@@ -674,7 +674,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Let, Name, Type},
+        crate::core::{Atom, Let, Type, Var},
         std::time::Duration,
     };
 
@@ -686,7 +686,7 @@ mod tests {
     fn reduce_apply_beta_reduces() {
         let mut context = context();
 
-        let term = Apply::many(Func::new("x", Name::label("x")), [Atom::from("ok")]);
+        let term = Apply::many(Func::new("x", Var::free("x")), [Atom::from("ok")]);
 
         assert_eq!(reduce(&mut context, &term), Ok(Atom::from("ok").into()));
     }
@@ -701,7 +701,7 @@ mod tests {
             Type,
             "x",
             "y",
-            Pair::new(Name::label("x"), Name::label("y")),
+            Pair::new(Var::free("x"), Var::free("y")),
         )
         .into();
 
@@ -727,24 +727,24 @@ mod tests {
     }
 
     #[test]
-    fn reduce_let_then_name_unfolds_definition() {
+    fn reduce_let_then_var_unfolds_definition() {
         let mut context = context();
 
         context.define("y", &Atom::from("done").into());
 
-        let term = Let::new("x", Type, Name::label("y"), Name::label("x")).into();
+        let term = Let::new("x", Type, Var::free("y"), Var::free("x")).into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Atom::from("done").into()));
     }
 
     #[test]
-    fn reduce_name_cycle_times_out() {
+    fn reduce_var_cycle_times_out() {
         let mut context = context();
 
-        context.define("loop", &Name::label("loop").into());
+        context.define("loop", &Var::free("loop").into());
 
         assert_eq!(
-            reduce(&mut context, &Name::label("loop").into()),
+            reduce(&mut context, &Var::free("loop").into()),
             Err(Preempted)
         );
     }

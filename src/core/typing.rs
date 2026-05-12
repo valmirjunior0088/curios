@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType,
-        Preempted, Prim, Split, Term, Type,
+        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, Pair, PairType,
+        Preempted, Prim, Split, Term, Type, Var,
     },
     crate::ersd,
 };
@@ -155,7 +155,7 @@ fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> 
 
         erase(
             context,
-            &output.open(&[&Name::label(label).into()]),
+            &output.open(&[&Var::free(label).into()]),
             &Type.into(),
         )
         .map(|_| ())
@@ -193,7 +193,7 @@ fn infer_pair_type(context: &mut Context, pt: &PairType) -> Result<Term, Error> 
 
         erase(
             context,
-            &output.open(&[&Name::label(label).into()]),
+            &output.open(&[&Var::free(label).into()]),
             &Type.into(),
         )
         .map(|_| ())
@@ -228,7 +228,7 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
 
         erase(
             context,
-            &motive.open(&[&Name::label(head_label).into()]),
+            &motive.open(&[&Var::free(head_label).into()]),
             &Type.into(),
         )
         .map(|_| ())
@@ -242,15 +242,15 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
     context.with_frame(|context| {
         context.assume(&fst_label, &input);
 
-        context.assume(&snd_label, &output.open(&[&Name::label(&fst_label).into()]));
+        context.assume(&snd_label, &output.open(&[&Var::free(&fst_label).into()]));
 
         erase(
             context,
             &tail.open(&[
-                &Name::label(&fst_label).into(),
-                &Name::label(&snd_label).into(),
+                &Var::free(&fst_label).into(),
+                &Var::free(&snd_label).into(),
             ]),
-            &motive.open(&[&Pair::new(Name::label(fst_label), Name::label(snd_label)).into()]),
+            &motive.open(&[&Pair::new(Var::free(fst_label), Var::free(snd_label)).into()]),
         )
         .map(|_| ())
     })?;
@@ -281,7 +281,7 @@ fn infer_match(context: &mut Context, match_: &Match, term: &Term) -> Result<Ter
 
         erase(
             context,
-            &motive.open(&[&Name::label(head_label).into()]),
+            &motive.open(&[&Var::free(head_label).into()]),
             &Type.into(),
         )
         .map(|_| ())
@@ -315,7 +315,7 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     context.with_frame(|context| {
         context.define_assuming(&label, type_, body);
 
-        infer(context, &tail.open(&[&Name::label(label).into()]))
+        infer(context, &tail.open(&[&Var::free(label).into()]))
     })
 }
 
@@ -328,7 +328,7 @@ fn infer_letrec(context: &mut Context, letrec: &LetRec) -> Result<Term, Error> {
 
     let label_terms = labels
         .iter()
-        .map(Name::label)
+        .map(Var::free)
         .map(Into::into)
         .collect::<Vec<_>>();
 
@@ -374,9 +374,9 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::Match(match_) => infer_match(context, match_, term),
         Term::Let(let_) => infer_let(context, let_),
         Term::LetRec(letrec) => infer_letrec(context, letrec),
-        Term::Name(name) => match context.assumption(name.unwrap()) {
+        Term::Var(var) => match context.assumption(var.unwrap()) {
             Some(type_) => Ok(type_.clone()),
-            None => Err(Error::cannot_infer(name.clone())),
+            None => Err(Error::cannot_infer(var.clone())),
         },
         _ => Err(Error::cannot_infer(term.clone())),
     }
@@ -852,9 +852,9 @@ fn erase_func(
         return Err(Error::type_mismatch(term.clone(), expected.clone()));
     };
 
-    let captures = body.collect().into_iter().collect::<Vec<_>>();
+    let captures = body.free_vars().into_iter().collect::<Vec<_>>();
     let param = context.fresh();
-    let param_term = Name::label(&param).into();
+    let param_term = Var::free(&param).into();
     let body = body.open(&[&param_term]);
 
     let body = context.with_frame(|context| {
@@ -941,17 +941,17 @@ fn erase_split(
 
         erase(
             context,
-            &motive.open(&[&Name::label(head_label).into()]),
+            &motive.open(&[&Var::free(head_label).into()]),
             &Type.into(),
         )
     })?;
 
     let fst = context.fresh();
     let snd = context.fresh();
-    let fst_term = Term::from(Name::label(&fst));
-    let snd_term = Term::from(Name::label(&snd));
+    let fst_term = Term::from(Var::free(&fst));
+    let snd_term = Term::from(Var::free(&snd));
     let tail = tail.open(&[&fst_term, &snd_term]);
-    let tail_type = motive.open(&[&Pair::new(Name::label(&fst), Name::label(&snd)).into()]);
+    let tail_type = motive.open(&[&Pair::new(Var::free(&fst), Var::free(&snd)).into()]);
 
     let erased = context.with_frame(|context| {
         context.assume(&fst, &input);
@@ -1016,7 +1016,7 @@ fn erase_match(
 
         erase(
             context,
-            &motive.open(&[&Name::label(head_label).into()]),
+            &motive.open(&[&Var::free(head_label).into()]),
             &Type.into(),
         )
     })?;
@@ -1058,8 +1058,8 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
 
     let name = context.fresh();
     let erased_body = erase(context, body, body_type)?;
-    let name_term = Name::label(&name).into();
-    let tail = tail.open(&[&name_term]);
+    let var_term = Var::free(&name).into();
+    let tail = tail.open(&[&var_term]);
 
     let tail = context.with_frame(|context| {
         context.define_assuming(&name, body_type, body);
@@ -1088,7 +1088,7 @@ fn erase_letrec(
 
     let label_terms = names
         .iter()
-        .map(Name::label)
+        .map(Var::free)
         .map(Into::into)
         .collect::<Vec<_>>();
 
@@ -1159,10 +1159,10 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         Term::Match(match_) => erase_match(context, match_, term, expected),
         Term::Let(let_) => erase_let(context, let_, expected),
         Term::LetRec(lr) => erase_letrec(context, lr, expected),
-        Term::Name(name) => {
+        Term::Var(var) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
-            Ok(ersd::Name::from(name.unwrap()).into())
+            Ok(ersd::Name::from(var.unwrap()).into())
         }
     }
 }
@@ -1190,7 +1190,7 @@ mod tests {
             "x",
             AtomType::new(["left", "right"]),
             Match::new(
-                Name::label("x"),
+                Var::free("x"),
                 "m",
                 Type,
                 vec![
@@ -1219,7 +1219,7 @@ mod tests {
             "x",
             AtomType::new(["left", "right"]),
             Match::new(
-                Name::label("x"),
+                Var::free("x"),
                 "m",
                 Type,
                 vec![
@@ -1248,8 +1248,8 @@ mod tests {
         ));
 
         let term = Term::from(LetRec::new(
-            vec![("f", func_type.clone(), Func::new("x", Name::label("x")))],
-            Name::label("f"),
+            vec![("f", func_type.clone(), Func::new("x", Var::free("x")))],
+            Var::free("f"),
         ));
 
         assert!(erase(&mut context, &term, &func_type).is_ok());
@@ -1259,10 +1259,10 @@ mod tests {
     fn erase_preempts_on_cyclic_expected_type() {
         let mut context = context();
 
-        context.define("loop", &Name::label("loop").into());
+        context.define("loop", &Var::free("loop").into());
 
         assert!(matches!(
-            erase(&mut context, &Type.into(), &Name::label("loop").into()),
+            erase(&mut context, &Type.into(), &Var::free("loop").into()),
             Err(Error::ConvertPreempted { .. })
         ));
     }
@@ -1274,8 +1274,8 @@ mod tests {
         let type_ = Term::from(AtomType::new(["a"]));
 
         let term = Term::from(LetRec::new(
-            vec![("loop", type_.clone(), Name::label("loop"))],
-            Name::label("loop"),
+            vec![("loop", type_.clone(), Var::free("loop"))],
+            Var::free("loop"),
         ));
 
         assert!(erase(&mut context, &term, &type_).is_ok());
@@ -1317,7 +1317,7 @@ mod tests {
         let type_ = Term::from(FuncType::new("x", atom_type.clone(), pair_type));
         let term = Term::from(Func::new(
             "x",
-            Pair::new(Name::label("x"), Name::label("y")),
+            Pair::new(Var::free("x"), Var::free("y")),
         ));
 
         let mut context = Context::new(Duration::from_secs(1));

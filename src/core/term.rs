@@ -1,54 +1,51 @@
 use {
-    super::{Arity, Many, One, Prim, Two},
-    crate::macros::name,
+    super::{Arity, Atom, Many, One, Prim, Two},
     std::collections::{BTreeMap, BTreeSet},
 };
 
-name!(Atom);
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum NameType {
-    Label(String),
-    Index(usize),
+enum VarType {
+    Free(String),
+    Bound(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Name {
-    type_: NameType,
+pub struct Var {
+    type_: VarType,
 }
 
-impl Name {
-    pub fn label<A>(label: A) -> Self
+impl Var {
+    pub fn free<A>(label: A) -> Self
     where
         A: Into<String>,
     {
         Self {
-            type_: NameType::Label(label.into()),
+            type_: VarType::Free(label.into()),
         }
     }
 
-    fn as_label(&self) -> Option<&str> {
+    fn as_free(&self) -> Option<&str> {
         match &self.type_ {
-            NameType::Label(label) => Some(label),
-            NameType::Index(_) => None,
+            VarType::Free(label) => Some(label),
+            VarType::Bound(_) => None,
         }
     }
 
-    fn index(index: usize) -> Self {
+    fn bound(index: usize) -> Self {
         Self {
-            type_: NameType::Index(index),
+            type_: VarType::Bound(index),
         }
     }
 
-    fn as_index(&self) -> Option<usize> {
+    fn as_bound(&self) -> Option<usize> {
         match &self.type_ {
-            NameType::Label(_) => None,
-            &NameType::Index(index) => Some(index),
+            VarType::Free(_) => None,
+            &VarType::Bound(index) => Some(index),
         }
     }
 
     pub fn unwrap(&self) -> &str {
-        self.as_label().unwrap()
+        self.as_free().unwrap()
     }
 }
 
@@ -96,8 +93,8 @@ where
         self.body.release(terms.as_ref())
     }
 
-    pub fn collect(&self) -> BTreeSet<String> {
-        self.body.collect()
+    pub fn free_vars(&self) -> BTreeSet<String> {
+        self.body.free_vars()
     }
 }
 
@@ -384,60 +381,60 @@ pub enum Term {
     Match(Match),
     Let(Let),
     LetRec(LetRec),
-    Name(Name),
+    Var(Var),
 }
 
 impl Term {
-    pub fn collect(&self) -> BTreeSet<String> {
-        let mut names = BTreeSet::new();
+    pub fn free_vars(&self) -> BTreeSet<String> {
+        let mut vars = BTreeSet::new();
 
-        Visit::new(|_, name| {
-            if let Some(label) = name.as_label() {
-                names.insert(label.to_string());
+        Visit::new(|_, var| {
+            if let Some(label) = var.as_free() {
+                vars.insert(label.to_string());
             }
 
             None
         })
         .visit_term(self);
 
-        names
+        vars
     }
 
     fn shift(&self, amount: usize) -> Self {
-        Visit::new(|depth, name| {
-            name.as_index()
+        Visit::new(|depth, var| {
+            var.as_bound()
                 .filter(|&index| index >= depth)
-                .map(|index| Name::index(index + amount).into())
+                .map(|index| Var::bound(index + amount).into())
         })
         .visit_term(self)
     }
 
     fn capture(&self, labels: &[&str]) -> Self {
-        Visit::new(|depth, name| {
-            name.as_label()
+        Visit::new(|depth, var| {
+            var.as_free()
                 .and_then(|label| {
                     labels
                         .iter()
                         .position(|&candidate| label == candidate)
-                        .map(|index| Name::index(depth + index).into())
+                        .map(|index| Var::bound(depth + index).into())
                 })
                 .or_else(|| {
-                    name.as_index()
+                    var.as_bound()
                         .filter(|&index| index >= depth)
-                        .map(|index| Name::index(index + labels.len()).into())
+                        .map(|index| Var::bound(index + labels.len()).into())
                 })
         })
         .visit_term(self)
     }
 
     fn release(&self, terms: &[&Term]) -> Self {
-        Visit::new(|depth, name| {
-            name.as_index().and_then(|index| {
+        Visit::new(|depth, var| {
+            var.as_bound().and_then(|index| {
                 index
                     .checked_sub(depth)
                     .map(|delta| match delta < terms.len() {
                         true => terms[delta].shift(depth),
-                        false => Name::index(index - terms.len()).into(),
+                        false => Var::bound(index - terms.len()).into(),
                     })
             })
         })
@@ -523,9 +520,9 @@ impl From<LetRec> for Term {
     }
 }
 
-impl From<Name> for Term {
-    fn from(value: Name) -> Self {
-        Self::Name(value)
+impl From<Var> for Term {
+    fn from(value: Var) -> Self {
+        Self::Var(value)
     }
 }
 
@@ -537,7 +534,7 @@ struct Visit<F> {
 
 impl<F> Visit<F>
 where
-    F: FnMut(usize, &Name) -> Option<Term>,
+    F: FnMut(usize, &Var) -> Option<Term>,
 {
     fn new(visit: F) -> Self {
         Self { depth: 0, visit }
@@ -773,8 +770,8 @@ where
             Term::Match(match_) => self.visit_match(match_).into(),
             Term::Let(let_) => self.visit_let(let_).into(),
             Term::LetRec(letrec) => self.visit_letrec(letrec).into(),
-            Term::Name(name) => {
-                (self.visit)(self.depth, name).unwrap_or_else(|| name.clone().into())
+            Term::Var(var) => {
+                (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into())
             }
         }
     }
@@ -786,32 +783,32 @@ mod tests {
 
     #[test]
     fn close_open_substitutes_label_name() {
-        let term = Scope::close(One, &["x"], Name::label("x")).open(&[&Name::label("y").into()]);
+        let term = Scope::close(One, &["x"], Var::free("x")).open(&[&Var::free("y").into()]);
 
-        let name = match term {
-            Term::Name(name) => name,
+        let var = match term {
+            Term::Var(var) => var,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        assert_eq!(name, Name::label("y"));
+        assert_eq!(var, Var::free("y"));
     }
 
     #[test]
     fn close_open_preserves_nested_bind() {
-        let term = Scope::close(One, &["x"], Func::new("y", Name::label("x")))
-            .open(&[&Name::label("z").into()]);
+        let term = Scope::close(One, &["x"], Func::new("y", Var::free("x")))
+            .open(&[&Var::free("z").into()]);
 
         let body = match term {
             Term::Func(body) => body.body,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        let name = match body.open(&[&Name::label("w").into()]) {
-            Term::Name(name) => name,
+        let var = match body.open(&[&Var::free("w").into()]) {
+            Term::Var(var) => var,
             term => panic!("unexpected `{term:?}`"),
         };
 
-        assert_eq!(name, Name::label("z"));
+        assert_eq!(var, Var::free("z"));
     }
 
     #[test]
@@ -819,16 +816,16 @@ mod tests {
         let term = Term::from(Func::new(
             "x",
             Pair::new(
-                Name::label("x"),
+                Var::free("x"),
                 LetRec::new(
-                    vec![("y", Type, Name::label("z"))],
-                    Pair::new(Name::label("y"), Name::label("w")),
+                    vec![("y", Type, Var::free("z"))],
+                    Pair::new(Var::free("y"), Var::free("w")),
                 ),
             ),
         ));
 
         assert_eq!(
-            term.collect(),
+            term.free_vars(),
             BTreeSet::from([String::from("w"), String::from("z")])
         );
     }

@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, Name, Pair, PairType,
+        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, Pair, PairType, Var,
         Preempted, Prim, Split, Term, reduce,
     },
     std::{
@@ -72,7 +72,7 @@ impl Convert {
         that: FuncType,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.input, *that.input);
-        let label = Name::label(context.fresh()).into();
+        let label = Var::free(context.fresh()).into();
         self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
         Ok(true)
     }
@@ -83,7 +83,7 @@ impl Convert {
         this: Func,
         that: Func,
     ) -> Result<bool, Preempted> {
-        let label = Name::label(context.fresh()).into();
+        let label = Var::free(context.fresh()).into();
         self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
         Ok(true)
     }
@@ -101,7 +101,7 @@ impl Convert {
         that: PairType,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.input, *that.input);
-        let label = Name::label(context.fresh()).into();
+        let label = Var::free(context.fresh()).into();
         self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
         Ok(true)
     }
@@ -120,14 +120,14 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.head, *that.head);
 
-        let motive_label = Name::label(context.fresh()).into();
+        let motive_label = Var::free(context.fresh()).into();
         self.enqueue(
             this.motive.open(&[&motive_label]),
             that.motive.open(&[&motive_label]),
         );
 
-        let fst_label = Name::label(context.fresh()).into();
-        let snd_label = Name::label(context.fresh()).into();
+        let fst_label = Var::free(context.fresh()).into();
+        let snd_label = Var::free(context.fresh()).into();
         self.enqueue(
             this.tail.open(&[&fst_label, &snd_label]),
             that.tail.open(&[&fst_label, &snd_label]),
@@ -152,7 +152,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.head, *that.head);
 
-        let label = Name::label(context.fresh()).into();
+        let label = Var::free(context.fresh()).into();
         self.enqueue(this.motive.open(&[&label]), that.motive.open(&[&label]));
 
         if this.cases.len() != that.cases.len() {
@@ -183,7 +183,7 @@ impl Convert {
         }
 
         let labels = (0..this.items.len())
-            .map(|_| Name::label(context.fresh()).into())
+            .map(|_| Var::free(context.fresh()).into())
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
@@ -249,7 +249,7 @@ impl Convert {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Func, FuncType, LetRec, Match, Name, PairType, Type},
+        crate::core::{Atom, Func, FuncType, LetRec, Match, PairType, Type, Var},
         std::time::Duration,
     };
 
@@ -261,9 +261,9 @@ mod tests {
     fn convert_func_type_is_alpha_equivalent() {
         let mut context = context();
 
-        let this = Term::from(FuncType::new("x", Type, Name::label("x")));
+        let this = Term::from(FuncType::new("x", Type, Var::free("x")));
 
-        let that = Term::from(FuncType::new("y", Type, Name::label("y")));
+        let that = Term::from(FuncType::new("y", Type, Var::free("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -272,9 +272,9 @@ mod tests {
     fn convert_func_is_alpha_equivalent() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Name::label("x")));
+        let this = Term::from(Func::new("x", Var::free("x")));
 
-        let that = Term::from(Func::new("y", Name::label("y")));
+        let that = Term::from(Func::new("y", Var::free("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
@@ -306,12 +306,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             "x",
-            Term::Prim(Prim::int_add(Name::label("x"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         let that = Term::from(Func::new(
             "y",
-            Term::Prim(Prim::int_add(Name::label("y"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_add(Var::free("y"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
@@ -323,12 +323,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             "x",
-            Term::Prim(Prim::int_add(Name::label("x"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         let that = Term::from(Func::new(
             "x",
-            Term::Prim(Prim::int_sub(Name::label("x"), Term::Prim(Prim::IntValue(1)))),
+            Term::Prim(Prim::int_sub(Var::free("x"), Term::Prim(Prim::IntValue(1)))),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));
@@ -339,13 +339,13 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(LetRec::new(
-            vec![("x", Type, Name::label("x"))],
-            Name::label("x"),
+            vec![("x", Type, Var::free("x"))],
+            Var::free("x"),
         ));
 
         let that = Term::from(LetRec::new(
-            vec![("y", Type, Name::label("y"))],
-            Name::label("y"),
+            vec![("y", Type, Var::free("y"))],
+            Var::free("y"),
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
@@ -355,15 +355,15 @@ mod tests {
     fn convert_times_out_on_pathological_inputs() {
         let mut context = context();
 
-        context.define("loop", &Name::label("loop").into());
+        context.define("loop", &Var::free("loop").into());
 
         let this = Term::from(PairType::new(
             "x",
-            Apply::many(Func::new("z", Name::label("z")), [Name::label("loop")]),
-            Name::label("x"),
+            Apply::many(Func::new("z", Var::free("z")), [Var::free("loop")]),
+            Var::free("x"),
         ));
 
-        let that = Term::from(PairType::new("y", Name::label("loop"), Name::label("y")));
+        let that = Term::from(PairType::new("y", Var::free("loop"), Var::free("y")));
 
         assert_eq!(convert(&mut context, &this, &that), Err(Preempted));
     }

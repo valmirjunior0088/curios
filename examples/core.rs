@@ -1,5 +1,5 @@
 use curios::core::{
-    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType, Split, Term,
+    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Split, Term, Var,
     Type,
 };
 
@@ -8,7 +8,7 @@ fn main() {
         vec![(
             "id",
             FuncType::new("_", Type, Type),
-            Func::new("x", Name::label("x")),
+            Func::new("x", Var::free("x")),
         )],
         Let::new(
             "pair_ty",
@@ -17,7 +17,7 @@ fn main() {
                 "tag",
                 AtomType::new(["left", "right"]),
                 Match::new(
-                    Name::label("tag"),
+                    Var::free("tag"),
                     "_",
                     Type,
                     [("left", Type), ("right", Type)],
@@ -25,20 +25,20 @@ fn main() {
             ),
             Let::new(
                 "p",
-                Name::label("pair_ty"),
+                Var::free("pair_ty"),
                 Pair::new(Atom::from("left"), Type),
                 Split::new(
-                    Name::label("p"),
+                    Var::free("p"),
                     "_",
                     Type,
                     "x",
                     "y",
                     Match::new(
-                        Name::label("x"),
+                        Var::free("x"),
                         "_",
                         Type,
                         [
-                            ("left", Apply::many(Name::label("id"), [Name::label("y")])),
+                            ("left", Apply::many(Var::free("id"), [Var::free("y")])),
                             ("right", Type.into()),
                         ],
                     ),

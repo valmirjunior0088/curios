@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Name, Pair, PairType, Prim, Split,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Prim, Split, Var,
         Term, Type,
     },
     crate::parser::{
@@ -33,7 +33,7 @@ fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier()
         .flat_map(|identifier| match KEYWORDS.contains(&identifier) {
             true => fail(format!("'{identifier}' is a reserved keyword")),
-            false => pure(Name::label(identifier).into()),
+            false => pure(Var::free(identifier).into()),
         })
 }
 
@@ -506,9 +506,9 @@ mod tests {
                 vec![(
                     "id",
                     FuncType::new("x", Type, Type),
-                    Func::new("x", Name::label("x"))
+                    Func::new("x", Var::free("x"))
                 )],
-                Apply::many(Name::label("id"), [Name::label("a")]),
+                Apply::many(Var::free("id"), [Var::free("a")]),
             )
             .into(),
         );
@@ -526,7 +526,7 @@ mod tests {
                 "x",
                 AtomType::new(["hot", "cold"]),
                 Atom::from("hot"),
-                Pair::new(Name::label("x"), Atom::from("cold")),
+                Pair::new(Var::free("x"), Atom::from("cold")),
             )
             .into(),
         );
@@ -546,7 +546,7 @@ mod tests {
                 Type,
                 "x",
                 "y",
-                Name::label("p"),
+                Var::free("p"),
             )
             .into(),
         );

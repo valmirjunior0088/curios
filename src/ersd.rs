@@ -1,6 +1,9 @@
 mod prim;
 pub use prim::*;
 
+mod names;
+pub use names::*;
+
 mod term;
 pub use term::*;
 
