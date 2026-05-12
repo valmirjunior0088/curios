@@ -7,16 +7,16 @@ use {
 #[derive(Debug)]
 pub struct ModuleEmitter<'a, 'b> {
     table: &'a Table<'a>,
-    module: &'b mut wasm::Module,
     start_expr: wasm::Expr,
+    module: &'b mut wasm::Module,
 }
 
 impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub fn new(table: &'a Table<'a>, module: &'b mut wasm::Module) -> Self {
         Self {
             table,
-            module,
             start_expr: Default::default(),
+            module,
         }
     }
 
