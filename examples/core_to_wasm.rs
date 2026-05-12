@@ -7,13 +7,13 @@ fn main() {
     let term = "
         let pair_ty : Type =
           (tag : '[left, right],
-            match tag with k => Type;
+            match tag with _ => Type;
             case 'left => Int;
             case 'right => Flt;);
         let pair : pair_ty = ('left, 42i);
-        let score : (p : pair_ty) -> Int = p =>
-          let (tag, payload) with q => Int = p;
-          match tag with k => Int;
+        let score : (_ : pair_ty) -> Int = p =>
+          let (tag, payload) with _ => Int = p;
+          match tag with _ => Int;
           case 'left => 42i;
           case 'right => 7i;;
         score pair

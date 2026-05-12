@@ -7,7 +7,7 @@ fn main() {
     let program: Term = LetRec::new(
         vec![(
             "id",
-            FuncType::new("x", Type, Type),
+            FuncType::new("_", Type, Type),
             Func::new("x", Name::label("x")),
         )],
         Let::new(
@@ -18,7 +18,7 @@ fn main() {
                 AtomType::new(["left", "right"]),
                 Match::new(
                     Name::label("tag"),
-                    "m",
+                    "_",
                     Type,
                     [("left", Type), ("right", Type)],
                 ),
@@ -29,13 +29,13 @@ fn main() {
                 Pair::new(Atom::from("left"), Type),
                 Split::new(
                     Name::label("p"),
-                    "q",
+                    "_",
                     Type,
                     "x",
                     "y",
                     Match::new(
                         Name::label("x"),
-                        "k",
+                        "_",
                         Type,
                         [
                             ("left", Apply::many(Name::label("id"), [Name::label("y")])),
