@@ -1,10 +1,10 @@
 use {
     super::{
         Apply, Atom, AtomType, FltPrim, FltType, Func, FuncType, IntPrim, IntType, Let, LetRec,
-        Match, Name, Pair, PairType, Prim, Split, Term, Type,
+        Match, Name, Pair, PairType, Split, Term, Type,
     },
     crate::parser::{
-        Parser, ParserError, catch, fail, lazy, many_until, many1, pure, run_parser, sep_by0,
+        Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0,
         sep_by1, take_eof, take_exact, take_while,
     },
     std::str::FromStr,
@@ -27,8 +27,14 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
+const KEYWORDS: &[&str] = &["let", "match", "with", "case"];
+
 fn parse_label<'a>() -> Parser<'a, Term> {
-    parse_identifier().map(Name::label).map(Into::into)
+    parse_identifier()
+        .flat_map(|identifier| match KEYWORDS.contains(&identifier) {
+            true => fail(format!("'{identifier}' is a reserved keyword")),
+            false => pure(Name::label(identifier).into()),
+        })
 }
 
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
@@ -52,18 +58,19 @@ fn parse_flt_type<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Flt")).map(|()| Term::Prim(FltType.into()))
 }
 
-fn parse_int_literal<'a>() -> Parser<'a, i32> {
+fn parse_int_value<'a>() -> Parser<'a, Term> {
     take_while(|char| char == '-' || char.is_ascii_digit())
-        .flat_map(|digits| match digits.parse() {
+        .flat_map::<i32, _>(|digits| match digits.parse() {
             Ok(value) => pure(value),
             Err(_) => fail("Expected integer literal"),
         })
         .and_drop(parse_whitespace())
+        .map(|value| Term::Prim(IntPrim::Value(value).into()))
 }
 
-fn parse_flt_literal<'a>() -> Parser<'a, f32> {
+fn parse_flt_value<'a>() -> Parser<'a, Term> {
     take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
-        .flat_map(|digits| {
+        .flat_map::<f32, _>(|digits| {
             let has_dot = digits.contains('.');
 
             let has_decimal = digits
@@ -86,21 +93,16 @@ fn parse_flt_literal<'a>() -> Parser<'a, f32> {
             }
         })
         .and_drop(parse_whitespace())
+        .map(|value| Term::Prim(FltPrim::Value(value.to_bits()).into()))
 }
 
-fn parse_int<'a>() -> Parser<'a, Term> {
-    parse_int_literal().map(|value| Term::Prim(IntPrim::Value(value).into()))
-}
-
-fn parse_flt<'a>() -> Parser<'a, Term> {
-    parse_flt_literal().map(|value| Term::Prim(FltPrim::Value(value.to_bits()).into()))
-}
-
-fn parse_prim<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Int.eql"))
-        .and_keep(lazy(parse_atomic_term))
-        .and(lazy(parse_atomic_term))
-        .map(|(left, right)| Term::Prim(IntPrim::eql(left, right).into()))
+fn parse_int_prim<'a>() -> Parser<'a, Term> {
+    parse_int_type()
+        .or(parse_int_value())
+        .or(catch(parse_keyword("Int.eql"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(IntPrim::eql(left, right).into())))
         .or(catch(parse_keyword("Int.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
@@ -113,6 +115,11 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|(left, right)| Term::Prim(IntPrim::mul(left, right).into())))
+}
+
+fn parse_flt_prim<'a>() -> Parser<'a, Term> {
+    parse_flt_type()
+        .or(parse_flt_value())
         .or(catch(parse_keyword("Flt.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
@@ -125,6 +132,10 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|(left, right)| Term::Prim(FltPrim::mul(left, right).into())))
+}
+
+fn parse_prim<'a>() -> Parser<'a, Term> {
+    parse_flt_prim().or(parse_int_prim())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
@@ -207,7 +218,8 @@ fn parse_match_case<'a>() -> Parser<'a, (Atom, Term)> {
 fn parse_match<'a>() -> Parser<'a, Term> {
     catch(
         parse_keyword("match")
-            .and_keep(lazy(|| parse_term_until(|| catch(parse_keyword("with")))))
+            .and_keep(lazy(parse_term))
+            .and_drop(parse_keyword("with"))
             .and(parse_identifier())
             .and_drop(parse_literal("=>")),
     )
@@ -274,10 +286,6 @@ fn parse_let<'a>() -> Parser<'a, Term> {
 
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     parse_type()
-        .or(parse_int_type())
-        .or(parse_flt_type())
-        .or(parse_flt())
-        .or(parse_int())
         .or(parse_prim())
         .or(parse_atom_type())
         .or(parse_atom())
@@ -287,10 +295,7 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
         .or(parse_label())
 }
 
-fn parse_term_until<'a, P>(p: P) -> Parser<'a, Term>
-where
-    P: FnMut() -> Parser<'a, ()> + 'a,
-{
+fn parse_term<'a>() -> Parser<'a, Term> {
     parse_let_rec()
         .or(parse_split())
         .or(parse_let())
@@ -298,12 +303,8 @@ where
         .or(parse_func_type())
         .or(parse_func())
         .or(parse_atomic_term()
-            .and(many_until(parse_atomic_term, p))
+            .and(many0(parse_atomic_term))
             .map(|(head, params)| Apply::many(head, params)))
-}
-
-fn parse_term<'a>() -> Parser<'a, Term> {
-    parse_term_until(|| fail(""))
 }
 
 impl FromStr for Term {
@@ -396,6 +397,19 @@ mod tests {
                 [(Atom::from("foo"), Atom::from("foo"))],
             )
             .into(),
+        );
+    }
+
+    #[test]
+    fn parse_int_literal_and_flt_literal_are_disambiguated() {
+        assert_eq!(
+            "42".parse::<Term>().unwrap(),
+            Term::Prim(IntPrim::Value(42).into())
+        );
+
+        assert_eq!(
+            "42.0".parse::<Term>().unwrap(),
+            Term::Prim(FltPrim::Value(42.0_f32.to_bits()).into())
         );
     }
 

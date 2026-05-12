@@ -1,5 +1,5 @@
 use {
-    super::{Arity, FltPrim, FltType, IntPrim, IntType, Many, One, Prim, Two},
+    super::{Arity, FltPrim, IntPrim, Many, One, Prim, Two},
     crate::macros::name,
     std::collections::{BTreeMap, BTreeSet},
 };

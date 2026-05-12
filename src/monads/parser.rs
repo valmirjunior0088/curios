@@ -335,41 +335,6 @@ where
     })
 }
 
-pub fn many_until<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
-where
-    T: 'a,
-    S: 'a,
-    F: FnMut() -> Parser<'a, T> + 'a,
-    G: FnMut() -> Parser<'a, S> + 'a,
-{
-    Parser::new(move |mut state| {
-        let mut items = Vec::new();
-
-        loop {
-            match g().parse(state) {
-                Ok((_, state)) => return Ok((items, state)),
-                Err(error) if error.is_uncaught(state) => return Err(error),
-                Err(_) => {}
-            }
-
-            let offset = state.offset;
-
-            let (item, next_state) = match f().parse(state) {
-                Ok(output) => output,
-                Err(error) if error.is_uncaught(state) => return Err(error),
-                Err(_) => return Ok((items, state)),
-            };
-
-            if offset == next_state.offset {
-                panic!("Infinite repetition");
-            }
-
-            items.push(item);
-            state = next_state;
-        }
-    })
-}
-
 pub fn sep_by0<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,
