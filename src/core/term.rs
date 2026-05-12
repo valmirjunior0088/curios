@@ -549,6 +549,41 @@ where
 
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
         match prim {
+            Prim::NatType => Prim::NatType,
+            Prim::NatValue(value) => Prim::NatValue(*value),
+            Prim::NatEql(left, right) => {
+                Prim::NatEql(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatNeq(left, right) => {
+                Prim::NatNeq(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatAdd(left, right) => {
+                Prim::NatAdd(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatSub(left, right) => {
+                Prim::NatSub(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatMul(left, right) => {
+                Prim::NatMul(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatDiv(left, right) => {
+                Prim::NatDiv(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatRem(left, right) => {
+                Prim::NatRem(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatLt(left, right) => {
+                Prim::NatLt(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatGt(left, right) => {
+                Prim::NatGt(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatLte(left, right) => {
+                Prim::NatLte(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatGte(left, right) => {
+                Prim::NatGte(self.visit_subterm(left), self.visit_subterm(right))
+            }
             Prim::IntType => Prim::IntType,
             Prim::IntValue(value) => Prim::IntValue(*value),
             Prim::IntEql(left, right) => {
@@ -574,6 +609,68 @@ where
             Prim::FltMul(left, right) => {
                 Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
             }
+            Prim::IntNeg(inner) => Prim::IntNeg(self.visit_subterm(inner)),
+            Prim::IntNeq(left, right) => {
+                Prim::IntNeq(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::IntDiv(left, right) => {
+                Prim::IntDiv(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::IntRem(left, right) => {
+                Prim::IntRem(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::IntLt(left, right) => {
+                Prim::IntLt(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::IntGt(left, right) => {
+                Prim::IntGt(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::IntLte(left, right) => {
+                Prim::IntLte(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::IntGte(left, right) => {
+                Prim::IntGte(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltNeg(inner) => Prim::FltNeg(self.visit_subterm(inner)),
+            Prim::FltAbs(inner) => Prim::FltAbs(self.visit_subterm(inner)),
+            Prim::FltSqrt(inner) => Prim::FltSqrt(self.visit_subterm(inner)),
+            Prim::FltFloor(inner) => Prim::FltFloor(self.visit_subterm(inner)),
+            Prim::FltCeil(inner) => Prim::FltCeil(self.visit_subterm(inner)),
+            Prim::FltTrunc(inner) => Prim::FltTrunc(self.visit_subterm(inner)),
+            Prim::FltNearest(inner) => Prim::FltNearest(self.visit_subterm(inner)),
+            Prim::FltDiv(left, right) => {
+                Prim::FltDiv(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltMin(left, right) => {
+                Prim::FltMin(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltMax(left, right) => {
+                Prim::FltMax(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltEql(left, right) => {
+                Prim::FltEql(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltNeq(left, right) => {
+                Prim::FltNeq(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltLt(left, right) => {
+                Prim::FltLt(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltGt(left, right) => {
+                Prim::FltGt(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltLte(left, right) => {
+                Prim::FltLte(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltGte(left, right) => {
+                Prim::FltGte(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::NatToInt(inner) => Prim::NatToInt(self.visit_subterm(inner)),
+            Prim::IntToNat(inner) => Prim::IntToNat(self.visit_subterm(inner)),
+            Prim::IntToFlt(inner) => Prim::IntToFlt(self.visit_subterm(inner)),
+            Prim::NatToFlt(inner) => Prim::NatToFlt(self.visit_subterm(inner)),
+            Prim::FltToInt(inner) => Prim::FltToInt(self.visit_subterm(inner)),
+            Prim::FltToNat(inner) => Prim::FltToNat(self.visit_subterm(inner)),
         }
     }
 

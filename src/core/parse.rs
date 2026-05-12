@@ -51,13 +51,27 @@ fn parse_type<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_int_value<'a>() -> Parser<'a, Term> {
-    take_while(|char| char == '-' || char.is_ascii_digit())
-        .flat_map::<i32, _>(|digits| match digits.parse() {
-            Ok(value) => pure(value),
-            Err(_) => fail("Expected integer literal"),
-        })
-        .and_drop(parse_whitespace())
-        .map(|value| Term::Prim(Prim::IntValue(value)))
+    catch(
+        take_while(|char| char == '-' || char.is_ascii_digit())
+            .flat_map::<i32, _>(|digits| match digits.parse() {
+                Ok(value) => pure(value),
+                Err(_) => fail("Expected integer literal"),
+            })
+            .and_drop(parse_keyword("i")),
+    )
+    .map(|value| Term::Prim(Prim::IntValue(value)))
+}
+
+fn parse_nat_value<'a>() -> Parser<'a, Term> {
+    catch(
+        take_while(|char| char.is_ascii_digit())
+            .flat_map::<u32, _>(|digits| match digits.parse() {
+                Ok(value) => pure(value),
+                Err(_) => fail("Expected natural literal"),
+            })
+            .and_drop(parse_keyword("n")),
+    )
+    .map(|value| Term::Prim(Prim::NatValue(value)))
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -88,6 +102,56 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
         .map(|value: f32| Term::Prim(Prim::FltValue(value.to_bits())))
 }
 
+fn parse_nat_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Nat"))
+        .map(|()| Term::Prim(Prim::NatType))
+        .or(parse_nat_value())
+        .or(catch(parse_keyword("Nat.eql"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_eql(left, right))))
+        .or(catch(parse_keyword("Nat.neq"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_neq(left, right))))
+        .or(catch(parse_keyword("Nat.add"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_add(left, right))))
+        .or(catch(parse_keyword("Nat.sub"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_sub(left, right))))
+        .or(catch(parse_keyword("Nat.mul"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_mul(left, right))))
+        .or(catch(parse_keyword("Nat.div"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_div(left, right))))
+        .or(catch(parse_keyword("Nat.rem"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_rem(left, right))))
+        .or(catch(parse_keyword("Nat.lt"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_lt(left, right))))
+        .or(catch(parse_keyword("Nat.gt"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_gt(left, right))))
+        .or(catch(parse_keyword("Nat.lte"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_lte(left, right))))
+        .or(catch(parse_keyword("Nat.gte"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::nat_gte(left, right))))
+}
+
 fn parse_int_prim<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("Int"))
         .map(|()| Term::Prim(Prim::IntType))
@@ -96,6 +160,10 @@ fn parse_int_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|(left, right)| Term::Prim(Prim::int_eql(left, right))))
+        .or(catch(parse_keyword("Int.neq"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_neq(left, right))))
         .or(catch(parse_keyword("Int.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
@@ -108,6 +176,33 @@ fn parse_int_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|(left, right)| Term::Prim(Prim::int_mul(left, right))))
+        .or(catch(parse_keyword("Int.neg"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::int_neg(inner))))
+        .or(catch(parse_keyword("Int.div"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_div(left, right))))
+        .or(catch(parse_keyword("Int.rem"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_rem(left, right))))
+        .or(catch(parse_keyword("Int.lt"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_lt(left, right))))
+        .or(catch(parse_keyword("Int.gt"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_gt(left, right))))
+        .or(catch(parse_keyword("Int.lte"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_lte(left, right))))
+        .or(catch(parse_keyword("Int.gte"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::int_gte(left, right))))
 }
 
 fn parse_flt_prim<'a>() -> Parser<'a, Term> {
@@ -126,10 +221,91 @@ fn parse_flt_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|(left, right)| Term::Prim(Prim::flt_mul(left, right))))
+        .or(catch(parse_keyword("Flt.neg"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_neg(inner))))
+        .or(catch(parse_keyword("Flt.abs"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_abs(inner))))
+        .or(catch(parse_keyword("Flt.sqrt"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_sqrt(inner))))
+        .or(catch(parse_keyword("Flt.floor"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_floor(inner))))
+        .or(catch(parse_keyword("Flt.ceil"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_ceil(inner))))
+        .or(catch(parse_keyword("Flt.trunc"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_trunc(inner))))
+        .or(catch(parse_keyword("Flt.nearest"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_nearest(inner))))
+        .or(catch(parse_keyword("Flt.div"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_div(left, right))))
+        .or(catch(parse_keyword("Flt.min"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_min(left, right))))
+        .or(catch(parse_keyword("Flt.max"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_max(left, right))))
+        .or(catch(parse_keyword("Flt.eql"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_eql(left, right))))
+        .or(catch(parse_keyword("Flt.neq"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_neq(left, right))))
+        .or(catch(parse_keyword("Flt.lt"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_lt(left, right))))
+        .or(catch(parse_keyword("Flt.gt"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_gt(left, right))))
+        .or(catch(parse_keyword("Flt.lte"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_lte(left, right))))
+        .or(catch(parse_keyword("Flt.gte"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::flt_gte(left, right))))
+}
+
+fn parse_conv_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Nat.to-int"))
+        .and_keep(lazy(parse_atomic_term))
+        .map(|inner| Term::Prim(Prim::nat_to_int(inner)))
+        .or(catch(parse_keyword("Int.to-nat"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::int_to_nat(inner))))
+        .or(catch(parse_keyword("Int.to-flt"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::int_to_flt(inner))))
+        .or(catch(parse_keyword("Nat.to-flt"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::nat_to_flt(inner))))
+        .or(catch(parse_keyword("Flt.to-int"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_to_int(inner))))
+        .or(catch(parse_keyword("Flt.to-nat"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::flt_to_nat(inner))))
 }
 
 fn parse_prim<'a>() -> Parser<'a, Term> {
-    parse_flt_prim().or(parse_int_prim())
+    parse_flt_prim()
+        .or(parse_int_prim())
+        .or(parse_nat_prim())
+        .or(parse_conv_prim())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
@@ -397,8 +573,13 @@ mod tests {
     #[test]
     fn parse_int_literal_and_flt_literal_are_disambiguated() {
         assert_eq!(
-            "42".parse::<Term>().unwrap(),
+            "42i".parse::<Term>().unwrap(),
             Term::Prim(Prim::IntValue(42))
+        );
+
+        assert_eq!(
+            "42n".parse::<Term>().unwrap(),
+            Term::Prim(Prim::NatValue(42))
         );
 
         assert_eq!(
@@ -411,9 +592,14 @@ mod tests {
     fn parse_prim() {
         assert_eq!("Int".parse::<Term>().unwrap(), Term::Prim(Prim::IntType));
         assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(Prim::FltType));
+        assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
         assert_eq!(
-            "42".parse::<Term>().unwrap(),
+            "42i".parse::<Term>().unwrap(),
             Term::Prim(Prim::IntValue(42))
+        );
+        assert_eq!(
+            "42n".parse::<Term>().unwrap(),
+            Term::Prim(Prim::NatValue(42))
         );
         assert_eq!(
             "1.5".parse::<Term>().unwrap(),
@@ -421,10 +607,18 @@ mod tests {
         );
 
         assert_eq!(
-            "Int.add 1 2".parse::<Term>().unwrap(),
+            "Int.add 1i 2i".parse::<Term>().unwrap(),
             Term::Prim(Prim::int_add(
                 Term::Prim(Prim::IntValue(1)),
                 Term::Prim(Prim::IntValue(2))
+            ))
+        );
+
+        assert_eq!(
+            "Nat.add 1n 2n".parse::<Term>().unwrap(),
+            Term::Prim(Prim::nat_add(
+                Term::Prim(Prim::NatValue(1)),
+                Term::Prim(Prim::NatValue(2))
             ))
         );
 

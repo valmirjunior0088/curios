@@ -10,12 +10,12 @@ fn main() {
             match tag with k => Type;
             case 'left => Int;
             case 'right => Flt;);
-        let pair : pair_ty = ('left, 42);
+        let pair : pair_ty = ('left, 42i);
         let score : (p : pair_ty) -> Int = p =>
-            let (tag, payload) with q => Int = p;
-            match tag with k => Int;
-            case 'left => 42;
-            case 'right => 7;;
+          let (tag, payload) with q => Int = p;
+          match tag with k => Int;
+          case 'left => 42i;
+          case 'right => 7i;;
         score pair
         "
     .parse()
