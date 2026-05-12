@@ -30,7 +30,6 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
 fn print_data<'a>(value: &'a Data) -> Printer<'a> {
     match value {
         Data::Unit => pure("()"),
-        Data::Bln(value) => pure(value.to_string()),
         Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
@@ -57,11 +56,6 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
 
 fn print_code<'a>(op: &'a Code) -> Printer<'a> {
     match op {
-        Code::BlnNot(operand) => flat([pure("bln.not"), pure(" "), print_value_name(operand)]),
-        Code::BlnAnd(left, right) => flat([pure("bln.and"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),
-        Code::BlnOr(left, right) => flat([pure("bln.or"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),
-        Code::BlnEql(left, right) => flat([pure("bln.eql"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),
-        Code::BlnNeq(left, right) => flat([pure("bln.neq"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),
         Code::NatEql(left, right) => flat([pure("nat.eql"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),
         Code::NatNeq(left, right) => flat([pure("nat.neq"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),
         Code::NatAdd(left, right) => flat([pure("nat.add"), pure(" "), print_value_name(left), pure(", "), print_value_name(right)]),

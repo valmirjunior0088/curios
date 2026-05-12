@@ -7,10 +7,6 @@ pub type ErasedSubterm = Box<ErasedTerm>;
 #[derive(Debug)]
 pub enum ErasedPrim {
     Unit,
-    Bln(bool),
-    BlnNot(ErasedSubterm),
-    BlnAnd(ErasedSubterm, ErasedSubterm),
-    BlnOr(ErasedSubterm, ErasedSubterm),
     Nat(u32),
     NatEql(ErasedSubterm, ErasedSubterm),
     NatAdd(ErasedSubterm, ErasedSubterm),
@@ -31,12 +27,6 @@ pub enum ErasedPrim {
 impl From<()> for ErasedPrim {
     fn from((): ()) -> Self {
         Self::Unit
-    }
-}
-
-impl From<bool> for ErasedPrim {
-    fn from(value: bool) -> Self {
-        Self::Bln(value)
     }
 }
 
@@ -132,12 +122,6 @@ impl From<ErasedPrim> for ErasedTerm {
 
 impl From<()> for ErasedTerm {
     fn from(value: ()) -> Self {
-        ErasedPrim::from(value).into()
-    }
-}
-
-impl From<bool> for ErasedTerm {
-    fn from(value: bool) -> Self {
         ErasedPrim::from(value).into()
     }
 }

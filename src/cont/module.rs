@@ -3,7 +3,6 @@ use super::{BlockName, ClsrName, FuncName, ValueName};
 #[derive(Debug)]
 pub enum Data {
     Unit,
-    Bln(bool),
     Nat(u32),
     Int(i32),
     Flt(f32),
@@ -15,11 +14,6 @@ pub enum Data {
 
 #[derive(Debug)]
 pub enum Code {
-    BlnNot(ValueName),
-    BlnAnd(ValueName, ValueName),
-    BlnOr(ValueName, ValueName),
-    BlnEql(ValueName, ValueName),
-    BlnNeq(ValueName, ValueName),
     NatEql(ValueName, ValueName),
     NatNeq(ValueName, ValueName),
     NatAdd(ValueName, ValueName),
