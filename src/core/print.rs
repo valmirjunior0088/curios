@@ -363,11 +363,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Term::AtomType(AtomType { atoms }) => flat([
-            pure("'{"),
+            pure("'["),
             sep_flat(atoms.into_iter().map(|atom| pure(atom.string)), || {
                 pure(", ")
             }),
-            pure("}"),
+            pure("]"),
         ]),
         Term::Atom(atom) => print_atom(atom),
         Term::Match(Match {

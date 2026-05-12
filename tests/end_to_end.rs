@@ -8,7 +8,7 @@ use {
 fn pipeline_lowers_and_runs_core_term() {
     let term = "
         let pair_ty : Type =
-          (tag : '{left, right},
+          (tag : '[left, right],
             match tag with k => Type;
             case 'left => Int;
             case 'right => Flt;);

@@ -317,12 +317,12 @@ fn parse_atom<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_atom_type<'a>() -> Parser<'a, Term> {
-    parse_literal("'{")
+    parse_literal("'[")
         .and_keep(sep_by0(
             || parse_identifier().map(Atom::from),
             || parse_literal(","),
         ))
-        .and_drop(parse_literal("}"))
+        .and_drop(parse_literal("]"))
         .map(|atoms| AtomType::new(atoms).into())
 }
 
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn parse_let_pair_and_atoms() {
-        let term = "let x : '{hot, cold} = 'hot; (x, 'cold)"
+        let term = "let x : '[hot, cold] = 'hot; (x, 'cold)"
             .parse::<Term>()
             .unwrap();
 
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn parse_match_single_case() {
-        let term = "match 'foo with k => '{foo}; case 'foo => 'foo;"
+        let term = "match 'foo with k => '[foo]; case 'foo => 'foo;"
             .parse::<Term>()
             .unwrap();
 

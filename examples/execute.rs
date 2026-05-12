@@ -5,7 +5,7 @@ fn main() {
         let { id : (x : Type) -> Type = x => x };
         let witness : Type = id Int;
         let pair_ty : Type =
-          (tag : '{left, right},
+          (tag : '[left, right],
             match tag with k => Type;
             case 'left => Int;
             case 'right => Flt;);
