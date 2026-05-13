@@ -56,6 +56,12 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
+    LstType(Subterm),
+    Lst(Vec<Subterm>),
+    LstLen(Subterm),
+    LstGet(Subterm, Subterm),
+    LstSlice(Subterm, Subterm, Subterm),
+    LstConcat(Subterm, Subterm),
 }
 
 impl Prim {
@@ -427,5 +433,50 @@ impl Prim {
         T: Into<Term>,
     {
         Self::FltToNat(inner.into().into())
+    }
+
+    pub fn lst_type<T>(elem: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::LstType(elem.into().into())
+    }
+
+    pub fn lst_len<L>(list: L) -> Self
+    where
+        L: Into<Term>,
+    {
+        Self::LstLen(list.into().into())
+    }
+
+    pub fn lst_get<I, L>(index: I, list: L) -> Self
+    where
+        I: Into<Term>,
+        L: Into<Term>,
+    {
+        Self::LstGet(index.into().into(), list.into().into())
+    }
+
+    pub fn lst_slice<S, E, L>(start: S, end: E, list: L) -> Self
+    where
+        S: Into<Term>,
+        E: Into<Term>,
+        L: Into<Term>,
+    {
+        Self::LstSlice(start.into().into(), end.into().into(), list.into().into())
+    }
+
+    pub fn lst_concat<L, R>(left: L, right: R) -> Self
+    where
+        L: Into<Term>,
+        R: Into<Term>,
+    {
+        Self::LstConcat(left.into().into(), right.into().into())
+    }
+}
+
+impl<A: Into<Term>> From<Vec<A>> for Prim {
+    fn from(items: Vec<A>) -> Self {
+        Self::Lst(items.into_iter().map(|a| a.into().into()).collect())
     }
 }

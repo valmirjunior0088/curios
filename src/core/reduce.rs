@@ -560,6 +560,59 @@ impl Reduce {
                     inner => Term::Prim(Prim::flt_to_nat(inner)),
                 })
             }
+            Prim::LstType(elem) => {
+                let elem = self.reduce(context, elem.as_ref().clone())?;
+                Ok(Term::Prim(Prim::lst_type(elem)))
+            }
+            Prim::Lst(elems) => {
+                let elems = elems
+                    .iter()
+                    .map(|e| self.reduce(context, e.as_ref().clone()).map(|t| t.into()))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Term::Prim(Prim::Lst(elems)))
+            }
+            Prim::LstLen(list) => {
+                let list = self.reduce(context, list.as_ref().clone())?;
+                Ok(match list {
+                    Term::Prim(Prim::Lst(elems)) => Term::Prim(Prim::Nat(elems.len() as u32)),
+                    list => Term::Prim(Prim::lst_len(list)),
+                })
+            }
+            Prim::LstGet(index, list) => {
+                let index = self.reduce(context, index.as_ref().clone())?;
+                let list = self.reduce(context, list.as_ref().clone())?;
+                Ok(match (index, list) {
+                    (Term::Prim(Prim::Nat(index)), Term::Prim(Prim::Lst(elems))) => *elems
+                        .into_iter()
+                        .nth(index as usize)
+                        .expect("Lst.get: index out of bounds"),
+                    (index, list) => Term::Prim(Prim::lst_get(index, list)),
+                })
+            }
+            Prim::LstSlice(start, end, list) => {
+                let start = self.reduce(context, start.as_ref().clone())?;
+                let end = self.reduce(context, end.as_ref().clone())?;
+                let list = self.reduce(context, list.as_ref().clone())?;
+                Ok(match (start, end, list) {
+                    (
+                        Term::Prim(Prim::Nat(start)),
+                        Term::Prim(Prim::Nat(end)),
+                        Term::Prim(Prim::Lst(elems)),
+                    ) => Term::Prim(Prim::Lst(elems[start as usize..end as usize].to_vec())),
+                    (start, end, list) => Term::Prim(Prim::lst_slice(start, end, list)),
+                })
+            }
+            Prim::LstConcat(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Lst(mut left)), Term::Prim(Prim::Lst(right))) => {
+                        left.extend(right);
+                        Term::Prim(Prim::Lst(left))
+                    }
+                    (left, right) => Term::Prim(Prim::lst_concat(left, right)),
+                })
+            }
         }
     }
 
@@ -797,5 +850,35 @@ mod tests {
             ),
             Ok(Term::Prim(Prim::Flt(3.0_f32.to_bits())))
         );
+    }
+
+    #[test]
+    fn reduce_lst_get_returns_element_at_index() {
+        let mut context = context();
+
+        let list = Term::Prim(Prim::from(vec![
+            Term::Prim(Prim::Nat(10)),
+            Term::Prim(Prim::Nat(20)),
+            Term::Prim(Prim::Nat(30)),
+        ]));
+
+        assert_eq!(
+            reduce(&mut context, &Term::Prim(Prim::lst_get(Term::Prim(Prim::Nat(0)), list.clone()))),
+            Ok(Term::Prim(Prim::Nat(10)))
+        );
+        assert_eq!(
+            reduce(&mut context, &Term::Prim(Prim::lst_get(Term::Prim(Prim::Nat(2)), list))),
+            Ok(Term::Prim(Prim::Nat(30)))
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Lst.get: index out of bounds")]
+    fn reduce_lst_get_panics_on_out_of_bounds() {
+        let mut context = context();
+
+        let list = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));
+
+        reduce(&mut context, &Term::Prim(Prim::lst_get(Term::Prim(Prim::Nat(1)), list))).ok();
     }
 }

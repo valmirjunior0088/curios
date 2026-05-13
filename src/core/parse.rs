@@ -300,11 +300,44 @@ fn parse_conv_prim<'a>() -> Parser<'a, Term> {
             .map(|inner| Term::Prim(Prim::flt_to_nat(inner))))
 }
 
+fn parse_lst_literal<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_literal("[")
+            .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+            .and_drop(parse_literal("]")),
+    )
+    .map(|elems: Vec<Term>| Term::Prim(Prim::Lst(elems.into_iter().map(|e| e.into()).collect())))
+}
+
+fn parse_lst_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Lst.len"))
+        .and_keep(lazy(parse_atomic_term))
+        .map(|list| Term::Prim(Prim::lst_len(list)))
+        .or(catch(parse_keyword("Lst.get"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(index, list)| Term::Prim(Prim::lst_get(index, list))))
+        .or(catch(parse_keyword("Lst.slice"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|((start, end), list)| Term::Prim(Prim::lst_slice(start, end, list))))
+        .or(catch(parse_keyword("Lst.concat"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::lst_concat(left, right))))
+        .or(catch(parse_keyword("Lst"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|elem| Term::Prim(Prim::lst_type(elem))))
+        .or(parse_lst_literal())
+}
+
 fn parse_prim<'a>() -> Parser<'a, Term> {
     parse_flt_prim()
         .or(parse_int_prim())
         .or(parse_nat_prim())
         .or(parse_conv_prim())
+        .or(parse_lst_prim())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {

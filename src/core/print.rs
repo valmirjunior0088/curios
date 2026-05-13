@@ -286,6 +286,33 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::NatToFlt(inner) => flat([pure("Nat.to-flt "), print_term(*inner, depth)]),
         Prim::FltToInt(inner) => flat([pure("Flt.to-int "), print_term(*inner, depth)]),
         Prim::FltToNat(inner) => flat([pure("Flt.to-nat "), print_term(*inner, depth)]),
+        Prim::LstType(elem) => flat([pure("Lst "), print_term(*elem, depth)]),
+        Prim::Lst(elems) => flat([
+            pure("["),
+            sep_flat(elems.into_iter().map(move |e| print_term(*e, depth)), || pure(", ")),
+            pure("]"),
+        ]),
+        Prim::LstLen(list) => flat([pure("Lst.len "), print_term(*list, depth)]),
+        Prim::LstGet(index, list) => flat([
+            pure("Lst.get "),
+            print_term(*index, depth),
+            pure(" "),
+            print_term(*list, depth),
+        ]),
+        Prim::LstSlice(start, end, list) => flat([
+            pure("Lst.slice "),
+            print_term(*start, depth),
+            pure(" "),
+            print_term(*end, depth),
+            pure(" "),
+            print_term(*list, depth),
+        ]),
+        Prim::LstConcat(left, right) => flat([
+            pure("Lst.concat "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
     }
 }
 

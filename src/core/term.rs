@@ -668,6 +668,20 @@ where
             Prim::NatToFlt(inner) => Prim::NatToFlt(self.visit_subterm(inner)),
             Prim::FltToInt(inner) => Prim::FltToInt(self.visit_subterm(inner)),
             Prim::FltToNat(inner) => Prim::FltToNat(self.visit_subterm(inner)),
+            Prim::LstType(elem) => Prim::LstType(self.visit_subterm(elem)),
+            Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| self.visit_subterm(e)).collect()),
+            Prim::LstLen(list) => Prim::LstLen(self.visit_subterm(list)),
+            Prim::LstGet(index, list) => {
+                Prim::LstGet(self.visit_subterm(index), self.visit_subterm(list))
+            }
+            Prim::LstSlice(start, end, list) => Prim::LstSlice(
+                self.visit_subterm(start),
+                self.visit_subterm(end),
+                self.visit_subterm(list),
+            ),
+            Prim::LstConcat(left, right) => {
+                Prim::LstConcat(self.visit_subterm(left), self.visit_subterm(right))
+            }
         }
     }
 
