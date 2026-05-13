@@ -2,7 +2,7 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~19,500 lines of Rust.
+**Codebase size:** ~20,600 lines.
 
 ---
 
@@ -52,6 +52,7 @@ The grammar covers:
 - Pattern matching `match x with k => Type; case :tag => body;`
 - Let bindings and recursive groups `let { f : T = body; }; tail`
 - Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions for all three — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to-flt`)
+- List type `Lst T` and list literals, with operations: `Lst.len`, `Lst.get`, `Lst.slice`, `Lst.concat`
 
 ---
 
@@ -115,6 +116,7 @@ Transforms `core::Term` into `ersd::Term`, stripping everything that exists only
 | Type annotations on bindings               | Function bodies, captures, parameters     |
 |                                            | `Let`, `LetRec`, all control flow         |
 |                                            | Primitives (except type constructors)     |
+|                                            | `Lst` and all list operations             |
 
 **Atom index translation:** During erasure, atom labels (`:left`, `:right`) are replaced with numeric indices matching case order in `Match`. This enables efficient dispatch without string comparison at runtime.
 
@@ -139,7 +141,11 @@ Module
               └── tail:   terminator (Jump | Case | Call)
 ```
 
-**Values** include: `Pure` (constants), `Eval` (primitive ops), `Clsr` (closure allocation with captures), `Tpl2` (pairs), `Proj` (projection), `Name`.
+**Values** use a three-level structure:
+
+- `Value` has three variants: `Pure(Data)`, `Eval(Code)`, `Alias(ValueName)`
+- `Data` (constant/aggregate): `Unit`, `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Lst(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)`
+- `Code` (computed): all arithmetic, comparison, and conversion ops, plus `TplGet(usize, ValueName)`, `BinLen`/`BinGet`/`BinSlice`/`BinConcat`, and `LstLen`/`LstGet`/`LstSlice`/`LstConcat`
 
 **Tails** (terminators) include: `Jump` (unconditional branch to block), `Case` (dispatch on atom index via `br_table`), `Call` (direct or indirect function call with resume target).
 
@@ -169,14 +175,17 @@ Each scope (function, block, closure) extends a `Frame` (HashMap of name → `Va
 
 ### Value Representation
 
-| Curios Value | WASM Representation                                |
-| ------------ | -------------------------------------------------- |
-| Integer      | `i31ref` (31-bit signed, packed in a single i32)   |
-| Float        | Boxed in a GC struct with a single `f32` field     |
-| Unit         | Empty GC struct                                    |
-| Pair/Tuple   | GC struct with two `anyref` fields                 |
-| Closure      | GC struct with funcref + captured values as fields |
-| Atom         | `i31ref` (the index)                               |
+| Curios Value | WASM Representation                                                                  |
+| ------------ | ------------------------------------------------------------------------------------ |
+| Natural      | `i31ref` (packed in a single i32)                                                    |
+| Integer      | `i31ref` (packed in a single i32)                                                    |
+| Float        | Boxed in a GC struct with a single `f32` field                                       |
+| Unit         | Empty GC struct                                                                      |
+| Tuple        | GC struct with N `anyref` fields (subtype hierarchy: `tpl/1` ← `tpl/2` ← `tpl/3` …)|
+| Closure      | GC struct with funcref + captured values as fields                                   |
+| Atom         | `i31ref` (the index)                                                                 |
+| Binary       | GC array of `i8`                                                                     |
+| List         | GC array of `anyref`                                                                 |
 
 ### Closure Calling Convention
 
@@ -189,7 +198,7 @@ The codegen uses WASM's tail call extension (`return_call` for direct calls, `re
 ### Codegen Submodules
 
 - **`src/cont/to_wasm/table.rs`:** Builds symbol tables mapping CPS names to WASM type/function names. Pre-allocates struct types for closures, tuples, and floats.
-- **`src/cont/to_wasm/context.rs`:** Tracks locals, frames, and value classifications (`Raw`, `NonNull`, `Concrete`, `Int`, `Flt`) for correct loading and casting.
+- **`src/cont/to_wasm/context.rs`:** Tracks locals, frames, and value classifications (`Null`, `NonNull`, `Concrete`, `Int`, `Flt`, `Bin`, `Lst`) for correct loading and casting.
 - **`src/cont/to_wasm/frame.rs`:** Represents nested WASM blocks, accumulates instructions, manages label-based branching.
 - **`src/cont/to_wasm/expr_emitter.rs`:** Emits instructions for CPS values — closure allocation, tuple construction/projection, arithmetic with type conversions, constant promotion.
 - **`src/cont/to_wasm/module_emitter.rs`:** Emits the top-level WASM module: imports, type definitions, function bodies, exports.
