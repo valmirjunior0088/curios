@@ -47,18 +47,92 @@ impl Convert {
 
     fn compare_prim(&mut self, this: Prim, that: Prim) -> Result<bool, Preempted> {
         match (this, that) {
-            (Prim::IntType, Prim::IntType) | (Prim::FltType, Prim::FltType) => Ok(true),
+            (Prim::NatType, Prim::NatType)
+            | (Prim::IntType, Prim::IntType)
+            | (Prim::FltType, Prim::FltType) => Ok(true),
+            (Prim::Nat(this), Prim::Nat(that)) => Ok(this == that),
             (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
             (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
-            (Prim::IntEql(this_l, this_r), Prim::IntEql(that_l, that_r))
-            | (Prim::IntAdd(this_l, this_r), Prim::IntAdd(that_l, that_r))
-            | (Prim::IntSub(this_l, this_r), Prim::IntSub(that_l, that_r))
-            | (Prim::IntMul(this_l, this_r), Prim::IntMul(that_l, that_r))
-            | (Prim::FltAdd(this_l, this_r), Prim::FltAdd(that_l, that_r))
-            | (Prim::FltSub(this_l, this_r), Prim::FltSub(that_l, that_r))
-            | (Prim::FltMul(this_l, this_r), Prim::FltMul(that_l, that_r)) => {
-                self.enqueue(*this_l, *that_l);
-                self.enqueue(*this_r, *that_r);
+            (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
+            | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
+            | (Prim::NatAdd(this_left, this_right), Prim::NatAdd(that_left, that_right))
+            | (Prim::NatSub(this_left, this_right), Prim::NatSub(that_left, that_right))
+            | (Prim::NatMul(this_left, this_right), Prim::NatMul(that_left, that_right))
+            | (Prim::NatDiv(this_left, this_right), Prim::NatDiv(that_left, that_right))
+            | (Prim::NatRem(this_left, this_right), Prim::NatRem(that_left, that_right))
+            | (Prim::NatLt(this_left, this_right), Prim::NatLt(that_left, that_right))
+            | (Prim::NatGt(this_left, this_right), Prim::NatGt(that_left, that_right))
+            | (Prim::NatLte(this_left, this_right), Prim::NatLte(that_left, that_right))
+            | (Prim::NatGte(this_left, this_right), Prim::NatGte(that_left, that_right))
+            | (Prim::IntEql(this_left, this_right), Prim::IntEql(that_left, that_right))
+            | (Prim::IntAdd(this_left, this_right), Prim::IntAdd(that_left, that_right))
+            | (Prim::IntSub(this_left, this_right), Prim::IntSub(that_left, that_right))
+            | (Prim::IntMul(this_left, this_right), Prim::IntMul(that_left, that_right))
+            | (Prim::IntNeq(this_left, this_right), Prim::IntNeq(that_left, that_right))
+            | (Prim::IntDiv(this_left, this_right), Prim::IntDiv(that_left, that_right))
+            | (Prim::IntRem(this_left, this_right), Prim::IntRem(that_left, that_right))
+            | (Prim::IntLt(this_left, this_right), Prim::IntLt(that_left, that_right))
+            | (Prim::IntGt(this_left, this_right), Prim::IntGt(that_left, that_right))
+            | (Prim::IntLte(this_left, this_right), Prim::IntLte(that_left, that_right))
+            | (Prim::IntGte(this_left, this_right), Prim::IntGte(that_left, that_right))
+            | (Prim::FltAdd(this_left, this_right), Prim::FltAdd(that_left, that_right))
+            | (Prim::FltSub(this_left, this_right), Prim::FltSub(that_left, that_right))
+            | (Prim::FltMul(this_left, this_right), Prim::FltMul(that_left, that_right))
+            | (Prim::FltDiv(this_left, this_right), Prim::FltDiv(that_left, that_right))
+            | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
+            | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
+            | (Prim::FltEql(this_left, this_right), Prim::FltEql(that_left, that_right))
+            | (Prim::FltNeq(this_left, this_right), Prim::FltNeq(that_left, that_right))
+            | (Prim::FltLt(this_left, this_right), Prim::FltLt(that_left, that_right))
+            | (Prim::FltGt(this_left, this_right), Prim::FltGt(that_left, that_right))
+            | (Prim::FltLte(this_left, this_right), Prim::FltLte(that_left, that_right))
+            | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
+            | (Prim::LstGet(this_left, this_right), Prim::LstGet(that_left, that_right))
+            | (Prim::LstConcat(this_left, this_right), Prim::LstConcat(that_left, that_right)) => {
+                self.enqueue(*this_left, *that_left);
+                self.enqueue(*this_right, *that_right);
+
+                Ok(true)
+            }
+            (Prim::IntNeg(this), Prim::IntNeg(that))
+            | (Prim::FltNeg(this), Prim::FltNeg(that))
+            | (Prim::FltAbs(this), Prim::FltAbs(that))
+            | (Prim::FltSqrt(this), Prim::FltSqrt(that))
+            | (Prim::FltFloor(this), Prim::FltFloor(that))
+            | (Prim::FltCeil(this), Prim::FltCeil(that))
+            | (Prim::FltTrunc(this), Prim::FltTrunc(that))
+            | (Prim::FltNearest(this), Prim::FltNearest(that))
+            | (Prim::NatToInt(this), Prim::NatToInt(that))
+            | (Prim::IntToNat(this), Prim::IntToNat(that))
+            | (Prim::IntToFlt(this), Prim::IntToFlt(that))
+            | (Prim::NatToFlt(this), Prim::NatToFlt(that))
+            | (Prim::FltToInt(this), Prim::FltToInt(that))
+            | (Prim::FltToNat(this), Prim::FltToNat(that))
+            | (Prim::LstType(this), Prim::LstType(that))
+            | (Prim::LstLen(this), Prim::LstLen(that)) => {
+                self.enqueue(*this, *that);
+
+                Ok(true)
+            }
+            (
+                Prim::LstSlice(this_start, this_end, this_list),
+                Prim::LstSlice(that_start, that_end, that_list),
+            ) => {
+                self.enqueue(*this_start, *that_start);
+                self.enqueue(*this_end, *that_end);
+                self.enqueue(*this_list, *that_list);
+
+                Ok(true)
+            }
+            (Prim::Lst(this_elems), Prim::Lst(that_elems)) => {
+                if this_elems.len() != that_elems.len() {
+                    return Ok(false);
+                }
+
+                for (this, that) in this_elems.into_iter().zip(that_elems) {
+                    self.enqueue(*this, *that);
+                }
+
                 Ok(true)
             }
             (_, _) => Ok(false),
@@ -72,8 +146,10 @@ impl Convert {
         that: FuncType,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.input, *that.input);
+
         let label = Var::free(context.fresh()).into();
         self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
+
         Ok(true)
     }
 
@@ -85,12 +161,14 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         let label = Var::free(context.fresh()).into();
         self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
+
         Ok(true)
     }
 
     fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, Preempted> {
         self.enqueue(*this.head, *that.head);
         self.enqueue(*this.param, *that.param);
+
         Ok(true)
     }
 
@@ -101,14 +179,17 @@ impl Convert {
         that: PairType,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.input, *that.input);
+
         let label = Var::free(context.fresh()).into();
         self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
+
         Ok(true)
     }
 
     fn compare_pair(&mut self, this: Pair, that: Pair) -> Result<bool, Preempted> {
         self.enqueue(*this.fst, *that.fst);
         self.enqueue(*this.snd, *that.snd);
+
         Ok(true)
     }
 
@@ -121,6 +202,7 @@ impl Convert {
         self.enqueue(*this.head, *that.head);
 
         let motive_label = Var::free(context.fresh()).into();
+
         self.enqueue(
             this.motive.open(&[&motive_label]),
             that.motive.open(&[&motive_label]),
@@ -128,6 +210,7 @@ impl Convert {
 
         let fst_label = Var::free(context.fresh()).into();
         let snd_label = Var::free(context.fresh()).into();
+
         self.enqueue(
             this.tail.open(&[&fst_label, &snd_label]),
             that.tail.open(&[&fst_label, &snd_label]),
@@ -349,6 +432,76 @@ mod tests {
         ));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_nat_add_recurses_into_operands() {
+        let mut context = context();
+
+        let this = Term::from(Func::new(
+            "x",
+            Term::Prim(Prim::nat_add(Var::free("x"), Term::Prim(Prim::Nat(1)))),
+        ));
+
+        let that = Term::from(Func::new(
+            "y",
+            Term::Prim(Prim::nat_add(Var::free("y"), Term::Prim(Prim::Nat(1)))),
+        ));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_flt_neg_recurses_into_operand() {
+        let mut context = context();
+
+        let this = Term::from(Func::new("x", Term::Prim(Prim::flt_neg(Var::free("x")))));
+
+        let that = Term::from(Func::new("y", Term::Prim(Prim::flt_neg(Var::free("y")))));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_nat_to_int_recurses_into_operand() {
+        let mut context = context();
+
+        let this = Term::from(Func::new("x", Term::Prim(Prim::nat_to_int(Var::free("x")))));
+
+        let that = Term::from(Func::new("y", Term::Prim(Prim::nat_to_int(Var::free("y")))));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_lst_compares_element_wise() {
+        let mut context = context();
+
+        let this = Term::Prim(Prim::from(vec![
+            Term::Prim(Prim::Nat(1)),
+            Term::Prim(Prim::Nat(2)),
+        ]));
+
+        let that = Term::Prim(Prim::from(vec![
+            Term::Prim(Prim::Nat(1)),
+            Term::Prim(Prim::Nat(2)),
+        ]));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_lst_rejects_different_lengths() {
+        let mut context = context();
+
+        let this = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));
+
+        let that = Term::Prim(Prim::from(vec![
+            Term::Prim(Prim::Nat(1)),
+            Term::Prim(Prim::Nat(2)),
+        ]));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }
 
     #[test]
