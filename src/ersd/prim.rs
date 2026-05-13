@@ -53,6 +53,11 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
+    Lst(Vec<Subterm>),
+    LstLen(Subterm),
+    LstGet(Subterm, Subterm),
+    LstSlice(Subterm, Subterm, Subterm),
+    LstConcat(Subterm, Subterm),
 }
 
 impl From<u32> for Prim {

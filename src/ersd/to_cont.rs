@@ -32,7 +32,7 @@ mod tests {
         super::to_cont,
         crate::{
             cont,
-            ersd::{Apply, Func, LetRec, Name, Pair, Prim, Term},
+            ersd::{Apply, Func, Let, LetRec, Name, Pair, Prim, Term},
         },
     };
 
@@ -123,6 +123,61 @@ mod tests {
         };
 
         assert_eq!(resume.string, func.resume.string);
+    }
+
+    #[test]
+    fn lowers_lst_into_main_region_value() {
+        let term = Term::Let(Let {
+            name: "a".into(),
+            body: Term::Prim(Prim::Nat(1)).into(),
+            tail: Term::Let(Let {
+                name: "b".into(),
+                body: Term::Prim(Prim::Nat(2)).into(),
+                tail: Term::Prim(Prim::Lst(vec![
+                    Term::Name(Name::from("a")).into(),
+                    Term::Name(Name::from("b")).into(),
+                ]))
+                .into(),
+            })
+            .into(),
+        });
+
+        let module = to_cont(&term);
+        let func = &module.funcs()[0].1;
+
+        assert!(func.region.values.iter().any(|(_, value)| matches!(
+            value,
+            cont::Value::Pure(cont::Data::Lst(elems)) if elems.len() == 2
+        )));
+    }
+
+    #[test]
+    fn lowers_lst_with_apply_element_through_join_block() {
+        let term = Term::Prim(Prim::Lst(vec![
+            Term::Apply(Apply {
+                head: Term::Func(Func {
+                    captures: vec![],
+                    param: "x".into(),
+                    body: Term::Name(Name::from("x")).into(),
+                })
+                .into(),
+                param: Term::Prim(Prim::Nat(1)).into(),
+            })
+            .into(),
+            Term::Prim(Prim::Nat(2)).into(),
+        ]));
+
+        let module = to_cont(&term);
+        let func = &module.funcs()[0].1;
+
+        assert_eq!(func.region.blocks.len(), 1);
+
+        let (_, block) = &func.region.blocks[0];
+
+        assert!(block.region.values.iter().any(|(_, value)| matches!(
+            value,
+            cont::Value::Pure(cont::Data::Lst(elems)) if elems.len() == 2
+        )));
     }
 
     #[test]
