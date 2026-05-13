@@ -7,15 +7,16 @@ fn main() {
         let pair_ty : Type =
           (tag : '[left, right],
             match tag with _ => Type;
-            case 'left => Int;
-            case 'right => Flt;);
+            | 'left => Int;
+            | 'right => Flt;);
         let payload : pair_ty = ('left, Int.mul 20i 2i);
         let decoded : Int =
           let (tag, value) with _ => Int = payload;
           match tag with _ => Int;
-          case 'left => Int.add 40i 2i;
-          case 'right => 7i;;
-        let make : (_ : Int) -> (_ : witness, Flt) = x => (x, Flt.add 0.25 0.5);
+          | 'left => Int.add 40i 2i;
+          | 'right => 7i;;
+        let make : (_ : Int) -> (_ : witness, Flt) = x =>
+          (x, Flt.add 0.25 0.5);
         make decoded
         ";
 

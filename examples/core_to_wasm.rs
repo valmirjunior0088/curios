@@ -8,28 +8,32 @@ fn main() {
         let pair_ty : Type =
           (tag : '[left, right],
             match tag with _ => Type;
-            case 'left => Int;
-            case 'right => Flt;);
+            | 'left => Int;
+            | 'right => Flt;);
         let pair : pair_ty = ('left, 42i);
         let score : (_ : pair_ty) -> Int = p =>
           let (tag, payload) with _ => Int = p;
           match tag with _ => Int;
-          case 'left => 42i;
-          case 'right => 7i;;
+          | 'left => 42i;
+          | 'right => 7i;;
         score pair
         "
     .parse()
     .expect("expected core term");
 
-    println!(
-        "{}",
-        cont::to_wasm(&ersd::to_cont(
-            &core::erase(
-                &mut core::Context::new(Duration::from_secs(1)),
-                &term,
-                &"Int".parse().expect("expected result type")
-            )
-            .expect("expected erased term"),
-        ))
+    let cont_module = ersd::to_cont(
+        &core::erase(
+            &mut core::Context::new(Duration::from_secs(1)),
+            &term,
+            &"Int".parse().expect("expected result type"),
+        )
+        .expect("expected erased term"),
     );
+
+    println!("=== cont ===");
+    println!("{cont_module}");
+
+    println!();
+    println!("=== wasm ===");
+    println!("{}", cont::to_wasm(&cont_module));
 }

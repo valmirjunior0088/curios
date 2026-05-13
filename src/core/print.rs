@@ -409,7 +409,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     .into_iter()
                     .map(|(atom, body)| {
                         flat([
-                            pure("\ncase "),
+                            pure("\n| "),
                             print_atom(atom),
                             pure(" => "),
                             print_term(*body, depth),
@@ -422,15 +422,12 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             flat([
                 pure("match "),
                 print_term(*head, depth),
-                pure("\n"),
-                indent(flat([
-                    pure("with "),
-                    pure(motive_label),
-                    pure(" => "),
-                    print_term(motive, depth + 1),
-                    pure(";"),
-                    cases,
-                ])),
+                pure(" with "),
+                pure(motive_label),
+                pure(" => "),
+                print_term(motive, depth + 1),
+                pure(";"),
+                cases,
             ])
         }
         Term::Let(Let { type_, body, tail }) => {

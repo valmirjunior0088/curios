@@ -1,4 +1,4 @@
-use curios::ersd;
+use curios::{cont, ersd};
 
 fn main() {
     let term = ersd::Term::Let(ersd::Let {
@@ -109,5 +109,12 @@ fn main() {
         .into(),
     });
 
-    println!("{}", ersd::to_cont(&term));
+    let cont_module = ersd::to_cont(&term);
+
+    println!("=== cont ===");
+    println!("{cont_module}");
+
+    println!();
+    println!("=== wasm ===");
+    println!("{}", cont::to_wasm(&cont_module));
 }

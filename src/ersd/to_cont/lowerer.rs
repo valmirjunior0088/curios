@@ -2392,7 +2392,7 @@ impl<'a> Lowerer<'a> {
                         });
                     }
 
-                    cont::Tail::Case(cont::CaseTarget {
+                    cont::Tail::Match(cont::MatchTarget {
                         operand: head,
                         targets,
                         default: None,

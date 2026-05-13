@@ -27,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-const KEYWORDS: &[&str] = &["let", "match", "with", "case"];
+const KEYWORDS: &[&str] = &["let", "match", "with"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -409,7 +409,7 @@ fn parse_func<'a>() -> Parser<'a, Term> {
 
 fn parse_match_case<'a>() -> Parser<'a, (Atom, Term)> {
     catch(
-        parse_keyword("case")
+        parse_literal("|")
             .and_keep(parse_atom_label())
             .and_drop(parse_literal("=>")),
     )
@@ -586,7 +586,7 @@ mod tests {
 
     #[test]
     fn parse_match_single_case() {
-        let term = "match 'foo with k => '[foo]; case 'foo => 'foo;"
+        let term = "match 'foo with k => '[foo]; | 'foo => 'foo;"
             .parse::<Term>()
             .unwrap();
 

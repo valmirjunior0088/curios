@@ -1469,21 +1469,21 @@ mod tests {
                 let mu_case : '[zeta, alpha, mu] = 'mu;
                 let zeta_case : '[zeta, alpha, mu] = 'zeta;
                 match outer with subject => '[zeta, alpha, mu];
-                case 'zeta =>
+                | 'zeta =>
                     match alpha_case with nested => '[zeta, alpha, mu];
-                    case 'zeta => 'alpha;
-                    case 'alpha => 'mu;
-                    case 'mu => 'zeta;;
-                case 'alpha =>
+                    | 'zeta => 'alpha;
+                    | 'alpha => 'mu;
+                    | 'mu => 'zeta;;
+                | 'alpha =>
                     match zeta_case with nested => '[zeta, alpha, mu];
-                    case 'zeta => 'mu;
-                    case 'alpha => 'zeta;
-                    case 'mu => 'alpha;;
-                case 'mu =>
+                    | 'zeta => 'mu;
+                    | 'alpha => 'zeta;
+                    | 'mu => 'alpha;;
+                | 'mu =>
                     match mu_case with nested => '[zeta, alpha, mu];
-                    case 'zeta => 'zeta;
-                    case 'alpha => 'alpha;
-                    case 'mu => 'mu;;
+                    | 'zeta => 'zeta;
+                    | 'alpha => 'alpha;
+                    | 'mu => 'mu;;
             "#
         .parse()
         .unwrap();
