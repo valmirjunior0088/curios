@@ -643,6 +643,15 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::FltToNat(operand)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::NatToBin(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatToBin(operand)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
                 emit_fresh_value(
                     state,
@@ -1065,6 +1074,11 @@ impl<'a> Lowerer<'a> {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::FltToNat(operand)));
+            }
+            ersd::Term::Prim(ersd::Prim::NatToBin(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::NatToBin(operand)));
             }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Bin(bytes.clone())));
@@ -2199,6 +2213,21 @@ impl<'a> Lowerer<'a> {
                         state,
                         builder,
                         cont::Value::Eval(cont::Code::FltToNat(operand)),
+                    );
+
+                    cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::NatToBin(operand)) => self.lower_to_name(
+                operand,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, operand| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::NatToBin(operand)),
                     );
 
                     cont(this, state, builder, value)

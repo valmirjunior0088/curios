@@ -56,6 +56,7 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
+    NatToBin(Subterm),
     BinType,
     Bin(Vec<u8>),
     BinLen(Subterm),
@@ -439,6 +440,13 @@ impl Prim {
         T: Into<Term>,
     {
         Self::FltToNat(inner.into().into())
+    }
+
+    pub fn nat_to_bin<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::NatToBin(inner.into().into())
     }
 
     pub fn bin_len<B>(bin: B) -> Self

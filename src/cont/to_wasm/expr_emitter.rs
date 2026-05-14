@@ -584,6 +584,17 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
+            cont::Code::NatToBin(nat) => {
+                let bin_type = self.context.table().bin_type();
+                self.emit_instrs(self.context.load_value_instrs(nat, LoadAs::Int));
+                self.emit_instr(wasm::Instr::ArrayNewFixed {
+                    type_name: bin_type,
+                    length: 1,
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::BinLen(bin) => {
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instr(wasm::Instr::ArrayLen);

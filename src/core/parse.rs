@@ -280,32 +280,34 @@ fn parse_flt_prim<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_conv_prim<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Nat.to-int"))
+    catch(parse_keyword("Nat.to_int"))
         .and_keep(lazy(parse_atomic_term))
         .map(|inner| Term::Prim(Prim::nat_to_int(inner)))
-        .or(catch(parse_keyword("Int.to-nat"))
+        .or(catch(parse_keyword("Int.to_nat"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::int_to_nat(inner))))
-        .or(catch(parse_keyword("Int.to-flt"))
+        .or(catch(parse_keyword("Int.to_flt"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::int_to_flt(inner))))
-        .or(catch(parse_keyword("Nat.to-flt"))
+        .or(catch(parse_keyword("Nat.to_flt"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::nat_to_flt(inner))))
-        .or(catch(parse_keyword("Flt.to-int"))
+        .or(catch(parse_keyword("Flt.to_int"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::flt_to_int(inner))))
-        .or(catch(parse_keyword("Flt.to-nat"))
+        .or(catch(parse_keyword("Flt.to_nat"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::flt_to_nat(inner))))
+        .or(catch(parse_keyword("Nat.to_bin"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::nat_to_bin(inner))))
 }
 
 fn parse_hex_byte<'a>() -> Parser<'a, u8> {
     take_exact("\\").and_keep(
         take_while(|c: char| c.is_ascii_hexdigit()).flat_map(|hex: &str| {
             if hex.len() == 2 {
-                let byte = u8::from_str_radix(hex, 16).expect("valid hex pair");
-                pure(byte)
+                pure(u8::from_str_radix(hex, 16).expect("valid hex pair"))
             } else {
                 fail("Expected exactly 2 hex digits after \\")
             }

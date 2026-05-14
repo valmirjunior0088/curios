@@ -140,6 +140,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Term::Prim(Prim::NatType))
         }
+        Prim::NatToBin(operand) => {
+            erase(context, operand, &Term::Prim(Prim::NatType))?;
+
+            Ok(Term::Prim(Prim::BinType))
+        }
         Prim::BinType => Ok(Type.into()),
         Prim::Bin(_) => Ok(Term::Prim(Prim::BinType)),
         Prim::BinLen(bin) => {
@@ -914,6 +919,14 @@ fn erase_prim(
 
             Ok(
                 ersd::Prim::FltToNat(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
+                    .into(),
+            )
+        }
+        Prim::NatToBin(operand) => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
+
+            Ok(
+                ersd::Prim::NatToBin(erase(context, operand, &Term::Prim(Prim::NatType))?.into())
                     .into(),
             )
         }
@@ -1766,10 +1779,16 @@ mod tests {
 
         context.assume("xs", &lst_nat);
         let len = Term::Prim(Prim::lst_len(Var::free("xs")));
-        assert_eq!(infer(&mut context, &len).unwrap(), Term::Prim(Prim::NatType));
+        assert_eq!(
+            infer(&mut context, &len).unwrap(),
+            Term::Prim(Prim::NatType)
+        );
 
         let get = Term::Prim(Prim::lst_get(Term::Prim(Prim::Nat(0)), Var::free("xs")));
-        assert_eq!(infer(&mut context, &get).unwrap(), Term::Prim(Prim::NatType));
+        assert_eq!(
+            infer(&mut context, &get).unwrap(),
+            Term::Prim(Prim::NatType)
+        );
     }
 
     #[test]
@@ -1785,9 +1804,27 @@ mod tests {
 
         context.assume("b", &bin_type);
         let len = Term::Prim(Prim::bin_len(Var::free("b")));
-        assert_eq!(infer(&mut context, &len).unwrap(), Term::Prim(Prim::NatType));
+        assert_eq!(
+            infer(&mut context, &len).unwrap(),
+            Term::Prim(Prim::NatType)
+        );
 
         let get = Term::Prim(Prim::bin_get(Term::Prim(Prim::Nat(0)), Var::free("b")));
-        assert_eq!(infer(&mut context, &get).unwrap(), Term::Prim(Prim::NatType));
+        assert_eq!(
+            infer(&mut context, &get).unwrap(),
+            Term::Prim(Prim::NatType)
+        );
+    }
+
+    #[test]
+    fn erase_nat_to_bin() {
+        let mut context = context();
+
+        let term = Term::Prim(Prim::nat_to_bin(Term::Prim(Prim::Nat(0x42))));
+        assert_eq!(
+            infer(&mut context, &term).unwrap(),
+            Term::Prim(Prim::BinType)
+        );
+        assert!(erase(&mut context, &term, &Term::Prim(Prim::BinType)).is_ok());
     }
 }

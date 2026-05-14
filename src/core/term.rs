@@ -668,6 +668,7 @@ where
             Prim::NatToFlt(inner) => Prim::NatToFlt(self.visit_subterm(inner)),
             Prim::FltToInt(inner) => Prim::FltToInt(self.visit_subterm(inner)),
             Prim::FltToNat(inner) => Prim::FltToNat(self.visit_subterm(inner)),
+            Prim::NatToBin(inner) => Prim::NatToBin(self.visit_subterm(inner)),
             Prim::BinType => Prim::BinType,
             Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
             Prim::BinLen(bin) => Prim::BinLen(self.visit_subterm(bin)),

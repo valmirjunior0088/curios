@@ -560,6 +560,14 @@ impl Reduce {
                     inner => Term::Prim(Prim::flt_to_nat(inner)),
                 })
             }
+            Prim::NatToBin(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Nat(n)) => Term::Prim(Prim::Bin(vec![n as u8])),
+                    inner => Term::Prim(Prim::nat_to_bin(inner)),
+                })
+            }
             Prim::BinType => Ok(Term::Prim(Prim::BinType)),
             Prim::Bin(bytes) => Ok(Term::Prim(Prim::Bin(bytes.clone()))),
             Prim::BinLen(bin) => {

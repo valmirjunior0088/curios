@@ -1640,4 +1640,49 @@ mod tests {
 
         assert_eq!(result, b'e' as i32);
     }
+
+    #[test]
+    fn lowers_and_runs_nat_to_bin() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("N"), cont::Data::Nat(0x42));
+        module.add_const(cont::ValueName::from("ZERO"), cont::Data::Nat(0));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![
+                        (
+                            cont::ValueName::from("bin"),
+                            cont::Value::Eval(cont::Code::NatToBin(cont::ValueName::from("N"))),
+                        ),
+                        (
+                            cont::ValueName::from("result"),
+                            cont::Value::Eval(cont::Code::BinGet(
+                                cont::ValueName::from("ZERO"),
+                                cont::ValueName::from("bin"),
+                            )),
+                        ),
+                    ],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 0x42);
+    }
 }

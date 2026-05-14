@@ -53,6 +53,7 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
+    NatToBin(Subterm),
     Bin(Vec<u8>),
     BinLen(Subterm),
     BinGet(Subterm, Subterm),

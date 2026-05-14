@@ -310,6 +310,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::NatToFlt(operand) => flat([pure("Nat.to_flt"), pure(" "), print_value_name(operand)]),
         Code::FltToInt(operand) => flat([pure("Flt.to_int"), pure(" "), print_value_name(operand)]),
         Code::FltToNat(operand) => flat([pure("Flt.to_nat"), pure(" "), print_value_name(operand)]),
+        Code::NatToBin(operand) => flat([pure("Nat.to_bin"), pure(" "), print_value_name(operand)]),
         Code::BinLen(bin) => flat([pure("Bin.len"), pure(" "), print_value_name(bin)]),
         Code::BinGet(idx, bin) => flat([
             pure("Bin.get"),
