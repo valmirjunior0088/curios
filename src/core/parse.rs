@@ -300,6 +300,45 @@ fn parse_conv_prim<'a>() -> Parser<'a, Term> {
             .map(|inner| Term::Prim(Prim::flt_to_nat(inner))))
 }
 
+fn parse_hex_byte<'a>() -> Parser<'a, u8> {
+    take_exact("\\").and_keep(
+        take_while(|c: char| c.is_ascii_hexdigit()).flat_map(|hex: &str| {
+            if hex.len() == 2 {
+                let byte = u8::from_str_radix(hex, 16).expect("valid hex pair");
+                pure(byte)
+            } else {
+                fail("Expected exactly 2 hex digits after \\")
+            }
+        }),
+    )
+}
+
+fn parse_bin_literal<'a>() -> Parser<'a, Term> {
+    catch(many1(parse_hex_byte).and_drop(parse_whitespace()))
+        .map(|bytes| Term::Prim(Prim::Bin(bytes)))
+}
+
+fn parse_bin_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Bin.len"))
+        .and_keep(lazy(parse_atomic_term))
+        .map(|bin| Term::Prim(Prim::bin_len(bin)))
+        .or(catch(parse_keyword("Bin.get"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(index, bin)| Term::Prim(Prim::bin_get(index, bin))))
+        .or(catch(parse_keyword("Bin.slice"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|((start, end), bin)| Term::Prim(Prim::bin_slice(start, end, bin))))
+        .or(catch(parse_keyword("Bin.concat"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(left, right)| Term::Prim(Prim::bin_concat(left, right))))
+        .or(catch(parse_keyword("Bin")).map(|()| Term::Prim(Prim::BinType)))
+        .or(parse_bin_literal())
+}
+
 fn parse_lst_literal<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("[")
@@ -337,6 +376,7 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_int_prim())
         .or(parse_nat_prim())
         .or(parse_conv_prim())
+        .or(parse_bin_prim())
         .or(parse_lst_prim())
 }
 

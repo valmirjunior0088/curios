@@ -56,6 +56,12 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
+    BinType,
+    Bin(Vec<u8>),
+    BinLen(Subterm),
+    BinGet(Subterm, Subterm),
+    BinSlice(Subterm, Subterm, Subterm),
+    BinConcat(Subterm, Subterm),
     LstType(Subterm),
     Lst(Vec<Subterm>),
     LstLen(Subterm),
@@ -433,6 +439,38 @@ impl Prim {
         T: Into<Term>,
     {
         Self::FltToNat(inner.into().into())
+    }
+
+    pub fn bin_len<B>(bin: B) -> Self
+    where
+        B: Into<Term>,
+    {
+        Self::BinLen(bin.into().into())
+    }
+
+    pub fn bin_get<I, B>(index: I, bin: B) -> Self
+    where
+        I: Into<Term>,
+        B: Into<Term>,
+    {
+        Self::BinGet(index.into().into(), bin.into().into())
+    }
+
+    pub fn bin_slice<S, E, B>(start: S, end: E, bin: B) -> Self
+    where
+        S: Into<Term>,
+        E: Into<Term>,
+        B: Into<Term>,
+    {
+        Self::BinSlice(start.into().into(), end.into().into(), bin.into().into())
+    }
+
+    pub fn bin_concat<L, R>(left: L, right: R) -> Self
+    where
+        L: Into<Term>,
+        R: Into<Term>,
+    {
+        Self::BinConcat(left.into().into(), right.into().into())
     }
 
     pub fn lst_type<T>(elem: T) -> Self

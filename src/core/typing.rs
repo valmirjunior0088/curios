@@ -140,6 +140,46 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Term::Prim(Prim::NatType))
         }
+        Prim::BinType => Ok(Type.into()),
+        Prim::Bin(_) => Ok(Term::Prim(Prim::BinType)),
+        Prim::BinLen(bin) => {
+            let bin_type = infer(context, bin)?;
+            let bin_type = reduce(context, &bin_type)?;
+            match bin_type {
+                Term::Prim(Prim::BinType) => Ok(Term::Prim(Prim::NatType)),
+                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+            }
+        }
+        Prim::BinGet(index, bin) => {
+            erase(context, index, &Term::Prim(Prim::NatType))?;
+            let bin_type = infer(context, bin)?;
+            let bin_type = reduce(context, &bin_type)?;
+            match bin_type {
+                Term::Prim(Prim::BinType) => Ok(Term::Prim(Prim::NatType)),
+                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+            }
+        }
+        Prim::BinSlice(start, end, bin) => {
+            erase(context, start, &Term::Prim(Prim::NatType))?;
+            erase(context, end, &Term::Prim(Prim::NatType))?;
+            let bin_type = infer(context, bin)?;
+            let bin_type = reduce(context, &bin_type)?;
+            match &bin_type {
+                Term::Prim(Prim::BinType) => Ok(bin_type),
+                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+            }
+        }
+        Prim::BinConcat(left, right) => {
+            let bin_type = infer(context, left)?;
+            let bin_type = reduce(context, &bin_type)?;
+            match &bin_type {
+                Term::Prim(Prim::BinType) => {
+                    erase(context, right, &bin_type)?;
+                    Ok(bin_type)
+                }
+                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+            }
+        }
         Prim::LstType(elem) => {
             erase(context, elem, &Type.into())?;
             Ok(Type.into())
@@ -876,6 +916,67 @@ fn erase_prim(
                 ersd::Prim::FltToNat(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
                     .into(),
             )
+        }
+        Prim::BinType => {
+            expect(context, term, &Type.into(), expected)?;
+            Ok(ersd::Term::Erased)
+        }
+        Prim::Bin(bytes) => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
+            Ok(ersd::Prim::Bin(bytes.clone()).into())
+        }
+        Prim::BinLen(bin) => {
+            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
+            let bin_type = infer(context, bin)?;
+            let bin_type_reduced = reduce(context, &bin_type)?;
+            match &bin_type_reduced {
+                Term::Prim(Prim::BinType) => {}
+                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+            }
+            Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
+        }
+        Prim::BinGet(index, bin) => {
+            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
+            let bin_type = infer(context, bin)?;
+            let bin_type_reduced = reduce(context, &bin_type)?;
+            match &bin_type_reduced {
+                Term::Prim(Prim::BinType) => {}
+                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+            }
+            Ok(ersd::Prim::BinGet(
+                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
+                erase(context, bin, &bin_type)?.into(),
+            )
+            .into())
+        }
+        Prim::BinSlice(start, end, bin) => {
+            let bin_type = infer(context, bin)?;
+            let bin_type_reduced = reduce(context, &bin_type)?;
+            match &bin_type_reduced {
+                Term::Prim(Prim::BinType) => {}
+                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+            }
+            expect(context, term, &bin_type_reduced, expected)?;
+            Ok(ersd::Prim::BinSlice(
+                erase(context, start, &Term::Prim(Prim::NatType))?.into(),
+                erase(context, end, &Term::Prim(Prim::NatType))?.into(),
+                erase(context, bin, &bin_type)?.into(),
+            )
+            .into())
+        }
+        Prim::BinConcat(left, right) => {
+            let bin_type = infer(context, left)?;
+            let bin_type_reduced = reduce(context, &bin_type)?;
+            match &bin_type_reduced {
+                Term::Prim(Prim::BinType) => {}
+                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+            }
+            expect(context, term, &bin_type_reduced, expected)?;
+            Ok(ersd::Prim::BinConcat(
+                erase(context, left, &bin_type)?.into(),
+                erase(context, right, &bin_type)?.into(),
+            )
+            .into())
         }
         Prim::LstType(elem) => {
             expect(context, term, &Type.into(), expected)?;
@@ -1668,6 +1769,25 @@ mod tests {
         assert_eq!(infer(&mut context, &len).unwrap(), Term::Prim(Prim::NatType));
 
         let get = Term::Prim(Prim::lst_get(Term::Prim(Prim::Nat(0)), Var::free("xs")));
+        assert_eq!(infer(&mut context, &get).unwrap(), Term::Prim(Prim::NatType));
+    }
+
+    #[test]
+    fn erase_bin_type_literal_len_and_get() {
+        let mut context = context();
+
+        let bin_type = Term::Prim(Prim::BinType);
+        assert!(erase(&mut context, &bin_type, &Type.into()).is_ok());
+
+        let literal = Term::Prim(Prim::Bin(vec![1, 2, 3]));
+        assert_eq!(infer(&mut context, &literal).unwrap(), bin_type);
+        assert!(erase(&mut context, &literal, &bin_type).is_ok());
+
+        context.assume("b", &bin_type);
+        let len = Term::Prim(Prim::bin_len(Var::free("b")));
+        assert_eq!(infer(&mut context, &len).unwrap(), Term::Prim(Prim::NatType));
+
+        let get = Term::Prim(Prim::bin_get(Term::Prim(Prim::Nat(0)), Var::free("b")));
         assert_eq!(infer(&mut context, &get).unwrap(), Term::Prim(Prim::NatType));
     }
 }

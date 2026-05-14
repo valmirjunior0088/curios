@@ -560,6 +560,49 @@ impl Reduce {
                     inner => Term::Prim(Prim::flt_to_nat(inner)),
                 })
             }
+            Prim::BinType => Ok(Term::Prim(Prim::BinType)),
+            Prim::Bin(bytes) => Ok(Term::Prim(Prim::Bin(bytes.clone()))),
+            Prim::BinLen(bin) => {
+                let bin = self.reduce(context, bin.as_ref().clone())?;
+                Ok(match bin {
+                    Term::Prim(Prim::Bin(bytes)) => Term::Prim(Prim::Nat(bytes.len() as u32)),
+                    bin => Term::Prim(Prim::bin_len(bin)),
+                })
+            }
+            Prim::BinGet(index, bin) => {
+                let index = self.reduce(context, index.as_ref().clone())?;
+                let bin = self.reduce(context, bin.as_ref().clone())?;
+                Ok(match (index, bin) {
+                    (Term::Prim(Prim::Nat(i)), Term::Prim(Prim::Bin(bytes))) => {
+                        Term::Prim(Prim::Nat(bytes[i as usize] as u32))
+                    }
+                    (index, bin) => Term::Prim(Prim::bin_get(index, bin)),
+                })
+            }
+            Prim::BinSlice(start, end, bin) => {
+                let start = self.reduce(context, start.as_ref().clone())?;
+                let end = self.reduce(context, end.as_ref().clone())?;
+                let bin = self.reduce(context, bin.as_ref().clone())?;
+                Ok(match (start, end, bin) {
+                    (
+                        Term::Prim(Prim::Nat(s)),
+                        Term::Prim(Prim::Nat(e)),
+                        Term::Prim(Prim::Bin(bytes)),
+                    ) => Term::Prim(Prim::Bin(bytes[s as usize..e as usize].to_vec())),
+                    (start, end, bin) => Term::Prim(Prim::bin_slice(start, end, bin)),
+                })
+            }
+            Prim::BinConcat(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Bin(mut left)), Term::Prim(Prim::Bin(right))) => {
+                        left.extend(right);
+                        Term::Prim(Prim::Bin(left))
+                    }
+                    (left, right) => Term::Prim(Prim::bin_concat(left, right)),
+                })
+            }
             Prim::LstType(elem) => {
                 let elem = self.reduce(context, elem.as_ref().clone())?;
                 Ok(Term::Prim(Prim::lst_type(elem)))
