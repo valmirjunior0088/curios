@@ -33,16 +33,7 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
         Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
-        Data::Bin(bytes) => flat([
-            pure("\""),
-            pure(
-                bytes
-                    .iter()
-                    .map(|b| format!("\\{:02x}", b))
-                    .collect::<String>(),
-            ),
-            pure("\""),
-        ]),
+        Data::Bin(bytes) => pure(bytes.iter().map(|b| format!("\\{:02x}", b)).collect::<String>()),
         Data::Lst(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
