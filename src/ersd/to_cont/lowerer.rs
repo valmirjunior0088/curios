@@ -643,6 +643,49 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::FltToNat(operand)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Pure(cont::Data::Bin(bytes.clone())),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+
+                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::BinLen(bin)))
+            }
+            ersd::Term::Prim(ersd::Prim::BinGet(idx, bin)) => {
+                let idx = self.lower_letrec_name(idx, frame, state, builder);
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BinGet(idx, bin)),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::BinSlice(start, end, bin)) => {
+                let start = self.lower_letrec_name(start, frame, state, builder);
+                let end = self.lower_letrec_name(end, frame, state, builder);
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
+                let b1 = self.lower_letrec_name(b1, frame, state, builder);
+                let b2 = self.lower_letrec_name(b2, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BinConcat(b1, b2)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
                 let names = elements
                     .iter()
@@ -1022,6 +1065,36 @@ impl<'a> Lowerer<'a> {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::FltToNat(operand)));
+            }
+            ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
+                builder.add_value(target, cont::Value::Pure(cont::Data::Bin(bytes.clone())));
+            }
+            ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinLen(bin)));
+            }
+            ersd::Term::Prim(ersd::Prim::BinGet(idx, bin)) => {
+                let idx = self.lower_letrec_name(idx, frame, state, builder);
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinGet(idx, bin)));
+            }
+            ersd::Term::Prim(ersd::Prim::BinSlice(start, end, bin)) => {
+                let start = self.lower_letrec_name(start, frame, state, builder);
+                let end = self.lower_letrec_name(end, frame, state, builder);
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
+                );
+            }
+            ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
+                let b1 = self.lower_letrec_name(b1, frame, state, builder);
+                let b2 = self.lower_letrec_name(b2, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinConcat(b1, b2)));
             }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
                 let names = elements
@@ -2129,6 +2202,107 @@ impl<'a> Lowerer<'a> {
                     );
 
                     cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
+                let value = emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Pure(cont::Data::Bin(bytes.clone())),
+                );
+
+                cont(self, state, builder, value)
+            }
+            ersd::Term::Prim(ersd::Prim::BinLen(bin)) => self.lower_to_name(
+                bin,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, bin| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::BinLen(bin)),
+                    );
+
+                    cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::BinGet(idx, bin)) => self.lower_to_name(
+                idx,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, idx| {
+                    this.lower_to_name(
+                        bin,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, bin| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::BinGet(idx, bin)),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::BinSlice(start, end, bin)) => self.lower_to_name(
+                start,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, start| {
+                    this.lower_to_name(
+                        end,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, end| {
+                            this.lower_to_name(
+                                bin,
+                                frame,
+                                state,
+                                builder,
+                                Box::new(move |this, state, builder, bin| {
+                                    let value = emit_fresh_value(
+                                        state,
+                                        builder,
+                                        cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
+                                    );
+
+                                    cont(this, state, builder, value)
+                                }),
+                            )
+                        }),
+                    )
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => self.lower_to_name(
+                b1,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, b1| {
+                    this.lower_to_name(
+                        b2,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, b2| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::BinConcat(b1, b2)),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
                 }),
             ),
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {

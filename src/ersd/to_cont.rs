@@ -216,4 +216,17 @@ mod tests {
                 .any(|(_, value)| matches!(value, cont::Value::Pure(cont::Data::Tpl(_))))
         );
     }
+
+    #[test]
+    fn lowers_bin_literal() {
+        let term = Term::Prim(Prim::Bin(vec![1, 2, 3]));
+        let module = to_cont(&term);
+
+        let func = &module.funcs()[0].1;
+        let has_bin = func.region.values.iter().any(|(_, value)| {
+            matches!(value, cont::Value::Pure(cont::Data::Bin(bytes)) if bytes == &[1, 2, 3])
+        });
+
+        assert!(has_bin);
+    }
 }
