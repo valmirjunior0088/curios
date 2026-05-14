@@ -49,10 +49,17 @@ impl Convert {
         match (this, that) {
             (Prim::NatType, Prim::NatType)
             | (Prim::IntType, Prim::IntType)
-            | (Prim::FltType, Prim::FltType) => Ok(true),
+            | (Prim::FltType, Prim::FltType)
+            | (Prim::BinType, Prim::BinType) => Ok(true),
             (Prim::Nat(this), Prim::Nat(that)) => Ok(this == that),
             (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
             (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
+            (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
+            (Prim::LstType(this), Prim::LstType(that)) => {
+                self.enqueue(*this, *that);
+
+                Ok(true)
+            }
             (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
             | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
             | (Prim::NatAdd(this_left, this_right), Prim::NatAdd(that_left, that_right))
@@ -88,7 +95,9 @@ impl Convert {
             | (Prim::FltLte(this_left, this_right), Prim::FltLte(that_left, that_right))
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
             | (Prim::LstGet(this_left, this_right), Prim::LstGet(that_left, that_right))
-            | (Prim::LstConcat(this_left, this_right), Prim::LstConcat(that_left, that_right)) => {
+            | (Prim::LstConcat(this_left, this_right), Prim::LstConcat(that_left, that_right))
+            | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
+            | (Prim::BinConcat(this_left, this_right), Prim::BinConcat(that_left, that_right)) => {
                 self.enqueue(*this_left, *that_left);
                 self.enqueue(*this_right, *that_right);
 
@@ -108,9 +117,20 @@ impl Convert {
             | (Prim::NatToFlt(this), Prim::NatToFlt(that))
             | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::FltToNat(this), Prim::FltToNat(that))
-            | (Prim::LstType(this), Prim::LstType(that))
-            | (Prim::LstLen(this), Prim::LstLen(that)) => {
+            | (Prim::LstLen(this), Prim::LstLen(that))
+            | (Prim::NatToBin(this), Prim::NatToBin(that))
+            | (Prim::BinLen(this), Prim::BinLen(that)) => {
                 self.enqueue(*this, *that);
+
+                Ok(true)
+            }
+            (
+                Prim::BinSlice(this_start, this_end, this_bin),
+                Prim::BinSlice(that_start, that_end, that_bin),
+            ) => {
+                self.enqueue(*this_start, *that_start);
+                self.enqueue(*this_end, *that_end);
+                self.enqueue(*this_bin, *that_bin);
 
                 Ok(true)
             }
@@ -502,6 +522,142 @@ mod tests {
         ]));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(false));
+    }
+
+    #[test]
+    fn convert_prim_bin_type_is_equal_to_itself() {
+        let mut context = context();
+
+        let this = Term::Prim(Prim::BinType);
+        let that = Term::Prim(Prim::BinType);
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_bin_literal_compares_bytes() {
+        let mut context = context();
+
+        assert_eq!(
+            convert(
+                &mut context,
+                &Term::Prim(Prim::Bin(vec![1, 2])),
+                &Term::Prim(Prim::Bin(vec![1, 2])),
+            ),
+            Ok(true)
+        );
+
+        assert_eq!(
+            convert(
+                &mut context,
+                &Term::Prim(Prim::Bin(vec![1, 2])),
+                &Term::Prim(Prim::Bin(vec![1, 3])),
+            ),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn convert_prim_bin_len_recurses_into_operand() {
+        let mut context = context();
+
+        let this = Term::from(Func::new("x", Term::Prim(Prim::bin_len(Var::free("x")))));
+        let that = Term::from(Func::new("y", Term::Prim(Prim::bin_len(Var::free("y")))));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_nat_to_bin_recurses_into_operand() {
+        let mut context = context();
+
+        let this = Term::from(Func::new("x", Term::Prim(Prim::nat_to_bin(Var::free("x")))));
+        let that = Term::from(Func::new("y", Term::Prim(Prim::nat_to_bin(Var::free("y")))));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_bin_get_recurses_into_operands() {
+        let mut context = context();
+
+        let this = Term::from(Func::new(
+            "x",
+            Func::new(
+                "a",
+                Term::Prim(Prim::bin_get(Var::free("x"), Var::free("a"))),
+            ),
+        ));
+
+        let that = Term::from(Func::new(
+            "y",
+            Func::new(
+                "b",
+                Term::Prim(Prim::bin_get(Var::free("y"), Var::free("b"))),
+            ),
+        ));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_bin_concat_recurses_into_operands() {
+        let mut context = context();
+
+        let this = Term::from(Func::new(
+            "x",
+            Func::new(
+                "a",
+                Term::Prim(Prim::bin_concat(Var::free("x"), Var::free("a"))),
+            ),
+        ));
+
+        let that = Term::from(Func::new(
+            "y",
+            Func::new(
+                "b",
+                Term::Prim(Prim::bin_concat(Var::free("y"), Var::free("b"))),
+            ),
+        ));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_prim_bin_slice_recurses_into_operands() {
+        let mut context = context();
+
+        let this = Term::from(Func::new(
+            "x",
+            Func::new(
+                "a",
+                Func::new(
+                    "p",
+                    Term::Prim(Prim::bin_slice(
+                        Var::free("x"),
+                        Var::free("a"),
+                        Var::free("p"),
+                    )),
+                ),
+            ),
+        ));
+
+        let that = Term::from(Func::new(
+            "y",
+            Func::new(
+                "b",
+                Func::new(
+                    "q",
+                    Term::Prim(Prim::bin_slice(
+                        Var::free("y"),
+                        Var::free("b"),
+                        Var::free("q"),
+                    )),
+                ),
+            ),
+        ));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
