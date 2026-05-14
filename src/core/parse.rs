@@ -315,6 +315,35 @@ fn parse_hex_byte<'a>() -> Parser<'a, u8> {
     )
 }
 
+fn parse_string_chunk<'a>() -> Parser<'a, String> {
+    catch(
+        take_while(|c| c != '\\' && c != '"').flat_map(|s: &str| {
+            if s.is_empty() {
+                fail("empty chunk")
+            } else {
+                pure(s.to_string())
+            }
+        }),
+    )
+    .or(catch(take_exact("\\")).and_keep(
+        take_exact("n")
+            .map(|_| "\n".to_string())
+            .or(take_exact("t").map(|_| "\t".to_string()))
+            .or(take_exact("r").map(|_| "\r".to_string()))
+            .or(take_exact("\\").map(|_| "\\".to_string()))
+            .or(take_exact("\"").map(|_| "\"".to_string()))
+            .or(fail("Unknown string escape sequence")),
+    ))
+}
+
+fn parse_string_literal<'a>() -> Parser<'a, Term> {
+    catch(take_exact("\""))
+        .and_keep(many0(parse_string_chunk))
+        .and_drop(take_exact("\""))
+        .and_drop(parse_whitespace())
+        .map(|chunks: Vec<String>| Term::Prim(Prim::Bin(chunks.concat().into_bytes())))
+}
+
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     catch(many1(parse_hex_byte).and_drop(parse_whitespace()))
         .map(|bytes| Term::Prim(Prim::Bin(bytes)))
@@ -338,6 +367,7 @@ fn parse_bin_prim<'a>() -> Parser<'a, Term> {
             .and(lazy(parse_atomic_term))
             .map(|(left, right)| Term::Prim(Prim::bin_concat(left, right))))
         .or(catch(parse_keyword("Bin")).map(|()| Term::Prim(Prim::BinType)))
+        .or(parse_string_literal())
         .or(parse_bin_literal())
 }
 
