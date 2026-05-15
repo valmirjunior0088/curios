@@ -70,11 +70,6 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Term::Prim(Prim::IntType))
         }
-        Prim::IntNeg(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
-
-            Ok(Term::Prim(Prim::IntType))
-        }
         Prim::FltType => Ok(Type.into()),
         Prim::Flt(_) => Ok(Term::Prim(Prim::FltType)),
         Prim::FltAdd(left, right)
@@ -637,14 +632,6 @@ fn erase_prim(
                 erase(context, right, &Term::Prim(Prim::IntType))?.into(),
             )
             .into())
-        }
-        Prim::IntNeg(inner) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(
-                ersd::Prim::IntNeg(erase(context, inner, &Term::Prim(Prim::IntType))?.into())
-                    .into(),
-            )
         }
         Prim::IntDiv(left, right) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;

@@ -176,7 +176,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
-        Prim::IntNeg(inner) => flat([pure("Int.neg "), print_term(*inner, depth)]),
         Prim::IntNeq(left, right) => flat([
             pure("Int.neq "),
             print_term(*left, depth),

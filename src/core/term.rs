@@ -606,7 +606,6 @@ where
             Prim::FltMul(left, right) => {
                 Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::IntNeg(inner) => Prim::IntNeg(self.visit_subterm(inner)),
             Prim::IntNeq(left, right) => {
                 Prim::IntNeq(self.visit_subterm(left), self.visit_subterm(right))
             }

@@ -230,14 +230,6 @@ impl Reduce {
                     (left, right) => Term::Prim(Prim::flt_mul(left, right)),
                 })
             }
-            Prim::IntNeg(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Int(v)) => Term::Prim(Prim::Int(v.wrapping_neg())),
-                    inner => Term::Prim(Prim::int_neg(inner)),
-                })
-            }
             Prim::IntNeq(left, right) => {
                 let left = self.reduce(context, left.as_ref().clone())?;
                 let right = self.reduce(context, right.as_ref().clone())?;

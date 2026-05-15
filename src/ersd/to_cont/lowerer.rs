@@ -337,15 +337,6 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::IntNeq(left, right)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::IntNeg(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntNeg(operand)),
-                )
-            }
             ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
                 let left = self.lower_letrec_name(left, frame, state, builder);
                 let right = self.lower_letrec_name(right, frame, state, builder);
@@ -896,11 +887,6 @@ impl<'a> Lowerer<'a> {
                 let right = self.lower_letrec_name(right, frame, state, builder);
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::IntNeq(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntNeg(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntNeg(operand)));
             }
             ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
                 let left = self.lower_letrec_name(left, frame, state, builder);
@@ -1592,21 +1578,6 @@ impl<'a> Lowerer<'a> {
                             cont(this, state, builder, value)
                         }),
                     )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntNeg(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::IntNeg(operand)),
-                    );
-
-                    cont(this, state, builder, value)
                 }),
             ),
             ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => self.lower_to_name(

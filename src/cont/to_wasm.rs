@@ -1055,10 +1055,19 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
-                    values: vec![(
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntNeg(cont::ValueName::from("FIVE"))),
-                    )],
+                    values: vec![
+                        (
+                            cont::ValueName::from("zero"),
+                            cont::Value::Pure(cont::Data::Int(0)),
+                        ),
+                        (
+                            cont::ValueName::from("result"),
+                            cont::Value::Eval(cont::Code::IntSub(
+                                cont::ValueName::from("zero"),
+                                cont::ValueName::from("FIVE"),
+                            )),
+                        ),
+                    ],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
                         target: cont::BlockName::from("r"),

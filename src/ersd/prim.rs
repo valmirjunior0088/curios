@@ -20,7 +20,6 @@ pub enum Prim {
     IntAdd(Subterm, Subterm),
     IntSub(Subterm, Subterm),
     IntMul(Subterm, Subterm),
-    IntNeg(Subterm),
     IntDiv(Subterm, Subterm),
     IntRem(Subterm, Subterm),
     IntLt(Subterm, Subterm),

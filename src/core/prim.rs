@@ -21,7 +21,6 @@ pub enum Prim {
     IntAdd(Subterm, Subterm),
     IntSub(Subterm, Subterm),
     IntMul(Subterm, Subterm),
-    IntNeg(Subterm),
     IntNeq(Subterm, Subterm),
     IntDiv(Subterm, Subterm),
     IntRem(Subterm, Subterm),
@@ -190,13 +189,6 @@ impl Prim {
         S: Into<Term>,
     {
         Self::IntMul(left.into().into(), right.into().into())
-    }
-
-    pub fn int_neg<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::IntNeg(inner.into().into())
     }
 
     pub fn int_neq<F, S>(left: F, right: S) -> Self

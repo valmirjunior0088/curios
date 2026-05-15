@@ -103,8 +103,7 @@ impl Convert {
 
                 Ok(true)
             }
-            (Prim::IntNeg(this), Prim::IntNeg(that))
-            | (Prim::FltNeg(this), Prim::FltNeg(that))
+            (Prim::FltNeg(this), Prim::FltNeg(that))
             | (Prim::FltAbs(this), Prim::FltAbs(that))
             | (Prim::FltSqrt(this), Prim::FltSqrt(that))
             | (Prim::FltFloor(this), Prim::FltFloor(that))
