@@ -595,15 +595,24 @@ impl Reduce {
                     (bin, byte) => Term::Prim(Prim::bin_append(bin, byte)),
                 })
             }
-            Prim::BinConcat(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Bin(mut left)), Term::Prim(Prim::Bin(right))) => {
-                        left.extend(right);
-                        Term::Prim(Prim::Bin(left))
+            Prim::BinConcat(operands) => {
+                let reduced: Vec<Term> = operands
+                    .iter()
+                    .map(|e| self.reduce(context, e.as_ref().clone()))
+                    .collect::<Result<_, _>>()?;
+                let merged = reduced.iter().try_fold(Vec::new(), |mut acc, t| {
+                    if let Term::Prim(Prim::Bin(b)) = t {
+                        acc.extend(b);
+                        Some(acc)
+                    } else {
+                        None
                     }
-                    (left, right) => Term::Prim(Prim::bin_concat(left, right)),
+                });
+                Ok(match merged {
+                    Some(bytes) => Term::Prim(Prim::Bin(bytes)),
+                    None => Term::Prim(Prim::BinConcat(
+                        reduced.into_iter().map(|t| t.into()).collect(),
+                    )),
                 })
             }
             Prim::LstType(elem) => {
@@ -659,15 +668,24 @@ impl Reduce {
                     list => Term::Prim(Prim::lst_append(list, elem)),
                 })
             }
-            Prim::LstConcat(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Lst(mut left)), Term::Prim(Prim::Lst(right))) => {
-                        left.extend(right);
-                        Term::Prim(Prim::Lst(left))
+            Prim::LstConcat(operands) => {
+                let reduced: Vec<Term> = operands
+                    .iter()
+                    .map(|e| self.reduce(context, e.as_ref().clone()))
+                    .collect::<Result<_, _>>()?;
+                let merged = reduced.iter().try_fold(Vec::new(), |mut acc, t| {
+                    if let Term::Prim(Prim::Lst(elems)) = t {
+                        acc.extend(elems.iter().cloned());
+                        Some(acc)
+                    } else {
+                        None
                     }
-                    (left, right) => Term::Prim(Prim::lst_concat(left, right)),
+                });
+                Ok(match merged {
+                    Some(elems) => Term::Prim(Prim::Lst(elems)),
+                    None => Term::Prim(Prim::LstConcat(
+                        reduced.into_iter().map(|t| t.into()).collect(),
+                    )),
                 })
             }
         }

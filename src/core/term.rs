@@ -681,8 +681,8 @@ where
             Prim::BinAppend(bin, byte) => {
                 Prim::BinAppend(self.visit_subterm(bin), self.visit_subterm(byte))
             }
-            Prim::BinConcat(left, right) => {
-                Prim::BinConcat(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::BinConcat(operands) => {
+                Prim::BinConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
             }
             Prim::LstType(elem) => Prim::LstType(self.visit_subterm(elem)),
             Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| self.visit_subterm(e)).collect()),
@@ -698,8 +698,8 @@ where
             Prim::LstAppend(list, elem) => {
                 Prim::LstAppend(self.visit_subterm(list), self.visit_subterm(elem))
             }
-            Prim::LstConcat(left, right) => {
-                Prim::LstConcat(self.visit_subterm(left), self.visit_subterm(right))
+            Prim::LstConcat(operands) => {
+                Prim::LstConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
             }
         }
     }

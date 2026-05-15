@@ -61,14 +61,14 @@ pub enum Prim {
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
     BinAppend(Subterm, Subterm),
-    BinConcat(Subterm, Subterm),
+    BinConcat(Vec<Subterm>),
     LstType(Subterm),
     Lst(Vec<Subterm>),
     LstLen(Subterm),
     LstGet(Subterm, Subterm),
     LstSlice(Subterm, Subterm, Subterm),
     LstAppend(Subterm, Subterm),
-    LstConcat(Subterm, Subterm),
+    LstConcat(Vec<Subterm>),
 }
 
 impl Prim {
@@ -467,12 +467,12 @@ impl Prim {
         Self::BinAppend(bin.into().into(), byte.into().into())
     }
 
-    pub fn bin_concat<L, R>(left: L, right: R) -> Self
+    pub fn bin_concat<I>(operands: I) -> Self
     where
-        L: Into<Term>,
-        R: Into<Term>,
+        I: IntoIterator,
+        I::Item: Into<Term>,
     {
-        Self::BinConcat(left.into().into(), right.into().into())
+        Self::BinConcat(operands.into_iter().map(|e| e.into().into()).collect())
     }
 
     pub fn lst_type<T>(elem: T) -> Self
@@ -514,12 +514,12 @@ impl Prim {
         Self::LstAppend(list.into().into(), elem.into().into())
     }
 
-    pub fn lst_concat<L, R>(left: L, right: R) -> Self
+    pub fn lst_concat<I>(operands: I) -> Self
     where
-        L: Into<Term>,
-        R: Into<Term>,
+        I: IntoIterator,
+        I::Item: Into<Term>,
     {
-        Self::LstConcat(left.into().into(), right.into().into())
+        Self::LstConcat(operands.into_iter().map(|e| e.into().into()).collect())
     }
 }
 

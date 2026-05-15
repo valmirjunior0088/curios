@@ -179,16 +179,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
-        Prim::BinConcat(left, right) => {
-            let bin_type = infer(context, left)?;
-            let bin_type = reduce(context, &bin_type)?;
-            match &bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, right, &bin_type)?;
-                    Ok(bin_type)
-                }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+        Prim::BinConcat(operands) => {
+            for operand in operands {
+                erase(context, operand, &Term::Prim(Prim::BinType))?;
             }
+            Ok(Term::Prim(Prim::BinType))
         }
         Prim::LstType(elem) => {
             erase(context, elem, &Type.into())?;
@@ -238,17 +233,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
-        Prim::LstConcat(left, right) => {
-            let list_type = infer(context, left)?;
-            let list_type = reduce(context, &list_type)?;
-            match &list_type {
-                Term::Prim(Prim::LstType(_)) => {
-                    erase(context, right, &list_type)?;
-                    Ok(list_type)
-                }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
-            }
-        }
+        Prim::LstConcat(_) => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
     }
 }
 
@@ -996,19 +981,12 @@ fn erase_prim(
             )
             .into())
         }
-        Prim::BinConcat(left, right) => {
-            let bin_type = infer(context, left)?;
-            let bin_type_reduced = reduce(context, &bin_type)?;
-            match &bin_type_reduced {
-                Term::Prim(Prim::BinType) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
-            }
-            expect(context, term, &bin_type_reduced, expected)?;
-            Ok(ersd::Prim::BinConcat(vec![
-                erase(context, left, &bin_type)?.into(),
-                erase(context, right, &bin_type)?.into(),
-            ])
-            .into())
+        Prim::BinConcat(operands) => {
+            let erased = operands
+                .iter()
+                .map(|e| erase(context, e, expected).map(|t| t.into()))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ersd::Prim::BinConcat(erased).into())
         }
         Prim::LstType(elem) => {
             expect(context, term, &Type.into(), expected)?;
@@ -1079,19 +1057,12 @@ fn erase_prim(
             )
             .into())
         }
-        Prim::LstConcat(left, right) => {
-            let list_type = infer(context, left)?;
-            let list_type_reduced = reduce(context, &list_type)?;
-            match &list_type_reduced {
-                Term::Prim(Prim::LstType(_)) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
-            }
-            expect(context, term, &list_type_reduced, expected)?;
-            Ok(ersd::Prim::LstConcat(vec![
-                erase(context, left, &list_type)?.into(),
-                erase(context, right, &list_type)?.into(),
-            ])
-            .into())
+        Prim::LstConcat(operands) => {
+            let erased = operands
+                .iter()
+                .map(|e| erase(context, e, expected).map(|t| t.into()))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ersd::Prim::LstConcat(erased).into())
         }
     }
 }

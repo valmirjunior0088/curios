@@ -308,11 +308,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*byte, depth),
         ]),
-        Prim::BinConcat(left, right) => flat([
+        Prim::BinConcat(operands) => flat([
             pure("Bin.concat "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
+            sep_flat(
+                operands.into_iter().map(move |e| print_term(*e, depth)),
+                || pure(", "),
+            ),
         ]),
         Prim::LstType(elem) => flat([pure("Lst "), print_term(*elem, depth)]),
         Prim::Lst(elems) => flat([
@@ -341,11 +342,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*elem, depth),
         ]),
-        Prim::LstConcat(left, right) => flat([
+        Prim::LstConcat(operands) => flat([
             pure("Lst.concat "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
+            sep_flat(
+                operands.into_iter().map(move |e| print_term(*e, depth)),
+                || pure(", "),
+            ),
         ]),
     }
 }

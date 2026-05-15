@@ -9,7 +9,7 @@ fn main() {
         let len : Nat = Lst.len xs;
         let first : Nat = Lst.get xs 0n;
         let rest : Lst Nat = Lst.slice xs 1n 3n;
-        let doubled : Lst Nat = Lst.concat xs xs;
+        let doubled : Lst Nat = Lst.concat xs, xs;
         Lst.len doubled
         "
     .parse()

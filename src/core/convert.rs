@@ -96,10 +96,8 @@ impl Convert {
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
             | (Prim::LstGet(this_left, this_right), Prim::LstGet(that_left, that_right))
             | (Prim::LstAppend(this_left, this_right), Prim::LstAppend(that_left, that_right))
-            | (Prim::LstConcat(this_left, this_right), Prim::LstConcat(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
-            | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right))
-            | (Prim::BinConcat(this_left, this_right), Prim::BinConcat(that_left, that_right)) => {
+            | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
                 self.enqueue(*this_left, *that_left);
                 self.enqueue(*this_right, *that_right);
 
@@ -153,6 +151,24 @@ impl Convert {
                     self.enqueue(*this, *that);
                 }
 
+                Ok(true)
+            }
+            (Prim::BinConcat(this_ops), Prim::BinConcat(that_ops)) => {
+                if this_ops.len() != that_ops.len() {
+                    return Ok(false);
+                }
+                for (this, that) in this_ops.into_iter().zip(that_ops) {
+                    self.enqueue(*this, *that);
+                }
+                Ok(true)
+            }
+            (Prim::LstConcat(this_ops), Prim::LstConcat(that_ops)) => {
+                if this_ops.len() != that_ops.len() {
+                    return Ok(false);
+                }
+                for (this, that) in this_ops.into_iter().zip(that_ops) {
+                    self.enqueue(*this, *that);
+                }
                 Ok(true)
             }
             (_, _) => Ok(false),
@@ -598,7 +614,7 @@ mod tests {
             "x",
             Func::new(
                 "a",
-                Term::Prim(Prim::bin_concat(Var::free("x"), Var::free("a"))),
+                Term::Prim(Prim::bin_concat([Var::free("x"), Var::free("a")])),
             ),
         ));
 
@@ -606,7 +622,7 @@ mod tests {
             "y",
             Func::new(
                 "b",
-                Term::Prim(Prim::bin_concat(Var::free("y"), Var::free("b"))),
+                Term::Prim(Prim::bin_concat([Var::free("y"), Var::free("b")])),
             ),
         ));
 
