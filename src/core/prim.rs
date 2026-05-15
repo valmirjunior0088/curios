@@ -55,18 +55,19 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
-    NatToBin(Subterm),
     BinType,
     Bin(Vec<u8>),
     BinLen(Subterm),
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
+    BinAppend(Subterm, Subterm),
     BinConcat(Subterm, Subterm),
     LstType(Subterm),
     Lst(Vec<Subterm>),
     LstLen(Subterm),
     LstGet(Subterm, Subterm),
     LstSlice(Subterm, Subterm, Subterm),
+    LstAppend(Subterm, Subterm),
     LstConcat(Subterm, Subterm),
 }
 
@@ -434,13 +435,6 @@ impl Prim {
         Self::FltToNat(inner.into().into())
     }
 
-    pub fn nat_to_bin<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::NatToBin(inner.into().into())
-    }
-
     pub fn bin_len<B>(bin: B) -> Self
     where
         B: Into<Term>,
@@ -463,6 +457,14 @@ impl Prim {
         E: Into<Term>,
     {
         Self::BinSlice(bin.into().into(), start.into().into(), end.into().into())
+    }
+
+    pub fn bin_append<B, E>(bin: B, byte: E) -> Self
+    where
+        B: Into<Term>,
+        E: Into<Term>,
+    {
+        Self::BinAppend(bin.into().into(), byte.into().into())
     }
 
     pub fn bin_concat<L, R>(left: L, right: R) -> Self
@@ -502,6 +504,14 @@ impl Prim {
         E: Into<Term>,
     {
         Self::LstSlice(list.into().into(), start.into().into(), end.into().into())
+    }
+
+    pub fn lst_append<L, E>(list: L, elem: E) -> Self
+    where
+        L: Into<Term>,
+        E: Into<Term>,
+    {
+        Self::LstAppend(list.into().into(), elem.into().into())
     }
 
     pub fn lst_concat<L, R>(left: L, right: R) -> Self

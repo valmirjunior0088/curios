@@ -52,16 +52,17 @@ pub enum Prim {
     NatToFlt(Subterm),
     FltToInt(Subterm),
     FltToNat(Subterm),
-    NatToBin(Subterm),
     Bin(Vec<u8>),
     BinLen(Subterm),
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
+    BinAppend(Subterm, Subterm),
     BinConcat(Subterm, Subterm),
     Lst(Vec<Subterm>),
     LstLen(Subterm),
     LstGet(Subterm, Subterm),
     LstSlice(Subterm, Subterm, Subterm),
+    LstAppend(Subterm, Subterm),
     LstConcat(Subterm, Subterm),
 }
 

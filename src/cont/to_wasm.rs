@@ -1651,11 +1651,15 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_nat_to_bin() {
+    fn lowers_and_runs_bin_append() {
         let mut module = cont::Module::new();
 
-        module.add_const(cont::ValueName::from("N"), cont::Data::Nat(0x42));
-        module.add_const(cont::ValueName::from("ZERO"), cont::Data::Nat(0));
+        module.add_const(
+            cont::ValueName::from("HELLO"),
+            cont::Data::Bin(b"hello".to_vec()),
+        );
+        module.add_const(cont::ValueName::from("BANG"), cont::Data::Nat(b'!' as u32));
+        module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
 
         module.add_func(
             cont::FuncName::from("main"),
@@ -1665,14 +1669,17 @@ mod tests {
                 region: cont::Region {
                     values: vec![
                         (
-                            cont::ValueName::from("bin"),
-                            cont::Value::Eval(cont::Code::NatToBin(cont::ValueName::from("N"))),
+                            cont::ValueName::from("appended"),
+                            cont::Value::Eval(cont::Code::BinAppend(
+                                cont::ValueName::from("HELLO"),
+                                cont::ValueName::from("BANG"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("result"),
                             cont::Value::Eval(cont::Code::BinGet(
-                                cont::ValueName::from("bin"),
-                                cont::ValueName::from("ZERO"),
+                                cont::ValueName::from("appended"),
+                                cont::ValueName::from("FIVE"),
                             )),
                         ),
                     ],
@@ -1692,6 +1699,64 @@ mod tests {
             .expect("expected i31 result")
             .get_i32();
 
-        assert_eq!(result, 0x42);
+        assert_eq!(result, b'!' as i32);
     }
+
+    #[test]
+    fn lowers_and_runs_lst_append() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+        module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+        module.add_const(cont::ValueName::from("NINE"), cont::Data::Nat(9));
+        module.add_const(
+            cont::ValueName::from("LST"),
+            cont::Data::Lst(vec![
+                cont::ValueName::from("THREE"),
+                cont::ValueName::from("SEVEN"),
+            ]),
+        );
+        module.add_const(cont::ValueName::from("TWO"), cont::Data::Nat(2));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![
+                        (
+                            cont::ValueName::from("appended"),
+                            cont::Value::Eval(cont::Code::LstAppend(
+                                cont::ValueName::from("LST"),
+                                cont::ValueName::from("NINE"),
+                            )),
+                        ),
+                        (
+                            cont::ValueName::from("result"),
+                            cont::Value::Eval(cont::Code::LstGet(
+                                cont::ValueName::from("appended"),
+                                cont::ValueName::from("TWO"),
+                            )),
+                        ),
+                    ],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        let (store, result) = run_main(&module);
+
+        let result = result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32();
+
+        assert_eq!(result, 9);
+    }
+
 }

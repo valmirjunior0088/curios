@@ -95,8 +95,10 @@ impl Convert {
             | (Prim::FltLte(this_left, this_right), Prim::FltLte(that_left, that_right))
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
             | (Prim::LstGet(this_left, this_right), Prim::LstGet(that_left, that_right))
+            | (Prim::LstAppend(this_left, this_right), Prim::LstAppend(that_left, that_right))
             | (Prim::LstConcat(this_left, this_right), Prim::LstConcat(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
+            | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right))
             | (Prim::BinConcat(this_left, this_right), Prim::BinConcat(that_left, that_right)) => {
                 self.enqueue(*this_left, *that_left);
                 self.enqueue(*this_right, *that_right);
@@ -117,7 +119,6 @@ impl Convert {
             | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::FltToNat(this), Prim::FltToNat(that))
             | (Prim::LstLen(this), Prim::LstLen(that))
-            | (Prim::NatToBin(this), Prim::NatToBin(that))
             | (Prim::BinLen(this), Prim::BinLen(that)) => {
                 self.enqueue(*this, *that);
 
@@ -562,16 +563,6 @@ mod tests {
 
         let this = Term::from(Func::new("x", Term::Prim(Prim::bin_len(Var::free("x")))));
         let that = Term::from(Func::new("y", Term::Prim(Prim::bin_len(Var::free("y")))));
-
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
-    }
-
-    #[test]
-    fn convert_prim_nat_to_bin_recurses_into_operand() {
-        let mut context = context();
-
-        let this = Term::from(Func::new("x", Term::Prim(Prim::nat_to_bin(Var::free("x")))));
-        let that = Term::from(Func::new("y", Term::Prim(Prim::nat_to_bin(Var::free("y")))));
 
         assert_eq!(convert(&mut context, &this, &that), Ok(true));
     }

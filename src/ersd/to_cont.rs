@@ -230,16 +230,4 @@ mod tests {
         assert!(has_bin);
     }
 
-    #[test]
-    fn lowers_nat_to_bin() {
-        let term = Term::Prim(Prim::NatToBin(Term::Prim(Prim::Nat(0x42)).into()));
-        let module = to_cont(&term);
-
-        let func = &module.funcs()[0].1;
-        let has_nat_to_bin = func.region.values.iter().any(|(_, value)| {
-            matches!(value, cont::Value::Eval(cont::Code::NatToBin(_)))
-        });
-
-        assert!(has_nat_to_bin);
-    }
 }

@@ -634,15 +634,6 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::FltToNat(operand)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::NatToBin(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatToBin(operand)),
-                )
-            }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
                 emit_fresh_value(
                     state,
@@ -674,6 +665,16 @@ impl<'a> Lowerer<'a> {
                     state,
                     builder,
                     cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => {
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+                let byte = self.lower_letrec_name(byte, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BinAppend(bin, byte)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
@@ -718,6 +719,16 @@ impl<'a> Lowerer<'a> {
                     state,
                     builder,
                     cont::Value::Eval(cont::Code::LstSlice(lst, start, end)),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::LstAppend(lst, elem)) => {
+                let lst = self.lower_letrec_name(lst, frame, state, builder);
+                let elem = self.lower_letrec_name(elem, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::LstAppend(lst, elem)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::LstConcat(l1, l2)) => {
@@ -1061,11 +1072,6 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::FltToNat(operand)));
             }
-            ersd::Term::Prim(ersd::Prim::NatToBin(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatToBin(operand)));
-            }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Bin(bytes.clone())));
             }
@@ -1089,6 +1095,12 @@ impl<'a> Lowerer<'a> {
                     target,
                     cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
                 );
+            }
+            ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => {
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
+                let byte = self.lower_letrec_name(byte, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinAppend(bin, byte)));
             }
             ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
                 let b1 = self.lower_letrec_name(b1, frame, state, builder);
@@ -1124,6 +1136,12 @@ impl<'a> Lowerer<'a> {
                     target,
                     cont::Value::Eval(cont::Code::LstSlice(start, end, lst)),
                 );
+            }
+            ersd::Term::Prim(ersd::Prim::LstAppend(lst, elem)) => {
+                let lst = self.lower_letrec_name(lst, frame, state, builder);
+                let elem = self.lower_letrec_name(elem, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::LstAppend(lst, elem)));
             }
             ersd::Term::Prim(ersd::Prim::LstConcat(l1, l2)) => {
                 let l1 = self.lower_letrec_name(l1, frame, state, builder);
@@ -2189,21 +2207,6 @@ impl<'a> Lowerer<'a> {
                     cont(this, state, builder, value)
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::NatToBin(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::NatToBin(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
                 let value = emit_fresh_value(
                     state,
@@ -2278,6 +2281,29 @@ impl<'a> Lowerer<'a> {
                                     cont(this, state, builder, value)
                                 }),
                             )
+                        }),
+                    )
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => self.lower_to_name(
+                bin,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, bin| {
+                    this.lower_to_name(
+                        byte,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, byte| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::BinAppend(bin, byte)),
+                            );
+
+                            cont(this, state, builder, value)
                         }),
                     )
                 }),
@@ -2373,6 +2399,29 @@ impl<'a> Lowerer<'a> {
                                     cont(this, state, builder, value)
                                 }),
                             )
+                        }),
+                    )
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::LstAppend(lst, elem)) => self.lower_to_name(
+                lst,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, lst| {
+                    this.lower_to_name(
+                        elem,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, elem| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::LstAppend(lst, elem)),
+                            );
+
+                            cont(this, state, builder, value)
                         }),
                     )
                 }),

@@ -552,14 +552,6 @@ impl Reduce {
                     inner => Term::Prim(Prim::flt_to_nat(inner)),
                 })
             }
-            Prim::NatToBin(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Nat(n)) => Term::Prim(Prim::Bin(vec![n as u8])),
-                    inner => Term::Prim(Prim::nat_to_bin(inner)),
-                })
-            }
             Prim::BinType => Ok(Term::Prim(Prim::BinType)),
             Prim::Bin(bytes) => Ok(Term::Prim(Prim::Bin(bytes.clone()))),
             Prim::BinLen(bin) => {
@@ -590,6 +582,17 @@ impl Reduce {
                         Term::Prim(Prim::Nat(e)),
                     ) => Term::Prim(Prim::Bin(bytes[s as usize..e as usize].to_vec())),
                     (bin, start, end) => Term::Prim(Prim::bin_slice(bin, start, end)),
+                })
+            }
+            Prim::BinAppend(bin, byte) => {
+                let bin = self.reduce(context, bin.as_ref().clone())?;
+                let byte = self.reduce(context, byte.as_ref().clone())?;
+                Ok(match (bin, byte) {
+                    (Term::Prim(Prim::Bin(mut bytes)), Term::Prim(Prim::Nat(n))) => {
+                        bytes.push(n as u8);
+                        Term::Prim(Prim::Bin(bytes))
+                    }
+                    (bin, byte) => Term::Prim(Prim::bin_append(bin, byte)),
                 })
             }
             Prim::BinConcat(left, right) => {
@@ -643,6 +646,17 @@ impl Reduce {
                         Term::Prim(Prim::Nat(end)),
                     ) => Term::Prim(Prim::Lst(elems[start as usize..end as usize].to_vec())),
                     (list, start, end) => Term::Prim(Prim::lst_slice(list, start, end)),
+                })
+            }
+            Prim::LstAppend(list, elem) => {
+                let list = self.reduce(context, list.as_ref().clone())?;
+                let elem = self.reduce(context, elem.as_ref().clone())?;
+                Ok(match list {
+                    Term::Prim(Prim::Lst(mut elems)) => {
+                        elems.push(elem.into());
+                        Term::Prim(Prim::Lst(elems))
+                    }
+                    list => Term::Prim(Prim::lst_append(list, elem)),
                 })
             }
             Prim::LstConcat(left, right) => {
@@ -923,5 +937,40 @@ mod tests {
         let list = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));
 
         reduce(&mut context, &Term::Prim(Prim::lst_get(list, Term::Prim(Prim::Nat(1))))).ok();
+    }
+
+    #[test]
+    fn reduce_bin_append_adds_byte() {
+        let mut context = context();
+
+        let bin = Term::Prim(Prim::Bin(vec![1, 2]));
+        let byte = Term::Prim(Prim::Nat(3));
+
+        assert_eq!(
+            reduce(&mut context, &Term::Prim(Prim::bin_append(bin, byte))),
+            Ok(Term::Prim(Prim::Bin(vec![1, 2, 3])))
+        );
+    }
+
+    #[test]
+    fn reduce_lst_append_adds_element() {
+        let mut context = context();
+
+        let list = Term::Prim(Prim::from(vec![
+            Term::Prim(Prim::Nat(10)),
+            Term::Prim(Prim::Nat(20)),
+        ]));
+
+        assert_eq!(
+            reduce(
+                &mut context,
+                &Term::Prim(Prim::lst_append(list, Term::Prim(Prim::Nat(30))))
+            ),
+            Ok(Term::Prim(Prim::from(vec![
+                Term::Prim(Prim::Nat(10)),
+                Term::Prim(Prim::Nat(20)),
+                Term::Prim(Prim::Nat(30)),
+            ])))
+        );
     }
 }

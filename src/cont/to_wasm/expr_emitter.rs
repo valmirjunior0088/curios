@@ -776,17 +776,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::NatToBin(nat) => {
-                let bin_type = self.context.table().bin_type();
-                self.emit_instrs(self.context.load_value_instrs(nat, LoadAs::Int));
-                self.emit_instr(wasm::Instr::ArrayNewFixed {
-                    type_name: bin_type,
-                    length: 1,
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
             cont::Code::BinLen(bin) => {
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instr(wasm::Instr::ArrayLen);
@@ -829,6 +818,38 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::ArrayCopy {
                     source_name: bin_type.clone(),
                     target_name: bin_type,
+                });
+            }
+            cont::Code::BinAppend(bin, byte) => {
+                let bin_type = self.context.table().bin_type();
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::ArrayNewDefault {
+                    type_name: bin_type.clone(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::ArrayCopy {
+                    source_name: bin_type.clone(),
+                    target_name: bin_type.clone(),
+                });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instrs(self.context.load_value_instrs(byte, LoadAs::Int));
+                self.emit_instr(wasm::Instr::ArraySet {
+                    type_name: bin_type,
                 });
             }
             cont::Code::BinConcat(operands) => {
@@ -975,6 +996,38 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::ArrayCopy {
                     source_name: lst_type.clone(),
                     target_name: lst_type.clone(),
+                });
+            }
+            cont::Code::LstAppend(lst, elem) => {
+                let lst_type = self.context.table().lst_type();
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::ArrayNewDefault {
+                    type_name: lst_type.clone(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instr(wasm::Instr::ArrayCopy {
+                    source_name: lst_type.clone(),
+                    target_name: lst_type.clone(),
+                });
+
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instr(wasm::Instr::ArrayLen);
+                self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
+                self.emit_instr(wasm::Instr::ArraySet {
+                    type_name: lst_type,
                 });
             }
             cont::Code::LstConcat(operands) => {

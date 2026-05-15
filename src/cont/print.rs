@@ -413,7 +413,6 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::NatToFlt(operand) => flat([pure("Nat.to_flt"), pure(" "), print_value_name(operand)]),
         Code::FltToInt(operand) => flat([pure("Flt.to_int"), pure(" "), print_value_name(operand)]),
         Code::FltToNat(operand) => flat([pure("Flt.to_nat"), pure(" "), print_value_name(operand)]),
-        Code::NatToBin(operand) => flat([pure("Nat.to_bin"), pure(" "), print_value_name(operand)]),
         Code::BinLen(bin) => flat([pure("Bin.len"), pure(" "), print_value_name(bin)]),
         Code::BinGet(bin, idx) => flat([
             pure("Bin.get"),
@@ -430,6 +429,13 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             print_value_name(start),
             pure(", "),
             print_value_name(end),
+        ]),
+        Code::BinAppend(bin, byte) => flat([
+            pure("Bin.append"),
+            pure(" "),
+            print_value_name(bin),
+            pure(", "),
+            print_value_name(byte),
         ]),
         Code::BinConcat(operands) => flat([
             pure("Bin.concat"),
@@ -452,6 +458,13 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             print_value_name(start),
             pure(", "),
             print_value_name(end),
+        ]),
+        Code::LstAppend(lst, elem) => flat([
+            pure("Lst.append"),
+            pure(" "),
+            print_value_name(lst),
+            pure(", "),
+            print_value_name(elem),
         ]),
         Code::LstConcat(operands) => flat([
             pure("Lst.concat"),

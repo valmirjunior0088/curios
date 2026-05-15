@@ -295,9 +295,6 @@ fn parse_conv_prim<'a>() -> Parser<'a, Term> {
         .or(catch(parse_keyword("Flt.to_nat"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::flt_to_nat(inner))))
-        .or(catch(parse_keyword("Nat.to_bin"))
-            .and_keep(lazy(parse_atomic_term))
-            .map(|inner| Term::Prim(Prim::nat_to_bin(inner))))
 }
 
 fn parse_hex_byte<'a>() -> Parser<'a, u8> {
@@ -359,6 +356,10 @@ fn parse_bin_prim<'a>() -> Parser<'a, Term> {
             .and(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|((bin, start), end)| Term::Prim(Prim::bin_slice(bin, start, end))))
+        .or(catch(parse_keyword("Bin.append"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(bin, byte)| Term::Prim(Prim::bin_append(bin, byte))))
         .or(catch(parse_keyword("Bin.concat"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
@@ -390,6 +391,10 @@ fn parse_lst_prim<'a>() -> Parser<'a, Term> {
             .and(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .map(|((list, start), end)| Term::Prim(Prim::lst_slice(list, start, end))))
+        .or(catch(parse_keyword("Lst.append"))
+            .and_keep(lazy(parse_atomic_term))
+            .and(lazy(parse_atomic_term))
+            .map(|(list, elem)| Term::Prim(Prim::lst_append(list, elem))))
         .or(catch(parse_keyword("Lst.concat"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))

@@ -285,7 +285,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(*inner, depth)]),
         Prim::FltToInt(inner) => flat([pure("Flt.to_int "), print_term(*inner, depth)]),
         Prim::FltToNat(inner) => flat([pure("Flt.to_nat "), print_term(*inner, depth)]),
-        Prim::NatToBin(inner) => flat([pure("Nat.to_bin "), print_term(*inner, depth)]),
         Prim::BinType => pure("Bin"),
         Prim::Bin(bytes) => pure(bytes.iter().map(|b| format!("\\{:02x}", b)).collect::<String>()),
         Prim::BinLen(bin) => flat([pure("Bin.len "), print_term(*bin, depth)]),
@@ -302,6 +301,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(*start, depth),
             pure(" "),
             print_term(*end, depth),
+        ]),
+        Prim::BinAppend(bin, byte) => flat([
+            pure("Bin.append "),
+            print_term(*bin, depth),
+            pure(" "),
+            print_term(*byte, depth),
         ]),
         Prim::BinConcat(left, right) => flat([
             pure("Bin.concat "),
@@ -329,6 +334,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(*start, depth),
             pure(" "),
             print_term(*end, depth),
+        ]),
+        Prim::LstAppend(list, elem) => flat([
+            pure("Lst.append "),
+            print_term(*list, depth),
+            pure(" "),
+            print_term(*elem, depth),
         ]),
         Prim::LstConcat(left, right) => flat([
             pure("Lst.concat "),
