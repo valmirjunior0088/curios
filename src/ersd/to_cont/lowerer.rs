@@ -683,7 +683,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BinConcat(b1, b2)),
+                    cont::Value::Eval(cont::Code::BinConcat(vec![b1, b2])),
                 )
             }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
@@ -727,7 +727,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::LstConcat(l1, l2)),
+                    cont::Value::Eval(cont::Code::LstConcat(vec![l1, l2])),
                 )
             }
             ersd::Term::Func(func) => {
@@ -1094,7 +1094,7 @@ impl<'a> Lowerer<'a> {
                 let b1 = self.lower_letrec_name(b1, frame, state, builder);
                 let b2 = self.lower_letrec_name(b2, frame, state, builder);
 
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinConcat(b1, b2)));
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinConcat(vec![b1, b2])));
             }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
                 let names = elements
@@ -1129,7 +1129,7 @@ impl<'a> Lowerer<'a> {
                 let l1 = self.lower_letrec_name(l1, frame, state, builder);
                 let l2 = self.lower_letrec_name(l2, frame, state, builder);
 
-                builder.add_value(target, cont::Value::Eval(cont::Code::LstConcat(l1, l2)));
+                builder.add_value(target, cont::Value::Eval(cont::Code::LstConcat(vec![l1, l2])));
             }
             ersd::Term::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
@@ -2297,7 +2297,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::BinConcat(b1, b2)),
+                                cont::Value::Eval(cont::Code::BinConcat(vec![b1, b2])),
                             );
 
                             cont(this, state, builder, value)
@@ -2392,7 +2392,7 @@ impl<'a> Lowerer<'a> {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::LstConcat(l1, l2)),
+                                cont::Value::Eval(cont::Code::LstConcat(vec![l1, l2])),
                             );
 
                             cont(this, state, builder, value)

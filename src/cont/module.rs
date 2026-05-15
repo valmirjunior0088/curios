@@ -88,11 +88,11 @@ pub enum Code {
     BinLen(ValueName),
     BinGet(ValueName, ValueName),
     BinSlice(ValueName, ValueName, ValueName),
-    BinConcat(ValueName, ValueName),
+    BinConcat(Vec<ValueName>),
     LstLen(ValueName),
     LstGet(ValueName, ValueName),
     LstSlice(ValueName, ValueName, ValueName),
-    LstConcat(ValueName, ValueName),
+    LstConcat(Vec<ValueName>),
     TplGet(usize, ValueName),
 }
 

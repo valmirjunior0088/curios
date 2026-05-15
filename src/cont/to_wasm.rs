@@ -772,10 +772,10 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("concat"),
-                            cont::Value::Eval(cont::Code::LstConcat(
+                            cont::Value::Eval(cont::Code::LstConcat(vec![
                                 cont::ValueName::from("LST1"),
                                 cont::ValueName::from("LST2"),
-                            )),
+                            ])),
                         ),
                         (
                             cont::ValueName::from("result"),

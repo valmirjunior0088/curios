@@ -431,12 +431,10 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(bin),
         ]),
-        Code::BinConcat(b1, b2) => flat([
+        Code::BinConcat(operands) => flat([
             pure("Bin.concat"),
             pure(" "),
-            print_value_name(b1),
-            pure(", "),
-            print_value_name(b2),
+            print_value_names(operands),
         ]),
         Code::LstLen(lst) => flat([pure("Lst.len"), pure(" "), print_value_name(lst)]),
         Code::LstGet(idx, lst) => flat([
@@ -455,12 +453,10 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(lst),
         ]),
-        Code::LstConcat(l1, l2) => flat([
+        Code::LstConcat(operands) => flat([
             pure("Lst.concat"),
             pure(" "),
-            print_value_name(l1),
-            pure(", "),
-            print_value_name(l2),
+            print_value_names(operands),
         ]),
         Code::TplGet(index, tuple) => flat([
             pure("Tpl.get "),
