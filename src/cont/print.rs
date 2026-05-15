@@ -531,14 +531,14 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 flat([
                     pure("| "),
                     pure(index.to_string()),
-                    pure(" -> "),
+                    pure(" => "),
                     print_target(target),
                     pure("\n"),
                 ])
             })),
             match &target.default {
-                Some(default) => flat([pure("| _ -> "), print_target(default)]),
-                None => pure("| _ -> unreachable"),
+                Some(default) => flat([pure("| _ => "), print_target(default)]),
+                None => pure("| _ => unreachable"),
             },
         ]),
         Tail::Call(target) => flat(match target {

@@ -1,5 +1,5 @@
 use {
-    super::{Apply, Case, Context, Func, Let, Pair, Preempted, Prim, Split, Term, Var},
+    super::{Apply, Case, Context, Elim, Func, Let, Pair, Preempted, Prim, Split, Term, Var},
     std::time::{Duration, Instant},
 };
 
@@ -705,6 +705,31 @@ impl Reduce {
         }
     }
 
+    fn reduce_elim(&mut self, context: &mut Context, elim: Elim) -> Result<Step, Preempted> {
+        let Elim {
+            head,
+            motive,
+            zero_case,
+            succ_case,
+        } = elim;
+
+        match self.reduce(context, *head)? {
+            Term::Prim(Prim::Nat(0)) => Ok(Step::Continue(*zero_case)),
+            Term::Prim(Prim::Nat(n)) => {
+                Ok(Step::Continue(succ_case.open(&[&Term::Prim(Prim::Nat(n - 1))])))
+            }
+            head => Ok(Step::Break(
+                Elim {
+                    head: head.into(),
+                    motive,
+                    zero_case,
+                    succ_case,
+                }
+                .into(),
+            )),
+        }
+    }
+
     fn reduce_split(&mut self, context: &mut Context, split: Split) -> Result<Step, Preempted> {
         let Split { head, motive, tail } = split;
         match self.reduce(context, *head)? {
@@ -773,11 +798,12 @@ impl Reduce {
             }
 
             let step = match term {
+                Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
+                Term::Elim(elim) => self.reduce_elim(context, elim)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
                 Term::Split(split) => self.reduce_split(context, split)?,
                 Term::Case(case) => self.reduce_case(context, case)?,
                 Term::Let(let_) => self.reduce_let(let_),
-                Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
                 Term::Var(var) => self.reduce_var(context, var),
                 term => Step::Break(term),
             };
@@ -794,7 +820,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Case, Let, Type, Var},
+        crate::core::{Atom, AtomType, Case, Elim, Let, Prim, Type, Var},
         std::time::Duration,
     };
 
@@ -844,6 +870,23 @@ mod tests {
         .into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Atom::from("yes").into()));
+    }
+
+    #[test]
+    fn reduce_elim_zero_is_not_true() {
+        let mut context = context();
+
+        let term = Elim::new(
+            Prim::Nat(0),
+            "m",
+            AtomType::new(["false", "true"]),
+            Atom::from("false"),
+            "pred",
+            Atom::from("true"),
+        )
+        .into();
+
+        assert_ne!(reduce(&mut context, &term), Ok(Atom::from("true").into()));
     }
 
     #[test]

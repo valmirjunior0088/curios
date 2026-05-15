@@ -214,6 +214,43 @@ impl Pair {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Elim {
+    pub head: Subterm,
+    pub motive: Scope<One>,
+    pub zero_case: Subterm,
+    pub succ_case: Scope<One>,
+}
+
+impl Elim {
+    pub fn new<H, ML, M, ZC, PL, SC>(
+        head: H,
+        motive_label: ML,
+        motive: M,
+        zero_case: ZC,
+        pred_label: PL,
+        succ_case: SC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        ML: Into<String>,
+        M: Into<Term>,
+        ZC: Into<Term>,
+        PL: Into<String>,
+        SC: Into<Term>,
+    {
+        let motive_label = motive_label.into();
+        let pred_label = pred_label.into();
+
+        Self {
+            head: head.into().into(),
+            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            zero_case: zero_case.into().into(),
+            succ_case: Scope::close(One, &[pred_label.as_str()], succ_case),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Split {
     pub head: Subterm,
     pub motive: Scope<One>,
@@ -370,6 +407,7 @@ impl LetRec {
 pub enum Term {
     Type,
     Prim(Prim),
+    Elim(Elim),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -481,6 +519,12 @@ impl From<PairType> for Term {
 impl From<Pair> for Term {
     fn from(value: Pair) -> Self {
         Self::Pair(value)
+    }
+}
+
+impl From<Elim> for Term {
+    fn from(value: Elim) -> Self {
+        Self::Elim(value)
     }
 }
 
@@ -749,6 +793,15 @@ where
         }
     }
 
+    fn visit_elim(&mut self, elim: &Elim) -> Elim {
+        Elim {
+            head: self.visit_subterm(&elim.head),
+            motive: self.visit_scope(&elim.motive),
+            zero_case: self.visit_subterm(&elim.zero_case),
+            succ_case: self.visit_scope(&elim.succ_case),
+        }
+    }
+
     fn visit_split(&mut self, split: &Split) -> Split {
         Split {
             head: self.visit_subterm(&split.head),
@@ -792,6 +845,7 @@ where
         match term {
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
+            Term::Elim(elim) => self.visit_elim(elim).into(),
             Term::FuncType(ft) => self.visit_func_type(ft).into(),
             Term::Func(func) => self.visit_func(func).into(),
             Term::Apply(apply) => self.visit_apply(apply).into(),

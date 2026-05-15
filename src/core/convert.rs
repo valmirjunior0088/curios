@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Case, Context, Func, FuncType, LetRec, Pair, PairType, Preempted,
-        Prim, Split, Term, Var, reduce,
+        Apply, Atom, AtomType, Case, Context, Elim, Func, FuncType, LetRec, Pair, PairType,
+        Preempted, Prim, Split, Term, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -229,6 +229,31 @@ impl Convert {
         Ok(true)
     }
 
+    fn compare_elim(
+        &mut self,
+        context: &mut Context,
+        this: Elim,
+        that: Elim,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(*this.head, *that.head);
+
+        let motive_label = Var::free(context.fresh()).into();
+        self.enqueue(
+            this.motive.open(&[&motive_label]),
+            that.motive.open(&[&motive_label]),
+        );
+
+        self.enqueue(*this.zero_case, *that.zero_case);
+
+        let pred_label = Var::free(context.fresh()).into();
+        self.enqueue(
+            this.succ_case.open(&[&pred_label]),
+            that.succ_case.open(&[&pred_label]),
+        );
+
+        Ok(true)
+    }
+
     fn compare_split(
         &mut self,
         context: &mut Context,
@@ -330,6 +355,9 @@ impl Convert {
 
             let ok = match (this, that) {
                 (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
+                (Term::Elim(this), Term::Elim(that)) => {
+                    self.compare_elim(context, this, that)?
+                }
                 (Term::FuncType(this), Term::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?
                 }

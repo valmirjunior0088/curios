@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Case, Func, FuncType, Let, LetRec, One, Pair, PairType, Prim, Scope,
-        Split, Term, Two, Var,
+        Apply, Atom, AtomType, Case, Elim, Func, FuncType, Let, LetRec, One, Pair, PairType, Prim,
+        Scope, Split, Term, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -364,6 +364,33 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
         Term::Prim(prim) => print_prim(prim, depth),
+        Term::Elim(Elim {
+            head,
+            motive,
+            zero_case,
+            succ_case,
+        }) => {
+            let (motive_label, motive) = open_scope_one(motive, depth);
+            let (pred_label, succ_case) = open_scope_one(succ_case, depth);
+
+            flat([
+                pure("elim "),
+                print_term(*head, depth),
+                pure(" with "),
+                pure(motive_label),
+                pure(" => "),
+                print_term(motive, depth + 1),
+                pure(";"),
+                pure("\n| 0n => "),
+                print_term(*zero_case, depth),
+                pure(";"),
+                pure("\n| "),
+                pure(pred_label),
+                pure(" => "),
+                print_term(succ_case, depth),
+                pure(";"),
+            ])
+        }
         Term::FuncType(FuncType { input, output }) => {
             let (label, output) = open_scope_one(output, depth);
 

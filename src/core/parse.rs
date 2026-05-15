@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Case, Func, FuncType, Let, LetRec, Pair, PairType, Prim, Split,
-        Term, Type, Var,
+        Apply, Atom, AtomType, Case, Elim, Func, FuncType, Let, LetRec, Pair, PairType, Prim,
+        Split, Term, Type, Var,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -27,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-const KEYWORDS: &[&str] = &["let", "case", "with"];
+const KEYWORDS: &[&str] = &["let", "case", "elim", "with"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -477,6 +477,33 @@ fn parse_func<'a>() -> Parser<'a, Term> {
         .map(|(label, body)| Func::new(label, body).into())
 }
 
+fn parse_elim<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_keyword("elim")
+            .and_keep(lazy(parse_term))
+            .and_drop(parse_keyword("with"))
+            .and(parse_identifier())
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+    .and_drop(parse_literal("|"))
+    .and_drop(parse_keyword("0n"))
+    .and_drop(parse_literal("=>"))
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+    .and_drop(parse_literal("|"))
+    .and(parse_identifier())
+    .and_drop(parse_literal("=>"))
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+    .map(
+        |(((((head, motive_label), motive), zero_case), pred_label), succ_case)| {
+            Elim::new(head, motive_label, motive, zero_case, pred_label, succ_case).into()
+        },
+    )
+}
+
 fn parse_case_branch<'a>() -> Parser<'a, (Atom, Term)> {
     catch(
         parse_literal("|")
@@ -571,6 +598,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     parse_let_rec()
         .or(parse_split())
         .or(parse_let())
+        .or(parse_elim())
         .or(parse_case())
         .or(parse_func_type())
         .or(parse_func())

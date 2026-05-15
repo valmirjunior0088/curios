@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, AtomType, Case, Context, Error, Func, FuncType, Let, LetRec, Pair, PairType,
+        Apply, AtomType, Case, Context, Elim, Error, Func, FuncType, Let, LetRec, Pair, PairType,
         Preempted, Prim, Split, Term, Type, Var,
     },
     crate::ersd,
@@ -296,6 +296,59 @@ fn infer_pair_type(context: &mut Context, pt: &PairType) -> Result<Term, Error> 
     Ok(Type.into())
 }
 
+fn infer_elim(context: &mut Context, elim: &Elim, term: &Term) -> Result<Term, Error> {
+    let Elim {
+        head,
+        motive,
+        zero_case,
+        succ_case,
+    } = elim;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    if !matches!(head_type, Term::Prim(Prim::NatType)) {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &Term::Prim(Prim::NatType));
+
+        erase(
+            context,
+            &motive.open(&[&Var::free(head_label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    erase(
+        context,
+        zero_case,
+        &motive.open(&[&Term::Prim(Prim::Nat(0))]),
+    )?;
+
+    let pred_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&pred_label, &Term::Prim(Prim::NatType));
+
+        erase(
+            context,
+            &succ_case.open(&[&Var::free(&pred_label).into()]),
+            &motive.open(&[&Term::Prim(Prim::nat_add(
+                Var::free(&pred_label),
+                Prim::Nat(1),
+            ))]),
+        )
+        .map(|_| ())
+    })?;
+
+    Ok(motive.open(&[head.as_ref()]))
+}
+
 fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term, Error> {
     let Split { head, motive, tail } = split;
 
@@ -457,6 +510,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     match term {
         Term::Type => Ok(Type.into()),
         Term::Prim(prim) => infer_prim(context, prim),
+        Term::Elim(elim) => infer_elim(context, elim, term),
         Term::FuncType(ft) => infer_func_type(context, ft),
         Term::Apply(apply) => infer_apply(context, apply, term),
         Term::PairType(pt) => infer_pair_type(context, pt),
@@ -1142,6 +1196,72 @@ fn erase_pair(context: &mut Context, pair: &Pair, expected: &Term) -> Result<ers
     .into())
 }
 
+fn erase_elim(
+    context: &mut Context,
+    elim: &Elim,
+    term: &Term,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let Elim {
+        head,
+        motive,
+        zero_case,
+        succ_case,
+    } = elim;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    if !matches!(head_type, Term::Prim(Prim::NatType)) {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &Term::Prim(Prim::NatType));
+
+        erase(
+            context,
+            &motive.open(&[&Var::free(head_label).into()]),
+            &Type.into(),
+        )
+    })?;
+
+    let erased_zero_case = erase(
+        context,
+        zero_case,
+        &motive.open(&[&Term::Prim(Prim::Nat(0))]),
+    )?;
+
+    let pred_label = context.fresh();
+
+    let erased_succ_case = context.with_frame(|context| {
+        context.assume(&pred_label, &Term::Prim(Prim::NatType));
+
+        erase(
+            context,
+            &succ_case.open(&[&Var::free(&pred_label).into()]),
+            &motive.open(&[&Term::Prim(Prim::nat_add(
+                Var::free(&pred_label),
+                Prim::Nat(1),
+            ))]),
+        )
+    })?;
+
+    let erased_head = erase(context, head, &head_type)?;
+
+    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
+
+    Ok(ersd::Elim {
+        head: erased_head.into(),
+        zero_case: erased_zero_case.into(),
+        pred: pred_label,
+        succ_case: erased_succ_case.into(),
+    }
+    .into())
+}
+
 fn erase_split(
     context: &mut Context,
     split: &Split,
@@ -1364,6 +1484,7 @@ fn erase_letrec(
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
     match term {
         Term::Prim(prim) => erase_prim(context, term, prim, expected),
+        Term::Elim(elim) => erase_elim(context, elim, term, expected),
         Term::Type => {
             expect(context, term, &Type.into(), expected)?;
             Ok(ersd::Term::Erased)
@@ -1404,7 +1525,7 @@ mod tests {
     use {
         super::*,
         crate::{
-            core::{Atom, AtomType, Case, Func, FuncType, LetRec, Pair, PairType, Term, Type},
+            core::{Atom, AtomType, Case, Elim, Func, FuncType, LetRec, Pair, PairType, Term, Type},
             ersd,
         },
         std::time::Duration,
@@ -1591,19 +1712,19 @@ mod tests {
                 let alpha_case : '[zeta, alpha, mu] = 'alpha;
                 let mu_case : '[zeta, alpha, mu] = 'mu;
                 let zeta_case : '[zeta, alpha, mu] = 'zeta;
-                match outer with subject => '[zeta, alpha, mu];
+                case outer with subject => '[zeta, alpha, mu];
                 | 'zeta =>
-                    match alpha_case with nested => '[zeta, alpha, mu];
+                    case alpha_case with nested => '[zeta, alpha, mu];
                     | 'zeta => 'alpha;
                     | 'alpha => 'mu;
                     | 'mu => 'zeta;;
                 | 'alpha =>
-                    match zeta_case with nested => '[zeta, alpha, mu];
+                    case zeta_case with nested => '[zeta, alpha, mu];
                     | 'zeta => 'mu;
                     | 'alpha => 'zeta;
                     | 'mu => 'alpha;;
                 | 'mu =>
-                    match mu_case with nested => '[zeta, alpha, mu];
+                    case mu_case with nested => '[zeta, alpha, mu];
                     | 'zeta => 'zeta;
                     | 'alpha => 'alpha;
                     | 'mu => 'mu;;
@@ -1836,6 +1957,55 @@ mod tests {
         let append = Term::Prim(Prim::bin_append(Var::free("b"), Var::free("n")));
         assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
         assert!(erase(&mut context, &append, &bin_type).is_ok());
+    }
+
+    #[test]
+    fn erase_elim_nat_to_bool_atom() {
+        let mut context = context();
+
+        let bool_type = Term::from(AtomType::new(["false", "true"]));
+
+        let elim_zero = Term::from(Elim::new(
+            Prim::Nat(0),
+            "m",
+            AtomType::new(["false", "true"]),
+            Atom::from("false"),
+            "pred",
+            Atom::from("true"),
+        ));
+
+        let elim_one = Term::from(Elim::new(
+            Prim::Nat(1),
+            "m",
+            AtomType::new(["false", "true"]),
+            Atom::from("false"),
+            "pred",
+            Atom::from("true"),
+        ));
+
+        assert!(erase(&mut context, &elim_zero, &bool_type).is_ok());
+        assert!(erase(&mut context, &elim_one, &bool_type).is_ok());
+    }
+
+    #[test]
+    fn erase_elim_rejects_non_nat_head() {
+        let mut context = context();
+
+        let bool_type = Term::from(AtomType::new(["false", "true"]));
+
+        let elim = Term::from(Elim::new(
+            Prim::Int(1),
+            "m",
+            AtomType::new(["false", "true"]),
+            Atom::from("false"),
+            "pred",
+            Atom::from("true"),
+        ));
+
+        assert!(matches!(
+            erase(&mut context, &elim, &bool_type),
+            Err(Error::CannotInfer { .. })
+        ));
     }
 
     #[test]
