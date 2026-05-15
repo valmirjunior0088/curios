@@ -150,22 +150,26 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
-        Prim::BinGet(index, bin) => {
-            erase(context, index, &Term::Prim(Prim::NatType))?;
+        Prim::BinGet(bin, index) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce(context, &bin_type)?;
             match bin_type {
-                Term::Prim(Prim::BinType) => Ok(Term::Prim(Prim::NatType)),
+                Term::Prim(Prim::BinType) => {
+                    erase(context, index, &Term::Prim(Prim::NatType))?;
+                    Ok(Term::Prim(Prim::NatType))
+                }
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
-        Prim::BinSlice(start, end, bin) => {
-            erase(context, start, &Term::Prim(Prim::NatType))?;
-            erase(context, end, &Term::Prim(Prim::NatType))?;
+        Prim::BinSlice(bin, start, end) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce(context, &bin_type)?;
             match &bin_type {
-                Term::Prim(Prim::BinType) => Ok(bin_type),
+                Term::Prim(Prim::BinType) => {
+                    erase(context, start, &Term::Prim(Prim::NatType))?;
+                    erase(context, end, &Term::Prim(Prim::NatType))?;
+                    Ok(bin_type)
+                }
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
@@ -193,22 +197,26 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
-        Prim::LstGet(index, list) => {
-            erase(context, index, &Term::Prim(Prim::NatType))?;
+        Prim::LstGet(list, index) => {
             let list_type = infer(context, list)?;
             let list_type = reduce(context, &list_type)?;
             match list_type {
-                Term::Prim(Prim::LstType(elem)) => Ok(*elem),
+                Term::Prim(Prim::LstType(elem)) => {
+                    erase(context, index, &Term::Prim(Prim::NatType))?;
+                    Ok(*elem)
+                }
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
-        Prim::LstSlice(start, end, list) => {
-            erase(context, start, &Term::Prim(Prim::NatType))?;
-            erase(context, end, &Term::Prim(Prim::NatType))?;
+        Prim::LstSlice(list, start, end) => {
             let list_type = infer(context, list)?;
             let list_type = reduce(context, &list_type)?;
             match &list_type {
-                Term::Prim(Prim::LstType(_)) => Ok(list_type),
+                Term::Prim(Prim::LstType(_)) => {
+                    erase(context, start, &Term::Prim(Prim::NatType))?;
+                    erase(context, end, &Term::Prim(Prim::NatType))?;
+                    Ok(list_type)
+                }
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
@@ -935,7 +943,7 @@ fn erase_prim(
             }
             Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
         }
-        Prim::BinGet(index, bin) => {
+        Prim::BinGet(bin, index) => {
             expect(context, term, &Term::Prim(Prim::NatType), expected)?;
             let bin_type = infer(context, bin)?;
             let bin_type_reduced = reduce(context, &bin_type)?;
@@ -944,12 +952,12 @@ fn erase_prim(
                 _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
             }
             Ok(ersd::Prim::BinGet(
-                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
                 erase(context, bin, &bin_type)?.into(),
+                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
             )
             .into())
         }
-        Prim::BinSlice(start, end, bin) => {
+        Prim::BinSlice(bin, start, end) => {
             let bin_type = infer(context, bin)?;
             let bin_type_reduced = reduce(context, &bin_type)?;
             match &bin_type_reduced {
@@ -958,9 +966,9 @@ fn erase_prim(
             }
             expect(context, term, &bin_type_reduced, expected)?;
             Ok(ersd::Prim::BinSlice(
+                erase(context, bin, &bin_type)?.into(),
                 erase(context, start, &Term::Prim(Prim::NatType))?.into(),
                 erase(context, end, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, bin, &bin_type)?.into(),
             )
             .into())
         }
@@ -1004,7 +1012,7 @@ fn erase_prim(
             }
             Ok(ersd::Prim::LstLen(erase(context, list, &list_type)?.into()).into())
         }
-        Prim::LstGet(index, list) => {
+        Prim::LstGet(list, index) => {
             let list_type = infer(context, list)?;
             let list_type_reduced = reduce(context, &list_type)?;
             let elem_type = match list_type_reduced {
@@ -1013,12 +1021,12 @@ fn erase_prim(
             };
             expect(context, term, &elem_type, expected)?;
             Ok(ersd::Prim::LstGet(
-                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
                 erase(context, list, &list_type)?.into(),
+                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
             )
             .into())
         }
-        Prim::LstSlice(start, end, list) => {
+        Prim::LstSlice(list, start, end) => {
             let list_type = infer(context, list)?;
             let list_type_reduced = reduce(context, &list_type)?;
             match &list_type_reduced {
@@ -1027,9 +1035,9 @@ fn erase_prim(
             }
             expect(context, term, &list_type_reduced, expected)?;
             Ok(ersd::Prim::LstSlice(
+                erase(context, list, &list_type)?.into(),
                 erase(context, start, &Term::Prim(Prim::NatType))?.into(),
                 erase(context, end, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, list, &list_type)?.into(),
             )
             .into())
         }
@@ -1771,7 +1779,7 @@ mod tests {
             Term::Prim(Prim::NatType)
         );
 
-        let get = Term::Prim(Prim::lst_get(Term::Prim(Prim::Nat(0)), Var::free("xs")));
+        let get = Term::Prim(Prim::lst_get(Var::free("xs"), Term::Prim(Prim::Nat(0))));
         assert_eq!(
             infer(&mut context, &get).unwrap(),
             Term::Prim(Prim::NatType)
@@ -1796,7 +1804,7 @@ mod tests {
             Term::Prim(Prim::NatType)
         );
 
-        let get = Term::Prim(Prim::bin_get(Term::Prim(Prim::Nat(0)), Var::free("b")));
+        let get = Term::Prim(Prim::bin_get(Var::free("b"), Term::Prim(Prim::Nat(0))));
         assert_eq!(
             infer(&mut context, &get).unwrap(),
             Term::Prim(Prim::NatType)

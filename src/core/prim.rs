@@ -448,21 +448,21 @@ impl Prim {
         Self::BinLen(bin.into().into())
     }
 
-    pub fn bin_get<I, B>(index: I, bin: B) -> Self
+    pub fn bin_get<B, I>(bin: B, index: I) -> Self
     where
-        I: Into<Term>,
         B: Into<Term>,
+        I: Into<Term>,
     {
-        Self::BinGet(index.into().into(), bin.into().into())
+        Self::BinGet(bin.into().into(), index.into().into())
     }
 
-    pub fn bin_slice<S, E, B>(start: S, end: E, bin: B) -> Self
+    pub fn bin_slice<B, S, E>(bin: B, start: S, end: E) -> Self
     where
+        B: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
-        B: Into<Term>,
     {
-        Self::BinSlice(start.into().into(), end.into().into(), bin.into().into())
+        Self::BinSlice(bin.into().into(), start.into().into(), end.into().into())
     }
 
     pub fn bin_concat<L, R>(left: L, right: R) -> Self
@@ -487,21 +487,21 @@ impl Prim {
         Self::LstLen(list.into().into())
     }
 
-    pub fn lst_get<I, L>(index: I, list: L) -> Self
+    pub fn lst_get<L, I>(list: L, index: I) -> Self
     where
-        I: Into<Term>,
         L: Into<Term>,
+        I: Into<Term>,
     {
-        Self::LstGet(index.into().into(), list.into().into())
+        Self::LstGet(list.into().into(), index.into().into())
     }
 
-    pub fn lst_slice<S, E, L>(start: S, end: E, list: L) -> Self
+    pub fn lst_slice<L, S, E>(list: L, start: S, end: E) -> Self
     where
+        L: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
-        L: Into<Term>,
     {
-        Self::LstSlice(start.into().into(), end.into().into(), list.into().into())
+        Self::LstSlice(list.into().into(), start.into().into(), end.into().into())
     }
 
     pub fn lst_concat<L, R>(left: L, right: R) -> Self

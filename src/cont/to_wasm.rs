@@ -85,11 +85,11 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("left"),
-                            cont::Value::Eval(cont::Code::TplGet(0, cont::ValueName::from("x"))),
+                            cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("x"), 0)),
                         ),
                         (
                             cont::ValueName::from("out"),
-                            cont::Value::Eval(cont::Code::TplGet(0, cont::ValueName::from("left"))),
+                            cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("left"), 0)),
                         ),
                     ],
                     blocks: vec![],
@@ -464,7 +464,7 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("out"),
-                        cont::Value::Eval(cont::Code::TplGet(1, cont::ValueName::from("PAIR"))),
+                        cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("PAIR"), 1)),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -669,8 +669,8 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::LstGet(
-                            cont::ValueName::from("ONE"),
                             cont::ValueName::from("LST"),
+                            cont::ValueName::from("ONE"),
                         )),
                     )],
                     blocks: vec![],
@@ -720,9 +720,9 @@ mod tests {
                         (
                             cont::ValueName::from("slice"),
                             cont::Value::Eval(cont::Code::LstSlice(
+                                cont::ValueName::from("LST"),
                                 cont::ValueName::from("ONE"),
                                 cont::ValueName::from("THREE_IDX"),
-                                cont::ValueName::from("LST"),
                             )),
                         ),
                         (
@@ -1627,8 +1627,8 @@ mod tests {
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("IDX"),
                             cont::ValueName::from("HELLO"),
+                            cont::ValueName::from("IDX"),
                         )),
                     )],
                     blocks: vec![],
@@ -1671,8 +1671,8 @@ mod tests {
                         (
                             cont::ValueName::from("result"),
                             cont::Value::Eval(cont::Code::BinGet(
-                                cont::ValueName::from("ZERO"),
                                 cont::ValueName::from("bin"),
+                                cont::ValueName::from("ZERO"),
                             )),
                         ),
                     ],

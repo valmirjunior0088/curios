@@ -655,25 +655,25 @@ impl<'a> Lowerer<'a> {
 
                 emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::BinLen(bin)))
             }
-            ersd::Term::Prim(ersd::Prim::BinGet(idx, bin)) => {
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
                 let bin = self.lower_letrec_name(bin, frame, state, builder);
+                let idx = self.lower_letrec_name(idx, frame, state, builder);
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BinGet(idx, bin)),
+                    cont::Value::Eval(cont::Code::BinGet(bin, idx)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::BinSlice(start, end, bin)) => {
+            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => {
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
                 let start = self.lower_letrec_name(start, frame, state, builder);
                 let end = self.lower_letrec_name(end, frame, state, builder);
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
+                    cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
@@ -699,25 +699,25 @@ impl<'a> Lowerer<'a> {
 
                 emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::LstLen(lst)))
             }
-            ersd::Term::Prim(ersd::Prim::LstGet(idx, lst)) => {
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::LstGet(lst, idx)) => {
                 let lst = self.lower_letrec_name(lst, frame, state, builder);
+                let idx = self.lower_letrec_name(idx, frame, state, builder);
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::LstGet(idx, lst)),
+                    cont::Value::Eval(cont::Code::LstGet(lst, idx)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::LstSlice(start, end, lst)) => {
+            ersd::Term::Prim(ersd::Prim::LstSlice(lst, start, end)) => {
+                let lst = self.lower_letrec_name(lst, frame, state, builder);
                 let start = self.lower_letrec_name(start, frame, state, builder);
                 let end = self.lower_letrec_name(end, frame, state, builder);
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::LstSlice(start, end, lst)),
+                    cont::Value::Eval(cont::Code::LstSlice(lst, start, end)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::LstConcat(l1, l2)) => {
@@ -2228,22 +2228,22 @@ impl<'a> Lowerer<'a> {
                     cont(this, state, builder, value)
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::BinGet(idx, bin)) => self.lower_to_name(
-                idx,
+            ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => self.lower_to_name(
+                bin,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, idx| {
+                Box::new(move |this, state, builder, bin| {
                     this.lower_to_name(
-                        bin,
+                        idx,
                         frame,
                         state,
                         builder,
-                        Box::new(move |this, state, builder, bin| {
+                        Box::new(move |this, state, builder, idx| {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::BinGet(idx, bin)),
+                                cont::Value::Eval(cont::Code::BinGet(bin, idx)),
                             );
 
                             cont(this, state, builder, value)
@@ -2251,28 +2251,28 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::BinSlice(start, end, bin)) => self.lower_to_name(
-                start,
+            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => self.lower_to_name(
+                bin,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, start| {
+                Box::new(move |this, state, builder, bin| {
                     this.lower_to_name(
-                        end,
+                        start,
                         frame,
                         state,
                         builder,
-                        Box::new(move |this, state, builder, end| {
+                        Box::new(move |this, state, builder, start| {
                             this.lower_to_name(
-                                bin,
+                                end,
                                 frame,
                                 state,
                                 builder,
-                                Box::new(move |this, state, builder, bin| {
+                                Box::new(move |this, state, builder, end| {
                                     let value = emit_fresh_value(
                                         state,
                                         builder,
-                                        cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
+                                        cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
                                     );
 
                                     cont(this, state, builder, value)
@@ -2323,22 +2323,22 @@ impl<'a> Lowerer<'a> {
                     cont(this, state, builder, value)
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::LstGet(idx, lst)) => self.lower_to_name(
-                idx,
+            ersd::Term::Prim(ersd::Prim::LstGet(lst, idx)) => self.lower_to_name(
+                lst,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, idx| {
+                Box::new(move |this, state, builder, lst| {
                     this.lower_to_name(
-                        lst,
+                        idx,
                         frame,
                         state,
                         builder,
-                        Box::new(move |this, state, builder, lst| {
+                        Box::new(move |this, state, builder, idx| {
                             let value = emit_fresh_value(
                                 state,
                                 builder,
-                                cont::Value::Eval(cont::Code::LstGet(idx, lst)),
+                                cont::Value::Eval(cont::Code::LstGet(lst, idx)),
                             );
 
                             cont(this, state, builder, value)
@@ -2346,28 +2346,28 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::LstSlice(start, end, lst)) => self.lower_to_name(
-                start,
+            ersd::Term::Prim(ersd::Prim::LstSlice(lst, start, end)) => self.lower_to_name(
+                lst,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, start| {
+                Box::new(move |this, state, builder, lst| {
                     this.lower_to_name(
-                        end,
+                        start,
                         frame,
                         state,
                         builder,
-                        Box::new(move |this, state, builder, end| {
+                        Box::new(move |this, state, builder, start| {
                             this.lower_to_name(
-                                lst,
+                                end,
                                 frame,
                                 state,
                                 builder,
-                                Box::new(move |this, state, builder, lst| {
+                                Box::new(move |this, state, builder, end| {
                                     let value = emit_fresh_value(
                                         state,
                                         builder,
-                                        cont::Value::Eval(cont::Code::LstSlice(start, end, lst)),
+                                        cont::Value::Eval(cont::Code::LstSlice(lst, start, end)),
                                     );
 
                                     cont(this, state, builder, value)
@@ -2582,11 +2582,11 @@ impl<'a> Lowerer<'a> {
                     let fst = state.fresh_value();
                     builder.add_value(
                         fst.clone(),
-                        cont::Value::Eval(cont::Code::TplGet(0, head.clone())),
+                        cont::Value::Eval(cont::Code::TplGet(head.clone(), 0)),
                     );
 
                     let snd = state.fresh_value();
-                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplGet(1, head)));
+                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplGet(head, 1)));
 
                     let frame =
                         frame.extended([(split.fst.clone(), fst), (split.snd.clone(), snd)]);

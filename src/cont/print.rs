@@ -415,21 +415,21 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::FltToNat(operand) => flat([pure("Flt.to_nat"), pure(" "), print_value_name(operand)]),
         Code::NatToBin(operand) => flat([pure("Nat.to_bin"), pure(" "), print_value_name(operand)]),
         Code::BinLen(bin) => flat([pure("Bin.len"), pure(" "), print_value_name(bin)]),
-        Code::BinGet(idx, bin) => flat([
+        Code::BinGet(bin, idx) => flat([
             pure("Bin.get"),
             pure(" "),
-            print_value_name(idx),
-            pure(", "),
             print_value_name(bin),
+            pure(", "),
+            print_value_name(idx),
         ]),
-        Code::BinSlice(start, end, bin) => flat([
+        Code::BinSlice(bin, start, end) => flat([
             pure("Bin.slice"),
             pure(" "),
+            print_value_name(bin),
+            pure(", "),
             print_value_name(start),
             pure(", "),
             print_value_name(end),
-            pure(", "),
-            print_value_name(bin),
         ]),
         Code::BinConcat(operands) => flat([
             pure("Bin.concat"),
@@ -437,32 +437,32 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             print_value_names(operands),
         ]),
         Code::LstLen(lst) => flat([pure("Lst.len"), pure(" "), print_value_name(lst)]),
-        Code::LstGet(idx, lst) => flat([
+        Code::LstGet(lst, idx) => flat([
             pure("Lst.get"),
             pure(" "),
-            print_value_name(idx),
-            pure(", "),
             print_value_name(lst),
+            pure(", "),
+            print_value_name(idx),
         ]),
-        Code::LstSlice(start, end, lst) => flat([
+        Code::LstSlice(lst, start, end) => flat([
             pure("Lst.slice"),
             pure(" "),
+            print_value_name(lst),
+            pure(", "),
             print_value_name(start),
             pure(", "),
             print_value_name(end),
-            pure(", "),
-            print_value_name(lst),
         ]),
         Code::LstConcat(operands) => flat([
             pure("Lst.concat"),
             pure(" "),
             print_value_names(operands),
         ]),
-        Code::TplGet(index, tuple) => flat([
+        Code::TplGet(tuple, index) => flat([
             pure("Tpl.get "),
-            pure(index.to_string()),
-            pure(" "),
             print_value_name(tuple),
+            pure(" "),
+            pure(index.to_string()),
         ]),
     }
 }

@@ -671,13 +671,13 @@ where
             Prim::BinType => Prim::BinType,
             Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
             Prim::BinLen(bin) => Prim::BinLen(self.visit_subterm(bin)),
-            Prim::BinGet(index, bin) => {
-                Prim::BinGet(self.visit_subterm(index), self.visit_subterm(bin))
+            Prim::BinGet(bin, index) => {
+                Prim::BinGet(self.visit_subterm(bin), self.visit_subterm(index))
             }
-            Prim::BinSlice(start, end, bin) => Prim::BinSlice(
+            Prim::BinSlice(bin, start, end) => Prim::BinSlice(
+                self.visit_subterm(bin),
                 self.visit_subterm(start),
                 self.visit_subterm(end),
-                self.visit_subterm(bin),
             ),
             Prim::BinConcat(left, right) => {
                 Prim::BinConcat(self.visit_subterm(left), self.visit_subterm(right))
@@ -685,13 +685,13 @@ where
             Prim::LstType(elem) => Prim::LstType(self.visit_subterm(elem)),
             Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| self.visit_subterm(e)).collect()),
             Prim::LstLen(list) => Prim::LstLen(self.visit_subterm(list)),
-            Prim::LstGet(index, list) => {
-                Prim::LstGet(self.visit_subterm(index), self.visit_subterm(list))
+            Prim::LstGet(list, index) => {
+                Prim::LstGet(self.visit_subterm(list), self.visit_subterm(index))
             }
-            Prim::LstSlice(start, end, list) => Prim::LstSlice(
+            Prim::LstSlice(list, start, end) => Prim::LstSlice(
+                self.visit_subterm(list),
                 self.visit_subterm(start),
                 self.visit_subterm(end),
-                self.visit_subterm(list),
             ),
             Prim::LstConcat(left, right) => {
                 Prim::LstConcat(self.visit_subterm(left), self.visit_subterm(right))

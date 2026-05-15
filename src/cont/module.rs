@@ -93,7 +93,7 @@ pub enum Code {
     LstGet(ValueName, ValueName),
     LstSlice(ValueName, ValueName, ValueName),
     LstConcat(Vec<ValueName>),
-    TplGet(usize, ValueName),
+    TplGet(ValueName, usize),
 }
 
 #[derive(Debug)]

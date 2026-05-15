@@ -795,7 +795,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::BinGet(idx, bin) => {
+            cont::Code::BinGet(bin, idx) => {
                 let bin_type = self.context.table().bin_type();
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
@@ -807,7 +807,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::BinSlice(start, end, bin) => {
+            cont::Code::BinSlice(bin, start, end) => {
                 let bin_type = self.context.table().bin_type();
                 self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
@@ -941,7 +941,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::LstGet(idx, lst) => {
+            cont::Code::LstGet(lst, idx) => {
                 let lst_type = self.context.table().lst_type();
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
@@ -952,7 +952,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::LstSlice(start, end, lst) => {
+            cont::Code::LstSlice(lst, start, end) => {
                 let lst_type = self.context.table().lst_type();
 
                 self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
@@ -1079,7 +1079,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     }
                 }
             }
-            cont::Code::TplGet(index, tuple) => {
+            cont::Code::TplGet(tuple, index) => {
                 self.emit_proj(tuple, *index);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local,

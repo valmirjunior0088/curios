@@ -119,11 +119,11 @@ fn main() {
                                     ),
                                     (
                                         ValueName::from("result_again"),
-                                        Value::Eval(Code::TplGet(0, ValueName::from("pair"))),
+                                        Value::Eval(Code::TplGet(ValueName::from("pair"), 0)),
                                     ),
                                     (
                                         ValueName::from("fallback_one"),
-                                        Value::Eval(Code::TplGet(1, ValueName::from("pair"))),
+                                        Value::Eval(Code::TplGet(ValueName::from("pair"), 1)),
                                     ),
                                     (
                                         ValueName::from("result_is_zero"),

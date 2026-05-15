@@ -289,19 +289,19 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::BinType => pure("Bin"),
         Prim::Bin(bytes) => pure(bytes.iter().map(|b| format!("\\{:02x}", b)).collect::<String>()),
         Prim::BinLen(bin) => flat([pure("Bin.len "), print_term(*bin, depth)]),
-        Prim::BinGet(index, bin) => flat([
+        Prim::BinGet(bin, index) => flat([
             pure("Bin.get "),
-            print_term(*index, depth),
-            pure(" "),
             print_term(*bin, depth),
+            pure(" "),
+            print_term(*index, depth),
         ]),
-        Prim::BinSlice(start, end, bin) => flat([
+        Prim::BinSlice(bin, start, end) => flat([
             pure("Bin.slice "),
+            print_term(*bin, depth),
+            pure(" "),
             print_term(*start, depth),
             pure(" "),
             print_term(*end, depth),
-            pure(" "),
-            print_term(*bin, depth),
         ]),
         Prim::BinConcat(left, right) => flat([
             pure("Bin.concat "),
@@ -316,19 +316,19 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure("]"),
         ]),
         Prim::LstLen(list) => flat([pure("Lst.len "), print_term(*list, depth)]),
-        Prim::LstGet(index, list) => flat([
+        Prim::LstGet(list, index) => flat([
             pure("Lst.get "),
-            print_term(*index, depth),
-            pure(" "),
             print_term(*list, depth),
+            pure(" "),
+            print_term(*index, depth),
         ]),
-        Prim::LstSlice(start, end, list) => flat([
+        Prim::LstSlice(list, start, end) => flat([
             pure("Lst.slice "),
+            print_term(*list, depth),
+            pure(" "),
             print_term(*start, depth),
             pure(" "),
             print_term(*end, depth),
-            pure(" "),
-            print_term(*list, depth),
         ]),
         Prim::LstConcat(left, right) => flat([
             pure("Lst.concat "),
