@@ -1084,20 +1084,20 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::BinLen(bin)));
             }
-            ersd::Term::Prim(ersd::Prim::BinGet(idx, bin)) => {
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
                 let bin = self.lower_letrec_name(bin, frame, state, builder);
+                let idx = self.lower_letrec_name(idx, frame, state, builder);
 
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinGet(idx, bin)));
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinGet(bin, idx)));
             }
-            ersd::Term::Prim(ersd::Prim::BinSlice(start, end, bin)) => {
+            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => {
+                let bin = self.lower_letrec_name(bin, frame, state, builder);
                 let start = self.lower_letrec_name(start, frame, state, builder);
                 let end = self.lower_letrec_name(end, frame, state, builder);
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::BinSlice(start, end, bin)),
+                    cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
                 );
             }
             ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => {
@@ -1127,20 +1127,20 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::ArrLen(lst)));
             }
-            ersd::Term::Prim(ersd::Prim::ArrGet(idx, lst)) => {
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::ArrGet(lst, idx)) => {
                 let lst = self.lower_letrec_name(lst, frame, state, builder);
+                let idx = self.lower_letrec_name(idx, frame, state, builder);
 
-                builder.add_value(target, cont::Value::Eval(cont::Code::ArrGet(idx, lst)));
+                builder.add_value(target, cont::Value::Eval(cont::Code::ArrGet(lst, idx)));
             }
-            ersd::Term::Prim(ersd::Prim::ArrSlice(start, end, lst)) => {
+            ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => {
+                let lst = self.lower_letrec_name(lst, frame, state, builder);
                 let start = self.lower_letrec_name(start, frame, state, builder);
                 let end = self.lower_letrec_name(end, frame, state, builder);
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
 
                 builder.add_value(
                     target,
-                    cont::Value::Eval(cont::Code::ArrSlice(start, end, lst)),
+                    cont::Value::Eval(cont::Code::ArrSlice(lst, start, end)),
                 );
             }
             ersd::Term::Prim(ersd::Prim::ArrAppend(lst, elem)) => {

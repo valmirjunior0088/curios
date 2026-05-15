@@ -123,22 +123,22 @@ impl Convert {
                 Ok(true)
             }
             (
-                Prim::BinSlice(this_start, this_end, this_bin),
-                Prim::BinSlice(that_start, that_end, that_bin),
+                Prim::BinSlice(this_bin, this_start, this_end),
+                Prim::BinSlice(that_bin, that_start, that_end),
             ) => {
+                self.enqueue(*this_bin, *that_bin);
                 self.enqueue(*this_start, *that_start);
                 self.enqueue(*this_end, *that_end);
-                self.enqueue(*this_bin, *that_bin);
 
                 Ok(true)
             }
             (
-                Prim::ArrSlice(this_start, this_end, this_list),
-                Prim::ArrSlice(that_start, that_end, that_list),
+                Prim::ArrSlice(this_list, this_start, this_end),
+                Prim::ArrSlice(that_list, that_start, that_end),
             ) => {
+                self.enqueue(*this_list, *that_list);
                 self.enqueue(*this_start, *that_start);
                 self.enqueue(*this_end, *that_end);
-                self.enqueue(*this_list, *that_list);
 
                 Ok(true)
             }
