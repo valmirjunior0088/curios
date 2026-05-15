@@ -7,13 +7,13 @@ fn main() {
     let term = r#"
         let pair_ty : Type =
             (tag : '[left, right],
-                match tag with _ => Type;
+                case tag with _ => Type;
                 | 'left => Int;
                 | 'right => Flt;);
         let pair : pair_ty = ('left, 42i);
         let score : (_ : pair_ty) -> Int = p =>
             let (tag, payload) with _ => Int = p;
-            match tag with _ => Int;
+            case tag with _ => Int;
             | 'left => 42i;
             | 'right => 7i;;
         let my_list : Arr Nat = [1n, 2n, 3n];

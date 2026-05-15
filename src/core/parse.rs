@@ -27,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-const KEYWORDS: &[&str] = &["let", "match", "with"];
+const KEYWORDS: &[&str] = &["let", "case", "with"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -477,7 +477,7 @@ fn parse_func<'a>() -> Parser<'a, Term> {
         .map(|(label, body)| Func::new(label, body).into())
 }
 
-fn parse_match_case<'a>() -> Parser<'a, (Atom, Term)> {
+fn parse_case_branch<'a>() -> Parser<'a, (Atom, Term)> {
     catch(
         parse_literal("|")
             .and_keep(parse_atom_label())
@@ -487,9 +487,9 @@ fn parse_match_case<'a>() -> Parser<'a, (Atom, Term)> {
     .and_drop(parse_literal(";"))
 }
 
-fn parse_match<'a>() -> Parser<'a, Term> {
+fn parse_case<'a>() -> Parser<'a, Term> {
     catch(
-        parse_keyword("match")
+        parse_keyword("case")
             .and_keep(lazy(parse_term))
             .and_drop(parse_keyword("with"))
             .and(parse_identifier())
@@ -497,7 +497,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
     )
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
-    .and(many1(parse_match_case))
+    .and(many1(parse_case_branch))
     .map(|(((head, motive_label), motive), cases)| {
         Case::new(head, motive_label, motive, cases).into()
     })
@@ -571,7 +571,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     parse_let_rec()
         .or(parse_split())
         .or(parse_let())
-        .or(parse_match())
+        .or(parse_case())
         .or(parse_func_type())
         .or(parse_func())
         .or(parse_atomic_term()
@@ -655,8 +655,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_match_single_case() {
-        let term = "match 'foo with k => '[foo]; | 'foo => 'foo;"
+    fn parse_case_single_branch() {
+        let term = "case 'foo with k => '[foo]; | 'foo => 'foo;"
             .parse::<Term>()
             .unwrap();
 

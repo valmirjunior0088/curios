@@ -464,7 +464,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             );
 
             flat([
-                pure("match "),
+                pure("case "),
                 print_term(*head, depth),
                 pure(" with "),
                 pure(motive_label),
