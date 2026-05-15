@@ -55,7 +55,7 @@ impl Convert {
             (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
             (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
             (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
-            (Prim::LstType(this), Prim::LstType(that)) => {
+            (Prim::ArrType(this), Prim::ArrType(that)) => {
                 self.enqueue(*this, *that);
 
                 Ok(true)
@@ -94,8 +94,8 @@ impl Convert {
             | (Prim::FltGt(this_left, this_right), Prim::FltGt(that_left, that_right))
             | (Prim::FltLte(this_left, this_right), Prim::FltLte(that_left, that_right))
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
-            | (Prim::LstGet(this_left, this_right), Prim::LstGet(that_left, that_right))
-            | (Prim::LstAppend(this_left, this_right), Prim::LstAppend(that_left, that_right))
+            | (Prim::ArrGet(this_left, this_right), Prim::ArrGet(that_left, that_right))
+            | (Prim::ArrAppend(this_left, this_right), Prim::ArrAppend(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
             | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
                 self.enqueue(*this_left, *that_left);
@@ -116,7 +116,7 @@ impl Convert {
             | (Prim::NatToFlt(this), Prim::NatToFlt(that))
             | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::FltToNat(this), Prim::FltToNat(that))
-            | (Prim::LstLen(this), Prim::LstLen(that))
+            | (Prim::ArrLen(this), Prim::ArrLen(that))
             | (Prim::BinLen(this), Prim::BinLen(that)) => {
                 self.enqueue(*this, *that);
 
@@ -133,8 +133,8 @@ impl Convert {
                 Ok(true)
             }
             (
-                Prim::LstSlice(this_start, this_end, this_list),
-                Prim::LstSlice(that_start, that_end, that_list),
+                Prim::ArrSlice(this_start, this_end, this_list),
+                Prim::ArrSlice(that_start, that_end, that_list),
             ) => {
                 self.enqueue(*this_start, *that_start);
                 self.enqueue(*this_end, *that_end);
@@ -142,7 +142,7 @@ impl Convert {
 
                 Ok(true)
             }
-            (Prim::Lst(this_elems), Prim::Lst(that_elems)) => {
+            (Prim::Arr(this_elems), Prim::Arr(that_elems)) => {
                 if this_elems.len() != that_elems.len() {
                     return Ok(false);
                 }
@@ -162,7 +162,7 @@ impl Convert {
                 }
                 Ok(true)
             }
-            (Prim::LstConcat(this_ops), Prim::LstConcat(that_ops)) => {
+            (Prim::ArrConcat(this_ops), Prim::ArrConcat(that_ops)) => {
                 if this_ops.len() != that_ops.len() {
                     return Ok(false);
                 }
@@ -510,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn convert_prim_lst_compares_element_wise() {
+    fn convert_prim_arr_compares_element_wise() {
         let mut context = context();
 
         let this = Term::Prim(Prim::from(vec![
@@ -527,7 +527,7 @@ mod tests {
     }
 
     #[test]
-    fn convert_prim_lst_rejects_different_lengths() {
+    fn convert_prim_arr_rejects_different_lengths() {
         let mut context = context();
 
         let this = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));

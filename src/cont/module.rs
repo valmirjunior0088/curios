@@ -7,7 +7,7 @@ pub enum Data {
     Int(i32),
     Flt(f32),
     Bin(Vec<u8>),
-    Lst(Vec<ValueName>),
+    Arr(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
 }
@@ -89,11 +89,11 @@ pub enum Code {
     BinSlice(ValueName, ValueName, ValueName),
     BinAppend(ValueName, ValueName),
     BinConcat(Vec<ValueName>),
-    LstLen(ValueName),
-    LstGet(ValueName, ValueName),
-    LstSlice(ValueName, ValueName, ValueName),
-    LstAppend(ValueName, ValueName),
-    LstConcat(Vec<ValueName>),
+    ArrLen(ValueName),
+    ArrGet(ValueName, ValueName),
+    ArrSlice(ValueName, ValueName, ValueName),
+    ArrAppend(ValueName, ValueName),
+    ArrConcat(Vec<ValueName>),
     TplGet(ValueName, usize),
 }
 

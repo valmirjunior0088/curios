@@ -62,13 +62,13 @@ pub enum Prim {
     BinSlice(Subterm, Subterm, Subterm),
     BinAppend(Subterm, Subterm),
     BinConcat(Vec<Subterm>),
-    LstType(Subterm),
-    Lst(Vec<Subterm>),
-    LstLen(Subterm),
-    LstGet(Subterm, Subterm),
-    LstSlice(Subterm, Subterm, Subterm),
-    LstAppend(Subterm, Subterm),
-    LstConcat(Vec<Subterm>),
+    ArrType(Subterm),
+    Arr(Vec<Subterm>),
+    ArrLen(Subterm),
+    ArrGet(Subterm, Subterm),
+    ArrSlice(Subterm, Subterm, Subterm),
+    ArrAppend(Subterm, Subterm),
+    ArrConcat(Vec<Subterm>),
 }
 
 impl Prim {
@@ -475,56 +475,56 @@ impl Prim {
         Self::BinConcat(operands.into_iter().map(|e| e.into().into()).collect())
     }
 
-    pub fn lst_type<T>(elem: T) -> Self
+    pub fn arr_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::LstType(elem.into().into())
+        Self::ArrType(elem.into().into())
     }
 
-    pub fn lst_len<L>(list: L) -> Self
+    pub fn arr_len<L>(list: L) -> Self
     where
         L: Into<Term>,
     {
-        Self::LstLen(list.into().into())
+        Self::ArrLen(list.into().into())
     }
 
-    pub fn lst_get<L, I>(list: L, index: I) -> Self
+    pub fn arr_get<L, I>(list: L, index: I) -> Self
     where
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::LstGet(list.into().into(), index.into().into())
+        Self::ArrGet(list.into().into(), index.into().into())
     }
 
-    pub fn lst_slice<L, S, E>(list: L, start: S, end: E) -> Self
+    pub fn arr_slice<L, S, E>(list: L, start: S, end: E) -> Self
     where
         L: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::LstSlice(list.into().into(), start.into().into(), end.into().into())
+        Self::ArrSlice(list.into().into(), start.into().into(), end.into().into())
     }
 
-    pub fn lst_append<L, E>(list: L, elem: E) -> Self
+    pub fn arr_append<L, E>(list: L, elem: E) -> Self
     where
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::LstAppend(list.into().into(), elem.into().into())
+        Self::ArrAppend(list.into().into(), elem.into().into())
     }
 
-    pub fn lst_concat<I>(operands: I) -> Self
+    pub fn arr_concat<I>(operands: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<Term>,
     {
-        Self::LstConcat(operands.into_iter().map(|e| e.into().into()).collect())
+        Self::ArrConcat(operands.into_iter().map(|e| e.into().into()).collect())
     }
 }
 
 impl<A: Into<Term>> From<Vec<A>> for Prim {
     fn from(items: Vec<A>) -> Self {
-        Self::Lst(items.into_iter().map(|a| a.into().into()).collect())
+        Self::Arr(items.into_iter().map(|a| a.into().into()).collect())
     }
 }

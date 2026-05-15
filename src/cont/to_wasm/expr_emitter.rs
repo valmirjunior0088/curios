@@ -73,15 +73,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 },
             ]),
-            cont::Data::Lst(elems) => {
-                let lst_type = self.context.table().lst_type();
+            cont::Data::Arr(elems) => {
+                let arr_type = self.context.table().arr_type();
 
                 for elem in elems {
                     self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
                 }
 
                 self.emit_instr(wasm::Instr::ArrayNewFixed {
-                    type_name: lst_type,
+                    type_name: arr_type,
                     length: elems.len() as u32,
                 });
             }
@@ -954,89 +954,89 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     }
                 }
             }
-            cont::Code::LstLen(lst) => {
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+            cont::Code::ArrLen(lst) => {
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::ArrayLen);
                 self.emit_instr(wasm::Instr::RefI31);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::LstGet(lst, idx) => {
-                let lst_type = self.context.table().lst_type();
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+            cont::Code::ArrGet(lst, idx) => {
+                let arr_type = self.context.table().arr_type();
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
                 self.emit_instr(wasm::Instr::ArrayGet {
-                    type_name: lst_type,
+                    type_name: arr_type,
                 });
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::LstSlice(lst, start, end) => {
-                let lst_type = self.context.table().lst_type();
+            cont::Code::ArrSlice(lst, start, end) => {
+                let arr_type = self.context.table().arr_type();
 
                 self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::ArrayNewDefault {
-                    type_name: lst_type.clone(),
+                    type_name: arr_type.clone(),
                 });
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
 
-                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::ArrayCopy {
-                    source_name: lst_type.clone(),
-                    target_name: lst_type.clone(),
+                    source_name: arr_type.clone(),
+                    target_name: arr_type.clone(),
                 });
             }
-            cont::Code::LstAppend(lst, elem) => {
-                let lst_type = self.context.table().lst_type();
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+            cont::Code::ArrAppend(lst, elem) => {
+                let arr_type = self.context.table().arr_type();
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::ArrayLen);
                 self.emit_instr(wasm::Instr::I32Const { value: 1 });
                 self.emit_instr(wasm::Instr::I32Add);
                 self.emit_instr(wasm::Instr::ArrayNewDefault {
-                    type_name: lst_type.clone(),
+                    type_name: arr_type.clone(),
                 });
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
 
-                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::ArrayLen);
                 self.emit_instr(wasm::Instr::ArrayCopy {
-                    source_name: lst_type.clone(),
-                    target_name: lst_type.clone(),
+                    source_name: arr_type.clone(),
+                    target_name: arr_type.clone(),
                 });
 
-                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::ArrayLen);
                 self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
                 self.emit_instr(wasm::Instr::ArraySet {
-                    type_name: lst_type,
+                    type_name: arr_type,
                 });
             }
-            cont::Code::LstConcat(operands) => {
-                let lst_type = self.context.table().lst_type();
+            cont::Code::ArrConcat(operands) => {
+                let arr_type = self.context.table().arr_type();
 
                 match operands.as_slice() {
                     [] => {
                         self.emit_instr(wasm::Instr::ArrayNewFixed {
-                            type_name: lst_type,
+                            type_name: arr_type,
                             length: 0,
                         });
                         self.emit_instr(wasm::Instr::LocalSet {
@@ -1044,56 +1044,56 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                         });
                     }
                     [only] => {
-                        self.emit_instrs(self.context.load_value_instrs(only, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(only, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::LocalSet {
                             local_name: result_local,
                         });
                     }
                     [l1, l2] => {
-                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::ArrayLen);
-                        self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::ArrayLen);
                         self.emit_instr(wasm::Instr::I32Add);
                         self.emit_instr(wasm::Instr::ArrayNewDefault {
-                            type_name: lst_type.clone(),
+                            type_name: arr_type.clone(),
                         });
                         self.emit_instr(wasm::Instr::LocalSet {
                             local_name: result_local.clone(),
                         });
 
-                        self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::ArrayLen);
                         self.emit_instr(wasm::Instr::ArrayCopy {
-                            source_name: lst_type.clone(),
-                            target_name: lst_type.clone(),
+                            source_name: arr_type.clone(),
+                            target_name: arr_type.clone(),
                         });
 
-                        self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
-                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
+                        self.emit_instrs(self.context.load_value_instrs(l1, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::ArrayLen);
-                        self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                        self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Lst));
+                        self.emit_instrs(self.context.load_value_instrs(l2, LoadAs::Arr));
                         self.emit_instr(wasm::Instr::ArrayLen);
                         self.emit_instr(wasm::Instr::ArrayCopy {
-                            source_name: lst_type.clone(),
-                            target_name: lst_type,
+                            source_name: arr_type.clone(),
+                            target_name: arr_type,
                         });
                     }
                     operands => {
                         self.emit_instr(wasm::Instr::I32Const { value: 0 });
                         for operand in operands.iter() {
-                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Lst));
+                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Arr));
                             self.emit_instr(wasm::Instr::ArrayLen);
                             self.emit_instr(wasm::Instr::I32Add);
                         }
                         self.emit_instr(wasm::Instr::ArrayNewDefault {
-                            type_name: lst_type.clone(),
+                            type_name: arr_type.clone(),
                         });
                         self.emit_instr(wasm::Instr::LocalSet {
                             local_name: result_local.clone(),
@@ -1105,24 +1105,24 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
                         for operand in operands.iter() {
                             self.emit_instrs(
-                                self.context.load_value_instrs(value_name, LoadAs::Lst),
+                                self.context.load_value_instrs(value_name, LoadAs::Arr),
                             );
                             self.emit_instr(wasm::Instr::LocalGet {
                                 local_name: offset_local.clone(),
                             });
-                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Lst));
+                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Arr));
                             self.emit_instr(wasm::Instr::I32Const { value: 0 });
-                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Lst));
+                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Arr));
                             self.emit_instr(wasm::Instr::ArrayLen);
                             self.emit_instr(wasm::Instr::ArrayCopy {
-                                source_name: lst_type.clone(),
-                                target_name: lst_type.clone(),
+                                source_name: arr_type.clone(),
+                                target_name: arr_type.clone(),
                             });
 
                             self.emit_instr(wasm::Instr::LocalGet {
                                 local_name: offset_local.clone(),
                             });
-                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Lst));
+                            self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Arr));
                             self.emit_instr(wasm::Instr::ArrayLen);
                             self.emit_instr(wasm::Instr::I32Add);
                             self.emit_instr(wasm::Instr::LocalSet {
@@ -1237,11 +1237,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_preallocate_lst(&mut self, value_name: &'a cont::ValueName, len: usize) {
+    fn emit_preallocate_arr(&mut self, value_name: &'a cont::ValueName, len: usize) {
         self.emit_instr(wasm::Instr::I32Const { value: len as i32 });
 
         self.emit_instr(wasm::Instr::ArrayNewDefault {
-            type_name: self.context.table().lst_type(),
+            type_name: self.context.table().arr_type(),
         });
 
         self.emit_instr(wasm::Instr::LocalSet {
@@ -1253,15 +1253,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    fn emit_backpatch_lst(
+    fn emit_backpatch_arr(
         &mut self,
         value_name: &'a cont::ValueName,
         elems: &'a [cont::ValueName],
     ) {
-        let lst_type = self.context.table().lst_type();
+        let arr_type = self.context.table().arr_type();
 
         for (index, elem) in elems.iter().enumerate() {
-            self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Lst));
+            self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
 
             self.emit_instr(wasm::Instr::I32Const {
                 value: index as i32,
@@ -1269,7 +1269,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
 
             self.emit_instr(wasm::Instr::ArraySet {
-                type_name: lst_type.clone(),
+                type_name: arr_type.clone(),
             });
         }
     }
@@ -1311,8 +1311,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
             match value {
-                cont::Value::Pure(cont::Data::Lst(elems)) => {
-                    self.emit_preallocate_lst(value_name, elems.len())
+                cont::Value::Pure(cont::Data::Arr(elems)) => {
+                    self.emit_preallocate_arr(value_name, elems.len())
                 }
                 cont::Value::Pure(cont::Data::Tpl(elems)) => {
                     self.emit_preallocate_tpl(value_name, elems.len())
@@ -1326,8 +1326,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
         for (value_name, value) in values {
             match value {
-                cont::Value::Pure(cont::Data::Lst(elems)) => {
-                    self.emit_backpatch_lst(value_name, elems)
+                cont::Value::Pure(cont::Data::Arr(elems)) => {
+                    self.emit_backpatch_arr(value_name, elems)
                 }
                 cont::Value::Pure(cont::Data::Tpl(elems)) => {
                     self.emit_backpatch_tpl(value_name, elems)

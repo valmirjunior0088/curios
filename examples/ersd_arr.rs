@@ -17,8 +17,8 @@ fn main() {
             name: "a".into(),
             body: ersd::Term::Prim(ersd::Prim::Nat(10)).into(),
             tail: ersd::Term::Let(ersd::Let {
-                name: "lst".into(),
-                body: ersd::Term::Prim(ersd::Prim::Lst(vec![
+                name: "arr".into(),
+                body: ersd::Term::Prim(ersd::Prim::Arr(vec![
                     ersd::Term::Apply(ersd::Apply {
                         head: ersd::Term::Name(ersd::Name::from("double")).into(),
                         param: ersd::Term::Name(ersd::Name::from("a")).into(),
@@ -27,8 +27,8 @@ fn main() {
                     ersd::Term::Name(ersd::Name::from("a")).into(),
                 ]))
                 .into(),
-                tail: ersd::Term::Prim(ersd::Prim::LstLen(
-                    ersd::Term::Name(ersd::Name::from("lst")).into(),
+                tail: ersd::Term::Prim(ersd::Prim::ArrLen(
+                    ersd::Term::Name(ersd::Name::from("arr")).into(),
                 ))
                 .into(),
             })

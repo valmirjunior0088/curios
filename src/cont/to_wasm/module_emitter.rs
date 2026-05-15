@@ -34,9 +34,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_lst_type(&mut self) {
+    fn emit_arr_type(&mut self) {
         self.module.add_type(
-            self.table.lst_type(),
+            self.table.arr_type(),
             wasm::SubType {
                 is_final: true,
                 super_types: vec![],
@@ -379,7 +379,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_unit_type();
         self.emit_flt_type();
         self.emit_bin_type();
-        self.emit_lst_type();
+        self.emit_arr_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types();

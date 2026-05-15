@@ -126,14 +126,14 @@ mod tests {
     }
 
     #[test]
-    fn lowers_lst_into_main_region_value() {
+    fn lowers_arr_into_main_region_value() {
         let term = Term::Let(Let {
             name: "a".into(),
             body: Term::Prim(Prim::Nat(1)).into(),
             tail: Term::Let(Let {
                 name: "b".into(),
                 body: Term::Prim(Prim::Nat(2)).into(),
-                tail: Term::Prim(Prim::Lst(vec![
+                tail: Term::Prim(Prim::Arr(vec![
                     Term::Name(Name::from("a")).into(),
                     Term::Name(Name::from("b")).into(),
                 ]))
@@ -147,13 +147,13 @@ mod tests {
 
         assert!(func.region.values.iter().any(|(_, value)| matches!(
             value,
-            cont::Value::Pure(cont::Data::Lst(elems)) if elems.len() == 2
+            cont::Value::Pure(cont::Data::Arr(elems)) if elems.len() == 2
         )));
     }
 
     #[test]
-    fn lowers_lst_with_apply_element_through_join_block() {
-        let term = Term::Prim(Prim::Lst(vec![
+    fn lowers_arr_with_apply_element_through_join_block() {
+        let term = Term::Prim(Prim::Arr(vec![
             Term::Apply(Apply {
                 head: Term::Func(Func {
                     captures: vec![],
@@ -176,7 +176,7 @@ mod tests {
 
         assert!(block.region.values.iter().any(|(_, value)| matches!(
             value,
-            cont::Value::Pure(cont::Data::Lst(elems)) if elems.len() == 2
+            cont::Value::Pure(cont::Data::Arr(elems)) if elems.len() == 2
         )));
     }
 

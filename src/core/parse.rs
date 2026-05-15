@@ -368,39 +368,39 @@ fn parse_bin_prim<'a>() -> Parser<'a, Term> {
         .or(parse_bin_literal())
 }
 
-fn parse_lst_literal<'a>() -> Parser<'a, Term> {
+fn parse_arr_literal<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("[")
             .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
             .and_drop(parse_literal("]")),
     )
-    .map(|elems: Vec<Term>| Term::Prim(Prim::Lst(elems.into_iter().map(|e| e.into()).collect())))
+    .map(|elems: Vec<Term>| Term::Prim(Prim::Arr(elems.into_iter().map(|e| e.into()).collect())))
 }
 
-fn parse_lst_prim<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Lst.len"))
+fn parse_arr_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Arr.len"))
         .and_keep(lazy(parse_atomic_term))
-        .map(|list| Term::Prim(Prim::lst_len(list)))
-        .or(catch(parse_keyword("Lst.get"))
+        .map(|list| Term::Prim(Prim::arr_len(list)))
+        .or(catch(parse_keyword("Arr.get"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(list, index)| Term::Prim(Prim::lst_get(list, index))))
-        .or(catch(parse_keyword("Lst.slice"))
+            .map(|(list, index)| Term::Prim(Prim::arr_get(list, index))))
+        .or(catch(parse_keyword("Arr.slice"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|((list, start), end)| Term::Prim(Prim::lst_slice(list, start, end))))
-        .or(catch(parse_keyword("Lst.append"))
+            .map(|((list, start), end)| Term::Prim(Prim::arr_slice(list, start, end))))
+        .or(catch(parse_keyword("Arr.append"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(list, elem)| Term::Prim(Prim::lst_append(list, elem))))
-        .or(catch(parse_keyword("Lst.concat"))
+            .map(|(list, elem)| Term::Prim(Prim::arr_append(list, elem))))
+        .or(catch(parse_keyword("Arr.concat"))
             .and_keep(sep_by0(|| lazy(parse_atomic_term), || parse_literal(",")))
-            .map(|ops: Vec<Term>| Term::Prim(Prim::lst_concat(ops))))
-        .or(catch(parse_keyword("Lst"))
+            .map(|ops: Vec<Term>| Term::Prim(Prim::arr_concat(ops))))
+        .or(catch(parse_keyword("Arr"))
             .and_keep(lazy(parse_atomic_term))
-            .map(|elem| Term::Prim(Prim::lst_type(elem))))
-        .or(parse_lst_literal())
+            .map(|elem| Term::Prim(Prim::arr_type(elem))))
+        .or(parse_arr_literal())
 }
 
 fn parse_prim<'a>() -> Parser<'a, Term> {
@@ -409,7 +409,7 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_nat_prim())
         .or(parse_conv_prim())
         .or(parse_bin_prim())
-        .or(parse_lst_prim())
+        .or(parse_arr_prim())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {

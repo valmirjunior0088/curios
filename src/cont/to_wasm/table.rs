@@ -187,7 +187,7 @@ pub struct Table<'a> {
     unit_type: wasm::TypeName,
     flt_type: wasm::TypeName,
     bin_type: wasm::TypeName,
-    lst_type: wasm::TypeName,
+    arr_type: wasm::TypeName,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -205,7 +205,7 @@ impl<'a> Table<'a> {
             unit_type: wasm::TypeName::from("unit"),
             flt_type: wasm::TypeName::from("flt"),
             bin_type: wasm::TypeName::from("bin"),
-            lst_type: wasm::TypeName::from("lst"),
+            arr_type: wasm::TypeName::from("arr"),
             tpl_types: {
                 let max = module
                     .consts()
@@ -305,8 +305,8 @@ impl<'a> Table<'a> {
         self.bin_type.clone()
     }
 
-    pub fn lst_type(&self) -> wasm::TypeName {
-        self.lst_type.clone()
+    pub fn arr_type(&self) -> wasm::TypeName {
+        self.arr_type.clone()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

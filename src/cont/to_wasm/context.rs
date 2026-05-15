@@ -33,7 +33,7 @@ pub enum LoadAs {
     Int,
     Flt,
     Bin,
-    Lst,
+    Arr,
 }
 
 impl<'a, 'b> Context<'a, 'b> {
@@ -230,11 +230,11 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 }]
             }
-            LoadAs::Lst => {
+            LoadAs::Arr => {
                 vec![wasm::Instr::RefCast {
                     ref_type: wasm::RefType {
                         is_nullable: false,
-                        heap_type: wasm::HeapType::Concrete(self.table().lst_type()),
+                        heap_type: wasm::HeapType::Concrete(self.table().arr_type()),
                     },
                 }]
             }

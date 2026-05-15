@@ -603,14 +603,14 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_lst_len() {
+    fn lowers_and_runs_arr_len() {
         let mut module = cont::Module::new();
 
         module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
         module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
         module.add_const(
             cont::ValueName::from("LST"),
-            cont::Data::Lst(vec![
+            cont::Data::Arr(vec![
                 cont::ValueName::from("THREE"),
                 cont::ValueName::from("SEVEN"),
             ]),
@@ -624,7 +624,7 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("LST"))),
+                        cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("LST"))),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -646,7 +646,7 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_lst_get() {
+    fn lowers_and_runs_arr_get() {
         let mut module = cont::Module::new();
 
         module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
@@ -654,7 +654,7 @@ mod tests {
         module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
         module.add_const(
             cont::ValueName::from("LST"),
-            cont::Data::Lst(vec![
+            cont::Data::Arr(vec![
                 cont::ValueName::from("THREE"),
                 cont::ValueName::from("SEVEN"),
             ]),
@@ -668,7 +668,7 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::LstGet(
+                        cont::Value::Eval(cont::Code::ArrGet(
                             cont::ValueName::from("LST"),
                             cont::ValueName::from("ONE"),
                         )),
@@ -693,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_lst_slice() {
+    fn lowers_and_runs_arr_slice() {
         let mut module = cont::Module::new();
 
         module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
@@ -703,7 +703,7 @@ mod tests {
         module.add_const(cont::ValueName::from("THREE_IDX"), cont::Data::Nat(3));
         module.add_const(
             cont::ValueName::from("LST"),
-            cont::Data::Lst(vec![
+            cont::Data::Arr(vec![
                 cont::ValueName::from("THREE"),
                 cont::ValueName::from("SEVEN"),
                 cont::ValueName::from("FIVE"),
@@ -719,7 +719,7 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("slice"),
-                            cont::Value::Eval(cont::Code::LstSlice(
+                            cont::Value::Eval(cont::Code::ArrSlice(
                                 cont::ValueName::from("LST"),
                                 cont::ValueName::from("ONE"),
                                 cont::ValueName::from("THREE_IDX"),
@@ -727,7 +727,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("result"),
-                            cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("slice"))),
+                            cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("slice"))),
                         ),
                     ],
                     blocks: vec![],
@@ -745,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_lst_concat() {
+    fn lowers_and_runs_arr_concat() {
         let mut module = cont::Module::new();
 
         module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
@@ -753,11 +753,11 @@ mod tests {
         module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
         module.add_const(
             cont::ValueName::from("LST1"),
-            cont::Data::Lst(vec![cont::ValueName::from("ONE")]),
+            cont::Data::Arr(vec![cont::ValueName::from("ONE")]),
         );
         module.add_const(
             cont::ValueName::from("LST2"),
-            cont::Data::Lst(vec![
+            cont::Data::Arr(vec![
                 cont::ValueName::from("TWO"),
                 cont::ValueName::from("THREE"),
             ]),
@@ -772,14 +772,14 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("concat"),
-                            cont::Value::Eval(cont::Code::LstConcat(vec![
+                            cont::Value::Eval(cont::Code::ArrConcat(vec![
                                 cont::ValueName::from("LST1"),
                                 cont::ValueName::from("LST2"),
                             ])),
                         ),
                         (
                             cont::ValueName::from("result"),
-                            cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("concat"))),
+                            cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("concat"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1703,7 +1703,7 @@ mod tests {
     }
 
     #[test]
-    fn lowers_and_runs_lst_append() {
+    fn lowers_and_runs_arr_append() {
         let mut module = cont::Module::new();
 
         module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
@@ -1711,7 +1711,7 @@ mod tests {
         module.add_const(cont::ValueName::from("NINE"), cont::Data::Nat(9));
         module.add_const(
             cont::ValueName::from("LST"),
-            cont::Data::Lst(vec![
+            cont::Data::Arr(vec![
                 cont::ValueName::from("THREE"),
                 cont::ValueName::from("SEVEN"),
             ]),
@@ -1727,14 +1727,14 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("appended"),
-                            cont::Value::Eval(cont::Code::LstAppend(
+                            cont::Value::Eval(cont::Code::ArrAppend(
                                 cont::ValueName::from("LST"),
                                 cont::ValueName::from("NINE"),
                             )),
                         ),
                         (
                             cont::ValueName::from("result"),
-                            cont::Value::Eval(cont::Code::LstGet(
+                            cont::Value::Eval(cont::Code::ArrGet(
                                 cont::ValueName::from("appended"),
                                 cont::ValueName::from("TWO"),
                             )),

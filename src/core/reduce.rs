@@ -615,66 +615,66 @@ impl Reduce {
                     )),
                 })
             }
-            Prim::LstType(elem) => {
+            Prim::ArrType(elem) => {
                 let elem = self.reduce(context, elem.as_ref().clone())?;
-                Ok(Term::Prim(Prim::lst_type(elem)))
+                Ok(Term::Prim(Prim::arr_type(elem)))
             }
-            Prim::Lst(elems) => {
+            Prim::Arr(elems) => {
                 let elems = elems
                     .iter()
                     .map(|e| self.reduce(context, e.as_ref().clone()).map(|t| t.into()))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(Term::Prim(Prim::Lst(elems)))
+                Ok(Term::Prim(Prim::Arr(elems)))
             }
-            Prim::LstLen(list) => {
+            Prim::ArrLen(list) => {
                 let list = self.reduce(context, list.as_ref().clone())?;
                 Ok(match list {
-                    Term::Prim(Prim::Lst(elems)) => Term::Prim(Prim::Nat(elems.len() as u32)),
-                    list => Term::Prim(Prim::lst_len(list)),
+                    Term::Prim(Prim::Arr(elems)) => Term::Prim(Prim::Nat(elems.len() as u32)),
+                    list => Term::Prim(Prim::arr_len(list)),
                 })
             }
-            Prim::LstGet(list, index) => {
+            Prim::ArrGet(list, index) => {
                 let list = self.reduce(context, list.as_ref().clone())?;
                 let index = self.reduce(context, index.as_ref().clone())?;
                 Ok(match (list, index) {
-                    (Term::Prim(Prim::Lst(elems)), Term::Prim(Prim::Nat(index))) => *elems
+                    (Term::Prim(Prim::Arr(elems)), Term::Prim(Prim::Nat(index))) => *elems
                         .into_iter()
                         .nth(index as usize)
-                        .expect("Lst.get: index out of bounds"),
-                    (list, index) => Term::Prim(Prim::lst_get(list, index)),
+                        .expect("Arr.get: index out of bounds"),
+                    (list, index) => Term::Prim(Prim::arr_get(list, index)),
                 })
             }
-            Prim::LstSlice(list, start, end) => {
+            Prim::ArrSlice(list, start, end) => {
                 let list = self.reduce(context, list.as_ref().clone())?;
                 let start = self.reduce(context, start.as_ref().clone())?;
                 let end = self.reduce(context, end.as_ref().clone())?;
                 Ok(match (list, start, end) {
                     (
-                        Term::Prim(Prim::Lst(elems)),
+                        Term::Prim(Prim::Arr(elems)),
                         Term::Prim(Prim::Nat(start)),
                         Term::Prim(Prim::Nat(end)),
-                    ) => Term::Prim(Prim::Lst(elems[start as usize..end as usize].to_vec())),
-                    (list, start, end) => Term::Prim(Prim::lst_slice(list, start, end)),
+                    ) => Term::Prim(Prim::Arr(elems[start as usize..end as usize].to_vec())),
+                    (list, start, end) => Term::Prim(Prim::arr_slice(list, start, end)),
                 })
             }
-            Prim::LstAppend(list, elem) => {
+            Prim::ArrAppend(list, elem) => {
                 let list = self.reduce(context, list.as_ref().clone())?;
                 let elem = self.reduce(context, elem.as_ref().clone())?;
                 Ok(match list {
-                    Term::Prim(Prim::Lst(mut elems)) => {
+                    Term::Prim(Prim::Arr(mut elems)) => {
                         elems.push(elem.into());
-                        Term::Prim(Prim::Lst(elems))
+                        Term::Prim(Prim::Arr(elems))
                     }
-                    list => Term::Prim(Prim::lst_append(list, elem)),
+                    list => Term::Prim(Prim::arr_append(list, elem)),
                 })
             }
-            Prim::LstConcat(operands) => {
+            Prim::ArrConcat(operands) => {
                 let reduced: Vec<Term> = operands
                     .iter()
                     .map(|e| self.reduce(context, e.as_ref().clone()))
                     .collect::<Result<_, _>>()?;
                 let merged = reduced.iter().try_fold(Vec::new(), |mut acc, t| {
-                    if let Term::Prim(Prim::Lst(elems)) = t {
+                    if let Term::Prim(Prim::Arr(elems)) = t {
                         acc.extend(elems.iter().cloned());
                         Some(acc)
                     } else {
@@ -682,8 +682,8 @@ impl Reduce {
                     }
                 });
                 Ok(match merged {
-                    Some(elems) => Term::Prim(Prim::Lst(elems)),
-                    None => Term::Prim(Prim::LstConcat(
+                    Some(elems) => Term::Prim(Prim::Arr(elems)),
+                    None => Term::Prim(Prim::ArrConcat(
                         reduced.into_iter().map(|t| t.into()).collect(),
                     )),
                 })
@@ -938,23 +938,23 @@ mod tests {
         ]));
 
         assert_eq!(
-            reduce(&mut context, &Term::Prim(Prim::lst_get(list.clone(), Term::Prim(Prim::Nat(0))))),
+            reduce(&mut context, &Term::Prim(Prim::arr_get(list.clone(), Term::Prim(Prim::Nat(0))))),
             Ok(Term::Prim(Prim::Nat(10)))
         );
         assert_eq!(
-            reduce(&mut context, &Term::Prim(Prim::lst_get(list, Term::Prim(Prim::Nat(2))))),
+            reduce(&mut context, &Term::Prim(Prim::arr_get(list, Term::Prim(Prim::Nat(2))))),
             Ok(Term::Prim(Prim::Nat(30)))
         );
     }
 
     #[test]
-    #[should_panic(expected = "Lst.get: index out of bounds")]
+    #[should_panic(expected = "Arr.get: index out of bounds")]
     fn reduce_lst_get_panics_on_out_of_bounds() {
         let mut context = context();
 
         let list = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));
 
-        reduce(&mut context, &Term::Prim(Prim::lst_get(list, Term::Prim(Prim::Nat(1))))).ok();
+        reduce(&mut context, &Term::Prim(Prim::arr_get(list, Term::Prim(Prim::Nat(1))))).ok();
     }
 
     #[test]
@@ -982,7 +982,7 @@ mod tests {
         assert_eq!(
             reduce(
                 &mut context,
-                &Term::Prim(Prim::lst_append(list, Term::Prim(Prim::Nat(30))))
+                &Term::Prim(Prim::arr_append(list, Term::Prim(Prim::Nat(30))))
             ),
             Ok(Term::Prim(Prim::from(vec![
                 Term::Prim(Prim::Nat(10)),

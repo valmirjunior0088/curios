@@ -684,22 +684,22 @@ where
             Prim::BinConcat(operands) => {
                 Prim::BinConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
             }
-            Prim::LstType(elem) => Prim::LstType(self.visit_subterm(elem)),
-            Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| self.visit_subterm(e)).collect()),
-            Prim::LstLen(list) => Prim::LstLen(self.visit_subterm(list)),
-            Prim::LstGet(list, index) => {
-                Prim::LstGet(self.visit_subterm(list), self.visit_subterm(index))
+            Prim::ArrType(elem) => Prim::ArrType(self.visit_subterm(elem)),
+            Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| self.visit_subterm(e)).collect()),
+            Prim::ArrLen(list) => Prim::ArrLen(self.visit_subterm(list)),
+            Prim::ArrGet(list, index) => {
+                Prim::ArrGet(self.visit_subterm(list), self.visit_subterm(index))
             }
-            Prim::LstSlice(list, start, end) => Prim::LstSlice(
+            Prim::ArrSlice(list, start, end) => Prim::ArrSlice(
                 self.visit_subterm(list),
                 self.visit_subterm(start),
                 self.visit_subterm(end),
             ),
-            Prim::LstAppend(list, elem) => {
-                Prim::LstAppend(self.visit_subterm(list), self.visit_subterm(elem))
+            Prim::ArrAppend(list, elem) => {
+                Prim::ArrAppend(self.visit_subterm(list), self.visit_subterm(elem))
             }
-            Prim::LstConcat(operands) => {
-                Prim::LstConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
+            Prim::ArrConcat(operands) => {
+                Prim::ArrConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
             }
         }
     }

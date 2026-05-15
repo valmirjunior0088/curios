@@ -34,7 +34,7 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
         Data::Bin(bytes) => pure(bytes.iter().map(|b| format!("\\{:02x}", b)).collect::<String>()),
-        Data::Lst(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
+        Data::Arr(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
             print_clsr_name(target),
@@ -442,16 +442,16 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(" "),
             print_value_names(operands),
         ]),
-        Code::LstLen(lst) => flat([pure("Lst.len"), pure(" "), print_value_name(lst)]),
-        Code::LstGet(lst, idx) => flat([
-            pure("Lst.get"),
+        Code::ArrLen(lst) => flat([pure("Arr.len"), pure(" "), print_value_name(lst)]),
+        Code::ArrGet(lst, idx) => flat([
+            pure("Arr.get"),
             pure(" "),
             print_value_name(lst),
             pure(", "),
             print_value_name(idx),
         ]),
-        Code::LstSlice(lst, start, end) => flat([
-            pure("Lst.slice"),
+        Code::ArrSlice(lst, start, end) => flat([
+            pure("Arr.slice"),
             pure(" "),
             print_value_name(lst),
             pure(", "),
@@ -459,15 +459,15 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(end),
         ]),
-        Code::LstAppend(lst, elem) => flat([
-            pure("Lst.append"),
+        Code::ArrAppend(lst, elem) => flat([
+            pure("Arr.append"),
             pure(" "),
             print_value_name(lst),
             pure(", "),
             print_value_name(elem),
         ]),
-        Code::LstConcat(operands) => flat([
-            pure("Lst.concat"),
+        Code::ArrConcat(operands) => flat([
+            pure("Arr.concat"),
             pure(" "),
             print_value_names(operands),
         ]),

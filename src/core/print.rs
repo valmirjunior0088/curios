@@ -315,35 +315,35 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::LstType(elem) => flat([pure("Lst "), print_term(*elem, depth)]),
-        Prim::Lst(elems) => flat([
+        Prim::ArrType(elem) => flat([pure("Arr "), print_term(*elem, depth)]),
+        Prim::Arr(elems) => flat([
             pure("["),
             sep_flat(elems.into_iter().map(move |e| print_term(*e, depth)), || pure(", ")),
             pure("]"),
         ]),
-        Prim::LstLen(list) => flat([pure("Lst.len "), print_term(*list, depth)]),
-        Prim::LstGet(list, index) => flat([
-            pure("Lst.get "),
+        Prim::ArrLen(list) => flat([pure("Arr.len "), print_term(*list, depth)]),
+        Prim::ArrGet(list, index) => flat([
+            pure("Arr.get "),
             print_term(*list, depth),
             pure(" "),
             print_term(*index, depth),
         ]),
-        Prim::LstSlice(list, start, end) => flat([
-            pure("Lst.slice "),
+        Prim::ArrSlice(list, start, end) => flat([
+            pure("Arr.slice "),
             print_term(*list, depth),
             pure(" "),
             print_term(*start, depth),
             pure(" "),
             print_term(*end, depth),
         ]),
-        Prim::LstAppend(list, elem) => flat([
-            pure("Lst.append "),
+        Prim::ArrAppend(list, elem) => flat([
+            pure("Arr.append "),
             print_term(*list, depth),
             pure(" "),
             print_term(*elem, depth),
         ]),
-        Prim::LstConcat(operands) => flat([
-            pure("Lst.concat "),
+        Prim::ArrConcat(operands) => flat([
+            pure("Arr.concat "),
             sep_flat(
                 operands.into_iter().map(move |e| print_term(*e, depth)),
                 || pure(", "),
