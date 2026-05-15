@@ -677,14 +677,16 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::BinAppend(bin, byte)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
-                let b1 = self.lower_letrec_name(b1, frame, state, builder);
-                let b2 = self.lower_letrec_name(b2, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::BinConcat(operands)) => {
+                let names = operands
+                    .iter()
+                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
+                    .collect();
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BinConcat(vec![b1, b2])),
+                    cont::Value::Eval(cont::Code::BinConcat(names)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
@@ -731,14 +733,16 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::LstAppend(lst, elem)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::LstConcat(l1, l2)) => {
-                let l1 = self.lower_letrec_name(l1, frame, state, builder);
-                let l2 = self.lower_letrec_name(l2, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::LstConcat(operands)) => {
+                let names = operands
+                    .iter()
+                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
+                    .collect();
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::LstConcat(vec![l1, l2])),
+                    cont::Value::Eval(cont::Code::LstConcat(names)),
                 )
             }
             ersd::Term::Func(func) => {
@@ -1102,11 +1106,13 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::BinAppend(bin, byte)));
             }
-            ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => {
-                let b1 = self.lower_letrec_name(b1, frame, state, builder);
-                let b2 = self.lower_letrec_name(b2, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::BinConcat(operands)) => {
+                let names = operands
+                    .iter()
+                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
+                    .collect();
 
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinConcat(vec![b1, b2])));
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinConcat(names)));
             }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
                 let names = elements
@@ -1143,11 +1149,13 @@ impl<'a> Lowerer<'a> {
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::LstAppend(lst, elem)));
             }
-            ersd::Term::Prim(ersd::Prim::LstConcat(l1, l2)) => {
-                let l1 = self.lower_letrec_name(l1, frame, state, builder);
-                let l2 = self.lower_letrec_name(l2, frame, state, builder);
+            ersd::Term::Prim(ersd::Prim::LstConcat(operands)) => {
+                let names = operands
+                    .iter()
+                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
+                    .collect();
 
-                builder.add_value(target, cont::Value::Eval(cont::Code::LstConcat(vec![l1, l2])));
+                builder.add_value(target, cont::Value::Eval(cont::Code::LstConcat(names)));
             }
             ersd::Term::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
@@ -2308,29 +2316,9 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::BinConcat(b1, b2)) => self.lower_to_name(
-                b1,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, b1| {
-                    this.lower_to_name(
-                        b2,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, b2| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::BinConcat(vec![b1, b2])),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
+            ersd::Term::Prim(ersd::Prim::BinConcat(operands)) => {
+                self.lower_bin_concat(operands, frame, state, builder, vec![], cont)
+            }
             ersd::Term::Prim(ersd::Prim::Lst(elements)) => {
                 self.lower_lst(elements, frame, state, builder, vec![], cont)
             }
@@ -2426,29 +2414,9 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::LstConcat(l1, l2)) => self.lower_to_name(
-                l1,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, l1| {
-                    this.lower_to_name(
-                        l2,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, l2| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::LstConcat(vec![l1, l2])),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
+            ersd::Term::Prim(ersd::Prim::LstConcat(operands)) => {
+                self.lower_lst_concat(operands, frame, state, builder, vec![], cont)
+            }
             ersd::Term::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
                 let value = emit_fresh_value(
@@ -2553,6 +2521,70 @@ impl<'a> Lowerer<'a> {
                 Box::new(move |this, state, builder, name| {
                     names.push(name);
                     this.lower_lst(tail, frame, state, builder, names, cont)
+                }),
+            ),
+        }
+    }
+
+    fn lower_bin_concat<'b>(
+        &mut self,
+        operands: &'b [ersd::Subterm],
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        mut names: Vec<cont::ValueName>,
+        cont: Cont<'b>,
+    ) -> cont::Tail {
+        match operands {
+            [] => {
+                let value = emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BinConcat(names)),
+                );
+
+                cont(self, state, builder, value)
+            }
+            [head, tail @ ..] => self.lower_to_name(
+                head,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, name| {
+                    names.push(name);
+                    this.lower_bin_concat(tail, frame, state, builder, names, cont)
+                }),
+            ),
+        }
+    }
+
+    fn lower_lst_concat<'b>(
+        &mut self,
+        operands: &'b [ersd::Subterm],
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        mut names: Vec<cont::ValueName>,
+        cont: Cont<'b>,
+    ) -> cont::Tail {
+        match operands {
+            [] => {
+                let value = emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::LstConcat(names)),
+                );
+
+                cont(self, state, builder, value)
+            }
+            [head, tail @ ..] => self.lower_to_name(
+                head,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, name| {
+                    names.push(name);
+                    this.lower_lst_concat(tail, frame, state, builder, names, cont)
                 }),
             ),
         }

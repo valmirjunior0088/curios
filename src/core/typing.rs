@@ -1004,10 +1004,10 @@ fn erase_prim(
                 _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
             }
             expect(context, term, &bin_type_reduced, expected)?;
-            Ok(ersd::Prim::BinConcat(
+            Ok(ersd::Prim::BinConcat(vec![
                 erase(context, left, &bin_type)?.into(),
                 erase(context, right, &bin_type)?.into(),
-            )
+            ])
             .into())
         }
         Prim::LstType(elem) => {
@@ -1087,10 +1087,10 @@ fn erase_prim(
                 _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
             }
             expect(context, term, &list_type_reduced, expected)?;
-            Ok(ersd::Prim::LstConcat(
+            Ok(ersd::Prim::LstConcat(vec![
                 erase(context, left, &list_type)?.into(),
                 erase(context, right, &list_type)?.into(),
-            )
+            ])
             .into())
         }
     }

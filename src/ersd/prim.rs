@@ -57,13 +57,13 @@ pub enum Prim {
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
     BinAppend(Subterm, Subterm),
-    BinConcat(Subterm, Subterm),
+    BinConcat(Vec<Subterm>),
     Lst(Vec<Subterm>),
     LstLen(Subterm),
     LstGet(Subterm, Subterm),
     LstSlice(Subterm, Subterm, Subterm),
     LstAppend(Subterm, Subterm),
-    LstConcat(Subterm, Subterm),
+    LstConcat(Vec<Subterm>),
 }
 
 impl From<u32> for Prim {
