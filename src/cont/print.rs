@@ -33,7 +33,12 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
         Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
-        Data::Bin(bytes) => pure(bytes.iter().map(|b| format!("\\{:02x}", b)).collect::<String>()),
+        Data::Bin(bytes) => pure(
+            bytes
+                .iter()
+                .map(|b| format!("\\{:02x}", b))
+                .collect::<String>(),
+        ),
         Data::Arr(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
@@ -252,7 +257,9 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         ]),
         Code::NatClz(operand) => flat([pure("Nat.clz"), pure(" "), print_value_name(operand)]),
         Code::NatCtz(operand) => flat([pure("Nat.ctz"), pure(" "), print_value_name(operand)]),
-        Code::NatPopcnt(operand) => flat([pure("Nat.popcnt"), pure(" "), print_value_name(operand)]),
+        Code::NatPopcnt(operand) => {
+            flat([pure("Nat.popcnt"), pure(" "), print_value_name(operand)])
+        }
         Code::NatEqz(operand) => flat([pure("Nat.eqz"), pure(" "), print_value_name(operand)]),
         Code::IntAnd(left, right) => flat([
             pure("Int.and"),
@@ -305,7 +312,9 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         ]),
         Code::IntClz(operand) => flat([pure("Int.clz"), pure(" "), print_value_name(operand)]),
         Code::IntCtz(operand) => flat([pure("Int.ctz"), pure(" "), print_value_name(operand)]),
-        Code::IntPopcnt(operand) => flat([pure("Int.popcnt"), pure(" "), print_value_name(operand)]),
+        Code::IntPopcnt(operand) => {
+            flat([pure("Int.popcnt"), pure(" "), print_value_name(operand)])
+        }
         Code::IntEqz(operand) => flat([pure("Int.eqz"), pure(" "), print_value_name(operand)]),
         Code::FltAdd(left, right) => flat([
             pure("Flt.add"),
@@ -437,11 +446,9 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(byte),
         ]),
-        Code::BinConcat(operands) => flat([
-            pure("Bin.concat"),
-            pure(" "),
-            print_value_names(operands),
-        ]),
+        Code::BinConcat(operands) => {
+            flat([pure("Bin.concat"), pure(" "), print_value_names(operands)])
+        }
         Code::ArrLen(lst) => flat([pure("Arr.len"), pure(" "), print_value_name(lst)]),
         Code::ArrGet(lst, idx) => flat([
             pure("Arr.get"),
@@ -466,11 +473,9 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(elem),
         ]),
-        Code::ArrConcat(operands) => flat([
-            pure("Arr.concat"),
-            pure(" "),
-            print_value_names(operands),
-        ]),
+        Code::ArrConcat(operands) => {
+            flat([pure("Arr.concat"), pure(" "), print_value_names(operands)])
+        }
         Code::TplGet(tuple, index) => flat([
             pure("Tpl.get "),
             print_value_name(tuple),
@@ -518,8 +523,8 @@ fn print_target<'a>(target: &'a JumpTarget) -> Printer<'a> {
 fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
     match tail {
         Tail::Jump(target) => print_target(target),
-        Tail::Match(target) => flat([
-            pure("match "),
+        Tail::Case(target) => flat([
+            pure("case "),
             print_value_name(&target.operand),
             pure("\n"),
             flat(target.targets.iter().enumerate().map(|(index, target)| {

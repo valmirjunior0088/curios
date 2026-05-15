@@ -634,13 +634,11 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::FltToNat(operand)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Pure(cont::Data::Bin(bytes.clone())),
-                )
-            }
+            ersd::Term::Prim(ersd::Prim::Bin(bytes)) => emit_fresh_value(
+                state,
+                builder,
+                cont::Value::Pure(cont::Data::Bin(bytes.clone())),
+            ),
             ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
                 let bin = self.lower_letrec_name(bin, frame, state, builder);
 
@@ -780,9 +778,10 @@ impl<'a> Lowerer<'a> {
 
                 self.lower_letrec_name(&letrec.tail, &frame, state, builder)
             }
-            ersd::Term::Apply(_) | ersd::Term::Split(_) | ersd::Term::Match(_) => {
-                unsupported_letrec_item(term)
-            }
+            ersd::Term::Apply(_)
+            | ersd::Term::Split(_)
+            | ersd::Term::Case(_)
+            | ersd::Term::Elim(_) => unsupported_letrec_item(term),
         }
     }
 
@@ -1187,9 +1186,10 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Name(name) => {
                 builder.add_value(target, cont::Value::Alias(frame.find(&name.string)));
             }
-            ersd::Term::Apply(_) | ersd::Term::Split(_) | ersd::Term::Match(_) => {
-                unsupported_letrec_item(term)
-            }
+            ersd::Term::Apply(_)
+            | ersd::Term::Split(_)
+            | ersd::Term::Case(_)
+            | ersd::Term::Elim(_) => unsupported_letrec_item(term),
         }
     }
 }
@@ -2478,7 +2478,10 @@ impl<'a> Lowerer<'a> {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
                 self.lower_to_name(&letrec.tail, &frame, state, builder, cont)
             }
-            ersd::Term::Apply(_) | ersd::Term::Split(_) | ersd::Term::Match(_) => {
+            ersd::Term::Apply(_)
+            | ersd::Term::Split(_)
+            | ersd::Term::Case(_)
+            | ersd::Term::Elim(_) => {
                 let block = state.fresh_block();
                 let param = state.fresh_value();
                 let mut join_builder = RegionBuilder::new();
@@ -2620,15 +2623,15 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Match(match_) => self.lower_to_name(
-                &match_.head,
+            ersd::Term::Case(case_) => self.lower_to_name(
+                &case_.head,
                 frame,
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
-                    let mut targets = Vec::with_capacity(match_.cases.len());
+                    let mut targets = Vec::with_capacity(case_.cases.len());
 
-                    for case in &match_.cases {
+                    for case in &case_.cases {
                         let block = state.fresh_block();
                         let mut case_builder = RegionBuilder::new();
                         let tail = this.lower_tail(case, frame, resume, state, &mut case_builder);
@@ -2647,10 +2650,69 @@ impl<'a> Lowerer<'a> {
                         });
                     }
 
-                    cont::Tail::Match(cont::MatchTarget {
+                    cont::Tail::Case(cont::CaseTarget {
                         operand: head,
                         targets,
                         default: None,
+                    })
+                }),
+            ),
+            ersd::Term::Elim(elim) => self.lower_to_name(
+                &elim.head,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, head| {
+                    let zero_block = state.fresh_block();
+                    let mut zero_builder = RegionBuilder::new();
+                    let zero_tail =
+                        this.lower_tail(&elim.zero_case, frame, resume, state, &mut zero_builder);
+                    builder.add_block(
+                        zero_block.clone(),
+                        cont::Block {
+                            params: vec![],
+                            region: zero_builder.finish(zero_tail),
+                        },
+                    );
+
+                    let succ_block = state.fresh_block();
+                    let mut succ_builder = RegionBuilder::new();
+                    let one = emit_fresh_value(
+                        state,
+                        &mut succ_builder,
+                        cont::Value::Pure(cont::Data::Nat(1)),
+                    );
+                    let pred = emit_fresh_value(
+                        state,
+                        &mut succ_builder,
+                        cont::Value::Eval(cont::Code::NatSub(head.clone(), one)),
+                    );
+                    let succ_frame = frame.extended([(elim.pred.clone(), pred)]);
+                    let succ_tail = this.lower_tail(
+                        &elim.succ_case,
+                        &succ_frame,
+                        resume,
+                        state,
+                        &mut succ_builder,
+                    );
+                    builder.add_block(
+                        succ_block.clone(),
+                        cont::Block {
+                            params: vec![],
+                            region: succ_builder.finish(succ_tail),
+                        },
+                    );
+
+                    cont::Tail::Case(cont::CaseTarget {
+                        operand: head,
+                        targets: vec![cont::JumpTarget {
+                            target: zero_block,
+                            params: vec![],
+                        }],
+                        default: Some(cont::JumpTarget {
+                            target: succ_block,
+                            params: vec![],
+                        }),
                     })
                 }),
             ),

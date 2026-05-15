@@ -171,7 +171,7 @@ mod tests {
                             },
                         ),
                     ],
-                    tail: cont::Tail::Match(cont::MatchTarget {
+                    tail: cont::Tail::Case(cont::CaseTarget {
                         operand: cont::ValueName::from("is_zero"),
                         targets: vec![cont::JumpTarget {
                             target: cont::BlockName::from("on_non_zero"),
@@ -237,7 +237,7 @@ mod tests {
                             },
                         ),
                     ],
-                    tail: cont::Tail::Match(cont::MatchTarget {
+                    tail: cont::Tail::Case(cont::CaseTarget {
                         operand: cont::ValueName::from("is_zero"),
                         targets: vec![cont::JumpTarget {
                             target: cont::BlockName::from("on_non_zero"),
@@ -1758,5 +1758,4 @@ mod tests {
 
         assert_eq!(result, 9);
     }
-
 }

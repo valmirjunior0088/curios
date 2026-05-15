@@ -3,6 +3,14 @@ use super::{Name, Prim};
 pub type Subterm = Box<Term>;
 
 #[derive(Debug)]
+pub struct Elim {
+    pub head: Subterm,
+    pub zero_case: Subterm,
+    pub pred: String,
+    pub succ_case: Subterm,
+}
+
+#[derive(Debug)]
 pub struct Func {
     pub captures: Vec<String>,
     pub param: String,
@@ -35,7 +43,7 @@ pub struct Atom {
 }
 
 #[derive(Debug)]
-pub struct Match {
+pub struct Case {
     pub head: Subterm,
     pub cases: Vec<Subterm>,
 }
@@ -58,12 +66,13 @@ pub struct LetRec {
 pub enum Term {
     Erased,
     Prim(Prim),
+    Elim(Elim),
     Func(Func),
     Apply(Apply),
     Pair(Pair),
     Split(Split),
     Atom(Atom),
-    Match(Match),
+    Case(Case),
     Let(Let),
     LetRec(LetRec),
     Name(Name),
@@ -72,6 +81,12 @@ pub enum Term {
 impl From<Prim> for Term {
     fn from(value: Prim) -> Self {
         Self::Prim(value)
+    }
+}
+
+impl From<Elim> for Term {
+    fn from(value: Elim) -> Self {
+        Self::Elim(value)
     }
 }
 
@@ -105,9 +120,9 @@ impl From<Atom> for Term {
     }
 }
 
-impl From<Match> for Term {
-    fn from(value: Match) -> Self {
-        Self::Match(value)
+impl From<Case> for Term {
+    fn from(value: Case) -> Self {
+        Self::Case(value)
     }
 }
 

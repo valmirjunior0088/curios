@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Prim, Split,
+        Apply, Atom, AtomType, Case, Func, FuncType, Let, LetRec, Pair, PairType, Prim, Split,
         Term, Type, Var,
     },
     crate::parser::{
@@ -310,15 +310,13 @@ fn parse_hex_byte<'a>() -> Parser<'a, u8> {
 }
 
 fn parse_string_chunk<'a>() -> Parser<'a, String> {
-    catch(
-        take_while(|c| c != '\\' && c != '"').flat_map(|s: &str| {
-            if s.is_empty() {
-                fail("empty chunk")
-            } else {
-                pure(s.to_string())
-            }
-        }),
-    )
+    catch(take_while(|c| c != '\\' && c != '"').flat_map(|s: &str| {
+        if s.is_empty() {
+            fail("empty chunk")
+        } else {
+            pure(s.to_string())
+        }
+    }))
     .or(catch(take_exact("\\")).and_keep(
         take_exact("n")
             .map(|_| "\n".to_string())
@@ -501,7 +499,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(";"))
     .and(many1(parse_match_case))
     .map(|(((head, motive_label), motive), cases)| {
-        Match::new(head, motive_label, motive, cases).into()
+        Case::new(head, motive_label, motive, cases).into()
     })
 }
 
@@ -664,7 +662,7 @@ mod tests {
 
         assert_eq!(
             term,
-            Match::new(
+            Case::new(
                 Atom::from("foo"),
                 "k",
                 AtomType::new(["foo"]),

@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, Pair, PairType,
+        Apply, AtomType, Case, Context, Error, Func, FuncType, Let, LetRec, Pair, PairType,
         Preempted, Prim, Split, Term, Type, Var,
     },
     crate::ersd,
@@ -349,12 +349,12 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
     Ok(type_)
 }
 
-fn infer_match(context: &mut Context, match_: &Match, term: &Term) -> Result<Term, Error> {
-    let Match {
+fn infer_case(context: &mut Context, case: &Case, term: &Term) -> Result<Term, Error> {
+    let Case {
         head,
         motive,
         cases,
-    } = match_;
+    } = case;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
@@ -462,7 +462,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::PairType(pt) => infer_pair_type(context, pt),
         Term::Split(split) => infer_split(context, split, term),
         Term::AtomType(_) => Ok(Type.into()),
-        Term::Match(match_) => infer_match(context, match_, term),
+        Term::Case(case) => infer_case(context, case, term),
         Term::Let(let_) => infer_let(context, let_),
         Term::LetRec(letrec) => infer_letrec(context, letrec),
         Term::Var(var) => match context.assumption(var.unwrap()) {
@@ -1050,7 +1050,12 @@ fn erase_prim(
                 Term::Prim(Prim::ArrType(e)) => *e,
                 _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
             };
-            expect(context, term, &Term::Prim(Prim::arr_type(elem_type.clone())), expected)?;
+            expect(
+                context,
+                term,
+                &Term::Prim(Prim::arr_type(elem_type.clone())),
+                expected,
+            )?;
             Ok(ersd::Prim::ArrAppend(
                 erase(context, list, &list_type)?.into(),
                 erase(context, elem, &elem_type)?.into(),
@@ -1215,17 +1220,17 @@ fn erase_atom(
     Ok(ersd::Atom { index }.into())
 }
 
-fn erase_match(
+fn erase_case(
     context: &mut Context,
-    match_: &Match,
+    case: &Case,
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Match {
+    let Case {
         head,
         motive,
         cases,
-    } = match_;
+    } = case;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
@@ -1267,7 +1272,7 @@ fn erase_match(
 
     expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
 
-    Ok(ersd::Match {
+    Ok(ersd::Case {
         head: erase(context, head, &head_type)?.into(),
         cases,
     }
@@ -1383,7 +1388,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
             Ok(ersd::Term::Erased)
         }
         Term::Atom(atom) => erase_atom(context, atom, term, expected),
-        Term::Match(match_) => erase_match(context, match_, term, expected),
+        Term::Case(case) => erase_case(context, case, term, expected),
         Term::Let(let_) => erase_let(context, let_, expected),
         Term::LetRec(lr) => erase_letrec(context, lr, expected),
         Term::Var(var) => {
@@ -1399,7 +1404,7 @@ mod tests {
     use {
         super::*,
         crate::{
-            core::{Atom, AtomType, Func, FuncType, LetRec, Match, Pair, PairType, Term, Type},
+            core::{Atom, AtomType, Case, Func, FuncType, LetRec, Pair, PairType, Term, Type},
             ersd,
         },
         std::time::Duration,
@@ -1410,13 +1415,13 @@ mod tests {
     }
 
     #[test]
-    fn erase_dependent_pair_type_over_atom_match_and_pair_value() {
+    fn erase_dependent_pair_type_over_atom_case_and_pair_value() {
         let mut context = context();
 
         let pair_type = Term::from(PairType::new(
             "x",
             AtomType::new(["left", "right"]),
-            Match::new(
+            Case::new(
                 Var::free("x"),
                 "m",
                 Type,
@@ -1445,7 +1450,7 @@ mod tests {
         let pair_type = Term::from(PairType::new(
             "x",
             AtomType::new(["left", "right"]),
-            Match::new(
+            Case::new(
                 Var::free("x"),
                 "m",
                 Type,
@@ -1578,7 +1583,7 @@ mod tests {
     }
 
     #[test]
-    fn erase_match_and_atom_stress_test() {
+    fn erase_case_and_atom_stress_test() {
         let type_ = "'[zeta, alpha, mu]".parse().unwrap();
 
         let term = r#"
@@ -1669,8 +1674,8 @@ mod tests {
             ersd::Term::Atom(ersd::Atom { index: 2 })
         ));
 
-        let ersd::Term::Match(ersd::Match { head, cases }) = *tail else {
-            panic!("expected outer erased match");
+        let ersd::Term::Case(ersd::Case { head, cases }) = *tail else {
+            panic!("expected outer erased case");
         };
 
         assert!(matches!(
@@ -1680,12 +1685,12 @@ mod tests {
 
         assert_eq!(cases.len(), 3);
 
-        let ersd::Term::Match(ersd::Match {
+        let ersd::Term::Case(ersd::Case {
             head: alpha_head,
             cases: alpha_cases,
         }) = &*cases[0]
         else {
-            panic!("expected nested match for 'alpha case");
+            panic!("expected nested case for 'alpha case");
         };
 
         assert!(matches!(
@@ -1707,12 +1712,12 @@ mod tests {
             ersd::Term::Atom(ersd::Atom { index: 1 })
         ));
 
-        let ersd::Term::Match(ersd::Match {
+        let ersd::Term::Case(ersd::Case {
             head: mu_head,
             cases: mu_cases,
         }) = &*cases[1]
         else {
-            panic!("expected nested match for 'mu case");
+            panic!("expected nested case for 'mu case");
         };
 
         assert!(matches!(
@@ -1737,12 +1742,12 @@ mod tests {
             ersd::Term::Atom(ersd::Atom { index: 2 })
         ));
 
-        let ersd::Term::Match(ersd::Match {
+        let ersd::Term::Case(ersd::Case {
             head: zeta_head,
             cases: zeta_cases,
         }) = &*cases[2]
         else {
-            panic!("expected nested match for 'zeta case");
+            panic!("expected nested case for 'zeta case");
         };
 
         assert!(matches!(
@@ -1845,5 +1850,4 @@ mod tests {
         assert_eq!(infer(&mut context, &append).unwrap(), arr_nat);
         assert!(erase(&mut context, &append, &arr_nat).is_ok());
     }
-
 }

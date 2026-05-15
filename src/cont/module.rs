@@ -117,7 +117,7 @@ pub struct JumpTarget {
 }
 
 #[derive(Debug)]
-pub struct MatchTarget {
+pub struct CaseTarget {
     pub operand: ValueName,
     pub targets: Vec<JumpTarget>,
     pub default: Option<JumpTarget>,
@@ -140,7 +140,7 @@ pub enum CallTarget {
 #[derive(Debug)]
 pub enum Tail {
     Jump(JumpTarget),
-    Match(MatchTarget),
+    Case(CaseTarget),
     Call(CallTarget),
 }
 

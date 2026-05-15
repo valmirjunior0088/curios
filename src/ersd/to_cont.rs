@@ -229,5 +229,4 @@ mod tests {
 
         assert!(has_bin);
     }
-
 }

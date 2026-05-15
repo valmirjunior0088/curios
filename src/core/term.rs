@@ -267,13 +267,13 @@ impl AtomType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Match {
+pub struct Case {
     pub head: Subterm,
     pub motive: Scope<One>,
     pub cases: BTreeMap<Atom, Subterm>,
 }
 
-impl Match {
+impl Case {
     pub fn new<H, L, M, I, A, B>(head: H, motive_label: L, motive: M, cases: I) -> Self
     where
         H: Into<Term>,
@@ -378,7 +378,7 @@ pub enum Term {
     Split(Split),
     AtomType(AtomType),
     Atom(Atom),
-    Match(Match),
+    Case(Case),
     Let(Let),
     LetRec(LetRec),
     Var(Var),
@@ -502,9 +502,9 @@ impl From<Atom> for Term {
     }
 }
 
-impl From<Match> for Term {
-    fn from(value: Match) -> Self {
-        Self::Match(value)
+impl From<Case> for Term {
+    fn from(value: Case) -> Self {
+        Self::Case(value)
     }
 }
 
@@ -757,11 +757,11 @@ where
         }
     }
 
-    fn visit_match(&mut self, match_: &Match) -> Match {
-        Match {
-            head: self.visit_subterm(&match_.head),
-            motive: self.visit_scope(&match_.motive),
-            cases: match_
+    fn visit_case(&mut self, case: &Case) -> Case {
+        Case {
+            head: self.visit_subterm(&case.head),
+            motive: self.visit_scope(&case.motive),
+            cases: case
                 .cases
                 .iter()
                 .map(|(atom, body)| (atom.clone(), self.visit_subterm(body)))
@@ -800,7 +800,7 @@ where
             Term::Split(split) => self.visit_split(split).into(),
             Term::AtomType(at) => at.clone().into(),
             Term::Atom(atom) => atom.clone().into(),
-            Term::Match(match_) => self.visit_match(match_).into(),
+            Term::Case(case) => self.visit_case(case).into(),
             Term::Let(let_) => self.visit_let(let_).into(),
             Term::LetRec(letrec) => self.visit_letrec(letrec).into(),
             Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),

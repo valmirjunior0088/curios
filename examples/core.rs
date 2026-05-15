@@ -1,5 +1,5 @@
 use curios::core::{
-    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Split, Term, Type,
+    Apply, Atom, AtomType, Case, Func, FuncType, Let, LetRec, Pair, PairType, Split, Term, Type,
     Var,
 };
 
@@ -16,7 +16,7 @@ fn main() {
             PairType::new(
                 "tag",
                 AtomType::new(["left", "right"]),
-                Match::new(
+                Case::new(
                     Var::free("tag"),
                     "_",
                     Type,
@@ -33,7 +33,7 @@ fn main() {
                     Type,
                     "x",
                     "y",
-                    Match::new(
+                    Case::new(
                         Var::free("x"),
                         "_",
                         Type,

@@ -1,5 +1,5 @@
 use {
-    super::{Apply, Context, Func, Let, Match, Pair, Preempted, Prim, Split, Term, Var},
+    super::{Apply, Case, Context, Func, Let, Pair, Preempted, Prim, Split, Term, Var},
     std::time::{Duration, Instant},
 };
 
@@ -722,17 +722,17 @@ impl Reduce {
         }
     }
 
-    fn reduce_match(&mut self, context: &mut Context, match_: Match) -> Result<Step, Preempted> {
-        let Match {
+    fn reduce_case(&mut self, context: &mut Context, case: Case) -> Result<Step, Preempted> {
+        let Case {
             head,
             motive,
             cases,
-        } = match_;
+        } = case;
         let atom = match self.reduce(context, *head)? {
             Term::Atom(atom) => atom,
             head => {
                 return Ok(Step::Break(
-                    Match {
+                    Case {
                         head: head.into(),
                         motive,
                         cases,
@@ -745,7 +745,7 @@ impl Reduce {
         match cases.get(&atom) {
             Some(body) => Ok(Step::Continue(body.as_ref().clone())),
             None => Ok(Step::Break(
-                Match {
+                Case {
                     head: Term::from(atom).into(),
                     motive,
                     cases,
@@ -775,7 +775,7 @@ impl Reduce {
             let step = match term {
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
                 Term::Split(split) => self.reduce_split(context, split)?,
-                Term::Match(match_) => self.reduce_match(context, match_)?,
+                Term::Case(case) => self.reduce_case(context, case)?,
                 Term::Let(let_) => self.reduce_let(let_),
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
                 Term::Var(var) => self.reduce_var(context, var),
@@ -794,7 +794,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Let, Type, Var},
+        crate::core::{Atom, Case, Let, Type, Var},
         std::time::Duration,
     };
 
@@ -832,10 +832,10 @@ mod tests {
     }
 
     #[test]
-    fn reduce_match_selects_case() {
+    fn reduce_case_selects_case() {
         let mut context = context();
 
-        let term = Match::new(
+        let term = Case::new(
             Atom::from("a"),
             "m",
             Type,
@@ -938,11 +938,17 @@ mod tests {
         ]));
 
         assert_eq!(
-            reduce(&mut context, &Term::Prim(Prim::arr_get(list.clone(), Term::Prim(Prim::Nat(0))))),
+            reduce(
+                &mut context,
+                &Term::Prim(Prim::arr_get(list.clone(), Term::Prim(Prim::Nat(0))))
+            ),
             Ok(Term::Prim(Prim::Nat(10)))
         );
         assert_eq!(
-            reduce(&mut context, &Term::Prim(Prim::arr_get(list, Term::Prim(Prim::Nat(2))))),
+            reduce(
+                &mut context,
+                &Term::Prim(Prim::arr_get(list, Term::Prim(Prim::Nat(2))))
+            ),
             Ok(Term::Prim(Prim::Nat(30)))
         );
     }
@@ -954,7 +960,11 @@ mod tests {
 
         let list = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));
 
-        reduce(&mut context, &Term::Prim(Prim::arr_get(list, Term::Prim(Prim::Nat(1))))).ok();
+        reduce(
+            &mut context,
+            &Term::Prim(Prim::arr_get(list, Term::Prim(Prim::Nat(1)))),
+        )
+        .ok();
     }
 
     #[test]

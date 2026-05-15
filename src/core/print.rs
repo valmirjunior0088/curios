@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, One, Pair, PairType, Prim,
-        Scope, Split, Term, Two, Var,
+        Apply, Atom, AtomType, Case, Func, FuncType, Let, LetRec, One, Pair, PairType, Prim, Scope,
+        Split, Term, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -286,7 +286,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::FltToInt(inner) => flat([pure("Flt.to_int "), print_term(*inner, depth)]),
         Prim::FltToNat(inner) => flat([pure("Flt.to_nat "), print_term(*inner, depth)]),
         Prim::BinType => pure("Bin"),
-        Prim::Bin(bytes) => pure(bytes.iter().map(|b| format!("\\{:02x}", b)).collect::<String>()),
+        Prim::Bin(bytes) => pure(
+            bytes
+                .iter()
+                .map(|b| format!("\\{:02x}", b))
+                .collect::<String>(),
+        ),
         Prim::BinLen(bin) => flat([pure("Bin.len "), print_term(*bin, depth)]),
         Prim::BinGet(bin, index) => flat([
             pure("Bin.get "),
@@ -318,7 +323,10 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::ArrType(elem) => flat([pure("Arr "), print_term(*elem, depth)]),
         Prim::Arr(elems) => flat([
             pure("["),
-            sep_flat(elems.into_iter().map(move |e| print_term(*e, depth)), || pure(", ")),
+            sep_flat(
+                elems.into_iter().map(move |e| print_term(*e, depth)),
+                || pure(", "),
+            ),
             pure("]"),
         ]),
         Prim::ArrLen(list) => flat([pure("Arr.len "), print_term(*list, depth)]),
@@ -433,7 +441,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             pure("]"),
         ]),
         Term::Atom(atom) => print_atom(atom),
-        Term::Match(Match {
+        Term::Case(Case {
             head,
             motive,
             cases,
@@ -540,7 +548,7 @@ mod tests {
                 "x",
                 AtomType::new(["a", "b"]),
                 Atom::from("a"),
-                Match::new(Var::free("x"), "m", Type, [("a", Type), ("b", Type)]),
+                Case::new(Var::free("x"), "m", Type, [("a", Type), ("b", Type)]),
             )
             .into(),
             LetRec::new(
