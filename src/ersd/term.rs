@@ -55,7 +55,7 @@ pub struct Let {
 }
 
 #[derive(Debug)]
-pub struct LetRec {
+pub struct Rec {
     pub names: Vec<String>,
     pub items: Vec<Subterm>,
     pub tail: Subterm,
@@ -73,7 +73,7 @@ pub enum Term {
     Atom(Atom),
     Match(Match),
     Let(Let),
-    LetRec(LetRec),
+    Rec(Rec),
     Name(Name),
 }
 
@@ -131,9 +131,9 @@ impl From<Let> for Term {
     }
 }
 
-impl From<LetRec> for Term {
-    fn from(value: LetRec) -> Self {
-        Self::LetRec(value)
+impl From<Rec> for Term {
+    fn from(value: Rec) -> Self {
+        Self::Rec(value)
     }
 }
 

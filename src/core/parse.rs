@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, Prim, Split, Term,
+        Apply, Atom, AtomType, Func, FuncType, Let, Rec, Match, NatMatch, Prim, Split, Term,
         Tuple, TupleType, Type, Var,
     },
     crate::parser::{
@@ -27,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-const KEYWORDS: &[&str] = &["let", "match"];
+const KEYWORDS: &[&str] = &["let", "match", "rec", "and"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -559,13 +559,12 @@ fn parse_binding<'a>() -> Parser<'a, (&'a str, Term, Term)> {
         .map(|((label, type_), body)| (label, type_, body))
 }
 
-fn parse_let_rec<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("let").and_drop(parse_literal("{")))
-        .and_keep(sep_by1(parse_binding, || parse_literal(";")))
-        .and_drop(parse_literal("}"))
+fn parse_rec<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("rec"))
+        .and_keep(sep_by1(parse_binding, || parse_keyword("and")))
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
-        .map(|(items, tail)| LetRec::new(items, tail).into())
+        .map(|(items, tail)| Rec::new(items, tail).into())
 }
 
 fn parse_split<'a>() -> Parser<'a, Term> {
@@ -615,7 +614,7 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
-    parse_let_rec()
+    parse_rec()
         .or(parse_split())
         .or(parse_let())
         .or(parse_nat_match())
@@ -645,14 +644,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_let_rec_func_and_apply() {
-        let term = "let { id : (x : Type) -> Type = x => x }; id a"
+    fn parse_rec_func_and_apply() {
+        let term = "rec id : (x : Type) -> Type = x => x; id a"
             .parse::<Term>()
             .unwrap();
 
         assert_eq!(
             term,
-            LetRec::new(
+            Rec::new(
                 vec![(
                     "id",
                     FuncType::new("x", Type, Type),

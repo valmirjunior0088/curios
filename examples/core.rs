@@ -1,10 +1,10 @@
 use curios::core::{
-    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Split, Term, Tuple, TupleType,
+    Apply, Atom, AtomType, Func, FuncType, Let, Rec, Match, Split, Term, Tuple, TupleType,
     Type, Var,
 };
 
 fn main() {
-    let program: Term = LetRec::new(
+    let program: Term = Rec::new(
         vec![(
             "id",
             FuncType::new("_", Type, Type),

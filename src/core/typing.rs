@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, NatMatch, Preempted,
+        Apply, AtomType, Context, Error, Func, FuncType, Let, Rec, Match, NatMatch, Preempted,
         Prim, Split, Term, Tuple, TupleType, Type, Var,
     },
     crate::ersd,
@@ -464,8 +464,8 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     })
 }
 
-fn infer_letrec(context: &mut Context, letrec: &LetRec) -> Result<Term, Error> {
-    let LetRec { items, tail } = letrec;
+fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
+    let Rec { items, tail } = rec;
 
     let labels = (0..items.len())
         .map(|_| context.fresh())
@@ -519,7 +519,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::AtomType(_) => Ok(Type.into()),
         Term::Match(m) => infer_match(context, m, term),
         Term::Let(let_) => infer_let(context, let_),
-        Term::LetRec(letrec) => infer_letrec(context, letrec),
+        Term::Rec(rec) => infer_rec(context, rec),
         Term::Var(var) => match context.assumption(var.unwrap()) {
             Some(type_) => Ok(type_.clone()),
             None => Err(Error::cannot_infer(var.clone())),
@@ -1441,12 +1441,12 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
     .into())
 }
 
-fn erase_letrec(
+fn erase_rec(
     context: &mut Context,
-    letrec: &LetRec,
+    rec: &Rec,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let LetRec { items, tail } = letrec;
+    let Rec { items, tail } = rec;
 
     let names = (0..items.len())
         .map(|_| context.fresh())
@@ -1485,7 +1485,7 @@ fn erase_letrec(
             context.define(name, body);
         }
 
-        Ok(ersd::LetRec {
+        Ok(ersd::Rec {
             names,
             items: erased_items,
             tail: erase(context, &tail, expected)?.into(),
@@ -1525,7 +1525,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         Term::Atom(atom) => erase_atom(context, atom, term, expected),
         Term::Match(m) => erase_match(context, m, term, expected),
         Term::Let(let_) => erase_let(context, let_, expected),
-        Term::LetRec(lr) => erase_letrec(context, lr, expected),
+        Term::Rec(lr) => erase_rec(context, lr, expected),
         Term::Var(var) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
@@ -1540,7 +1540,7 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Func, FuncType, LetRec, Match, NatMatch, Term, Tuple, TupleType,
+                Atom, AtomType, Func, FuncType, Rec, Match, NatMatch, Term, Tuple, TupleType,
                 Type,
             },
             ersd,
@@ -1612,7 +1612,7 @@ mod tests {
     }
 
     #[test]
-    fn erase_letrec_single_identity_function() {
+    fn erase_rec_single_identity_function() {
         let mut context = context();
 
         let func_type = Term::from(FuncType::new(
@@ -1621,7 +1621,7 @@ mod tests {
             AtomType::new(["a"]),
         ));
 
-        let term = Term::from(LetRec::new(
+        let term = Term::from(Rec::new(
             vec![("f", func_type.clone(), Func::new("x", Var::free("x")))],
             Var::free("f"),
         ));
@@ -1647,7 +1647,7 @@ mod tests {
 
         let type_ = Term::from(AtomType::new(["a"]));
 
-        let term = Term::from(LetRec::new(
+        let term = Term::from(Rec::new(
             vec![("loop", type_.clone(), Var::free("loop"))],
             Var::free("loop"),
         ));

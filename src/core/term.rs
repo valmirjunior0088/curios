@@ -375,12 +375,12 @@ impl Let {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LetRec {
+pub struct Rec {
     pub items: Vec<(Scope<Many>, Scope<Many>)>,
     pub tail: Scope<Many>,
 }
 
-impl LetRec {
+impl Rec {
     pub fn new<I, L, T, U, V>(items: I, tail: V) -> Self
     where
         I: IntoIterator<Item = (L, T, U)>,
@@ -434,7 +434,7 @@ pub enum Term {
     Atom(Atom),
     Match(Match),
     Let(Let),
-    LetRec(LetRec),
+    Rec(Rec),
     Var(Var),
 }
 
@@ -574,9 +574,9 @@ impl From<Let> for Term {
     }
 }
 
-impl From<LetRec> for Term {
-    fn from(value: LetRec) -> Self {
-        Self::LetRec(value)
+impl From<Rec> for Term {
+    fn from(value: Rec) -> Self {
+        Self::Rec(value)
     }
 }
 
@@ -852,14 +852,14 @@ where
         }
     }
 
-    fn visit_letrec(&mut self, letrec: &LetRec) -> LetRec {
-        LetRec {
-            items: letrec
+    fn visit_rec(&mut self, rec: &Rec) -> Rec {
+        Rec {
+            items: rec
                 .items
                 .iter()
                 .map(|(type_, value)| (self.visit_scope(type_), self.visit_scope(value)))
                 .collect(),
-            tail: self.visit_scope(&letrec.tail),
+            tail: self.visit_scope(&rec.tail),
         }
     }
 
@@ -878,7 +878,7 @@ where
             Term::Atom(atom) => atom.clone().into(),
             Term::Match(m) => self.visit_match(m).into(),
             Term::Let(let_) => self.visit_let(let_).into(),
-            Term::LetRec(letrec) => self.visit_letrec(letrec).into(),
+            Term::Rec(rec) => self.visit_rec(rec).into(),
             Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),
         }
     }
@@ -924,7 +924,7 @@ mod tests {
             "x",
             Tuple::new([
                 Term::from(Var::free("x")),
-                LetRec::new(
+                Rec::new(
                     vec![("y", Type, Var::free("z"))],
                     Tuple::new([Var::free("y"), Var::free("w")]),
                 )

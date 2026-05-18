@@ -32,13 +32,13 @@ mod tests {
         super::to_cont,
         crate::{
             cont,
-            ersd::{Apply, Func, Let, LetRec, Name, Prim, Term, Tuple},
+            ersd::{Apply, Func, Let, Rec, Name, Prim, Term, Tuple},
         },
     };
 
     #[test]
     fn lowers_recursive_pairs_into_main_region_values() {
-        let term = Term::LetRec(LetRec {
+        let term = Term::Rec(Rec {
             names: vec!["x".into(), "y".into()],
             items: vec![
                 Term::from(Tuple {

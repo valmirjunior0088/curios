@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, One, Prim, Scope,
+        Apply, Atom, AtomType, Func, FuncType, Let, Rec, Match, NatMatch, One, Prim, Scope,
         Split, Term, Tuple, TupleType, Two, Var,
     },
-    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -517,7 +517,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, depth + 1),
             ])
         }
-        Term::LetRec(LetRec { items, tail }) => {
+        Term::Rec(Rec { items, tail }) => {
             let labels = labels_from(depth, items.len());
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
@@ -543,10 +543,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let tail = tail.open(&label_terms);
 
             flat([
-                pure("let {"),
-                pure("\n"),
-                indent(sep_flat(bindings, || pure(";\n"))),
-                pure("\n};\n"),
+                pure("rec "),
+                sep_flat(bindings, || pure("\nand ")),
+                pure(";\n"),
                 print_term(tail, inner_depth),
             ])
         }
@@ -582,7 +581,7 @@ mod tests {
                 Match::new(Var::free("x"), "m", Type, [("a", Type), ("b", Type)]),
             )
             .into(),
-            LetRec::new(
+            Rec::new(
                 vec![(
                     "id",
                     FuncType::new("x", Type, Type),

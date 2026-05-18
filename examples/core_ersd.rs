@@ -34,7 +34,7 @@ fn main() {
             tail: ersd::Term::Let(ersd::Let {
                 name: "unit".into(),
                 body: ersd::Term::Erased.into(),
-                tail: ersd::Term::LetRec(ersd::LetRec {
+                tail: ersd::Term::Rec(ersd::Rec {
                     names: vec!["self_pair".into(), "make".into()],
                     items: vec![
                         ersd::Term::Tuple(ersd::Tuple {

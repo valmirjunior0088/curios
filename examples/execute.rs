@@ -2,7 +2,7 @@ use {curios::execute, std::time::Duration};
 
 fn main() {
     let source = "
-        let { id : (_ : Type) -> Type = x => x };
+        rec id : (_ : Type) -> Type = x => x;
         let witness : Type = id Int;
         let pair_ty : Type = {
             label : '[left, right],

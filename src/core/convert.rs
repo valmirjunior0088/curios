@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, NatMatch, Preempted, Prim,
+        Apply, Atom, AtomType, Context, Func, FuncType, Rec, Match, NatMatch, Preempted, Prim,
         Split, Term, Tuple, TupleType, Var, reduce,
     },
     std::{
@@ -332,11 +332,11 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_letrec(
+    fn compare_rec(
         &mut self,
         context: &mut Context,
-        this: LetRec,
-        that: LetRec,
+        this: Rec,
+        that: Rec,
     ) -> Result<bool, Preempted> {
         if this.items.len() != that.items.len() {
             return Ok(false);
@@ -393,8 +393,8 @@ impl Convert {
                 (Term::Match(this), Term::Match(that)) => {
                     self.compare_match(context, this, that)?
                 }
-                (Term::LetRec(this), Term::LetRec(that)) => {
-                    self.compare_letrec(context, this, that)?
+                (Term::Rec(this), Term::Rec(that)) => {
+                    self.compare_rec(context, this, that)?
                 }
                 (_, _) => return Ok(false),
             };
@@ -412,7 +412,7 @@ impl Convert {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Apply, AtomType, Func, FuncType, LetRec, Match, Split, Tuple, TupleType, Type, Var},
+        crate::core::{Atom, Apply, AtomType, Func, FuncType, Rec, Match, Split, Tuple, TupleType, Type, Var},
         std::time::Duration,
     };
 
@@ -498,15 +498,15 @@ mod tests {
     }
 
     #[test]
-    fn convert_letrec_is_alpha_equivalent() {
+    fn convert_rec_is_alpha_equivalent() {
         let mut context = context();
 
-        let this = Term::from(LetRec::new(
+        let this = Term::from(Rec::new(
             vec![("x", Type, Var::free("x"))],
             Var::free("x"),
         ));
 
-        let that = Term::from(LetRec::new(
+        let that = Term::from(Rec::new(
             vec![("y", Type, Var::free("y"))],
             Var::free("y"),
         ));

@@ -3,9 +3,9 @@ use {
     crate::{cont, ersd},
 };
 
-fn unsupported_letrec_item(term: &ersd::Term) -> ! {
+fn unsupported_rec_item(term: &ersd::Term) -> ! {
     panic!(
-        "`to_cont` does not support this `let rec` item in the MVP: \
+        "`to_cont` does not support this `rec` item in the MVP: \
          recursive RHSs must lower directly to a `cont::Value`, but the following term \
          requires value-level knot tying in `cont` (for example alias/cell/fixpoint support): \
          {term:?}",
@@ -128,7 +128,7 @@ impl<'a> Lowerer<'a> {
 impl<'a> Lowerer<'a> {
     fn lower_letrec_bindings(
         &mut self,
-        letrec: &ersd::LetRec,
+        letrec: &ersd::Rec,
         frame: &Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
@@ -776,7 +776,7 @@ impl<'a> Lowerer<'a> {
 
                 self.lower_letrec_name(&let_.tail, &frame, state, builder)
             }
-            ersd::Term::LetRec(letrec) => {
+            ersd::Term::Rec(letrec) => {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
 
                 self.lower_letrec_name(&letrec.tail, &frame, state, builder)
@@ -784,7 +784,7 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatMatch(_) => unsupported_letrec_item(term),
+            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
         }
     }
 
@@ -1186,7 +1186,7 @@ impl<'a> Lowerer<'a> {
                 let frame = frame.extended([(let_.name.clone(), body)]);
                 self.lower_letrec_item(&let_.tail, target, &frame, state, builder);
             }
-            ersd::Term::LetRec(letrec) => {
+            ersd::Term::Rec(letrec) => {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
                 self.lower_letrec_item(&letrec.tail, target, &frame, state, builder);
             }
@@ -1196,7 +1196,7 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatMatch(_) => unsupported_letrec_item(term),
+            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
         }
     }
 }
@@ -2461,7 +2461,7 @@ impl<'a> Lowerer<'a> {
                     }),
                 )
             }
-            ersd::Term::LetRec(letrec) => {
+            ersd::Term::Rec(letrec) => {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
                 self.lower_to_name(&letrec.tail, &frame, state, builder, cont)
             }
