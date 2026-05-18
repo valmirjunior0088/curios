@@ -8,7 +8,7 @@ use {
 fn nat_match_computes_triangular_sum() {
     // sum(5) = 0 + 1 + 2 + 3 + 4 = 10
     // succ_case(pred, ih) = ih + pred; zero_case = 0
-    let term = "Nat.match 5n with _ => Nat;
+    let term = "Nat.match 5n : _ => Nat;
         | 0n => 0n;
         | pred ih => Nat.add ih pred;"
         .parse()

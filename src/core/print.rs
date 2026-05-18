@@ -376,7 +376,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             flat([
                 pure("Nat.match "),
                 print_term(*head, depth),
-                pure(" with "),
+                pure(" : "),
                 pure(motive_label),
                 pure(" => "),
                 print_term(motive, depth + 1),
@@ -449,7 +449,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(")"),
                 pure("\n"),
                 indent(flat([
-                    pure("with "),
+                    pure(": "),
                     pure(motive_label),
                     pure(" => "),
                     print_term(motive, depth + 3),
@@ -495,7 +495,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             flat([
                 pure("match "),
                 print_term(*head, depth),
-                pure(" with "),
+                pure(" : "),
                 pure(motive_label),
                 pure(" => "),
                 print_term(motive, depth + 1),

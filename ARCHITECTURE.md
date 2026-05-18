@@ -49,8 +49,8 @@ The grammar covers:
 - Dependent pair types `(x: A, B)`, pair values `(a, b)`
 - Atom types `'[left, right]`, atom values `'left`
 - Pair elimination `let (x, y) with m => motive = pair; tail`
-- Natural-number induction `Nat.match n with k => motive; | 0n => zero; | pred ih => succ;`
-- Pattern matching `match x with k => Type; | 'tag => body;`
+- Natural-number induction `Nat.match n : k => motive; | 0n => zero; | pred ih => succ;`
+- Pattern matching `match x : k => Type; | 'tag => body;`
 - Let bindings and recursive groups `let { f : T = body; }; tail`
 - Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to_flt`)
 - Binary values via string literals, hex byte literals, and `Bin.len`/`Bin.get`/`Bin.slice`/`Bin.append`/`Bin.concat`

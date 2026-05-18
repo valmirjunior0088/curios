@@ -27,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-const KEYWORDS: &[&str] = &["let", "match", "with"];
+const KEYWORDS: &[&str] = &["let", "match"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -481,7 +481,7 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
     catch(
         parse_keyword("Nat.match")
             .and_keep(lazy(parse_term))
-            .and_drop(parse_keyword("with"))
+            .and_drop(parse_literal(":"))
             .and(parse_identifier())
             .and_drop(parse_literal("=>")),
     )
@@ -528,7 +528,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
     catch(
         parse_keyword("match")
             .and_keep(lazy(parse_term))
-            .and_drop(parse_keyword("with"))
+            .and_drop(parse_literal(":"))
             .and(parse_identifier())
             .and_drop(parse_literal("=>")),
     )
@@ -564,7 +564,7 @@ fn parse_split<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(","))
         .and(parse_identifier())
         .and_drop(parse_literal(")"))
-        .and_drop(parse_keyword("with"))
+        .and_drop(parse_literal(":"))
         .and(parse_identifier())
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn parse_split_with_motive() {
-        let term = "let (x, y) with p => Type = ('left, 'right); p"
+        let term = "let (x, y) : p => Type = ('left, 'right); p"
             .parse::<Term>()
             .unwrap();
 
@@ -694,7 +694,7 @@ mod tests {
 
     #[test]
     fn parse_match_single_branch() {
-        let term = "match 'foo with k => '[foo]; | 'foo => 'foo;"
+        let term = "match 'foo : k => '[foo]; | 'foo => 'foo;"
             .parse::<Term>()
             .unwrap();
 
