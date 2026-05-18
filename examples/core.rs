@@ -14,11 +14,11 @@ fn main() {
             "tuple_ty",
             Type,
             TupleType::new([
-                ("tag", Term::from(AtomType::new(["left", "right"]))),
+                ("label", Term::from(AtomType::new(["left", "right"]))),
                 (
                     "value",
                     Term::from(Match::new(
-                        Var::free("tag"),
+                        Var::free("label"),
                         "_",
                         Type,
                         [("left", Type), ("right", Type)],
@@ -33,13 +33,13 @@ fn main() {
                     Var::free("p"),
                     "_",
                     Type,
-                    ["x", "y"],
+                    ["label", "value"],
                     Match::new(
-                        Var::free("x"),
+                        Var::free("label"),
                         "_",
                         Type,
                         [
-                            ("left", Apply::many(Var::free("id"), [Var::free("y")])),
+                            ("left", Apply::many(Var::free("id"), [Var::free("value")])),
                             ("right", Type.into()),
                         ],
                     ),
