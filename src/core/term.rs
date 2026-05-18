@@ -214,14 +214,14 @@ impl Pair {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Elim {
+pub struct NatMatch {
     pub head: Subterm,
     pub motive: Scope<One>,
     pub zero_case: Subterm,
     pub succ_case: Scope<Two>,
 }
 
-impl Elim {
+impl NatMatch {
     pub fn new<H, ML, M, ZC, PL, IL, SC>(
         head: H,
         motive_label: ML,
@@ -307,13 +307,13 @@ impl AtomType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Case {
+pub struct Match {
     pub head: Subterm,
     pub motive: Scope<One>,
     pub cases: BTreeMap<Atom, Subterm>,
 }
 
-impl Case {
+impl Match {
     pub fn new<H, L, M, I, A, B>(head: H, motive_label: L, motive: M, cases: I) -> Self
     where
         H: Into<Term>,
@@ -410,7 +410,7 @@ impl LetRec {
 pub enum Term {
     Type,
     Prim(Prim),
-    Elim(Elim),
+    NatMatch(NatMatch),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -419,7 +419,7 @@ pub enum Term {
     Split(Split),
     AtomType(AtomType),
     Atom(Atom),
-    Case(Case),
+    Match(Match),
     Let(Let),
     LetRec(LetRec),
     Var(Var),
@@ -525,9 +525,9 @@ impl From<Pair> for Term {
     }
 }
 
-impl From<Elim> for Term {
-    fn from(value: Elim) -> Self {
-        Self::Elim(value)
+impl From<NatMatch> for Term {
+    fn from(value: NatMatch) -> Self {
+        Self::NatMatch(value)
     }
 }
 
@@ -549,9 +549,9 @@ impl From<Atom> for Term {
     }
 }
 
-impl From<Case> for Term {
-    fn from(value: Case) -> Self {
-        Self::Case(value)
+impl From<Match> for Term {
+    fn from(value: Match) -> Self {
+        Self::Match(value)
     }
 }
 
@@ -796,12 +796,12 @@ where
         }
     }
 
-    fn visit_elim(&mut self, elim: &Elim) -> Elim {
-        Elim {
-            head: self.visit_subterm(&elim.head),
-            motive: self.visit_scope(&elim.motive),
-            zero_case: self.visit_subterm(&elim.zero_case),
-            succ_case: self.visit_scope(&elim.succ_case),
+    fn visit_nat_match(&mut self, nat_match: &NatMatch) -> NatMatch {
+        NatMatch {
+            head: self.visit_subterm(&nat_match.head),
+            motive: self.visit_scope(&nat_match.motive),
+            zero_case: self.visit_subterm(&nat_match.zero_case),
+            succ_case: self.visit_scope(&nat_match.succ_case),
         }
     }
 
@@ -813,11 +813,11 @@ where
         }
     }
 
-    fn visit_case(&mut self, case: &Case) -> Case {
-        Case {
-            head: self.visit_subterm(&case.head),
-            motive: self.visit_scope(&case.motive),
-            cases: case
+    fn visit_match(&mut self, m: &Match) -> Match {
+        Match {
+            head: self.visit_subterm(&m.head),
+            motive: self.visit_scope(&m.motive),
+            cases: m
                 .cases
                 .iter()
                 .map(|(atom, body)| (atom.clone(), self.visit_subterm(body)))
@@ -848,7 +848,7 @@ where
         match term {
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
-            Term::Elim(elim) => self.visit_elim(elim).into(),
+            Term::NatMatch(nat_match) => self.visit_nat_match(nat_match).into(),
             Term::FuncType(ft) => self.visit_func_type(ft).into(),
             Term::Func(func) => self.visit_func(func).into(),
             Term::Apply(apply) => self.visit_apply(apply).into(),
@@ -857,7 +857,7 @@ where
             Term::Split(split) => self.visit_split(split).into(),
             Term::AtomType(at) => at.clone().into(),
             Term::Atom(atom) => atom.clone().into(),
-            Term::Case(case) => self.visit_case(case).into(),
+            Term::Match(m) => self.visit_match(m).into(),
             Term::Let(let_) => self.visit_let(let_).into(),
             Term::LetRec(letrec) => self.visit_letrec(letrec).into(),
             Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),

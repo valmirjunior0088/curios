@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Case, Elim, Func, FuncType, Let, LetRec, Pair, PairType, Prim,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, Pair, PairType, Prim,
         Split, Term, Type, Var,
     },
     crate::parser::{
@@ -27,7 +27,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
-const KEYWORDS: &[&str] = &["let", "case", "elim", "with"];
+const KEYWORDS: &[&str] = &["let", "match", "with"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -477,9 +477,9 @@ fn parse_func<'a>() -> Parser<'a, Term> {
         .map(|(label, body)| Func::new(label, body).into())
 }
 
-fn parse_elim<'a>() -> Parser<'a, Term> {
+fn parse_nat_match<'a>() -> Parser<'a, Term> {
     catch(
-        parse_keyword("elim")
+        parse_keyword("Nat.match")
             .and_keep(lazy(parse_term))
             .and_drop(parse_keyword("with"))
             .and(parse_identifier())
@@ -500,13 +500,21 @@ fn parse_elim<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(";"))
     .map(
         |((((((head, motive_label), motive), zero_case), pred_label), ih_label), succ_case)| {
-            Elim::new(head, motive_label, motive, zero_case, pred_label, ih_label, succ_case)
-                .into()
+            NatMatch::new(
+                head,
+                motive_label,
+                motive,
+                zero_case,
+                pred_label,
+                ih_label,
+                succ_case,
+            )
+            .into()
         },
     )
 }
 
-fn parse_case_branch<'a>() -> Parser<'a, (Atom, Term)> {
+fn parse_match_branch<'a>() -> Parser<'a, (Atom, Term)> {
     catch(
         parse_literal("|")
             .and_keep(parse_atom_label())
@@ -516,9 +524,9 @@ fn parse_case_branch<'a>() -> Parser<'a, (Atom, Term)> {
     .and_drop(parse_literal(";"))
 }
 
-fn parse_case<'a>() -> Parser<'a, Term> {
+fn parse_match<'a>() -> Parser<'a, Term> {
     catch(
-        parse_keyword("case")
+        parse_keyword("match")
             .and_keep(lazy(parse_term))
             .and_drop(parse_keyword("with"))
             .and(parse_identifier())
@@ -526,9 +534,9 @@ fn parse_case<'a>() -> Parser<'a, Term> {
     )
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
-    .and(many1(parse_case_branch))
+    .and(many1(parse_match_branch))
     .map(|(((head, motive_label), motive), cases)| {
-        Case::new(head, motive_label, motive, cases).into()
+        Match::new(head, motive_label, motive, cases).into()
     })
 }
 
@@ -600,8 +608,8 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     parse_let_rec()
         .or(parse_split())
         .or(parse_let())
-        .or(parse_elim())
-        .or(parse_case())
+        .or(parse_nat_match())
+        .or(parse_match())
         .or(parse_func_type())
         .or(parse_func())
         .or(parse_atomic_term()
@@ -685,14 +693,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_case_single_branch() {
-        let term = "case 'foo with k => '[foo]; | 'foo => 'foo;"
+    fn parse_match_single_branch() {
+        let term = "match 'foo with k => '[foo]; | 'foo => 'foo;"
             .parse::<Term>()
             .unwrap();
 
         assert_eq!(
             term,
-            Case::new(
+            Match::new(
                 Atom::from("foo"),
                 "k",
                 AtomType::new(["foo"]),

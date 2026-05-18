@@ -1,5 +1,5 @@
 use {
-    super::{Apply, Case, Context, Elim, Func, Let, Pair, Preempted, Prim, Split, Term, Var},
+    super::{Apply, Context, Func, Let, Match, NatMatch, Pair, Preempted, Prim, Split, Term, Var},
     std::time::{Duration, Instant},
 };
 
@@ -705,19 +705,23 @@ impl Reduce {
         }
     }
 
-    fn reduce_elim(&mut self, context: &mut Context, elim: Elim) -> Result<Step, Preempted> {
-        let Elim {
+    fn reduce_nat_match(
+        &mut self,
+        context: &mut Context,
+        nat_match: NatMatch,
+    ) -> Result<Step, Preempted> {
+        let NatMatch {
             head,
             motive,
             zero_case,
             succ_case,
-        } = elim;
+        } = nat_match;
 
         match self.reduce(context, *head)? {
             Term::Prim(Prim::Nat(0)) => Ok(Step::Continue(*zero_case)),
             Term::Prim(Prim::Nat(n)) => {
                 let pred = Term::Prim(Prim::Nat(n - 1));
-                let ih = Term::Elim(Elim {
+                let ih = Term::NatMatch(NatMatch {
                     head: pred.clone().into(),
                     motive: motive.clone(),
                     zero_case: zero_case.clone(),
@@ -726,7 +730,7 @@ impl Reduce {
                 Ok(Step::Continue(succ_case.open(&[&pred, &ih])))
             }
             head => Ok(Step::Break(
-                Elim {
+                NatMatch {
                     head: head.into(),
                     motive,
                     zero_case,
@@ -754,17 +758,17 @@ impl Reduce {
         }
     }
 
-    fn reduce_case(&mut self, context: &mut Context, case: Case) -> Result<Step, Preempted> {
-        let Case {
+    fn reduce_match(&mut self, context: &mut Context, m: Match) -> Result<Step, Preempted> {
+        let Match {
             head,
             motive,
             cases,
-        } = case;
+        } = m;
         let atom = match self.reduce(context, *head)? {
             Term::Atom(atom) => atom,
             head => {
                 return Ok(Step::Break(
-                    Case {
+                    Match {
                         head: head.into(),
                         motive,
                         cases,
@@ -777,7 +781,7 @@ impl Reduce {
         match cases.get(&atom) {
             Some(body) => Ok(Step::Continue(body.as_ref().clone())),
             None => Ok(Step::Break(
-                Case {
+                Match {
                     head: Term::from(atom).into(),
                     motive,
                     cases,
@@ -806,10 +810,10 @@ impl Reduce {
 
             let step = match term {
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
-                Term::Elim(elim) => self.reduce_elim(context, elim)?,
+                Term::NatMatch(nat_match) => self.reduce_nat_match(context, nat_match)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
                 Term::Split(split) => self.reduce_split(context, split)?,
-                Term::Case(case) => self.reduce_case(context, case)?,
+                Term::Match(m) => self.reduce_match(context, m)?,
                 Term::Let(let_) => self.reduce_let(let_),
                 Term::Var(var) => self.reduce_var(context, var),
                 term => Step::Break(term),
@@ -827,7 +831,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, AtomType, Case, Elim, Let, Prim, Type, Var},
+        crate::core::{Atom, AtomType, Let, Match, NatMatch, Prim, Type, Var},
         std::time::Duration,
     };
 
@@ -865,10 +869,10 @@ mod tests {
     }
 
     #[test]
-    fn reduce_case_selects_case() {
+    fn reduce_match_selects_match() {
         let mut context = context();
 
-        let term = Case::new(
+        let term = Match::new(
             Atom::from("a"),
             "m",
             Type,
@@ -880,10 +884,10 @@ mod tests {
     }
 
     #[test]
-    fn reduce_elim_zero_is_not_true() {
+    fn reduce_nat_match_zero_is_not_true() {
         let mut context = context();
 
-        let term = Elim::new(
+        let term = NatMatch::new(
             Prim::Nat(0),
             "m",
             AtomType::new(["false", "true"]),

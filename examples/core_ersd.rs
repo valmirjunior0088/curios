@@ -82,7 +82,7 @@ fn main() {
                             head: ersd::Term::Name(ersd::Name::from("applied")).into(),
                             fst: "sum".into(),
                             snd: "pair".into(),
-                            tail: ersd::Term::Case(ersd::Case {
+                            tail: ersd::Term::Match(ersd::Match {
                                 head: ersd::Term::Atom(ersd::Atom { index: 0 }).into(),
                                 cases: vec![
                                     ersd::Term::Split(ersd::Split {

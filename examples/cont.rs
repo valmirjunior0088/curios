@@ -1,6 +1,6 @@
 use curios::cont::{
-    Block, BlockName, CallTarget, CaseTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
-    JumpTarget, Module, Region, Tail, Value, ValueName,
+    Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName, JumpTarget,
+    MatchTarget, Module, Region, Tail, Value, ValueName,
 };
 
 fn main() {
@@ -95,7 +95,7 @@ fn main() {
                                     ),
                                 ],
                                 blocks: vec![],
-                                tail: Tail::Case(CaseTarget {
+                                tail: Tail::Match(MatchTarget {
                                     operand: ValueName::from("is_zero"),
                                     targets: vec![JumpTarget {
                                         target: BlockName::from("Zero"),

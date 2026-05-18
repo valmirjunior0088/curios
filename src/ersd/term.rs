@@ -3,7 +3,7 @@ use super::{Name, Prim};
 pub type Subterm = Box<Term>;
 
 #[derive(Debug)]
-pub struct Elim {
+pub struct NatMatch {
     pub head: Subterm,
     pub zero_case: Subterm,
     pub pred: String,
@@ -44,7 +44,7 @@ pub struct Atom {
 }
 
 #[derive(Debug)]
-pub struct Case {
+pub struct Match {
     pub head: Subterm,
     pub cases: Vec<Subterm>,
 }
@@ -67,13 +67,13 @@ pub struct LetRec {
 pub enum Term {
     Erased,
     Prim(Prim),
-    Elim(Elim),
+    NatMatch(NatMatch),
     Func(Func),
     Apply(Apply),
     Pair(Pair),
     Split(Split),
     Atom(Atom),
-    Case(Case),
+    Match(Match),
     Let(Let),
     LetRec(LetRec),
     Name(Name),
@@ -85,9 +85,9 @@ impl From<Prim> for Term {
     }
 }
 
-impl From<Elim> for Term {
-    fn from(value: Elim) -> Self {
-        Self::Elim(value)
+impl From<NatMatch> for Term {
+    fn from(value: NatMatch) -> Self {
+        Self::NatMatch(value)
     }
 }
 
@@ -121,9 +121,9 @@ impl From<Atom> for Term {
     }
 }
 
-impl From<Case> for Term {
-    fn from(value: Case) -> Self {
-        Self::Case(value)
+impl From<Match> for Term {
+    fn from(value: Match) -> Self {
+        Self::Match(value)
     }
 }
 

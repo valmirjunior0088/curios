@@ -780,8 +780,8 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
-            | ersd::Term::Case(_)
-            | ersd::Term::Elim(_) => unsupported_letrec_item(term),
+            | ersd::Term::Match(_)
+            | ersd::Term::NatMatch(_) => unsupported_letrec_item(term),
         }
     }
 
@@ -1188,8 +1188,8 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
-            | ersd::Term::Case(_)
-            | ersd::Term::Elim(_) => unsupported_letrec_item(term),
+            | ersd::Term::Match(_)
+            | ersd::Term::NatMatch(_) => unsupported_letrec_item(term),
         }
     }
 }
@@ -2480,8 +2480,8 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
-            | ersd::Term::Case(_)
-            | ersd::Term::Elim(_) => {
+            | ersd::Term::Match(_)
+            | ersd::Term::NatMatch(_) => {
                 let block = state.fresh_block();
                 let param = state.fresh_value();
                 let mut join_builder = RegionBuilder::new();
@@ -2623,24 +2623,25 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Case(case_) => self.lower_to_name(
-                &case_.head,
+            ersd::Term::Match(m) => self.lower_to_name(
+                &m.head,
                 frame,
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
-                    let mut targets = Vec::with_capacity(case_.cases.len());
+                    let mut targets = Vec::with_capacity(m.cases.len());
 
-                    for case in &case_.cases {
+                    for branch in &m.cases {
                         let block = state.fresh_block();
-                        let mut case_builder = RegionBuilder::new();
-                        let tail = this.lower_tail(case, frame, resume, state, &mut case_builder);
+                        let mut branch_builder = RegionBuilder::new();
+                        let tail =
+                            this.lower_tail(branch, frame, resume, state, &mut branch_builder);
 
                         builder.add_block(
                             block.clone(),
                             cont::Block {
                                 params: vec![],
-                                region: case_builder.finish(tail),
+                                region: branch_builder.finish(tail),
                             },
                         );
 
@@ -2650,15 +2651,15 @@ impl<'a> Lowerer<'a> {
                         });
                     }
 
-                    cont::Tail::Case(cont::CaseTarget {
+                    cont::Tail::Match(cont::MatchTarget {
                         operand: head,
                         targets,
                         default: None,
                     })
                 }),
             ),
-            ersd::Term::Elim(elim) => self.lower_to_name(
-                &elim.head,
+            ersd::Term::NatMatch(nat_match) => self.lower_to_name(
+                &nat_match.head,
                 frame,
                 state,
                 builder,
@@ -2704,7 +2705,7 @@ impl<'a> Lowerer<'a> {
                             &mut b,
                             cont::Value::Eval(cont::Code::NatEql(i.clone(), head)),
                         );
-                        b.finish(cont::Tail::Case(cont::CaseTarget {
+                        b.finish(cont::Tail::Match(cont::MatchTarget {
                             operand: cmp,
                             targets: vec![cont::JumpTarget {
                                 target: body_block_name.clone(),
@@ -2759,11 +2760,11 @@ impl<'a> Lowerer<'a> {
                     );
 
                     let succ_frame = frame.extended([
-                        (elim.pred.clone(), i2.clone()),
-                        (elim.ih.clone(), acc2.clone()),
+                        (nat_match.pred.clone(), i2.clone()),
+                        (nat_match.ih.clone(), acc2.clone()),
                     ]);
                     let body_tail = this.lower_tail(
-                        &elim.succ_case,
+                        &nat_match.succ_case,
                         &succ_frame,
                         &body_resume_name,
                         state,
@@ -2793,7 +2794,13 @@ impl<'a> Lowerer<'a> {
                     );
 
                     // Outer tail: lower zero_case; its result flows into zero_resume → loop.
-                    this.lower_tail(&elim.zero_case, frame, &zero_resume_name, state, builder)
+                    this.lower_tail(
+                        &nat_match.zero_case,
+                        frame,
+                        &zero_resume_name,
+                        state,
+                        builder,
+                    )
                 }),
             ),
             ersd::Term::Split(split) => self.lower_to_name(

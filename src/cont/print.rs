@@ -523,8 +523,8 @@ fn print_target<'a>(target: &'a JumpTarget) -> Printer<'a> {
 fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
     match tail {
         Tail::Jump(target) => print_target(target),
-        Tail::Case(target) => flat([
-            pure("case "),
+        Tail::Match(target) => flat([
+            pure("match "),
             print_value_name(&target.operand),
             pure("\n"),
             flat(target.targets.iter().enumerate().map(|(index, target)| {

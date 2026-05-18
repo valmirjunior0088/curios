@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Case, Elim, Func, FuncType, Let, LetRec, One, Pair, PairType, Prim,
-        Scope, Split, Term, Two, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, One, Pair, PairType,
+        Prim, Scope, Split, Term, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -364,7 +364,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
         Term::Prim(prim) => print_prim(prim, depth),
-        Term::Elim(Elim {
+        Term::NatMatch(NatMatch {
             head,
             motive,
             zero_case,
@@ -374,7 +374,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let ((pred_label, ih_label), succ_case) = open_scope_two(succ_case, depth);
 
             flat([
-                pure("elim "),
+                pure("Nat.match "),
                 print_term(*head, depth),
                 pure(" with "),
                 pure(motive_label),
@@ -470,7 +470,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             pure("]"),
         ]),
         Term::Atom(atom) => print_atom(atom),
-        Term::Case(Case {
+        Term::Match(Match {
             head,
             motive,
             cases,
@@ -493,7 +493,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             );
 
             flat([
-                pure("case "),
+                pure("match "),
                 print_term(*head, depth),
                 pure(" with "),
                 pure(motive_label),
@@ -577,7 +577,7 @@ mod tests {
                 "x",
                 AtomType::new(["a", "b"]),
                 Atom::from("a"),
-                Case::new(Var::free("x"), "m", Type, [("a", Type), ("b", Type)]),
+                Match::new(Var::free("x"), "m", Type, [("a", Type), ("b", Type)]),
             )
             .into(),
             LetRec::new(

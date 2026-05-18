@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Case, Context, Elim, Func, FuncType, LetRec, Pair, PairType,
+        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, NatMatch, Pair, PairType,
         Preempted, Prim, Split, Term, Var, reduce,
     },
     std::{
@@ -229,11 +229,11 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_elim(
+    fn compare_nat_match(
         &mut self,
         context: &mut Context,
-        this: Elim,
-        that: Elim,
+        this: NatMatch,
+        that: NatMatch,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.head, *that.head);
 
@@ -289,11 +289,11 @@ impl Convert {
         Ok(this == that)
     }
 
-    fn compare_case(
+    fn compare_match(
         &mut self,
         context: &mut Context,
-        this: Case,
-        that: Case,
+        this: Match,
+        that: Match,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.head, *that.head);
 
@@ -356,8 +356,8 @@ impl Convert {
 
             let ok = match (this, that) {
                 (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
-                (Term::Elim(this), Term::Elim(that)) => {
-                    self.compare_elim(context, this, that)?
+                (Term::NatMatch(this), Term::NatMatch(that)) => {
+                    self.compare_nat_match(context, this, that)?
                 }
                 (Term::FuncType(this), Term::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?
@@ -375,7 +375,9 @@ impl Convert {
                     self.compare_atom_type(this, that)?
                 }
                 (Term::Atom(this), Term::Atom(that)) => self.compare_atom(this, that)?,
-                (Term::Case(this), Term::Case(that)) => self.compare_case(context, this, that)?,
+                (Term::Match(this), Term::Match(that)) => {
+                    self.compare_match(context, this, that)?
+                }
                 (Term::LetRec(this), Term::LetRec(that)) => {
                     self.compare_letrec(context, this, that)?
                 }
@@ -395,7 +397,7 @@ impl Convert {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Case, Func, FuncType, LetRec, PairType, Type, Var},
+        crate::core::{Atom, Func, FuncType, LetRec, Match, PairType, Type, Var},
         std::time::Duration,
     };
 
@@ -426,17 +428,17 @@ mod tests {
     }
 
     #[test]
-    fn convert_case_compares_cases_and_motive() {
+    fn convert_match_compares_matches_and_motive() {
         let mut context = context();
 
-        let this = Term::from(Case::new(
+        let this = Term::from(Match::new(
             Atom::from("a"),
             "m",
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
         ));
 
-        let that = Term::from(Case::new(
+        let that = Term::from(Match::new(
             Atom::from("a"),
             "n",
             Type,

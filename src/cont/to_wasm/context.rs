@@ -334,7 +334,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn case_instrs(&self, target: &'a cont::CaseTarget) -> Vec<wasm::Instr> {
+    pub fn match_instrs(&self, target: &'a cont::MatchTarget) -> Vec<wasm::Instr> {
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
             None => vec![wasm::Instr::Unreachable],
@@ -530,7 +530,7 @@ impl<'a, 'b> Context<'a, 'b> {
     pub fn tail_instrs(&self, tail: &'a cont::Tail) -> Vec<wasm::Instr> {
         match tail {
             cont::Tail::Jump(target) => self.jump_instrs(target),
-            cont::Tail::Case(target) => self.case_instrs(target),
+            cont::Tail::Match(target) => self.match_instrs(target),
             cont::Tail::Call(cont::CallTarget::Direct {
                 target,
                 params,
