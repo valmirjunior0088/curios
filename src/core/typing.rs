@@ -331,13 +331,15 @@ fn infer_elim(context: &mut Context, elim: &Elim, term: &Term) -> Result<Term, E
     )?;
 
     let pred_label = context.fresh();
+    let ih_label = context.fresh();
 
     context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
+        context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
 
         erase(
             context,
-            &succ_case.open(&[&Var::free(&pred_label).into()]),
+            &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
             &motive.open(&[&Term::Prim(Prim::nat_add(
                 Var::free(&pred_label),
                 Prim::Nat(1),
@@ -1235,13 +1237,15 @@ fn erase_elim(
     )?;
 
     let pred_label = context.fresh();
+    let ih_label = context.fresh();
 
     let erased_succ_case = context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
+        context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
 
         erase(
             context,
-            &succ_case.open(&[&Var::free(&pred_label).into()]),
+            &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
             &motive.open(&[&Term::Prim(Prim::nat_add(
                 Var::free(&pred_label),
                 Prim::Nat(1),
@@ -1257,6 +1261,7 @@ fn erase_elim(
         head: erased_head.into(),
         zero_case: erased_zero_case.into(),
         pred: pred_label,
+        ih: ih_label,
         succ_case: erased_succ_case.into(),
     }
     .into())
@@ -1971,6 +1976,7 @@ mod tests {
             AtomType::new(["false", "true"]),
             Atom::from("false"),
             "pred",
+            "ih",
             Atom::from("true"),
         ));
 
@@ -1980,6 +1986,7 @@ mod tests {
             AtomType::new(["false", "true"]),
             Atom::from("false"),
             "pred",
+            "ih",
             Atom::from("true"),
         ));
 
@@ -1999,6 +2006,7 @@ mod tests {
             AtomType::new(["false", "true"]),
             Atom::from("false"),
             "pred",
+            "ih",
             Atom::from("true"),
         ));
 

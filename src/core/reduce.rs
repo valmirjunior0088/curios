@@ -716,7 +716,14 @@ impl Reduce {
         match self.reduce(context, *head)? {
             Term::Prim(Prim::Nat(0)) => Ok(Step::Continue(*zero_case)),
             Term::Prim(Prim::Nat(n)) => {
-                Ok(Step::Continue(succ_case.open(&[&Term::Prim(Prim::Nat(n - 1))])))
+                let pred = Term::Prim(Prim::Nat(n - 1));
+                let ih = Term::Elim(Elim {
+                    head: pred.clone().into(),
+                    motive: motive.clone(),
+                    zero_case: zero_case.clone(),
+                    succ_case: succ_case.clone(),
+                });
+                Ok(Step::Continue(succ_case.open(&[&pred, &ih])))
             }
             head => Ok(Step::Break(
                 Elim {
@@ -882,6 +889,7 @@ mod tests {
             AtomType::new(["false", "true"]),
             Atom::from("false"),
             "pred",
+            "ih",
             Atom::from("true"),
         )
         .into();

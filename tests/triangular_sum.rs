@@ -5,29 +5,20 @@ use {
 };
 
 #[test]
-fn pipeline_lowers_and_runs_core_term() {
-    let term = "
-        let pair_ty : Type =
-            (tag : '[left, right],
-                case tag with _ => Type;
-                | 'left => Int;
-                | 'right => Flt;);
-        let pair : pair_ty = ('left, 42i);
-        let score : (_ : pair_ty) -> Int = p =>
-            let (tag, payload) with _ => Int = p;
-            case tag with _ => Int;
-            | 'left => 42i;
-            | 'right => 7i;;
-        score pair
-        "
-    .parse()
-    .expect("expected core term");
+fn elim_computes_triangular_sum() {
+    // sum(5) = 0 + 1 + 2 + 3 + 4 = 10
+    // succ_case(pred, ih) = ih + pred; zero_case = 0
+    let term = "elim 5n with _ => Nat;
+        | 0n => 0n;
+        | pred ih => Nat.add ih pred;"
+        .parse()
+        .expect("expected core term");
 
     let cont_module = ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(1)),
             &term,
-            &"Int".parse().expect("expected result type"),
+            &"Nat".parse().expect("expected result type"),
         )
         .expect("expected erased term"),
     );
@@ -71,5 +62,5 @@ fn pipeline_lowers_and_runs_core_term() {
     println!("=== result ===");
     println!("{result}");
 
-    assert_eq!(result, 42);
+    assert_eq!(result, 10);
 }

@@ -218,16 +218,17 @@ pub struct Elim {
     pub head: Subterm,
     pub motive: Scope<One>,
     pub zero_case: Subterm,
-    pub succ_case: Scope<One>,
+    pub succ_case: Scope<Two>,
 }
 
 impl Elim {
-    pub fn new<H, ML, M, ZC, PL, SC>(
+    pub fn new<H, ML, M, ZC, PL, IL, SC>(
         head: H,
         motive_label: ML,
         motive: M,
         zero_case: ZC,
         pred_label: PL,
+        ih_label: IL,
         succ_case: SC,
     ) -> Self
     where
@@ -236,16 +237,18 @@ impl Elim {
         M: Into<Term>,
         ZC: Into<Term>,
         PL: Into<String>,
+        IL: Into<String>,
         SC: Into<Term>,
     {
         let motive_label = motive_label.into();
         let pred_label = pred_label.into();
+        let ih_label = ih_label.into();
 
         Self {
             head: head.into().into(),
             motive: Scope::close(One, &[motive_label.as_str()], motive),
             zero_case: zero_case.into().into(),
-            succ_case: Scope::close(One, &[pred_label.as_str()], succ_case),
+            succ_case: Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_case),
         }
     }
 }

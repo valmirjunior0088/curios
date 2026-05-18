@@ -371,7 +371,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             succ_case,
         }) => {
             let (motive_label, motive) = open_scope_one(motive, depth);
-            let (pred_label, succ_case) = open_scope_one(succ_case, depth);
+            let ((pred_label, ih_label), succ_case) = open_scope_two(succ_case, depth);
 
             flat([
                 pure("elim "),
@@ -386,6 +386,8 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(";"),
                 pure("\n| "),
                 pure(pred_label),
+                pure(" "),
+                pure(ih_label),
                 pure(" => "),
                 print_term(succ_case, depth),
                 pure(";"),

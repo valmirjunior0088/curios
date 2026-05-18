@@ -245,10 +245,11 @@ impl Convert {
 
         self.enqueue(*this.zero_case, *that.zero_case);
 
-        let pred_label = Var::free(context.fresh()).into();
+        let pred_label: Term = Var::free(context.fresh()).into();
+        let ih_label: Term = Var::free(context.fresh()).into();
         self.enqueue(
-            this.succ_case.open(&[&pred_label]),
-            that.succ_case.open(&[&pred_label]),
+            this.succ_case.open(&[&pred_label, &ih_label]),
+            that.succ_case.open(&[&pred_label, &ih_label]),
         );
 
         Ok(true)

@@ -494,12 +494,14 @@ fn parse_elim<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(";"))
     .and_drop(parse_literal("|"))
     .and(parse_identifier())
+    .and(parse_identifier())
     .and_drop(parse_literal("=>"))
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
     .map(
-        |(((((head, motive_label), motive), zero_case), pred_label), succ_case)| {
-            Elim::new(head, motive_label, motive, zero_case, pred_label, succ_case).into()
+        |((((((head, motive_label), motive), zero_case), pred_label), ih_label), succ_case)| {
+            Elim::new(head, motive_label, motive, zero_case, pred_label, ih_label, succ_case)
+                .into()
         },
     )
 }

@@ -7,6 +7,7 @@ pub struct Elim {
     pub head: Subterm,
     pub zero_case: Subterm,
     pub pred: String,
+    pub ih: String,
     pub succ_case: Subterm,
 }
 

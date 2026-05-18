@@ -2663,57 +2663,137 @@ impl<'a> Lowerer<'a> {
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
-                    let zero_block = state.fresh_block();
-                    let mut zero_builder = RegionBuilder::new();
-                    let zero_tail =
-                        this.lower_tail(&elim.zero_case, frame, resume, state, &mut zero_builder);
+                    // Constants shared across the loop.
+                    let zero_nat =
+                        emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Nat(0)));
+                    let one_nat =
+                        emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Nat(1)));
+
+                    // Allocate block names up front so they can be referenced cross-block.
+                    let loop_block_name = state.fresh_block();
+                    let body_block_name = state.fresh_block();
+                    let exit_block_name = state.fresh_block();
+                    let zero_resume_name = state.fresh_block();
+
+                    // zero_resume(pz): jump loop_block(0, pz)
+                    // This is the resume for the zero_case lowering; its result seeds the loop.
+                    let pz = state.fresh_value();
                     builder.add_block(
-                        zero_block.clone(),
+                        zero_resume_name.clone(),
                         cont::Block {
-                            params: vec![],
-                            region: zero_builder.finish(zero_tail),
+                            params: vec![pz.clone()],
+                            region: RegionBuilder::new().finish(cont::Tail::Jump(
+                                cont::JumpTarget {
+                                    target: loop_block_name.clone(),
+                                    params: vec![zero_nat, pz],
+                                },
+                            )),
                         },
                     );
 
-                    let succ_block = state.fresh_block();
-                    let mut succ_builder = RegionBuilder::new();
-                    let one = emit_fresh_value(
-                        state,
-                        &mut succ_builder,
-                        cont::Value::Pure(cont::Data::Nat(1)),
+                    // loop_block(i, acc):
+                    //   cmp = NatEql(i, n)
+                    //   cmp==0 (i≠n) → body_block(i, acc)
+                    //   cmp≠0 (i=n) → exit_block(acc)
+                    let i = state.fresh_value();
+                    let acc = state.fresh_value();
+                    let loop_block_region = {
+                        let mut b = RegionBuilder::new();
+                        let cmp = emit_fresh_value(
+                            state,
+                            &mut b,
+                            cont::Value::Eval(cont::Code::NatEql(i.clone(), head)),
+                        );
+                        b.finish(cont::Tail::Case(cont::CaseTarget {
+                            operand: cmp,
+                            targets: vec![cont::JumpTarget {
+                                target: body_block_name.clone(),
+                                params: vec![i.clone(), acc.clone()],
+                            }],
+                            default: Some(cont::JumpTarget {
+                                target: exit_block_name.clone(),
+                                params: vec![acc.clone()],
+                            }),
+                        }))
+                    };
+                    builder.add_block(
+                        loop_block_name.clone(),
+                        cont::Block {
+                            params: vec![i.clone(), acc.clone()],
+                            region: loop_block_region,
+                        },
                     );
-                    let pred = emit_fresh_value(
-                        state,
-                        &mut succ_builder,
-                        cont::Value::Eval(cont::Code::NatSub(head.clone(), one)),
+
+                    // body_block(i2, acc2):
+                    //   succ_frame = {pred→i2, ih→acc2}
+                    //   lower succ_case with body_resume as resume
+                    //
+                    // body_resume(acc'):
+                    //   i' = NatAdd(i2, 1)   -- i2 accessible from enclosing body_block frame
+                    //   jump loop_block(i', acc')
+                    let i2 = state.fresh_value();
+                    let acc2 = state.fresh_value();
+                    let body_resume_name = state.fresh_block();
+                    let acc_prime = state.fresh_value();
+
+                    let body_resume_region = {
+                        let mut b = RegionBuilder::new();
+                        let i_prime = emit_fresh_value(
+                            state,
+                            &mut b,
+                            cont::Value::Eval(cont::Code::NatAdd(i2.clone(), one_nat)),
+                        );
+                        b.finish(cont::Tail::Jump(cont::JumpTarget {
+                            target: loop_block_name,
+                            params: vec![i_prime, acc_prime.clone()],
+                        }))
+                    };
+
+                    let mut body_builder = RegionBuilder::new();
+                    body_builder.add_block(
+                        body_resume_name.clone(),
+                        cont::Block {
+                            params: vec![acc_prime],
+                            region: body_resume_region,
+                        },
                     );
-                    let succ_frame = frame.extended([(elim.pred.clone(), pred)]);
-                    let succ_tail = this.lower_tail(
+
+                    let succ_frame = frame.extended([
+                        (elim.pred.clone(), i2.clone()),
+                        (elim.ih.clone(), acc2.clone()),
+                    ]);
+                    let body_tail = this.lower_tail(
                         &elim.succ_case,
                         &succ_frame,
-                        resume,
+                        &body_resume_name,
                         state,
-                        &mut succ_builder,
+                        &mut body_builder,
                     );
                     builder.add_block(
-                        succ_block.clone(),
+                        body_block_name,
                         cont::Block {
-                            params: vec![],
-                            region: succ_builder.finish(succ_tail),
+                            params: vec![i2, acc2],
+                            region: body_builder.finish(body_tail),
                         },
                     );
 
-                    cont::Tail::Case(cont::CaseTarget {
-                        operand: head,
-                        targets: vec![cont::JumpTarget {
-                            target: zero_block,
-                            params: vec![],
-                        }],
-                        default: Some(cont::JumpTarget {
-                            target: succ_block,
-                            params: vec![],
-                        }),
-                    })
+                    // exit_block(acc_final): return the accumulated result.
+                    let acc_final = state.fresh_value();
+                    builder.add_block(
+                        exit_block_name,
+                        cont::Block {
+                            params: vec![acc_final.clone()],
+                            region: RegionBuilder::new().finish(cont::Tail::Jump(
+                                cont::JumpTarget {
+                                    target: resume.clone(),
+                                    params: vec![acc_final],
+                                },
+                            )),
+                        },
+                    );
+
+                    // Outer tail: lower zero_case; its result flows into zero_resume → loop.
+                    this.lower_tail(&elim.zero_case, frame, &zero_resume_name, state, builder)
                 }),
             ),
             ersd::Term::Split(split) => self.lower_to_name(
