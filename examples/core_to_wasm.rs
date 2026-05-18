@@ -11,7 +11,7 @@ fn main() {
             | 'left => Int;
             | 'right => Flt; };
         let pair : pair_ty = ('left, 42i);
-        let score : (_ : pair_ty) -> Int = p =>
+        let score : pair_ty -> Int = p =>
             split p : _ => Int; | (label, payload) =>
             match label : _ => Int;
             | 'left => 42i;

@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Rec, Match, NatMatch, Prim, Split, Term,
-        Tuple, TupleType, Type, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, Prim, Rec, Split, Term, Tuple,
+        TupleType, Type, Var,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -9,6 +9,8 @@ use {
     },
     std::str::FromStr,
 };
+
+const KEYWORDS: &[&str] = &["let", "match", "rec", "and", "split", "->", "=>"];
 
 fn parse_whitespace<'a>() -> Parser<'a, &'a str> {
     take_while(|char| char.is_whitespace())
@@ -19,15 +21,13 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
 }
 
 fn parse_identifier<'a>() -> Parser<'a, &'a str> {
-    take_while(|char| "._-@#$!%&*".contains(char) || char.is_alphanumeric())
+    take_while(|char| "._-@#$!%&*<>".contains(char) || char.is_alphanumeric())
         .flat_map(|identifier| match identifier.is_empty() {
             true => fail("Expected identifier"),
             false => pure(identifier),
         })
         .and_drop(parse_whitespace())
 }
-
-const KEYWORDS: &[&str] = &["let", "match", "rec", "and"];
 
 fn parse_label<'a>() -> Parser<'a, Term> {
     parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
@@ -469,16 +469,27 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
-    catch(
+    let labeled = catch(
         parse_literal("(")
             .and_keep(parse_identifier())
             .and_drop(parse_literal(":"))
             .and(lazy(parse_term))
             .and_drop(parse_literal(")"))
-            .and_drop(parse_literal("->")),
+            .and_drop(parse_keyword("->")),
+    );
+
+    let bare = catch(
+        parse_atomic_term()
+            .and(many0(parse_atomic_term))
+            .map(|(head, params)| Apply::many(head, params))
+            .and_drop(parse_keyword("->")),
     )
-    .and(lazy(parse_term))
-    .map(|((label, input), output)| FuncType::new(label, input, output).into())
+    .map(|input| ("", input));
+
+    labeled
+        .or(bare)
+        .and(lazy(parse_term))
+        .map(|((label, input), output)| FuncType::new(label, input, output).into())
 }
 
 fn parse_func<'a>() -> Parser<'a, Term> {
