@@ -11,7 +11,7 @@ fn main() {
                 | 'right => Flt;);
         let payload : pair_ty = ('left, Int.mul 20i 2i);
         let decoded : Int =
-            let (tag, value) : _ => Int = payload;
+            split payload : _ => Int; | (tag, value) =>
             match tag : _ => Int;
             | 'left => Int.add 40i 2i;
             | 'right => 7i;;

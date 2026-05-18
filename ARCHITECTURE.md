@@ -48,7 +48,7 @@ The grammar covers:
 - Dependent function types `(x: A) -> B`, lambdas `x => body`
 - Dependent pair types `(x: A, B)`, pair values `(a, b)`
 - Atom types `'[left, right]`, atom values `'left`
-- Pair elimination `let (x, y) with m => motive = pair; tail`
+- Pair elimination `split pair : m => motive; | (x, y) => tail`
 - Natural-number induction `Nat.match n : k => motive; | 0n => zero; | pred ih => succ;`
 - Pattern matching `match x : k => Type; | 'tag => body;`
 - Let bindings and recursive groups `let { f : T = body; }; tail`

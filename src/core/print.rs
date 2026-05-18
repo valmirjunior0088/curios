@@ -436,29 +436,22 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             pure(")"),
         ]),
         Term::Split(Split { head, motive, tail }) => {
-            let motive_label = label_at(depth + 2);
-            let motive_label_term = Var::free(&motive_label).into();
-            let motive = motive.open(&[&motive_label_term]);
+            let (motive_label, motive) = open_scope_one(motive, depth + 2);
             let ((fst_label, snd_label), tail) = open_scope_two(tail, depth);
 
             flat([
-                pure("let ("),
+                pure("split "),
+                print_term(*head, depth),
+                pure(" : "),
+                pure(motive_label),
+                pure(" => "),
+                print_term(motive, depth + 3),
+                pure(";"),
+                pure("\n| ("),
                 pure(fst_label),
                 pure(", "),
                 pure(snd_label),
-                pure(")"),
-                pure("\n"),
-                indent(flat([
-                    pure(": "),
-                    pure(motive_label),
-                    pure(" => "),
-                    print_term(motive, depth + 3),
-                    pure("\n"),
-                    pure("= "),
-                    print_term(*head, depth),
-                    pure(";"),
-                ])),
-                pure("\n"),
+                pure(") => "),
                 print_term(tail, depth + 2),
             ])
         }

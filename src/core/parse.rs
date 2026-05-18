@@ -559,24 +559,28 @@ fn parse_let_rec<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_split<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("let").and_drop(parse_literal("(")))
-        .and_keep(parse_identifier())
-        .and_drop(parse_literal(","))
-        .and(parse_identifier())
-        .and_drop(parse_literal(")"))
-        .and_drop(parse_literal(":"))
-        .and(parse_identifier())
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal("="))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(";"))
-        .and(lazy(parse_term))
-        .map(
-            |(((((fst_label, snd_label), motive_label), motive), head), tail)| {
-                Split::new(head, motive_label, motive, fst_label, snd_label, tail).into()
-            },
-        )
+    catch(
+        parse_keyword("split")
+            .and_keep(lazy(parse_term))
+            .and_drop(parse_literal(":"))
+            .and(parse_identifier())
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+    .and_drop(parse_literal("|"))
+    .and_drop(parse_literal("("))
+    .and(parse_identifier())
+    .and_drop(parse_literal(","))
+    .and(parse_identifier())
+    .and_drop(parse_literal(")"))
+    .and_drop(parse_literal("=>"))
+    .and(lazy(parse_term))
+    .map(
+        |(((((head, motive_label), motive), fst_label), snd_label), tail)| {
+            Split::new(head, motive_label, motive, fst_label, snd_label, tail).into()
+        },
+    )
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
@@ -674,7 +678,7 @@ mod tests {
 
     #[test]
     fn parse_split_with_motive() {
-        let term = "let (x, y) : p => Type = ('left, 'right); p"
+        let term = "split ('left, 'right) : p => Type; | (x, y) => p"
             .parse::<Term>()
             .unwrap();
 
