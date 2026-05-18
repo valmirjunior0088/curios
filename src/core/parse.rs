@@ -440,11 +440,15 @@ fn parse_labeled_field<'a>() -> Parser<'a, (&'a str, Term)> {
         .and(lazy(parse_term))
 }
 
+fn parse_tuple_type_field<'a>() -> Parser<'a, (&'a str, Term)> {
+    catch(parse_labeled_field()).or(lazy(parse_term).map(|t| ("", t)))
+}
+
 fn parse_tuple_type<'a>() -> Parser<'a, Term> {
     catch(
-        parse_literal("(")
-            .and_keep(sep_by1(parse_labeled_field, || parse_literal(",")))
-            .and_drop(parse_literal(")")),
+        parse_literal("{")
+            .and_keep(sep_by1(parse_tuple_type_field, || parse_literal(",")))
+            .and_drop(parse_literal("}")),
     )
     .map(|fields| TupleType::new(fields).into())
 }

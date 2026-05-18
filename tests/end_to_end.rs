@@ -7,11 +7,11 @@ use {
 #[test]
 fn pipeline_lowers_and_runs_core_term() {
     let term = "
-        let pair_ty : Type = (
+        let pair_ty : Type = {
             label : '[left, right],
-            value : match label : _ => Type;
-                | 'left => Int;
-                | 'right => Flt;);
+            match label : _ => Type;
+            | 'left => Int;
+            | 'right => Flt; };
         let pair : pair_ty = ('left, 42i);
         let score : (_ : pair_ty) -> Int = p =>
             split p : _ => Int; | (label, payload) =>

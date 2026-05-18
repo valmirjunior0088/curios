@@ -426,15 +426,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 .enumerate()
                 .map(|(i, scope)| {
                     let ty = scope.open(&label_refs[..i]);
-                    flat([
-                        pure(labels[i].clone()),
-                        pure(" : "),
-                        print_term(ty, depth + n),
-                    ])
+                    flat([pure(labels[i].clone()), pure(" : "), print_term(ty, depth + n)])
                 })
                 .collect::<Vec<_>>();
 
-            flat([pure("("), sep_flat(items, || pure(", ")), pure(")")])
+            flat([pure("{"), sep_flat(items, || pure(", ")), pure("}")])
         }
         Term::Tuple(Tuple { fields }) => flat([
             pure("("),
