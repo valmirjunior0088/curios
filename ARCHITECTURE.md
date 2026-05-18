@@ -49,8 +49,8 @@ The grammar covers:
 - Dependent pair types `(x: A, B)`, pair values `(a, b)`
 - Atom types `'[left, right]`, atom values `'left`
 - Pair elimination `let (x, y) with m => motive = pair; tail`
-- Natural-number elimination `elim n with k => motive; | 0n => zero; | pred => succ;`
-- Pattern matching `case x with k => Type; | 'tag => body;`
+- Natural-number induction `Nat.match n with k => motive; | 0n => zero; | pred ih => succ;`
+- Pattern matching `match x with k => Type; | 'tag => body;`
 - Let bindings and recursive groups `let { f : T = body; }; tail`
 - Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to_flt`)
 - Binary values via string literals, hex byte literals, and `Bin.len`/`Bin.get`/`Bin.slice`/`Bin.append`/`Bin.concat`
@@ -69,8 +69,8 @@ The central `Term` enum represents the full surface language:
 | `Type`                        | The sort (type of types — no universe hierarchy) |
 | `FuncType` / `Func` / `Apply` | Π-types, λ-abstraction, application              |
 | `PairType` / `Pair` / `Split` | Σ-types, pair construction, elimination          |
-| `Elim`                        | Natural-number induction/elimination             |
-| `AtomType` / `Atom` / `Case`  | Labeled unions, tags, pattern matching           |
+| `NatMatch`                    | Natural-number induction/elimination             |
+| `AtomType` / `Atom` / `Match` | Labeled unions, tags, pattern matching           |
 | `Let` / `LetRec`              | Bindings, mutual recursion                       |
 | `Prim`                        | Built-in values and operations                   |
 | `Var`                         | Bound variables                                  |
@@ -113,14 +113,16 @@ Curios is intended to support impure term-level computation, but type-level norm
 
 Transforms `core::Term` into `ersd::Term`, stripping everything that exists only at the type level:
 
-| Erased (removed)                           | Preserved                                 |
-| ------------------------------------------ | ----------------------------------------- |
-| `Type`, `FuncType`, `PairType`, `AtomType` | `Func`, `Apply`, `Pair`, `Split`, `Elim`, `Case` |
-| Type annotations on bindings               | Function bodies, captures, parameters     |
-|                                            | `Let`, `LetRec`, all control flow         |
-|                                            | Primitives (except type constructors)     |
-|                                            | `Bin`, `Arr`, and their operations        |
-|                                            | `Name` references                         |
+| Erased (removed)                           | Preserved                                        |
+| ------------------------------------------ | ------------------------------------------------ |
+| `Type`, `FuncType`, `PairType`, `AtomType` | `Func`, `Apply`, `Pair`, `Split`, `NatMatch`, `Match` |
+| Type annotations on bindings               | Function bodies, captures, parameters            |
+|                                            | `Let`, `LetRec`, all control flow                |
+|                                            | Primitives (except type constructors)            |
+|                                            | `Bin`, `Arr`, and their operations               |
+|                                            | `Name` references                                |
+
+**Erased placeholder:** Removed type-level terms (`Type`, `FuncType`, `PairType`, `AtomType`) are not dropped outright — they are replaced by the `ersd::Term::Erased` variant, which serves as a runtime placeholder for any position that was occupied purely by type information.
 
 **Atom index translation:** During erasure, atom labels (`'left`, `'right`) are replaced with numeric indices matching case order in `Case`. This enables efficient dispatch without string comparison at runtime.
 
@@ -151,7 +153,7 @@ Module
 - `Data` (constant/aggregate): `Unit`, `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Arr(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)`
 - `Code` (computed): arithmetic, comparison, conversion, selected bitwise/counting ops, `TplGet(ValueName, usize)`, `BinLen`/`BinGet`/`BinSlice`/`BinAppend`/`BinConcat`, and `ArrLen`/`ArrGet`/`ArrSlice`/`ArrAppend`/`ArrConcat`
 
-**Tails** (terminators) include: `Jump` (unconditional branch to block), `Case` (dispatch on atom index via `br_table`), `Call` (direct or indirect function call with resume target).
+**Tails** (terminators) include: `Jump` (unconditional branch to block), `Match` (dispatch on atom index via `br_table`), `Call` (direct or indirect function call with resume target).
 
 ### Second-Class Continuations
 
@@ -228,7 +230,20 @@ The pipeline runs parse → infer → erase → CPS lower → WASM codegen → s
 
 ---
 
-## 7. Testing
+## 7. CLI
+
+**File:** `src/main.rs`
+
+The binary entry point is a thin Clap wrapper around `execute`. It accepts:
+
+- `--timeout <MILLIS>` — deadline for type-checking reduction (default: 1000 ms)
+- `<path>` — path to a Curios source file
+
+It reads the file, calls `execute(timeout, &source)`, and prints the result or a formatted error message.
+
+---
+
+## 8. Testing
 
 Tests exist at each layer:
 
@@ -238,10 +253,11 @@ Tests exist at each layer:
 - **Type checking / erasure:** dependent pairs over atom cases, Nat elimination, recursive definitions, primitive operand validation, arrays, and binaries
 - **CPS lowering:** recursive pairs, tail application, arrays/binaries, and join block creation
 - **WASM codegen + execution:** primitives, arrays, binaries, tuples, recursive closures, data segments, and end-to-end execution through Wasmtime
+- **`tests/triangular_sum.rs`:** standalone Wasmtime test that verifies `Nat.match` computes the triangular sum `sum(5) = 10` end-to-end
 
 ---
 
-## 8. Utility Layer
+## 9. Utility Layer
 
 **`src/monads/`:** Provides both the parser combinator library (`Parser<'a, A>`) and a printer combinator library used for pretty-printing terms. The printer uses `Printer` combinators that mirror the parser structure, giving a degree of symmetry between parsing and printing.
 
