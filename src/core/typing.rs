@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, NatMatch, Pair,
-        PairType, Preempted, Prim, Split, Term, Type, Var,
+        Apply, AtomType, Context, Error, Func, FuncType, Let, LetRec, Match, NatMatch, Preempted,
+        Prim, Split, Term, Tuple, TupleType, Type, Var,
     },
     crate::ersd,
 };
@@ -275,22 +275,21 @@ fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term
     Ok(output.open(&[param.as_ref()]))
 }
 
-fn infer_pair_type(context: &mut Context, pt: &PairType) -> Result<Term, Error> {
-    let PairType { input, output } = pt;
+fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error> {
+    let TupleType { fields } = tt;
+    let n = fields.len();
 
-    erase(context, input, &Type.into())?;
-
-    let label = context.fresh();
+    let labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
+    let label_terms = labels.iter().map(|l| Term::from(Var::free(l))).collect::<Vec<Term>>();
+    let label_refs = label_terms.iter().collect::<Vec<_>>();
 
     context.with_frame(|context| {
-        context.assume(&label, input);
-
-        erase(
-            context,
-            &output.open(&[&Var::free(label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
+        for i in 0..n {
+            let ty = fields[i].open(&label_refs[..i]);
+            erase(context, &ty, &Type.into())?;
+            context.assume(&labels[i], &ty);
+        }
+        Ok(())
     })?;
 
     Ok(Type.into())
@@ -361,23 +360,17 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let (input, output) = if let Term::PairType(PairType { input, output }) = head_type {
-        (input, output)
+    let TupleType { fields } = if let Term::TupleType(tt) = head_type {
+        tt
     } else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
+    let n = fields.len();
     let head_label = context.fresh();
 
     context.with_frame(|context| {
-        context.assume(
-            &head_label,
-            &PairType {
-                input: input.clone(),
-                output: output.clone(),
-            }
-            .into(),
-        );
+        context.assume(&head_label, &TupleType { fields: fields.clone() }.into());
 
         erase(
             context,
@@ -387,20 +380,22 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
         .map(|_| ())
     })?;
 
-    let fst_label = context.fresh();
-    let snd_label = context.fresh();
-
+    let field_labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
+    let field_terms = field_labels.iter().map(|l| Term::from(Var::free(l))).collect::<Vec<_>>();
+    let field_refs = field_terms.iter().collect::<Vec<_>>();
+    let tuple_term: Term = Tuple::new(field_terms.clone()).into();
     let type_ = motive.open(&[head.as_ref()]);
 
     context.with_frame(|context| {
-        context.assume(&fst_label, &input);
-
-        context.assume(&snd_label, &output.open(&[&Var::free(&fst_label).into()]));
+        for i in 0..n {
+            let field_ty = fields[i].open(&field_refs[..i]);
+            context.assume(&field_labels[i], &field_ty);
+        }
 
         erase(
             context,
-            &tail.open(&[&Var::free(&fst_label).into(), &Var::free(&snd_label).into()]),
-            &motive.open(&[&Pair::new(Var::free(fst_label), Var::free(snd_label)).into()]),
+            &tail.open(&field_refs),
+            &motive.open(&[&tuple_term]),
         )
         .map(|_| ())
     })?;
@@ -519,7 +514,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::NatMatch(nat_match) => infer_nat_match(context, nat_match, term),
         Term::FuncType(ft) => infer_func_type(context, ft),
         Term::Apply(apply) => infer_apply(context, apply, term),
-        Term::PairType(pt) => infer_pair_type(context, pt),
+        Term::TupleType(tt) => infer_tuple_type(context, tt),
         Term::Split(split) => infer_split(context, split, term),
         Term::AtomType(_) => Ok(Type.into()),
         Term::Match(m) => infer_match(context, m, term),
@@ -1188,20 +1183,33 @@ fn erase_apply(
     Ok(erased.into())
 }
 
-fn erase_pair(context: &mut Context, pair: &Pair, expected: &Term) -> Result<ersd::Term, Error> {
-    let Pair { fst, snd } = pair;
+fn erase_tuple(
+    context: &mut Context,
+    tuple: &Tuple,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let Tuple { fields } = tuple;
 
-    let Term::PairType(PairType { input, output }) = reduce(context, expected)? else {
-        return Err(Error::type_mismatch(pair.clone(), expected.clone()));
+    let type_fields = if let Term::TupleType(TupleType { fields: tf }) = reduce(context, expected)? {
+        tf
+    } else {
+        return Err(Error::type_mismatch(tuple.clone(), expected.clone()));
     };
 
-    Ok(ersd::Tuple {
-        fields: vec![
-            erase(context, fst, &input)?.into(),
-            erase(context, snd, &output.open(&[fst.as_ref()]))?.into(),
-        ],
+    if fields.len() != type_fields.len() {
+        return Err(Error::type_mismatch(tuple.clone(), expected.clone()));
     }
-    .into())
+
+    let mut checked_terms = Vec::<&Term>::new();
+    let mut erased_fields = Vec::<ersd::Subterm>::new();
+
+    for (i, field) in fields.iter().enumerate() {
+        let field_type = type_fields[i].open(&checked_terms);
+        erased_fields.push(erase(context, field, &field_type)?.into());
+        checked_terms.push(field.as_ref());
+    }
+
+    Ok(ersd::Tuple { fields: erased_fields }.into())
 }
 
 fn erase_nat_match(
@@ -1284,23 +1292,17 @@ fn erase_split(
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let (input, output) = if let Term::PairType(PairType { input, output }) = &head_type {
-        (input.clone(), output.clone())
+    let type_fields = if let Term::TupleType(TupleType { fields }) = &head_type {
+        fields.clone()
     } else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
+    let n = type_fields.len();
     let head_label = context.fresh();
 
     context.with_frame(|context| {
-        context.assume(
-            &head_label,
-            &PairType {
-                input: input.clone(),
-                output: output.clone(),
-            }
-            .into(),
-        );
+        context.assume(&head_label, &TupleType { fields: type_fields.clone() }.into());
 
         erase(
             context,
@@ -1309,21 +1311,23 @@ fn erase_split(
         )
     })?;
 
-    let fst = context.fresh();
-    let snd = context.fresh();
-    let fst_term = Term::from(Var::free(&fst));
-    let snd_term = Term::from(Var::free(&snd));
-    let tail = tail.open(&[&fst_term, &snd_term]);
-    let tail_type = motive.open(&[&Pair::new(Var::free(&fst), Var::free(&snd)).into()]);
+    let field_labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
+    let field_terms = field_labels.iter().map(|l| Term::from(Var::free(l))).collect::<Vec<_>>();
+    let field_refs = field_terms.iter().collect::<Vec<_>>();
+    let tail_opened = tail.open(&field_refs);
+    let tuple_term: Term = Tuple::new(field_terms.clone()).into();
+    let tail_type = motive.open(&[&tuple_term]);
 
     let erased = context.with_frame(|context| {
-        context.assume(&fst, &input);
-        context.assume(&snd, &output.open(&[&fst_term]));
+        for i in 0..n {
+            let field_ty = type_fields[i].open(&field_refs[..i]);
+            context.assume(&field_labels[i], &field_ty);
+        }
 
         Ok::<_, Error>(ersd::Split {
             head: erase(context, head, &head_type)?.into(),
-            fields: vec![fst, snd],
-            tail: erase(context, &tail, &tail_type)?.into(),
+            fields: field_labels.clone(),
+            tail: erase(context, &tail_opened, &tail_type)?.into(),
         })
     })?;
 
@@ -1506,12 +1510,12 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         }
         Term::Func(func) => erase_func(context, func, term, expected),
         Term::Apply(apply) => erase_apply(context, apply, term, expected),
-        Term::PairType(_) => {
+        Term::TupleType(_) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
             Ok(ersd::Term::Erased)
         }
-        Term::Pair(pair) => erase_pair(context, pair, expected),
+        Term::Tuple(tuple) => erase_tuple(context, tuple, expected),
         Term::Split(split) => erase_split(context, split, term, expected),
         Term::AtomType(_) => {
             let t = infer(context, term)?;
@@ -1536,7 +1540,8 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Func, FuncType, LetRec, Match, NatMatch, Pair, PairType, Term, Type,
+                Atom, AtomType, Func, FuncType, LetRec, Match, NatMatch, Term, Tuple, TupleType,
+                Type,
             },
             ersd,
         },
@@ -1548,56 +1553,60 @@ mod tests {
     }
 
     #[test]
-    fn erase_dependent_pair_type_over_atom_match_and_pair_value() {
+    fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
         let mut context = context();
 
-        let pair_type = Term::from(PairType::new(
-            "x",
-            AtomType::new(["left", "right"]),
-            Match::new(
-                Var::free("x"),
-                "m",
-                Type,
-                vec![
-                    ("left", AtomType::new(["hot"])),
-                    ("right", AtomType::new(["cold"])),
-                ],
+        let tuple_type = Term::from(TupleType::new([
+            ("x", Term::from(AtomType::new(["left", "right"]))),
+            (
+                "y",
+                Term::from(Match::new(
+                    Var::free("x"),
+                    "m",
+                    Type,
+                    vec![
+                        ("left", AtomType::new(["hot"])),
+                        ("right", AtomType::new(["cold"])),
+                    ],
+                )),
             ),
-        ));
+        ]));
 
-        assert!(erase(&mut context, &pair_type, &Type.into()).is_ok());
+        assert!(erase(&mut context, &tuple_type, &Type.into()).is_ok());
 
-        let pair = Term::from(Pair::new(Atom::from("left"), Atom::from("hot")));
+        let tuple = Term::from(Tuple::new([Atom::from("left"), Atom::from("hot")]));
 
-        assert!(erase(&mut context, &pair, &pair_type).is_ok());
+        assert!(erase(&mut context, &tuple, &tuple_type).is_ok());
 
-        let pair = Term::from(Pair::new(Atom::from("right"), Atom::from("cold")));
+        let tuple = Term::from(Tuple::new([Atom::from("right"), Atom::from("cold")]));
 
-        assert!(erase(&mut context, &pair, &pair_type).is_ok());
+        assert!(erase(&mut context, &tuple, &tuple_type).is_ok());
     }
 
     #[test]
-    fn erase_dependent_pair_type_rejects_wrong_branch_atom() {
+    fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
         let mut context = context();
 
-        let pair_type = Term::from(PairType::new(
-            "x",
-            AtomType::new(["left", "right"]),
-            Match::new(
-                Var::free("x"),
-                "m",
-                Type,
-                vec![
-                    ("left", AtomType::new(["hot"])),
-                    ("right", AtomType::new(["cold"])),
-                ],
+        let tuple_type = Term::from(TupleType::new([
+            ("x", Term::from(AtomType::new(["left", "right"]))),
+            (
+                "y",
+                Term::from(Match::new(
+                    Var::free("x"),
+                    "m",
+                    Type,
+                    vec![
+                        ("left", AtomType::new(["hot"])),
+                        ("right", AtomType::new(["cold"])),
+                    ],
+                )),
             ),
-        ));
+        ]));
 
-        let pair = Term::from(Pair::new(Atom::from("left"), Atom::from("cold")));
+        let tuple = Term::from(Tuple::new([Atom::from("left"), Atom::from("cold")]));
 
         assert!(matches!(
-            erase(&mut context, &pair, &pair_type),
+            erase(&mut context, &tuple, &tuple_type),
             Err(Error::TypeMismatch { .. })
         ));
     }
@@ -1678,9 +1687,15 @@ mod tests {
     #[test]
     fn erase_func_captures_free_variables_before_opening_body() {
         let atom_type = Term::from(AtomType::new(["a"]));
-        let pair_type = Term::from(PairType::new("z", atom_type.clone(), atom_type.clone()));
-        let type_ = Term::from(FuncType::new("x", atom_type.clone(), pair_type));
-        let term = Term::from(Func::new("x", Pair::new(Var::free("x"), Var::free("y"))));
+        let tuple_type = Term::from(TupleType::new([
+            ("z", atom_type.clone()),
+            ("w", atom_type.clone()),
+        ]));
+        let type_ = Term::from(FuncType::new("x", atom_type.clone(), tuple_type));
+        let term = Term::from(Func::new(
+            "x",
+            Tuple::new([Term::from(Var::free("x")), Term::from(Var::free("y"))]),
+        ));
 
         let mut context = Context::new(Duration::from_secs(1));
         context.assume("y", &atom_type);
@@ -2034,5 +2049,74 @@ mod tests {
         let append = Term::Prim(Prim::arr_append(Var::free("xs"), Var::free("n")));
         assert_eq!(infer(&mut context, &append).unwrap(), arr_nat);
         assert!(erase(&mut context, &append, &arr_nat).is_ok());
+    }
+
+    #[test]
+    fn erase_three_field_tuple_type_and_value() {
+        let mut context = context();
+
+        let tuple_type = Term::from(TupleType::new([
+            ("x", Term::from(AtomType::new(["a"]))),
+            ("y", Term::from(AtomType::new(["b"]))),
+            ("z", Term::from(AtomType::new(["c"]))),
+        ]));
+
+        assert!(erase(&mut context, &tuple_type, &Type.into()).is_ok());
+
+        let tuple = Term::from(Tuple::new([
+            Term::from(Atom::from("a")),
+            Term::from(Atom::from("b")),
+            Term::from(Atom::from("c")),
+        ]));
+
+        assert!(erase(&mut context, &tuple, &tuple_type).is_ok());
+    }
+
+    #[test]
+    fn infer_split_returns_motive_applied_to_head() {
+        let mut context = context();
+
+        let tuple_type = Term::from(TupleType::new([
+            ("x", Term::from(AtomType::new(["a", "b"]))),
+            ("y", Term::from(AtomType::new(["c"]))),
+        ]));
+
+        context.assume("p", &tuple_type);
+
+        let split = Term::from(Split::new(
+            Var::free("p"),
+            "m",
+            AtomType::new(["a", "b"]),
+            ["x", "y"],
+            Var::free("x"),
+        ));
+
+        assert_eq!(
+            infer(&mut context, &split).unwrap(),
+            Term::from(AtomType::new(["a", "b"])),
+        );
+    }
+
+    #[test]
+    fn erase_split_three_field_tuple() {
+        let mut context = context();
+
+        let tuple_type = Term::from(TupleType::new([
+            ("x", Term::from(AtomType::new(["a", "b"]))),
+            ("y", Term::from(AtomType::new(["c"]))),
+            ("z", Term::from(AtomType::new(["d", "e"]))),
+        ]));
+
+        context.assume("p", &tuple_type);
+
+        let split = Term::from(Split::new(
+            Var::free("p"),
+            "m",
+            AtomType::new(["c"]),
+            ["x", "y", "z"],
+            Var::free("y"),
+        ));
+
+        assert!(erase(&mut context, &split, &Term::from(AtomType::new(["c"]))).is_ok());
     }
 }

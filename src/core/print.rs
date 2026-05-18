@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, One, Pair, PairType,
-        Prim, Scope, Split, Term, Two, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, One, Prim, Scope,
+        Split, Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -415,29 +415,42 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*param, depth),
         ]),
-        Term::PairType(PairType { input, output }) => {
-            let (label, output) = open_scope_one(output, depth);
+        Term::TupleType(TupleType { fields }) => {
+            let n = fields.len();
+            let labels = labels_from(depth, n);
+            let label_terms_vec = label_terms(&labels);
+            let label_refs = label_terms_vec.iter().collect::<Vec<_>>();
 
-            flat([
-                pure("("),
-                pure(label),
-                pure(" : "),
-                print_term(*input, depth),
-                pure(", "),
-                print_term(output, depth + 1),
-                pure(")"),
-            ])
+            let items = fields
+                .into_iter()
+                .enumerate()
+                .map(|(i, scope)| {
+                    let ty = scope.open(&label_refs[..i]);
+                    flat([
+                        pure(labels[i].clone()),
+                        pure(" : "),
+                        print_term(ty, depth + n),
+                    ])
+                })
+                .collect::<Vec<_>>();
+
+            flat([pure("("), sep_flat(items, || pure(", ")), pure(")")])
         }
-        Term::Pair(Pair { fst, snd }) => flat([
+        Term::Tuple(Tuple { fields }) => flat([
             pure("("),
-            print_term(*fst, depth),
-            pure(", "),
-            print_term(*snd, depth),
+            sep_flat(
+                fields.into_iter().map(move |f| print_term(*f, depth)),
+                || pure(", "),
+            ),
             pure(")"),
         ]),
         Term::Split(Split { head, motive, tail }) => {
             let (motive_label, motive) = open_scope_one(motive, depth + 2);
-            let ((fst_label, snd_label), tail) = open_scope_two(tail, depth);
+            let n = tail.arity();
+            let labels = labels_from(depth, n);
+            let label_terms_vec = label_terms(&labels);
+            let label_refs = label_terms_vec.iter().collect::<Vec<_>>();
+            let tail = tail.open(&label_refs);
 
             flat([
                 pure("split "),
@@ -448,9 +461,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(motive, depth + 3),
                 pure(";"),
                 pure("\n| ("),
-                pure(fst_label),
-                pure(", "),
-                pure(snd_label),
+                sep_flat(labels.into_iter().map(pure), || pure(", ")),
                 pure(") => "),
                 print_term(tail, depth + 2),
             ])
@@ -555,7 +566,7 @@ impl Display for Term {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::core::Type};
+    use {super::*, crate::core::{Atom, AtomType, Tuple, TupleType, Type}};
 
     #[test]
     fn print_parse_roundtrip_closed_terms() {
@@ -564,8 +575,10 @@ mod tests {
             Func::new("x", Var::free("x")).into(),
             Apply::many(
                 Var::free("f"),
-                [Pair::new(Atom::from("a"), Atom::from("b"))],
+                [Tuple::new([Atom::from("a"), Atom::from("b")])],
             ),
+            TupleType::new([("x", Type), ("y", Type), ("z", Type)]).into(),
+            Tuple::new([Atom::from("a"), Atom::from("b"), Atom::from("c")]).into(),
             Let::new(
                 "x",
                 AtomType::new(["a", "b"]),

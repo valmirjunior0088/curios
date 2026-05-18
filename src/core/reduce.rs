@@ -1,5 +1,5 @@
 use {
-    super::{Apply, Context, Func, Let, Match, NatMatch, Pair, Preempted, Prim, Split, Term, Var},
+    super::{Apply, Context, Func, Let, Match, NatMatch, Preempted, Prim, Split, Term, Tuple, Var},
     std::time::{Duration, Instant},
 };
 
@@ -744,8 +744,9 @@ impl Reduce {
     fn reduce_split(&mut self, context: &mut Context, split: Split) -> Result<Step, Preempted> {
         let Split { head, motive, tail } = split;
         match self.reduce(context, *head)? {
-            Term::Pair(Pair { fst, snd }) => {
-                Ok(Step::Continue(tail.open(&[fst.as_ref(), snd.as_ref()])))
+            Term::Tuple(Tuple { fields }) => {
+                let refs = fields.iter().map(|f| f.as_ref()).collect::<Vec<_>>();
+                Ok(Step::Continue(tail.open(&refs)))
             }
             head => Ok(Step::Break(
                 Split {
@@ -831,7 +832,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, AtomType, Let, Match, NatMatch, Prim, Type, Var},
+        crate::core::{Atom, AtomType, Let, Match, NatMatch, Prim, Tuple, Type, Var},
         std::time::Duration,
     };
 
@@ -853,18 +854,17 @@ mod tests {
         let mut context = context();
 
         let term = Split::new(
-            Pair::new(Atom::from("left"), Atom::from("right")),
+            Tuple::new([Atom::from("left"), Atom::from("right")]),
             "p",
             Type,
-            "x",
-            "y",
-            Pair::new(Var::free("x"), Var::free("y")),
+            ["x", "y"],
+            Tuple::new([Var::free("x"), Var::free("y")]),
         )
         .into();
 
         assert_eq!(
             reduce(&mut context, &term),
-            Ok(Pair::new(Atom::from("left"), Atom::from("right")).into())
+            Ok(Tuple::new([Atom::from("left"), Atom::from("right")]).into())
         );
     }
 

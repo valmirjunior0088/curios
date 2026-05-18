@@ -7,9 +7,9 @@ fn main() {
     let term = r#"
         let pair_ty : Type =
             (tag : '[left, right],
-                match tag : _ => Type;
-                | 'left => Int;
-                | 'right => Flt;);
+             value : match tag : _ => Type;
+                     | 'left => Int;
+                     | 'right => Flt;);
         let pair : pair_ty = ('left, 42i);
         let score : (_ : pair_ty) -> Int = p =>
             split p : _ => Int; | (tag, payload) =>

@@ -173,42 +173,53 @@ impl Apply {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PairType {
-    pub input: Subterm,
-    pub output: Scope<One>,
+pub struct TupleType {
+    pub fields: Vec<Scope<Many>>,
 }
 
-impl PairType {
-    pub fn new<L, I, O>(label: L, input: I, output: O) -> Self
+impl TupleType {
+    pub fn new<I, L, T>(fields: I) -> Self
     where
+        I: IntoIterator<Item = (L, T)>,
         L: Into<String>,
-        I: Into<Term>,
-        O: Into<Term>,
+        T: Into<Term>,
     {
-        let label = label.into();
+        let fields = fields
+            .into_iter()
+            .map(|(l, t)| (l.into(), t.into()))
+            .collect::<Vec<(String, Term)>>();
+
+        let labels = fields.iter().map(|(l, _)| l.clone()).collect::<Vec<String>>();
 
         Self {
-            input: input.into().into(),
-            output: Scope::close(One, &[label.as_str()], output),
+            fields: fields
+                .into_iter()
+                .enumerate()
+                .map(|(i, (_, ty))| {
+                    let label_strs = labels[..i].iter().map(|s| s.as_str()).collect::<Vec<_>>();
+                    Scope::close(Many(i), &label_strs, ty)
+                })
+                .collect::<Vec<_>>(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Pair {
-    pub fst: Subterm,
-    pub snd: Subterm,
+pub struct Tuple {
+    pub fields: Vec<Subterm>,
 }
 
-impl Pair {
-    pub fn new<F, S>(fst: F, snd: S) -> Self
+impl Tuple {
+    pub fn new<I, T>(fields: I) -> Self
     where
-        F: Into<Term>,
-        S: Into<Term>,
+        I: IntoIterator<Item = T>,
+        T: Into<Term>,
     {
         Self {
-            fst: fst.into().into(),
-            snd: snd.into().into(),
+            fields: fields
+                .into_iter()
+                .map(|t| t.into().into())
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -257,34 +268,36 @@ impl NatMatch {
 pub struct Split {
     pub head: Subterm,
     pub motive: Scope<One>,
-    pub tail: Scope<Two>,
+    pub tail: Scope<Many>,
 }
 
 impl Split {
-    pub fn new<H, ML, M, FL, SL, T>(
+    pub fn new<H, ML, M, I, L, T>(
         head: H,
         motive_label: ML,
         motive: M,
-        fst_label: FL,
-        snd_label: SL,
+        field_labels: I,
         tail: T,
     ) -> Self
     where
         H: Into<Term>,
         ML: Into<String>,
         M: Into<Term>,
-        FL: Into<String>,
-        SL: Into<String>,
+        I: IntoIterator<Item = L>,
+        L: Into<String>,
         T: Into<Term>,
     {
         let motive_label = motive_label.into();
-        let fst_label = fst_label.into();
-        let snd_label = snd_label.into();
+        let field_labels = field_labels
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<String>>();
+        let label_strs = field_labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
 
         Self {
             head: head.into().into(),
             motive: Scope::close(One, &[motive_label.as_str()], motive),
-            tail: Scope::close(Two, &[fst_label.as_str(), snd_label.as_str()], tail),
+            tail: Scope::close(Many(field_labels.len()), &label_strs, tail),
         }
     }
 }
@@ -414,8 +427,8 @@ pub enum Term {
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
-    PairType(PairType),
-    Pair(Pair),
+    TupleType(TupleType),
+    Tuple(Tuple),
     Split(Split),
     AtomType(AtomType),
     Atom(Atom),
@@ -513,15 +526,15 @@ impl From<Apply> for Term {
     }
 }
 
-impl From<PairType> for Term {
-    fn from(value: PairType) -> Self {
-        Self::PairType(value)
+impl From<TupleType> for Term {
+    fn from(value: TupleType) -> Self {
+        Self::TupleType(value)
     }
 }
 
-impl From<Pair> for Term {
-    fn from(value: Pair) -> Self {
-        Self::Pair(value)
+impl From<Tuple> for Term {
+    fn from(value: Tuple) -> Self {
+        Self::Tuple(value)
     }
 }
 
@@ -782,17 +795,23 @@ where
         }
     }
 
-    fn visit_pair_type(&mut self, pt: &PairType) -> PairType {
-        PairType {
-            input: self.visit_subterm(&pt.input),
-            output: self.visit_scope(&pt.output),
+    fn visit_tuple_type(&mut self, tt: &TupleType) -> TupleType {
+        TupleType {
+            fields: tt
+                .fields
+                .iter()
+                .map(|s| self.visit_scope(s))
+                .collect::<Vec<_>>(),
         }
     }
 
-    fn visit_pair(&mut self, pair: &Pair) -> Pair {
-        Pair {
-            fst: self.visit_subterm(&pair.fst),
-            snd: self.visit_subterm(&pair.snd),
+    fn visit_tuple(&mut self, t: &Tuple) -> Tuple {
+        Tuple {
+            fields: t
+                .fields
+                .iter()
+                .map(|f| self.visit_subterm(f))
+                .collect::<Vec<_>>(),
         }
     }
 
@@ -852,8 +871,8 @@ where
             Term::FuncType(ft) => self.visit_func_type(ft).into(),
             Term::Func(func) => self.visit_func(func).into(),
             Term::Apply(apply) => self.visit_apply(apply).into(),
-            Term::PairType(pt) => self.visit_pair_type(pt).into(),
-            Term::Pair(pair) => self.visit_pair(pair).into(),
+            Term::TupleType(tt) => self.visit_tuple_type(tt).into(),
+            Term::Tuple(t) => self.visit_tuple(t).into(),
             Term::Split(split) => self.visit_split(split).into(),
             Term::AtomType(at) => at.clone().into(),
             Term::Atom(atom) => atom.clone().into(),
@@ -903,13 +922,14 @@ mod tests {
     fn collect_ignores_index_names() {
         let term = Term::from(Func::new(
             "x",
-            Pair::new(
-                Var::free("x"),
+            Tuple::new([
+                Term::from(Var::free("x")),
                 LetRec::new(
                     vec![("y", Type, Var::free("z"))],
-                    Pair::new(Var::free("y"), Var::free("w")),
-                ),
-            ),
+                    Tuple::new([Var::free("y"), Var::free("w")]),
+                )
+                .into(),
+            ]),
         ));
 
         assert_eq!(

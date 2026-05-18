@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, NatMatch, Pair, PairType,
-        Preempted, Prim, Split, Term, Var, reduce,
+        Apply, Atom, AtomType, Context, Func, FuncType, LetRec, Match, NatMatch, Preempted, Prim,
+        Split, Term, Tuple, TupleType, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -208,23 +208,40 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_pair_type(
+    fn compare_tuple_type(
         &mut self,
         context: &mut Context,
-        this: PairType,
-        that: PairType,
+        this: TupleType,
+        that: TupleType,
     ) -> Result<bool, Preempted> {
-        self.enqueue(*this.input, *that.input);
+        if this.fields.len() != that.fields.len() {
+            return Ok(false);
+        }
 
-        let label = Var::free(context.fresh()).into();
-        self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
+        let n = this.fields.len();
+        let labels = (0..n)
+            .map(|_| Term::from(Var::free(context.fresh())))
+            .collect::<Vec<_>>();
+        let label_refs = labels.iter().collect::<Vec<_>>();
+
+        for i in 0..n {
+            self.enqueue(
+                this.fields[i].open(&label_refs[..i]),
+                that.fields[i].open(&label_refs[..i]),
+            );
+        }
 
         Ok(true)
     }
 
-    fn compare_pair(&mut self, this: Pair, that: Pair) -> Result<bool, Preempted> {
-        self.enqueue(*this.fst, *that.fst);
-        self.enqueue(*this.snd, *that.snd);
+    fn compare_tuple(&mut self, this: Tuple, that: Tuple) -> Result<bool, Preempted> {
+        if this.fields.len() != that.fields.len() {
+            return Ok(false);
+        }
+
+        for (a, b) in this.fields.into_iter().zip(that.fields) {
+            self.enqueue(*a, *b);
+        }
 
         Ok(true)
     }
@@ -264,19 +281,17 @@ impl Convert {
         self.enqueue(*this.head, *that.head);
 
         let motive_label = Var::free(context.fresh()).into();
-
         self.enqueue(
             this.motive.open(&[&motive_label]),
             that.motive.open(&[&motive_label]),
         );
 
-        let fst_label = Var::free(context.fresh()).into();
-        let snd_label = Var::free(context.fresh()).into();
-
-        self.enqueue(
-            this.tail.open(&[&fst_label, &snd_label]),
-            that.tail.open(&[&fst_label, &snd_label]),
-        );
+        let n = this.tail.arity();
+        let labels = (0..n)
+            .map(|_| Term::from(Var::free(context.fresh())))
+            .collect::<Vec<_>>();
+        let label_refs = labels.iter().collect::<Vec<_>>();
+        self.enqueue(this.tail.open(&label_refs), that.tail.open(&label_refs));
 
         Ok(true)
     }
@@ -364,10 +379,10 @@ impl Convert {
                 }
                 (Term::Func(this), Term::Func(that)) => self.compare_func(context, this, that)?,
                 (Term::Apply(this), Term::Apply(that)) => self.compare_apply(this, that)?,
-                (Term::PairType(this), Term::PairType(that)) => {
-                    self.compare_pair_type(context, this, that)?
+                (Term::TupleType(this), Term::TupleType(that)) => {
+                    self.compare_tuple_type(context, this, that)?
                 }
-                (Term::Pair(this), Term::Pair(that)) => self.compare_pair(this, that)?,
+                (Term::Tuple(this), Term::Tuple(that)) => self.compare_tuple(this, that)?,
                 (Term::Split(this), Term::Split(that)) => {
                     self.compare_split(context, this, that)?
                 }
@@ -397,7 +412,7 @@ impl Convert {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, Func, FuncType, LetRec, Match, PairType, Type, Var},
+        crate::core::{Atom, Apply, AtomType, Func, FuncType, LetRec, Match, Split, Tuple, TupleType, Type, Var},
         std::time::Duration,
     };
 
@@ -696,18 +711,74 @@ mod tests {
     }
 
     #[test]
+    fn convert_tuple_equal() {
+        let mut context = context();
+
+        let this = Term::from(Tuple::new([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("y")),
+        ]));
+        let that = Term::from(Tuple::new([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("y")),
+        ]));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_tuple_unequal_field() {
+        let mut context = context();
+
+        let this = Term::from(Tuple::new([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("y")),
+        ]));
+        let that = Term::from(Tuple::new([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("z")),
+        ]));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(false));
+    }
+
+    #[test]
+    fn convert_split_is_alpha_equivalent() {
+        let mut context = context();
+
+        let this = Term::from(Split::new(
+            Var::free("p"),
+            "m",
+            AtomType::new(["a"]),
+            ["x", "y"],
+            Var::free("x"),
+        ));
+        let that = Term::from(Split::new(
+            Var::free("p"),
+            "n",
+            AtomType::new(["a"]),
+            ["u", "v"],
+            Var::free("u"),
+        ));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
     fn convert_times_out_on_pathological_inputs() {
         let mut context = context();
 
         context.define("loop", &Var::free("loop").into());
 
-        let this = Term::from(PairType::new(
-            "x",
-            Apply::many(Func::new("z", Var::free("z")), [Var::free("loop")]),
-            Var::free("x"),
-        ));
+        let this = Term::from(TupleType::new([
+            (
+                "x",
+                Term::from(Apply::many(Func::new("z", Var::free("z")), [Var::free("loop")])),
+            ),
+            ("y", Term::from(Var::free("x"))),
+        ]));
 
-        let that = Term::from(PairType::new("y", Var::free("loop"), Var::free("y")));
+        let that = Term::from(TupleType::new([("x", Var::free("loop")), ("y", Var::free("x"))]));
 
         assert_eq!(convert(&mut context, &this, &that), Err(Preempted));
     }

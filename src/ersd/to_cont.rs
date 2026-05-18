@@ -32,7 +32,7 @@ mod tests {
         super::to_cont,
         crate::{
             cont,
-            ersd::{Apply, Func, Let, LetRec, Name, Prim, Tuple, Term},
+            ersd::{Apply, Func, Let, LetRec, Name, Prim, Term, Tuple},
         },
     };
 

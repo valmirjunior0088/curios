@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, Pair, PairType, Prim,
-        Split, Term, Type, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, NatMatch, Prim, Split, Term,
+        Tuple, TupleType, Type, Var,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -434,28 +434,34 @@ fn parse_parens<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
 }
 
-fn parse_pair_type<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_literal("(")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal(":"))
-            .and(lazy(parse_term))
-            .and_drop(parse_literal(","))
-            .and(lazy(parse_term))
-            .and_drop(parse_literal(")")),
-    )
-    .map(|((label, input), output)| PairType::new(label, input, output).into())
+fn parse_labeled_field<'a>() -> Parser<'a, (&'a str, Term)> {
+    parse_identifier()
+        .and_drop(parse_literal(":"))
+        .and(lazy(parse_term))
 }
 
-fn parse_pair<'a>() -> Parser<'a, Term> {
+fn parse_tuple_type<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_literal("(")
+            .and_keep(sep_by1(parse_labeled_field, || parse_literal(",")))
+            .and_drop(parse_literal(")")),
+    )
+    .map(|fields| TupleType::new(fields).into())
+}
+
+fn parse_tuple<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("(")
             .and_keep(lazy(parse_term))
             .and_drop(parse_literal(","))
-            .and(lazy(parse_term))
+            .and(sep_by1(|| lazy(parse_term), || parse_literal(",")))
             .and_drop(parse_literal(")")),
     )
-    .map(|(fst, snd)| Pair::new(fst, snd).into())
+    .map(|(first, rest)| {
+        let mut fields = vec![first];
+        fields.extend(rest);
+        Tuple::new(fields).into()
+    })
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
@@ -570,17 +576,13 @@ fn parse_split<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(";"))
     .and_drop(parse_literal("|"))
     .and_drop(parse_literal("("))
-    .and(parse_identifier())
-    .and_drop(parse_literal(","))
-    .and(parse_identifier())
+    .and(sep_by1(|| parse_identifier(), || parse_literal(",")))
     .and_drop(parse_literal(")"))
     .and_drop(parse_literal("=>"))
     .and(lazy(parse_term))
-    .map(
-        |(((((head, motive_label), motive), fst_label), snd_label), tail)| {
-            Split::new(head, motive_label, motive, fst_label, snd_label, tail).into()
-        },
-    )
+    .map(|((((head, motive_label), motive), field_labels), tail)| {
+        Split::new(head, motive_label, motive, field_labels, tail).into()
+    })
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
@@ -602,8 +604,8 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
         .or(parse_prim())
         .or(parse_atom_type())
         .or(parse_atom())
-        .or(parse_pair_type())
-        .or(parse_pair())
+        .or(parse_tuple_type())
+        .or(parse_tuple())
         .or(parse_parens())
         .or(parse_label())
 }
@@ -659,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_let_pair_and_atoms() {
+    fn parse_let_tuple_and_atoms() {
         let term = "let x : '[hot, cold] = 'hot; (x, 'cold)"
             .parse::<Term>()
             .unwrap();
@@ -670,7 +672,7 @@ mod tests {
                 "x",
                 AtomType::new(["hot", "cold"]),
                 Atom::from("hot"),
-                Pair::new(Var::free("x"), Atom::from("cold")),
+                Tuple::new([Term::from(Var::free("x")), Term::from(Atom::from("cold"))]),
             )
             .into(),
         );
@@ -685,11 +687,10 @@ mod tests {
         assert_eq!(
             term,
             Split::new(
-                Pair::new(Atom::from("left"), Atom::from("right")),
+                Tuple::new([Atom::from("left"), Atom::from("right")]),
                 "p",
                 Type,
-                "x",
-                "y",
+                ["x", "y"],
                 Var::free("p"),
             )
             .into(),

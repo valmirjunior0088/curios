@@ -1,6 +1,6 @@
 use curios::core::{
-    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Pair, PairType, Split, Term, Type,
-    Var,
+    Apply, Atom, AtomType, Func, FuncType, Let, LetRec, Match, Split, Term, Tuple, TupleType,
+    Type, Var,
 };
 
 fn main() {
@@ -11,28 +11,29 @@ fn main() {
             Func::new("x", Var::free("x")),
         )],
         Let::new(
-            "pair_ty",
+            "tuple_ty",
             Type,
-            PairType::new(
-                "tag",
-                AtomType::new(["left", "right"]),
-                Match::new(
-                    Var::free("tag"),
-                    "_",
-                    Type,
-                    [("left", Type), ("right", Type)],
+            TupleType::new([
+                ("tag", Term::from(AtomType::new(["left", "right"]))),
+                (
+                    "value",
+                    Term::from(Match::new(
+                        Var::free("tag"),
+                        "_",
+                        Type,
+                        [("left", Type), ("right", Type)],
+                    )),
                 ),
-            ),
+            ]),
             Let::new(
                 "p",
-                Var::free("pair_ty"),
-                Pair::new(Atom::from("left"), Type),
+                Var::free("tuple_ty"),
+                Tuple::new([Term::from(Atom::from("left")), Type.into()]),
                 Split::new(
                     Var::free("p"),
                     "_",
                     Type,
-                    "x",
-                    "y",
+                    ["x", "y"],
                     Match::new(
                         Var::free("x"),
                         "_",
