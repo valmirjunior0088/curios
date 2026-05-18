@@ -32,7 +32,7 @@ mod tests {
         super::to_cont,
         crate::{
             cont,
-            ersd::{Apply, Func, Let, LetRec, Name, Pair, Prim, Term},
+            ersd::{Apply, Func, Let, LetRec, Name, Prim, Tuple, Term},
         },
     };
 
@@ -41,14 +41,18 @@ mod tests {
         let term = Term::LetRec(LetRec {
             names: vec!["x".into(), "y".into()],
             items: vec![
-                Term::from(Pair {
-                    fst: Term::Name(Name::from("y")).into(),
-                    snd: Term::Prim(Prim::Int(1)).into(),
+                Term::from(Tuple {
+                    fields: vec![
+                        Term::Name(Name::from("y")).into(),
+                        Term::Prim(Prim::Int(1)).into(),
+                    ],
                 })
                 .into(),
-                Term::from(Pair {
-                    fst: Term::Prim(Prim::Int(2)).into(),
-                    snd: Term::Name(Name::from("x")).into(),
+                Term::from(Tuple {
+                    fields: vec![
+                        Term::Prim(Prim::Int(2)).into(),
+                        Term::Name(Name::from("x")).into(),
+                    ],
                 })
                 .into(),
             ],
@@ -182,18 +186,20 @@ mod tests {
 
     #[test]
     fn lowers_apply_in_value_position_through_join_block() {
-        let term = Term::Pair(Pair {
-            fst: Term::Apply(Apply {
-                head: Term::Func(Func {
-                    captures: vec![],
-                    param: "x".into(),
-                    body: Term::Name(Name::from("x")).into(),
+        let term = Term::Tuple(Tuple {
+            fields: vec![
+                Term::Apply(Apply {
+                    head: Term::Func(Func {
+                        captures: vec![],
+                        param: "x".into(),
+                        body: Term::Name(Name::from("x")).into(),
+                    })
+                    .into(),
+                    param: Term::Prim(Prim::Int(7)).into(),
                 })
                 .into(),
-                param: Term::Prim(Prim::Int(7)).into(),
-            })
-            .into(),
-            snd: Term::Prim(Prim::Int(1)).into(),
+                Term::Prim(Prim::Int(1)).into(),
+            ],
         });
 
         let module = to_cont(&term);

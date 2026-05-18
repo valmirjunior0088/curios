@@ -37,9 +37,11 @@ fn main() {
                 tail: ersd::Term::LetRec(ersd::LetRec {
                     names: vec!["self_pair".into(), "make".into()],
                     items: vec![
-                        ersd::Term::Pair(ersd::Pair {
-                            fst: ersd::Term::Name(ersd::Name::from("self_pair")).into(),
-                            snd: ersd::Term::Name(ersd::Name::from("bias")).into(),
+                        ersd::Term::Tuple(ersd::Tuple {
+                            fields: vec![
+                                ersd::Term::Name(ersd::Name::from("self_pair")).into(),
+                                ersd::Term::Name(ersd::Name::from("bias")).into(),
+                            ],
                         })
                         .into(),
                         ersd::Term::Func(ersd::Func {
@@ -59,9 +61,11 @@ fn main() {
                                         ersd::Term::Name(ersd::Name::from("bias")).into(),
                                     ))
                                     .into(),
-                                    tail: ersd::Term::Pair(ersd::Pair {
-                                        fst: ersd::Term::Name(ersd::Name::from("sum")).into(),
-                                        snd: ersd::Term::Name(ersd::Name::from("self_pair")).into(),
+                                    tail: ersd::Term::Tuple(ersd::Tuple {
+                                        fields: vec![
+                                            ersd::Term::Name(ersd::Name::from("sum")).into(),
+                                            ersd::Term::Name(ersd::Name::from("self_pair")).into(),
+                                        ],
                                     })
                                     .into(),
                                 })
@@ -80,15 +84,13 @@ fn main() {
                         .into(),
                         tail: ersd::Term::Split(ersd::Split {
                             head: ersd::Term::Name(ersd::Name::from("applied")).into(),
-                            fst: "sum".into(),
-                            snd: "pair".into(),
+                            fields: vec!["sum".into(), "pair".into()],
                             tail: ersd::Term::Match(ersd::Match {
                                 head: ersd::Term::Atom(ersd::Atom { index: 0 }).into(),
                                 cases: vec![
                                     ersd::Term::Split(ersd::Split {
                                         head: ersd::Term::Name(ersd::Name::from("pair")).into(),
-                                        fst: "loop".into(),
-                                        snd: "captured_bias".into(),
+                                        fields: vec!["loop".into(), "captured_bias".into()],
                                         tail: ersd::Term::Name(ersd::Name::from("captured_bias"))
                                             .into(),
                                     })

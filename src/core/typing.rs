@@ -1195,9 +1195,11 @@ fn erase_pair(context: &mut Context, pair: &Pair, expected: &Term) -> Result<ers
         return Err(Error::type_mismatch(pair.clone(), expected.clone()));
     };
 
-    Ok(ersd::Pair {
-        fst: erase(context, fst, &input)?.into(),
-        snd: erase(context, snd, &output.open(&[fst.as_ref()]))?.into(),
+    Ok(ersd::Tuple {
+        fields: vec![
+            erase(context, fst, &input)?.into(),
+            erase(context, snd, &output.open(&[fst.as_ref()]))?.into(),
+        ],
     }
     .into())
 }
@@ -1320,8 +1322,7 @@ fn erase_split(
 
         Ok::<_, Error>(ersd::Split {
             head: erase(context, head, &head_type)?.into(),
-            fst,
-            snd,
+            fields: vec![fst, snd],
             tail: erase(context, &tail, &tail_type)?.into(),
         })
     })?;

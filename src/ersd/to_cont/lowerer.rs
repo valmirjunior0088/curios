@@ -752,14 +752,17 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Pure(cont::Data::Clsr(clsr_name, captured_values)),
                 )
             }
-            ersd::Term::Pair(pair) => {
-                let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
-                let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
+            ersd::Term::Tuple(s) => {
+                let field_names = s
+                    .fields
+                    .iter()
+                    .map(|f| self.lower_letrec_name(f, frame, state, builder))
+                    .collect::<Vec<_>>();
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Pure(cont::Data::Tpl(vec![fst, snd])),
+                    cont::Value::Pure(cont::Data::Tpl(field_names)),
                 )
             }
             ersd::Term::Atom(atom) => emit_fresh_value(
@@ -1163,10 +1166,14 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Pure(cont::Data::Clsr(clsr_name, captured_values)),
                 );
             }
-            ersd::Term::Pair(pair) => {
-                let fst = self.lower_letrec_name(&pair.fst, frame, state, builder);
-                let snd = self.lower_letrec_name(&pair.snd, frame, state, builder);
-                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![fst, snd])));
+            ersd::Term::Tuple(s) => {
+                let field_names = s
+                    .fields
+                    .iter()
+                    .map(|f| self.lower_letrec_name(f, frame, state, builder))
+                    .collect::<Vec<_>>();
+
+                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(field_names)));
             }
             ersd::Term::Atom(atom) => {
                 builder.add_value(
@@ -2427,29 +2434,9 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            ersd::Term::Pair(pair) => self.lower_to_name(
-                &pair.fst,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, fst| {
-                    this.lower_to_name(
-                        &pair.snd,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, snd| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Pure(cont::Data::Tpl(vec![fst, snd])),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
+            ersd::Term::Tuple(s) => {
+                self.lower_struct(&s.fields, frame, state, builder, vec![], cont)
+            }
             ersd::Term::Atom(atom) => {
                 let value = emit_fresh_value(
                     state,
@@ -2588,6 +2575,35 @@ impl<'a> Lowerer<'a> {
                 Box::new(move |this, state, builder, name| {
                     names.push(name);
                     this.lower_arr_concat(tail, frame, state, builder, names, cont)
+                }),
+            ),
+        }
+    }
+
+    fn lower_struct<'b>(
+        &mut self,
+        fields: &'b [ersd::Subterm],
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        mut names: Vec<cont::ValueName>,
+        cont: Cont<'b>,
+    ) -> cont::Tail {
+        match fields {
+            [] => {
+                let value =
+                    emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(names)));
+
+                cont(self, state, builder, value)
+            }
+            [head, tail @ ..] => self.lower_to_name(
+                head,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, name| {
+                    names.push(name);
+                    this.lower_struct(tail, frame, state, builder, names, cont)
                 }),
             ),
         }
@@ -2809,17 +2825,21 @@ impl<'a> Lowerer<'a> {
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
-                    let fst = state.fresh_value();
-                    builder.add_value(
-                        fst.clone(),
-                        cont::Value::Eval(cont::Code::TplGet(head.clone(), 0)),
-                    );
+                    let bindings = split
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, name)| {
+                            let v = state.fresh_value();
+                            builder.add_value(
+                                v.clone(),
+                                cont::Value::Eval(cont::Code::TplGet(head.clone(), i)),
+                            );
+                            (name.clone(), v)
+                        })
+                        .collect::<Vec<_>>();
 
-                    let snd = state.fresh_value();
-                    builder.add_value(snd.clone(), cont::Value::Eval(cont::Code::TplGet(head, 1)));
-
-                    let frame =
-                        frame.extended([(split.fst.clone(), fst), (split.snd.clone(), snd)]);
+                    let frame = frame.extended(bindings);
 
                     this.lower_tail(&split.tail, &frame, resume, state, builder)
                 }),

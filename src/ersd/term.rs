@@ -25,16 +25,14 @@ pub struct Apply {
 }
 
 #[derive(Debug)]
-pub struct Pair {
-    pub fst: Subterm,
-    pub snd: Subterm,
+pub struct Tuple {
+    pub fields: Vec<Subterm>,
 }
 
 #[derive(Debug)]
 pub struct Split {
     pub head: Subterm,
-    pub fst: String,
-    pub snd: String,
+    pub fields: Vec<String>,
     pub tail: Subterm,
 }
 
@@ -70,7 +68,7 @@ pub enum Term {
     NatMatch(NatMatch),
     Func(Func),
     Apply(Apply),
-    Pair(Pair),
+    Tuple(Tuple),
     Split(Split),
     Atom(Atom),
     Match(Match),
@@ -103,9 +101,9 @@ impl From<Apply> for Term {
     }
 }
 
-impl From<Pair> for Term {
-    fn from(value: Pair) -> Self {
-        Self::Pair(value)
+impl From<Tuple> for Term {
+    fn from(value: Tuple) -> Self {
+        Self::Tuple(value)
     }
 }
 
