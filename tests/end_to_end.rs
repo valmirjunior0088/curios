@@ -14,7 +14,7 @@ fn pipeline_lowers_and_runs_core_term() {
             | 'right => Flt; };
         let pair : pair_ty = ('left, 42i);
         let score : (_ : pair_ty) -> Int = p =>
-            split p : _ => Int; | (label, payload) =>
+            split p : _ => Int; | (label, value) =>
             match label : _ => Int;
             | 'left => 42i;
             | 'right => 7i;;

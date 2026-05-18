@@ -443,7 +443,15 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
             return Err(Error::cannot_infer(term.clone()));
         };
 
-        erase(context, body, &motive.open(&[&atom.clone().into()]))?;
+        let expected = motive.open(&[&atom.clone().into()]);
+
+        context.with_frame(|context| {
+            if let Term::Var(var) = head.as_ref() {
+                context.define(var.unwrap(), &atom.clone().into());
+            }
+
+            erase(context, body, &expected)
+        })?;
     }
 
     Ok(motive.open(&[head.as_ref()]))
@@ -495,12 +503,12 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
             erase(context, type_, &Type.into())?;
         }
 
-        for (_, (type_, body)) in labels.iter().zip(items.iter()) {
-            erase(context, body, type_)?;
-        }
-
         for (label, (_, body)) in labels.iter().zip(items.iter()) {
             context.define(label, body);
+        }
+
+        for (_, (type_, body)) in labels.iter().zip(items.iter()) {
+            erase(context, body, type_)?;
         }
 
         infer(context, &tail)
@@ -1400,7 +1408,15 @@ fn erase_match(
                 return Err(Error::cannot_infer(term.clone()));
             };
 
-            erase(context, body, &motive.open(&[&atom.clone().into()])).map(Into::into)
+            let expected = motive.open(&[&atom.clone().into()]);
+
+            context.with_frame(|context| {
+                if let Term::Var(var) = head.as_ref() {
+                    context.define(var.unwrap(), &atom.clone().into());
+                }
+
+                erase(context, body, &expected).map(Into::into)
+            })
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
@@ -1476,14 +1492,14 @@ fn erase_rec(
             erase(context, type_, &Type.into())?;
         }
 
+        for (name, (_, body)) in names.iter().zip(items.iter()) {
+            context.define(name, body);
+        }
+
         let erased_items = items
             .iter()
             .map(|(type_, body)| erase(context, body, type_).map(Into::into))
             .collect::<Result<Vec<_>, Error>>()?;
-
-        for (name, (_, body)) in names.iter().zip(items.iter()) {
-            context.define(name, body);
-        }
 
         Ok(ersd::Rec {
             names,
