@@ -208,15 +208,14 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(motive_label),
             pure(" => "),
             print_term(*motive),
-            pure(";\n| 0n => "),
-            print_term(*zero_case),
-            pure(";\n| "),
+            pure(";\n| 0n =>\n"),
+            indent(flat([print_term(*zero_case), pure(";")])),
+            pure("\n| "),
             pure(pred_label),
             pure(" "),
             pure(ih_label),
-            pure(" => "),
-            print_term(*succ_case),
-            pure(";"),
+            pure(" =>\n"),
+            indent(flat([print_term(*succ_case), pure(";")])),
         ]),
         Term::Split(Split {
             head,
@@ -246,9 +245,8 @@ fn print_term(term: Term) -> Printer<'static> {
                 flat([
                     pure("\n| "),
                     print_atom(atom),
-                    pure(" => "),
-                    print_term(*body),
-                    pure(";"),
+                    pure(" =>\n"),
+                    indent(flat([print_term(*body), pure(";")])),
                 ])
             });
             flat([

@@ -381,16 +381,14 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(" => "),
                 print_term(motive, depth + 1),
                 pure(";"),
-                pure("\n| 0n => "),
-                print_term(*zero_case, depth),
-                pure(";"),
+                pure("\n| 0n =>\n"),
+                indent(flat([print_term(*zero_case, depth), pure(";")])),
                 pure("\n| "),
                 pure(pred_label),
                 pure(" "),
                 pure(ih_label),
-                pure(" => "),
-                print_term(succ_case, depth),
-                pure(";"),
+                pure(" =>\n"),
+                indent(flat([print_term(succ_case, depth), pure(";")])),
             ])
         }
         Term::FuncType(FuncType { input, output }) => {
@@ -408,7 +406,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         Term::Func(Func { body }) => {
             let (label, body) = open_scope_one(body, depth);
 
-            flat([pure(label), pure(" => "), print_term(body, depth + 1)])
+            flat([pure(label), pure(" =>\n"), indent(print_term(body, depth + 1))])
         }
         Term::Apply(Apply { head, param }) => flat([
             print_term(*head, depth),
@@ -488,9 +486,8 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         flat([
                             pure("\n| "),
                             print_atom(atom),
-                            pure(" => "),
-                            print_term(*body, depth),
-                            pure(";"),
+                            pure(" =>\n"),
+                            indent(flat([print_term(*body, depth), pure(";")])),
                         ])
                     })
                     .collect::<Vec<_>>(),
@@ -515,9 +512,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(label),
                 pure(" : "),
                 print_term(*type_, depth),
-                pure(" = "),
-                print_term(*body, depth),
-                pure(";\n"),
+                pure(" =\n"),
+                indent(flat([print_term(*body, depth), pure(";")])),
+                pure("\n"),
                 print_term(tail, depth + 1),
             ])
         }
@@ -538,8 +535,8 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         pure(labels[index].clone()),
                         pure(" : "),
                         print_term(type_, inner_depth),
-                        pure(" = "),
-                        print_term(body, inner_depth),
+                        pure(" =\n"),
+                        indent(print_term(body, inner_depth)),
                     ])
                 })
                 .collect::<Vec<_>>();

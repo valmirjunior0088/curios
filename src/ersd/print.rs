@@ -151,15 +151,14 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
         }) => flat([
             pure("Nat.match "),
             print_term(head),
-            pure(";\n| 0n => "),
-            print_term(zero_case),
-            pure(";\n| "),
+            pure(";\n| 0n =>\n"),
+            indent(flat([print_term(zero_case), pure(";")])),
+            pure("\n| "),
             pure(pred.as_str()),
             pure(" "),
             pure(ih.as_str()),
-            pure(" => "),
-            print_term(succ_case),
-            pure(";"),
+            pure(" =>\n"),
+            indent(flat([print_term(succ_case), pure(";")])),
         ]),
         Term::Func(Func {
             captures,
@@ -198,7 +197,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
         Term::Atom(atom) => print_atom(atom),
         Term::Match(Match { head, cases }) => {
             let cases = cases.iter().enumerate().map(|(i, body)| {
-                flat([pure(format!("\n| @{i} => ")), print_term(body), pure(";")])
+                flat([pure(format!("\n| @{i} =>\n")), indent(flat([print_term(body), pure(";")]))])
             });
             flat([
                 pure("match "),
