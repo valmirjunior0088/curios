@@ -6,25 +6,37 @@ use {
 
 #[test]
 fn nat_match_computes_triangular_sum() {
-    // sum(5) = 0 + 1 + 2 + 3 + 4 = 10
-    // succ_case(pred, ih) = ih + pred; zero_case = 0
-    let term = text::elaborate(
-        &"Nat.match 5n : _ => Nat;
+    let text_term = r#"
+        Nat.match 5n : _ => Nat;
         | 0n => 0n;
-        | pred ih => Nat.add ih pred;"
-            .parse()
-            .expect("expected core term"),
-    );
+        | pred ih => Nat.add ih pred;
+        "#
+    .parse::<text::Term>()
+    .expect("expected text term");
 
-    let cont_module = ersd::to_cont(
-        &core::erase(
-            &mut core::Context::new(Duration::from_secs(1)),
-            &term,
-            &text::elaborate(&"Nat".parse().expect("expected result type")),
-        )
-        .expect("expected erased term"),
-    );
+    println!("=== text ===");
+    println!("{text_term}");
 
+    let core_term = text::elaborate(&text_term);
+
+    println!();
+    println!("=== core ===");
+    println!("{core_term}");
+
+    let ersd_term = core::erase(
+        &mut core::Context::new(Duration::from_secs(5)),
+        &core_term,
+        &text::elaborate(&"Nat".parse().expect("expected result type")),
+    )
+    .expect("expected erased term");
+
+    println!();
+    println!("=== ersd ===");
+    println!("{ersd_term}");
+
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 

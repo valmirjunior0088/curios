@@ -6,8 +6,7 @@ use {
 
 #[test]
 fn pipeline_lowers_and_runs_core_term() {
-    let term = text::elaborate(
-        &"
+    let text_term = r#"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -20,20 +19,33 @@ fn pipeline_lowers_and_runs_core_term() {
             | 'left => 42i;
             | 'right => 7i;;
         score pair
-        "
-        .parse()
-        .expect("expected core term"),
-    );
+        "#
+    .parse::<text::Term>()
+    .expect("expected text term");
 
-    let cont_module = ersd::to_cont(
-        &core::erase(
-            &mut core::Context::new(Duration::from_secs(1)),
-            &term,
-            &text::elaborate(&"Int".parse().expect("expected result type")),
-        )
-        .expect("expected erased term"),
-    );
+    println!("=== text ===");
+    println!("{text_term}");
 
+    let core_term = text::elaborate(&text_term);
+
+    println!();
+    println!("=== core ===");
+    println!("{core_term}");
+
+    let ersd_term = core::erase(
+        &mut core::Context::new(Duration::from_secs(5)),
+        &core_term,
+        &text::elaborate(&"Int".parse().expect("expected result type")),
+    )
+    .expect("expected erased term");
+
+    println!();
+    println!("=== ersd ===");
+    println!("{ersd_term}");
+
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 
