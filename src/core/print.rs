@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, One, Prim, Rec, Scope, Split,
         Term, Tuple, TupleType, Two, Var,
     },
-    crate::printer::{Printer, flat, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -426,15 +426,15 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 .enumerate()
                 .map(|(i, scope)| {
                     let ty = scope.open(&label_refs[..i]);
-                    flat([
+                    indent(flat([
                         pure(labels[i].clone()),
                         pure(" : "),
                         print_term(ty, depth + n),
-                    ])
+                    ]))
                 })
                 .collect::<Vec<_>>();
 
-            flat([pure("{"), sep_flat(items, || pure(", ")), pure("}")])
+            flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Term::Tuple(Tuple { fields }) => flat([
             pure("("),

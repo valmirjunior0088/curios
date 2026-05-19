@@ -158,7 +158,7 @@ fn elaborate_prim(p: &Prim) -> core::Prim {
         Prim::BinAppend(b, byte) => core::Prim::bin_append(elaborate(b), elaborate(byte)),
         Prim::BinConcat(vs) => core::Prim::bin_concat(vs.iter().map(|t| elaborate(t))),
         Prim::ArrType(t) => core::Prim::arr_type(elaborate(t)),
-        Prim::Arr(vs) => core::Prim::arr_concat(vs.iter().map(|t| elaborate(t))),
+        Prim::Arr(vs) => core::Prim::Arr(vs.iter().map(|t| elaborate(t).into()).collect()),
         Prim::ArrLen(t) => core::Prim::arr_len(elaborate(t)),
         Prim::ArrGet(l, i) => core::Prim::arr_get(elaborate(l), elaborate(i)),
         Prim::ArrSlice(l, s, end) => {

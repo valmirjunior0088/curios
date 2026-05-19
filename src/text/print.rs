@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, Prim, Rec, Split, Term, Tuple,
         TupleType, Var,
     },
-    crate::printer::{Printer, flat, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -173,16 +173,20 @@ fn print_term(term: Term) -> Printer<'static> {
             ]),
             None => flat([print_term(*input), pure(" -> "), print_term(*output)]),
         },
-        Term::Func(Func { label, body }) => flat([pure(label), pure(" => "), print_term(*body)]),
+        Term::Func(Func { label, body }) => flat([
+            pure(label),
+            pure(" =>\n"),
+            indent(print_term(*body)),
+        ]),
         Term::Apply(Apply { head, param }) => {
             flat([print_term(*head), pure(" "), print_term(*param)])
         }
         Term::TupleType(TupleType { fields }) => {
             let items = fields.into_iter().map(|(label, t)| match label {
-                Some(label) => flat([pure(label), pure(" : "), print_term(*t)]),
-                None => print_term(*t),
+                Some(label) => indent(flat([pure(label), pure(" : "), print_term(*t)])),
+                None => indent(print_term(*t)),
             });
-            flat([pure("{"), sep_flat(items, || pure(", ")), pure("}")])
+            flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Term::Tuple(Tuple { fields }) => flat([
             pure("("),
@@ -227,9 +231,9 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(motive_label),
             pure(" => "),
             print_term(*motive),
-            pure(";\n| ("),
+            pure("; | ("),
             sep_flat(field_labels.into_iter().map(pure), || pure(", ")),
-            pure(") => "),
+            pure(") =>\n"),
             print_term(*tail),
         ]),
         Term::Match(Match {
@@ -268,9 +272,9 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(label),
             pure(" : "),
             print_term(*type_),
-            pure(" = "),
-            print_term(*body),
-            pure(";\n"),
+            pure(" =\n"),
+            indent(flat([print_term(*body), pure(";")])),
+            pure("\n"),
             print_term(*tail),
         ]),
         Term::Rec(Rec { items, tail }) => {
@@ -279,8 +283,8 @@ fn print_term(term: Term) -> Printer<'static> {
                     pure(it.label),
                     pure(" : "),
                     print_term(*it.type_),
-                    pure(" = "),
-                    print_term(*it.value),
+                    pure(" =\n"),
+                    indent(print_term(*it.value)),
                 ])
             });
             flat([

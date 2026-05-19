@@ -1,6 +1,6 @@
 use {
     super::{Atom, Func, Let, Match, NatMatch, Prim, Rec, Split, Term, Tuple},
-    crate::printer::{Printer, flat, pure, run_printer, sep_flat},
+    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -167,15 +167,15 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             body,
         }) => {
             if captures.is_empty() {
-                flat([pure(param.as_str()), pure(" => "), print_term(body)])
+                flat([pure(param.as_str()), pure(" =>\n"), indent(print_term(body))])
             } else {
                 flat([
                     pure("{"),
                     sep_flat(captures.iter().map(|s| pure(s.as_str())), || pure(", ")),
                     pure("} "),
                     pure(param.as_str()),
-                    pure(" => "),
-                    print_term(body),
+                    pure(" =>\n"),
+                    indent(print_term(body)),
                 ])
             }
         }
@@ -190,9 +190,9 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
         Term::Split(Split { head, fields, tail }) => flat([
             pure("split "),
             print_term(head),
-            pure(";\n| ("),
+            pure("; | ("),
             sep_flat(fields.iter().map(|s| pure(s.as_str())), || pure(", ")),
-            pure(") => "),
+            pure(") =>\n"),
             print_term(tail),
         ]),
         Term::Atom(atom) => print_atom(atom),
@@ -210,16 +210,16 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
         Term::Let(Let { name, body, tail }) => flat([
             pure("let "),
             pure(name.as_str()),
-            pure(" = "),
-            print_term(body),
-            pure(";\n"),
+            pure(" =\n"),
+            indent(flat([print_term(body), pure(";")])),
+            pure("\n"),
             print_term(tail),
         ]),
         Term::Rec(Rec { names, items, tail }) => {
             let bindings = names
                 .iter()
                 .zip(items.iter())
-                .map(|(name, body)| flat([pure(name.as_str()), pure(" = "), print_term(body)]))
+                .map(|(name, body)| flat([pure(name.as_str()), pure(" =\n"), indent(print_term(body))]))
                 .collect::<Vec<_>>();
 
             flat([
