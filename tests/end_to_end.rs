@@ -1,12 +1,13 @@
 use {
-    curios::{cont, core, ersd, wasm},
+    curios::{cont, core, ersd, text, wasm},
     std::time::Duration,
     wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
 };
 
 #[test]
 fn pipeline_lowers_and_runs_core_term() {
-    let term = "
+    let term = text::elaborate(
+        &"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -20,14 +21,15 @@ fn pipeline_lowers_and_runs_core_term() {
             | 'right => 7i;;
         score pair
         "
-    .parse()
-    .expect("expected core term");
+        .parse()
+        .expect("expected core term"),
+    );
 
     let cont_module = ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(1)),
             &term,
-            &"Int".parse().expect("expected result type"),
+            &text::elaborate(&"Int".parse().expect("expected result type")),
         )
         .expect("expected erased term"),
     );

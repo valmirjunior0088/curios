@@ -1560,6 +1560,7 @@ mod tests {
                 Type,
             },
             ersd,
+            text,
         },
         std::time::Duration,
     };
@@ -1748,9 +1749,14 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = "'[zeta, alpha, mu]".parse().unwrap();
+        let type_ = text::elaborate(
+            &"'[zeta, alpha, mu]"
+                .parse()
+                .unwrap(),
+        );
 
-        let term = r#"
+        let term = text::elaborate(
+            &r#"
                 let outer : '[zeta, alpha, mu] = 'mu;
                 let alpha_case : '[zeta, alpha, mu] = 'alpha;
                 let mu_case : '[zeta, alpha, mu] = 'mu;
@@ -1772,8 +1778,9 @@ mod tests {
                     | 'alpha => 'alpha;
                     | 'mu => 'mu;;
             "#
-        .parse()
-        .unwrap();
+            .parse()
+            .unwrap(),
+        );
 
         erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
         let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();

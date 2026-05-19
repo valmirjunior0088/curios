@@ -1,6 +1,6 @@
 use {
     crate::{
-        cont, core, ersd,
+        cont, core, ersd, text,
         printer::{Printer, flat, indent, pure, sep_flat},
         wasm,
     },
@@ -146,8 +146,9 @@ fn print_ref(
 
 pub fn execute(timeout: Duration, source: &str) -> Result<String, String> {
     let term = source
-        .parse()
+        .parse::<text::Term>()
         .map_err(|error| format!("failed to parse source: {error:?}"))?;
+    let term = text::elaborate(&term);
 
     let type_ = core::infer(&mut core::Context::new(timeout), &term)
         .map_err(|error| format!("failed to infer type: {error:?}"))?;

@@ -1,5 +1,5 @@
 use {
-    curios::{cont, core, ersd, wasm},
+    curios::{cont, core, ersd, text, wasm},
     std::time::Duration,
     wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
 };
@@ -8,17 +8,19 @@ use {
 fn nat_match_computes_triangular_sum() {
     // sum(5) = 0 + 1 + 2 + 3 + 4 = 10
     // succ_case(pred, ih) = ih + pred; zero_case = 0
-    let term = "Nat.match 5n : _ => Nat;
+    let term = text::elaborate(
+        &"Nat.match 5n : _ => Nat;
         | 0n => 0n;
         | pred ih => Nat.add ih pred;"
-        .parse()
-        .expect("expected core term");
+            .parse()
+            .expect("expected core term"),
+    );
 
     let cont_module = ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(1)),
             &term,
-            &"Nat".parse().expect("expected result type"),
+            &text::elaborate(&"Nat".parse().expect("expected result type")),
         )
         .expect("expected erased term"),
     );

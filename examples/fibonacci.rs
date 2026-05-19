@@ -1,11 +1,12 @@
 use {
-    curios::{cont, core, ersd},
+    curios::{cont, core, ersd, text},
     std::time::Duration,
 };
 
 fn main() {
 
-    let term = "
+    let term = text::elaborate(
+        &"
         rec fib_pair : Nat -> {Int, Int} = n =>
             Nat.match n : _ => {Int, Int};
             | 0n => (0i, 1i);
@@ -15,14 +16,15 @@ fn main() {
         split fib_pair 10n : _ => Int; | (a, b) =>
         a
         "
-    .parse()
-    .expect("expected core term");
+        .parse()
+        .expect("expected core term"),
+    );
 
     let cont_module = ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(5)),
             &term,
-            &"Int".parse().expect("expected result type"),
+            &text::elaborate(&"Int".parse().expect("expected result type")),
         )
         .expect("expected erased term"),
     );

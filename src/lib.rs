@@ -3,6 +3,8 @@ mod macros;
 mod monads;
 pub use monads::*;
 
+pub mod text;
+
 pub mod core;
 
 pub mod ersd;

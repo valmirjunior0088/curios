@@ -1,11 +1,12 @@
 use {
-    curios::{cont, core, ersd},
+    curios::{cont, core, ersd, text},
     std::time::Duration,
 };
 
 fn main() {
 
-    let term = "
+    let term = text::elaborate(
+        &"
         let Bln : Type = '[false, true];
         rec is_even : Nat -> Bln = n =>
             Nat.match n : _ => Bln;
@@ -17,14 +18,17 @@ fn main() {
             | pred ih => is_even pred;;
         is_even 10n
         "
-    .parse()
-    .expect("expected core term");
+        .parse()
+        .expect("expected core term"),
+    );
 
     let cont_module = ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(5)),
             &term,
-            &"'[false, true]".parse().expect("expected result type"),
+            &text::elaborate(
+                &"'[false, true]".parse().expect("expected result type"),
+            ),
         )
         .expect("expected erased term"),
     );

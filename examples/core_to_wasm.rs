@@ -1,10 +1,11 @@
 use {
-    curios::{cont, core, ersd},
+    curios::{cont, core, ersd, text},
     std::time::Duration,
 };
 
 fn main() {
-    let term = r#"
+    let term = text::elaborate(
+        &r#"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -24,14 +25,15 @@ fn main() {
         let str_len : Nat = Bin.len my_str;
         Int.add (score pair) (Nat.to_int (Nat.add list_len (Nat.add bin_len str_len)))
         "#
-    .parse()
-    .expect("expected core term");
+        .parse()
+        .expect("expected core term"),
+    );
 
     let cont_module = ersd::to_cont(
         &core::erase(
             &mut core::Context::new(Duration::from_secs(1)),
             &term,
-            &"Int".parse().expect("expected result type"),
+            &text::elaborate(&"Int".parse().expect("expected result type")),
         )
         .expect("expected erased term"),
     );

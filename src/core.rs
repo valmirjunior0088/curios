@@ -10,8 +10,6 @@ pub use names::*;
 mod term;
 pub use term::*;
 
-mod parse;
-
 mod print;
 
 mod reduce;

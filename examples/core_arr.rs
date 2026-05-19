@@ -1,10 +1,11 @@
 use {
-    curios::{cont, core, ersd},
+    curios::{cont, core, ersd, text},
     std::time::Duration,
 };
 
 fn main() {
-    let term = "
+    let term = text::elaborate(
+        &"
         let xs : Arr Nat = [10n, 20n, 30n];
         let len : Nat = Arr.len xs;
         let first : Nat = Arr.get xs 0n;
@@ -12,13 +13,14 @@ fn main() {
         let doubled : Arr Nat = Arr.concat xs, xs;
         Arr.len doubled
         "
-    .parse()
-    .expect("expected core term");
+        .parse()
+        .expect("expected core term"),
+    );
 
     let erased = core::erase(
         &mut core::Context::new(Duration::from_secs(1)),
         &term,
-        &"Nat".parse().expect("expected result type"),
+        &text::elaborate(&"Nat".parse().expect("expected result type")),
     )
     .expect("expected erased term");
 
