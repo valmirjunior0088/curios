@@ -1072,9 +1072,10 @@ fn erase_prim(
             .into())
         }
         Prim::BinConcat(operands) => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
             let erased = operands
                 .iter()
-                .map(|e| erase(context, e, expected).map(|t| t.into()))
+                .map(|e| erase(context, e, &Term::Prim(Prim::BinType)).map(|t| t.into()))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ersd::Prim::BinConcat(erased).into())
         }
@@ -1153,9 +1154,14 @@ fn erase_prim(
             .into())
         }
         Prim::ArrConcat(operands) => {
+            let expected_reduced = reduce(context, expected)?;
+            match &expected_reduced {
+                Term::Prim(Prim::ArrType(_)) => {}
+                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+            }
             let erased = operands
                 .iter()
-                .map(|e| erase(context, e, expected).map(|t| t.into()))
+                .map(|e| erase(context, e, &expected_reduced).map(|t| t.into()))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ersd::Prim::ArrConcat(erased).into())
         }
@@ -2171,5 +2177,62 @@ mod tests {
         ));
 
         erase(&mut context, &split, &Term::from(AtomType::new(["c"]))).unwrap();
+    }
+
+    #[test]
+    fn erase_bin_concat() {
+        let mut context = context();
+
+        let bin_type = Term::Prim(Prim::BinType);
+        let concat = Term::Prim(Prim::bin_concat([
+            Term::Prim(Prim::Bin(vec![1, 2])),
+            Term::Prim(Prim::Bin(vec![3, 4])),
+        ]));
+
+        erase(&mut context, &concat, &bin_type).unwrap();
+    }
+
+    #[test]
+    fn erase_bin_concat_rejects_wrong_expected_type() {
+        let mut context = context();
+
+        let concat = Term::Prim(Prim::bin_concat([
+            Term::Prim(Prim::Bin(vec![1])),
+            Term::Prim(Prim::Bin(vec![2])),
+        ]));
+
+        assert!(matches!(
+            erase(&mut context, &concat, &Term::Prim(Prim::NatType)),
+            Err(Error::TypeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn erase_arr_concat() {
+        let mut context = context();
+
+        let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
+        context.assume("xs", &arr_nat);
+        context.assume("ys", &arr_nat);
+
+        let concat = Term::Prim(Prim::arr_concat([Var::free("xs"), Var::free("ys")]));
+
+        erase(&mut context, &concat, &arr_nat).unwrap();
+    }
+
+    #[test]
+    fn erase_arr_concat_rejects_wrong_expected_type() {
+        let mut context = context();
+
+        let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
+        context.assume("xs", &arr_nat);
+        context.assume("ys", &arr_nat);
+
+        let concat = Term::Prim(Prim::arr_concat([Var::free("xs"), Var::free("ys")]));
+
+        assert!(matches!(
+            erase(&mut context, &concat, &Term::Prim(Prim::NatType)),
+            Err(Error::TypeMismatch { .. })
+        ));
     }
 }
