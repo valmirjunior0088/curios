@@ -2,19 +2,22 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~22,000 lines, including examples, tests, and docs.
+**Codebase size:** ~25,000 lines, including examples, tests, and docs.
 
 ---
 
 ## Compilation Pipeline
 
-Source text flows through five distinct phases, each with a clean handoff:
+Source text flows through six distinct phases, each with a clean handoff:
 
 ```
 Source Text
    │
    ▼
-Parsing           → core::Term (full AST with types)
+Parsing           → text::Term (surface AST with named variables)
+   │
+   ▼
+Elaboration       → core::Term (full AST with de Bruijn indices)
    │
    ▼
 Type Inference    → core::Term type result (checked source term)
@@ -39,51 +42,69 @@ Wasmtime          → execution and result printing
 
 ## 1. Parsing
 
-**Files:** `src/core/parse.rs`, `src/monads/parser.rs`
+**Files:** `src/text/parse.rs`, `src/monads/parser.rs`
 
 A custom monadic parser combinator library. `Parser<'a, A>` supports `or`, `and`, `flat_map`, and `lazy` combinators, with position-aware error reporting via `ParserState`.
 
+Parsing produces a `text::Term` — a surface AST where every variable is stored as a plain string label. There are no de Bruijn indices at this stage; all binding and scoping is resolved during elaboration.
+
 The grammar covers:
 
-- Dependent function types `(x: A) -> B`, lambdas `x => body`
-- Dependent pair types `(x: A, B)`, pair values `(a, b)`
+- Dependent function types `(x: A) -> B` or bare `A -> B`, lambdas `x => body`
+- Tuple types `{x: A, B, z: C}` (curly braces, fields optionally labeled), tuple values `(a, b)` or `(a, b, c)`
 - Atom types `'[left, right]`, atom values `'left`
-- Pair elimination `split pair : m => motive; | (x, y) => tail`
+- Tuple elimination `split tuple : m => motive; | (x, y) => tail`
 - Natural-number induction `Nat.match n : k => motive; | 0n => zero; | pred ih => succ;`
 - Pattern matching `match x : k => Type; | 'tag => body;`
-- Let bindings and recursive groups `let { f : T = body; }; tail`
+- Non-recursive let bindings `let x : T = body; tail`
+- Recursive groups `rec f : T = body; tail` or `rec f : T = v and g : T2 = v2; tail` for mutual recursion
 - Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to_flt`)
 - Binary values via string literals, hex byte literals, and `Bin.len`/`Bin.get`/`Bin.slice`/`Bin.append`/`Bin.concat`
 - Array type `Arr T` and array literals, with operations: `Arr.len`, `Arr.get`, `Arr.slice`, `Arr.append`, `Arr.concat`
 
 ---
 
-## 2. Core Type System
+## 2. Elaboration
+
+**File:** `src/text/elaborate.rs`
+
+Converts `text::Term` into `core::Term`. The elaboration is a straightforward structural recursion: each `text::Term` variant maps to the corresponding `core::Term` constructor, which internally calls `Scope::close()` to bind free variable labels as de Bruijn indices.
+
+The key distinctions between the two representations:
+
+- **`text::Term`** — all variables are `String` labels; binders (lambdas, let, rec, split) carry their binding labels as plain strings; `FuncType.label` is `Option<String>` to allow anonymous `A -> B` types; `TupleType` and `Split` carry `Vec<String>` field labels.
+- **`core::Term`** — variables are de Bruijn indices stored in `Scope<A: Arity>` wrappers; free variables (not yet bound by any enclosing scope) remain as labeled `Var::free(label)` until they are captured by a `Scope::close()` call.
+
+`elaborate()` does no type-directed work — it is a pure syntactic translation. Type checking happens after, in `src/core/typing.rs`.
+
+---
+
+## 3. Core Type System
 
 **Files:** `src/core/term.rs`, `src/core/typing.rs`, `src/core/reduce.rs`, `src/core/convert.rs`, `src/core/context.rs`
 
-The central `Term` enum represents the full surface language:
+The central `Term` enum represents the full typed language after elaboration:
 
-| Variant                       | Role                                             |
-| ----------------------------- | ------------------------------------------------ |
-| `Type`                        | The sort (type of types — no universe hierarchy) |
-| `FuncType` / `Func` / `Apply` | Π-types, λ-abstraction, application              |
-| `PairType` / `Pair` / `Split` | Σ-types, pair construction, elimination          |
-| `NatMatch`                    | Natural-number induction/elimination             |
-| `AtomType` / `Atom` / `Match` | Labeled unions, tags, pattern matching           |
-| `Let` / `LetRec`              | Bindings, mutual recursion                       |
-| `Prim`                        | Built-in values and operations                   |
-| `Var`                         | Bound variables                                  |
+| Variant                           | Role                                             |
+| --------------------------------- | ------------------------------------------------ |
+| `Type`                            | The sort (type of types — no universe hierarchy) |
+| `FuncType` / `Func` / `Apply`     | Π-types, λ-abstraction, application              |
+| `TupleType` / `Tuple` / `Split`   | Σ-types (n-ary), tuple construction, elimination |
+| `NatMatch`                        | Natural-number induction/elimination             |
+| `AtomType` / `Atom` / `Match`     | Labeled unions, tags, pattern matching           |
+| `Let` / `Rec`                     | Bindings, mutual recursion                       |
+| `Prim`                            | Built-in values and operations                   |
+| `Var`                             | Bound variables                                  |
 
 **Key techniques employed:**
 
 ### De Bruijn Indices with Bidirectional Conversion
 
-Variables are stored as labels (`String`) during parsing and printing but converted to de Bruijn indices after binding. The `Scope` type's `close(labels, body)` captures free labels as indices, and `open(terms)` substitutes indices back with concrete terms. `shift(amount)` adjusts indices when moving under binders. This solves alpha-equivalence without rename passes.
+Variables arrive from elaboration as free labels (`Var::free(label)`). Each binding construct (`Func`, `FuncType`, `Split`, `Rec`, etc.) calls `Scope::close(labels, body)` to capture those free labels as de Bruijn indices, and `open(terms)` to substitute indices back with concrete terms during reduction. `shift(amount)` adjusts indices when moving under binders. This solves alpha-equivalence without rename passes.
 
 ### Generic Binder Abstraction (`Scope<A: Arity>`)
 
-A single `Scope` type handles 1-ary (functions), 2-ary (pair elimination), and n-ary (recursive groups) binders through an `Arity` trait with associated type `Params<'a, T>`. This provides compile-time arity safety across all binding forms.
+A single `Scope` type handles 1-ary (functions), n-ary (tuple elimination, recursive groups) binders through an `Arity` trait with associated type `Params<'a, T>`. This provides compile-time arity safety across all binding forms.
 
 ### Bidirectional Type Checking
 
@@ -103,26 +124,26 @@ Every reduction operation receives an `Instant` deadline. This prevents infinite
 
 ### Runtime Effects and Type-Level Reduction
 
-Curios is intended to support impure term-level computation, but type-level normalization must remain pure and predictable. The current core implements total reduction for the existing primitive term forms (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, functions, pairs, atoms, and eliminators) with timeout protection; future effectful primitives should be treated as opaque or rejected during type-level reduction rather than executed by the checker.
+Curios is intended to support impure term-level computation, but type-level normalization must remain pure and predictable. The current core implements total reduction for the existing primitive term forms (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, functions, tuples, atoms, and eliminators) with timeout protection; future effectful primitives should be treated as opaque or rejected during type-level reduction rather than executed by the checker.
 
 ---
 
-## 3. Type Erasure
+## 4. Type Erasure
 
 **Files:** `src/ersd/term.rs`, `src/ersd/prim.rs`
 
 Transforms `core::Term` into `ersd::Term`, stripping everything that exists only at the type level:
 
-| Erased (removed)                           | Preserved                                        |
-| ------------------------------------------ | ------------------------------------------------ |
-| `Type`, `FuncType`, `PairType`, `AtomType` | `Func`, `Apply`, `Pair`, `Split`, `NatMatch`, `Match` |
-| Type annotations on bindings               | Function bodies, captures, parameters            |
-|                                            | `Let`, `LetRec`, all control flow                |
-|                                            | Primitives (except type constructors)            |
-|                                            | `Bin`, `Arr`, and their operations               |
-|                                            | `Name` references                                |
+| Erased (removed)                              | Preserved                                            |
+| --------------------------------------------- | ---------------------------------------------------- |
+| `Type`, `FuncType`, `TupleType`, `AtomType`   | `Func`, `Apply`, `Tuple`, `Split`, `NatMatch`, `Match` |
+| Type annotations on bindings                  | Function bodies, captures, parameters                |
+|                                               | `Let`, `Rec`, all control flow                       |
+|                                               | Primitives (except type constructors)                |
+|                                               | `Bin`, `Arr`, and their operations                   |
+|                                               | `Name` references                                    |
 
-**Erased placeholder:** Removed type-level terms (`Type`, `FuncType`, `PairType`, `AtomType`) are not dropped outright — they are replaced by the `ersd::Term::Erased` variant, which serves as a runtime placeholder for any position that was occupied purely by type information.
+**Erased placeholder:** Removed type-level terms (`Type`, `FuncType`, `TupleType`, `AtomType`) are not dropped outright — they are replaced by the `ersd::Term::Erased` variant, which serves as a runtime placeholder for any position that was occupied purely by type information.
 
 **Atom index translation:** During erasure, atom labels (`'left`, `'right`) are replaced with numeric indices matching case order in `Case`. This enables efficient dispatch without string comparison at runtime.
 
@@ -130,7 +151,7 @@ Transforms `core::Term` into `ersd::Term`, stripping everything that exists only
 
 ---
 
-## 4. CPS Lowering
+## 5. CPS Lowering
 
 **Files:** `src/cont/module.rs`, `src/ersd/to_cont/lowerer.rs`, `src/ersd/to_cont/entropy.rs`, `src/ersd/to_cont/frame.rs`
 
@@ -167,7 +188,7 @@ When a function call appears in value position (not tail position), the lowerer 
 
 ### Mutual Recursion via Preallocated Stubs
 
-`LetRec` groups pre-reserve value names before any bodies are lowered. This allows mutual references within the group when each recursive right-hand side can lower directly to a `cont::Value` in the current region. The MVP lowerer intentionally rejects more general recursive RHSs that would need value-level knot tying such as aliases, cells, or fixpoint support.
+`Rec` groups pre-reserve value names before any bodies are lowered. This allows mutual references within the group when each recursive right-hand side can lower directly to a `cont::Value` in the current region. The MVP lowerer intentionally rejects more general recursive RHSs that would need value-level knot tying such as aliases, cells, or fixpoint support.
 
 ### Frame-Based Variable Scoping
 
@@ -175,7 +196,7 @@ Each scope (function, block, closure) extends a `Frame` (HashMap of name → `Va
 
 ---
 
-## 5. WebAssembly Code Generation
+## 6. WebAssembly Code Generation
 
 **Files:** `src/cont/to_wasm/`, `src/wasm/expr.rs`, `src/wasm/module.rs`, `src/wasm/types.rs`, `src/wasm/writer.rs`
 
@@ -215,7 +236,7 @@ The codegen uses WASM's tail call extension (`return_call` for direct calls, `re
 
 ---
 
-## 6. Execution
+## 7. Execution
 
 **File:** `src/execute.rs`
 
@@ -226,11 +247,11 @@ Wasmtime is configured with:
 - GC (struct/array types)
 - Tail calls
 
-The pipeline runs parse → infer → erase → CPS lower → WASM codegen → serialize → load into Wasmtime → call `func/main` → print result. Result printing uses a `RefIds` table to track already-seen references (cycle detection) and recursively formats structs, arrays, and i31 values.
+The pipeline runs parse → elaborate → infer → erase → CPS lower → WASM codegen → serialize → load into Wasmtime → call `func/main` → print result. Result printing uses a `RefIds` table to track already-seen references (cycle detection) and recursively formats structs, arrays, and i31 values.
 
 ---
 
-## 7. CLI
+## 8. CLI
 
 **File:** `src/main.rs`
 
@@ -243,21 +264,21 @@ It reads the file, calls `execute(timeout, &source)`, and prints the result or a
 
 ---
 
-## 8. Testing
+## 9. Testing
 
 Tests exist at each layer:
 
 - **Term operations:** scope open/close symmetry, capture/release substitution
-- **Parsing:** round-trip tests for let-rec, atoms, pairs, function types, primitives, and split/case syntax
+- **Parsing:** round-trip tests for rec groups, atoms, tuples, function types, primitives, and split/case syntax
 - **Reduction:** beta-reduction, let inlining, natural elimination, arrays, binaries, and timeout enforcement
-- **Type checking / erasure:** dependent pairs over atom cases, Nat elimination, recursive definitions, primitive operand validation, arrays, and binaries
-- **CPS lowering:** recursive pairs, tail application, arrays/binaries, and join block creation
+- **Type checking / erasure:** dependent tuples over atom cases, Nat elimination, recursive definitions, primitive operand validation, arrays, and binaries
+- **CPS lowering:** recursive tuples, tail application, arrays/binaries, and join block creation
 - **WASM codegen + execution:** primitives, arrays, binaries, tuples, recursive closures, data segments, and end-to-end execution through Wasmtime
 - **`tests/triangular_sum.rs`:** standalone Wasmtime test that verifies `Nat.match` computes the triangular sum `sum(5) = 10` end-to-end
 
 ---
 
-## 9. Utility Layer
+## 10. Utility Layer
 
 **`src/monads/`:** Provides both the parser combinator library (`Parser<'a, A>`) and a printer combinator library used for pretty-printing terms. The printer uses `Printer` combinators that mirror the parser structure, giving a degree of symmetry between parsing and printing.
 
@@ -271,18 +292,22 @@ For anyone wanting to understand this project:
 
 1. **Browse `examples/`** — the example files (`examples/core.rs`, `examples/execute.rs`, etc.) show the language in action at each compilation stage. They are the fastest way to see what Curios programs look like and how the pipeline behaves. For a full pipeline execution test, see `tests/end_to_end.rs`.
 
-2. **Read `src/core/term.rs`** — the `Term` enum is the central data structure. Everything else transforms it or consumes it. Understanding the variants (especially `Scope`, `FuncType`, `PairType`, `AtomType`) is prerequisite to everything.
+2. **Read `src/text/term.rs`** — the `text::Term` enum is the surface AST. Its variants mirror the language syntax directly, with all variables as plain string labels. This is where to learn the surface grammar in type form.
 
-3. **Read `src/core/parse.rs`** — see what the surface syntax looks like. The test cases at the bottom are concrete examples.
+3. **Read `src/text/parse.rs`** — see what the surface syntax looks like. The test cases at the bottom are concrete examples.
 
-4. **Read `src/core/typing.rs`** — follow how each `Term` variant gets its type. Notice the bidirectional flow and where reduction is invoked.
+4. **Read `src/text/elaborate.rs`** — see how `text::Term` becomes `core::Term`. Understanding this translation is key to understanding what de Bruijn scoping means in practice.
 
-5. **Read `src/ersd/term.rs`** — see exactly what disappears and what survives into runtime.
+5. **Read `src/core/term.rs`** — the `core::Term` enum is the central data structure for type checking. Understanding the `Scope<A: Arity>` wrapper (especially `FuncType`, `TupleType`, `AtomType`) is prerequisite to everything downstream.
 
-6. **Read `src/cont/module.rs`** — the CPS IR types. Understand `Region`, `Value`, `Tail`, and especially how `Call` specifies a `resume` block.
+6. **Read `src/core/typing.rs`** — follow how each `Term` variant gets its type. Notice the bidirectional flow and where reduction is invoked.
 
-7. **Read `src/ersd/to_cont/lowerer.rs`** — follow how `ersd::Term` becomes CPS. The `lower_tail` and `lower_value` distinction (tail position vs. value position) is the key insight.
+7. **Read `src/ersd/term.rs`** — see exactly what disappears and what survives into runtime.
 
-8. **Read `src/cont/to_wasm/expr_emitter.rs`** and **`src/cont/to_wasm/module_emitter.rs`** — see how CPS maps to WASM instructions.
+8. **Read `src/cont/module.rs`** — the CPS IR types. Understand `Region`, `Value`, `Tail`, and especially how `Call` specifies a `resume` block.
 
-9. **Read `src/execute.rs`** — the top-level pipeline that ties everything together. The integration test in `tests/end_to_end.rs` shows the same path running through Wasmtime.
+9. **Read `src/ersd/to_cont/lowerer.rs`** — follow how `ersd::Term` becomes CPS. The `lower_tail` and `lower_value` distinction (tail position vs. value position) is the key insight.
+
+10. **Read `src/cont/to_wasm/expr_emitter.rs`** and **`src/cont/to_wasm/module_emitter.rs`** — see how CPS maps to WASM instructions.
+
+11. **Read `src/execute.rs`** — the top-level pipeline that ties everything together. The integration test in `tests/end_to_end.rs` shows the same path running through Wasmtime.
