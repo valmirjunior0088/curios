@@ -54,7 +54,9 @@ The grammar covers:
 - Tuple types `{x: A, B, z: C}` (curly braces, fields optionally labeled), tuple values `(a, b)` or `(a, b, c)`
 - Atom types `'[left, right]`, atom values `'left`
 - Tuple elimination `split tuple : m => motive; | (x, y) => tail`
-- Natural-number induction `Nat.match n : k => motive; | 0n => zero; | pred ih => succ;`
+- Natural-number induction `Nat.fold n : k => motive; | 0n => zero; | pred ih => succ;`
+- Sparse natural-number dispatch `Nat.match n : k => motive; | 34n => body; | _ => default;`
+- Char literals as nat values: single-character string with `n` suffix (`"["n`, `"\""n`) parses to the Unicode codepoint
 - Pattern matching `match x : k => Type; | 'tag => body;`
 - Non-recursive let bindings `let x : T = body; tail`
 - Recursive groups `rec f : T = body; tail` or `rec f : T = v and g : T2 = v2; tail` for mutual recursion
@@ -90,7 +92,8 @@ The central `Term` enum represents the full typed language after elaboration:
 | `Type`                            | The sort (type of types — no universe hierarchy) |
 | `FuncType` / `Func` / `Apply`     | Π-types, λ-abstraction, application              |
 | `TupleType` / `Tuple` / `Split`   | Σ-types (n-ary), tuple construction, elimination |
-| `NatMatch`                        | Natural-number induction/elimination             |
+| `NatFold`                         | Natural-number structural induction (zero case + pred/IH case) |
+| `NatMatch`                        | Sparse dispatch on specific nat values (explicit cases + default) |
 | `AtomType` / `Atom` / `Match`     | Labeled unions, tags, pattern matching           |
 | `Let` / `Rec`                     | Bindings, mutual recursion                       |
 | `Prim`                            | Built-in values and operations                   |
@@ -174,7 +177,7 @@ Module
 - `Data` (constant/aggregate): `Unit`, `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Arr(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)`
 - `Code` (computed): arithmetic, comparison, conversion, selected bitwise/counting ops, `TplGet(ValueName, usize)`, `BinLen`/`BinEql`/`BinGet`/`BinSlice`/`BinAppend`/`BinConcat`, and `ArrLen`/`ArrGet`/`ArrSlice`/`ArrAppend`/`ArrConcat`
 
-**Tails** (terminators) include: `Jump` (unconditional branch to block), `Match` (dispatch on atom index via `br_table`), `Call` (direct or indirect function call with resume target).
+**Tails** (terminators) include: `Jump` (unconditional branch to block), `Match` (sparse dispatch on a `u32` key — atom index or nat value — with a `BTreeMap` of explicit cases and an optional default), `Call` (direct or indirect function call with resume target).
 
 ### Second-Class Continuations
 
