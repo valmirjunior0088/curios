@@ -2844,6 +2844,23 @@ impl<'a> Lowerer<'a> {
                     this.lower_tail(&split.tail, &frame, resume, state, builder)
                 }),
             ),
+            ersd::Term::Let(let_) => {
+                let name = let_.name.clone();
+                self.lower_to_name(
+                    &let_.body,
+                    frame,
+                    state,
+                    builder,
+                    Box::new(move |this, state, builder, body| {
+                        let frame = frame.extended([(name, body)]);
+                        this.lower_tail(&let_.tail, &frame, resume, state, builder)
+                    }),
+                )
+            }
+            ersd::Term::Rec(letrec) => {
+                let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
+                self.lower_tail(&letrec.tail, &frame, resume, state, builder)
+            }
             _ => self.lower_to_name(
                 term,
                 frame,
