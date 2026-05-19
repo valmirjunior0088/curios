@@ -1604,15 +1604,15 @@ mod tests {
             ),
         ]));
 
-        assert!(erase(&mut context, &tuple_type, &Type.into()).is_ok());
+        erase(&mut context, &tuple_type, &Type.into()).unwrap();
 
         let tuple = Term::from(Tuple::new([Atom::from("left"), Atom::from("hot")]));
 
-        assert!(erase(&mut context, &tuple, &tuple_type).is_ok());
+        erase(&mut context, &tuple, &tuple_type).unwrap();
 
         let tuple = Term::from(Tuple::new([Atom::from("right"), Atom::from("cold")]));
 
-        assert!(erase(&mut context, &tuple, &tuple_type).is_ok());
+        erase(&mut context, &tuple, &tuple_type).unwrap();
     }
 
     #[test]
@@ -1658,7 +1658,7 @@ mod tests {
             Var::free("f"),
         ));
 
-        assert!(erase(&mut context, &term, &func_type).is_ok());
+        erase(&mut context, &term, &func_type).unwrap();
     }
 
     #[test]
@@ -1684,36 +1684,32 @@ mod tests {
             Var::free("loop"),
         ));
 
-        assert!(erase(&mut context, &term, &type_).is_ok());
+        erase(&mut context, &term, &type_).unwrap();
     }
 
     #[test]
     fn erase_prim_ops_typecheck() {
         let mut context = context();
 
-        assert!(
-            erase(
-                &mut context,
-                &Term::Prim(Prim::int_eql(
-                    Term::Prim(Prim::Int(1)),
-                    Term::Prim(Prim::Int(1))
-                )),
-                &Term::Prim(Prim::NatType),
-            )
-            .is_ok()
-        );
+        erase(
+            &mut context,
+            &Term::Prim(Prim::int_eql(
+                Term::Prim(Prim::Int(1)),
+                Term::Prim(Prim::Int(1)),
+            )),
+            &Term::Prim(Prim::NatType),
+        )
+        .unwrap();
 
-        assert!(
-            erase(
-                &mut context,
-                &Term::Prim(Prim::flt_add(
-                    Term::Prim(Prim::Flt(1.5_f32.to_bits())),
-                    Term::Prim(Prim::Flt(2.0_f32.to_bits()))
-                )),
-                &Term::Prim(Prim::FltType),
-            )
-            .is_ok()
-        );
+        erase(
+            &mut context,
+            &Term::Prim(Prim::flt_add(
+                Term::Prim(Prim::Flt(1.5_f32.to_bits())),
+                Term::Prim(Prim::Flt(2.0_f32.to_bits())),
+            )),
+            &Term::Prim(Prim::FltType),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -1728,11 +1724,6 @@ mod tests {
             "x",
             Tuple::new([Term::from(Var::free("x")), Term::from(Var::free("y"))]),
         ));
-
-        let mut context = Context::new(Duration::from_secs(1));
-        context.assume("y", &atom_type);
-
-        erase(&mut context, &term, &type_).unwrap();
 
         let mut context = Context::new(Duration::from_secs(1));
         context.assume("y", &atom_type);
@@ -1793,7 +1784,6 @@ mod tests {
             .unwrap(),
         );
 
-        erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
         let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 
         let ersd::Term::Let(ersd::Let {
@@ -1960,13 +1950,13 @@ mod tests {
         let mut context = context();
 
         let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
-        assert!(erase(&mut context, &arr_nat, &Type.into()).is_ok());
+        erase(&mut context, &arr_nat, &Type.into()).unwrap();
 
         let literal = Term::Prim(Prim::from(vec![
             Term::Prim(Prim::Nat(1)),
             Term::Prim(Prim::Nat(2)),
         ]));
-        assert!(erase(&mut context, &literal, &arr_nat).is_ok());
+        erase(&mut context, &literal, &arr_nat).unwrap();
 
         context.assume("xs", &arr_nat);
         let len = Term::Prim(Prim::arr_len(Var::free("xs")));
@@ -1987,11 +1977,11 @@ mod tests {
         let mut context = context();
 
         let bin_type = Term::Prim(Prim::BinType);
-        assert!(erase(&mut context, &bin_type, &Type.into()).is_ok());
+        erase(&mut context, &bin_type, &Type.into()).unwrap();
 
         let literal = Term::Prim(Prim::Bin(vec![1, 2, 3]));
         assert_eq!(infer(&mut context, &literal).unwrap(), bin_type);
-        assert!(erase(&mut context, &literal, &bin_type).is_ok());
+        erase(&mut context, &literal, &bin_type).unwrap();
 
         context.assume("b", &bin_type);
         let len = Term::Prim(Prim::bin_len(Var::free("b")));
@@ -2017,7 +2007,7 @@ mod tests {
 
         let append = Term::Prim(Prim::bin_append(Var::free("b"), Var::free("n")));
         assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
-        assert!(erase(&mut context, &append, &bin_type).is_ok());
+        erase(&mut context, &append, &bin_type).unwrap();
     }
 
     #[test]
@@ -2046,8 +2036,8 @@ mod tests {
             Atom::from("true"),
         ));
 
-        assert!(erase(&mut context, &nat_match_zero, &bool_type).is_ok());
-        assert!(erase(&mut context, &nat_match_one, &bool_type).is_ok());
+        erase(&mut context, &nat_match_zero, &bool_type).unwrap();
+        erase(&mut context, &nat_match_one, &bool_type).unwrap();
     }
 
     #[test]
@@ -2082,7 +2072,7 @@ mod tests {
 
         let append = Term::Prim(Prim::arr_append(Var::free("xs"), Var::free("n")));
         assert_eq!(infer(&mut context, &append).unwrap(), arr_nat);
-        assert!(erase(&mut context, &append, &arr_nat).is_ok());
+        erase(&mut context, &append, &arr_nat).unwrap();
     }
 
     #[test]
@@ -2095,7 +2085,7 @@ mod tests {
             ("z", Term::from(AtomType::new(["c"]))),
         ]));
 
-        assert!(erase(&mut context, &tuple_type, &Type.into()).is_ok());
+        erase(&mut context, &tuple_type, &Type.into()).unwrap();
 
         let tuple = Term::from(Tuple::new([
             Term::from(Atom::from("a")),
@@ -2103,7 +2093,7 @@ mod tests {
             Term::from(Atom::from("c")),
         ]));
 
-        assert!(erase(&mut context, &tuple, &tuple_type).is_ok());
+        erase(&mut context, &tuple, &tuple_type).unwrap();
     }
 
     #[test]
@@ -2151,6 +2141,6 @@ mod tests {
             Var::free("y"),
         ));
 
-        assert!(erase(&mut context, &split, &Term::from(AtomType::new(["c"]))).is_ok());
+        erase(&mut context, &split, &Term::from(AtomType::new(["c"]))).unwrap();
     }
 }

@@ -2,7 +2,7 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~25,000 lines, including examples, tests, and docs.
+**Codebase size:** ~24,800 lines, including examples, tests, and docs.
 
 ---
 
@@ -234,11 +234,17 @@ The codegen uses WASM's tail call extension (`return_call` for direct calls, `re
 
 `src/wasm/writer.rs` serializes the WASM AST to the binary format. The compiler writes its own WASM binary rather than depending on a library like `wasm-encoder`.
 
+### WAT Parser
+
+`src/wasm/parse.rs` implements a `FromStr` parser for `wasm::Module` covering the WebAssembly Text (WAT) format. It uses the same monadic parser combinator library as the Curios surface parser. `wasm::Module` supports a text round-trip: a parsed module can be printed and re-parsed to an identical result, which is verified by the round-trip test in `src/wasm/module.rs`.
+
 ---
 
 ## 7. Execution
 
-**File:** `src/execute.rs`
+**Files:** `src/lib.rs`, `src/print.rs`
+
+`src/lib.rs` exposes the public `run(timeout: Duration, source: &str) -> Result<String, String>` function that drives the full pipeline: parse → elaborate → infer → erase → CPS lower → WASM codegen → serialize → load into Wasmtime → call `func/main` → print result.
 
 Wasmtime is configured with:
 
@@ -247,7 +253,7 @@ Wasmtime is configured with:
 - GC (struct/array types)
 - Tail calls
 
-The pipeline runs parse → elaborate → infer → erase → CPS lower → WASM codegen → serialize → load into Wasmtime → call `func/main` → print result. Result printing uses a `RefIds` table to track already-seen references (cycle detection) and recursively formats structs, arrays, and i31 values.
+`src/print.rs` contains the result printer. `RefIds` tracks already-seen GC references by raw identity (cycle detection), and `print_ref` recursively formats `i31ref`, struct, and array values.
 
 ---
 
@@ -255,12 +261,12 @@ The pipeline runs parse → elaborate → infer → erase → CPS lower → WASM
 
 **File:** `src/main.rs`
 
-The binary entry point is a thin Clap wrapper around `execute`. It accepts:
+The binary entry point is a thin Clap wrapper around `run`. It accepts:
 
 - `--timeout <MILLIS>` — deadline for type-checking reduction (default: 1000 ms)
 - `<path>` — path to a Curios source file
 
-It reads the file, calls `execute(timeout, &source)`, and prints the result or a formatted error message.
+It reads the file, calls `curios::run(cli.timeout, &source)`, and prints the result or a formatted error message.
 
 ---
 
@@ -282,7 +288,9 @@ Tests exist at each layer:
 
 **`src/monads/`:** Provides both the parser combinator library (`Parser<'a, A>`) and a printer combinator library used for pretty-printing terms. The printer uses `Printer` combinators that mirror the parser structure, giving a degree of symmetry between parsing and printing.
 
-**`src/macros.rs`:** Helper macros used across the codebase.
+**`src/print.rs`:** Wasmtime result printer. `RefIds` maps raw GC reference identities to display indices for cycle detection; `print_ref` recursively formats `i31ref`, struct, and array references returned from a Wasmtime `Store`.
+
+**`src/macros.rs`:** Helper macros used across the codebase, including the `name!` macro that generates the newtype name wrappers (`ValueName`, `BlockName`, `ClsrName`, `FuncName`, etc.) used throughout the CPS and WASM layers.
 
 ---
 
@@ -290,7 +298,11 @@ Tests exist at each layer:
 
 For anyone wanting to understand this project:
 
-1. **Browse `examples/`** — the example files (`examples/core.rs`, `examples/execute.rs`, etc.) show the language in action at each compilation stage. They are the fastest way to see what Curios programs look like and how the pipeline behaves. For a full pipeline execution test, see `tests/end_to_end.rs`.
+1. **Browse `examples/`** — the example files show the language in action at each compilation stage. They are the fastest way to see what Curios programs look like and how the pipeline behaves. Two naming conventions:
+   - `inline_*` examples build terms directly in Rust (e.g. `inline_core.rs`, `inline_cont.rs`, `inline_wasm.rs`, `inline_core_ersd.rs`, `inline_ersd_arr.rs`, `inline_cont_to_wasm.rs`)
+   - `parse_*` examples parse Curios source text (e.g. `parse_execute.rs`, `parse_fibonacci.rs`, `parse_even_odd.rs`, `parse_binary_tree.rs`, `parse_recursive_sum_type.rs`, `parse_triple.rs`, `parse_core_arr.rs`, `parse_core_to_wasm.rs`)
+
+   For a full pipeline execution test that asserts on the result, see `tests/end_to_end.rs`.
 
 2. **Read `src/text/term.rs`** — the `text::Term` enum is the surface AST. Its variants mirror the language syntax directly, with all variables as plain string labels. This is where to learn the surface grammar in type form.
 
@@ -310,4 +322,4 @@ For anyone wanting to understand this project:
 
 10. **Read `src/cont/to_wasm/expr_emitter.rs`** and **`src/cont/to_wasm/module_emitter.rs`** — see how CPS maps to WASM instructions.
 
-11. **Read `src/execute.rs`** — the top-level pipeline that ties everything together. The integration test in `tests/end_to_end.rs` shows the same path running through Wasmtime.
+11. **Read `src/lib.rs`** — the top-level `run()` function that ties the entire pipeline together. `src/print.rs` shows how Wasmtime results are formatted. The integration test in `tests/end_to_end.rs` shows the same path running through Wasmtime and asserting on the result.

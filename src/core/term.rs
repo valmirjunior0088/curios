@@ -895,9 +895,8 @@ mod tests {
     fn close_open_substitutes_label_name() {
         let term = Scope::close(One, &["x"], Var::free("x")).open(&[&Var::free("y").into()]);
 
-        let var = match term {
-            Term::Var(var) => var,
-            term => panic!("unexpected `{term:?}`"),
+        let Term::Var(var) = term else {
+            panic!("unexpected `{term:?}`")
         };
 
         assert_eq!(var, Var::free("y"));
@@ -908,14 +907,12 @@ mod tests {
         let term = Scope::close(One, &["x"], Func::new("y", Var::free("x")))
             .open(&[&Var::free("z").into()]);
 
-        let body = match term {
-            Term::Func(body) => body.body,
-            term => panic!("unexpected `{term:?}`"),
+        let Term::Func(body) = term else {
+            panic!("unexpected `{term:?}`")
         };
 
-        let var = match body.open(&[&Var::free("w").into()]) {
-            Term::Var(var) => var,
-            term => panic!("unexpected `{term:?}`"),
+        let Term::Var(var) = body.body.open(&[&Var::free("w").into()]) else {
+            panic!("unexpected term")
         };
 
         assert_eq!(var, Var::free("z"));

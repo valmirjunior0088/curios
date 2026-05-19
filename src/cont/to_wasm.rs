@@ -55,6 +55,24 @@ mod tests {
         (store, result)
     }
 
+    fn i32_result(module: &cont::Module) -> i32 {
+        let (store, result) = run_main(module);
+        result
+            .unwrap_i31(&store)
+            .expect("expected i31 result")
+            .get_i32()
+    }
+
+    fn f32_result(module: &cont::Module) -> f32 {
+        let (mut store, result) = run_main(module);
+        result
+            .unwrap_struct(&store)
+            .expect("expected float struct")
+            .field(&mut store, 0)
+            .expect("expected float field")
+            .unwrap_f32()
+    }
+
     #[test]
     fn lowers_and_runs_mutually_recursive_tuple() {
         let mut module = cont::Module::new();
@@ -101,14 +119,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 2);
+        assert_eq!(i32_result(&module), 2);
     }
 
     #[test]
@@ -284,14 +295,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 22);
+        assert_eq!(i32_result(&module), 22);
     }
 
     #[test]
@@ -353,14 +357,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 3);
+        assert_eq!(i32_result(&module), 3);
     }
 
     #[test]
@@ -430,16 +427,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&cont_module);
-
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-
-        assert_eq!(result, 3.75);
+        assert_eq!(f32_result(&cont_module), 3.75);
     }
 
     #[test]
@@ -475,14 +463,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 2);
+        assert_eq!(i32_result(&module), 2);
     }
 
     #[test]
@@ -553,14 +534,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 8);
+        assert_eq!(i32_result(&module), 8);
     }
 
     #[test]
@@ -592,14 +566,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 7);
+        assert_eq!(i32_result(&module), 7);
     }
 
     #[test]
@@ -635,14 +602,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 2);
+        assert_eq!(i32_result(&module), 2);
     }
 
     #[test]
@@ -682,14 +642,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 7);
+        assert_eq!(i32_result(&module), 7);
     }
 
     #[test]
@@ -739,9 +692,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 2);
+        assert_eq!(i32_result(&module), 2);
     }
 
     #[test]
@@ -791,14 +742,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 3);
+        assert_eq!(i32_result(&module), 3);
     }
 
     #[test]
@@ -826,14 +770,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 2.0);
+        assert_eq!(f32_result(&module), 2.0);
     }
 
     #[test]
@@ -861,14 +798,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 3.0);
+        assert_eq!(f32_result(&module), 3.0);
     }
 
     #[test]
@@ -896,14 +826,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, -2.0);
+        assert_eq!(f32_result(&module), -2.0);
     }
 
     #[test]
@@ -931,14 +854,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 2.0);
+        assert_eq!(f32_result(&module), 2.0);
     }
 
     #[test]
@@ -970,9 +886,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 3);
+        assert_eq!(i32_result(&module), 3);
     }
 
     #[test]
@@ -1004,9 +918,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 1);
+        assert_eq!(i32_result(&module), 1);
     }
 
     #[test]
@@ -1038,9 +950,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 1);
+        assert_eq!(i32_result(&module), 1);
     }
 
     #[test]
@@ -1077,9 +987,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, -5);
+        assert_eq!(i32_result(&module), -5);
     }
 
     #[test]
@@ -1111,9 +1019,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, -3);
+        assert_eq!(i32_result(&module), -3);
     }
 
     #[test]
@@ -1145,9 +1051,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 1);
+        assert_eq!(i32_result(&module), 1);
     }
 
     #[test]
@@ -1179,14 +1083,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 0.25);
+        assert_eq!(f32_result(&module), 0.25);
     }
 
     #[test]
@@ -1218,9 +1115,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 1);
+        assert_eq!(i32_result(&module), 1);
     }
 
     #[test]
@@ -1248,14 +1143,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 2.0);
+        assert_eq!(f32_result(&module), 2.0);
     }
 
     #[test]
@@ -1283,14 +1171,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 3.0);
+        assert_eq!(f32_result(&module), 3.0);
     }
 
     #[test]
@@ -1318,14 +1199,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 5.0);
+        assert_eq!(f32_result(&module), 5.0);
     }
 
     #[test]
@@ -1355,9 +1229,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 3);
+        assert_eq!(i32_result(&module), 3);
     }
 
     #[test]
@@ -1385,9 +1257,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 7);
+        assert_eq!(i32_result(&module), 7);
     }
 
     #[test]
@@ -1419,9 +1289,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 1);
+        assert_eq!(i32_result(&module), 1);
     }
 
     #[test]
@@ -1453,9 +1321,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 0);
+        assert_eq!(i32_result(&module), 0);
     }
 
     #[test]
@@ -1487,9 +1353,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-        let result = result.unwrap_i31(&store).expect("expected i31").get_i32();
-        assert_eq!(result, 1);
+        assert_eq!(i32_result(&module), 1);
     }
 
     #[test]
@@ -1521,14 +1385,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 1.5);
+        assert_eq!(f32_result(&module), 1.5);
     }
 
     #[test]
@@ -1560,14 +1417,7 @@ mod tests {
             },
         );
 
-        let (mut store, result) = run_main(&module);
-        let result = result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32();
-        assert_eq!(result, 2.5);
+        assert_eq!(f32_result(&module), 2.5);
     }
 
     #[test]
@@ -1598,14 +1448,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 5);
+        assert_eq!(i32_result(&module), 5);
     }
 
     #[test]
@@ -1640,14 +1483,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, b'e' as i32);
+        assert_eq!(i32_result(&module), b'e' as i32);
     }
 
     #[test]
@@ -1692,14 +1528,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, b'!' as i32);
+        assert_eq!(i32_result(&module), b'!' as i32);
     }
 
     #[test]
@@ -1749,13 +1578,6 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32();
-
-        assert_eq!(result, 9);
+        assert_eq!(i32_result(&module), 9);
     }
 }
