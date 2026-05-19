@@ -160,9 +160,9 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure(";\n| 0n =>\n"),
             indent(flat([print_term(zero_case), pure(";")])),
             pure("\n| "),
-            pure(pred.as_str()),
+            pure(format!("#{}", pred.as_str())),
             pure(" "),
-            pure(ih.as_str()),
+            pure(format!("#{}", ih.as_str())),
             pure(" =>\n"),
             indent(flat([print_term(succ_case), pure(";")])),
         ]),
@@ -172,13 +172,13 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             body,
         }) => {
             if captures.is_empty() {
-                flat([pure(param.as_str()), pure(" =>\n"), indent(print_term(body))])
+                flat([pure(format!("#{}", param.as_str())), pure(" =>\n"), indent(print_term(body))])
             } else {
                 flat([
                     pure("{"),
-                    sep_flat(captures.iter().map(|s| pure(s.as_str())), || pure(", ")),
+                    sep_flat(captures.iter().map(|s| pure(format!("#{}", s.as_str()))), || pure(", ")),
                     pure("} "),
-                    pure(param.as_str()),
+                    pure(format!("#{}", param.as_str())),
                     pure(" =>\n"),
                     indent(print_term(body)),
                 ])
@@ -196,7 +196,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure("split "),
             print_term(head),
             pure("; | ("),
-            sep_flat(fields.iter().map(|s| pure(s.as_str())), || pure(", ")),
+            sep_flat(fields.iter().map(|s| pure(format!("#{}", s.as_str()))), || pure(", ")),
             pure(") =>\n"),
             print_term(tail),
         ]),
@@ -214,7 +214,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
         }
         Term::Let(Let { name, body, tail }) => flat([
             pure("let "),
-            pure(name.as_str()),
+            pure(format!("#{}", name.as_str())),
             pure(" =\n"),
             indent(flat([print_term(body), pure(";")])),
             pure("\n"),
@@ -224,7 +224,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             let bindings = names
                 .iter()
                 .zip(items.iter())
-                .map(|(name, body)| flat([pure(name.as_str()), pure(" =\n"), indent(print_term(body))]))
+                .map(|(name, body)| flat([pure(format!("#{}", name.as_str())), pure(" =\n"), indent(print_term(body))]))
                 .collect::<Vec<_>>();
 
             flat([
@@ -234,7 +234,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 print_term(tail),
             ])
         }
-        Term::Name(name) => pure(name.string.as_str()),
+        Term::Name(name) => pure(format!("#{}", name.string.as_str())),
     }
 }
 
