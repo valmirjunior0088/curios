@@ -1,6 +1,5 @@
 use {
     clap::Parser,
-    curios::execute,
     std::{fs, path::PathBuf, time::Duration},
 };
 
@@ -26,7 +25,7 @@ fn main() -> Result<(), String> {
     let source = fs::read_to_string(&cli.path)
         .map_err(|error| format!("failed to read {}: {error}", cli.path.display()))?;
 
-    println!("{}", execute(cli.timeout, &source)?);
+    println!("{}", curios::run(cli.timeout, &source)?);
 
     Ok(())
 }

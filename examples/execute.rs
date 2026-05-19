@@ -1,4 +1,4 @@
-use {curios::execute, std::time::Duration};
+use std::time::Duration;
 
 fn main() {
     let source = "
@@ -22,6 +22,6 @@ fn main() {
 
     println!(
         "{}",
-        execute(Duration::from_secs(1), source).expect("expected successful execution")
+        curios::run(Duration::from_secs(1), source).expect("expected successful execution")
     );
 }
