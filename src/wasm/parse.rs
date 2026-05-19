@@ -825,62 +825,43 @@ fn parse_start<'a>() -> Parser<'a, FuncName> {
         .and_drop(parse_literal(")"))
 }
 
+enum ModuleItem {
+    RecType(RecType),
+    Import(String, String, Import),
+    Func(FuncName, Func),
+    Global(GlobalName, Global),
+    DataSegment(DataName, DataSegment),
+    Export(String, Export),
+    Start(FuncName),
+}
+
+fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
+    parse_rec_type()
+        .map(ModuleItem::RecType)
+        .or(parse_import().map(|(module_name, name, import)| ModuleItem::Import(module_name, name, import)))
+        .or(parse_func().map(|(func_name, func)| ModuleItem::Func(func_name, func)))
+        .or(parse_global().map(|(global_name, global)| ModuleItem::Global(global_name, global)))
+        .or(parse_data_segment().map(|(data_name, data_segment)| ModuleItem::DataSegment(data_name, data_segment)))
+        .or(parse_export().map(|(name, export)| ModuleItem::Export(name, export)))
+        .or(parse_start().map(ModuleItem::Start))
+}
+
 fn parse_module<'a>() -> Parser<'a, Module> {
     catch(parse_literal("(").and_drop(parse_literal("module")))
         .and_keep(parse_name())
         .map(Module::new)
-        .and(many0(parse_rec_type))
-        .map(|(mut module, rec_types)| {
-            for rec_type in rec_types {
-                module.add_types(rec_type);
-            }
-
-            module
-        })
-        .and(many0(parse_import))
-        .map(|(mut module, imports)| {
-            for (module_name, name, import) in imports {
-                module.add_import(module_name, name, import);
-            }
-
-            module
-        })
-        .and(many0(parse_func))
-        .map(|(mut module, funcs)| {
-            for (func_name, func) in funcs {
-                module.add_func(func_name, func);
-            }
-
-            module
-        })
-        .and(many0(parse_global))
-        .map(|(mut module, globals)| {
-            for (global_name, global) in globals {
-                module.add_global(global_name, global);
-            }
-
-            module
-        })
-        .and(many0(parse_data_segment))
-        .map(|(mut module, datas)| {
-            for (data_name, data_segment) in datas {
-                module.add_data(data_name, data_segment);
-            }
-
-            module
-        })
-        .and(many0(parse_export))
-        .map(|(mut module, exports)| {
-            for (name, export) in exports {
-                module.add_export(name, export);
-            }
-
-            module
-        })
-        .and(parse_start().map(Some).or(pure(None)))
-        .map(|(mut module, start)| {
-            if let Some(start) = start {
-                module.set_start(start);
+        .and(many0(parse_module_item))
+        .map(|(mut module, items)| {
+            for item in items {
+                match item {
+                    ModuleItem::RecType(rec_type) => module.add_types(rec_type),
+                    ModuleItem::Import(module_name, name, import) => module.add_import(module_name, name, import),
+                    ModuleItem::Func(func_name, func) => module.add_func(func_name, func),
+                    ModuleItem::Global(global_name, global) => module.add_global(global_name, global),
+                    ModuleItem::DataSegment(data_name, data_segment) => module.add_data(data_name, data_segment),
+                    ModuleItem::Export(name, export) => module.add_export(name, export),
+                    ModuleItem::Start(func_name) => module.set_start(func_name),
+                }
             }
 
             module
