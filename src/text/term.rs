@@ -51,6 +51,15 @@ pub struct NatFold {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NatMatch {
+    pub head: Subterm,
+    pub motive_label: String,
+    pub motive: Subterm,
+    pub cases: BTreeMap<u32, Subterm>,
+    pub default: Subterm,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Split {
     pub head: Subterm,
     pub motive_label: String,
@@ -98,6 +107,7 @@ pub enum Term {
     Type,
     Prim(Prim),
     NatFold(NatFold),
+    NatMatch(NatMatch),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),

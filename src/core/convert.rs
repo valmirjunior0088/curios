@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, Preempted, Prim, Rec,
-        Split, Term, Tuple, TupleType, Var, reduce,
+        Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, NatMatch, Preempted, Prim,
+        Rec, Split, Term, Tuple, TupleType, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -305,6 +305,32 @@ impl Convert {
         Ok(this == that)
     }
 
+    fn compare_nat_match(
+        &mut self,
+        context: &mut Context,
+        this: NatMatch,
+        that: NatMatch,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(*this.head, *that.head);
+
+        let label = Var::free(context.fresh()).into();
+        self.enqueue(this.motive.open(&[&label]), that.motive.open(&[&label]));
+
+        if this.cases.len() != that.cases.len() {
+            return Ok(false);
+        }
+
+        for ((kl, vl), (kr, vr)) in this.cases.into_iter().zip(that.cases) {
+            if kl != kr {
+                return Ok(false);
+            }
+            self.enqueue(*vl, *vr);
+        }
+
+        self.enqueue(*this.default, *that.default);
+        Ok(true)
+    }
+
     fn compare_match(
         &mut self,
         context: &mut Context,
@@ -374,6 +400,9 @@ impl Convert {
                 (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
                 (Term::NatFold(this), Term::NatFold(that)) => {
                     self.compare_nat_fold(context, this, that)?
+                }
+                (Term::NatMatch(this), Term::NatMatch(that)) => {
+                    self.compare_nat_match(context, this, that)?
                 }
                 (Term::FuncType(this), Term::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?

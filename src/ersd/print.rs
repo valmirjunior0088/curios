@@ -166,6 +166,19 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure(" =>\n"),
             indent(flat([print_term(succ_case), pure(";")])),
         ]),
+        Term::NatMatch(super::NatMatch { head, cases, default }) => {
+            let case_printers = cases.iter().map(|(val, body)| {
+                flat([pure(format!("\n| {val}n =>\n")), indent(flat([print_term(body), pure(";")]))])
+            });
+            flat([
+                pure("Nat.match "),
+                print_term(head),
+                pure(";"),
+                flat(case_printers.collect::<Vec<_>>()),
+                pure("\n| _ =>\n"),
+                indent(flat([print_term(default), pure(";")])),
+            ])
+        }
         Term::Func(Func {
             captures,
             param,

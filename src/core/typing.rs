@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, Match, NatFold, Preempted, Prim,
-        Rec, Split, Term, Tuple, TupleType, Type, Var,
+        Apply, AtomType, Context, Error, Func, FuncType, Let, Match, NatFold, NatMatch, Preempted,
+        Prim, Rec, Split, Term, Tuple, TupleType, Type, Var,
     },
     crate::ersd,
 };
@@ -363,6 +363,41 @@ fn infer_nat_fold(
     Ok(motive.open(&[head.as_ref()]))
 }
 
+fn infer_nat_match(
+    context: &mut Context,
+    nm: &NatMatch,
+    term: &Term,
+) -> Result<Term, Error> {
+    let NatMatch { head, motive, cases, default } = nm;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    if !matches!(head_type, Term::Prim(Prim::NatType)) {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &Term::Prim(Prim::NatType));
+        erase(
+            context,
+            &motive.open(&[&Var::free(head_label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    for (n, body) in cases {
+        erase(context, body, &motive.open(&[&Term::Prim(Prim::Nat(*n))]))?;
+    }
+
+    erase(context, default, &motive.open(&[head.as_ref()]))?;
+
+    Ok(motive.open(&[head.as_ref()]))
+}
+
 fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term, Error> {
     let Split { head, motive, tail } = split;
 
@@ -538,6 +573,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::Type => Ok(Type.into()),
         Term::Prim(prim) => infer_prim(context, prim),
         Term::NatFold(nat_fold) => infer_nat_fold(context, nat_fold, term),
+        Term::NatMatch(nm) => infer_nat_match(context, nm, term),
         Term::FuncType(ft) => infer_func_type(context, ft),
         Term::Apply(apply) => infer_apply(context, apply, term),
         Term::TupleType(tt) => infer_tuple_type(context, tt),
@@ -1322,6 +1358,54 @@ fn erase_nat_fold(
     .into())
 }
 
+fn erase_nat_match(
+    context: &mut Context,
+    nm: &NatMatch,
+    term: &Term,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let NatMatch { head, motive, cases, default } = nm;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    if !matches!(head_type, Term::Prim(Prim::NatType)) {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &Term::Prim(Prim::NatType));
+        erase(
+            context,
+            &motive.open(&[&Var::free(head_label).into()]),
+            &Type.into(),
+        )
+    })?;
+
+    let erased_cases = cases
+        .iter()
+        .map(|(n, body)| {
+            let case_expected = motive.open(&[&Term::Prim(Prim::Nat(*n))]);
+            erase(context, body, &case_expected).map(|e| (*n, e.into()))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    let erased_default = erase(context, default, &motive.open(&[head.as_ref()]))?;
+
+    let erased_head = erase(context, head, &head_type)?;
+
+    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
+
+    Ok(ersd::NatMatch {
+        head: erased_head.into(),
+        cases: erased_cases,
+        default: erased_default.into(),
+    }
+    .into())
+}
+
 fn erase_split(
     context: &mut Context,
     split: &Split,
@@ -1553,6 +1637,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
     match term {
         Term::Prim(prim) => erase_prim(context, term, prim, expected),
         Term::NatFold(nat_fold) => erase_nat_fold(context, nat_fold, term, expected),
+        Term::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
         Term::Type => {
             expect(context, term, &Type.into(), expected)?;
             Ok(ersd::Term::Erased)
@@ -1594,7 +1679,8 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Func, FuncType, Match, NatFold, Rec, Term, Tuple, TupleType, Type,
+                Atom, AtomType, Func, FuncType, Match, NatFold, NatMatch, Rec, Term, Tuple,
+                TupleType, Type,
             },
             ersd, text,
         },
@@ -2093,6 +2179,43 @@ mod tests {
 
         assert!(matches!(
             erase(&mut context, &nat_fold, &bool_type),
+            Err(Error::CannotInfer { .. })
+        ));
+    }
+
+    #[test]
+    fn erase_nat_match_dispatches_to_named_case() {
+        let mut context = context();
+
+        let bool_type = Term::from(AtomType::new(["false", "true"]));
+
+        let nat_match = Term::from(NatMatch::new(
+            Prim::Nat(5),
+            "m",
+            AtomType::new(["false", "true"]),
+            [(5u32, Term::from(Atom::from("true")))],
+            Atom::from("false"),
+        ));
+
+        erase(&mut context, &nat_match, &bool_type).unwrap();
+    }
+
+    #[test]
+    fn erase_nat_match_rejects_non_nat_head() {
+        let mut context = context();
+
+        let bool_type = Term::from(AtomType::new(["false", "true"]));
+
+        let nat_match = Term::from(NatMatch::new(
+            Prim::Int(0),
+            "m",
+            AtomType::new(["false", "true"]),
+            [(0u32, Term::from(Atom::from("true")))],
+            Atom::from("false"),
+        ));
+
+        assert!(matches!(
+            erase(&mut context, &nat_match, &bool_type),
             Err(Error::CannotInfer { .. })
         ));
     }

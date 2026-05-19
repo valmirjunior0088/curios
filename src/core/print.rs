@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, One, Prim, Rec, Scope, Split,
-        Term, Tuple, TupleType, Two, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim, Rec,
+        Scope, Split, Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -395,6 +395,32 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(ih_label),
                 pure(" =>\n"),
                 indent(flat([print_term(succ_case, depth), pure(";")])),
+            ])
+        }
+        Term::NatMatch(NatMatch { head, motive, cases, default }) => {
+            let (motive_label, motive) = open_scope_one(motive, depth);
+            let case_printers = flat(
+                cases
+                    .into_iter()
+                    .map(|(n, body)| {
+                        flat([
+                            pure(format!("\n| {n}n =>\n")),
+                            indent(flat([print_term(*body, depth), pure(";")])),
+                        ])
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            flat([
+                pure("Nat.match "),
+                print_term(*head, depth),
+                pure(" : "),
+                pure(motive_label),
+                pure(" => "),
+                print_term(motive, depth + 1),
+                pure(";"),
+                case_printers,
+                pure("\n| _ =>\n"),
+                indent(flat([print_term(*default, depth), pure(";")])),
             ])
         }
         Term::FuncType(FuncType { input, output }) => {

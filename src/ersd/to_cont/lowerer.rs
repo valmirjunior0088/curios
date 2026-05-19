@@ -795,7 +795,8 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatFold(_) => unsupported_rec_item(term),
+            | ersd::Term::NatFold(_)
+            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
         }
     }
 
@@ -1213,7 +1214,8 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatFold(_) => unsupported_rec_item(term),
+            | ersd::Term::NatFold(_)
+            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
         }
     }
 }
@@ -2508,7 +2510,8 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatFold(_) => {
+            | ersd::Term::NatFold(_)
+            | ersd::Term::NatMatch(_) => {
                 let block = state.fresh_block();
                 let param = state.fresh_value();
                 let mut join_builder = RegionBuilder::new();
@@ -2857,6 +2860,51 @@ impl<'a> Lowerer<'a> {
                         state,
                         builder,
                     )
+                }),
+            ),
+            ersd::Term::NatMatch(nm) => self.lower_to_name(
+                &nm.head,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, head| {
+                    let mut cases = BTreeMap::new();
+
+                    for (val, branch) in nm.cases.iter() {
+                        let block = state.fresh_block();
+                        let mut branch_builder = RegionBuilder::new();
+                        let tail =
+                            this.lower_tail(branch, frame, resume, state, &mut branch_builder);
+                        builder.add_block(
+                            block.clone(),
+                            cont::Block {
+                                params: vec![],
+                                region: branch_builder.finish(tail),
+                            },
+                        );
+                        cases.insert(*val, cont::JumpTarget { target: block, params: vec![] });
+                    }
+
+                    let default_block = state.fresh_block();
+                    let mut default_builder = RegionBuilder::new();
+                    let default_tail =
+                        this.lower_tail(&nm.default, frame, resume, state, &mut default_builder);
+                    builder.add_block(
+                        default_block.clone(),
+                        cont::Block {
+                            params: vec![],
+                            region: default_builder.finish(default_tail),
+                        },
+                    );
+
+                    cont::Tail::Match(cont::MatchTarget {
+                        operand: head,
+                        cases,
+                        default: Some(cont::JumpTarget {
+                            target: default_block,
+                            params: vec![],
+                        }),
+                    })
                 }),
             ),
             ersd::Term::Split(split) => self.lower_to_name(

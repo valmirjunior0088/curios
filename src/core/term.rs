@@ -268,6 +268,40 @@ impl NatFold {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NatMatch {
+    pub head: Subterm,
+    pub motive: Scope<One>,
+    pub cases: BTreeMap<u32, Subterm>,
+    pub default: Subterm,
+}
+
+impl NatMatch {
+    pub fn new<H, ML, M, I, B, D>(
+        head: H,
+        motive_label: ML,
+        motive: M,
+        cases: I,
+        default: D,
+    ) -> Self
+    where
+        H: Into<Term>,
+        ML: Into<String>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (u32, B)>,
+        B: Into<Term>,
+        D: Into<Term>,
+    {
+        let motive_label = motive_label.into();
+        Self {
+            head: head.into().into(),
+            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            cases: cases.into_iter().map(|(n, b)| (n, b.into().into())).collect(),
+            default: default.into().into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Split {
     pub head: Subterm,
     pub motive: Scope<One>,
@@ -427,6 +461,7 @@ pub enum Term {
     Type,
     Prim(Prim),
     NatFold(NatFold),
+    NatMatch(NatMatch),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -544,6 +579,12 @@ impl From<Tuple> for Term {
 impl From<NatFold> for Term {
     fn from(value: NatFold) -> Self {
         Self::NatFold(value)
+    }
+}
+
+impl From<NatMatch> for Term {
+    fn from(value: NatMatch) -> Self {
+        Self::NatMatch(value)
     }
 }
 
@@ -830,6 +871,19 @@ where
         }
     }
 
+    fn visit_nat_match(&mut self, nm: &NatMatch) -> NatMatch {
+        NatMatch {
+            head: self.visit_subterm(&nm.head),
+            motive: self.visit_scope(&nm.motive),
+            cases: nm
+                .cases
+                .iter()
+                .map(|(&n, body)| (n, self.visit_subterm(body)))
+                .collect(),
+            default: self.visit_subterm(&nm.default),
+        }
+    }
+
     fn visit_split(&mut self, split: &Split) -> Split {
         Split {
             head: self.visit_subterm(&split.head),
@@ -874,6 +928,7 @@ where
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
             Term::NatFold(nat_fold) => self.visit_nat_fold(nat_fold).into(),
+            Term::NatMatch(nm) => self.visit_nat_match(nm).into(),
             Term::FuncType(ft) => self.visit_func_type(ft).into(),
             Term::Func(func) => self.visit_func(func).into(),
             Term::Apply(apply) => self.visit_apply(apply).into(),

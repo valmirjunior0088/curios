@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, Prim, Rec, Split, Term, Tuple,
-        TupleType, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, NatMatch, Prim, Rec, Split,
+        Term, Tuple, TupleType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -223,6 +223,32 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(" =>\n"),
             indent(flat([print_term(*succ_case), pure(";")])),
         ]),
+        Term::NatMatch(NatMatch {
+            head,
+            motive_label,
+            motive,
+            cases,
+            default,
+        }) => {
+            let case_printers = cases.into_iter().map(|(n, body)| {
+                flat([
+                    pure(format!("\n| {n}n =>\n")),
+                    indent(flat([print_term(*body), pure(";")])),
+                ])
+            });
+            flat([
+                pure("Nat.match "),
+                print_term(*head),
+                pure(" : "),
+                pure(motive_label),
+                pure(" => "),
+                print_term(*motive),
+                pure(";"),
+                flat(case_printers.collect::<Vec<_>>()),
+                pure("\n| _ =>\n"),
+                indent(flat([print_term(*default), pure(";")])),
+            ])
+        }
         Term::Split(Split {
             head,
             motive_label,

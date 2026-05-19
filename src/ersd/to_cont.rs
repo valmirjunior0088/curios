@@ -32,7 +32,7 @@ mod tests {
         super::to_cont,
         crate::{
             cont,
-            ersd::{Apply, Func, Let, Name, Prim, Rec, Term, Tuple},
+            ersd::{Apply, Func, Let, Name, NatMatch, Prim, Rec, Term, Tuple},
         },
     };
 
@@ -221,6 +221,29 @@ mod tests {
                 .iter()
                 .any(|(_, value)| matches!(value, cont::Value::Pure(cont::Data::Tpl(_))))
         );
+    }
+
+    #[test]
+    fn lowers_nat_match_as_sparse_match() {
+        let term = Term::NatMatch(NatMatch {
+            head: Term::Prim(Prim::Nat(7)).into(),
+            cases: vec![
+                (2, Term::Prim(Prim::Nat(10)).into()),
+                (7, Term::Prim(Prim::Nat(20)).into()),
+            ],
+            default: Term::Prim(Prim::Nat(0)).into(),
+        });
+
+        let module = to_cont(&term);
+        let func = &module.funcs()[0].1;
+
+        let cont::Tail::Match(cont::MatchTarget { cases, default, .. }) = &func.region.tail else {
+            panic!("expected Tail::Match");
+        };
+
+        let keys: Vec<u32> = cases.keys().copied().collect();
+        assert_eq!(keys, vec![2, 7]);
+        assert!(default.is_some());
     }
 
     #[test]

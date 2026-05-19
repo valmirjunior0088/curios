@@ -1,5 +1,8 @@
 use {
-    super::{Apply, Context, Func, Let, Match, NatFold, Preempted, Prim, Split, Term, Tuple, Var},
+    super::{
+        Apply, Context, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Split, Term, Tuple,
+        Var,
+    },
     std::time::{Duration, Instant},
 };
 
@@ -770,6 +773,23 @@ impl Reduce {
         }
     }
 
+    fn reduce_nat_match(
+        &mut self,
+        context: &mut Context,
+        nm: NatMatch,
+    ) -> Result<Step, Preempted> {
+        let NatMatch { head, motive, cases, default } = nm;
+        match self.reduce(context, *head)? {
+            Term::Prim(Prim::Nat(n)) => match cases.get(&n) {
+                Some(body) => Ok(Step::Continue(body.as_ref().clone())),
+                None => Ok(Step::Continue(*default)),
+            },
+            head => Ok(Step::Break(
+                NatMatch { head: head.into(), motive, cases, default }.into(),
+            )),
+        }
+    }
+
     fn reduce_match(&mut self, context: &mut Context, m: Match) -> Result<Step, Preempted> {
         let Match {
             head,
@@ -823,6 +843,7 @@ impl Reduce {
             let step = match term {
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
                 Term::NatFold(nat_fold) => self.reduce_nat_fold(context, nat_fold)?,
+                Term::NatMatch(nm) => self.reduce_nat_match(context, nm)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
                 Term::Split(split) => self.reduce_split(context, split)?,
                 Term::Match(m) => self.reduce_match(context, m)?,

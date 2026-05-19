@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, Prim, Rec, RecItem, Split,
-        Term, Tuple, TupleType, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, NatMatch, Prim, Rec, RecItem,
+        Split, Term, Tuple, TupleType, Var,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -567,6 +567,55 @@ fn parse_nat_fold<'a>() -> Parser<'a, Term> {
     )
 }
 
+fn parse_nat_match_case<'a>() -> Parser<'a, (u32, Term)> {
+    catch(
+        parse_literal("|").and_keep(
+            take_while(|char| char.is_ascii_digit())
+                .flat_map::<u32, _>(|digits| match digits.parse() {
+                    Ok(value) => pure(value),
+                    Err(_) => fail("expected natural number"),
+                })
+                .and_drop(parse_keyword("n"))
+                .and_drop(parse_literal("=>")),
+        ),
+    )
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+}
+
+fn parse_nat_match_default<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_literal("|")
+            .and_keep(parse_literal("_"))
+            .and_drop(parse_literal("=>")),
+    )
+    .and_keep(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+}
+
+fn parse_nat_match<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_keyword("Nat.match")
+            .and_keep(lazy(parse_term))
+            .and_drop(parse_literal(":"))
+            .and(parse_identifier())
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(";"))
+    .and(many0(parse_nat_match_case))
+    .and(parse_nat_match_default())
+    .map(|((((head, motive_label), motive), cases), default)| {
+        Term::NatMatch(NatMatch {
+            head: head.into(),
+            motive_label: motive_label.to_string(),
+            motive: motive.into(),
+            cases: cases.into_iter().map(|(n, t)| (n, t.into())).collect(),
+            default: default.into(),
+        })
+    })
+}
+
 fn parse_match_branch<'a>() -> Parser<'a, (Atom, Term)> {
     catch(
         parse_literal("|")
@@ -688,6 +737,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
         .or(parse_split())
         .or(parse_let())
         .or(parse_nat_fold())
+        .or(parse_nat_match())
         .or(parse_match())
         .or(parse_func_type())
         .or(parse_func())

@@ -44,6 +44,15 @@ pub fn elaborate(term: &Term) -> core::Term {
         )
         .into(),
 
+        Term::NatMatch(nm) => core::NatMatch::new(
+            elaborate(&nm.head),
+            nm.motive_label.clone(),
+            elaborate(&nm.motive),
+            nm.cases.iter().map(|(&n, body)| (n, elaborate(body))),
+            elaborate(&nm.default),
+        )
+        .into(),
+
         Term::Split(sp) => core::Split::new(
             elaborate(&sp.head),
             sp.motive_label.clone(),

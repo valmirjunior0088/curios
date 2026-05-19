@@ -12,6 +12,13 @@ pub struct NatFold {
 }
 
 #[derive(Debug)]
+pub struct NatMatch {
+    pub head: Subterm,
+    pub cases: Vec<(u32, Subterm)>,
+    pub default: Subterm,
+}
+
+#[derive(Debug)]
 pub struct Func {
     pub captures: Vec<String>,
     pub param: String,
@@ -66,6 +73,7 @@ pub enum Term {
     Erased,
     Prim(Prim),
     NatFold(NatFold),
+    NatMatch(NatMatch),
     Func(Func),
     Apply(Apply),
     Tuple(Tuple),
@@ -86,6 +94,12 @@ impl From<Prim> for Term {
 impl From<NatFold> for Term {
     fn from(value: NatFold) -> Self {
         Self::NatFold(value)
+    }
+}
+
+impl From<NatMatch> for Term {
+    fn from(value: NatMatch) -> Self {
+        Self::NatMatch(value)
     }
 }
 
