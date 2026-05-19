@@ -72,16 +72,34 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
     .map(|value| Term::Prim(Prim::Int(value)))
 }
 
-fn parse_nat_value<'a>() -> Parser<'a, Term> {
+fn parse_nat_literal<'a>() -> Parser<'a, u32> {
     catch(
-        take_while(|char| char.is_ascii_digit())
-            .flat_map::<u32, _>(|digits| match digits.parse() {
-                Ok(value) => pure(value),
-                Err(_) => fail("Expected natural literal"),
-            })
+        take_exact("\"")
+            .and_keep(many0(parse_string_chunk))
+            .and_drop(take_exact("\""))
+            .and_drop(parse_whitespace())
             .and_drop(parse_keyword("n")),
     )
-    .map(|value| Term::Prim(Prim::Nat(value)))
+    .flat_map(|chunks: Vec<String>| {
+        let s: String = chunks.concat();
+        let mut cs = s.chars();
+        match (cs.next(), cs.next()) {
+            (Some(c), None) => pure(c as u32),
+            _ => fail("char literal requires exactly one Unicode scalar value"),
+        }
+    })
+    .or(catch(
+        take_while(|char: char| char.is_ascii_digit())
+            .flat_map::<u32, _>(|digits| match digits.parse() {
+                Ok(value) => pure(value),
+                Err(_) => fail("expected natural number"),
+            })
+            .and_drop(parse_keyword("n")),
+    ))
+}
+
+fn parse_nat_value<'a>() -> Parser<'a, Term> {
+    parse_nat_literal().map(|n| Term::Prim(Prim::Nat(n)))
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -569,15 +587,8 @@ fn parse_nat_fold<'a>() -> Parser<'a, Term> {
 
 fn parse_nat_match_case<'a>() -> Parser<'a, (u32, Term)> {
     catch(
-        parse_literal("|").and_keep(
-            take_while(|char| char.is_ascii_digit())
-                .flat_map::<u32, _>(|digits| match digits.parse() {
-                    Ok(value) => pure(value),
-                    Err(_) => fail("expected natural number"),
-                })
-                .and_drop(parse_keyword("n"))
-                .and_drop(parse_literal("=>")),
-        ),
+        parse_literal("|")
+            .and_keep(parse_nat_literal().and_drop(parse_literal("=>")))
     )
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
@@ -916,5 +927,39 @@ mod tests {
                 Term::Prim(Prim::Flt(2.0_f32.to_bits())).into(),
             ))
         );
+    }
+
+    #[test]
+    fn parse_char_literal_ascii() {
+        assert_eq!(
+            "\"a\"n".parse::<Term>().unwrap(),
+            Term::Prim(Prim::Nat(97))
+        );
+    }
+
+    #[test]
+    fn parse_char_literal_escape() {
+        assert_eq!(
+            "\"\\n\"n".parse::<Term>().unwrap(),
+            Term::Prim(Prim::Nat(10))
+        );
+    }
+
+    #[test]
+    fn parse_char_literal_no_suffix_is_bin() {
+        assert_eq!(
+            "\"a\"".parse::<Term>().unwrap(),
+            Term::Prim(Prim::Bin(vec![97]))
+        );
+    }
+
+    #[test]
+    fn parse_char_literal_multi_char_is_error() {
+        assert!("\"ab\"n".parse::<Term>().is_err());
+    }
+
+    #[test]
+    fn parse_char_literal_empty_is_error() {
+        assert!("\"\"n".parse::<Term>().is_err());
     }
 }
