@@ -1,9 +1,21 @@
 use super::{Subterm, Term};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Nat {
+    Number(u32),
+    Char(char),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Bin {
+    Bytes(Vec<u8>),
+    String(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Prim {
     NatType,
-    Nat(u32),
+    Nat(Nat),
     NatEql(Subterm, Subterm),
     NatNeq(Subterm, Subterm),
     NatAdd(Subterm, Subterm),
@@ -56,7 +68,7 @@ pub enum Prim {
     FltToInt(Subterm),
     FltToNat(Subterm),
     BinType,
-    Bin(Vec<u8>),
+    Bin(Bin),
     BinLen(Subterm),
     BinEql(Subterm, Subterm),
     BinGet(Subterm, Subterm),

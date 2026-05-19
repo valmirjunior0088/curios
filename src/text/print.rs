@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, NatMatch, Prim, Rec, Split,
-        Term, Tuple, TupleType, Var,
+        Apply, Atom, AtomType, Bin, Func, FuncType, Let, Match, Nat, NatFold, NatMatch, Prim, Rec,
+        Split, Term, Tuple, TupleType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -29,7 +29,20 @@ fn print_flt(bits: u32) -> Printer<'static> {
 fn print_prim(prim: Prim) -> Printer<'static> {
     match prim {
         Prim::NatType => pure("Nat"),
-        Prim::Nat(value) => pure(format!("{value}n")),
+        Prim::Nat(nat) => match nat {
+            Nat::Number(n) => pure(format!("{n}n")),
+            Nat::Char(c) => {
+                let escaped = match c {
+                    '"' => "\\\"".to_string(),
+                    '\\' => "\\\\".to_string(),
+                    '\n' => "\\n".to_string(),
+                    '\t' => "\\t".to_string(),
+                    '\r' => "\\r".to_string(),
+                    _ => c.to_string(),
+                };
+                pure(format!("\"{escaped}\"n"))
+            }
+        },
         Prim::NatEql(l, r) => flat([pure("Nat.eql "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::NatNeq(l, r) => flat([pure("Nat.neq "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::NatAdd(l, r) => flat([pure("Nat.add "), print_term(*l), pure(" "), print_term(*r)]),
@@ -82,12 +95,28 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltToInt(t) => flat([pure("Flt.to_int "), print_term(*t)]),
         Prim::FltToNat(t) => flat([pure("Flt.to_nat "), print_term(*t)]),
         Prim::BinType => pure("Bin"),
-        Prim::Bin(bytes) => pure(
-            bytes
-                .iter()
-                .map(|b| format!("\\{:02x}", b))
-                .collect::<String>(),
-        ),
+        Prim::Bin(bin) => match bin {
+            Bin::Bytes(bytes) => pure(
+                bytes
+                    .iter()
+                    .map(|b| format!("\\{:02x}", b))
+                    .collect::<String>(),
+            ),
+            Bin::String(s) => {
+                let escaped = s
+                    .chars()
+                    .map(|c| match c {
+                        '"' => "\\\"".to_string(),
+                        '\\' => "\\\\".to_string(),
+                        '\n' => "\\n".to_string(),
+                        '\t' => "\\t".to_string(),
+                        '\r' => "\\r".to_string(),
+                        _ => c.to_string(),
+                    })
+                    .collect::<String>();
+                pure(format!("\"{escaped}\""))
+            }
+        },
         Prim::BinLen(t) => flat([pure("Bin.len "), print_term(*t)]),
         Prim::BinEql(left, right) => flat([
             pure("Bin.eql "),

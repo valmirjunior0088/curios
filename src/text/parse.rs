@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, NatMatch, Prim, Rec, RecItem,
-        Split, Term, Tuple, TupleType, Var,
+        Apply, Atom, AtomType, Bin, Func, FuncType, Let, Match, Nat, NatFold, NatMatch, Prim, Rec,
+        RecItem, Split, Term, Tuple, TupleType, Var,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -72,7 +72,7 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
     .map(|value| Term::Prim(Prim::Int(value)))
 }
 
-fn parse_nat_literal<'a>() -> Parser<'a, u32> {
+fn parse_nat<'a>() -> Parser<'a, Nat> {
     catch(
         take_exact("\"")
             .and_keep(many0(parse_string_chunk))
@@ -84,7 +84,7 @@ fn parse_nat_literal<'a>() -> Parser<'a, u32> {
         let s: String = chunks.concat();
         let mut cs = s.chars();
         match (cs.next(), cs.next()) {
-            (Some(c), None) => pure(c as u32),
+            (Some(c), None) => pure(Nat::Char(c)),
             _ => fail("char literal requires exactly one Unicode scalar value"),
         }
     })
@@ -95,11 +95,19 @@ fn parse_nat_literal<'a>() -> Parser<'a, u32> {
                 Err(_) => fail("expected natural number"),
             })
             .and_drop(parse_keyword("n")),
-    ))
+    )
+    .map(Nat::Number))
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
-    parse_nat_literal().map(|n| Term::Prim(Prim::Nat(n)))
+    parse_nat().map(|nat| Term::Prim(Prim::Nat(nat)))
+}
+
+fn parse_nat_literal<'a>() -> Parser<'a, u32> {
+    parse_nat().map(|nat| match nat {
+        Nat::Number(n) => n,
+        Nat::Char(c) => c as u32,
+    })
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -356,12 +364,12 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace())
-        .map(|chunks: Vec<String>| Term::Prim(Prim::Bin(chunks.concat().into_bytes())))
+        .map(|chunks: Vec<String>| Term::Prim(Prim::Bin(Bin::String(chunks.concat()))))
 }
 
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     catch(many1(parse_hex_byte).and_drop(parse_whitespace()))
-        .map(|bytes| Term::Prim(Prim::Bin(bytes)))
+        .map(|bytes| Term::Prim(Prim::Bin(Bin::Bytes(bytes))))
 }
 
 fn parse_bin_prim<'a>() -> Parser<'a, Term> {
@@ -888,7 +896,7 @@ mod tests {
     #[test]
     fn parse_int_literal_and_flt_literal_are_disambiguated() {
         assert_eq!("42i".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
-        assert_eq!("42n".parse::<Term>().unwrap(), Term::Prim(Prim::Nat(42)));
+        assert_eq!("42n".parse::<Term>().unwrap(), Term::Prim(Prim::Nat(Nat::Number(42))));
         assert_eq!(
             "42.0".parse::<Term>().unwrap(),
             Term::Prim(Prim::Flt(42.0_f32.to_bits()))
@@ -901,7 +909,7 @@ mod tests {
         assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(Prim::FltType));
         assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
         assert_eq!("42i".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
-        assert_eq!("42n".parse::<Term>().unwrap(), Term::Prim(Prim::Nat(42)));
+        assert_eq!("42n".parse::<Term>().unwrap(), Term::Prim(Prim::Nat(Nat::Number(42))));
         assert_eq!(
             "1.5".parse::<Term>().unwrap(),
             Term::Prim(Prim::Flt(1.5_f32.to_bits()))
@@ -916,8 +924,8 @@ mod tests {
         assert_eq!(
             "Nat.add 1n 2n".parse::<Term>().unwrap(),
             Term::Prim(Prim::NatAdd(
-                Term::Prim(Prim::Nat(1)).into(),
-                Term::Prim(Prim::Nat(2)).into(),
+                Term::Prim(Prim::Nat(Nat::Number(1))).into(),
+                Term::Prim(Prim::Nat(Nat::Number(2))).into(),
             ))
         );
         assert_eq!(
@@ -933,7 +941,7 @@ mod tests {
     fn parse_char_literal_ascii() {
         assert_eq!(
             "\"a\"n".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(97))
+            Term::Prim(Prim::Nat(Nat::Char('a')))
         );
     }
 
@@ -941,7 +949,7 @@ mod tests {
     fn parse_char_literal_escape() {
         assert_eq!(
             "\"\\n\"n".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(10))
+            Term::Prim(Prim::Nat(Nat::Char('\n')))
         );
     }
 
@@ -949,7 +957,7 @@ mod tests {
     fn parse_char_literal_no_suffix_is_bin() {
         assert_eq!(
             "\"a\"".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Bin(vec![97]))
+            Term::Prim(Prim::Bin(Bin::String("a".to_string())))
         );
     }
 

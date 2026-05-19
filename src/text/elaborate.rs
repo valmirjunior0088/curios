@@ -105,7 +105,10 @@ fn elaborate_atom(a: &Atom) -> core::Atom {
 fn elaborate_prim(p: &Prim) -> core::Prim {
     match p {
         Prim::NatType => core::Prim::NatType,
-        Prim::Nat(n) => core::Prim::Nat(*n),
+        Prim::Nat(nat) => core::Prim::Nat(match nat {
+            Nat::Number(n) => *n,
+            Nat::Char(c) => *c as u32,
+        }),
         Prim::NatEql(l, r) => core::Prim::nat_eql(elaborate(l), elaborate(r)),
         Prim::NatNeq(l, r) => core::Prim::nat_neq(elaborate(l), elaborate(r)),
         Prim::NatAdd(l, r) => core::Prim::nat_add(elaborate(l), elaborate(r)),
@@ -158,7 +161,10 @@ fn elaborate_prim(p: &Prim) -> core::Prim {
         Prim::FltToInt(t) => core::Prim::flt_to_int(elaborate(t)),
         Prim::FltToNat(t) => core::Prim::flt_to_nat(elaborate(t)),
         Prim::BinType => core::Prim::BinType,
-        Prim::Bin(bytes) => core::Prim::Bin(bytes.clone()),
+        Prim::Bin(bin) => core::Prim::Bin(match bin {
+            Bin::Bytes(bytes) => bytes.clone(),
+            Bin::String(s) => s.as_bytes().to_vec(),
+        }),
         Prim::BinLen(t) => core::Prim::bin_len(elaborate(t)),
         Prim::BinEql(left, right) => core::Prim::bin_eql(elaborate(left), elaborate(right)),
         Prim::BinGet(b, i) => core::Prim::bin_get(elaborate(b), elaborate(i)),
