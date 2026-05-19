@@ -4,7 +4,6 @@ use {
 };
 
 fn main() {
-
     let term = text::elaborate(
         &"
         rec fib_pair : Nat -> {Int, Int} = n =>

@@ -1,22 +1,9 @@
 use {
-    super::Prim,
+    super::{Atom, Prim},
     std::collections::{BTreeMap, BTreeSet},
 };
 
 pub type Subterm = Box<Term>;
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Atom {
-    pub string: String,
-}
-
-impl<A: Into<String>> From<A> for Atom {
-    fn from(string: A) -> Self {
-        Self {
-            string: string.into(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Var {

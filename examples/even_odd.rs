@@ -4,7 +4,6 @@ use {
 };
 
 fn main() {
-
     let term = text::elaborate(
         &"
         let Bln : Type = '[false, true];
@@ -26,9 +25,7 @@ fn main() {
         &core::erase(
             &mut core::Context::new(Duration::from_secs(5)),
             &term,
-            &text::elaborate(
-                &"'[false, true]".parse().expect("expected result type"),
-            ),
+            &text::elaborate(&"'[false, true]".parse().expect("expected result type")),
         )
         .expect("expected erased term"),
     );

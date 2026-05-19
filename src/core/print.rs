@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Rec, Match, NatMatch, One, Prim, Scope,
-        Split, Term, Tuple, TupleType, Two, Var,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, One, Prim, Rec, Scope, Split,
+        Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -426,7 +426,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 .enumerate()
                 .map(|(i, scope)| {
                     let ty = scope.open(&label_refs[..i]);
-                    flat([pure(labels[i].clone()), pure(" : "), print_term(ty, depth + n)])
+                    flat([
+                        pure(labels[i].clone()),
+                        pure(" : "),
+                        print_term(ty, depth + n),
+                    ])
                 })
                 .collect::<Vec<_>>();
 
@@ -558,4 +562,3 @@ impl Display for Term {
         run_printer(print_term(self.clone(), 0), formatter, 2)
     }
 }
-

@@ -358,11 +358,11 @@ fn parse_bin_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|((bin, start), end)| Term::Prim(Prim::bin_slice((bin), (start), (end)))))
+            .map(|((bin, start), end)| Term::Prim(Prim::bin_slice(bin, start, end))))
         .or(catch(parse_keyword("Bin.append"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(bin, byte)| Term::Prim(Prim::bin_append((bin), (byte)))))
+            .map(|(bin, byte)| Term::Prim(Prim::bin_append(bin, byte))))
         .or(catch(parse_keyword("Bin.concat"))
             .and_keep(sep_by0(|| lazy(parse_atomic_term), || parse_literal(",")))
             .map(|ops: Vec<Term>| Term::Prim(Prim::bin_concat(ops))))
@@ -392,11 +392,11 @@ fn parse_arr_prim<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|((list, start), end)| Term::Prim(Prim::arr_slice((list), (start), (end)))))
+            .map(|((list, start), end)| Term::Prim(Prim::arr_slice(list, start, end))))
         .or(catch(parse_keyword("Arr.append"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(list, elem)| Term::Prim(Prim::arr_append((list), (elem)))))
+            .map(|(list, elem)| Term::Prim(Prim::arr_append(list, elem))))
         .or(catch(parse_keyword("Arr.concat"))
             .and_keep(sep_by0(|| lazy(parse_atomic_term), || parse_literal(",")))
             .map(|ops: Vec<Term>| Term::Prim(Prim::arr_concat(ops))))
@@ -707,72 +707,116 @@ impl FromStr for Term {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::core};
-
-    fn parse(input: &str) -> core::Term {
-        let term: Term = input.parse().unwrap();
-        super::super::elaborate::elaborate(&term)
-    }
+    use super::*;
 
     #[test]
     fn parse_rec_func_and_apply() {
         assert_eq!(
-            parse("rec id : (x : Type) -> Type = x => x; id a"),
-            core::Rec::new(
-                vec![(
-                    "id",
-                    core::FuncType::new("x", core::Type, core::Type),
-                    core::Func::new("x", core::Var::free("x"))
-                )],
-                core::Apply::many(core::Var::free("id"), [core::Var::free("a")]),
-            )
-            .into(),
+            "rec id : (x : Type) -> Type = x => x; id a"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Rec(Rec {
+                items: vec![RecItem {
+                    label: "id".to_string(),
+                    type_: Term::FuncType(FuncType {
+                        label: Some("x".to_string()),
+                        input: Term::Type.into(),
+                        output: Term::Type.into(),
+                    })
+                    .into(),
+                    value: Term::Func(Func {
+                        label: "x".to_string(),
+                        body: Term::Var(Var {
+                            label: "x".to_string(),
+                        })
+                        .into(),
+                    })
+                    .into(),
+                }],
+                tail: Term::Apply(Apply {
+                    head: Term::Var(Var {
+                        label: "id".to_string(),
+                    })
+                    .into(),
+                    param: Term::Var(Var {
+                        label: "a".to_string(),
+                    })
+                    .into(),
+                })
+                .into(),
+            })
         );
     }
 
     #[test]
     fn parse_let_tuple_and_atoms() {
         assert_eq!(
-            parse("let x : '[hot, cold] = 'hot; (x, 'cold)"),
-            core::Let::new(
-                "x",
-                core::AtomType::new(["hot", "cold"]),
-                core::Atom::from("hot"),
-                core::Tuple::new([
-                    core::Term::from(core::Var::free("x")),
-                    core::Term::from(core::Atom::from("cold")),
-                ]),
-            )
-            .into(),
+            "let x : '[hot, cold] = 'hot; (x, 'cold)"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Let(Let {
+                label: "x".to_string(),
+                type_: Term::AtomType(AtomType {
+                    atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
+                })
+                .into(),
+                body: Term::Atom(Atom::from("hot")).into(),
+                tail: Term::Tuple(Tuple {
+                    fields: vec![
+                        Term::Var(Var {
+                            label: "x".to_string(),
+                        })
+                        .into(),
+                        Term::Atom(Atom::from("cold")).into(),
+                    ],
+                })
+                .into(),
+            })
         );
     }
 
     #[test]
     fn parse_split_with_motive() {
         assert_eq!(
-            parse("split ('left, 'right) : p => Type; | (x, y) => p"),
-            core::Split::new(
-                core::Tuple::new([core::Atom::from("left"), core::Atom::from("right")]),
-                "p",
-                core::Type,
-                ["x", "y"],
-                core::Var::free("p"),
-            )
-            .into(),
+            "split ('left, 'right) : p => Type; | (x, y) => p"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Split(Split {
+                head: Term::Tuple(Tuple {
+                    fields: vec![
+                        Term::Atom(Atom::from("left")).into(),
+                        Term::Atom(Atom::from("right")).into(),
+                    ],
+                })
+                .into(),
+                motive_label: "p".to_string(),
+                motive: Term::Type.into(),
+                field_labels: vec!["x".to_string(), "y".to_string()],
+                tail: Term::Var(Var {
+                    label: "p".to_string(),
+                })
+                .into(),
+            })
         );
     }
 
     #[test]
     fn parse_match_single_branch() {
         assert_eq!(
-            parse("match 'foo : k => '[foo]; | 'foo => 'foo;"),
-            core::Match::new(
-                core::Atom::from("foo"),
-                "k",
-                core::AtomType::new(["foo"]),
-                [(core::Atom::from("foo"), core::Atom::from("foo"))],
-            )
-            .into(),
+            "match 'foo : k => '[foo]; | 'foo => 'foo;"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Match(Match {
+                head: Term::Atom(Atom::from("foo")).into(),
+                motive_label: "k".to_string(),
+                motive: Term::AtomType(AtomType {
+                    atoms: [Atom::from("foo")].into_iter().collect(),
+                })
+                .into(),
+                cases: [(Atom::from("foo"), Term::Atom(Atom::from("foo")).into())]
+                    .into_iter()
+                    .collect(),
+            })
         );
     }
 
@@ -797,76 +841,26 @@ mod tests {
             "1.5".parse::<Term>().unwrap(),
             Term::Prim(Prim::Flt(1.5_f32.to_bits()))
         );
-
         assert_eq!(
-            parse("Int.add 1i 2i"),
-            core::Term::Prim(core::Prim::int_add(
-                core::Term::Prim(core::Prim::Int(1)),
-                core::Term::Prim(core::Prim::Int(2))
+            "Int.add 1i 2i".parse::<Term>().unwrap(),
+            Term::Prim(Prim::IntAdd(
+                Term::Prim(Prim::Int(1)).into(),
+                Term::Prim(Prim::Int(2)).into(),
             ))
         );
         assert_eq!(
-            parse("Nat.add 1n 2n"),
-            core::Term::Prim(core::Prim::nat_add(
-                core::Term::Prim(core::Prim::Nat(1)),
-                core::Term::Prim(core::Prim::Nat(2))
+            "Nat.add 1n 2n".parse::<Term>().unwrap(),
+            Term::Prim(Prim::NatAdd(
+                Term::Prim(Prim::Nat(1)).into(),
+                Term::Prim(Prim::Nat(2)).into(),
             ))
         );
         assert_eq!(
-            parse("Flt.mul 1.5 2.0"),
-            core::Term::Prim(core::Prim::flt_mul(
-                core::Term::Prim(core::Prim::Flt(1.5_f32.to_bits())),
-                core::Term::Prim(core::Prim::Flt(2.0_f32.to_bits()))
+            "Flt.mul 1.5 2.0".parse::<Term>().unwrap(),
+            Term::Prim(Prim::FltMul(
+                Term::Prim(Prim::Flt(1.5_f32.to_bits())).into(),
+                Term::Prim(Prim::Flt(2.0_f32.to_bits())).into(),
             ))
         );
-    }
-
-    #[test]
-    fn print_parse_roundtrip_closed_terms() {
-        let terms = [
-            core::FuncType::new("x", core::Type, core::Type).into(),
-            core::Func::new("x", core::Var::free("x")).into(),
-            core::Apply::many(
-                core::Var::free("f"),
-                [core::Tuple::new([
-                    core::Atom::from("a"),
-                    core::Atom::from("b"),
-                ])],
-            ),
-            core::TupleType::new([("x", core::Type), ("y", core::Type), ("z", core::Type)]).into(),
-            core::Tuple::new([
-                core::Atom::from("a"),
-                core::Atom::from("b"),
-                core::Atom::from("c"),
-            ])
-            .into(),
-            core::Let::new(
-                "x",
-                core::AtomType::new(["a", "b"]),
-                core::Atom::from("a"),
-                core::Match::new(
-                    core::Var::free("x"),
-                    "m",
-                    core::Type,
-                    [("a", core::Type), ("b", core::Type)],
-                ),
-            )
-            .into(),
-            core::Rec::new(
-                vec![(
-                    "id",
-                    core::FuncType::new("x", core::Type, core::Type),
-                    core::Func::new("x", core::Var::free("x")),
-                )],
-                core::Apply::many(core::Var::free("id"), [core::Type]),
-            )
-            .into(),
-        ]
-        .into_iter()
-        .collect::<Vec<_>>();
-
-        for term in terms {
-            assert_eq!(parse(&term.to_string()), term);
-        }
     }
 }

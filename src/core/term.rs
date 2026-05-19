@@ -189,7 +189,10 @@ impl TupleType {
             .map(|(l, t)| (l.into(), t.into()))
             .collect::<Vec<(String, Term)>>();
 
-        let labels = fields.iter().map(|(l, _)| l.clone()).collect::<Vec<String>>();
+        let labels = fields
+            .iter()
+            .map(|(l, _)| l.clone())
+            .collect::<Vec<String>>();
 
         Self {
             fields: fields

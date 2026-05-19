@@ -1,8 +1,8 @@
 use {
     crate::{
-        cont, core, ersd, text,
+        cont, core, ersd,
         printer::{Printer, flat, indent, pure, sep_flat},
-        wasm,
+        text, wasm,
     },
     std::{collections::HashMap, time::Duration},
     wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store, Val},

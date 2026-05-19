@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, Rec, Match, NatMatch, Preempted,
-        Prim, Split, Term, Tuple, TupleType, Type, Var,
+        Apply, AtomType, Context, Error, Func, FuncType, Let, Match, NatMatch, Preempted, Prim,
+        Rec, Split, Term, Tuple, TupleType, Type, Var,
     },
     crate::ersd,
 };
@@ -280,7 +280,10 @@ fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error
     let n = fields.len();
 
     let labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
-    let label_terms = labels.iter().map(|l| Term::from(Var::free(l))).collect::<Vec<Term>>();
+    let label_terms = labels
+        .iter()
+        .map(|l| Term::from(Var::free(l)))
+        .collect::<Vec<Term>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
 
     context.with_frame(|context| {
@@ -370,7 +373,13 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
     let head_label = context.fresh();
 
     context.with_frame(|context| {
-        context.assume(&head_label, &TupleType { fields: fields.clone() }.into());
+        context.assume(
+            &head_label,
+            &TupleType {
+                fields: fields.clone(),
+            }
+            .into(),
+        );
 
         erase(
             context,
@@ -381,7 +390,10 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
     })?;
 
     let field_labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
-    let field_terms = field_labels.iter().map(|l| Term::from(Var::free(l))).collect::<Vec<_>>();
+    let field_terms = field_labels
+        .iter()
+        .map(|l| Term::from(Var::free(l)))
+        .collect::<Vec<_>>();
     let field_refs = field_terms.iter().collect::<Vec<_>>();
     let tuple_term: Term = Tuple::new(field_terms.clone()).into();
     let type_ = motive.open(&[head.as_ref()]);
@@ -1191,14 +1203,11 @@ fn erase_apply(
     Ok(erased.into())
 }
 
-fn erase_tuple(
-    context: &mut Context,
-    tuple: &Tuple,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
+fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
     let Tuple { fields } = tuple;
 
-    let type_fields = if let Term::TupleType(TupleType { fields: tf }) = reduce(context, expected)? {
+    let type_fields = if let Term::TupleType(TupleType { fields: tf }) = reduce(context, expected)?
+    {
         tf
     } else {
         return Err(Error::type_mismatch(tuple.clone(), expected.clone()));
@@ -1217,7 +1226,10 @@ fn erase_tuple(
         checked_terms.push(field.as_ref());
     }
 
-    Ok(ersd::Tuple { fields: erased_fields }.into())
+    Ok(ersd::Tuple {
+        fields: erased_fields,
+    }
+    .into())
 }
 
 fn erase_nat_match(
@@ -1310,7 +1322,13 @@ fn erase_split(
     let head_label = context.fresh();
 
     context.with_frame(|context| {
-        context.assume(&head_label, &TupleType { fields: type_fields.clone() }.into());
+        context.assume(
+            &head_label,
+            &TupleType {
+                fields: type_fields.clone(),
+            }
+            .into(),
+        );
 
         erase(
             context,
@@ -1320,7 +1338,10 @@ fn erase_split(
     })?;
 
     let field_labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
-    let field_terms = field_labels.iter().map(|l| Term::from(Var::free(l))).collect::<Vec<_>>();
+    let field_terms = field_labels
+        .iter()
+        .map(|l| Term::from(Var::free(l)))
+        .collect::<Vec<_>>();
     let field_refs = field_terms.iter().collect::<Vec<_>>();
     let tail_opened = tail.open(&field_refs);
     let tuple_term: Term = Tuple::new(field_terms.clone()).into();
@@ -1457,11 +1478,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
     .into())
 }
 
-fn erase_rec(
-    context: &mut Context,
-    rec: &Rec,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
+fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::Term, Error> {
     let Rec { items, tail } = rec;
 
     let names = (0..items.len())
@@ -1556,11 +1573,9 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Func, FuncType, Rec, Match, NatMatch, Term, Tuple, TupleType,
-                Type,
+                Atom, AtomType, Func, FuncType, Match, NatMatch, Rec, Term, Tuple, TupleType, Type,
             },
-            ersd,
-            text,
+            ersd, text,
         },
         std::time::Duration,
     };
@@ -1749,11 +1764,7 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = text::elaborate(
-            &"'[zeta, alpha, mu]"
-                .parse()
-                .unwrap(),
-        );
+        let type_ = text::elaborate(&"'[zeta, alpha, mu]".parse().unwrap());
 
         let term = text::elaborate(
             &r#"

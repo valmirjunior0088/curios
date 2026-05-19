@@ -10,9 +10,7 @@ pub fn elaborate(term: &text::Term) -> core::Term {
 
         text::Term::Atom(a) => core::Term::Atom(elaborate_atom(a)),
 
-        text::Term::AtomType(at) => {
-            core::AtomType::new(at.atoms.iter().map(elaborate_atom)).into()
-        }
+        text::Term::AtomType(at) => core::AtomType::new(at.atoms.iter().map(elaborate_atom)).into(),
 
         text::Term::FuncType(ft) => {
             let label = ft.label.as_deref().unwrap_or("");
@@ -21,9 +19,7 @@ pub fn elaborate(term: &text::Term) -> core::Term {
 
         text::Term::Func(f) => core::Func::new(f.label.clone(), elaborate(&f.body)).into(),
 
-        text::Term::Apply(ap) => {
-            core::Apply::new(elaborate(&ap.head), elaborate(&ap.param)).into()
-        }
+        text::Term::Apply(ap) => core::Apply::new(elaborate(&ap.head), elaborate(&ap.param)).into(),
 
         text::Term::TupleType(tt) => {
             let fields = tt.fields.iter().map(|(label, t)| {
@@ -161,5 +157,150 @@ fn elaborate_prim(p: &text::Prim) -> core::Prim {
         text::Prim::ArrSlice(l, s, end) => core::Prim::arr_slice(e(l), e(s), e(end)),
         text::Prim::ArrAppend(l, elem) => core::Prim::arr_append(e(l), e(elem)),
         text::Prim::ArrConcat(vs) => core::Prim::arr_concat(vs.iter().map(e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{core, text};
+
+    fn parse(input: &str) -> core::Term {
+        super::elaborate(&input.parse::<text::Term>().unwrap())
+    }
+
+    #[test]
+    fn elaborate_rec_func_and_apply() {
+        assert_eq!(
+            parse("rec id : (x : Type) -> Type = x => x; id a"),
+            core::Rec::new(
+                vec![(
+                    "id",
+                    core::FuncType::new("x", core::Type, core::Type),
+                    core::Func::new("x", core::Var::free("x"))
+                )],
+                core::Apply::many(core::Var::free("id"), [core::Var::free("a")]),
+            )
+            .into(),
+        );
+    }
+
+    #[test]
+    fn elaborate_let_tuple_and_atoms() {
+        assert_eq!(
+            parse("let x : '[hot, cold] = 'hot; (x, 'cold)"),
+            core::Let::new(
+                "x",
+                core::AtomType::new(["hot", "cold"]),
+                core::Atom::from("hot"),
+                core::Tuple::new([
+                    core::Term::from(core::Var::free("x")),
+                    core::Term::from(core::Atom::from("cold")),
+                ]),
+            )
+            .into(),
+        );
+    }
+
+    #[test]
+    fn elaborate_split_with_motive() {
+        assert_eq!(
+            parse("split ('left, 'right) : p => Type; | (x, y) => p"),
+            core::Split::new(
+                core::Tuple::new([core::Atom::from("left"), core::Atom::from("right")]),
+                "p",
+                core::Type,
+                ["x", "y"],
+                core::Var::free("p"),
+            )
+            .into(),
+        );
+    }
+
+    #[test]
+    fn elaborate_match_single_branch() {
+        assert_eq!(
+            parse("match 'foo : k => '[foo]; | 'foo => 'foo;"),
+            core::Match::new(
+                core::Atom::from("foo"),
+                "k",
+                core::AtomType::new(["foo"]),
+                [(core::Atom::from("foo"), core::Atom::from("foo"))],
+            )
+            .into(),
+        );
+    }
+
+    #[test]
+    fn elaborate_prim() {
+        assert_eq!(
+            parse("Int.add 1i 2i"),
+            core::Term::Prim(core::Prim::int_add(
+                core::Term::Prim(core::Prim::Int(1)),
+                core::Term::Prim(core::Prim::Int(2))
+            ))
+        );
+        assert_eq!(
+            parse("Nat.add 1n 2n"),
+            core::Term::Prim(core::Prim::nat_add(
+                core::Term::Prim(core::Prim::Nat(1)),
+                core::Term::Prim(core::Prim::Nat(2))
+            ))
+        );
+        assert_eq!(
+            parse("Flt.mul 1.5 2.0"),
+            core::Term::Prim(core::Prim::flt_mul(
+                core::Term::Prim(core::Prim::Flt(1.5_f32.to_bits())),
+                core::Term::Prim(core::Prim::Flt(2.0_f32.to_bits()))
+            ))
+        );
+    }
+
+    #[test]
+    fn print_parse_roundtrip_closed_terms() {
+        let terms = [
+            core::FuncType::new("x", core::Type, core::Type).into(),
+            core::Func::new("x", core::Var::free("x")).into(),
+            core::Apply::many(
+                core::Var::free("f"),
+                [core::Tuple::new([
+                    core::Atom::from("a"),
+                    core::Atom::from("b"),
+                ])],
+            ),
+            core::TupleType::new([("x", core::Type), ("y", core::Type), ("z", core::Type)]).into(),
+            core::Tuple::new([
+                core::Atom::from("a"),
+                core::Atom::from("b"),
+                core::Atom::from("c"),
+            ])
+            .into(),
+            core::Let::new(
+                "x",
+                core::AtomType::new(["a", "b"]),
+                core::Atom::from("a"),
+                core::Match::new(
+                    core::Var::free("x"),
+                    "m",
+                    core::Type,
+                    [("a", core::Type), ("b", core::Type)],
+                ),
+            )
+            .into(),
+            core::Rec::new(
+                vec![(
+                    "id",
+                    core::FuncType::new("x", core::Type, core::Type),
+                    core::Func::new("x", core::Var::free("x")),
+                )],
+                core::Apply::many(core::Var::free("id"), [core::Type]),
+            )
+            .into(),
+        ]
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        for term in terms {
+            assert_eq!(parse(&term.to_string()), term);
+        }
     }
 }
