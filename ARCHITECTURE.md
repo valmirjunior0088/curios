@@ -2,7 +2,7 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~24,800 lines, including examples, tests, and docs.
+**Codebase size:** ~23,900 lines, including examples, tests, and docs.
 
 ---
 
@@ -59,7 +59,7 @@ The grammar covers:
 - Non-recursive let bindings `let x : T = body; tail`
 - Recursive groups `rec f : T = body; tail` or `rec f : T = v and g : T2 = v2; tail` for mutual recursion
 - Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to_flt`)
-- Binary values via string literals, hex byte literals, and `Bin.len`/`Bin.get`/`Bin.slice`/`Bin.append`/`Bin.concat`
+- Binary values via string literals, hex byte literals, and `Bin.len`/`Bin.eql`/`Bin.get`/`Bin.slice`/`Bin.append`/`Bin.concat`
 - Array type `Arr T` and array literals, with operations: `Arr.len`, `Arr.get`, `Arr.slice`, `Arr.append`, `Arr.concat`
 
 ---
@@ -172,7 +172,7 @@ Module
 
 - `Value` has three variants: `Pure(Data)`, `Eval(Code)`, `Alias(ValueName)`
 - `Data` (constant/aggregate): `Unit`, `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Arr(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)`
-- `Code` (computed): arithmetic, comparison, conversion, selected bitwise/counting ops, `TplGet(ValueName, usize)`, `BinLen`/`BinGet`/`BinSlice`/`BinAppend`/`BinConcat`, and `ArrLen`/`ArrGet`/`ArrSlice`/`ArrAppend`/`ArrConcat`
+- `Code` (computed): arithmetic, comparison, conversion, selected bitwise/counting ops, `TplGet(ValueName, usize)`, `BinLen`/`BinEql`/`BinGet`/`BinSlice`/`BinAppend`/`BinConcat`, and `ArrLen`/`ArrGet`/`ArrSlice`/`ArrAppend`/`ArrConcat`
 
 **Tails** (terminators) include: `Jump` (unconditional branch to block), `Match` (dispatch on atom index via `br_table`), `Call` (direct or indirect function call with resume target).
 
