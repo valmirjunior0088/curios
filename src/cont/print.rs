@@ -534,10 +534,10 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
             pure("match "),
             print_value_name(&target.operand),
             pure("\n"),
-            flat(target.targets.iter().enumerate().map(|(index, target)| {
+            flat(target.cases.iter().map(|(&value, target)| {
                 flat([
                     pure("| "),
-                    pure(index.to_string()),
+                    pure(value.to_string()),
                     pure(" => "),
                     print_target(target),
                     pure("\n"),

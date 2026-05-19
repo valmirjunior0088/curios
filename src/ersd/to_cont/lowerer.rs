@@ -1,6 +1,7 @@
 use {
     super::{Entropy, Frame, FrameEntropy},
     crate::{cont, ersd},
+    std::collections::BTreeMap,
 };
 
 fn unsupported_rec_item(term: &ersd::Term) -> ! {
@@ -2684,9 +2685,9 @@ impl<'a> Lowerer<'a> {
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
-                    let mut targets = Vec::with_capacity(m.cases.len());
+                    let mut cases = BTreeMap::new();
 
-                    for branch in &m.cases {
+                    for (i, branch) in m.cases.iter().enumerate() {
                         let block = state.fresh_block();
                         let mut branch_builder = RegionBuilder::new();
                         let tail =
@@ -2700,7 +2701,7 @@ impl<'a> Lowerer<'a> {
                             },
                         );
 
-                        targets.push(cont::JumpTarget {
+                        cases.insert(i as u32, cont::JumpTarget {
                             target: block,
                             params: vec![],
                         });
@@ -2708,7 +2709,7 @@ impl<'a> Lowerer<'a> {
 
                     cont::Tail::Match(cont::MatchTarget {
                         operand: head,
-                        targets,
+                        cases,
                         default: None,
                     })
                 }),
@@ -2762,10 +2763,10 @@ impl<'a> Lowerer<'a> {
                         );
                         b.finish(cont::Tail::Match(cont::MatchTarget {
                             operand: cmp,
-                            targets: vec![cont::JumpTarget {
+                            cases: BTreeMap::from([(0, cont::JumpTarget {
                                 target: body_block_name.clone(),
                                 params: vec![i.clone(), acc.clone()],
-                            }],
+                            })]),
                             default: Some(cont::JumpTarget {
                                 target: exit_block_name.clone(),
                                 params: vec![acc.clone()],

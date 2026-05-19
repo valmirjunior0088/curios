@@ -184,10 +184,10 @@ mod tests {
                     ],
                     tail: cont::Tail::Match(cont::MatchTarget {
                         operand: cont::ValueName::from("is_zero"),
-                        targets: vec![cont::JumpTarget {
+                        cases: std::collections::BTreeMap::from([(0, cont::JumpTarget {
                             target: cont::BlockName::from("on_non_zero"),
                             params: vec![],
-                        }],
+                        })]),
                         default: Some(cont::JumpTarget {
                             target: cont::BlockName::from("on_zero"),
                             params: vec![],
@@ -250,10 +250,10 @@ mod tests {
                     ],
                     tail: cont::Tail::Match(cont::MatchTarget {
                         operand: cont::ValueName::from("is_zero"),
-                        targets: vec![cont::JumpTarget {
+                        cases: std::collections::BTreeMap::from([(0, cont::JumpTarget {
                             target: cont::BlockName::from("on_non_zero"),
                             params: vec![],
-                        }],
+                        })]),
                         default: Some(cont::JumpTarget {
                             target: cont::BlockName::from("on_zero"),
                             params: vec![],
@@ -1655,5 +1655,99 @@ mod tests {
         );
 
         assert_eq!(i32_result(&module), 9);
+    }
+
+    #[test]
+    fn lowers_and_runs_sparse_match() {
+        let mut module = cont::Module::new();
+
+        module.add_const(cont::ValueName::from("BYTE"), cont::Data::Nat(123)); // '{'
+        module.add_const(cont::ValueName::from("R0"), cont::Data::Nat(0));
+        module.add_const(cont::ValueName::from("R1"), cont::Data::Nat(1));
+        module.add_const(cont::ValueName::from("R2"), cont::Data::Nat(2));
+        module.add_const(cont::ValueName::from("R3"), cont::Data::Nat(3));
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![],
+                    blocks: vec![
+                        (
+                            cont::BlockName::from("b_quote"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Jump(cont::JumpTarget {
+                                        target: cont::BlockName::from("r"),
+                                        params: vec![cont::ValueName::from("R1")],
+                                    }),
+                                },
+                            },
+                        ),
+                        (
+                            cont::BlockName::from("b_lbracket"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Jump(cont::JumpTarget {
+                                        target: cont::BlockName::from("r"),
+                                        params: vec![cont::ValueName::from("R2")],
+                                    }),
+                                },
+                            },
+                        ),
+                        (
+                            cont::BlockName::from("b_lbrace"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Jump(cont::JumpTarget {
+                                        target: cont::BlockName::from("r"),
+                                        params: vec![cont::ValueName::from("R3")],
+                                    }),
+                                },
+                            },
+                        ),
+                        (
+                            cont::BlockName::from("b_default"),
+                            cont::Block {
+                                params: vec![],
+                                region: cont::Region {
+                                    values: vec![],
+                                    blocks: vec![],
+                                    tail: cont::Tail::Jump(cont::JumpTarget {
+                                        target: cont::BlockName::from("r"),
+                                        params: vec![cont::ValueName::from("R0")],
+                                    }),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: cont::Tail::Match(cont::MatchTarget {
+                        operand: cont::ValueName::from("BYTE"),
+                        cases: std::collections::BTreeMap::from([
+                            (34,  cont::JumpTarget { target: cont::BlockName::from("b_quote"),    params: vec![] }),
+                            (91,  cont::JumpTarget { target: cont::BlockName::from("b_lbracket"), params: vec![] }),
+                            (123, cont::JumpTarget { target: cont::BlockName::from("b_lbrace"),   params: vec![] }),
+                        ]),
+                        default: Some(cont::JumpTarget {
+                            target: cont::BlockName::from("b_default"),
+                            params: vec![],
+                        }),
+                    }),
+                },
+            },
+        );
+
+        assert_eq!(i32_result(&module), 3);
     }
 }

@@ -1,4 +1,7 @@
-use super::{BlockName, ClsrName, FuncName, ValueName};
+use {
+    super::{BlockName, ClsrName, FuncName, ValueName},
+    std::collections::BTreeMap,
+};
 
 #[derive(Debug)]
 pub enum Data {
@@ -120,7 +123,7 @@ pub struct JumpTarget {
 #[derive(Debug)]
 pub struct MatchTarget {
     pub operand: ValueName,
-    pub targets: Vec<JumpTarget>,
+    pub cases: BTreeMap<u32, JumpTarget>,
     pub default: Option<JumpTarget>,
 }
 

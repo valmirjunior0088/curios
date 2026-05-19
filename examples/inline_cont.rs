@@ -1,4 +1,4 @@
-use curios::cont;
+use {curios::cont, std::collections::BTreeMap};
 
 fn main() {
     let mut cont_module = cont::Module::new();
@@ -103,10 +103,10 @@ fn main() {
                                 blocks: vec![],
                                 tail: cont::Tail::Match(cont::MatchTarget {
                                     operand: cont::ValueName::from("is_zero"),
-                                    targets: vec![cont::JumpTarget {
+                                    cases: BTreeMap::from([(0, cont::JumpTarget {
                                         target: cont::BlockName::from("Zero"),
                                         params: vec![cont::ValueName::from("out_again")],
-                                    }],
+                                    })]),
                                     default: Some(cont::JumpTarget {
                                         target: cont::BlockName::from("NonZero"),
                                         params: vec![cont::ValueName::from("out_again")],

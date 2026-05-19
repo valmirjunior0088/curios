@@ -1,8 +1,12 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
     crate::{cont, wasm},
-    std::{collections::HashMap, iter, mem},
+    std::{collections::{BTreeMap, HashMap}, iter, mem},
 };
+
+fn is_sequential_from_zero(cases: &BTreeMap<u32, cont::JumpTarget>) -> bool {
+    cases.keys().enumerate().all(|(i, &k)| k == i as u32)
+}
 
 #[derive(Debug)]
 pub enum Context<'a, 'b> {
@@ -335,7 +339,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub fn match_instrs(&self, target: &'a cont::MatchTarget) -> Vec<wasm::Instr> {
-        if target.targets.is_empty() && target.default.is_none() {
+        if target.cases.is_empty() && target.default.is_none() {
             return vec![wasm::Instr::Unreachable];
         }
 
@@ -344,59 +348,109 @@ impl<'a, 'b> Context<'a, 'b> {
             None => vec![wasm::Instr::Unreachable],
         };
 
-        if let [jump_target] = &target.targets[..] {
-            self.load_value_instrs(&target.operand, LoadAs::Int)
+        let sorted: Vec<(u32, &cont::JumpTarget)> =
+            target.cases.iter().map(|(&k, v)| (k, v)).collect();
+
+        if is_sequential_from_zero(&target.cases) {
+            if let [(_, jump_target)] = sorted.as_slice() {
+                self.load_value_instrs(&target.operand, LoadAs::Int)
+                    .into_iter()
+                    .chain([
+                        wasm::Instr::I32Eqz,
+                        wasm::Instr::If {
+                            label_name: wasm::LabelName::from("0"),
+                            block_type: wasm::BlockType::Empty,
+                            then_instructions: self.jump_instrs(jump_target),
+                            else_instructions: default_instructions,
+                        },
+                    ])
+                    .collect()
+            } else {
+                let label_names = sorted
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (_, jump_target))| {
+                        (
+                            wasm::LabelName::from(format!("{index}")),
+                            self.jump_instrs(jump_target),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
+                let label_name = wasm::LabelName::from("tail");
+
+                let instructions = self
+                    .load_value_instrs(&target.operand, LoadAs::Int)
+                    .into_iter()
+                    .chain([wasm::Instr::BrTable {
+                        label_names: label_names
+                            .iter()
+                            .map(|(label_name, _)| label_name.clone())
+                            .collect(),
+                        label_name: label_name.clone(),
+                    }])
+                    .collect();
+
+                label_names
+                    .into_iter()
+                    .chain([(label_name, default_instructions)])
+                    .rev()
+                    .fold(instructions, |instructions, (block_label, block_body)| {
+                        iter::once(wasm::Instr::Block {
+                            label_name: block_label,
+                            block_type: wasm::BlockType::Empty,
+                            instructions,
+                        })
+                        .chain(block_body)
+                        .collect()
+                    })
+            }
+        } else {
+            self.binary_search_instrs(&target.operand, &sorted, default_instructions)
+        }
+    }
+
+    fn binary_search_instrs(
+        &self,
+        operand: &'a cont::ValueName,
+        cases: &[(u32, &'a cont::JumpTarget)],
+        default_instructions: Vec<wasm::Instr>,
+    ) -> Vec<wasm::Instr> {
+        match cases {
+            [] => default_instructions,
+            [(value, jump_target)] => self
+                .load_value_instrs(operand, LoadAs::Int)
                 .into_iter()
                 .chain([
-                    wasm::Instr::I32Eqz,
+                    wasm::Instr::I32Const { value: *value as i32 },
+                    wasm::Instr::I32Eq,
                     wasm::Instr::If {
-                        label_name: wasm::LabelName::from("0"),
+                        label_name: wasm::LabelName::from("eq"),
                         block_type: wasm::BlockType::Empty,
                         then_instructions: self.jump_instrs(jump_target),
                         else_instructions: default_instructions,
                     },
                 ])
-                .collect()
-        } else {
-            let label_names = target
-                .targets
-                .iter()
-                .enumerate()
-                .map(|(index, jump_target)| {
-                    (
-                        wasm::LabelName::from(format!("{index}")),
-                        self.jump_instrs(jump_target),
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            let label_name = wasm::LabelName::from("tail");
-
-            let instructions = self
-                .load_value_instrs(&target.operand, LoadAs::Int)
-                .into_iter()
-                .chain([wasm::Instr::BrTable {
-                    label_names: label_names
-                        .iter()
-                        .map(|(label_name, _)| label_name.clone())
-                        .collect(),
-                    label_name: label_name.clone(),
-                }])
-                .collect();
-
-            label_names
-                .into_iter()
-                .chain([(label_name, default_instructions)])
-                .rev()
-                .fold(instructions, |instructions, (block_label, block_body)| {
-                    iter::once(wasm::Instr::Block {
-                        label_name: block_label,
-                        block_type: wasm::BlockType::Empty,
-                        instructions,
-                    })
-                    .chain(block_body)
+                .collect(),
+            _ => {
+                let mid = cases.len() / 2;
+                let (pivot, _) = cases[mid];
+                let left = self.binary_search_instrs(operand, &cases[..mid], default_instructions.clone());
+                let right = self.binary_search_instrs(operand, &cases[mid..], default_instructions);
+                self.load_value_instrs(operand, LoadAs::Int)
+                    .into_iter()
+                    .chain([
+                        wasm::Instr::I32Const { value: pivot as i32 },
+                        wasm::Instr::I32LtU,
+                        wasm::Instr::If {
+                            label_name: wasm::LabelName::from("lt"),
+                            block_type: wasm::BlockType::Empty,
+                            then_instructions: left,
+                            else_instructions: right,
+                        },
+                    ])
                     .collect()
-                })
+            }
         }
     }
 
