@@ -335,6 +335,10 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub fn match_instrs(&self, target: &'a cont::MatchTarget) -> Vec<wasm::Instr> {
+        if target.targets.is_empty() && target.default.is_none() {
+            return vec![wasm::Instr::Unreachable];
+        }
+
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
             None => vec![wasm::Instr::Unreachable],
