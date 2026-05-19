@@ -4,8 +4,7 @@ use {
 };
 
 fn main() {
-    let term = text::elaborate(
-        &r#"
+    let text_term = r#"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -25,19 +24,32 @@ fn main() {
         let str_len : Nat = Bin.len my_str;
         Int.add (score pair) (Nat.to_int (Nat.add list_len (Nat.add bin_len str_len)))
         "#
-        .parse()
-        .expect("expected core term"),
-    );
+    .parse::<text::Term>()
+    .expect("expected text term");
 
-    let cont_module = ersd::to_cont(
-        &core::erase(
-            &mut core::Context::new(Duration::from_secs(1)),
-            &term,
-            &text::elaborate(&"Int".parse().expect("expected result type")),
-        )
-        .expect("expected erased term"),
-    );
+    println!("=== text ===");
+    println!("{text_term}");
 
+    let core_term = text::elaborate(&text_term);
+
+    println!();
+    println!("=== core ===");
+    println!("{core_term}");
+
+    let ersd_term = core::erase(
+        &mut core::Context::new(Duration::from_secs(1)),
+        &core_term,
+        &text::elaborate(&"Int".parse().expect("expected result type")),
+    )
+    .expect("expected erased term");
+
+    println!();
+    println!("=== ersd ===");
+    println!("{ersd_term}");
+
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 

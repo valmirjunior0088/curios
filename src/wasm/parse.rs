@@ -838,10 +838,12 @@ enum ModuleItem {
 fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
     parse_rec_type()
         .map(ModuleItem::RecType)
-        .or(parse_import().map(|(module_name, name, import)| ModuleItem::Import(module_name, name, import)))
+        .or(parse_import()
+            .map(|(module_name, name, import)| ModuleItem::Import(module_name, name, import)))
         .or(parse_func().map(|(func_name, func)| ModuleItem::Func(func_name, func)))
         .or(parse_global().map(|(global_name, global)| ModuleItem::Global(global_name, global)))
-        .or(parse_data_segment().map(|(data_name, data_segment)| ModuleItem::DataSegment(data_name, data_segment)))
+        .or(parse_data_segment()
+            .map(|(data_name, data_segment)| ModuleItem::DataSegment(data_name, data_segment)))
         .or(parse_export().map(|(name, export)| ModuleItem::Export(name, export)))
         .or(parse_start().map(ModuleItem::Start))
 }
@@ -855,10 +857,16 @@ fn parse_module<'a>() -> Parser<'a, Module> {
             for item in items {
                 match item {
                     ModuleItem::RecType(rec_type) => module.add_types(rec_type),
-                    ModuleItem::Import(module_name, name, import) => module.add_import(module_name, name, import),
+                    ModuleItem::Import(module_name, name, import) => {
+                        module.add_import(module_name, name, import)
+                    }
                     ModuleItem::Func(func_name, func) => module.add_func(func_name, func),
-                    ModuleItem::Global(global_name, global) => module.add_global(global_name, global),
-                    ModuleItem::DataSegment(data_name, data_segment) => module.add_data(data_name, data_segment),
+                    ModuleItem::Global(global_name, global) => {
+                        module.add_global(global_name, global)
+                    }
+                    ModuleItem::DataSegment(data_name, data_segment) => {
+                        module.add_data(data_name, data_segment)
+                    }
                     ModuleItem::Export(name, export) => module.add_export(name, export),
                     ModuleItem::Start(func_name) => module.set_start(func_name),
                 }

@@ -22,11 +22,11 @@ use {
 };
 
 pub fn run(timeout: Duration, source: &str) -> Result<String, String> {
-    let term = source
-        .parse::<text::Term>()
-        .map_err(|error| format!("failed to parse source: {error:?}"))?;
-
-    let term = text::elaborate(&term);
+    let term = text::elaborate(
+        &source
+            .parse()
+            .map_err(|error| format!("failed to parse source: {error:?}"))?,
+    );
 
     let type_ = core::infer(&mut core::Context::new(timeout), &term)
         .map_err(|error| format!("failed to infer type: {error:?}"))?;

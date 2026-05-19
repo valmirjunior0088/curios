@@ -1,7 +1,7 @@
 use curios::{cont, ersd};
 
 fn main() {
-    let term = ersd::Term::Let(ersd::Let {
+    let ersd_term = ersd::Term::Let(ersd::Let {
         name: "double".into(),
         body: ersd::Term::Func(ersd::Func {
             captures: vec![],
@@ -37,12 +37,16 @@ fn main() {
         .into(),
     });
 
-    let cont_module = ersd::to_cont(&term);
+    println!("=== ersd ===");
+    println!("{ersd_term}");
 
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 
-    println!("");
+    println!();
     println!("=== wasm ===");
     println!("{}", cont::to_wasm(&cont_module));
 }

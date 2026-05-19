@@ -4,8 +4,7 @@ use {
 };
 
 fn main() {
-    let term = text::elaborate(
-        &"
+    let text_term = r#"
         rec Tree : Type = {
             label : '[leaf, node],
             match label : _ => Type;
@@ -23,20 +22,33 @@ fn main() {
                 ('node, (2i, ('leaf, 3i), ('leaf, 4i))),
                 ('node, (5i, ('leaf, 6i), ('leaf, 7i)))));
         sum tree
-        "
-        .parse()
-        .expect("expected core term"),
-    );
+        "#
+    .parse::<text::Term>()
+    .expect("expected text term");
 
-    let cont_module = ersd::to_cont(
-        &core::erase(
-            &mut core::Context::new(Duration::from_secs(5)),
-            &term,
-            &text::elaborate(&"Int".parse().expect("expected result type")),
-        )
-        .expect("expected erased term"),
-    );
+    println!("=== text ===");
+    println!("{text_term}");
 
+    let core_term = text::elaborate(&text_term);
+
+    println!();
+    println!("=== core ===");
+    println!("{core_term}");
+
+    let ersd_term = core::erase(
+        &mut core::Context::new(Duration::from_secs(5)),
+        &core_term,
+        &text::elaborate(&"Int".parse().expect("expected result type")),
+    )
+    .expect("expected erased term");
+
+    println!();
+    println!("=== ersd ===");
+    println!("{ersd_term}");
+
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 

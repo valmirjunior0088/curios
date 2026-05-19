@@ -4,8 +4,7 @@ use {
 };
 
 fn main() {
-    let term = text::elaborate(
-        &"
+    let text_term = r#"
         rec IntList : Type = {
             label : '[nil, cons],
             match label : _ => Type;
@@ -21,20 +20,33 @@ fn main() {
         let xs : IntList =
             ('cons, (1i, ('cons, (2i, ('cons, (3i, ('nil, 0i)))))));
         sum xs
-        "
-        .parse()
-        .expect("expected core term"),
-    );
+        "#
+    .parse::<text::Term>()
+    .expect("expected text term");
 
-    let cont_module = ersd::to_cont(
-        &core::erase(
-            &mut core::Context::new(Duration::from_secs(5)),
-            &term,
-            &text::elaborate(&"Int".parse().expect("expected result type")),
-        )
-        .expect("expected erased term"),
-    );
+    println!("=== text ===");
+    println!("{text_term}");
 
+    let core_term = text::elaborate(&text_term);
+
+    println!();
+    println!("=== core ===");
+    println!("{core_term}");
+
+    let ersd_term = core::erase(
+        &mut core::Context::new(Duration::from_secs(5)),
+        &core_term,
+        &text::elaborate(&"Int".parse().expect("expected result type")),
+    )
+    .expect("expected erased term");
+
+    println!();
+    println!("=== ersd ===");
+    println!("{ersd_term}");
+
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 

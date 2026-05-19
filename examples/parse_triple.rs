@@ -1,0 +1,47 @@
+use {
+    curios::{cont, core, ersd, text},
+    std::time::Duration,
+};
+
+fn main() {
+    let text_term = r#"
+        let triple : {Int, Int, Int} = (1i, 2i, 3i);
+        split triple : _ => Int; | (a, b, c) =>
+        Int.add a (Int.add b c)
+        "#
+    .parse::<text::Term>()
+    .expect("expected text term");
+
+    println!("=== text ===");
+    println!("{text_term}");
+
+    let core_term = text::elaborate(&text_term);
+
+    println!();
+    println!("=== core ===");
+    println!("{core_term}");
+
+    let type_ = core::infer(&mut core::Context::new(Duration::from_secs(5)), &core_term)
+        .expect("expected type");
+
+    let ersd_term = core::erase(
+        &mut core::Context::new(Duration::from_secs(5)),
+        &core_term,
+        &type_,
+    )
+    .expect("expected erased term");
+
+    println!();
+    println!("=== ersd ===");
+    println!("{ersd_term}");
+
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
+    println!("=== cont ===");
+    println!("{cont_module}");
+
+    println!();
+    println!("=== wasm ===");
+    println!("{}", cont::to_wasm(&cont_module));
+}

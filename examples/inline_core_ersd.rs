@@ -1,7 +1,7 @@
 use curios::{cont, ersd};
 
 fn main() {
-    let term = ersd::Term::Let(ersd::Let {
+    let ersd_term = ersd::Term::Let(ersd::Let {
         name: "bias".into(),
         body: ersd::Term::Prim(ersd::Prim::IntMul(
             ersd::Term::Prim(ersd::Prim::IntAdd(
@@ -111,8 +111,12 @@ fn main() {
         .into(),
     });
 
-    let cont_module = ersd::to_cont(&term);
+    println!("=== ersd ===");
+    println!("{ersd_term}");
 
+    let cont_module = ersd::to_cont(&ersd_term);
+
+    println!();
     println!("=== cont ===");
     println!("{cont_module}");
 
