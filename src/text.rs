@@ -10,4 +10,6 @@ pub use term::*;
 mod elaborate;
 pub use elaborate::*;
 
+mod print;
+
 mod parse;
