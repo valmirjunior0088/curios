@@ -1532,6 +1532,82 @@ mod tests {
     }
 
     #[test]
+    fn lowers_and_runs_bin_eql_equal() {
+        let mut module = cont::Module::new();
+
+        module.add_const(
+            cont::ValueName::from("A"),
+            cont::Data::Bin(b"hello".to_vec()),
+        );
+        module.add_const(
+            cont::ValueName::from("B"),
+            cont::Data::Bin(b"hello".to_vec()),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(cont::Code::BinEql(
+                            cont::ValueName::from("A"),
+                            cont::ValueName::from("B"),
+                        )),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        assert_eq!(i32_result(&module), 1);
+    }
+
+    #[test]
+    fn lowers_and_runs_bin_eql_unequal() {
+        let mut module = cont::Module::new();
+
+        module.add_const(
+            cont::ValueName::from("A"),
+            cont::Data::Bin(b"hello".to_vec()),
+        );
+        module.add_const(
+            cont::ValueName::from("B"),
+            cont::Data::Bin(b"world".to_vec()),
+        );
+
+        module.add_func(
+            cont::FuncName::from("main"),
+            cont::Func {
+                params: vec![],
+                resume: cont::BlockName::from("r"),
+                region: cont::Region {
+                    values: vec![(
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(cont::Code::BinEql(
+                            cont::ValueName::from("A"),
+                            cont::ValueName::from("B"),
+                        )),
+                    )],
+                    blocks: vec![],
+                    tail: cont::Tail::Jump(cont::JumpTarget {
+                        target: cont::BlockName::from("r"),
+                        params: vec![cont::ValueName::from("result")],
+                    }),
+                },
+            },
+        );
+
+        assert_eq!(i32_result(&module), 0);
+    }
+
+    #[test]
     fn lowers_and_runs_arr_append() {
         let mut module = cont::Module::new();
 

@@ -784,6 +784,123 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
+            cont::Code::BinEql(left, right) => {
+                let bin_type = self.context.table().bin_type();
+
+                let idx_local = self
+                    .context
+                    .push_local("idx", wasm::ValType::Num(wasm::NumType::I32));
+                let result_raw_local = self
+                    .context
+                    .push_local("eql", wasm::ValType::Num(wasm::NumType::I32));
+
+                let done_label =
+                    wasm::LabelName::from(format!("{}_done", result_local.string));
+                let loop_label =
+                    wasm::LabelName::from(format!("{}_loop", result_local.string));
+                let if_label =
+                    wasm::LabelName::from(format!("{}_if", result_local.string));
+
+                let load_left = self.context.load_value_instrs(left, LoadAs::Bin);
+                let load_right = self.context.load_value_instrs(right, LoadAs::Bin);
+
+                // Build the loop body instructions.
+                let mut loop_instrs = Vec::new();
+
+                // if idx >= left.len: all bytes matched, result = true, exit block
+                loop_instrs.push(wasm::Instr::LocalGet {
+                    local_name: idx_local.clone(),
+                });
+                loop_instrs.extend(load_left.clone());
+                loop_instrs.push(wasm::Instr::ArrayLen);
+                loop_instrs.push(wasm::Instr::I32GeU);
+                loop_instrs.push(wasm::Instr::If {
+                    label_name: if_label,
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![
+                        wasm::Instr::I32Const { value: 1 },
+                        wasm::Instr::LocalSet {
+                            local_name: result_raw_local.clone(),
+                        },
+                        wasm::Instr::Br {
+                            label_name: done_label.clone(),
+                        },
+                    ],
+                    else_instructions: vec![],
+                });
+
+                // if left[idx] != right[idx]: mismatch, exit block (result stays false)
+                loop_instrs.extend(load_left.clone());
+                loop_instrs.push(wasm::Instr::LocalGet {
+                    local_name: idx_local.clone(),
+                });
+                loop_instrs.push(wasm::Instr::ArrayGetU {
+                    type_name: bin_type.clone(),
+                });
+                loop_instrs.extend(load_right.clone());
+                loop_instrs.push(wasm::Instr::LocalGet {
+                    local_name: idx_local.clone(),
+                });
+                loop_instrs.push(wasm::Instr::ArrayGetU {
+                    type_name: bin_type,
+                });
+                loop_instrs.push(wasm::Instr::I32Ne);
+                loop_instrs.push(wasm::Instr::BrIf {
+                    label_name: done_label.clone(),
+                });
+
+                // idx += 1; continue loop
+                loop_instrs.extend([
+                    wasm::Instr::LocalGet {
+                        local_name: idx_local.clone(),
+                    },
+                    wasm::Instr::I32Const { value: 1 },
+                    wasm::Instr::I32Add,
+                    wasm::Instr::LocalSet {
+                        local_name: idx_local,
+                    },
+                    wasm::Instr::Br {
+                        label_name: loop_label.clone(),
+                    },
+                ]);
+
+                // Build the outer block: length check then loop.
+                let mut block_instrs = Vec::new();
+
+                // if left.len != right.len: exit block immediately (result stays false)
+                block_instrs.extend(load_left.clone());
+                block_instrs.push(wasm::Instr::ArrayLen);
+                block_instrs.extend(load_right);
+                block_instrs.push(wasm::Instr::ArrayLen);
+                block_instrs.push(wasm::Instr::I32Ne);
+                block_instrs.push(wasm::Instr::BrIf {
+                    label_name: done_label.clone(),
+                });
+
+                block_instrs.push(wasm::Instr::Loop {
+                    label_name: loop_label,
+                    block_type: wasm::BlockType::Empty,
+                    instructions: loop_instrs,
+                });
+
+                // result_raw defaults to 0 (false); emit block; box result as i31ref
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_raw_local.clone(),
+                });
+                self.emit_instr(wasm::Instr::Block {
+                    label_name: done_label,
+                    block_type: wasm::BlockType::Empty,
+                    instructions: block_instrs,
+                });
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: result_raw_local,
+                });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local,
+                });
+            }
             cont::Code::BinGet(bin, idx) => {
                 let bin_type = self.context.table().bin_type();
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));

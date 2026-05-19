@@ -644,6 +644,16 @@ impl<'a> Lowerer<'a> {
 
                 emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::BinLen(bin)))
             }
+            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::BinEql(left, right)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
                 let bin = self.lower_letrec_name(bin, frame, state, builder);
                 let idx = self.lower_letrec_name(idx, frame, state, builder);
@@ -1085,6 +1095,12 @@ impl<'a> Lowerer<'a> {
                 let bin = self.lower_letrec_name(bin, frame, state, builder);
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::BinLen(bin)));
+            }
+            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::BinEql(left, right)));
             }
             ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
                 let bin = self.lower_letrec_name(bin, frame, state, builder);
@@ -2244,6 +2260,29 @@ impl<'a> Lowerer<'a> {
                     );
 
                     cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => self.lower_to_name(
+                left,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, left| {
+                    this.lower_to_name(
+                        right,
+                        frame,
+                        state,
+                        builder,
+                        Box::new(move |this, state, builder, right| {
+                            let value = emit_fresh_value(
+                                state,
+                                builder,
+                                cont::Value::Eval(cont::Code::BinEql(left, right)),
+                            );
+
+                            cont(this, state, builder, value)
+                        }),
+                    )
                 }),
             ),
             ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => self.lower_to_name(

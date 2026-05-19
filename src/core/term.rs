@@ -733,6 +733,9 @@ where
             Prim::BinType => Prim::BinType,
             Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
             Prim::BinLen(bin) => Prim::BinLen(self.visit_subterm(bin)),
+            Prim::BinEql(left, right) => {
+                Prim::BinEql(self.visit_subterm(left), self.visit_subterm(right))
+            }
             Prim::BinGet(bin, index) => {
                 Prim::BinGet(self.visit_subterm(bin), self.visit_subterm(index))
             }

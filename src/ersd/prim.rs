@@ -54,6 +54,7 @@ pub enum Prim {
     FltToNat(Subterm),
     Bin(Vec<u8>),
     BinLen(Subterm),
+    BinEql(Subterm, Subterm),
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
     BinAppend(Subterm, Subterm),

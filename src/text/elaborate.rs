@@ -151,6 +151,7 @@ fn elaborate_prim(p: &Prim) -> core::Prim {
         Prim::BinType => core::Prim::BinType,
         Prim::Bin(bytes) => core::Prim::Bin(bytes.clone()),
         Prim::BinLen(t) => core::Prim::bin_len(elaborate(t)),
+        Prim::BinEql(left, right) => core::Prim::bin_eql(elaborate(left), elaborate(right)),
         Prim::BinGet(b, i) => core::Prim::bin_get(elaborate(b), elaborate(i)),
         Prim::BinSlice(b, s, end) => {
             core::Prim::bin_slice(elaborate(b), elaborate(s), elaborate(end))

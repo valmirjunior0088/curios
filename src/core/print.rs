@@ -293,6 +293,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 .collect::<String>(),
         ),
         Prim::BinLen(bin) => flat([pure("Bin.len "), print_term(*bin, depth)]),
+        Prim::BinEql(left, right) => flat([
+            pure("Bin.eql "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
         Prim::BinGet(bin, index) => flat([
             pure("Bin.get "),
             print_term(*bin, depth),

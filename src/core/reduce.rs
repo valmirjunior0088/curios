@@ -561,6 +561,17 @@ impl Reduce {
                     bin => Term::Prim(Prim::bin_len(bin)),
                 })
             }
+            Prim::BinEql(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Bin(left)), Term::Prim(Prim::Bin(right))) => {
+                        Term::Prim(Prim::Nat(if left == right { 1 } else { 0 }))
+                    }
+                    (left, right) => Term::Prim(Prim::bin_eql(left, right)),
+                })
+            }
             Prim::BinGet(bin, index) => {
                 let bin = self.reduce(context, bin.as_ref().clone())?;
                 let index = self.reduce(context, index.as_ref().clone())?;

@@ -96,6 +96,7 @@ impl Convert {
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
             | (Prim::ArrGet(this_left, this_right), Prim::ArrGet(that_left, that_right))
             | (Prim::ArrAppend(this_left, this_right), Prim::ArrAppend(that_left, that_right))
+            | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
             | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
                 self.enqueue(*this_left, *that_left);

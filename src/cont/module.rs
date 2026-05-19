@@ -85,6 +85,7 @@ pub enum Code {
     FltToNat(ValueName),
     FltToInt(ValueName),
     BinLen(ValueName),
+    BinEql(ValueName, ValueName),
     BinGet(ValueName, ValueName),
     BinSlice(ValueName, ValueName, ValueName),
     BinAppend(ValueName, ValueName),

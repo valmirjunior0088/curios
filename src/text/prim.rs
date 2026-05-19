@@ -58,6 +58,7 @@ pub enum Prim {
     BinType,
     Bin(Vec<u8>),
     BinLen(Subterm),
+    BinEql(Subterm, Subterm),
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
     BinAppend(Subterm, Subterm),
@@ -440,6 +441,14 @@ impl Prim {
         B: Into<Term>,
     {
         Self::BinLen(bin.into().into())
+    }
+
+    pub fn bin_eql<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::BinEql(left.into().into(), right.into().into())
     }
 
     pub fn bin_get<B, I>(bin: B, index: I) -> Self

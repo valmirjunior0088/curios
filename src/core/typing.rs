@@ -145,6 +145,12 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                 _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
             }
         }
+        Prim::BinEql(left, right) => {
+            erase(context, left, &Term::Prim(Prim::BinType))?;
+            erase(context, right, &Term::Prim(Prim::BinType))?;
+
+            Ok(Term::Prim(Prim::NatType))
+        }
         Prim::BinGet(bin, index) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce(context, &bin_type)?;
@@ -1012,6 +1018,15 @@ fn erase_prim(
                 _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
             }
             Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
+        }
+        Prim::BinEql(left, right) => {
+            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
+
+            Ok(ersd::Prim::BinEql(
+                erase(context, left, &Term::Prim(Prim::BinType))?.into(),
+                erase(context, right, &Term::Prim(Prim::BinType))?.into(),
+            )
+            .into())
         }
         Prim::BinGet(bin, index) => {
             expect(context, term, &Term::Prim(Prim::NatType), expected)?;
@@ -2008,6 +2023,20 @@ mod tests {
         let append = Term::Prim(Prim::bin_append(Var::free("b"), Var::free("n")));
         assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
         erase(&mut context, &append, &bin_type).unwrap();
+    }
+
+    #[test]
+    fn erase_bin_eql() {
+        let mut context = context();
+
+        let bin_type = Term::Prim(Prim::BinType);
+        let nat_type = Term::Prim(Prim::NatType);
+        context.assume("a", &bin_type);
+        context.assume("b", &bin_type);
+
+        let eql = Term::Prim(Prim::bin_eql(Var::free("a"), Var::free("b")));
+        assert_eq!(infer(&mut context, &eql).unwrap(), nat_type);
+        erase(&mut context, &eql, &nat_type).unwrap();
     }
 
     #[test]
