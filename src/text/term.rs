@@ -5,41 +5,41 @@ use {
 
 pub type Subterm = Box<Term>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
     pub label: Option<String>,
     pub input: Subterm,
     pub output: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Func {
     pub label: String,
     pub body: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Apply {
     pub head: Subterm,
     pub param: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TupleType {
     pub fields: Vec<(Option<String>, Subterm)>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
     pub fields: Vec<Subterm>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NatFold {
     pub head: Subterm,
     pub motive_label: String,
@@ -50,7 +50,7 @@ pub struct NatFold {
     pub succ_case: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NatMatch {
     pub head: Subterm,
     pub motive_label: String,
@@ -59,7 +59,7 @@ pub struct NatMatch {
     pub default: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Split {
     pub head: Subterm,
     pub motive_label: String,
@@ -68,12 +68,12 @@ pub struct Split {
     pub tail: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AtomType {
     pub atoms: BTreeSet<Atom>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Match {
     pub head: Subterm,
     pub motive_label: String,
@@ -81,7 +81,7 @@ pub struct Match {
     pub cases: BTreeMap<Atom, Subterm>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     pub label: String,
     pub type_: Subterm,
@@ -89,20 +89,20 @@ pub struct Let {
     pub tail: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RecItem {
     pub label: String,
     pub type_: Subterm,
     pub value: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rec {
     pub items: Vec<RecItem>,
     pub tail: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Term {
     Type,
     Prim(Prim),

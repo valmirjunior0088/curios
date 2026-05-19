@@ -74,10 +74,13 @@ fn main() {
                 ],
                 tail: cont::Tail::Match(cont::MatchTarget {
                     operand: cont::ValueName::from("is_zero"),
-                    cases: BTreeMap::from([(0, cont::JumpTarget {
-                        target: cont::BlockName::from("on_zero"),
-                        params: vec![cont::ValueName::from("x")],
-                    })]),
+                    cases: BTreeMap::from([(
+                        0,
+                        cont::JumpTarget {
+                            target: cont::BlockName::from("on_zero"),
+                            params: vec![cont::ValueName::from("x")],
+                        },
+                    )]),
                     default: Some(cont::JumpTarget {
                         target: cont::BlockName::from("on_non_zero"),
                         params: vec![cont::ValueName::from("x")],
@@ -193,10 +196,13 @@ fn main() {
                                 ],
                                 tail: cont::Tail::Match(cont::MatchTarget {
                                     operand: cont::ValueName::from("result_is_zero"),
-                                    cases: BTreeMap::from([(0, cont::JumpTarget {
-                                        target: cont::BlockName::from("pick_zero"),
-                                        params: vec![cont::ValueName::from("result")],
-                                    })]),
+                                    cases: BTreeMap::from([(
+                                        0,
+                                        cont::JumpTarget {
+                                            target: cont::BlockName::from("pick_zero"),
+                                            params: vec![cont::ValueName::from("result")],
+                                        },
+                                    )]),
                                     default: Some(cont::JumpTarget {
                                         target: cont::BlockName::from("pick_one"),
                                         params: vec![cont::ValueName::from("result")],

@@ -794,12 +794,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     .context
                     .push_local("eql", wasm::ValType::Num(wasm::NumType::I32));
 
-                let done_label =
-                    wasm::LabelName::from(format!("{}_done", result_local.string));
-                let loop_label =
-                    wasm::LabelName::from(format!("{}_loop", result_local.string));
-                let if_label =
-                    wasm::LabelName::from(format!("{}_if", result_local.string));
+                let done_label = wasm::LabelName::from(format!("{}_done", result_local.string));
+                let loop_label = wasm::LabelName::from(format!("{}_loop", result_local.string));
+                let if_label = wasm::LabelName::from(format!("{}_if", result_local.string));
 
                 let load_left = self.context.load_value_instrs(left, LoadAs::Bin);
                 let load_right = self.context.load_value_instrs(right, LoadAs::Bin);

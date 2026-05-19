@@ -12,7 +12,7 @@ pub enum Bin {
     String(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
     NatType,
     Nat(Nat),
@@ -41,7 +41,7 @@ pub enum Prim {
     IntLte(Subterm, Subterm),
     IntGte(Subterm, Subterm),
     FltType,
-    Flt(u32),
+    Flt(f32),
     FltAdd(Subterm, Subterm),
     FltSub(Subterm, Subterm),
     FltMul(Subterm, Subterm),

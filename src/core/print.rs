@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim, Rec,
+        Apply, Atom, AtomType, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim, Rec,
         Scope, Split, Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -45,9 +45,8 @@ fn print_atom(atom: Atom) -> Printer<'static> {
     flat([pure("'"), pure(atom.string)])
 }
 
-fn print_flt(bits: u32) -> Printer<'static> {
-    let value = f32::from_bits(bits);
-    let mut string = value.to_string();
+fn print_flt(flt: Flt) -> Printer<'static> {
+    let mut string = flt.to_f32().to_string();
 
     if let Some(index) = string.find(['e', 'E']) {
         if !string[..index].contains('.') {
@@ -157,7 +156,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(*right, depth),
         ]),
         Prim::FltType => pure("Flt"),
-        Prim::Flt(bits) => print_flt(bits),
+        Prim::Flt(flt) => print_flt(flt),
         Prim::FltAdd(left, right) => flat([
             pure("Flt.add "),
             print_term(*left, depth),
@@ -397,7 +396,12 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 indent(flat([print_term(succ_case, depth), pure(";")])),
             ])
         }
-        Term::NatMatch(NatMatch { head, motive, cases, default }) => {
+        Term::NatMatch(NatMatch {
+            head,
+            motive,
+            cases,
+            default,
+        }) => {
             let (motive_label, motive) = open_scope_one(motive, depth);
             let case_printers = flat(
                 cases
@@ -438,7 +442,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         Term::Func(Func { body }) => {
             let (label, body) = open_scope_one(body, depth);
 
-            flat([pure(label), pure(" =>\n"), indent(print_term(body, depth + 1))])
+            flat([
+                pure(label),
+                pure(" =>\n"),
+                indent(print_term(body, depth + 1)),
+            ])
         }
         Term::Apply(Apply { head, param }) => flat([
             print_term(*head, depth),

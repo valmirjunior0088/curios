@@ -103,10 +103,13 @@ fn main() {
                                 blocks: vec![],
                                 tail: cont::Tail::Match(cont::MatchTarget {
                                     operand: cont::ValueName::from("is_zero"),
-                                    cases: BTreeMap::from([(0, cont::JumpTarget {
-                                        target: cont::BlockName::from("Zero"),
-                                        params: vec![cont::ValueName::from("out_again")],
-                                    })]),
+                                    cases: BTreeMap::from([(
+                                        0,
+                                        cont::JumpTarget {
+                                            target: cont::BlockName::from("Zero"),
+                                            params: vec![cont::ValueName::from("out_again")],
+                                        },
+                                    )]),
                                     default: Some(cont::JumpTarget {
                                         target: cont::BlockName::from("NonZero"),
                                         params: vec![cont::ValueName::from("out_again")],

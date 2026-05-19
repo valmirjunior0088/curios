@@ -134,7 +134,7 @@ fn elaborate_prim(p: &Prim) -> core::Prim {
         Prim::IntLte(l, r) => core::Prim::int_lte(elaborate(l), elaborate(r)),
         Prim::IntGte(l, r) => core::Prim::int_gte(elaborate(l), elaborate(r)),
         Prim::FltType => core::Prim::FltType,
-        Prim::Flt(n) => core::Prim::Flt(*n),
+        Prim::Flt(n) => core::Prim::Flt(core::Flt::from_f32(*n)),
         Prim::FltAdd(l, r) => core::Prim::flt_add(elaborate(l), elaborate(r)),
         Prim::FltSub(l, r) => core::Prim::flt_sub(elaborate(l), elaborate(r)),
         Prim::FltMul(l, r) => core::Prim::flt_mul(elaborate(l), elaborate(r)),
@@ -274,8 +274,8 @@ mod tests {
         assert_eq!(
             parse("Flt.mul 1.5 2.0"),
             core::Term::Prim(core::Prim::flt_mul(
-                core::Term::Prim(core::Prim::Flt(1.5_f32.to_bits())),
-                core::Term::Prim(core::Prim::Flt(2.0_f32.to_bits()))
+                core::Term::Prim(core::Prim::Flt(core::Flt::from_f32(1.5))),
+                core::Term::Prim(core::Prim::Flt(core::Flt::from_f32(2.0)))
             ))
         );
     }

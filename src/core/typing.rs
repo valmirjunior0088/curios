@@ -304,11 +304,7 @@ fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error
     Ok(Type.into())
 }
 
-fn infer_nat_fold(
-    context: &mut Context,
-    nat_fold: &NatFold,
-    term: &Term,
-) -> Result<Term, Error> {
+fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Result<Term, Error> {
     let NatFold {
         head,
         motive,
@@ -363,12 +359,13 @@ fn infer_nat_fold(
     Ok(motive.open(&[head.as_ref()]))
 }
 
-fn infer_nat_match(
-    context: &mut Context,
-    nm: &NatMatch,
-    term: &Term,
-) -> Result<Term, Error> {
-    let NatMatch { head, motive, cases, default } = nm;
+fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<Term, Error> {
+    let NatMatch {
+        head,
+        motive,
+        cases,
+        default,
+    } = nm;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
@@ -820,10 +817,10 @@ fn erase_prim(
 
             Ok(ersd::Term::Erased)
         }
-        &Prim::Flt(bits) => {
+        &Prim::Flt(flt) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
 
-            Ok(ersd::Prim::Flt(f32::from_bits(bits)).into())
+            Ok(ersd::Prim::Flt(flt.to_f32()).into())
         }
         Prim::FltAdd(left, right) => {
             expect(context, term, &Term::Prim(Prim::FltType), expected)?;
@@ -1364,7 +1361,12 @@ fn erase_nat_match(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let NatMatch { head, motive, cases, default } = nm;
+    let NatMatch {
+        head,
+        motive,
+        cases,
+        default,
+    } = nm;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
@@ -1679,7 +1681,7 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Func, FuncType, Match, NatFold, NatMatch, Rec, Term, Tuple,
+                Atom, AtomType, Flt, Func, FuncType, Match, NatFold, NatMatch, Rec, Term, Tuple,
                 TupleType, Type,
             },
             ersd, text,
@@ -1811,8 +1813,8 @@ mod tests {
         erase(
             &mut context,
             &Term::Prim(Prim::flt_add(
-                Term::Prim(Prim::Flt(1.5_f32.to_bits())),
-                Term::Prim(Prim::Flt(2.0_f32.to_bits())),
+                Term::Prim(Prim::Flt(Flt::from_f32(1.5))),
+                Term::Prim(Prim::Flt(Flt::from_f32(2.0))),
             )),
             &Term::Prim(Prim::FltType),
         )
@@ -1852,7 +1854,7 @@ mod tests {
                 &mut Context::new(Duration::from_secs(1)),
                 &Term::Prim(Prim::int_add(
                     Term::Prim(Prim::Int(1)),
-                    Term::Prim(Prim::Flt(2.0_f32.to_bits()))
+                    Term::Prim(Prim::Flt(Flt::from_f32(2.0)))
                 )),
                 &Term::Prim(Prim::IntType),
             ),

@@ -2704,10 +2704,13 @@ impl<'a> Lowerer<'a> {
                             },
                         );
 
-                        cases.insert(i as u32, cont::JumpTarget {
-                            target: block,
-                            params: vec![],
-                        });
+                        cases.insert(
+                            i as u32,
+                            cont::JumpTarget {
+                                target: block,
+                                params: vec![],
+                            },
+                        );
                     }
 
                     cont::Tail::Match(cont::MatchTarget {
@@ -2766,10 +2769,13 @@ impl<'a> Lowerer<'a> {
                         );
                         b.finish(cont::Tail::Match(cont::MatchTarget {
                             operand: cmp,
-                            cases: BTreeMap::from([(0, cont::JumpTarget {
-                                target: body_block_name.clone(),
-                                params: vec![i.clone(), acc.clone()],
-                            })]),
+                            cases: BTreeMap::from([(
+                                0,
+                                cont::JumpTarget {
+                                    target: body_block_name.clone(),
+                                    params: vec![i.clone(), acc.clone()],
+                                },
+                            )]),
                             default: Some(cont::JumpTarget {
                                 target: exit_block_name.clone(),
                                 params: vec![acc.clone()],
@@ -2882,7 +2888,13 @@ impl<'a> Lowerer<'a> {
                                 region: branch_builder.finish(tail),
                             },
                         );
-                        cases.insert(*val, cont::JumpTarget { target: block, params: vec![] });
+                        cases.insert(
+                            *val,
+                            cont::JumpTarget {
+                                target: block,
+                                params: vec![],
+                            },
+                        );
                     }
 
                     let default_block = state.fresh_block();

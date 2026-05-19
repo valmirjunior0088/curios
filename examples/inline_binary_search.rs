@@ -85,9 +85,27 @@ fn main() {
                 tail: cont::Tail::Match(cont::MatchTarget {
                     operand: cont::ValueName::from("BYTE"),
                     cases: BTreeMap::from([
-                        (34,  cont::JumpTarget { target: cont::BlockName::from("b_quote"),    params: vec![] }),
-                        (91,  cont::JumpTarget { target: cont::BlockName::from("b_lbracket"), params: vec![] }),
-                        (123, cont::JumpTarget { target: cont::BlockName::from("b_lbrace"),   params: vec![] }),
+                        (
+                            34,
+                            cont::JumpTarget {
+                                target: cont::BlockName::from("b_quote"),
+                                params: vec![],
+                            },
+                        ),
+                        (
+                            91,
+                            cont::JumpTarget {
+                                target: cont::BlockName::from("b_lbracket"),
+                                params: vec![],
+                            },
+                        ),
+                        (
+                            123,
+                            cont::JumpTarget {
+                                target: cont::BlockName::from("b_lbrace"),
+                                params: vec![],
+                            },
+                        ),
                     ]),
                     default: Some(cont::JumpTarget {
                         target: cont::BlockName::from("b_default"),

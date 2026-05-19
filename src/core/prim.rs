@@ -1,5 +1,17 @@
 use super::{Subterm, Term};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Flt(pub u32);
+
+impl Flt {
+    pub fn from_f32(v: f32) -> Self {
+        Self(v.to_bits())
+    }
+    pub fn to_f32(self) -> f32 {
+        f32::from_bits(self.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
     NatType,
@@ -29,7 +41,7 @@ pub enum Prim {
     IntLte(Subterm, Subterm),
     IntGte(Subterm, Subterm),
     FltType,
-    Flt(u32),
+    Flt(Flt),
     FltAdd(Subterm, Subterm),
     FltSub(Subterm, Subterm),
     FltMul(Subterm, Subterm),

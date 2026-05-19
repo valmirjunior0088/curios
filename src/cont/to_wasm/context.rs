@@ -1,7 +1,10 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
     crate::{cont, wasm},
-    std::{collections::{BTreeMap, HashMap}, iter, mem},
+    std::{
+        collections::{BTreeMap, HashMap},
+        iter, mem,
+    },
 };
 
 fn is_sequential_from_zero(cases: &BTreeMap<u32, cont::JumpTarget>) -> bool {
@@ -422,7 +425,9 @@ impl<'a, 'b> Context<'a, 'b> {
                 .load_value_instrs(operand, LoadAs::Int)
                 .into_iter()
                 .chain([
-                    wasm::Instr::I32Const { value: *value as i32 },
+                    wasm::Instr::I32Const {
+                        value: *value as i32,
+                    },
                     wasm::Instr::I32Eq,
                     wasm::Instr::If {
                         label_name: wasm::LabelName::from("eq"),
@@ -435,12 +440,15 @@ impl<'a, 'b> Context<'a, 'b> {
             _ => {
                 let mid = cases.len() / 2;
                 let (pivot, _) = cases[mid];
-                let left = self.binary_search_instrs(operand, &cases[..mid], default_instructions.clone());
+                let left =
+                    self.binary_search_instrs(operand, &cases[..mid], default_instructions.clone());
                 let right = self.binary_search_instrs(operand, &cases[mid..], default_instructions);
                 self.load_value_instrs(operand, LoadAs::Int)
                     .into_iter()
                     .chain([
-                        wasm::Instr::I32Const { value: pivot as i32 },
+                        wasm::Instr::I32Const {
+                            value: pivot as i32,
+                        },
                         wasm::Instr::I32LtU,
                         wasm::Instr::If {
                             label_name: wasm::LabelName::from("lt"),

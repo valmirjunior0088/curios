@@ -11,8 +11,7 @@ fn print_atom(atom: Atom) -> Printer<'static> {
     flat([pure("'"), pure(atom.string)])
 }
 
-fn print_flt(bits: u32) -> Printer<'static> {
-    let value = f32::from_bits(bits);
+fn print_flt(value: f32) -> Printer<'static> {
     let mut string = value.to_string();
 
     if let Some(index) = string.find(['e', 'E']) {
@@ -68,7 +67,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IntLte(l, r) => flat([pure("Int.lte "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::IntGte(l, r) => flat([pure("Int.gte "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::FltType => pure("Flt"),
-        Prim::Flt(bits) => print_flt(bits),
+        Prim::Flt(value) => print_flt(value),
         Prim::FltAdd(l, r) => flat([pure("Flt.add "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::FltSub(l, r) => flat([pure("Flt.sub "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::FltMul(l, r) => flat([pure("Flt.mul "), print_term(*l), pure(" "), print_term(*r)]),
@@ -208,11 +207,9 @@ fn print_term(term: Term) -> Printer<'static> {
             ]),
             None => flat([print_term(*input), pure(" -> "), print_term(*output)]),
         },
-        Term::Func(Func { label, body }) => flat([
-            pure(label),
-            pure(" =>\n"),
-            indent(print_term(*body)),
-        ]),
+        Term::Func(Func { label, body }) => {
+            flat([pure(label), pure(" =>\n"), indent(print_term(*body))])
+        }
         Term::Apply(Apply { head, param }) => {
             flat([print_term(*head), pure(" "), print_term(*param)])
         }

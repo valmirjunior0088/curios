@@ -166,9 +166,16 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure(" =>\n"),
             indent(flat([print_term(succ_case), pure(";")])),
         ]),
-        Term::NatMatch(super::NatMatch { head, cases, default }) => {
+        Term::NatMatch(super::NatMatch {
+            head,
+            cases,
+            default,
+        }) => {
             let case_printers = cases.iter().map(|(val, body)| {
-                flat([pure(format!("\n| {val}n =>\n")), indent(flat([print_term(body), pure(";")]))])
+                flat([
+                    pure(format!("\n| {val}n =>\n")),
+                    indent(flat([print_term(body), pure(";")])),
+                ])
             });
             flat([
                 pure("Nat.match "),
@@ -185,11 +192,18 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             body,
         }) => {
             if captures.is_empty() {
-                flat([pure(format!("#{}", param.as_str())), pure(" =>\n"), indent(print_term(body))])
+                flat([
+                    pure(format!("#{}", param.as_str())),
+                    pure(" =>\n"),
+                    indent(print_term(body)),
+                ])
             } else {
                 flat([
                     pure("{"),
-                    sep_flat(captures.iter().map(|s| pure(format!("#{}", s.as_str()))), || pure(", ")),
+                    sep_flat(
+                        captures.iter().map(|s| pure(format!("#{}", s.as_str()))),
+                        || pure(", "),
+                    ),
                     pure("} "),
                     pure(format!("#{}", param.as_str())),
                     pure(" =>\n"),
@@ -209,14 +223,20 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure("split "),
             print_term(head),
             pure("; | ("),
-            sep_flat(fields.iter().map(|s| pure(format!("#{}", s.as_str()))), || pure(", ")),
+            sep_flat(
+                fields.iter().map(|s| pure(format!("#{}", s.as_str()))),
+                || pure(", "),
+            ),
             pure(") =>\n"),
             print_term(tail),
         ]),
         Term::Atom(atom) => print_atom(atom),
         Term::Match(Match { head, cases }) => {
             let cases = cases.iter().enumerate().map(|(i, body)| {
-                flat([pure(format!("\n| @{i} =>\n")), indent(flat([print_term(body), pure(";")]))])
+                flat([
+                    pure(format!("\n| @{i} =>\n")),
+                    indent(flat([print_term(body), pure(";")])),
+                ])
             });
             flat([
                 pure("match "),
@@ -237,7 +257,13 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             let bindings = names
                 .iter()
                 .zip(items.iter())
-                .map(|(name, body)| flat([pure(format!("#{}", name.as_str())), pure(" =\n"), indent(print_term(body))]))
+                .map(|(name, body)| {
+                    flat([
+                        pure(format!("#{}", name.as_str())),
+                        pure(" =\n"),
+                        indent(print_term(body)),
+                    ])
+                })
                 .collect::<Vec<_>>();
 
             flat([

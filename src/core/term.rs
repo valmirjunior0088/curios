@@ -295,7 +295,10 @@ impl NatMatch {
         Self {
             head: head.into().into(),
             motive: Scope::close(One, &[motive_label.as_str()], motive),
-            cases: cases.into_iter().map(|(n, b)| (n, b.into().into())).collect(),
+            cases: cases
+                .into_iter()
+                .map(|(n, b)| (n, b.into().into()))
+                .collect(),
             default: default.into().into(),
         }
     }
@@ -700,7 +703,7 @@ where
                 Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::FltType => Prim::FltType,
-            Prim::Flt(bits) => Prim::Flt(*bits),
+            Prim::Flt(flt) => Prim::Flt(*flt),
             Prim::FltAdd(left, right) => {
                 Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
             }

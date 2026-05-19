@@ -184,10 +184,13 @@ mod tests {
                     ],
                     tail: cont::Tail::Match(cont::MatchTarget {
                         operand: cont::ValueName::from("is_zero"),
-                        cases: std::collections::BTreeMap::from([(0, cont::JumpTarget {
-                            target: cont::BlockName::from("on_non_zero"),
-                            params: vec![],
-                        })]),
+                        cases: std::collections::BTreeMap::from([(
+                            0,
+                            cont::JumpTarget {
+                                target: cont::BlockName::from("on_non_zero"),
+                                params: vec![],
+                            },
+                        )]),
                         default: Some(cont::JumpTarget {
                             target: cont::BlockName::from("on_zero"),
                             params: vec![],
@@ -250,10 +253,13 @@ mod tests {
                     ],
                     tail: cont::Tail::Match(cont::MatchTarget {
                         operand: cont::ValueName::from("is_zero"),
-                        cases: std::collections::BTreeMap::from([(0, cont::JumpTarget {
-                            target: cont::BlockName::from("on_non_zero"),
-                            params: vec![],
-                        })]),
+                        cases: std::collections::BTreeMap::from([(
+                            0,
+                            cont::JumpTarget {
+                                target: cont::BlockName::from("on_non_zero"),
+                                params: vec![],
+                            },
+                        )]),
                         default: Some(cont::JumpTarget {
                             target: cont::BlockName::from("on_zero"),
                             params: vec![],
@@ -1735,9 +1741,27 @@ mod tests {
                     tail: cont::Tail::Match(cont::MatchTarget {
                         operand: cont::ValueName::from("BYTE"),
                         cases: std::collections::BTreeMap::from([
-                            (34,  cont::JumpTarget { target: cont::BlockName::from("b_quote"),    params: vec![] }),
-                            (91,  cont::JumpTarget { target: cont::BlockName::from("b_lbracket"), params: vec![] }),
-                            (123, cont::JumpTarget { target: cont::BlockName::from("b_lbrace"),   params: vec![] }),
+                            (
+                                34,
+                                cont::JumpTarget {
+                                    target: cont::BlockName::from("b_quote"),
+                                    params: vec![],
+                                },
+                            ),
+                            (
+                                91,
+                                cont::JumpTarget {
+                                    target: cont::BlockName::from("b_lbracket"),
+                                    params: vec![],
+                                },
+                            ),
+                            (
+                                123,
+                                cont::JumpTarget {
+                                    target: cont::BlockName::from("b_lbrace"),
+                                    params: vec![],
+                                },
+                            ),
                         ]),
                         default: Some(cont::JumpTarget {
                             target: cont::BlockName::from("b_default"),
