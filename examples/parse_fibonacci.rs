@@ -6,7 +6,7 @@ use {
 fn main() {
     let text_term = r#"
         rec fib_pair : Nat -> {Int, Int} = n =>
-            Nat.match n : _ => {Int, Int};
+            Nat.fold n : _ => {Int, Int};
             | 0n => (0i, 1i);
             | pred ih =>
                 split ih : _ => {Int, Int}; | (a, b) =>

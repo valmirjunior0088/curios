@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Func, Let, Match, NatMatch, Prim, Rec, Split, Term, Tuple},
+    super::{Atom, Func, Let, Match, NatFold, Prim, Rec, Split, Term, Tuple},
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
@@ -148,14 +148,14 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
     match term {
         Term::Erased => pure("_"),
         Term::Prim(prim) => print_prim(prim),
-        Term::NatMatch(NatMatch {
+        Term::NatFold(NatFold {
             head,
             zero_case,
             pred,
             ih,
             succ_case,
         }) => flat([
-            pure("Nat.match "),
+            pure("Nat.fold "),
             print_term(head),
             pure(";\n| 0n =>\n"),
             indent(flat([print_term(zero_case), pure(";")])),

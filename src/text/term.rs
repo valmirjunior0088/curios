@@ -40,7 +40,7 @@ pub struct Tuple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NatMatch {
+pub struct NatFold {
     pub head: Subterm,
     pub motive_label: String,
     pub motive: Subterm,
@@ -97,7 +97,7 @@ pub struct Rec {
 pub enum Term {
     Type,
     Prim(Prim),
-    NatMatch(NatMatch),
+    NatFold(NatFold),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),

@@ -3,7 +3,7 @@ use super::{Name, Prim};
 pub type Subterm = Box<Term>;
 
 #[derive(Debug)]
-pub struct NatMatch {
+pub struct NatFold {
     pub head: Subterm,
     pub zero_case: Subterm,
     pub pred: String,
@@ -65,7 +65,7 @@ pub struct Rec {
 pub enum Term {
     Erased,
     Prim(Prim),
-    NatMatch(NatMatch),
+    NatFold(NatFold),
     Func(Func),
     Apply(Apply),
     Tuple(Tuple),
@@ -83,9 +83,9 @@ impl From<Prim> for Term {
     }
 }
 
-impl From<NatMatch> for Term {
-    fn from(value: NatMatch) -> Self {
-        Self::NatMatch(value)
+impl From<NatFold> for Term {
+    fn from(value: NatFold) -> Self {
+        Self::NatFold(value)
     }
 }
 

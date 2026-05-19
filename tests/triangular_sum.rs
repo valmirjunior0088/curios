@@ -5,9 +5,9 @@ use {
 };
 
 #[test]
-fn nat_match_computes_triangular_sum() {
+fn nat_fold_computes_triangular_sum() {
     let text_term = r#"
-        Nat.match 5n : _ => Nat;
+        Nat.fold 5n : _ => Nat;
         | 0n => 0n;
         | pred ih => Nat.add ih pred;
         "#

@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, Match, NatMatch, Preempted, Prim, Rec,
+        Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, Preempted, Prim, Rec,
         Split, Term, Tuple, TupleType, Var, reduce,
     },
     std::{
@@ -247,11 +247,11 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_nat_match(
+    fn compare_nat_fold(
         &mut self,
         context: &mut Context,
-        this: NatMatch,
-        that: NatMatch,
+        this: NatFold,
+        that: NatFold,
     ) -> Result<bool, Preempted> {
         self.enqueue(*this.head, *that.head);
 
@@ -372,8 +372,8 @@ impl Convert {
 
             let ok = match (this, that) {
                 (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
-                (Term::NatMatch(this), Term::NatMatch(that)) => {
-                    self.compare_nat_match(context, this, that)?
+                (Term::NatFold(this), Term::NatFold(that)) => {
+                    self.compare_nat_fold(context, this, that)?
                 }
                 (Term::FuncType(this), Term::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?

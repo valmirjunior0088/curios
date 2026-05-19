@@ -1,5 +1,5 @@
 use {
-    super::{Apply, Context, Func, Let, Match, NatMatch, Preempted, Prim, Split, Term, Tuple, Var},
+    super::{Apply, Context, Func, Let, Match, NatFold, Preempted, Prim, Split, Term, Tuple, Var},
     std::time::{Duration, Instant},
 };
 
@@ -716,23 +716,23 @@ impl Reduce {
         }
     }
 
-    fn reduce_nat_match(
+    fn reduce_nat_fold(
         &mut self,
         context: &mut Context,
-        nat_match: NatMatch,
+        nat_fold: NatFold,
     ) -> Result<Step, Preempted> {
-        let NatMatch {
+        let NatFold {
             head,
             motive,
             zero_case,
             succ_case,
-        } = nat_match;
+        } = nat_fold;
 
         match self.reduce(context, *head)? {
             Term::Prim(Prim::Nat(0)) => Ok(Step::Continue(*zero_case)),
             Term::Prim(Prim::Nat(n)) => {
                 let pred = Term::Prim(Prim::Nat(n - 1));
-                let ih = Term::NatMatch(NatMatch {
+                let ih = Term::NatFold(NatFold {
                     head: pred.clone().into(),
                     motive: motive.clone(),
                     zero_case: zero_case.clone(),
@@ -741,7 +741,7 @@ impl Reduce {
                 Ok(Step::Continue(succ_case.open(&[&pred, &ih])))
             }
             head => Ok(Step::Break(
-                NatMatch {
+                NatFold {
                     head: head.into(),
                     motive,
                     zero_case,
@@ -822,7 +822,7 @@ impl Reduce {
 
             let step = match term {
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
-                Term::NatMatch(nat_match) => self.reduce_nat_match(context, nat_match)?,
+                Term::NatFold(nat_fold) => self.reduce_nat_fold(context, nat_fold)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
                 Term::Split(split) => self.reduce_split(context, split)?,
                 Term::Match(m) => self.reduce_match(context, m)?,
@@ -843,7 +843,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, AtomType, Let, Match, NatMatch, Prim, Tuple, Type, Var},
+        crate::core::{Atom, AtomType, Let, Match, NatFold, Prim, Tuple, Type, Var},
         std::time::Duration,
     };
 
@@ -895,10 +895,10 @@ mod tests {
     }
 
     #[test]
-    fn reduce_nat_match_zero_is_not_true() {
+    fn reduce_nat_fold_zero_is_not_true() {
         let mut context = context();
 
-        let term = NatMatch::new(
+        let term = NatFold::new(
             Prim::Nat(0),
             "m",
             AtomType::new(["false", "true"]),

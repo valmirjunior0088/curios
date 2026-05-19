@@ -7,11 +7,11 @@ fn main() {
     let text_term = r#"
         let Bln : Type = '[false, true];
         rec is_even : Nat -> Bln = n =>
-            Nat.match n : _ => Bln;
+            Nat.fold n : _ => Bln;
             | 0n => 'true;
             | pred ih => is_odd pred;
         and is_odd : Nat -> Bln = n =>
-            Nat.match n : _ => Bln;
+            Nat.fold n : _ => Bln;
             | 0n => 'false;
             | pred ih => is_even pred;;
         is_even 10n

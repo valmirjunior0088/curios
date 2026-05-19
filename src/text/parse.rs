@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, Prim, Rec, RecItem, Split,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, Prim, Rec, RecItem, Split,
         Term, Tuple, TupleType, Var,
     },
     crate::parser::{
@@ -531,9 +531,9 @@ fn parse_func<'a>() -> Parser<'a, Term> {
         })
 }
 
-fn parse_nat_match<'a>() -> Parser<'a, Term> {
+fn parse_nat_fold<'a>() -> Parser<'a, Term> {
     catch(
-        parse_keyword("Nat.match")
+        parse_keyword("Nat.fold")
             .and_keep(lazy(parse_term))
             .and_drop(parse_literal(":"))
             .and(parse_identifier())
@@ -554,7 +554,7 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(";"))
     .map(
         |((((((head, motive_label), motive), zero_case), pred_label), ih_label), succ_case)| {
-            Term::NatMatch(NatMatch {
+            Term::NatFold(NatFold {
                 head: head.into(),
                 motive_label: motive_label.to_string(),
                 motive: motive.into(),
@@ -687,7 +687,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     parse_rec()
         .or(parse_split())
         .or(parse_let())
-        .or(parse_nat_match())
+        .or(parse_nat_fold())
         .or(parse_match())
         .or(parse_func_type())
         .or(parse_func())

@@ -794,7 +794,7 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
+            | ersd::Term::NatFold(_) => unsupported_rec_item(term),
         }
     }
 
@@ -1212,7 +1212,7 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
+            | ersd::Term::NatFold(_) => unsupported_rec_item(term),
         }
     }
 }
@@ -2507,7 +2507,7 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
             | ersd::Term::Match(_)
-            | ersd::Term::NatMatch(_) => {
+            | ersd::Term::NatFold(_) => {
                 let block = state.fresh_block();
                 let param = state.fresh_value();
                 let mut join_builder = RegionBuilder::new();
@@ -2713,8 +2713,8 @@ impl<'a> Lowerer<'a> {
                     })
                 }),
             ),
-            ersd::Term::NatMatch(nat_match) => self.lower_to_name(
-                &nat_match.head,
+            ersd::Term::NatFold(nat_fold) => self.lower_to_name(
+                &nat_fold.head,
                 frame,
                 state,
                 builder,
@@ -2815,11 +2815,11 @@ impl<'a> Lowerer<'a> {
                     );
 
                     let succ_frame = frame.extended([
-                        (nat_match.pred.clone(), i2.clone()),
-                        (nat_match.ih.clone(), acc2.clone()),
+                        (nat_fold.pred.clone(), i2.clone()),
+                        (nat_fold.ih.clone(), acc2.clone()),
                     ]);
                     let body_tail = this.lower_tail(
-                        &nat_match.succ_case,
+                        &nat_fold.succ_case,
                         &succ_frame,
                         &body_resume_name,
                         state,
@@ -2850,7 +2850,7 @@ impl<'a> Lowerer<'a> {
 
                     // Outer tail: lower zero_case; its result flows into zero_resume → loop.
                     this.lower_tail(
-                        &nat_match.zero_case,
+                        &nat_fold.zero_case,
                         frame,
                         &zero_resume_name,
                         state,

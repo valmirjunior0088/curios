@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, Prim, Rec, Split, Term, Tuple,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, Prim, Rec, Split, Term, Tuple,
         TupleType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -199,7 +199,7 @@ fn print_term(term: Term) -> Printer<'static> {
             sep_flat(fields.into_iter().map(|f| print_term(*f)), || pure(", ")),
             pure(")"),
         ]),
-        Term::NatMatch(NatMatch {
+        Term::NatFold(NatFold {
             head,
             motive_label,
             motive,
@@ -208,7 +208,7 @@ fn print_term(term: Term) -> Printer<'static> {
             ih_label,
             succ_case,
         }) => flat([
-            pure("Nat.match "),
+            pure("Nat.fold "),
             print_term(*head),
             pure(" : "),
             pure(motive_label),

@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatMatch, One, Prim, Rec, Scope, Split,
+        Apply, Atom, AtomType, Func, FuncType, Let, Match, NatFold, One, Prim, Rec, Scope, Split,
         Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -370,7 +370,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
         Term::Prim(prim) => print_prim(prim, depth),
-        Term::NatMatch(NatMatch {
+        Term::NatFold(NatFold {
             head,
             motive,
             zero_case,
@@ -380,7 +380,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let ((pred_label, ih_label), succ_case) = open_scope_two(succ_case, depth);
 
             flat([
-                pure("Nat.match "),
+                pure("Nat.fold "),
                 print_term(*head, depth),
                 pure(" : "),
                 pure(motive_label),

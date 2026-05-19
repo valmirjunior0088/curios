@@ -228,14 +228,14 @@ impl Tuple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NatMatch {
+pub struct NatFold {
     pub head: Subterm,
     pub motive: Scope<One>,
     pub zero_case: Subterm,
     pub succ_case: Scope<Two>,
 }
 
-impl NatMatch {
+impl NatFold {
     pub fn new<H, ML, M, ZC, PL, IL, SC>(
         head: H,
         motive_label: ML,
@@ -426,7 +426,7 @@ impl Rec {
 pub enum Term {
     Type,
     Prim(Prim),
-    NatMatch(NatMatch),
+    NatFold(NatFold),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -541,9 +541,9 @@ impl From<Tuple> for Term {
     }
 }
 
-impl From<NatMatch> for Term {
-    fn from(value: NatMatch) -> Self {
-        Self::NatMatch(value)
+impl From<NatFold> for Term {
+    fn from(value: NatFold) -> Self {
+        Self::NatFold(value)
     }
 }
 
@@ -821,12 +821,12 @@ where
         }
     }
 
-    fn visit_nat_match(&mut self, nat_match: &NatMatch) -> NatMatch {
-        NatMatch {
-            head: self.visit_subterm(&nat_match.head),
-            motive: self.visit_scope(&nat_match.motive),
-            zero_case: self.visit_subterm(&nat_match.zero_case),
-            succ_case: self.visit_scope(&nat_match.succ_case),
+    fn visit_nat_fold(&mut self, nat_fold: &NatFold) -> NatFold {
+        NatFold {
+            head: self.visit_subterm(&nat_fold.head),
+            motive: self.visit_scope(&nat_fold.motive),
+            zero_case: self.visit_subterm(&nat_fold.zero_case),
+            succ_case: self.visit_scope(&nat_fold.succ_case),
         }
     }
 
@@ -873,7 +873,7 @@ where
         match term {
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
-            Term::NatMatch(nat_match) => self.visit_nat_match(nat_match).into(),
+            Term::NatFold(nat_fold) => self.visit_nat_fold(nat_fold).into(),
             Term::FuncType(ft) => self.visit_func_type(ft).into(),
             Term::Func(func) => self.visit_func(func).into(),
             Term::Apply(apply) => self.visit_apply(apply).into(),

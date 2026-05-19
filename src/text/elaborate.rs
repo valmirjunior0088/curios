@@ -33,7 +33,7 @@ pub fn elaborate(term: &Term) -> core::Term {
 
         Term::Tuple(t) => core::Tuple::new(t.fields.iter().map(|f| elaborate(f))).into(),
 
-        Term::NatMatch(nm) => core::NatMatch::new(
+        Term::NatFold(nm) => core::NatFold::new(
             elaborate(&nm.head),
             nm.motive_label.clone(),
             elaborate(&nm.motive),
