@@ -69,6 +69,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
+        Prim::NatNeq(left, right) => flat([
+            pure("Nat.neq "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
         Prim::NatAdd(left, right) => flat([
             pure("Nat.add "),
             print_term(*left, depth),
@@ -87,8 +93,8 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
-        Prim::NatNeq(left, right) => flat([
-            pure("Nat.neq "),
+        Prim::NatLt(left, right) => flat([
+            pure("Nat.lt "),
             print_term(*left, depth),
             pure(" "),
             print_term(*right, depth),
@@ -101,12 +107,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::NatRem(left, right) => flat([
             pure("Nat.rem "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::NatLt(left, right) => flat([
-            pure("Nat.lt "),
             print_term(*left, depth),
             pure(" "),
             print_term(*right, depth),
@@ -137,6 +137,12 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
+        Prim::IntNeq(left, right) => flat([
+            pure("Int.neq "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
         Prim::IntAdd(left, right) => flat([
             pure("Int.add "),
             print_term(*left, depth),
@@ -151,32 +157,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::IntMul(left, right) => flat([
             pure("Int.mul "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::FltType => pure("Flt"),
-        Prim::Flt(flt) => print_flt(flt),
-        Prim::FltAdd(left, right) => flat([
-            pure("Flt.add "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::FltSub(left, right) => flat([
-            pure("Flt.sub "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::FltMul(left, right) => flat([
-            pure("Flt.mul "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::IntNeq(left, right) => flat([
-            pure("Int.neq "),
             print_term(*left, depth),
             pure(" "),
             print_term(*right, depth),
@@ -217,27 +197,28 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
-        Prim::FltNeg(inner) => flat([pure("Flt.neg "), print_term(*inner, depth)]),
-        Prim::FltAbs(inner) => flat([pure("Flt.abs "), print_term(*inner, depth)]),
-        Prim::FltSqrt(inner) => flat([pure("Flt.sqrt "), print_term(*inner, depth)]),
-        Prim::FltFloor(inner) => flat([pure("Flt.floor "), print_term(*inner, depth)]),
-        Prim::FltCeil(inner) => flat([pure("Flt.ceil "), print_term(*inner, depth)]),
-        Prim::FltTrunc(inner) => flat([pure("Flt.trunc "), print_term(*inner, depth)]),
-        Prim::FltNearest(inner) => flat([pure("Flt.nearest "), print_term(*inner, depth)]),
+        Prim::FltType => pure("Flt"),
+        Prim::Flt(flt) => print_flt(flt),
+        Prim::FltAdd(left, right) => flat([
+            pure("Flt.add "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltSub(left, right) => flat([
+            pure("Flt.sub "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltMul(left, right) => flat([
+            pure("Flt.mul "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
         Prim::FltDiv(left, right) => flat([
             pure("Flt.div "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::FltMin(left, right) => flat([
-            pure("Flt.min "),
-            print_term(*left, depth),
-            pure(" "),
-            print_term(*right, depth),
-        ]),
-        Prim::FltMax(left, right) => flat([
-            pure("Flt.max "),
             print_term(*left, depth),
             pure(" "),
             print_term(*right, depth),
@@ -278,12 +259,31 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
+        Prim::FltMin(left, right) => flat([
+            pure("Flt.min "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltMax(left, right) => flat([
+            pure("Flt.max "),
+            print_term(*left, depth),
+            pure(" "),
+            print_term(*right, depth),
+        ]),
+        Prim::FltNeg(inner) => flat([pure("Flt.neg "), print_term(*inner, depth)]),
+        Prim::FltAbs(inner) => flat([pure("Flt.abs "), print_term(*inner, depth)]),
+        Prim::FltSqrt(inner) => flat([pure("Flt.sqrt "), print_term(*inner, depth)]),
+        Prim::FltFloor(inner) => flat([pure("Flt.floor "), print_term(*inner, depth)]),
+        Prim::FltCeil(inner) => flat([pure("Flt.ceil "), print_term(*inner, depth)]),
+        Prim::FltTrunc(inner) => flat([pure("Flt.trunc "), print_term(*inner, depth)]),
+        Prim::FltNearest(inner) => flat([pure("Flt.nearest "), print_term(*inner, depth)]),
         Prim::NatToInt(inner) => flat([pure("Nat.to_int "), print_term(*inner, depth)]),
+        Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(*inner, depth)]),
         Prim::IntToNat(inner) => flat([pure("Int.to_nat "), print_term(*inner, depth)]),
         Prim::IntToFlt(inner) => flat([pure("Int.to_flt "), print_term(*inner, depth)]),
-        Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(*inner, depth)]),
-        Prim::FltToInt(inner) => flat([pure("Flt.to_int "), print_term(*inner, depth)]),
         Prim::FltToNat(inner) => flat([pure("Flt.to_nat "), print_term(*inner, depth)]),
+        Prim::FltToInt(inner) => flat([pure("Flt.to_int "), print_term(*inner, depth)]),
         Prim::BinType => pure("Bin"),
         Prim::Bin(bytes) => pure(
             bytes
@@ -590,27 +590,27 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Term::Sealed(Sealed { repr, body }) => {
+        Term::Sealed(Sealed { carrier, body }) => {
             let label = label_at(depth);
             let var: Term = Var::free(&label).into();
             flat([
                 pure("let "),
                 pure(label.clone()),
                 pure("{"),
-                print_term(repr.open(&[&var]), depth + 1),
+                print_term(*carrier.clone(), depth + 1),
                 pure("};\n"),
                 print_term(body.open(&[&var]), depth + 1),
             ])
         }
-        Term::Seal(Seal { opaque, value }) => flat([
-            print_term(*opaque, depth),
+        Term::Seal(Seal { carrier, value }) => flat([
+            print_term(*carrier, depth),
             pure("{"),
             print_term(*value, depth),
             pure("}"),
         ]),
-        Term::Unseal(Unseal { opaque, value }) => flat([
+        Term::Unseal(Unseal { carrier, value }) => flat([
             pure("let "),
-            print_term(*opaque, depth),
+            print_term(*carrier, depth),
             pure("{#x} = "),
             print_term(*value, depth),
             pure(";"),

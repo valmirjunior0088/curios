@@ -182,6 +182,16 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::NatEql(left, right)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatNeq(left, right)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => {
                 let left = self.lower_letrec_name(left, frame, state, builder);
                 let right = self.lower_letrec_name(right, frame, state, builder);
@@ -220,16 +230,6 @@ impl<'a> Lowerer<'a> {
                     state,
                     builder,
                     cont::Value::Eval(cont::Code::NatLt(left, right)),
-                )
-            }
-            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatNeq(left, right)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => {
@@ -298,6 +298,16 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::IntEql(left, right)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => {
+                let left = self.lower_letrec_name(left, frame, state, builder);
+                let right = self.lower_letrec_name(right, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::IntNeq(left, right)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => {
                 let left = self.lower_letrec_name(left, frame, state, builder);
                 let right = self.lower_letrec_name(right, frame, state, builder);
@@ -326,16 +336,6 @@ impl<'a> Lowerer<'a> {
                     state,
                     builder,
                     cont::Value::Eval(cont::Code::IntMul(left, right)),
-                )
-            }
-            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntNeq(left, right)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
@@ -590,6 +590,15 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::NatToInt(operand)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::NatToFlt(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatToFlt(operand)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::IntToNat(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
 
@@ -608,13 +617,13 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::IntToFlt(operand)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::NatToFlt(operand)) => {
+            ersd::Term::Prim(ersd::Prim::FltToNat(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
 
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::NatToFlt(operand)),
+                    cont::Value::Eval(cont::Code::FltToNat(operand)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::FltToInt(operand)) => {
@@ -624,15 +633,6 @@ impl<'a> Lowerer<'a> {
                     state,
                     builder,
                     cont::Value::Eval(cont::Code::FltToInt(operand)),
-                )
-            }
-            ersd::Term::Prim(ersd::Prim::FltToNat(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltToNat(operand)),
                 )
             }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => emit_fresh_value(

@@ -1,5 +1,5 @@
 use {
-    super::Term,
+    super::{Term, Type},
     std::{collections::HashMap, time::Duration},
 };
 
@@ -9,7 +9,7 @@ pub struct Context {
     timeout: Duration,
     assumptions: Vec<HashMap<String, Term>>,
     definitions: Vec<HashMap<String, Term>>,
-    sealed_reprs: Vec<HashMap<String, Term>>,
+    representations: Vec<HashMap<String, Term>>,
 }
 
 impl Context {
@@ -19,7 +19,7 @@ impl Context {
             timeout,
             assumptions: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
-            sealed_reprs: vec![HashMap::new()],
+            representations: vec![HashMap::new()],
         }
     }
 
@@ -37,13 +37,13 @@ impl Context {
     fn enter_frame(&mut self) {
         self.assumptions.push(HashMap::new());
         self.definitions.push(HashMap::new());
-        self.sealed_reprs.push(HashMap::new());
+        self.representations.push(HashMap::new());
     }
 
     fn leave_frame(&mut self) {
         self.assumptions.pop().unwrap();
         self.definitions.pop().unwrap();
-        self.sealed_reprs.pop().unwrap();
+        self.representations.pop().unwrap();
     }
 
     pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -97,20 +97,20 @@ impl Context {
         self.define(label, term);
     }
 
-    pub fn assume_sealed<A>(&mut self, label: A, repr: &Term)
+    pub fn assume_sealed<A>(&mut self, label: A, representation: &Term)
     where
         A: Into<String>,
     {
         let label = label.into();
-        self.assume(label.as_str(), &super::Type.into());
-        self.sealed_reprs
+        self.assume(label.as_str(), &Type.into());
+        self.representations
             .last_mut()
             .unwrap()
-            .insert(label, repr.clone());
+            .insert(label, representation.clone());
     }
 
-    pub fn sealed_repr(&self, label: &str) -> Option<&Term> {
-        self.sealed_reprs
+    pub fn representation(&self, label: &str) -> Option<&Term> {
+        self.representations
             .iter()
             .rev()
             .find_map(|reprs| reprs.get(label))

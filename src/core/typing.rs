@@ -36,9 +36,9 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         | Prim::NatAdd(left, right)
         | Prim::NatSub(left, right)
         | Prim::NatMul(left, right)
+        | Prim::NatLt(left, right)
         | Prim::NatDiv(left, right)
         | Prim::NatRem(left, right)
-        | Prim::NatLt(left, right)
         | Prim::NatGt(left, right)
         | Prim::NatLte(left, right)
         | Prim::NatGte(left, right) => {
@@ -110,6 +110,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Term::Prim(Prim::IntType))
         }
+        Prim::NatToFlt(inner) => {
+            erase(context, inner, &Term::Prim(Prim::NatType))?;
+
+            Ok(Term::Prim(Prim::FltType))
+        }
         Prim::IntToNat(inner) => {
             erase(context, inner, &Term::Prim(Prim::IntType))?;
 
@@ -120,20 +125,15 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Term::Prim(Prim::FltType))
         }
-        Prim::NatToFlt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
+        Prim::FltToNat(inner) => {
+            erase(context, inner, &Term::Prim(Prim::FltType))?;
 
-            Ok(Term::Prim(Prim::FltType))
+            Ok(Term::Prim(Prim::NatType))
         }
         Prim::FltToInt(inner) => {
             erase(context, inner, &Term::Prim(Prim::FltType))?;
 
             Ok(Term::Prim(Prim::IntType))
-        }
-        Prim::FltToNat(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::NatType))
         }
         Prim::BinType => Ok(Type.into()),
         Prim::Bin(_) => Ok(Term::Prim(Prim::BinType)),
@@ -508,52 +508,51 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
 }
 
 fn infer_sealed(context: &mut Context, sealed: &Sealed) -> Result<Term, Error> {
-    let Sealed { repr, body } = sealed;
+    let Sealed { carrier, body } = sealed;
 
     let label = context.fresh();
     let var = Var::free(&label).into();
 
-    let repr_t = repr.open(&[&var]);
-    erase(context, &repr_t, &Type.into())?;
+    erase(context, &carrier, &Type.into())?;
 
     context.with_frame(|context| {
-        context.assume_sealed(&label, &repr_t);
+        context.assume_sealed(&label, &carrier);
         infer(context, &body.open(&[&var]))
     })
 }
 
 fn infer_seal(context: &mut Context, seal: &Seal, term: &Term) -> Result<Term, Error> {
-    let Seal { opaque, value } = seal;
+    let Seal { carrier, value } = seal;
 
-    let opaque_r = reduce(context, opaque)?;
-    let Term::Var(var) = &opaque_r else {
+    let carrier_r = reduce(context, carrier)?;
+    let Term::Var(var) = &carrier_r else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
     let repr_t = context
-        .sealed_repr(var.unwrap())
+        .representation(var.unwrap())
         .ok_or_else(|| Error::cannot_infer(term.clone()))?
         .clone();
 
     erase(context, value, &repr_t)?;
 
-    Ok(opaque_r)
+    Ok(carrier_r)
 }
 
 fn infer_unseal(context: &mut Context, unseal: &Unseal, term: &Term) -> Result<Term, Error> {
-    let Unseal { opaque, value } = unseal;
+    let Unseal { carrier, value } = unseal;
 
-    let opaque_r = reduce(context, opaque)?;
-    let Term::Var(var) = &opaque_r else {
+    let carrier_r = reduce(context, carrier)?;
+    let Term::Var(var) = &carrier_r else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
     let repr_t = context
-        .sealed_repr(var.unwrap())
+        .representation(var.unwrap())
         .ok_or_else(|| Error::cannot_infer(term.clone()))?
         .clone();
 
-    erase(context, value, &opaque_r)?;
+    erase(context, value, &carrier_r)?;
 
     Ok(repr_t)
 }
@@ -1616,16 +1615,15 @@ fn erase_sealed(
     sealed: &Sealed,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Sealed { repr, body } = sealed;
+    let Sealed { carrier, body } = sealed;
 
     let label = context.fresh();
     let var = Var::free(&label).into();
 
-    let repr_t = repr.open(&[&var]);
-    erase(context, &repr_t, &Type.into())?;
+    erase(context, &carrier, &Type.into())?;
 
     context.with_frame(|context| {
-        context.assume_sealed(&label, &repr_t);
+        context.assume_sealed(&label, &carrier);
         erase(context, &body.open(&[&var]), expected)
     })
 }
@@ -1636,19 +1634,19 @@ fn erase_seal(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Seal { opaque, value } = seal;
+    let Seal { carrier, value } = seal;
 
-    let opaque_r = reduce(context, opaque)?;
-    let Term::Var(var) = &opaque_r else {
+    let carrier_r = reduce(context, carrier)?;
+    let Term::Var(var) = &carrier_r else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
     let repr_t = context
-        .sealed_repr(var.unwrap())
+        .representation(var.unwrap())
         .ok_or_else(|| Error::cannot_infer(term.clone()))?
         .clone();
 
-    expect(context, term, &opaque_r, expected)?;
+    expect(context, term, &carrier_r, expected)?;
     erase(context, value, &repr_t)
 }
 
@@ -1658,20 +1656,20 @@ fn erase_unseal(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Unseal { opaque, value } = unseal;
+    let Unseal { carrier, value } = unseal;
 
-    let opaque_r = reduce(context, opaque)?;
-    let Term::Var(var) = &opaque_r else {
+    let carrier_r = reduce(context, carrier)?;
+    let Term::Var(var) = &carrier_r else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
     let repr_t = context
-        .sealed_repr(var.unwrap())
+        .representation(var.unwrap())
         .ok_or_else(|| Error::cannot_infer(term.clone()))?
         .clone();
 
     expect(context, term, &repr_t, expected)?;
-    erase(context, value, &opaque_r)
+    erase(context, value, &carrier_r)
 }
 
 fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd::Term, Error> {
@@ -2539,7 +2537,7 @@ mod tests {
         let nat_type = Term::Prim(Prim::NatType);
         let val = Term::Prim(Prim::Nat(1));
 
-        // Two distinct sealed types T1 and T2, both with repr Nat.
+        // Two distinct sealed types T1 and T2, both with carrier Nat.
         // Seal(T1, v) cannot have type T2.
         // We test that Seal with a non-sealed Var is rejected.
         let sealed_term = Term::from(Sealed::new(

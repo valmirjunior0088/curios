@@ -195,87 +195,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::IntEql(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Eq);
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::IntNeq(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Ne);
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::IntAdd(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Add);
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::IntSub(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Sub);
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::IntMul(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Mul);
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::FltAdd(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::F32Add);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.table().flt_type(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::FltSub(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::F32Sub);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.table().flt_type(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::FltMul(left, right) => {
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::F32Mul);
-
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.table().flt_type(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
             cont::Code::NatDiv(left, right) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
@@ -316,6 +235,51 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
                 self.emit_instr(wasm::Instr::I32GeU);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntEql(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Eq);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntNeq(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Ne);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntAdd(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntSub(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntMul(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Mul);
                 self.emit_instr(wasm::Instr::RefI31);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
@@ -565,6 +529,42 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
+            cont::Code::FltAdd(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Add);
+
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::FltSub(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Sub);
+
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::FltMul(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Mul);
+
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::FltDiv(left, right) => {
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
@@ -733,7 +733,24 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::NatToInt(operand) | cont::Code::IntToNat(operand) => {
+            cont::Code::NatToInt(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::NatToFlt(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::F32ConvertI32U);
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().flt_type(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntToNat(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
                 self.emit_instr(wasm::Instr::RefI31);
                 self.emit_instr(wasm::Instr::LocalSet {
@@ -750,12 +767,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::NatToFlt(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
-                self.emit_instr(wasm::Instr::F32ConvertI32U);
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.table().flt_type(),
-                });
+            cont::Code::FltToNat(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::I32TruncF32U);
+                self.emit_instr(wasm::Instr::RefI31);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
@@ -763,14 +778,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             cont::Code::FltToInt(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::I32TruncF32S);
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
-            cont::Code::FltToNat(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::I32TruncF32U);
                 self.emit_instr(wasm::Instr::RefI31);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),

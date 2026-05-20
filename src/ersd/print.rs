@@ -30,9 +30,9 @@ fn print_prim<'a>(prim: &'a Prim) -> Printer<'a> {
         Prim::NatAdd(l, r) => flat([pure("Nat.add "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatSub(l, r) => flat([pure("Nat.sub "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatMul(l, r) => flat([pure("Nat.mul "), print_term(l), pure(" "), print_term(r)]),
+        Prim::NatLt(l, r) => flat([pure("Nat.lt "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatDiv(l, r) => flat([pure("Nat.div "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatRem(l, r) => flat([pure("Nat.rem "), print_term(l), pure(" "), print_term(r)]),
-        Prim::NatLt(l, r) => flat([pure("Nat.lt "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatGt(l, r) => flat([pure("Nat.gt "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatLte(l, r) => flat([pure("Nat.lte "), print_term(l), pure(" "), print_term(r)]),
         Prim::NatGte(l, r) => flat([pure("Nat.gte "), print_term(l), pure(" "), print_term(r)]),
@@ -69,11 +69,11 @@ fn print_prim<'a>(prim: &'a Prim) -> Printer<'a> {
         Prim::FltTrunc(t) => flat([pure("Flt.trunc "), print_term(t)]),
         Prim::FltNearest(t) => flat([pure("Flt.nearest "), print_term(t)]),
         Prim::NatToInt(t) => flat([pure("Nat.to_int "), print_term(t)]),
+        Prim::NatToFlt(t) => flat([pure("Nat.to_flt "), print_term(t)]),
         Prim::IntToNat(t) => flat([pure("Int.to_nat "), print_term(t)]),
         Prim::IntToFlt(t) => flat([pure("Int.to_flt "), print_term(t)]),
-        Prim::NatToFlt(t) => flat([pure("Nat.to_flt "), print_term(t)]),
-        Prim::FltToInt(t) => flat([pure("Flt.to_int "), print_term(t)]),
         Prim::FltToNat(t) => flat([pure("Flt.to_nat "), print_term(t)]),
+        Prim::FltToInt(t) => flat([pure("Flt.to_int "), print_term(t)]),
         Prim::Bin(bytes) => pure(
             bytes
                 .iter()

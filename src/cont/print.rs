@@ -417,11 +417,11 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             print_value_name(right),
         ]),
         Code::NatToInt(operand) => flat([pure("Nat.to_int"), pure(" "), print_value_name(operand)]),
+        Code::NatToFlt(operand) => flat([pure("Nat.to_flt"), pure(" "), print_value_name(operand)]),
         Code::IntToNat(operand) => flat([pure("Int.to_nat"), pure(" "), print_value_name(operand)]),
         Code::IntToFlt(operand) => flat([pure("Int.to_flt"), pure(" "), print_value_name(operand)]),
-        Code::NatToFlt(operand) => flat([pure("Nat.to_flt"), pure(" "), print_value_name(operand)]),
-        Code::FltToInt(operand) => flat([pure("Flt.to_int"), pure(" "), print_value_name(operand)]),
         Code::FltToNat(operand) => flat([pure("Flt.to_nat"), pure(" "), print_value_name(operand)]),
+        Code::FltToInt(operand) => flat([pure("Flt.to_int"), pure(" "), print_value_name(operand)]),
         Code::BinLen(bin) => flat([pure("Bin.len"), pure(" "), print_value_name(bin)]),
         Code::BinEql(left, right) => flat([
             pure("Bin.eql"),

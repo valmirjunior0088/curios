@@ -65,17 +65,17 @@ impl Convert {
             | (Prim::NatAdd(this_left, this_right), Prim::NatAdd(that_left, that_right))
             | (Prim::NatSub(this_left, this_right), Prim::NatSub(that_left, that_right))
             | (Prim::NatMul(this_left, this_right), Prim::NatMul(that_left, that_right))
+            | (Prim::NatLt(this_left, this_right), Prim::NatLt(that_left, that_right))
             | (Prim::NatDiv(this_left, this_right), Prim::NatDiv(that_left, that_right))
             | (Prim::NatRem(this_left, this_right), Prim::NatRem(that_left, that_right))
-            | (Prim::NatLt(this_left, this_right), Prim::NatLt(that_left, that_right))
             | (Prim::NatGt(this_left, this_right), Prim::NatGt(that_left, that_right))
             | (Prim::NatLte(this_left, this_right), Prim::NatLte(that_left, that_right))
             | (Prim::NatGte(this_left, this_right), Prim::NatGte(that_left, that_right))
             | (Prim::IntEql(this_left, this_right), Prim::IntEql(that_left, that_right))
+            | (Prim::IntNeq(this_left, this_right), Prim::IntNeq(that_left, that_right))
             | (Prim::IntAdd(this_left, this_right), Prim::IntAdd(that_left, that_right))
             | (Prim::IntSub(this_left, this_right), Prim::IntSub(that_left, that_right))
             | (Prim::IntMul(this_left, this_right), Prim::IntMul(that_left, that_right))
-            | (Prim::IntNeq(this_left, this_right), Prim::IntNeq(that_left, that_right))
             | (Prim::IntDiv(this_left, this_right), Prim::IntDiv(that_left, that_right))
             | (Prim::IntRem(this_left, this_right), Prim::IntRem(that_left, that_right))
             | (Prim::IntLt(this_left, this_right), Prim::IntLt(that_left, that_right))
@@ -86,14 +86,14 @@ impl Convert {
             | (Prim::FltSub(this_left, this_right), Prim::FltSub(that_left, that_right))
             | (Prim::FltMul(this_left, this_right), Prim::FltMul(that_left, that_right))
             | (Prim::FltDiv(this_left, this_right), Prim::FltDiv(that_left, that_right))
-            | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
-            | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
             | (Prim::FltEql(this_left, this_right), Prim::FltEql(that_left, that_right))
             | (Prim::FltNeq(this_left, this_right), Prim::FltNeq(that_left, that_right))
             | (Prim::FltLt(this_left, this_right), Prim::FltLt(that_left, that_right))
             | (Prim::FltGt(this_left, this_right), Prim::FltGt(that_left, that_right))
             | (Prim::FltLte(this_left, this_right), Prim::FltLte(that_left, that_right))
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
+            | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
+            | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
             | (Prim::ArrGet(this_left, this_right), Prim::ArrGet(that_left, that_right))
             | (Prim::ArrAppend(this_left, this_right), Prim::ArrAppend(that_left, that_right))
             | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
@@ -112,11 +112,11 @@ impl Convert {
             | (Prim::FltTrunc(this), Prim::FltTrunc(that))
             | (Prim::FltNearest(this), Prim::FltNearest(that))
             | (Prim::NatToInt(this), Prim::NatToInt(that))
+            | (Prim::NatToFlt(this), Prim::NatToFlt(that))
             | (Prim::IntToNat(this), Prim::IntToNat(that))
             | (Prim::IntToFlt(this), Prim::IntToFlt(that))
-            | (Prim::NatToFlt(this), Prim::NatToFlt(that))
-            | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::FltToNat(this), Prim::FltToNat(that))
+            | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::ArrLen(this), Prim::ArrLen(that))
             | (Prim::BinLen(this), Prim::BinLen(that)) => {
                 self.enqueue(*this, *that);
@@ -394,19 +394,19 @@ impl Convert {
         that: Sealed,
     ) -> Result<bool, Preempted> {
         let label = Var::free(context.fresh()).into();
-        self.enqueue(this.repr.open(&[&label]), that.repr.open(&[&label]));
+        self.enqueue(*this.carrier, *that.carrier);
         self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
         Ok(true)
     }
 
     fn compare_seal(&mut self, this: Seal, that: Seal) -> Result<bool, Preempted> {
-        self.enqueue(*this.opaque, *that.opaque);
+        self.enqueue(*this.carrier, *that.carrier);
         self.enqueue(*this.value, *that.value);
         Ok(true)
     }
 
     fn compare_unseal(&mut self, this: Unseal, that: Unseal) -> Result<bool, Preempted> {
-        self.enqueue(*this.opaque, *that.opaque);
+        self.enqueue(*this.carrier, *that.carrier);
         self.enqueue(*this.value, *that.value);
         Ok(true)
     }

@@ -42,6 +42,17 @@ impl Reduce {
                     (left, right) => Term::Prim(Prim::nat_eql(left, right)),
                 })
             }
+            Prim::NatNeq(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
+                        Term::Prim(Prim::Nat(if left != right { 1 } else { 0 }))
+                    }
+                    (left, right) => Term::Prim(Prim::nat_neq(left, right)),
+                })
+            }
             Prim::NatAdd(left, right) => {
                 let left = self.reduce(context, left.as_ref().clone())?;
                 let right = self.reduce(context, right.as_ref().clone())?;
@@ -75,15 +86,15 @@ impl Reduce {
                     (left, right) => Term::Prim(Prim::nat_mul(left, right)),
                 })
             }
-            Prim::NatNeq(left, right) => {
+            Prim::NatLt(left, right) => {
                 let left = self.reduce(context, left.as_ref().clone())?;
                 let right = self.reduce(context, right.as_ref().clone())?;
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Prim(Prim::Nat(if left != right { 1 } else { 0 }))
+                        Term::Prim(Prim::Nat(if left < right { 1 } else { 0 }))
                     }
-                    (left, right) => Term::Prim(Prim::nat_neq(left, right)),
+                    (left, right) => Term::Prim(Prim::nat_lt(left, right)),
                 })
             }
             Prim::NatDiv(left, right) => {
@@ -106,17 +117,6 @@ impl Reduce {
                         Term::Prim(Prim::Nat(left.wrapping_rem(right)))
                     }
                     (left, right) => Term::Prim(Prim::nat_rem(left, right)),
-                })
-            }
-            Prim::NatLt(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Prim(Prim::Nat(if left < right { 1 } else { 0 }))
-                    }
-                    (left, right) => Term::Prim(Prim::nat_lt(left, right)),
                 })
             }
             Prim::NatGt(left, right) => {
@@ -165,6 +165,17 @@ impl Reduce {
                     (left, right) => Term::Prim(Prim::int_eql(left, right)),
                 })
             }
+            Prim::IntNeq(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
+
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
+                        Term::Prim(Prim::Nat(if left != right { 1 } else { 0 }))
+                    }
+                    (left, right) => Term::Prim(Prim::int_neq(left, right)),
+                })
+            }
             Prim::IntAdd(left, right) => {
                 let left = self.reduce(context, left.as_ref().clone())?;
                 let right = self.reduce(context, right.as_ref().clone())?;
@@ -196,52 +207,6 @@ impl Reduce {
                         Term::Prim(Prim::Int(left.wrapping_mul(right)))
                     }
                     (left, right) => Term::Prim(Prim::int_mul(left, right)),
-                })
-            }
-            Prim::FltType => Ok(Term::Prim(Prim::FltType)),
-            Prim::Flt(flt) => Ok(Term::Prim(Prim::Flt(*flt))),
-            Prim::FltAdd(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(left + right))
-                    }
-                    (left, right) => Term::Prim(Prim::flt_add(left, right)),
-                })
-            }
-            Prim::FltSub(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(left - right))
-                    }
-                    (left, right) => Term::Prim(Prim::flt_sub(left, right)),
-                })
-            }
-            Prim::FltMul(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(left * right))
-                    }
-                    (left, right) => Term::Prim(Prim::flt_mul(left, right)),
-                })
-            }
-            Prim::IntNeq(left, right) => {
-                let left = self.reduce(context, left.as_ref().clone())?;
-                let right = self.reduce(context, right.as_ref().clone())?;
-
-                Ok(match (left, right) {
-                    (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Prim(Prim::Nat(if left != right { 1 } else { 0 }))
-                    }
-                    (left, right) => Term::Prim(Prim::int_neq(left, right)),
                 })
             }
             Prim::IntDiv(left, right) => {
@@ -310,74 +275,39 @@ impl Reduce {
                     (left, right) => Term::Prim(Prim::int_gte(left, right)),
                 })
             }
-            Prim::FltNeg(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
+            Prim::FltType => Ok(Term::Prim(Prim::FltType)),
+            Prim::Flt(flt) => Ok(Term::Prim(Prim::Flt(*flt))),
+            Prim::FltAdd(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(-flt))
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
+                        Term::Prim(Prim::Flt(left + right))
                     }
-                    inner => Term::Prim(Prim::flt_neg(inner)),
+                    (left, right) => Term::Prim(Prim::flt_add(left, right)),
                 })
             }
-            Prim::FltAbs(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
+            Prim::FltSub(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(flt.abs()))
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
+                        Term::Prim(Prim::Flt(left - right))
                     }
-                    inner => Term::Prim(Prim::flt_abs(inner)),
+                    (left, right) => Term::Prim(Prim::flt_sub(left, right)),
                 })
             }
-            Prim::FltSqrt(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
+            Prim::FltMul(left, right) => {
+                let left = self.reduce(context, left.as_ref().clone())?;
+                let right = self.reduce(context, right.as_ref().clone())?;
 
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(flt.sqrt()))
+                Ok(match (left, right) {
+                    (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
+                        Term::Prim(Prim::Flt(left * right))
                     }
-                    inner => Term::Prim(Prim::flt_sqrt(inner)),
-                })
-            }
-            Prim::FltFloor(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(flt.floor()))
-                    }
-                    inner => Term::Prim(Prim::flt_floor(inner)),
-                })
-            }
-            Prim::FltCeil(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(flt.ceil()))
-                    }
-                    inner => Term::Prim(Prim::flt_ceil(inner)),
-                })
-            }
-            Prim::FltTrunc(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(flt.trunc()))
-                    }
-                    inner => Term::Prim(Prim::flt_trunc(inner)),
-                })
-            }
-            Prim::FltNearest(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(flt.nearest()))
-                    }
-                    inner => Term::Prim(Prim::flt_nearest(inner)),
+                    (left, right) => Term::Prim(Prim::flt_mul(left, right)),
                 })
             }
             Prim::FltDiv(left, right) => {
@@ -479,12 +409,76 @@ impl Reduce {
                     (left, right) => Term::Prim(Prim::flt_gte(left, right)),
                 })
             }
+            Prim::FltNeg(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(-flt)),
+                    inner => Term::Prim(Prim::flt_neg(inner)),
+                })
+            }
+            Prim::FltAbs(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(flt.abs())),
+                    inner => Term::Prim(Prim::flt_abs(inner)),
+                })
+            }
+            Prim::FltSqrt(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(flt.sqrt())),
+                    inner => Term::Prim(Prim::flt_sqrt(inner)),
+                })
+            }
+            Prim::FltFloor(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(flt.floor())),
+                    inner => Term::Prim(Prim::flt_floor(inner)),
+                })
+            }
+            Prim::FltCeil(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(flt.ceil())),
+                    inner => Term::Prim(Prim::flt_ceil(inner)),
+                })
+            }
+            Prim::FltTrunc(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(flt.trunc())),
+                    inner => Term::Prim(Prim::flt_trunc(inner)),
+                })
+            }
+            Prim::FltNearest(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Flt(flt.nearest())),
+                    inner => Term::Prim(Prim::flt_nearest(inner)),
+                })
+            }
             Prim::NatToInt(inner) => {
                 let inner = self.reduce(context, inner.as_ref().clone())?;
 
                 Ok(match inner {
                     Term::Prim(Prim::Nat(v)) => Term::Prim(Prim::Int(v as i32)),
                     inner => Term::Prim(Prim::nat_to_int(inner)),
+                })
+            }
+            Prim::NatToFlt(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Nat(v)) => Term::Prim(Prim::Flt(Flt::from_f32(v as f32))),
+                    inner => Term::Prim(Prim::nat_to_flt(inner)),
                 })
             }
             Prim::IntToNat(inner) => {
@@ -503,12 +497,12 @@ impl Reduce {
                     inner => Term::Prim(Prim::int_to_flt(inner)),
                 })
             }
-            Prim::NatToFlt(inner) => {
+            Prim::FltToNat(inner) => {
                 let inner = self.reduce(context, inner.as_ref().clone())?;
 
                 Ok(match inner {
-                    Term::Prim(Prim::Nat(v)) => Term::Prim(Prim::Flt(Flt::from_f32(v as f32))),
-                    inner => Term::Prim(Prim::nat_to_flt(inner)),
+                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Nat(flt.to_f32() as u32)),
+                    inner => Term::Prim(Prim::flt_to_nat(inner)),
                 })
             }
             Prim::FltToInt(inner) => {
@@ -517,14 +511,6 @@ impl Reduce {
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Int(flt.to_f32() as i32)),
                     inner => Term::Prim(Prim::flt_to_int(inner)),
-                })
-            }
-            Prim::FltToNat(inner) => {
-                let inner = self.reduce(context, inner.as_ref().clone())?;
-
-                Ok(match inner {
-                    Term::Prim(Prim::Flt(flt)) => Term::Prim(Prim::Nat(flt.to_f32() as u32)),
-                    inner => Term::Prim(Prim::flt_to_nat(inner)),
                 })
             }
             Prim::BinType => Ok(Term::Prim(Prim::BinType)),

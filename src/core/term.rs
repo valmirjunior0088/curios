@@ -461,12 +461,12 @@ impl Rec {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sealed {
-    pub repr: Scope<One>,
+    pub carrier: Subterm,
     pub body: Scope<One>,
 }
 
 impl Sealed {
-    pub fn new<L, R, B>(label: L, repr: R, body: B) -> Self
+    pub fn new<L, R, B>(label: L, representation: R, body: B) -> Self
     where
         L: Into<String>,
         R: Into<Term>,
@@ -474,7 +474,7 @@ impl Sealed {
     {
         let label = label.into();
         Self {
-            repr: Scope::close(One, &[label.as_str()], repr),
+            carrier: representation.into().into(),
             body: Scope::close(One, &[label.as_str()], body),
         }
     }
@@ -482,18 +482,18 @@ impl Sealed {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Seal {
-    pub opaque: Subterm,
+    pub carrier: Subterm,
     pub value: Subterm,
 }
 
 impl Seal {
-    pub fn new<O, V>(opaque: O, value: V) -> Self
+    pub fn new<O, V>(carrier: O, value: V) -> Self
     where
         O: Into<Term>,
         V: Into<Term>,
     {
         Self {
-            opaque: opaque.into().into(),
+            carrier: carrier.into().into(),
             value: value.into().into(),
         }
     }
@@ -501,18 +501,18 @@ impl Seal {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Unseal {
-    pub opaque: Subterm,
+    pub carrier: Subterm,
     pub value: Subterm,
 }
 
 impl Unseal {
-    pub fn new<O, V>(opaque: O, value: V) -> Self
+    pub fn new<O, V>(carrier: O, value: V) -> Self
     where
         O: Into<Term>,
         V: Into<Term>,
     {
         Self {
-            opaque: opaque.into().into(),
+            carrier: carrier.into().into(),
             value: value.into().into(),
         }
     }
@@ -750,14 +750,14 @@ where
             Prim::NatMul(left, right) => {
                 Prim::NatMul(self.visit_subterm(left), self.visit_subterm(right))
             }
+            Prim::NatLt(left, right) => {
+                Prim::NatLt(self.visit_subterm(left), self.visit_subterm(right))
+            }
             Prim::NatDiv(left, right) => {
                 Prim::NatDiv(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::NatRem(left, right) => {
                 Prim::NatRem(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatLt(left, right) => {
-                Prim::NatLt(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::NatGt(left, right) => {
                 Prim::NatGt(self.visit_subterm(left), self.visit_subterm(right))
@@ -773,6 +773,9 @@ where
             Prim::IntEql(left, right) => {
                 Prim::IntEql(self.visit_subterm(left), self.visit_subterm(right))
             }
+            Prim::IntNeq(left, right) => {
+                Prim::IntNeq(self.visit_subterm(left), self.visit_subterm(right))
+            }
             Prim::IntAdd(left, right) => {
                 Prim::IntAdd(self.visit_subterm(left), self.visit_subterm(right))
             }
@@ -781,20 +784,6 @@ where
             }
             Prim::IntMul(left, right) => {
                 Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltType => Prim::FltType,
-            Prim::Flt(flt) => Prim::Flt(*flt),
-            Prim::FltAdd(left, right) => {
-                Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltSub(left, right) => {
-                Prim::FltSub(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltMul(left, right) => {
-                Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntNeq(left, right) => {
-                Prim::IntNeq(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::IntDiv(left, right) => {
                 Prim::IntDiv(self.visit_subterm(left), self.visit_subterm(right))
@@ -814,21 +803,19 @@ where
             Prim::IntGte(left, right) => {
                 Prim::IntGte(self.visit_subterm(left), self.visit_subterm(right))
             }
-            Prim::FltNeg(inner) => Prim::FltNeg(self.visit_subterm(inner)),
-            Prim::FltAbs(inner) => Prim::FltAbs(self.visit_subterm(inner)),
-            Prim::FltSqrt(inner) => Prim::FltSqrt(self.visit_subterm(inner)),
-            Prim::FltFloor(inner) => Prim::FltFloor(self.visit_subterm(inner)),
-            Prim::FltCeil(inner) => Prim::FltCeil(self.visit_subterm(inner)),
-            Prim::FltTrunc(inner) => Prim::FltTrunc(self.visit_subterm(inner)),
-            Prim::FltNearest(inner) => Prim::FltNearest(self.visit_subterm(inner)),
+            Prim::FltType => Prim::FltType,
+            Prim::Flt(flt) => Prim::Flt(*flt),
+            Prim::FltAdd(left, right) => {
+                Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltSub(left, right) => {
+                Prim::FltSub(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltMul(left, right) => {
+                Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
+            }
             Prim::FltDiv(left, right) => {
                 Prim::FltDiv(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltMin(left, right) => {
-                Prim::FltMin(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltMax(left, right) => {
-                Prim::FltMax(self.visit_subterm(left), self.visit_subterm(right))
             }
             Prim::FltEql(left, right) => {
                 Prim::FltEql(self.visit_subterm(left), self.visit_subterm(right))
@@ -848,12 +835,25 @@ where
             Prim::FltGte(left, right) => {
                 Prim::FltGte(self.visit_subterm(left), self.visit_subterm(right))
             }
+            Prim::FltMin(left, right) => {
+                Prim::FltMin(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltMax(left, right) => {
+                Prim::FltMax(self.visit_subterm(left), self.visit_subterm(right))
+            }
+            Prim::FltNeg(inner) => Prim::FltNeg(self.visit_subterm(inner)),
+            Prim::FltAbs(inner) => Prim::FltAbs(self.visit_subterm(inner)),
+            Prim::FltSqrt(inner) => Prim::FltSqrt(self.visit_subterm(inner)),
+            Prim::FltFloor(inner) => Prim::FltFloor(self.visit_subterm(inner)),
+            Prim::FltCeil(inner) => Prim::FltCeil(self.visit_subterm(inner)),
+            Prim::FltTrunc(inner) => Prim::FltTrunc(self.visit_subterm(inner)),
+            Prim::FltNearest(inner) => Prim::FltNearest(self.visit_subterm(inner)),
             Prim::NatToInt(inner) => Prim::NatToInt(self.visit_subterm(inner)),
+            Prim::NatToFlt(inner) => Prim::NatToFlt(self.visit_subterm(inner)),
             Prim::IntToNat(inner) => Prim::IntToNat(self.visit_subterm(inner)),
             Prim::IntToFlt(inner) => Prim::IntToFlt(self.visit_subterm(inner)),
-            Prim::NatToFlt(inner) => Prim::NatToFlt(self.visit_subterm(inner)),
-            Prim::FltToInt(inner) => Prim::FltToInt(self.visit_subterm(inner)),
             Prim::FltToNat(inner) => Prim::FltToNat(self.visit_subterm(inner)),
+            Prim::FltToInt(inner) => Prim::FltToInt(self.visit_subterm(inner)),
             Prim::BinType => Prim::BinType,
             Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
             Prim::BinLen(bin) => Prim::BinLen(self.visit_subterm(bin)),
@@ -1008,21 +1008,21 @@ where
 
     fn visit_sealed(&mut self, sealed: &Sealed) -> Sealed {
         Sealed {
-            repr: self.visit_scope(&sealed.repr),
+            carrier: self.visit_term(&sealed.carrier).into(),
             body: self.visit_scope(&sealed.body),
         }
     }
 
     fn visit_seal(&mut self, seal: &Seal) -> Seal {
         Seal {
-            opaque: self.visit_subterm(&seal.opaque),
+            carrier: self.visit_subterm(&seal.carrier),
             value: self.visit_subterm(&seal.value),
         }
     }
 
     fn visit_unseal(&mut self, unseal: &Unseal) -> Unseal {
         Unseal {
-            opaque: self.visit_subterm(&unseal.opaque),
+            carrier: self.visit_subterm(&unseal.carrier),
             value: self.visit_subterm(&unseal.value),
         }
     }
