@@ -206,7 +206,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(left.to_f32() + right.to_f32())))
+                        Term::Prim(Prim::Flt(left + right))
                     }
                     (left, right) => Term::Prim(Prim::flt_add(left, right)),
                 })
@@ -217,7 +217,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(left.to_f32() - right.to_f32())))
+                        Term::Prim(Prim::Flt(left - right))
                     }
                     (left, right) => Term::Prim(Prim::flt_sub(left, right)),
                 })
@@ -228,7 +228,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(left.to_f32() * right.to_f32())))
+                        Term::Prim(Prim::Flt(left * right))
                     }
                     (left, right) => Term::Prim(Prim::flt_mul(left, right)),
                 })
@@ -315,7 +315,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(-flt.to_f32())))
+                        Term::Prim(Prim::Flt(-flt))
                     }
                     inner => Term::Prim(Prim::flt_neg(inner)),
                 })
@@ -325,7 +325,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(flt.to_f32().abs())))
+                        Term::Prim(Prim::Flt(flt.abs()))
                     }
                     inner => Term::Prim(Prim::flt_abs(inner)),
                 })
@@ -335,7 +335,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(flt.to_f32().sqrt())))
+                        Term::Prim(Prim::Flt(flt.sqrt()))
                     }
                     inner => Term::Prim(Prim::flt_sqrt(inner)),
                 })
@@ -345,7 +345,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(flt.to_f32().floor())))
+                        Term::Prim(Prim::Flt(flt.floor()))
                     }
                     inner => Term::Prim(Prim::flt_floor(inner)),
                 })
@@ -355,7 +355,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(flt.to_f32().ceil())))
+                        Term::Prim(Prim::Flt(flt.ceil()))
                     }
                     inner => Term::Prim(Prim::flt_ceil(inner)),
                 })
@@ -365,7 +365,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(flt.to_f32().trunc())))
+                        Term::Prim(Prim::Flt(flt.trunc()))
                     }
                     inner => Term::Prim(Prim::flt_trunc(inner)),
                 })
@@ -375,7 +375,7 @@ impl Reduce {
 
                 Ok(match inner {
                     Term::Prim(Prim::Flt(flt)) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(flt.to_f32().round_ties_even())))
+                        Term::Prim(Prim::Flt(flt.nearest()))
                     }
                     inner => Term::Prim(Prim::flt_nearest(inner)),
                 })
@@ -386,7 +386,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(left.to_f32() / right.to_f32())))
+                        Term::Prim(Prim::Flt(left / right))
                     }
                     (left, right) => Term::Prim(Prim::flt_div(left, right)),
                 })
@@ -397,7 +397,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(left.to_f32().min(right.to_f32()))))
+                        Term::Prim(Prim::Flt(left.min(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_min(left, right)),
                 })
@@ -408,7 +408,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Flt(Flt::from_f32(left.to_f32().max(right.to_f32()))))
+                        Term::Prim(Prim::Flt(left.max(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_max(left, right)),
                 })
@@ -419,11 +419,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Nat(if left.to_f32() == right.to_f32() {
-                            1
-                        } else {
-                            0
-                        }))
+                        Term::Prim(Prim::Nat(left.eql(right) as u32))
                     }
                     (left, right) => Term::Prim(Prim::flt_eql(left, right)),
                 })
@@ -434,11 +430,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Nat(if left.to_f32() != right.to_f32() {
-                            1
-                        } else {
-                            0
-                        }))
+                        Term::Prim(Prim::Nat(left.neq(right) as u32))
                     }
                     (left, right) => Term::Prim(Prim::flt_neq(left, right)),
                 })
@@ -449,11 +441,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Nat(if left.to_f32() < right.to_f32() {
-                            1
-                        } else {
-                            0
-                        }))
+                        Term::Prim(Prim::Nat(left.lt(right) as u32))
                     }
                     (left, right) => Term::Prim(Prim::flt_lt(left, right)),
                 })
@@ -464,11 +452,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Nat(if left.to_f32() > right.to_f32() {
-                            1
-                        } else {
-                            0
-                        }))
+                        Term::Prim(Prim::Nat(left.gt(right) as u32))
                     }
                     (left, right) => Term::Prim(Prim::flt_gt(left, right)),
                 })
@@ -479,11 +463,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Nat(if left.to_f32() <= right.to_f32() {
-                            1
-                        } else {
-                            0
-                        }))
+                        Term::Prim(Prim::Nat(left.lte(right) as u32))
                     }
                     (left, right) => Term::Prim(Prim::flt_lte(left, right)),
                 })
@@ -494,11 +474,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Prim(Prim::Nat(if left.to_f32() >= right.to_f32() {
-                            1
-                        } else {
-                            0
-                        }))
+                        Term::Prim(Prim::Nat(left.gte(right) as u32))
                     }
                     (left, right) => Term::Prim(Prim::flt_gte(left, right)),
                 })

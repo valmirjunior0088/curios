@@ -1,6 +1,9 @@
 mod arity;
 pub use arity::*;
 
+mod flt;
+pub use flt::*;
+
 mod prim;
 pub use prim::*;
 
