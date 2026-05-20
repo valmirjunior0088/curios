@@ -1,4 +1,4 @@
-use super::{Subterm, Term};
+use super::{Name, Subterm, Term};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet {
@@ -9,7 +9,7 @@ pub struct TopLet {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopRecItem {
+pub struct TopRec {
     pub is_pub: bool,
     pub label: String,
     pub type_: Subterm,
@@ -17,21 +17,33 @@ pub struct TopRecItem {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TopMod {
+    pub is_pub: bool,
+    pub label: String,
+    pub module: Module,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopUse {
+    pub is_absolute: bool,
+    pub path: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
+    Mod(TopMod),
+    Use(TopUse),
     Let(TopLet),
-    Rec(Vec<TopRecItem>),
-    Mod(String, Module),
+    Rec(Vec<TopRec>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
-    pub uses: Vec<String>,
     pub items: Vec<TopItem>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
-    pub uses: Vec<String>,
     pub items: Vec<TopItem>,
     pub tail: Term,
 }
