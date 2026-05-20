@@ -460,6 +460,65 @@ impl Rec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Sealed {
+    pub repr: Scope<One>,
+    pub body: Scope<One>,
+}
+
+impl Sealed {
+    pub fn new<L, R, B>(label: L, repr: R, body: B) -> Self
+    where
+        L: Into<String>,
+        R: Into<Term>,
+        B: Into<Term>,
+    {
+        let label = label.into();
+        Self {
+            repr: Scope::close(One, &[label.as_str()], repr),
+            body: Scope::close(One, &[label.as_str()], body),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Seal {
+    pub opaque: Subterm,
+    pub value: Subterm,
+}
+
+impl Seal {
+    pub fn new<O, V>(opaque: O, value: V) -> Self
+    where
+        O: Into<Term>,
+        V: Into<Term>,
+    {
+        Self {
+            opaque: opaque.into().into(),
+            value: value.into().into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Unseal {
+    pub opaque: Subterm,
+    pub value: Subterm,
+}
+
+impl Unseal {
+    pub fn new<O, V>(opaque: O, value: V) -> Self
+    where
+        O: Into<Term>,
+        V: Into<Term>,
+    {
+        Self {
+            opaque: opaque.into().into(),
+            value: value.into().into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
     Type,
     Prim(Prim),
@@ -476,6 +535,9 @@ pub enum Term {
     Match(Match),
     Let(Let),
     Rec(Rec),
+    Sealed(Sealed),
+    Seal(Seal),
+    Unseal(Unseal),
     Var(Var),
 }
 
@@ -624,6 +686,24 @@ impl From<Let> for Term {
 impl From<Rec> for Term {
     fn from(value: Rec) -> Self {
         Self::Rec(value)
+    }
+}
+
+impl From<Sealed> for Term {
+    fn from(value: Sealed) -> Self {
+        Self::Sealed(value)
+    }
+}
+
+impl From<Seal> for Term {
+    fn from(value: Seal) -> Self {
+        Self::Seal(value)
+    }
+}
+
+impl From<Unseal> for Term {
+    fn from(value: Unseal) -> Self {
+        Self::Unseal(value)
     }
 }
 
@@ -926,6 +1006,27 @@ where
         }
     }
 
+    fn visit_sealed(&mut self, sealed: &Sealed) -> Sealed {
+        Sealed {
+            repr: self.visit_scope(&sealed.repr),
+            body: self.visit_scope(&sealed.body),
+        }
+    }
+
+    fn visit_seal(&mut self, seal: &Seal) -> Seal {
+        Seal {
+            opaque: self.visit_subterm(&seal.opaque),
+            value: self.visit_subterm(&seal.value),
+        }
+    }
+
+    fn visit_unseal(&mut self, unseal: &Unseal) -> Unseal {
+        Unseal {
+            opaque: self.visit_subterm(&unseal.opaque),
+            value: self.visit_subterm(&unseal.value),
+        }
+    }
+
     fn visit_term(&mut self, term: &Term) -> Term {
         match term {
             Term::Type => Type.into(),
@@ -943,6 +1044,9 @@ where
             Term::Match(m) => self.visit_match(m).into(),
             Term::Let(let_) => self.visit_let(let_).into(),
             Term::Rec(rec) => self.visit_rec(rec).into(),
+            Term::Sealed(sealed) => self.visit_sealed(sealed).into(),
+            Term::Seal(seal) => self.visit_seal(seal).into(),
+            Term::Unseal(unseal) => self.visit_unseal(unseal).into(),
             Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),
         }
     }
