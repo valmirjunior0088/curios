@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, Func, FuncType, Let, Match, Nat, NatFold, NatMatch, Prim, Rec,
-        RecItem, Split, Term, Tuple, TupleType, Var,
+        Apply, Atom, AtomType, Bin, Func, FuncType, Let, Match, Module, Nat, NatFold, NatMatch,
+        Name, Prim, Rec, RecItem, Entrypoint, Split, Term, TopItem, TopLet, TopRecItem, Tuple,
+        TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -10,7 +11,7 @@ use {
     std::str::FromStr,
 };
 
-const KEYWORDS: &[&str] = &["let", "match", "rec", "and", "split", "->", "=>"];
+const KEYWORDS: &[&str] = &["let", "match", "rec", "and", "split", "->", "=>", "mod", "use", "pub", "end"];
 
 fn apply_many(head: Term, params: Vec<Term>) -> Term {
     params.into_iter().fold(head, |head, param| {
@@ -29,22 +30,34 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
     take_exact(expected).and_drop(parse_whitespace())
 }
 
-fn parse_identifier<'a>() -> Parser<'a, &'a str> {
+fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
     take_while(|char| "._-@#$!%&*<>".contains(char) || char.is_alphanumeric())
         .flat_map(|identifier| match identifier.is_empty() {
             true => fail("Expected identifier"),
             false => pure(identifier),
         })
+}
+
+fn parse_identifier<'a>() -> Parser<'a, &'a str> {
+    parse_identifier_raw().and_drop(parse_whitespace())
+}
+
+fn parse_path<'a>() -> Parser<'a, Vec<String>> {
+    parse_identifier_raw()
+        .and(many0(|| take_exact("/").and_keep(parse_identifier_raw())))
         .and_drop(parse_whitespace())
+        .flat_map(|(first, rest)| {
+            let mut path = vec![first.to_string()];
+            path.extend(rest.into_iter().map(|s: &str| s.to_string()));
+            match path.iter().any(|s| KEYWORDS.contains(&s.as_str())) {
+                true => fail(format!("path '{}' contains a reserved keyword", path.join("/"))),
+                false => pure(path),
+            }
+        })
 }
 
 fn parse_label<'a>() -> Parser<'a, Term> {
-    parse_identifier().flat_map(|identifier| match KEYWORDS.contains(&identifier) {
-        true => fail(format!("'{identifier}' is a reserved keyword")),
-        false => pure(Term::Var(Var {
-            label: identifier.to_string(),
-        })),
-    })
+    parse_path().map(|path| Term::Name(Name { path }))
 }
 
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
@@ -775,6 +788,108 @@ impl FromStr for Term {
     }
 }
 
+fn parse_pub<'a>() -> Parser<'a, bool> {
+    catch(parse_keyword("pub")).map(|()| true).or(pure(false))
+}
+
+fn parse_top_let<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("let")))
+        .flat_map(|(is_pub, ())| {
+            parse_identifier()
+                .and_drop(parse_literal(":"))
+                .and(lazy(parse_term))
+                .and_drop(parse_literal("="))
+                .and(lazy(parse_term))
+                .and_drop(parse_literal(";"))
+                .map(move |((label, type_), body)| {
+                    TopItem::Let(TopLet {
+                        is_pub,
+                        label: label.to_string(),
+                        type_: type_.into(),
+                        body: body.into(),
+                    })
+                })
+        })
+}
+
+fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("rec")))
+        .flat_map(|(is_pub, ())| {
+            parse_binding().map(move |item| TopRecItem {
+                is_pub,
+                label: item.label,
+                type_: item.type_,
+                value: item.value,
+            })
+        })
+        .and(many0(|| {
+            catch(parse_pub().and(parse_keyword("and"))).flat_map(|(is_pub, ())| {
+                parse_binding().map(move |item| TopRecItem {
+                    is_pub,
+                    label: item.label,
+                    type_: item.type_,
+                    value: item.value,
+                })
+            })
+        }))
+        .and_drop(parse_literal(";"))
+        .map(|(first, mut rest)| {
+            rest.insert(0, first);
+            TopItem::Rec(rest)
+        })
+}
+
+fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
+    catch(parse_keyword("mod"))
+        .and_keep(parse_identifier())
+        .flat_map(|name| {
+            many0(parse_top_item)
+                .and_drop(parse_keyword("end"))
+                .map(move |items| TopItem::Mod(name.to_string(), Module { uses: vec![], items }))
+        })
+}
+
+fn parse_top_item<'a>() -> Parser<'a, TopItem> {
+    parse_top_let().or(parse_top_rec()).or(parse_top_mod())
+}
+
+fn parse_use_decl<'a>() -> Parser<'a, String> {
+    catch(parse_keyword("use"))
+        .and_keep(parse_identifier())
+        .map(|s: &str| s.to_string())
+}
+
+impl FromStr for Module {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(many0(parse_use_decl))
+                .and(many0(parse_top_item))
+                .and_drop(take_eof())
+                .map(|(uses, items)| Module { uses, items }),
+            input,
+        )
+    }
+}
+
+impl FromStr for Entrypoint {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(many0(parse_use_decl))
+                .and(many0(parse_top_item))
+                .and(lazy(parse_term))
+                .and_drop(take_eof())
+                .map(|((uses, items), tail)| Entrypoint { uses, items, tail }),
+            input,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -796,20 +911,20 @@ mod tests {
                     .into(),
                     value: Term::Func(Func {
                         label: "x".to_string(),
-                        body: Term::Var(Var {
-                            label: "x".to_string(),
+                        body: Term::Name(Name {
+                            path: vec!["x".to_string()],
                         })
                         .into(),
                     })
                     .into(),
                 }],
                 tail: Term::Apply(Apply {
-                    head: Term::Var(Var {
-                        label: "id".to_string(),
+                    head: Term::Name(Name {
+                        path: vec!["id".to_string()],
                     })
                     .into(),
-                    param: Term::Var(Var {
-                        label: "a".to_string(),
+                    param: Term::Name(Name {
+                        path: vec!["a".to_string()],
                     })
                     .into(),
                 })
@@ -833,8 +948,8 @@ mod tests {
                 body: Term::Atom(Atom::from("hot")).into(),
                 tail: Term::Tuple(Tuple {
                     fields: vec![
-                        Term::Var(Var {
-                            label: "x".to_string(),
+                        Term::Name(Name {
+                            path: vec!["x".to_string()],
                         })
                         .into(),
                         Term::Atom(Atom::from("cold")).into(),
@@ -862,8 +977,8 @@ mod tests {
                 motive_label: "p".to_string(),
                 motive: Term::Type.into(),
                 field_labels: vec!["x".to_string(), "y".to_string()],
-                tail: Term::Var(Var {
-                    label: "p".to_string(),
+                tail: Term::Name(Name {
+                    path: vec!["p".to_string()],
                 })
                 .into(),
             })
@@ -972,5 +1087,127 @@ mod tests {
     #[test]
     fn parse_char_literal_empty_is_error() {
         assert!("\"\"n".parse::<Term>().is_err());
+    }
+
+    #[test]
+    fn parse_top_let_without_pub() {
+        assert_eq!(
+            "let x : Type = Type;\n".parse::<Module>().unwrap().items,
+            vec![TopItem::Let(TopLet {
+                is_pub: false,
+                label: "x".to_string(),
+                type_: Term::Type.into(),
+                body: Term::Type.into(),
+            })]
+        );
+    }
+
+    #[test]
+    fn parse_top_let_with_pub() {
+        assert_eq!(
+            "pub let x : Type = Type;\n".parse::<Module>().unwrap().items,
+            vec![TopItem::Let(TopLet {
+                is_pub: true,
+                label: "x".to_string(),
+                type_: Term::Type.into(),
+                body: Term::Type.into(),
+            })]
+        );
+    }
+
+    #[test]
+    fn parse_top_rec_mixed_pub() {
+        assert_eq!(
+            "pub rec id : (x : Type) -> Type = x => x\nand helper : Type = Type;\n"
+                .parse::<Module>()
+                .unwrap()
+                .items,
+            vec![TopItem::Rec(vec![
+                TopRecItem {
+                    is_pub: true,
+                    label: "id".to_string(),
+                    type_: Term::FuncType(FuncType {
+                        label: Some("x".to_string()),
+                        input: Term::Type.into(),
+                        output: Term::Type.into(),
+                    })
+                    .into(),
+                    value: Term::Func(Func {
+                        label: "x".to_string(),
+                        body: Term::Name(Name {
+                            path: vec!["x".to_string()],
+                        })
+                        .into(),
+                    })
+                    .into(),
+                },
+                TopRecItem {
+                    is_pub: false,
+                    label: "helper".to_string(),
+                    type_: Term::Type.into(),
+                    value: Term::Type.into(),
+                },
+            ])]
+        );
+    }
+
+    #[test]
+    fn parse_module_roundtrip() {
+        let m = "use Bar\npub let x : Type = Type;\nrec f : Type = Type;\n"
+            .parse::<Module>()
+            .unwrap();
+        assert_eq!(m.uses, vec!["Bar".to_string()]);
+        assert_eq!(m.items.len(), 2);
+        assert!(matches!(m.items[0], TopItem::Let(TopLet { is_pub: true, .. })));
+        assert!(matches!(m.items[1], TopItem::Rec(_)));
+    }
+
+    #[test]
+    fn parse_nested_module() {
+        let m = "mod Inner\npub let x : Type = Type;\nend\n"
+            .parse::<Module>()
+            .unwrap();
+        assert_eq!(
+            m.items,
+            vec![TopItem::Mod(
+                "Inner".to_string(),
+                Module {
+                    uses: vec![],
+                    items: vec![TopItem::Let(TopLet {
+                        is_pub: true,
+                        label: "x".to_string(),
+                        type_: Term::Type.into(),
+                        body: Term::Type.into(),
+                    })],
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn parse_entrypoint_roundtrip() {
+        let r = "use Foo\nuse Bar\npub rec f : Type = Type;\nlet x : Type = Type;\nf"
+            .parse::<Entrypoint>()
+            .unwrap();
+        assert_eq!(r.uses, vec!["Foo".to_string(), "Bar".to_string()]);
+        assert_eq!(r.items.len(), 2);
+        assert!(matches!(r.items[0], TopItem::Rec(_)));
+        assert!(matches!(r.items[1], TopItem::Let(TopLet { is_pub: false, .. })));
+        assert_eq!(
+            r.tail,
+            Term::Name(Name {
+                path: vec!["f".to_string()],
+            })
+        );
+    }
+
+    #[test]
+    fn parse_qualified_path() {
+        assert_eq!(
+            "Foo/bar/baz".parse::<Term>().unwrap(),
+            Term::Name(Name {
+                path: vec!["Foo".to_string(), "bar".to_string(), "baz".to_string()],
+            })
+        );
     }
 }

@@ -13,3 +13,6 @@ pub use elaborate::*;
 mod print;
 
 mod parse;
+
+mod module;
+pub use module::*;

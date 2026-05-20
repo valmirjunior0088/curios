@@ -1,14 +1,9 @@
 use {
-    super::{Atom, Prim},
+    super::{Atom, Name, Prim},
     std::collections::{BTreeMap, BTreeSet},
 };
 
 pub type Subterm = Box<Term>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Var {
-    pub label: String,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
@@ -119,5 +114,5 @@ pub enum Term {
     Match(Match),
     Let(Let),
     Rec(Rec),
-    Var(Var),
+    Name(Name),
 }

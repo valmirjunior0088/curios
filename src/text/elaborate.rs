@@ -6,7 +6,7 @@ pub fn elaborate(term: &Term) -> core::Term {
 
         Term::Prim(p) => core::Term::Prim(elaborate_prim(p)),
 
-        Term::Var(v) => core::Var::free(v.label.clone()).into(),
+        Term::Name(v) => core::Var::free(v.path.join("/")).into(),
 
         Term::Atom(a) => core::Term::Atom(elaborate_atom(a)),
 

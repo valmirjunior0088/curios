@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Bin, Func, FuncType, Let, Match, Nat, NatFold, NatMatch, Prim, Rec,
-        Split, Term, Tuple, TupleType, Var,
+        Name, Split, Term, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -185,7 +185,7 @@ fn print_term(term: Term) -> Printer<'static> {
     match term {
         Term::Type => pure("Type"),
         Term::Prim(prim) => print_prim(prim),
-        Term::Var(Var { label }) => pure(label),
+        Term::Name(Name { path }) => pure(path.join("/")),
         Term::Atom(atom) => print_atom(atom),
         Term::AtomType(AtomType { atoms }) => flat([
             pure("'["),
