@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, NatMatch, Preempted, Prim,
-        Rec, Seal, Sealed, Split, Term, Tuple, TupleType, Unseal, Var, reduce,
+        Rec, Split, Term, Tuple, TupleType, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -387,30 +387,6 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_sealed(
-        &mut self,
-        context: &mut Context,
-        this: Sealed,
-        that: Sealed,
-    ) -> Result<bool, Preempted> {
-        let label = Var::free(context.fresh()).into();
-        self.enqueue(*this.carrier, *that.carrier);
-        self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
-        Ok(true)
-    }
-
-    fn compare_seal(&mut self, this: Seal, that: Seal) -> Result<bool, Preempted> {
-        self.enqueue(*this.carrier, *that.carrier);
-        self.enqueue(*this.value, *that.value);
-        Ok(true)
-    }
-
-    fn compare_unseal(&mut self, this: Unseal, that: Unseal) -> Result<bool, Preempted> {
-        self.enqueue(*this.carrier, *that.carrier);
-        self.enqueue(*this.value, *that.value);
-        Ok(true)
-    }
-
     fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
         while let Some((this, that)) = self.dequeue()? {
             let this = reduce(context, &this)?;
@@ -448,11 +424,6 @@ impl Convert {
                     self.compare_match(context, this, that)?
                 }
                 (Term::Rec(this), Term::Rec(that)) => self.compare_rec(context, this, that)?,
-                (Term::Sealed(this), Term::Sealed(that)) => {
-                    self.compare_sealed(context, this, that)?
-                }
-                (Term::Seal(this), Term::Seal(that)) => self.compare_seal(this, that)?,
-                (Term::Unseal(this), Term::Unseal(that)) => self.compare_unseal(this, that)?,
                 (_, _) => return Ok(false),
             };
 

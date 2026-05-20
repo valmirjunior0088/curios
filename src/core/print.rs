@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim, Rec,
-        Scope, Seal, Sealed, Split, Term, Tuple, TupleType, Two, Unseal, Var,
+        Scope, Split, Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -590,31 +590,6 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Term::Sealed(Sealed { carrier, body }) => {
-            let label = label_at(depth);
-            let var: Term = Var::free(&label).into();
-            flat([
-                pure("let "),
-                pure(label.clone()),
-                pure("{"),
-                print_term(*carrier.clone(), depth + 1),
-                pure("};\n"),
-                print_term(body.open(&[&var]), depth + 1),
-            ])
-        }
-        Term::Seal(Seal { carrier, value }) => flat([
-            print_term(*carrier, depth),
-            pure("{"),
-            print_term(*value, depth),
-            pure("}"),
-        ]),
-        Term::Unseal(Unseal { carrier, value }) => flat([
-            pure("let "),
-            print_term(*carrier, depth),
-            pure("{#x} = "),
-            print_term(*value, depth),
-            pure(";"),
-        ]),
         Term::Var(var) => print_var(var),
     }
 }
