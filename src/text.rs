@@ -10,10 +10,12 @@ pub use term::*;
 mod elaborate;
 pub use elaborate::*;
 
+mod elaborate_entrypoint;
+pub use elaborate_entrypoint::*;
+
 mod print;
 
 mod parse;
 
 mod module;
 pub use module::*;
-

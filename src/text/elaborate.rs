@@ -1,29 +1,5 @@
 use {super::*, crate::core};
 
-pub fn elaborate_entrypoint(entrypoint: &Entrypoint) -> core::Term {
-    entrypoint
-        .items
-        .iter()
-        .rev()
-        .fold(elaborate(&entrypoint.tail), |tail, item| match item {
-            TopItem::Mod(_) => todo!(),
-            TopItem::Use(_) => todo!(),
-            TopItem::Let(l) => core::Let::new(
-                l.label.clone(),
-                elaborate(&l.type_),
-                elaborate(&l.body),
-                tail,
-            )
-            .into(),
-            TopItem::Rec(recs) => core::Rec::new(
-                recs.iter()
-                    .map(|r| (r.label.clone(), elaborate(&r.type_), elaborate(&r.body))),
-                tail,
-            )
-            .into(),
-        })
-}
-
 pub fn elaborate(term: &Term) -> core::Term {
     match term {
         Term::Type => core::Term::Type,
