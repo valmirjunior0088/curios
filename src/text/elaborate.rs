@@ -282,21 +282,21 @@ mod tests {
     #[test]
     fn elaborate_prim() {
         assert_eq!(
-            parse("Int.add 1i 2i"),
+            parse("Int.add +1 +2"),
             core::Term::Prim(core::Prim::int_add(
                 core::Term::Prim(core::Prim::Int(1)),
                 core::Term::Prim(core::Prim::Int(2))
             ))
         );
         assert_eq!(
-            parse("Nat.add 1n 2n"),
+            parse("Nat.add 1 2"),
             core::Term::Prim(core::Prim::nat_add(
                 core::Term::Prim(core::Prim::Nat(1)),
                 core::Term::Prim(core::Prim::Nat(2))
             ))
         );
         assert_eq!(
-            parse("Flt.mul 1.5 2.0"),
+            parse("Flt.mul +1.5 +2.0"),
             core::Term::Prim(core::Prim::flt_mul(
                 core::Term::Prim(core::Prim::Flt(core::Flt::from_f32(1.5))),
                 core::Term::Prim(core::Prim::Flt(core::Flt::from_f32(2.0)))

@@ -70,12 +70,17 @@ fn parse_type<'a>() -> Parser<'a, Term> {
 
 fn parse_int_value<'a>() -> Parser<'a, Term> {
     catch(
-        take_while(|char| char == '-' || char.is_ascii_digit())
-            .flat_map::<i32, _>(|digits| match digits.parse() {
+        take_n(1)
+            .flat_map(|sign| match sign {
+                "+" | "-" => pure(sign.to_string()),
+                _ => fail("Expected '+' or '-'"),
+            })
+            .and(take_while(|char| char.is_ascii_digit()))
+            .flat_map::<i32, _>(|(sign, digits)| match format!("{sign}{digits}").parse() {
                 Ok(value) => pure(value),
                 Err(_) => fail("Expected integer literal"),
             })
-            .and_drop(parse_keyword("i")),
+            .and_drop(parse_whitespace()),
     )
     .map(|value| Term::Prim(Prim::Int(value)))
 }
@@ -94,7 +99,7 @@ fn parse_nat<'a>() -> Parser<'a, Nat> {
                 Ok(value) => pure(value),
                 Err(_) => fail("expected natural number"),
             })
-            .and_drop(parse_keyword("n")),
+            .and_drop(parse_whitespace()),
     )
     .map(Nat::Number))
 }
@@ -111,31 +116,40 @@ fn parse_nat_literal<'a>() -> Parser<'a, u32> {
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
-    take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
-        .flat_map::<f32, _>(|digits| {
-            let has_dot = digits.contains('.');
+    catch(
+        take_n(1)
+            .flat_map(|sign| match sign {
+                "+" | "-" => pure(sign.to_string()),
+                _ => fail("Expected '+' or '-'"),
+            })
+            .and(take_while(|char| {
+                ".-+eE".contains(char) || char.is_ascii_digit()
+            }))
+            .flat_map::<f32, _>(|(sign, digits)| {
+                let has_dot = digits.contains('.');
 
-            let has_decimal = digits
-                .split_once('.')
-                .map(|(_, suffix)| {
-                    suffix
-                        .chars()
-                        .next()
-                        .is_some_and(|char| char.is_ascii_digit())
-                })
-                .unwrap_or(false);
+                let has_decimal = digits
+                    .split_once('.')
+                    .map(|(_, suffix)| {
+                        suffix
+                            .chars()
+                            .next()
+                            .is_some_and(|char| char.is_ascii_digit())
+                    })
+                    .unwrap_or(false);
 
-            if !has_dot || !has_decimal {
-                return fail("Expected float literal with dot and decimal");
-            }
+                if !has_dot || !has_decimal {
+                    return fail("Expected float literal with dot and decimal");
+                }
 
-            match digits.parse() {
-                Ok(value) => pure(value),
-                Err(_) => fail("Expected float literal"),
-            }
-        })
-        .and_drop(parse_whitespace())
-        .map(|value| Term::Prim(Prim::Flt(value)))
+                match format!("{sign}{digits}").parse() {
+                    Ok(value) => pure(value),
+                    Err(_) => fail("Expected float literal"),
+                }
+            })
+            .and_drop(parse_whitespace()),
+    )
+    .map(|value| Term::Prim(Prim::Flt(value)))
 }
 
 fn parse_nat_prim<'a>() -> Parser<'a, Term> {
@@ -369,10 +383,12 @@ fn parse_char_value<'a>() -> Parser<'a, char> {
                 .or(take_exact("'").map(|_| '\''))
                 .or(fail("Unknown char escape sequence")),
         )
-        .or(take_n(1).flat_map(|string| match string.chars().next().unwrap() {
-            '\'' => fail("use \\' to include a single quote in a char literal"),
-            char => pure(char),
-        }))
+        .or(
+            take_n(1).flat_map(|string| match string.chars().next().unwrap() {
+                '\'' => fail("use \\' to include a single quote in a char literal"),
+                char => pure(char),
+            }),
+        )
 }
 
 fn parse_string_literal<'a>() -> Parser<'a, Term> {
@@ -587,7 +603,7 @@ fn parse_nat_fold<'a>() -> Parser<'a, Term> {
         .and(lazy(parse_term))
         .and_drop(parse_literal(";"))
         .and_drop(parse_literal("|"))
-        .and_drop(parse_keyword("0n"))
+        .and_drop(parse_keyword("0"))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .and_drop(parse_literal(";"))
@@ -999,13 +1015,13 @@ mod tests {
 
     #[test]
     fn parse_int_literal_and_flt_literal_are_disambiguated() {
-        assert_eq!("42i".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
+        assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
         assert_eq!(
-            "42n".parse::<Term>().unwrap(),
+            "42".parse::<Term>().unwrap(),
             Term::Prim(Prim::Nat(Nat::Number(42)))
         );
         assert_eq!(
-            "42.0".parse::<Term>().unwrap(),
+            "+42.0".parse::<Term>().unwrap(),
             Term::Prim(Prim::Flt(42.0_f32))
         );
     }
@@ -1015,31 +1031,31 @@ mod tests {
         assert_eq!("Int".parse::<Term>().unwrap(), Term::Prim(Prim::IntType));
         assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(Prim::FltType));
         assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
-        assert_eq!("42i".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
+        assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
         assert_eq!(
-            "42n".parse::<Term>().unwrap(),
+            "42".parse::<Term>().unwrap(),
             Term::Prim(Prim::Nat(Nat::Number(42)))
         );
         assert_eq!(
-            "1.5".parse::<Term>().unwrap(),
+            "+1.5".parse::<Term>().unwrap(),
             Term::Prim(Prim::Flt(1.5_f32))
         );
         assert_eq!(
-            "Int.add 1i 2i".parse::<Term>().unwrap(),
+            "Int.add +1 +2".parse::<Term>().unwrap(),
             Term::Prim(Prim::IntAdd(
                 Term::Prim(Prim::Int(1)).into(),
                 Term::Prim(Prim::Int(2)).into(),
             ))
         );
         assert_eq!(
-            "Nat.add 1n 2n".parse::<Term>().unwrap(),
+            "Nat.add 1 2".parse::<Term>().unwrap(),
             Term::Prim(Prim::NatAdd(
                 Term::Prim(Prim::Nat(Nat::Number(1))).into(),
                 Term::Prim(Prim::Nat(Nat::Number(2))).into(),
             ))
         );
         assert_eq!(
-            "Flt.mul 1.5 2.0".parse::<Term>().unwrap(),
+            "Flt.mul +1.5 +2.0".parse::<Term>().unwrap(),
             Term::Prim(Prim::FltMul(
                 Term::Prim(Prim::Flt(1.5_f32)).into(),
                 Term::Prim(Prim::Flt(2.0_f32)).into(),
@@ -1084,7 +1100,7 @@ mod tests {
     #[test]
     fn parse_top_let_without_pub() {
         assert_eq!(
-            "let x : Type = Type;\n".parse::<Module>().unwrap().items,
+            "let x : Type = Type;".parse::<Module>().unwrap().items,
             vec![TopItem::Let(TopLet {
                 is_pub: false,
                 label: "x".to_string(),
@@ -1097,10 +1113,7 @@ mod tests {
     #[test]
     fn parse_top_let_with_pub() {
         assert_eq!(
-            "pub let x : Type = Type;\n"
-                .parse::<Module>()
-                .unwrap()
-                .items,
+            "pub let x : Type = Type;".parse::<Module>().unwrap().items,
             vec![TopItem::Let(TopLet {
                 is_pub: true,
                 label: "x".to_string(),
@@ -1113,10 +1126,13 @@ mod tests {
     #[test]
     fn parse_top_rec_mixed_pub() {
         assert_eq!(
-            "pub rec id : (x : Type) -> Type = x => x\nand helper : Type = Type;\n"
-                .parse::<Module>()
-                .unwrap()
-                .items,
+            r#"
+                pub rec id : (x : Type) -> Type = x => x
+                and helper : Type = Type;
+            "#
+            .parse::<Module>()
+            .unwrap()
+            .items,
             vec![TopItem::Rec(vec![
                 TopLet {
                     is_pub: true,
@@ -1145,9 +1161,13 @@ mod tests {
 
     #[test]
     fn parse_module_roundtrip() {
-        let m = "use Bar\npub let x : Type = Type;\nrec f : Type = Type;\n"
-            .parse::<Module>()
-            .unwrap();
+        let m = r#"
+            use Bar
+            pub let x : Type = Type;
+            rec f : Type = Type;
+        "#
+        .parse::<Module>()
+        .unwrap();
         assert_eq!(m.items.len(), 3);
         assert!(matches!(m.items[0], TopItem::Use(_)));
         assert!(matches!(
@@ -1159,9 +1179,13 @@ mod tests {
 
     #[test]
     fn parse_nested_module() {
-        let m = "mod Inner\npub let x : Type = Type;\nend\n"
-            .parse::<Module>()
-            .unwrap();
+        let m = r#"
+            mod Inner
+                pub let x : Type = Type;
+            end
+        "#
+        .parse::<Module>()
+        .unwrap();
         assert_eq!(
             m.items,
             vec![TopItem::Mod(TopMod {
@@ -1181,9 +1205,15 @@ mod tests {
 
     #[test]
     fn parse_entrypoint_roundtrip() {
-        let entrypoint = "use Foo\nuse Bar\npub rec f : Type = Type;\nlet x : Type = Type;\nf"
-            .parse::<Entrypoint>()
-            .unwrap();
+        let entrypoint = r#"
+            use Foo
+            use Bar
+            pub rec f : Type = Type;
+            let x : Type = Type;
+            f
+        "#
+        .parse::<Entrypoint>()
+        .unwrap();
         assert_eq!(entrypoint.items.len(), 4);
         assert!(matches!(entrypoint.items[0], TopItem::Use(_)));
         assert!(matches!(entrypoint.items[1], TopItem::Use(_)));

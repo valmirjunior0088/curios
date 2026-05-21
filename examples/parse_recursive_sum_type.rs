@@ -13,12 +13,12 @@ fn main() {
         rec sum : IntList -> Int = list =>
             split list : _ => Int; | (label, value) =>
             match label : _ => Int;
-            | 'nil => 0i;
+            | 'nil => +0;
             | 'cons =>
                 split value : _ => Int; | (head, tail) =>
                 Int.add head (sum tail);;
         let xs : IntList =
-            ('cons, (1i, ('cons, (2i, ('cons, (3i, ('nil, 0i)))))));
+            ('cons, (+1, ('cons, (+2, ('cons, (+3, ('nil, +0)))))));
         sum xs
         "#
     .parse::<text::Term>()

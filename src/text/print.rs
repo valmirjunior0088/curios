@@ -22,6 +22,10 @@ fn print_flt(value: f32) -> Printer<'static> {
         string.push_str(".0");
     }
 
+    if !string.starts_with('-') {
+        string.insert(0, '+');
+    }
+
     pure(string)
 }
 
@@ -29,7 +33,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
     match prim {
         Prim::NatType => pure("Nat"),
         Prim::Nat(nat) => match nat {
-            Nat::Number(n) => pure(format!("{n}n")),
+            Nat::Number(n) => pure(format!("{n}")),
             Nat::Char(c) => {
                 let escaped = match c {
                     '\'' => "\\'".to_string(),
@@ -54,7 +58,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::NatLte(l, r) => flat([pure("Nat.lte "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::NatGte(l, r) => flat([pure("Nat.gte "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::IntType => pure("Int"),
-        Prim::Int(value) => pure(format!("{value}i")),
+        Prim::Int(value) => pure(format!("{value:+}")),
         Prim::IntEql(l, r) => flat([pure("Int.eql "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::IntNeq(l, r) => flat([pure("Int.neq "), print_term(*l), pure(" "), print_term(*r)]),
         Prim::IntAdd(l, r) => flat([pure("Int.add "), print_term(*l), pure(" "), print_term(*r)]),

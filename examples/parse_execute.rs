@@ -12,14 +12,14 @@ fn main() {
             match label : _ => Type;
             | 'left => Int;
             | 'right => Flt; };
-        let value : pair_ty = ('left, Int.mul 20i 2i);
+        let value : pair_ty = ('left, Int.mul +20 +2);
         let decoded : Int =
             split value : _ => Int; | (label, value) =>
             match label : _ => Int;
-            | 'left => Int.add 40i 2i;
-            | 'right => 7i;;
+            | 'left => Int.add +40 +2;
+            | 'right => +7;;
         let make : Int -> {witness, Flt} = x =>
-            (x, Flt.add 0.25 0.5);
+            (x, Flt.add +0.25 +0.5);
         make decoded
         "#
     .parse::<text::Term>()

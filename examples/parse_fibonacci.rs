@@ -7,11 +7,11 @@ fn main() {
     let text_term = r#"
         rec fib_pair : Nat -> {Int, Int} = n =>
             Nat.fold n : _ => {Int, Int};
-            | 0n => (0i, 1i);
+            | 0 => (+0, +1);
             | pred ih =>
                 split ih : _ => {Int, Int}; | (a, b) =>
                 (b, Int.add a b);;
-        split fib_pair 10n : _ => Int; | (a, b) =>
+        split fib_pair 10 : _ => Int; | (a, b) =>
         a
         "#
     .parse::<text::Term>()

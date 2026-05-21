@@ -12,12 +12,12 @@ fn pipeline_lowers_and_runs_core_term() {
             match label : _ => Type;
             | 'left => Int;
             | 'right => Flt; };
-        let pair : pair_ty = ('left, 42i);
+        let pair : pair_ty = ('left, +42);
         let score : (_ : pair_ty) -> Int = p =>
             split p : _ => Int; | (label, value) =>
             match label : _ => Int;
-            | 'left => 42i;
-            | 'right => 7i;;
+            | 'left => +42;
+            | 'right => +7;;
         score pair
         "#
     .parse::<text::Term>()

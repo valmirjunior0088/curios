@@ -7,8 +7,8 @@ use {
 #[test]
 fn nat_fold_computes_triangular_sum() {
     let text_term = r#"
-        Nat.fold 5n : _ => Nat;
-        | 0n => 0n;
+        Nat.fold 5 : _ => Nat;
+        | 0 => 0;
         | pred ih => Nat.add ih pred;
         "#
     .parse::<text::Term>()

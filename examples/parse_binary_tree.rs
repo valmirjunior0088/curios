@@ -18,9 +18,9 @@ fn main() {
                 split value : _ => Int; | (v, left, right) =>
                 Int.add v (Int.add (sum left) (sum right));;
         let tree : Tree =
-            ('node, (1i,
-                ('node, (2i, ('leaf, 3i), ('leaf, 4i))),
-                ('node, (5i, ('leaf, 6i), ('leaf, 7i)))));
+            ('node, (+1,
+                ('node, (+2, ('leaf, +3), ('leaf, +4))),
+                ('node, (+5, ('leaf, +6), ('leaf, +7)))));
         sum tree
         "#
     .parse::<text::Term>()

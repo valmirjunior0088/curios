@@ -8,13 +8,13 @@ fn main() {
         let Bln : Type = '[false, true];
         rec is_even : Nat -> Bln = n =>
             Nat.fold n : _ => Bln;
-            | 0n => 'true;
+            | 0 => 'true;
             | pred ih => is_odd pred;
         and is_odd : Nat -> Bln = n =>
             Nat.fold n : _ => Bln;
-            | 0n => 'false;
+            | 0 => 'false;
             | pred ih => is_even pred;;
-        is_even 10n
+        is_even 10
         "#
     .parse::<text::Term>()
     .expect("expected text term");

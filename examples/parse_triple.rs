@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let text_term = r#"
-        let triple : {Int, Int, Int} = (1i, 2i, 3i);
+        let triple : {Int, Int, Int} = (+1, +2, +3);
         split triple : _ => Int; | (a, b, c) =>
         Int.add a (Int.add b c)
         "#

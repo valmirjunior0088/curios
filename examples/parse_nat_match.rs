@@ -9,7 +9,7 @@ use {
 // WASM codegen path end-to-end from surface syntax.
 fn main() {
     let text_term = r#"
-        Nat.match 91n : _ => '[quote, lbracket, lbrace, other];
+        Nat.match 91 : _ => '[quote, lbracket, lbrace, other];
         | '"' => 'quote;
         | '[' => 'lbracket;
         | '{' => 'lbrace;
