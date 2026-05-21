@@ -462,11 +462,11 @@ impl Rec {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sealed {
     pub witness: Subterm,
-    pub body: Scope<One>,
+    pub tail: Scope<One>,
 }
 
 impl Sealed {
-    pub fn new<L, C, B>(label: L, witness: C, body: B) -> Self
+    pub fn new<L, C, B>(label: L, witness: C, tail: B) -> Self
     where
         L: Into<String>,
         C: Into<Term>,
@@ -475,7 +475,7 @@ impl Sealed {
         let label = label.into();
         Self {
             witness: witness.into().into(),
-            body: Scope::close(One, &[label.as_str()], body),
+            tail: Scope::close(One, &[label.as_str()], tail),
         }
     }
 }
@@ -990,7 +990,7 @@ where
     fn visit_sealed(&mut self, sealed: &Sealed) -> Sealed {
         Sealed {
             witness: self.visit_term(&sealed.witness).into(),
-            body: self.visit_scope(&sealed.body),
+            tail: self.visit_scope(&sealed.tail),
         }
     }
 

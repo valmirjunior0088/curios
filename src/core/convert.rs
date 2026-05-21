@@ -367,7 +367,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         let label = Var::free(context.fresh()).into();
         self.enqueue(*this.witness, *that.witness);
-        self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
+        self.enqueue(this.tail.open(&[&label]), that.tail.open(&[&label]));
         Ok(true)
     }
 

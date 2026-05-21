@@ -590,16 +590,16 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Term::Sealed(Sealed { witness, body }) => {
-            let (label, body) = open_scope_one(body, depth);
+        Term::Sealed(Sealed { witness, tail }) => {
+            let (label, tail) = open_scope_one(tail, depth);
 
             flat([
                 pure("def "),
                 pure(label),
                 pure(" : "),
                 print_term(*witness, depth),
-                pure(" =\n"),
-                indent(print_term(body, depth + 1)),
+                pure(";\n"),
+                print_term(tail, depth + 1),
             ])
         }
         Term::Seal(Seal { witness, value }) => flat([

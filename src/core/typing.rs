@@ -1562,13 +1562,13 @@ fn erase_sealed(
     sealed: &Sealed,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Sealed { witness, body } = sealed;
+    let Sealed { witness, tail } = sealed;
     erase(context, witness, &Type.into())?;
     let label = context.fresh();
-    let body = body.open(&[&Var::free(&label).into()]);
+    let tail = tail.open(&[&Var::free(&label).into()]);
     context.with_frame(|context| {
         context.seal(&label, witness);
-        erase(context, &body, expected)
+        erase(context, &tail, expected)
     })
 }
 
