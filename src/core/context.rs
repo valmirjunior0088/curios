@@ -1,5 +1,5 @@
 use {
-    super::Term,
+    super::{Term, Type},
     std::{collections::HashMap, time::Duration},
 };
 
@@ -9,6 +9,7 @@ pub struct Context {
     timeout: Duration,
     assumptions: Vec<HashMap<String, Term>>,
     definitions: Vec<HashMap<String, Term>>,
+    witnesses: Vec<HashMap<String, Term>>,
 }
 
 impl Context {
@@ -18,6 +19,7 @@ impl Context {
             timeout,
             assumptions: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
+            witnesses: vec![HashMap::new()],
         }
     }
 
@@ -35,11 +37,13 @@ impl Context {
     fn enter_frame(&mut self) {
         self.assumptions.push(HashMap::new());
         self.definitions.push(HashMap::new());
+        self.witnesses.push(HashMap::new());
     }
 
     fn leave_frame(&mut self) {
         self.assumptions.pop().unwrap();
         self.definitions.pop().unwrap();
+        self.witnesses.pop().unwrap();
     }
 
     pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -91,5 +95,18 @@ impl Context {
         let label = label.into();
         self.assume(label.as_str(), type_);
         self.define(label, term);
+    }
+
+    pub fn seal<A>(&mut self, label: A, witness: &Term)
+    where
+        A: Into<String>,
+    {
+        let label = label.into();
+        self.assume(label.as_str(), &Type.into());
+        self.witnesses.last_mut().unwrap().insert(label, witness.clone());
+    }
+
+    pub fn witness(&self, label: &str) -> Option<&Term> {
+        self.witnesses.iter().rev().find_map(|s| s.get(label))
     }
 }

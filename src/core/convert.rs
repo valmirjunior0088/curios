@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, NatMatch, Preempted, Prim,
-        Rec, Split, Term, Tuple, TupleType, Var, reduce,
+        Rec, Seal, Sealed, Split, Term, Tuple, TupleType, Unseal, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -359,6 +359,30 @@ impl Convert {
         Ok(true)
     }
 
+    fn compare_sealed(
+        &mut self,
+        context: &mut Context,
+        this: Sealed,
+        that: Sealed,
+    ) -> Result<bool, Preempted> {
+        let label = Var::free(context.fresh()).into();
+        self.enqueue(*this.witness, *that.witness);
+        self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
+        Ok(true)
+    }
+
+    fn compare_seal(&mut self, this: Seal, that: Seal) -> Result<bool, Preempted> {
+        self.enqueue(*this.witness, *that.witness);
+        self.enqueue(*this.value, *that.value);
+        Ok(true)
+    }
+
+    fn compare_unseal(&mut self, this: Unseal, that: Unseal) -> Result<bool, Preempted> {
+        self.enqueue(*this.witness, *that.witness);
+        self.enqueue(*this.value, *that.value);
+        Ok(true)
+    }
+
     fn compare_rec(
         &mut self,
         context: &mut Context,
@@ -424,6 +448,11 @@ impl Convert {
                     self.compare_match(context, this, that)?
                 }
                 (Term::Rec(this), Term::Rec(that)) => self.compare_rec(context, this, that)?,
+                (Term::Sealed(this), Term::Sealed(that)) => {
+                    self.compare_sealed(context, this, that)?
+                }
+                (Term::Seal(this), Term::Seal(that)) => self.compare_seal(this, that)?,
+                (Term::Unseal(this), Term::Unseal(that)) => self.compare_unseal(this, that)?,
                 (_, _) => return Ok(false),
             };
 
@@ -441,7 +470,7 @@ mod tests {
     use {
         super::*,
         crate::core::{
-            Apply, Atom, AtomType, Func, FuncType, Match, Rec, Split, Tuple, TupleType, Type, Var,
+            Apply, Atom, AtomType, Func, FuncType, Match, Rec, Sealed, Split, Tuple, TupleType, Type, Var,
         },
         std::time::Duration,
     };
@@ -811,5 +840,25 @@ mod tests {
         ]));
 
         assert_eq!(convert(&mut context, &this, &that), Err(Preempted));
+    }
+
+    #[test]
+    fn convert_sealed_is_alpha_equivalent() {
+        let mut context = context();
+
+        let this = Term::from(Sealed::new("x", Type, Var::free("x")));
+        let that = Term::from(Sealed::new("y", Type, Var::free("y")));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_sealed_different_witnesses_not_convertible() {
+        let mut context = context();
+
+        let this = Term::from(Sealed::new("x", Type, Var::free("x")));
+        let that = Term::from(Sealed::new("x", AtomType::new(["a"]), Var::free("x")));
+
+        assert_eq!(convert(&mut context, &this, &that), Ok(false));
     }
 }

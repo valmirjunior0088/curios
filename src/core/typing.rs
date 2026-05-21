@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, AtomType, Context, Error, Func, FuncType, Let, Match, NatFold, NatMatch, Preempted,
-        Prim, Rec, Split, Term, Tuple, TupleType, Type, Var,
+        Prim, Rec, Seal, Sealed, Split, Term, Tuple, TupleType, Type, Unseal, Var,
     },
     crate::ersd,
 };
@@ -1557,6 +1557,59 @@ fn erase_match(
     .into())
 }
 
+fn erase_sealed(
+    context: &mut Context,
+    sealed: &Sealed,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let Sealed { witness, body } = sealed;
+    erase(context, witness, &Type.into())?;
+    let label = context.fresh();
+    let body = body.open(&[&Var::free(&label).into()]);
+    context.with_frame(|context| {
+        context.seal(&label, witness);
+        erase(context, &body, expected)
+    })
+}
+
+fn erase_seal(
+    context: &mut Context,
+    seal: &Seal,
+    term: &Term,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let Seal { witness, value } = seal;
+    let witness_reduced = reduce(context, witness)?;
+    let Term::Var(var) = &witness_reduced else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+    let repr = context
+        .witness(var.unwrap())
+        .ok_or_else(|| Error::cannot_infer(term.clone()))?
+        .clone();
+    expect(context, term, &witness_reduced, expected)?;
+    erase(context, value, &repr)
+}
+
+fn erase_unseal(
+    context: &mut Context,
+    unseal: &Unseal,
+    term: &Term,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let Unseal { witness, value } = unseal;
+    let witness_reduced = reduce(context, witness)?;
+    let Term::Var(var) = &witness_reduced else {
+        return Err(Error::cannot_infer(term.clone()));
+    };
+    let repr = context
+        .witness(var.unwrap())
+        .ok_or_else(|| Error::cannot_infer(term.clone()))?
+        .clone();
+    expect(context, term, &repr, expected)?;
+    erase(context, value, &witness_reduced)
+}
+
 fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd::Term, Error> {
     let Let {
         type_: body_type,
@@ -1667,6 +1720,9 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         Term::Match(m) => erase_match(context, m, term, expected),
         Term::Let(let_) => erase_let(context, let_, expected),
         Term::Rec(lr) => erase_rec(context, lr, expected),
+        Term::Sealed(sealed) => erase_sealed(context, sealed, expected),
+        Term::Seal(seal) => erase_seal(context, seal, term, expected),
+        Term::Unseal(unseal) => erase_unseal(context, unseal, term, expected),
         Term::Var(var) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
@@ -1681,8 +1737,8 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Flt, Func, FuncType, Match, NatFold, NatMatch, Rec, Term, Tuple,
-                TupleType, Type,
+                Atom, AtomType, Flt, Func, FuncType, Match, NatFold, NatMatch, Prim, Rec, Seal,
+                Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
             },
             ersd, text,
         },
@@ -2359,5 +2415,60 @@ mod tests {
             erase(&mut context, &concat, &Term::Prim(Prim::NatType)),
             Err(Error::TypeMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn seal_and_unseal_non_recursive() {
+        let mut context = context();
+
+        let term = Term::from(Sealed::new(
+            "x",
+            Term::Prim(Prim::NatType),
+            Unseal::new(Var::free("x"), Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42)))),
+        ));
+
+        erase(&mut context, &term, &Term::Prim(Prim::NatType)).unwrap();
+    }
+
+    #[test]
+    fn unseal_recovers_repr() {
+        let mut context = context();
+
+        let term = Term::from(Sealed::new(
+            "x",
+            Term::Prim(Prim::NatType),
+            Unseal::new(Var::free("x"), Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42)))),
+        ));
+
+        let result = erase(&mut context, &term, &Term::Prim(Prim::NatType)).unwrap();
+
+        assert!(matches!(result, ersd::Term::Prim(ersd::Prim::Nat(42))));
+    }
+
+    #[test]
+    fn seal_rejected_for_wrong_opaque_type() {
+        let mut context = context();
+
+        context.seal("x", &Term::from(AtomType::new(["a"])));
+
+        let seal = Term::from(Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42))));
+
+        assert!(matches!(
+            erase(&mut context, &seal, &Var::free("x").into()),
+            Err(Error::TypeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn seal_erases_to_inner_value() {
+        let mut context = context();
+
+        context.seal("x", &Term::Prim(Prim::NatType));
+
+        let seal = Term::from(Seal::new(Var::free("x"), Term::Prim(Prim::Nat(7))));
+
+        let result = erase(&mut context, &seal, &Var::free("x").into()).unwrap();
+
+        assert!(matches!(result, ersd::Term::Prim(ersd::Prim::Nat(7))));
     }
 }

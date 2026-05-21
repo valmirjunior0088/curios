@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Split, Term,
-        Tuple, Var,
+        Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Seal,
+        Split, Term, Tuple, Unseal, Var,
     },
     std::time::{Duration, Instant},
 };
@@ -788,6 +788,18 @@ impl Reduce {
         }
     }
 
+    fn reduce_unseal(
+        &mut self,
+        context: &mut Context,
+        unseal: Unseal,
+    ) -> Result<Step, Preempted> {
+        let Unseal { witness, value } = unseal;
+        match self.reduce(context, *value)? {
+            Term::Seal(Seal { value: sealed_value, .. }) => Ok(Step::Continue(*sealed_value)),
+            value => Ok(Step::Break(Unseal { witness, value: value.into() }.into())),
+        }
+    }
+
     fn reduce_let(&self, let_: Let) -> Step {
         Step::Continue(let_.tail.open(&[let_.body.as_ref()]))
     }
@@ -813,6 +825,7 @@ impl Reduce {
                 Term::Split(split) => self.reduce_split(context, split)?,
                 Term::Match(m) => self.reduce_match(context, m)?,
                 Term::Let(let_) => self.reduce_let(let_),
+                Term::Unseal(unseal) => self.reduce_unseal(context, unseal)?,
                 Term::Var(var) => self.reduce_var(context, var),
                 term => Step::Break(term),
             };
@@ -829,7 +842,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, AtomType, Let, Match, NatFold, Prim, Tuple, Type, Var},
+        crate::core::{Atom, AtomType, Let, Match, NatFold, Prim, Seal, Sealed, Tuple, Type, Unseal, Var},
         std::time::Duration,
     };
 
@@ -1003,6 +1016,33 @@ mod tests {
             ),
             Ok(Term::Prim(Prim::Nat(30)))
         );
+    }
+
+    #[test]
+    fn reduce_unseal_fires_on_sealed_value() {
+        let mut context = context();
+
+        let term = Unseal::new(Var::free("x"), Seal::new(Var::free("x"), Atom::from("ok"))).into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(Atom::from("ok").into()));
+    }
+
+    #[test]
+    fn reduce_unseal_stuck_on_free_var() {
+        let mut context = context();
+
+        let term: Term = Unseal::new(Var::free("x"), Var::free("v")).into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(term));
+    }
+
+    #[test]
+    fn reduce_sealed_is_stuck() {
+        let mut context = context();
+
+        let term: Term = Sealed::new("x", Type, Var::free("x")).into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(term));
     }
 
     #[test]
