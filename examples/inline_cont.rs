@@ -67,7 +67,7 @@ fn main() {
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
                                     target: cont::BlockName::from("r"),
-                                    params: vec![cont::ValueName::from("1")],
+                                    params: vec![cont::ValueName::from("flag")],
                                 }),
                             },
                         },

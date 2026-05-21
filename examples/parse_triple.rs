@@ -13,7 +13,7 @@ fn main() {
     .expect("expected text term");
 
 
-    let core_term = text::elaborate(&text_entrypoint);
+    let core_term = text::to_core(&text_entrypoint);
 
     println!("=== core ===");
     println!("{core_term}");

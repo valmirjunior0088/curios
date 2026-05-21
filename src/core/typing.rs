@@ -1864,9 +1864,9 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = text::elaborate(&"'[zeta, alpha, mu]".parse().unwrap());
+        let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap());
 
-        let term = text::elaborate(
+        let term = text::to_core(
             &r#"
                 let outer : '[zeta, alpha, mu] = 'mu;
                 let alpha_case : '[zeta, alpha, mu] = 'alpha;
@@ -2360,5 +2360,4 @@ mod tests {
             Err(Error::TypeMismatch { .. })
         ));
     }
-
 }

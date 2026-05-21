@@ -22,7 +22,7 @@ use {
 };
 
 pub fn run(timeout: Duration, source: &str) -> Result<String, String> {
-    let term = text::elaborate(
+    let term = text::to_core(
         &source
             .parse()
             .map_err(|error| format!("failed to parse source: {error:?}"))?,

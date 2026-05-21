@@ -19,12 +19,12 @@ fn main() {
     .expect("expected text term");
 
 
-    let core_term = text::elaborate(&text_entrypoint);
+    let core_term = text::to_core(&text_entrypoint);
 
     println!("=== core ===");
     println!("{core_term}");
 
-    let result_type = text::elaborate(
+    let result_type = text::to_core(
         &"'[quote, lbracket, lbrace, other]"
             .parse()
             .expect("expected result type"),

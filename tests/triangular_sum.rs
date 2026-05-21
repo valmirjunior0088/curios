@@ -15,7 +15,7 @@ fn nat_fold_computes_triangular_sum() {
     .expect("expected text term");
 
 
-    let core_term = text::elaborate(&text_entrypoint);
+    let core_term = text::to_core(&text_entrypoint);
 
     println!("=== core ===");
     println!("{core_term}");
@@ -23,7 +23,7 @@ fn nat_fold_computes_triangular_sum() {
     let ersd_term = core::erase(
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
-        &text::elaborate(&"Nat".parse().expect("expected result type")),
+        &text::to_core(&"Nat".parse().expect("expected result type")),
     )
     .expect("expected erased term");
 
