@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, Bin, Entrypoint, Func, FuncType, Let, Match, Module, Name, Nat,
-        NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopItem, TopLet, TopMod, TopRec,
-        TopUse, Tuple, TupleType,
+        NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopItem, TopLet, TopMod, TopUse, Tuple,
+        TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -110,8 +110,8 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
 
 fn parse_nat_literal<'a>() -> Parser<'a, u32> {
     parse_nat().map(|nat| match nat {
-        Nat::Number(n) => n,
-        Nat::Char(c) => c as u32,
+        Nat::Number(number) => number,
+        Nat::Char(char) => char as u32,
     })
 }
 
@@ -804,28 +804,26 @@ fn parse_top_let<'a>() -> Parser<'a, TopItem> {
 fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("rec")))
         .flat_map(|(is_pub, ())| {
-            parse_binding().map(move |item| TopRec {
+            parse_binding().map(move |item| TopLet {
                 is_pub,
                 label: item.label,
                 type_: item.type_,
-                value: item.value,
+                body: item.value,
             })
         })
         .and(many0(|| {
             catch(parse_pub().and(parse_keyword("and"))).flat_map(|(is_pub, ())| {
-                parse_binding().map(move |item| TopRec {
+                parse_binding().map(move |item| TopLet {
                     is_pub,
                     label: item.label,
                     type_: item.type_,
-                    value: item.value,
+                    body: item.value,
                 })
             })
         }))
         .and_drop(parse_literal(";"))
-        .map(|(first, mut rest)| {
-            rest.insert(0, first);
-            TopItem::Rec(rest)
-        })
+        .map(|(first, rest)| iter::once(first).chain(rest).collect())
+        .map(TopItem::Rec)
 }
 
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
@@ -848,7 +846,7 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     catch(parse_keyword("use"))
         .and_keep(catch(take_exact("/")).map(|()| true).or(pure(false)))
         .and(parse_name())
-        .map(|(is_absolute, name)| TopItem::Use(TopUse { is_absolute, name }))
+        .map(|(is_abs, name)| TopItem::Use(TopUse { is_abs, name }))
 }
 
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {
@@ -1108,7 +1106,7 @@ mod tests {
                 .unwrap()
                 .items,
             vec![TopItem::Rec(vec![
-                TopRec {
+                TopLet {
                     is_pub: true,
                     label: "id".to_string(),
                     type_: Term::FuncType(FuncType {
@@ -1117,17 +1115,17 @@ mod tests {
                         output: Term::Type.into(),
                     })
                     .into(),
-                    value: Term::Func(Func {
+                    body: Term::Func(Func {
                         label: "x".to_string(),
                         body: Term::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
                 },
-                TopRec {
+                TopLet {
                     is_pub: false,
                     label: "helper".to_string(),
                     type_: Term::Type.into(),
-                    value: Term::Type.into(),
+                    body: Term::Type.into(),
                 },
             ])]
         );
@@ -1171,18 +1169,18 @@ mod tests {
 
     #[test]
     fn parse_entrypoint_roundtrip() {
-        let r = "use Foo\nuse Bar\npub rec f : Type = Type;\nlet x : Type = Type;\nf"
+        let entrypoint = "use Foo\nuse Bar\npub rec f : Type = Type;\nlet x : Type = Type;\nf"
             .parse::<Entrypoint>()
             .unwrap();
-        assert_eq!(r.items.len(), 4);
-        assert!(matches!(r.items[0], TopItem::Use(_)));
-        assert!(matches!(r.items[1], TopItem::Use(_)));
-        assert!(matches!(r.items[2], TopItem::Rec(_)));
+        assert_eq!(entrypoint.items.len(), 4);
+        assert!(matches!(entrypoint.items[0], TopItem::Use(_)));
+        assert!(matches!(entrypoint.items[1], TopItem::Use(_)));
+        assert!(matches!(entrypoint.items[2], TopItem::Rec(_)));
         assert!(matches!(
-            r.items[3],
+            entrypoint.items[3],
             TopItem::Let(TopLet { is_pub: false, .. })
         ));
-        assert_eq!(r.tail, Term::Name(Name::from(["f".to_string()])));
+        assert_eq!(entrypoint.tail, Term::Name(Name::from(["f".to_string()])));
     }
 
     #[test]
