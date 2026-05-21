@@ -24,6 +24,17 @@ pub struct Apply {
     pub param: Subterm,
 }
 
+impl Apply {
+    pub fn many(head: Term, params: Vec<Term>) -> Term {
+        params.into_iter().fold(head, |head, param| {
+            Term::Apply(Apply {
+                head: head.into(),
+                param: param.into(),
+            })
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType {
     pub fields: Vec<(Option<String>, Subterm)>,

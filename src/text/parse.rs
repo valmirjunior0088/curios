@@ -1,29 +1,19 @@
 use {
     super::{
         Apply, Atom, AtomType, Bin, Entrypoint, Func, FuncType, Let, Match, Module, Name, Nat,
-        NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopItem, TopLet, TopMod,
-        TopRec, TopUse, Tuple,
-        TupleType,
+        NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopItem, TopLet, TopMod, TopRec,
+        TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
         take_eof, take_exact, take_while,
     },
-    std::str::FromStr,
+    std::{iter, str::FromStr},
 };
 
 const KEYWORDS: &[&str] = &[
     "let", "match", "rec", "and", "split", "->", "=>", "mod", "use", "pub", "end",
 ];
-
-fn apply_many(head: Term, params: Vec<Term>) -> Term {
-    params.into_iter().fold(head, |head, param| {
-        Term::Apply(Apply {
-            head: head.into(),
-            param: param.into(),
-        })
-    })
-}
 
 fn parse_whitespace<'a>() -> Parser<'a, &'a str> {
     take_while(|char| char.is_whitespace())
@@ -33,38 +23,36 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
     take_exact(expected).and_drop(parse_whitespace())
 }
 
-fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
-    take_while(|char| "._-@#$!%&*<>".contains(char) || char.is_alphanumeric()).flat_map(
-        |identifier| match identifier.is_empty() {
+fn parse_identifier<'a>() -> Parser<'a, &'a str> {
+    take_while(|char| "._-@#$!%&*<>".contains(char) || char.is_alphanumeric())
+        .flat_map(|identifier| match identifier.is_empty() {
             true => fail("Expected identifier"),
             false => pure(identifier),
-        },
-    )
-}
-
-fn parse_identifier<'a>() -> Parser<'a, &'a str> {
-    parse_identifier_raw().and_drop(parse_whitespace())
-}
-
-fn parse_path<'a>() -> Parser<'a, Vec<String>> {
-    parse_identifier_raw()
-        .and(many0(|| take_exact("/").and_keep(parse_identifier_raw())))
+        })
         .and_drop(parse_whitespace())
-        .flat_map(|(first, rest)| {
-            let mut path = vec![first.to_string()];
-            path.extend(rest.into_iter().map(|s: &str| s.to_string()));
-            match path.iter().any(|s| KEYWORDS.contains(&s.as_str())) {
+}
+
+fn parse_name<'a>() -> Parser<'a, Name> {
+    parse_identifier()
+        .and(many0(|| take_exact("/").and_keep(parse_identifier())))
+        .map(|(first, rest)| {
+            iter::once(first)
+                .chain(rest)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .flat_map(|path| {
+            match path
+                .iter()
+                .any(|segment| KEYWORDS.contains(&segment.as_str()))
+            {
                 true => fail(format!(
                     "path '{}' contains a reserved keyword",
                     path.join("/")
                 )),
-                false => pure(path),
+                false => pure(Name::from(path)),
             }
         })
-}
-
-fn parse_label<'a>() -> Parser<'a, Term> {
-    parse_path().map(|path| Term::Name(Name::from(path)))
 }
 
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
@@ -100,16 +88,13 @@ fn parse_nat<'a>() -> Parser<'a, Nat> {
             .and_drop(parse_whitespace())
             .and_drop(parse_keyword("n")),
     )
-    .flat_map(|chunks: Vec<String>| {
-        let s: String = chunks.concat();
-        let mut cs = s.chars();
-        match (cs.next(), cs.next()) {
-            (Some(c), None) => pure(Nat::Char(c)),
-            _ => fail("char literal requires exactly one Unicode scalar value"),
-        }
+    .map(|chunks| chunks.concat())
+    .flat_map(|string| match string.chars().count() {
+        1 => pure(Nat::Char(string.chars().next().unwrap())),
+        _ => fail("char literal requires exactly one Unicode scalar value"),
     })
     .or(catch(
-        take_while(|char: char| char.is_ascii_digit())
+        take_while(|char| char.is_ascii_digit())
             .flat_map::<u32, _>(|digits| match digits.parse() {
                 Ok(value) => pure(value),
                 Err(_) => fail("expected natural number"),
@@ -134,9 +119,15 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
     take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
         .flat_map::<f32, _>(|digits| {
             let has_dot = digits.contains('.');
+
             let has_decimal = digits
                 .split_once('.')
-                .map(|(_, suffix)| suffix.chars().next().is_some_and(|c| c.is_ascii_digit()))
+                .map(|(_, suffix)| {
+                    suffix
+                        .chars()
+                        .next()
+                        .is_some_and(|char| char.is_ascii_digit())
+                })
                 .unwrap_or(false);
 
             if !has_dot || !has_decimal {
@@ -149,7 +140,7 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
             }
         })
         .and_drop(parse_whitespace())
-        .map(|value: f32| Term::Prim(Prim::Flt(value)))
+        .map(|value| Term::Prim(Prim::Flt(value)))
 }
 
 fn parse_nat_prim<'a>() -> Parser<'a, Term> {
@@ -159,47 +150,53 @@ fn parse_nat_prim<'a>() -> Parser<'a, Term> {
         .or(catch(parse_keyword("Nat.eql"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_eql(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_eql(left, right))))
         .or(catch(parse_keyword("Nat.neq"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_neq(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_neq(left, right))))
         .or(catch(parse_keyword("Nat.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_add(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_add(left, right))))
         .or(catch(parse_keyword("Nat.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_sub(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_sub(left, right))))
         .or(catch(parse_keyword("Nat.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_mul(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_mul(left, right))))
         .or(catch(parse_keyword("Nat.lt"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_lt(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_lt(left, right))))
         .or(catch(parse_keyword("Nat.div"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_div(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_div(left, right))))
         .or(catch(parse_keyword("Nat.rem"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_rem(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_rem(left, right))))
         .or(catch(parse_keyword("Nat.gt"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_gt(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_gt(left, right))))
         .or(catch(parse_keyword("Nat.lte"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_lte(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_lte(left, right))))
         .or(catch(parse_keyword("Nat.gte"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::nat_gte(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::nat_gte(left, right))))
+        .or(catch(parse_keyword("Nat.to_int"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::nat_to_int(inner))))
+        .or(catch(parse_keyword("Nat.to_flt"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::nat_to_flt(inner))))
 }
 
 fn parse_int_prim<'a>() -> Parser<'a, Term> {
@@ -209,47 +206,53 @@ fn parse_int_prim<'a>() -> Parser<'a, Term> {
         .or(catch(parse_keyword("Int.eql"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_eql(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_eql(left, right))))
         .or(catch(parse_keyword("Int.neq"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_neq(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_neq(left, right))))
         .or(catch(parse_keyword("Int.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_add(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_add(left, right))))
         .or(catch(parse_keyword("Int.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_sub(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_sub(left, right))))
         .or(catch(parse_keyword("Int.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_mul(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_mul(left, right))))
         .or(catch(parse_keyword("Int.div"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_div(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_div(left, right))))
         .or(catch(parse_keyword("Int.rem"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_rem(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_rem(left, right))))
         .or(catch(parse_keyword("Int.lt"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_lt(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_lt(left, right))))
         .or(catch(parse_keyword("Int.gt"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_gt(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_gt(left, right))))
         .or(catch(parse_keyword("Int.lte"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_lte(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_lte(left, right))))
         .or(catch(parse_keyword("Int.gte"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::int_gte(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::int_gte(left, right))))
+        .or(catch(parse_keyword("Int.to_nat"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::int_to_nat(inner))))
+        .or(catch(parse_keyword("Int.to_flt"))
+            .and_keep(lazy(parse_atomic_term))
+            .map(|inner| Term::Prim(Prim::int_to_flt(inner))))
 }
 
 fn parse_flt_prim<'a>() -> Parser<'a, Term> {
@@ -259,51 +262,51 @@ fn parse_flt_prim<'a>() -> Parser<'a, Term> {
         .or(catch(parse_keyword("Flt.add"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_add(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_add(left, right))))
         .or(catch(parse_keyword("Flt.sub"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_sub(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_sub(left, right))))
         .or(catch(parse_keyword("Flt.mul"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_mul(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_mul(left, right))))
         .or(catch(parse_keyword("Flt.div"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_div(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_div(left, right))))
         .or(catch(parse_keyword("Flt.eql"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_eql(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_eql(left, right))))
         .or(catch(parse_keyword("Flt.neq"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_neq(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_neq(left, right))))
         .or(catch(parse_keyword("Flt.lt"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_lt(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_lt(left, right))))
         .or(catch(parse_keyword("Flt.gt"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_gt(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_gt(left, right))))
         .or(catch(parse_keyword("Flt.lte"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_lte(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_lte(left, right))))
         .or(catch(parse_keyword("Flt.gte"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_gte(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_gte(left, right))))
         .or(catch(parse_keyword("Flt.min"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_min(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_min(left, right))))
         .or(catch(parse_keyword("Flt.max"))
             .and_keep(lazy(parse_atomic_term))
             .and(lazy(parse_atomic_term))
-            .map(|(l, r)| Term::Prim(Prim::flt_max(l, r))))
+            .map(|(left, right)| Term::Prim(Prim::flt_max(left, right))))
         .or(catch(parse_keyword("Flt.neg"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::flt_neg(inner))))
@@ -325,21 +328,6 @@ fn parse_flt_prim<'a>() -> Parser<'a, Term> {
         .or(catch(parse_keyword("Flt.nearest"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::flt_nearest(inner))))
-}
-
-fn parse_conv_prim<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Nat.to_int"))
-        .and_keep(lazy(parse_atomic_term))
-        .map(|inner| Term::Prim(Prim::nat_to_int(inner)))
-        .or(catch(parse_keyword("Nat.to_flt"))
-            .and_keep(lazy(parse_atomic_term))
-            .map(|inner| Term::Prim(Prim::nat_to_flt(inner))))
-        .or(catch(parse_keyword("Int.to_nat"))
-            .and_keep(lazy(parse_atomic_term))
-            .map(|inner| Term::Prim(Prim::int_to_nat(inner))))
-        .or(catch(parse_keyword("Int.to_flt"))
-            .and_keep(lazy(parse_atomic_term))
-            .map(|inner| Term::Prim(Prim::int_to_flt(inner))))
         .or(catch(parse_keyword("Flt.to_nat"))
             .and_keep(lazy(parse_atomic_term))
             .map(|inner| Term::Prim(Prim::flt_to_nat(inner))))
@@ -349,25 +337,21 @@ fn parse_conv_prim<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_hex_byte<'a>() -> Parser<'a, u8> {
-    take_exact("\\").and_keep(
-        take_while(|c: char| c.is_ascii_hexdigit()).flat_map(|hex: &str| {
-            if hex.len() == 2 {
-                pure(u8::from_str_radix(hex, 16).expect("valid hex pair"))
-            } else {
-                fail("Expected exactly 2 hex digits after \\")
-            }
-        }),
-    )
+    take_exact("\\").and_keep(take_while(|char| char.is_ascii_hexdigit()).flat_map(|hex| {
+        match hex.len() {
+            2 => pure(u8::from_str_radix(hex, 16).expect("valid hex pair")),
+            _ => fail("Expected exactly 2 hex digits after \\"),
+        }
+    }))
 }
 
 fn parse_string_chunk<'a>() -> Parser<'a, String> {
-    catch(take_while(|c| c != '\\' && c != '"').flat_map(|s: &str| {
-        if s.is_empty() {
-            fail("empty chunk")
-        } else {
-            pure(s.to_string())
-        }
-    }))
+    catch(
+        take_while(|char| char != '\\' && char != '"').flat_map(|chunk| match chunk.is_empty() {
+            true => fail("empty chunk"),
+            false => pure(chunk.to_string()),
+        }),
+    )
     .or(catch(take_exact("\\")).and_keep(
         take_exact("n")
             .map(|_| "\n".to_string())
@@ -384,7 +368,7 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace())
-        .map(|chunks: Vec<String>| Term::Prim(Prim::Bin(Bin::String(chunks.concat()))))
+        .map(|chunks| Term::Prim(Prim::Bin(Bin::String(chunks.concat()))))
 }
 
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
@@ -415,19 +399,21 @@ fn parse_bin_prim<'a>() -> Parser<'a, Term> {
             .map(|(bin, byte)| Term::Prim(Prim::bin_append(bin, byte))))
         .or(catch(parse_keyword("Bin.concat"))
             .and_keep(sep_by0(|| lazy(parse_atomic_term), || parse_literal(",")))
-            .map(|ops: Vec<Term>| Term::Prim(Prim::bin_concat(ops))))
+            .map(|ops| Term::Prim(Prim::bin_concat(ops))))
         .or(catch(parse_keyword("Bin")).map(|()| Term::Prim(Prim::BinType)))
         .or(parse_string_literal())
         .or(parse_bin_literal())
 }
 
 fn parse_arr_literal<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_literal("[")
-            .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
-            .and_drop(parse_literal("]")),
-    )
-    .map(|elems: Vec<Term>| Term::Prim(Prim::Arr(elems.into_iter().map(|e| (e).into()).collect())))
+    catch(parse_literal("["))
+        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+        .and_drop(parse_literal("]"))
+        .map(|elems| {
+            Term::Prim(Prim::Arr(
+                elems.into_iter().map(|elem| elem.into()).collect(),
+            ))
+        })
 }
 
 fn parse_arr_prim<'a>() -> Parser<'a, Term> {
@@ -449,7 +435,7 @@ fn parse_arr_prim<'a>() -> Parser<'a, Term> {
             .map(|(list, elem)| Term::Prim(Prim::arr_append(list, elem))))
         .or(catch(parse_keyword("Arr.concat"))
             .and_keep(sep_by0(|| lazy(parse_atomic_term), || parse_literal(",")))
-            .map(|ops: Vec<Term>| Term::Prim(Prim::arr_concat(ops))))
+            .map(|ops| Term::Prim(Prim::arr_concat(ops))))
         .or(catch(parse_keyword("Arr"))
             .and_keep(lazy(parse_atomic_term))
             .map(|elem| Term::Prim(Prim::arr_type(elem))))
@@ -460,7 +446,6 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
     parse_flt_prim()
         .or(parse_int_prim())
         .or(parse_nat_prim())
-        .or(parse_conv_prim())
         .or(parse_bin_prim())
         .or(parse_arr_prim())
 }
@@ -480,7 +465,7 @@ fn parse_atom_type<'a>() -> Parser<'a, Term> {
             || parse_literal(","),
         ))
         .and_drop(parse_literal("]"))
-        .map(|atoms: Vec<Atom>| {
+        .map(|atoms| {
             Term::AtomType(AtomType {
                 atoms: atoms.into_iter().collect(),
             })
@@ -493,77 +478,81 @@ fn parse_parens<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
 }
 
-fn parse_labeled_field<'a>() -> Parser<'a, (&'a str, Term)> {
-    parse_identifier()
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
-}
-
 fn parse_tuple_type_field<'a>() -> Parser<'a, (Option<String>, Term)> {
-    catch(parse_labeled_field())
-        .map(|(l, t)| (Some(l.to_string()), t))
-        .or(lazy(parse_term).map(|t| (None, t)))
+    catch(parse_identifier().and_drop(parse_literal(":")))
+        .and(lazy(parse_term))
+        .map(|(label, term): (&str, Term)| (Some(label.to_string()), term))
+        .or(lazy(parse_term).map(|term| (None, term)))
 }
 
 fn parse_tuple_type<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_literal("{")
-            .and_keep(sep_by1(parse_tuple_type_field, || parse_literal(",")))
-            .and_drop(parse_literal("}")),
-    )
-    .map(|fields: Vec<(Option<String>, Term)>| {
-        Term::TupleType(TupleType {
-            fields: fields.into_iter().map(|(l, t)| (l, t.into())).collect(),
+    catch(parse_literal("{"))
+        .and_keep(sep_by1(parse_tuple_type_field, || parse_literal(",")))
+        .and_drop(parse_literal("}"))
+        .map(|fields| {
+            Term::TupleType(TupleType {
+                fields: fields
+                    .into_iter()
+                    .map(|(label, term)| (label, term.into()))
+                    .collect(),
+            })
         })
-    })
 }
 
 fn parse_tuple<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("(")
             .and_keep(lazy(parse_term))
-            .and_drop(parse_literal(","))
-            .and(sep_by1(|| lazy(parse_term), || parse_literal(",")))
-            .and_drop(parse_literal(")")),
+            .and_drop(parse_literal(",")),
     )
+    .and(sep_by1(|| lazy(parse_term), || parse_literal(",")))
+    .and_drop(parse_literal(")"))
     .map(|(first, rest)| {
-        let mut fields = vec![first];
-        fields.extend(rest);
         Term::Tuple(Tuple {
-            fields: fields.into_iter().map(|t| t.into()).collect(),
+            fields: iter::once(first).chain(rest).map(Into::into).collect(),
+        })
+    })
+}
+
+fn parse_dependent_func_type<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_literal("(")
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal(":")),
+    )
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(")"))
+    .and_drop(parse_keyword("->"))
+    .map(|(label, input): (&str, Term)| (Some(label.to_string()), input))
+    .and(lazy(parse_term))
+    .map(|((label, input), output)| {
+        Term::FuncType(FuncType {
+            label,
+            input: input.into(),
+            output: output.into(),
+        })
+    })
+}
+
+fn parse_non_dependent_func_type<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_atomic_term()
+            .and(many0(parse_atomic_term))
+            .map(|(head, params)| Apply::many(head, params))
+            .and_drop(parse_keyword("->")),
+    )
+    .and(lazy(parse_term))
+    .map(|(input, output)| {
+        Term::FuncType(FuncType {
+            label: None,
+            input: input.into(),
+            output: output.into(),
         })
     })
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
-    let labeled = catch(
-        parse_literal("(")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal(":"))
-            .and(lazy(parse_term))
-            .and_drop(parse_literal(")"))
-            .and_drop(parse_keyword("->")),
-    )
-    .map(|(label, input): (&str, Term)| (Some(label.to_string()), input));
-
-    let bare = catch(
-        parse_atomic_term()
-            .and(many0(parse_atomic_term))
-            .map(|(head, params)| apply_many(head, params))
-            .and_drop(parse_keyword("->")),
-    )
-    .map(|input| (None, input));
-
-    labeled
-        .or(bare)
-        .and(lazy(parse_term))
-        .map(|((label, input), output)| {
-            Term::FuncType(FuncType {
-                label,
-                input: input.into(),
-                output: output.into(),
-            })
-        })
+    parse_dependent_func_type().or(parse_non_dependent_func_type())
 }
 
 fn parse_func<'a>() -> Parser<'a, Term> {
@@ -578,109 +567,104 @@ fn parse_func<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_nat_fold<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_keyword("Nat.fold")
-            .and_keep(lazy(parse_term))
-            .and_drop(parse_literal(":"))
-            .and(parse_identifier())
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .and_drop(parse_literal("|"))
-    .and_drop(parse_keyword("0n"))
-    .and_drop(parse_literal("=>"))
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .and_drop(parse_literal("|"))
-    .and(parse_identifier())
-    .and(parse_identifier())
-    .and_drop(parse_literal("=>"))
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .map(
-        |((((((head, motive_label), motive), zero_case), pred_label), ih_label), succ_case)| {
-            Term::NatFold(NatFold {
-                head: head.into(),
-                motive_label: motive_label.to_string(),
-                motive: motive.into(),
-                zero_case: zero_case.into(),
-                pred_label: pred_label.to_string(),
-                ih_label: ih_label.to_string(),
-                succ_case: succ_case.into(),
-            })
-        },
-    )
+    catch(parse_keyword("Nat.fold"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(":"))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and_drop(parse_literal("|"))
+        .and_drop(parse_keyword("0n"))
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and_drop(parse_literal("|"))
+        .and(parse_identifier())
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .map(
+            |((((((head, motive_label), motive), zero_case), pred_label), ih_label), succ_case)| {
+                Term::NatFold(NatFold {
+                    head: head.into(),
+                    motive_label: motive_label.to_string(),
+                    motive: motive.into(),
+                    zero_case: zero_case.into(),
+                    pred_label: pred_label.to_string(),
+                    ih_label: ih_label.to_string(),
+                    succ_case: succ_case.into(),
+                })
+            },
+        )
 }
 
 fn parse_nat_match_case<'a>() -> Parser<'a, (u32, Term)> {
-    catch(parse_literal("|").and_keep(parse_nat_literal().and_drop(parse_literal("=>"))))
+    catch(parse_literal("|").and_keep(parse_nat_literal()))
+        .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .and_drop(parse_literal(";"))
 }
 
 fn parse_nat_match_default<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_literal("|")
-            .and_keep(parse_literal("_"))
-            .and_drop(parse_literal("=>")),
-    )
-    .and_keep(lazy(parse_term))
-    .and_drop(parse_literal(";"))
+    catch(parse_literal("|").and_keep(parse_literal("_")))
+        .and_drop(parse_literal("=>"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(";"))
 }
 
 fn parse_nat_match<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_keyword("Nat.match")
-            .and_keep(lazy(parse_term))
-            .and_drop(parse_literal(":"))
-            .and(parse_identifier())
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .and(many0(parse_nat_match_case))
-    .and(parse_nat_match_default())
-    .map(|((((head, motive_label), motive), cases), default)| {
-        Term::NatMatch(NatMatch {
-            head: head.into(),
-            motive_label: motive_label.to_string(),
-            motive: motive.into(),
-            cases: cases.into_iter().map(|(n, t)| (n, t.into())).collect(),
-            default: default.into(),
+    catch(parse_keyword("Nat.match"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(":"))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and(many0(parse_nat_match_case))
+        .and(parse_nat_match_default())
+        .map(|((((head, motive_label), motive), cases), default)| {
+            Term::NatMatch(NatMatch {
+                head: head.into(),
+                motive_label: motive_label.to_string(),
+                motive: motive.into(),
+                cases: cases
+                    .into_iter()
+                    .map(|(nat, term)| (nat, term.into()))
+                    .collect(),
+                default: default.into(),
+            })
         })
-    })
 }
 
 fn parse_match_branch<'a>() -> Parser<'a, (Atom, Term)> {
-    catch(
-        parse_literal("|")
-            .and_keep(parse_atom_label())
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
+    catch(parse_literal("|").and_keep(parse_atom_label()))
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
 }
 
 fn parse_match<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_keyword("match")
-            .and_keep(lazy(parse_term))
-            .and_drop(parse_literal(":"))
-            .and(parse_identifier())
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .and(many1(parse_match_branch))
-    .map(|(((head, motive_label), motive), cases)| {
-        Term::Match(Match {
-            head: head.into(),
-            motive_label: motive_label.to_string(),
-            motive: motive.into(),
-            cases: cases.into_iter().map(|(a, t)| (a, t.into())).collect(),
+    catch(parse_keyword("match"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(":"))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and(many1(parse_match_branch))
+        .map(|(((head, motive_label), motive), cases)| {
+            Term::Match(Match {
+                head: head.into(),
+                motive_label: motive_label.to_string(),
+                motive: motive.into(),
+                cases: cases
+                    .into_iter()
+                    .map(|(atom, term)| (atom, term.into()))
+                    .collect(),
+            })
         })
-    })
 }
 
 fn parse_binding<'a>() -> Parser<'a, RecItem> {
@@ -710,51 +694,50 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_split<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_keyword("split")
-            .and_keep(lazy(parse_term))
-            .and_drop(parse_literal(":"))
-            .and(parse_identifier())
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .and_drop(parse_literal("|"))
-    .and_drop(parse_literal("("))
-    .and(sep_by1(|| parse_identifier(), || parse_literal(",")))
-    .and_drop(parse_literal(")"))
-    .and_drop(parse_literal("=>"))
-    .and(lazy(parse_term))
-    .map(|((((head, motive_label), motive), field_labels), tail)| {
-        Term::Split(Split {
-            head: head.into(),
-            motive_label: motive_label.to_string(),
-            motive: motive.into(),
-            field_labels: field_labels.into_iter().map(|l| l.to_string()).collect(),
-            tail: tail.into(),
+    catch(parse_keyword("split"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(":"))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and_drop(parse_literal("|"))
+        .and_drop(parse_literal("("))
+        .and(sep_by1(|| parse_identifier(), || parse_literal(",")))
+        .and_drop(parse_literal(")"))
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .map(|((((head, motive_label), motive), field_labels), tail)| {
+            Term::Split(Split {
+                head: head.into(),
+                motive_label: motive_label.to_string(),
+                motive: motive.into(),
+                field_labels: field_labels
+                    .into_iter()
+                    .map(|label| label.to_string())
+                    .collect(),
+                tail: tail.into(),
+            })
         })
-    })
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_keyword("let")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal(":"))
-            .and(lazy(parse_term))
-            .and_drop(parse_literal("=")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
-    .and(lazy(parse_term))
-    .map(|(((label, type_), body), tail)| {
-        Term::Let(Let {
-            label: label.to_string(),
-            type_: type_.into(),
-            body: body.into(),
-            tail: tail.into(),
+    catch(parse_keyword("let"))
+        .and_keep(parse_identifier())
+        .and_drop(parse_literal(":"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal("="))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and(lazy(parse_term))
+        .map(|(((label, type_), body), tail)| {
+            Term::Let(Let {
+                label: label.to_string(),
+                type_: type_.into(),
+                body: body.into(),
+                tail: tail.into(),
+            })
         })
-    })
 }
 
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
@@ -765,7 +748,7 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
         .or(parse_tuple_type())
         .or(parse_tuple())
         .or(parse_parens())
-        .or(parse_label())
+        .or(parse_name().map(Term::Name))
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
@@ -779,7 +762,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
         .or(parse_func())
         .or(parse_atomic_term()
             .and(many0(parse_atomic_term))
-            .map(|(head, params)| apply_many(head, params)))
+            .map(|(head, params)| Apply::many(head, params)))
 }
 
 impl FromStr for Term {
@@ -846,27 +829,26 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("mod")))
-        .flat_map(|(is_pub, ())| {
-            parse_identifier().flat_map(move |name| {
-                many0(parse_top_item)
-                    .and_drop(parse_keyword("end"))
-                    .map(move |items| {
-                        TopItem::Mod(TopMod {
-                            is_pub,
-                            label: name.to_string(),
-                            module: Module { items },
-                        })
+    catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
+        parse_identifier().flat_map(move |name| {
+            many0(parse_top_item)
+                .and_drop(parse_keyword("end"))
+                .map(move |items| {
+                    TopItem::Mod(TopMod {
+                        is_pub,
+                        label: name.to_string(),
+                        module: Module { items },
                     })
-            })
+                })
         })
+    })
 }
 
 fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     catch(parse_keyword("use"))
-        .and_keep(catch(take_exact("/")).map(|_| true).or(pure(false)))
-        .and(parse_path())
-        .map(|(is_absolute, path)| TopItem::Use(TopUse { is_absolute, path }))
+        .and_keep(catch(take_exact("/")).map(|()| true).or(pure(false)))
+        .and(parse_name())
+        .map(|(is_absolute, name)| TopItem::Use(TopUse { is_absolute, name }))
 }
 
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {

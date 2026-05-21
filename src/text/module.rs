@@ -26,7 +26,7 @@ pub struct TopMod {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopUse {
     pub is_absolute: bool,
-    pub path: Vec<String>,
+    pub name: Name,
 }
 
 #[derive(Debug, Clone, PartialEq)]
