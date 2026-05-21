@@ -4,7 +4,7 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         rec IntList : Type = {
             label : '[nil, cons],
             match label : _ => Type;
@@ -21,15 +21,12 @@ fn main() {
             ('cons, (+1, ('cons, (+2, ('cons, (+3, ('nil, +0)))))));
         sum xs
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

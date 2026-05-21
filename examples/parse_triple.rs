@@ -4,20 +4,17 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         let triple : {Int, Int, Int} = (+1, +2, +3);
         split triple : _ => Int; | (a, b, c) =>
         Int.add a (Int.add b c)
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

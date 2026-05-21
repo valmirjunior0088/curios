@@ -4,7 +4,7 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -24,15 +24,12 @@ fn main() {
         let str_len : Nat = Bin.len my_str;
         Int.add (score pair) (Nat.to_int (Nat.add list_len (Nat.add bin_len str_len)))
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

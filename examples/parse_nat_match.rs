@@ -8,22 +8,19 @@ use {
 // result is 'lbracket.  The sparse cases exercise the binary-search
 // WASM codegen path end-to-end from surface syntax.
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         Nat.match 91 : _ => '[quote, lbracket, lbrace, other];
         | '"' => 'quote;
         | '[' => 'lbracket;
         | '{' => 'lbrace;
         | _ => 'other;
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

@@ -16,6 +16,10 @@ impl<I: IntoIterator<Item = String>> From<I> for Name {
 }
 
 impl Name {
+    pub fn new() -> Name {
+        Name { path: vec![] }
+    }
+
     pub fn with(&self, segment: &str) -> Name {
         Self {
             path: self

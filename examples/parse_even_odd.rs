@@ -4,7 +4,7 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         let Bln : Type = '[false, true];
         rec is_even : Nat -> Bln = n =>
             Nat.fold n : _ => Bln;
@@ -16,15 +16,12 @@ fn main() {
             | pred ih => is_even pred;;
         is_even 10
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

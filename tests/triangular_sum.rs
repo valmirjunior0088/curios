@@ -6,20 +6,17 @@ use {
 
 #[test]
 fn nat_fold_computes_triangular_sum() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         Nat.fold 5 : _ => Nat;
         | 0 => 0;
         | pred ih => Nat.add ih pred;
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

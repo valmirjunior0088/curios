@@ -6,7 +6,7 @@ use {
 
 #[test]
 fn pipeline_lowers_and_runs_core_term() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -20,15 +20,11 @@ fn pipeline_lowers_and_runs_core_term() {
             | 'right => +7;;
         score pair
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
+    let core_term = text::elaborate(&text_entrypoint);
 
-    let core_term = text::elaborate(&text_term);
-
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

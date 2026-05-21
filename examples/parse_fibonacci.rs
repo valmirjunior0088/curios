@@ -4,7 +4,7 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         rec fib_pair : Nat -> {Int, Int} = n =>
             Nat.fold n : _ => {Int, Int};
             | 0 => (+0, +1);
@@ -14,15 +14,12 @@ fn main() {
         split fib_pair 10 : _ => Int; | (a, b) =>
         a
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

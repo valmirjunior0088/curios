@@ -4,7 +4,7 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         rec Tree : Type = {
             label : '[leaf, node],
             match label : _ => Type;
@@ -23,15 +23,12 @@ fn main() {
                 ('node, (+5, ('leaf, +6), ('leaf, +7)))));
         sum tree
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 

@@ -4,7 +4,7 @@ use {
 };
 
 fn main() {
-    let text_term = r#"
+    let text_entrypoint = r#"
         let xs : Arr Nat = [10, 20, 30];
         let len : Nat = Arr.len xs;
         let first : Nat = Arr.get xs 0;
@@ -12,15 +12,12 @@ fn main() {
         let doubled : Arr Nat = Arr.concat xs, xs;
         Arr.len doubled
         "#
-    .parse::<text::Term>()
+    .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    println!("=== text ===");
-    println!("{text_term}");
 
-    let core_term = text::elaborate(&text_term);
+    let core_term = text::elaborate(&text_entrypoint);
 
-    println!();
     println!("=== core ===");
     println!("{core_term}");
 
