@@ -10,9 +10,9 @@ use {
 fn main() {
     let text_term = r#"
         Nat.match 91n : _ => '[quote, lbracket, lbrace, other];
-        | "\""n => 'quote;
-        | "["n => 'lbracket;
-        | "{"n => 'lbrace;
+        | '"' => 'quote;
+        | '[' => 'lbracket;
+        | '{' => 'lbrace;
         | _ => 'other;
         "#
     .parse::<text::Term>()

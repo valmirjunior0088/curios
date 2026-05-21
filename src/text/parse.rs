@@ -6,7 +6,7 @@ use {
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
-        take_eof, take_exact, take_while,
+        take_eof, take_exact, take_n, take_while,
     },
     std::{iter, str::FromStr},
 };
@@ -82,17 +82,12 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
 
 fn parse_nat<'a>() -> Parser<'a, Nat> {
     catch(
-        take_exact("\"")
-            .and_keep(many0(parse_string_chunk))
-            .and_drop(take_exact("\""))
-            .and_drop(parse_whitespace())
-            .and_drop(parse_keyword("n")),
+        take_exact("'")
+            .and_keep(parse_char_value())
+            .and_drop(take_exact("'"))
+            .and_drop(parse_whitespace()),
     )
-    .map(|chunks| chunks.concat())
-    .flat_map(|string| match string.chars().count() {
-        1 => pure(Nat::Char(string.chars().next().unwrap())),
-        _ => fail("char literal requires exactly one Unicode scalar value"),
-    })
+    .map(Nat::Char)
     .or(catch(
         take_while(|char| char.is_ascii_digit())
             .flat_map::<u32, _>(|digits| match digits.parse() {
@@ -355,12 +350,29 @@ fn parse_string_chunk<'a>() -> Parser<'a, String> {
     .or(catch(take_exact("\\")).and_keep(
         take_exact("n")
             .map(|_| "\n".to_string())
-            .or(take_exact("t").map(|_| "\t".to_string()))
-            .or(take_exact("r").map(|_| "\r".to_string()))
-            .or(take_exact("\\").map(|_| "\\".to_string()))
-            .or(take_exact("\"").map(|_| "\"".to_string()))
+            .or(take_exact("t").map(|()| "\t".to_string()))
+            .or(take_exact("r").map(|()| "\r".to_string()))
+            .or(take_exact("\\").map(|()| "\\".to_string()))
+            .or(take_exact("\"").map(|()| "\"".to_string()))
             .or(fail("Unknown string escape sequence")),
     ))
+}
+
+fn parse_char_value<'a>() -> Parser<'a, char> {
+    catch(take_exact("\\"))
+        .and_keep(
+            take_exact("n")
+                .map(|_| '\n')
+                .or(take_exact("t").map(|_| '\t'))
+                .or(take_exact("r").map(|_| '\r'))
+                .or(take_exact("\\").map(|_| '\\'))
+                .or(take_exact("'").map(|_| '\''))
+                .or(fail("Unknown char escape sequence")),
+        )
+        .or(take_n(1).flat_map(|string| match string.chars().next().unwrap() {
+            '\'' => fail("use \\' to include a single quote in a char literal"),
+            char => pure(char),
+        }))
 }
 
 fn parse_string_literal<'a>() -> Parser<'a, Term> {
@@ -1038,7 +1050,7 @@ mod tests {
     #[test]
     fn parse_char_literal_ascii() {
         assert_eq!(
-            "\"a\"n".parse::<Term>().unwrap(),
+            "'a'".parse::<Term>().unwrap(),
             Term::Prim(Prim::Nat(Nat::Char('a')))
         );
     }
@@ -1046,7 +1058,7 @@ mod tests {
     #[test]
     fn parse_char_literal_escape() {
         assert_eq!(
-            "\"\\n\"n".parse::<Term>().unwrap(),
+            "'\\n'".parse::<Term>().unwrap(),
             Term::Prim(Prim::Nat(Nat::Char('\n')))
         );
     }
@@ -1061,12 +1073,12 @@ mod tests {
 
     #[test]
     fn parse_char_literal_multi_char_is_error() {
-        assert!("\"ab\"n".parse::<Term>().is_err());
+        assert!("'ab'".parse::<Term>().is_err());
     }
 
     #[test]
     fn parse_char_literal_empty_is_error() {
-        assert!("\"\"n".parse::<Term>().is_err());
+        assert!("''".parse::<Term>().is_err());
     }
 
     #[test]

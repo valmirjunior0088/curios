@@ -19,6 +19,24 @@ impl<'a> ParserState<'a> {
         ))
     }
 
+    fn take_n(self, n: usize) -> Option<(&'a str, Self)> {
+        let mut iter = self.string.char_indices();
+
+        for _ in 0..n {
+            iter.next()?;
+        }
+
+        let width = iter.next().map_or(self.string.len(), |(i, _)| i);
+
+        Some((
+            &self.string[..width],
+            Self {
+                offset: self.offset + width,
+                string: &self.string[width..],
+            },
+        ))
+    }
+
     fn take_while<F>(self, mut predicate: F) -> (&'a str, Self)
     where
         F: FnMut(char) -> bool,
@@ -235,6 +253,16 @@ pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
         None => Err(ParserError::new(
             state,
             format!("Expected '{expected}', obtained 'end-of-file'"),
+        )),
+    })
+}
+
+pub fn take_n<'a>(expected: usize) -> Parser<'a, &'a str> {
+    Parser::new(move |state| match state.take_n(expected) {
+        Some((obtained, state)) => Ok((obtained, state)),
+        None => Err(ParserError::new(
+            state,
+            format!("Expected {expected} character(s), obtained 'end-of-file'"),
         )),
     })
 }

@@ -32,14 +32,14 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             Nat::Number(n) => pure(format!("{n}n")),
             Nat::Char(c) => {
                 let escaped = match c {
-                    '"' => "\\\"".to_string(),
+                    '\'' => "\\'".to_string(),
                     '\\' => "\\\\".to_string(),
                     '\n' => "\\n".to_string(),
                     '\t' => "\\t".to_string(),
                     '\r' => "\\r".to_string(),
                     _ => c.to_string(),
                 };
-                pure(format!("\"{escaped}\"n"))
+                pure(format!("'{escaped}'"))
             }
         },
         Prim::NatEql(l, r) => flat([pure("Nat.eql "), print_term(*l), pure(" "), print_term(*r)]),
