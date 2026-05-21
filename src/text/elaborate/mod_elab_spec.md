@@ -1,4 +1,4 @@
-# Elaboration spec
+# Module elaboration specification
 
 ## Pipeline
 
@@ -15,6 +15,9 @@ by the bundler; the elaborator handles the full tree.
 Modules form a DAG — there are no circular dependencies. A module may `use` another only if
 that module does not (transitively) `use` it back.
 
+Declaration order is enforced: a module or binding may only be referenced after it has been
+declared. The elaborator processes items sequentially and rejects forward references.
+
 ## Scoping
 
 Modules are fully isolated. No context is inherited between modules.
@@ -24,6 +27,7 @@ module — their full transitive public surface is accessible via qualified path
 `Foo/Bar/g`, etc.) without any `use` declaration.
 
 `use` is needed in two cases:
+
 1. To bring a non-child module into scope (always via an absolute path).
 2. To get a short-name shorthand for a deeper descendant: `use Foo/Bar` makes `Bar/...`
    writable in terms instead of `Foo/Bar/...`.
@@ -58,7 +62,7 @@ an error.
 
 ## Visibility
 
-`is_pub` on `TopLet` and `TopMod` controls visibility *above the declaring module*. The
+`is_pub` on `TopLet` and `TopMod` controls visibility _above the declaring module_. The
 direct parent always has access to its own children regardless of `is_pub` — it declared
 them. `is_pub` is only meaningful to ancestors further up and to unrelated modules.
 
@@ -80,15 +84,13 @@ After resolving `use` and flattening nested `Mod`s, every binding is assigned a 
 qualified name. The flat representation has the shape:
 
 ```
-Vec<(Name, Item)>
+Vec<Item>
 ```
 
-where `Name` is the full path (e.g. `["Bar", "helper"]` for a `pub let helper` inside
-`mod Bar`) and `Item` is either a single `Let` (label, type, body) or a `Rec` group
-(`Vec<(label, type, body)>`).
-
-`TopItem::Rec(Vec<TopLet>)` groups mutually recursive bindings. Rec groups are preserved
-as-is in the flat representation, since mutual recursion must remain grouped for `core::Term`.
+where `Item` is either `Let(FlatLet)` or `Rec(Vec<FlatLet>)`, and `FlatLet` is a
+single binding with its fully-qualified `Name`, type, and body (e.g. `Name` is
+`["Bar", "helper"]` for a `pub let helper` inside `mod Bar`). `Rec` groups mutually
+recursive bindings, each as a `FlatLet` with its own fully-qualified `Name`.
 
 The `Entrypoint.tail` is not part of the flat list — it is lowered separately and becomes
 the tail of the final `core::Term`.
@@ -96,14 +98,16 @@ the tail of the final `core::Term`.
 At the text level, `TopLet.label` and `TopMod.label` are `String` (local single-segment
 names). The qualified `Name` is only computed during flattening.
 
+## Forbidden constructs
+
+The elaborator rejects:
+
+- `pub` on a top-level `Entrypoint` item — there is no outside to export to.
+- A single-segment relative `use Foo` — `Foo` is already in scope as a declared child
+  and re-declaring it as a `use` qualifier is an error.
+
 ## Future work
 
 **Opacity** controls whether the _definition_ of a `pub` binding is visible to consumers,
 as distinct from whether the name is accessible. A per-binding annotation on `TopLet` is
 needed. The precise form is not yet decided.
-
-**Redundant constructs** are syntactically valid but carry no semantic weight and should
-eventually be flagged by a linter:
-
-- `pub` on a top-level `Entrypoint` item — there is no outside to export to.
-- A single-segment relative `use Foo` — `Foo` is already in scope as a declared child.
