@@ -594,9 +594,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let (label, tail) = open_scope_one(tail, depth);
 
             flat([
-                pure("def "),
+                pure("sealed "),
                 pure(label),
-                pure(" : "),
+                pure(" = "),
                 print_term(*witness, depth),
                 pure(";\n"),
                 print_term(tail, depth + 1),
