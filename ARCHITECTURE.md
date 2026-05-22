@@ -2,7 +2,7 @@
 
 Curios is a compiler for an impure, dependently typed functional programming language targeting WebAssembly. It combines full dependent types (Π, Σ, atoms) with first-class functions, algebraic data via labeled unions, and compiles through a CPS intermediate representation down to WebAssembly bytecode executed by Wasmtime.
 
-**Codebase size:** ~23,900 lines, including examples, tests, and docs.
+**Codebase size:** ~28,200 lines, including examples, tests, and docs.
 
 ---
 
@@ -14,7 +14,7 @@ Source text flows through six distinct phases, each with a clean handoff:
 Source Text
    │
    ▼
-Parsing           → text::Term (surface AST with named variables)
+Parsing           → text::Entrypoint (surface AST: module items + tail expression)
    │
    ▼
 Elaboration       → core::Term (full AST with de Bruijn indices)
@@ -46,7 +46,7 @@ Wasmtime          → execution and result printing
 
 A custom monadic parser combinator library. `Parser<'a, A>` supports `or`, `and`, `flat_map`, and `lazy` combinators, with position-aware error reporting via `ParserState`.
 
-Parsing produces a `text::Term` — a surface AST where every variable is stored as a plain string label. There are no de Bruijn indices at this stage; all binding and scoping is resolved during elaboration.
+Parsing produces a `text::Entrypoint` — a surface AST consisting of a list of top-level `TopItem`s followed by a `tail: Term`. Each `TopItem` is one of `Mod` (a nested module block), `Use` (an import), `Let` (a top-level binding), `Rec` (a mutually recursive group), or `Def` (an opaque-type block). The tail expression and all inner term bodies are `text::Term` nodes where every variable is a plain string label. There are no de Bruijn indices at this stage; all binding and scoping is resolved during elaboration.
 
 The grammar covers:
 
@@ -63,21 +63,33 @@ The grammar covers:
 - Primitive types (`Nat`, `Int`, `Flt`) and built-in operations (arithmetic, comparisons, and conversions — e.g. `Int.add`, `Nat.div`, `Flt.sqrt`, `Int.to_flt`)
 - Binary values via string literals, hex byte literals, and `Bin.len`/`Bin.eql`/`Bin.get`/`Bin.slice`/`Bin.append`/`Bin.concat`
 - Array type `Arr T` and array literals, with operations: `Arr.len`, `Arr.get`, `Arr.slice`, `Arr.append`, `Arr.concat`
+- Module blocks `mod Label ... end` / `pub mod Label ... end` — group bindings under a namespace; only `pub` items are accessible from outside
+- Import declarations `use Path/qualifier` (relative) / `use /abs/Path` (absolute) / `pub use ...` to re-export a qualifier; single-segment relative `use` is forbidden
+- Qualified names `Namespace/name` (slash-separated) used to reference items inside modules
+- Opaque-type blocks `def Label = witness in ... end` — introduces an opaque type named `Label` backed by `witness`; `Label.from value` coerces into the opaque type, `Label.into value` coerces out; coercions are only valid inside the `def` block
 
 ---
 
 ## 2. Elaboration
 
-**File:** `src/text/elaborate.rs`
+**Files:** `src/text/to_core.rs`, `src/text/to_core/elaborate.rs`, `src/text/to_core/context.rs`
 
-Converts `text::Term` into `core::Term`. The elaboration is a straightforward structural recursion: each `text::Term` variant maps to the corresponding `core::Term` constructor, which internally calls `Scope::close()` to bind free variable labels as de Bruijn indices.
+Converts a `text::Entrypoint` into `core::Term` via the public `text::to_core()` function. This phase has two concerns:
+
+**Module processing** (`src/text/to_core.rs`): `process_items()` walks the `TopItem` list recursively, building a name-resolution scope. It:
+- Resolves `use` declarations, registering qualifiers and enforcing `pub`/private visibility.
+- Translates `mod` blocks into nested scopes, qualifying each binding name (e.g. `Foo/bar`).
+- Translates `def Label = witness in ... end` into `core::Sealed` nodes, binding the opaque-type label over the elaborated body.
+- Collects `let`/`rec` groups as flat items, then folds them right-to-left into the tail expression.
+
+**Term elaboration** (`src/text/to_core/elaborate.rs`): `Elaborate` converts each `text::Term` into the corresponding `core::Term` constructor via structural recursion, calling `Scope::close()` to bind free variable labels as de Bruijn indices.
 
 The key distinctions between the two representations:
 
 - **`text::Term`** — all variables are `String` labels; binders (lambdas, let, rec, split) carry their binding labels as plain strings; `FuncType.label` is `Option<String>` to allow anonymous `A -> B` types; `TupleType` and `Split` carry `Vec<String>` field labels.
 - **`core::Term`** — variables are de Bruijn indices stored in `Scope<A: Arity>` wrappers; free variables (not yet bound by any enclosing scope) remain as labeled `Var::free(label)` until they are captured by a `Scope::close()` call.
 
-`elaborate()` does no type-directed work — it is a pure syntactic translation. Type checking happens after, in `src/core/typing.rs`.
+`Elaborate` does no type-directed work — it is a pure syntactic translation. Type checking happens after, in `src/core/typing.rs`.
 
 ---
 
@@ -96,6 +108,7 @@ The central `Term` enum represents the full typed language after elaboration:
 | `NatMatch`                        | Sparse dispatch on specific nat values (explicit cases + default) |
 | `AtomType` / `Atom` / `Match`     | Labeled unions, tags, pattern matching           |
 | `Let` / `Rec`                     | Bindings, mutual recursion                       |
+| `Sealed` / `Seal` / `Unseal`      | Opaque-type abstraction (from `def`): `Sealed` binds a label to a witness type over a continuation; `Seal` / `Unseal` coerce values in and out of the opaque type |
 | `Prim`                            | Built-in values and operations                   |
 | `Var`                             | Bound variables                                  |
 
@@ -125,6 +138,10 @@ Every reduction operation receives an `Instant` deadline. This prevents infinite
 
 `src/core/context.rs` maintains separate stacks for **assumptions** (name → type) and **definitions** (name → value). Scoped frames via `with_frame(f)` handle nested contexts. Fresh name generation uses an entropy counter.
 
+### Opaque Types (`def`)
+
+`Sealed` binds a label to a witness type (the underlying representation) and scopes it over a continuation. Inside that scope, `Seal` (`Label.from`) and `Unseal` (`Label.into`) coerce values between the opaque type and the witness. The type checker enforces that the label and the representation are interchangeable only within the `def` block; outside, the label is opaque. All three constructs are transparent at runtime — erasure drops `Sealed` and replaces `Seal`/`Unseal` with a direct pass-through of the wrapped value.
+
 ### Runtime Effects and Type-Level Reduction
 
 Curios is intended to support impure term-level computation, but type-level normalization must remain pure and predictable. The current core implements total reduction for the existing primitive term forms (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, functions, tuples, atoms, and eliminators) with timeout protection; future effectful primitives should be treated as opaque or rejected during type-level reduction rather than executed by the checker.
@@ -140,8 +157,8 @@ Transforms `core::Term` into `ersd::Term`, stripping everything that exists only
 | Erased (removed)                              | Preserved                                            |
 | --------------------------------------------- | ---------------------------------------------------- |
 | `Type`, `FuncType`, `TupleType`, `AtomType`   | `Func`, `Apply`, `Tuple`, `Split`, `NatMatch`, `Match` |
-| Type annotations on bindings                  | Function bodies, captures, parameters                |
-|                                               | `Let`, `Rec`, all control flow                       |
+| `Sealed`, `Seal`, `Unseal`                    | Function bodies, captures, parameters                |
+| Type annotations on bindings                  | `Let`, `Rec`, all control flow                       |
 |                                               | Primitives (except type constructors)                |
 |                                               | `Bin`, `Arr`, and their operations                   |
 |                                               | `Name` references                                    |
@@ -302,8 +319,8 @@ Tests exist at each layer:
 For anyone wanting to understand this project:
 
 1. **Browse `examples/`** — the example files show the language in action at each compilation stage. They are the fastest way to see what Curios programs look like and how the pipeline behaves. Two naming conventions:
-   - `inline_*` examples build terms directly in Rust (e.g. `inline_core.rs`, `inline_cont.rs`, `inline_wasm.rs`, `inline_core_ersd.rs`, `inline_ersd_arr.rs`, `inline_cont_to_wasm.rs`)
-   - `parse_*` examples parse Curios source text (e.g. `parse_execute.rs`, `parse_fibonacci.rs`, `parse_even_odd.rs`, `parse_binary_tree.rs`, `parse_recursive_sum_type.rs`, `parse_triple.rs`, `parse_core_arr.rs`, `parse_core_to_wasm.rs`)
+   - `inline_*` examples build terms directly in Rust (e.g. `inline_core.rs`, `inline_cont.rs`, `inline_wasm.rs`, `inline_core_ersd.rs`, `inline_ersd_arr.rs`, `inline_cont_to_wasm.rs`, `inline_binary_search.rs`)
+   - `parse_*` examples parse Curios source text (e.g. `parse_execute.rs`, `parse_fibonacci.rs`, `parse_even_odd.rs`, `parse_binary_tree.rs`, `parse_recursive_sum_type.rs`, `parse_triple.rs`, `parse_core_arr.rs`, `parse_core_to_wasm.rs`, `parse_nat_match.rs`)
 
    For a full pipeline execution test that asserts on the result, see `tests/end_to_end.rs`.
 
@@ -311,7 +328,7 @@ For anyone wanting to understand this project:
 
 3. **Read `src/text/parse.rs`** — see what the surface syntax looks like. The test cases at the bottom are concrete examples.
 
-4. **Read `src/text/elaborate.rs`** — see how `text::Term` becomes `core::Term`. Understanding this translation is key to understanding what de Bruijn scoping means in practice.
+4. **Read `src/text/to_core.rs`** and **`src/text/to_core/elaborate.rs`** — see how `text::Entrypoint` becomes `core::Term`. `to_core.rs` handles module processing and name qualification; `elaborate.rs` handles term-level structural translation. Understanding this translation is key to understanding what de Bruijn scoping means in practice.
 
 5. **Read `src/core/term.rs`** — the `core::Term` enum is the central data structure for type checking. Understanding the `Scope<A: Arity>` wrapper (especially `FuncType`, `TupleType`, `AtomType`) is prerequisite to everything downstream.
 
