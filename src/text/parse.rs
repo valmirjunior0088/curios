@@ -17,8 +17,17 @@ const KEYWORDS: &[&str] = &[
     "let", "match", "rec", "and", "split", "mod", "use", "pub", "end", "def",
 ];
 
-fn parse_whitespace<'a>() -> Parser<'a, &'a str> {
+fn parse_whitespace<'a>() -> Parser<'a, ()> {
     take_while(|char| char.is_whitespace())
+        .and(
+            catch(
+                take_exact("--")
+                    .and_keep(take_while(|char| char != '\n'))
+                    .and_keep(lazy(parse_whitespace)),
+            )
+            .or(pure(())),
+        )
+        .map(|_| ())
 }
 
 fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
@@ -733,7 +742,7 @@ fn parse_split<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(";"))
         .and_drop(parse_literal("|"))
         .and_drop(parse_literal("("))
-        .and(sep_by1(|| parse_identifier(), || parse_literal(",")))
+        .and(sep_by1(parse_identifier, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
@@ -903,15 +912,19 @@ fn parse_top_def<'a>() -> Parser<'a, TopItem> {
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
         parse_identifier().flat_map(move |name| {
-            many0(parse_top_item)
-                .and_drop(parse_keyword("end"))
-                .map(move |items| {
-                    TopItem::Mod(TopMod {
-                        is_pub,
-                        label: name.to_string(),
-                        module: Module { items },
-                    })
+            catch(
+                many0(parse_top_item)
+                    .and_drop(parse_keyword("end"))
+                    .map(|items| Some(Module { items })),
+            )
+            .or(parse_literal(";").map(|()| None))
+            .map(move |module| {
+                TopItem::Mod(TopMod {
+                    is_pub,
+                    label: name.to_string(),
+                    module,
                 })
+            })
         })
     })
 }
@@ -922,6 +935,7 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
             .map(|()| true)
             .or(pure(false))
             .and(parse_name())
+            .and_drop(parse_literal(";"))
             .map(move |(is_abs, name)| {
                 TopItem::Use(TopUse {
                     is_pub,
@@ -1218,7 +1232,7 @@ mod tests {
     #[test]
     fn parse_module_roundtrip() {
         let m = r#"
-            use Bar
+            use Bar;
             pub let x : Type = Type;
             rec f : Type = Type;
         "#
@@ -1247,14 +1261,14 @@ mod tests {
             vec![TopItem::Mod(TopMod {
                 is_pub: false,
                 label: "Inner".to_string(),
-                module: Module {
+                module: Some(Module {
                     items: vec![TopItem::Let(TopLet {
                         is_pub: true,
                         label: "x".to_string(),
                         type_: Term::Type.into(),
                         body: Term::Type.into(),
                     })],
-                },
+                }),
             })]
         );
     }
@@ -1262,8 +1276,8 @@ mod tests {
     #[test]
     fn parse_entrypoint_roundtrip() {
         let entrypoint = r#"
-            use Foo
-            use Bar
+            use Foo;
+            use Bar;
             pub rec f : Type = Type;
             let x : Type = Type;
             f

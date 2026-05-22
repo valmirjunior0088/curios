@@ -113,6 +113,10 @@ impl<'a> Context<'a> {
         }
     }
 
+    pub fn prefix(&self) -> &Name {
+        &self.prefix
+    }
+
     pub fn prefixed(&self, label: &str) -> Name {
         self.prefix.with(label)
     }

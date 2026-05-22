@@ -11,6 +11,7 @@ fn process_items(
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
     def_stack: &DefStack,
+    loader: &dyn Loader,
 ) {
     let mut info = ModuleInfo::new();
 
@@ -20,12 +21,28 @@ fn process_items(
                 context.insert_scope(mod_item.label.clone(), context.prefixed(&mod_item.label));
                 info.insert_child(mod_item.label.clone(), mod_item.is_pub);
 
-                process_items(
-                    &mod_item.module.items,
-                    &mut context.nested(&mod_item.label),
-                    flat_items,
-                    def_stack,
-                );
+                match &mod_item.module {
+                    Some(module) => process_items(
+                        &module.items,
+                        &mut context.nested(&mod_item.label),
+                        flat_items,
+                        def_stack,
+                        loader,
+                    ),
+                    None => {
+                        let module = loader
+                            .load(context.prefix(), &mod_item.label)
+                            .unwrap_or_else(|e| panic!("{e}"));
+
+                        process_items(
+                            &module.items,
+                            &mut context.nested(&mod_item.label),
+                            flat_items,
+                            def_stack,
+                            loader,
+                        );
+                    }
+                }
             }
             TopItem::Use(use_item) => {
                 context.resolve_use(use_item);
@@ -101,6 +118,7 @@ fn process_items(
                     &mut context.nested(&def_item.label),
                     flat_items,
                     &new_def_stack,
+                    loader,
                 );
             }
         }
@@ -138,7 +156,7 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     }
 }
 
-pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
+pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> core::Term {
     check_entrypoint(&entrypoint.items);
 
     let mut table = HashMap::new();
@@ -151,6 +169,7 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
         &mut context,
         &mut flat_items,
         &DefStack::empty(),
+        loader,
     );
 
     flat_items.into_iter().rev().fold(
@@ -170,7 +189,10 @@ mod tests {
     use crate::{core, text};
 
     fn run(src: &str) -> core::Term {
-        super::to_core(&src.parse::<text::Entrypoint>().unwrap())
+        super::to_core(
+            &src.parse::<text::Entrypoint>().unwrap(),
+            &text::PanicLoader,
+        )
     }
 
     #[test]
@@ -211,7 +233,7 @@ mod tests {
                         pub let f : Type = Type;
                     end
                 end
-                use Foo/Bar
+                use Foo/Bar;
                 Bar/f
             "#),
             core::Let::new(
@@ -242,7 +264,7 @@ mod tests {
                     pub let f : Type = Type;
                 end
             end
-            pub use /Foo/Bar
+            pub use /Foo/Bar;
             Type
         "#);
     }
@@ -254,7 +276,7 @@ mod tests {
             mod Foo
                 let x : Type = Type;
             end
-            use Foo
+            use Foo;
             Type
         "#);
     }
@@ -303,8 +325,8 @@ mod tests {
                     pub let g : Type = Type;
                 end
             end
-            use Foo/Baz
-            use Bar/Baz
+            use Foo/Baz;
+            use Bar/Baz;
             Type
         "#);
     }
@@ -315,7 +337,7 @@ mod tests {
         run(r#"
             mod Foo
             end
-            use Foo/Nonexistent
+            use Foo/Nonexistent;
             Type
         "#);
     }
@@ -324,7 +346,7 @@ mod tests {
     #[should_panic(expected = "module not found")]
     fn rejects_absolute_use_of_nonexistent_module() {
         run(r#"
-            use /Nonexistent
+            use /Nonexistent;
             Type
         "#);
     }
@@ -442,7 +464,7 @@ mod tests {
                         pub let from : Bin -> Str = x => Str.from x;
                     end
                 end
-                use Foo/Str
+                use Foo/Str;
                 Str/from
             "#),
             core::Sealed::new(
@@ -578,7 +600,7 @@ mod tests {
                     end
                 end
                 mod MyMod
-                    pub use /Foo/Bar
+                    pub use /Foo/Bar;
                 end
                 MyMod/Bar/f
             "#),
@@ -601,7 +623,7 @@ mod tests {
                     pub let f : Type = Type;
                 end
             end
-            use Foo/Bar
+            use Foo/Bar;
             mod Bar
             end
             Type
@@ -617,7 +639,7 @@ mod tests {
                     pub let f : Type = Type;
                 end
             end
-            use Foo/Bar
+            use Foo/Bar;
             def Bar(Bin)
             end
             Type
@@ -634,9 +656,9 @@ mod tests {
                     end
                 end
                 mod MyMod
-                    pub use /Foo/Bar
+                    pub use /Foo/Bar;
                 end
-                use /MyMod/Bar
+                use /MyMod/Bar;
                 Bar/f
             "#),
             core::Let::new(
@@ -659,10 +681,10 @@ mod tests {
                     end
                 end
                 mod B
-                    pub use /A/X
+                    pub use /A/X;
                 end
                 mod C
-                    pub use /B/X
+                    pub use /B/X;
                 end
                 C/X/f
             "#),
@@ -680,7 +702,7 @@ mod tests {
                 end
             end
             mod MyMod
-                use /Foo/Bar
+                use /Foo/Bar;
             end
             MyMod/Bar/f
         "#);

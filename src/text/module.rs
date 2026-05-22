@@ -4,7 +4,7 @@ use super::{Name, Subterm, Term};
 pub struct TopMod {
     pub is_pub: bool,
     pub label: String,
-    pub module: Module,
+    pub module: Option<Module>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

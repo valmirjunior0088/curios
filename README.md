@@ -6,8 +6,45 @@ Dependent types pay off most in a handful of recurring patterns. Length-indexed 
 
 Curios is an impure language, like OCaml. Side effects — terminal IO, file access, and other operations — are ordinary expressions that can appear anywhere in a program. The type system accommodates this by treating effectful operations as opaque at the type level: when the type checker encounters a term that performs IO during reduction, it raises a type error rather than attempting to evaluate the side effect.
 
-The project's progress is being tracked [here](https://github.com/users/valmirjunior0088/projects/3/views/1).
+## Installation
+
+Download a pre-built binary for your platform from the [releases page](https://github.com/valmirjunior0088/curios/releases), or install directly from the repository:
+
+```
+cargo install --git https://github.com/valmirjunior0088/curios
+```
+
+Or, if you have a local clone:
+
+```
+cargo install --path .
+```
+
+## Usage
+
+```
+curios [--timeout MILLIS] [--check] [--print] <file>
+```
+
+- `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
+- `--check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure (default: off)
+- `--print` prints every intermediate representation — core, ersd, cont, and wasm — before executing (default: off)
+- `<file>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
+
+A minimal example:
+
+```
+-- hello.crs
+let msg : Bin = "hello, world";
+msg
+```
+
+```
+curios hello.crs
+```
 
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — full architectural overview of the compiler pipeline, from parsing through type checking, erasure, CPS lowering, and WebAssembly code generation, including a "Start Here" guide for newcomers.
+- [SYNTAX.md](SYNTAX.md) — language syntax reference covering lexical basics, all term and type forms, primitive operations, and idioms for sum types and recursive types.
+- [CRASH_COURSE.md](CRASH_COURSE.md) — guided introduction for Rust programmers, building from familiar constructs up to dependent function types and length-indexed vectors.

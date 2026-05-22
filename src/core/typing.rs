@@ -1920,7 +1920,7 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap());
+        let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::PanicLoader);
 
         let term = text::to_core(
             &r#"
@@ -1947,6 +1947,7 @@ mod tests {
             "#
             .parse()
             .unwrap(),
+            &text::PanicLoader,
         );
 
         let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();

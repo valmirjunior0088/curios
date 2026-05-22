@@ -1,8 +1,17 @@
 [package]
 name = "curios"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+description = "Work-in-progress functional dependently typed programming language"
+
+[features]
+run = ["dep:wasmtime"]
+cli = ["dep:clap", "run"]
+default = ["cli"]
 
 [dependencies]
-clap = { version = "4.5.60", features = ["derive"] }
-wasmtime = { version = "44.0.1" }
+wasmtime = { optional = true, version = "44.0.1", features = [] }
+clap = { optional = true, version = "4.5.60", features = ["derive"] }
+
+[dev-dependencies]
+curios = { path = ".", default-features = false, features = ["run"] }

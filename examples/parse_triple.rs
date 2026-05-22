@@ -12,8 +12,12 @@ fn main() {
     .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-    let core_term = text::to_core(&text_entrypoint);
+    println!("=== text ===");
+    println!("{text_entrypoint}");
 
+    let core_term = text::to_core(&text_entrypoint, &curios::text::PanicLoader);
+
+    println!();
     println!("=== core ===");
     println!("{core_term}");
 

@@ -50,6 +50,10 @@ impl Name {
     pub fn interior(&self) -> &[String] {
         &self.path[1..self.path.len() - 1]
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.path.iter().map(String::as_str)
+    }
 }
 
 impl<S, I> From<I> for Name

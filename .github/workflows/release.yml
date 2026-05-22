@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "release/*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            binary: curios
+            asset: curios-linux-x86_64
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            binary: curios
+            asset: curios-macos-aarch64
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            binary: curios.exe
+            asset: curios-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+
+  release:
+    name: Create release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: build
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Rename artifacts
+        run: |
+          mv artifacts/curios-linux-x86_64/curios artifacts/curios-linux-x86_64
+          mv artifacts/curios-macos-aarch64/curios artifacts/curios-macos-aarch64
+          mv artifacts/curios-windows-x86_64.exe/curios.exe artifacts/curios-windows-x86_64.exe
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            artifacts/curios-linux-x86_64 \
+            artifacts/curios-macos-aarch64 \
+            artifacts/curios-windows-x86_64.exe

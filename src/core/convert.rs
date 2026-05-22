@@ -827,10 +827,7 @@ mod tests {
         let this = Term::from(TupleType::new([
             (
                 "x",
-                Term::from(Apply::many(
-                    Func::new("z", Var::free("z")),
-                    [Var::free("loop")],
-                )),
+                Apply::many(Func::new("z", Var::free("z")), [Var::free("loop")]),
             ),
             ("y", Term::from(Var::free("x"))),
         ]));

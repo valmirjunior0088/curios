@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, DefFrom, DefInto, Func, FuncType, Let, Match, Nat, NatFold,
-        NatMatch, Prim, Rec, Split, Term, Tuple, TupleType,
+        Apply, Atom, AtomType, Bin, DefFrom, DefInto, Entrypoint, Func, FuncType, Let, Match,
+        Module, Nat, NatFold, NatMatch, Prim, Rec, Split, Term, TopDef, TopItem, TopLet, TopMod,
+        TopUse, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -549,5 +550,131 @@ fn print_term(term: Term) -> Printer<'static> {
 impl Display for Term {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         run_printer(print_term(self.clone()), formatter, 2)
+    }
+}
+
+fn print_pub(is_pub: bool) -> Printer<'static> {
+    if is_pub { pure("pub ") } else { pure("") }
+}
+
+fn print_top_use(item: TopUse) -> Printer<'static> {
+    flat([
+        print_pub(item.is_pub),
+        pure("use "),
+        if item.is_abs { pure("/") } else { pure("") },
+        pure(item.name.join()),
+        pure(";"),
+    ])
+}
+
+fn print_top_let(item: TopLet) -> Printer<'static> {
+    flat([
+        print_pub(item.is_pub),
+        pure("let "),
+        pure(item.label),
+        pure(" : "),
+        print_term(*item.type_),
+        pure(" =\n"),
+        indent(flat([print_term(*item.body), pure(";")])),
+    ])
+}
+
+fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
+    let mut iter = items.into_iter();
+    let first = iter.next().unwrap();
+    let rest = iter.collect::<Vec<_>>();
+
+    flat([
+        print_pub(first.is_pub),
+        pure("rec "),
+        pure(first.label),
+        pure(" : "),
+        print_term(*first.type_),
+        pure(" =\n"),
+        indent(print_term(*first.body)),
+        flat(
+            rest.into_iter()
+                .map(|item| {
+                    flat([
+                        pure("\nand "),
+                        print_pub(item.is_pub),
+                        pure(item.label),
+                        pure(" : "),
+                        print_term(*item.type_),
+                        pure(" =\n"),
+                        indent(print_term(*item.body)),
+                    ])
+                })
+                .collect::<Vec<_>>(),
+        ),
+        pure(";"),
+    ])
+}
+
+fn print_top_mod(item: TopMod) -> Printer<'static> {
+    match item.module {
+        None => flat([
+            print_pub(item.is_pub),
+            pure("mod "),
+            pure(item.label),
+            pure(";"),
+        ]),
+        Some(module) => flat([
+            print_pub(item.is_pub),
+            pure("mod "),
+            pure(item.label),
+            pure("\n"),
+            indent(print_module_items(module.items)),
+            pure("\nend"),
+        ]),
+    }
+}
+
+fn print_top_def(item: TopDef) -> Printer<'static> {
+    flat([
+        print_pub(item.is_pub),
+        pure("def "),
+        pure(item.label),
+        pure("("),
+        print_term(*item.witness),
+        pure(")\n"),
+        indent(print_module_items(item.module.items)),
+        pure("\nend"),
+    ])
+}
+
+fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
+    sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
+}
+
+fn print_top_item(item: TopItem) -> Printer<'static> {
+    match item {
+        TopItem::Mod(m) => print_top_mod(m),
+        TopItem::Use(u) => print_top_use(u),
+        TopItem::Let(l) => print_top_let(l),
+        TopItem::Rec(items) => print_top_rec(items),
+        TopItem::Def(d) => print_top_def(d),
+    }
+}
+
+impl Display for Module {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
+        run_printer(print_module_items(self.clone().items), formatter, 2)
+    }
+}
+
+impl Display for Entrypoint {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
+        let entrypoint = self.clone();
+        let printer = if entrypoint.items.is_empty() {
+            print_term(entrypoint.tail)
+        } else {
+            flat([
+                print_module_items(entrypoint.items),
+                pure("\n"),
+                print_term(entrypoint.tail),
+            ])
+        };
+        run_printer(printer, formatter, 2)
     }
 }
