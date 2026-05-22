@@ -131,7 +131,6 @@ fn check_entrypoint(items: &[TopItem]) {
     for item in items {
         match item {
             TopItem::Mod(mod_item) if mod_item.is_pub => panic!("pub on top-level entrypoint item"),
-            TopItem::Use(use_item) if use_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Let(let_item) if let_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Def(def_item) if def_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Rec(let_items) if let_items.iter().any(|let_item| let_item.is_pub) => {
@@ -251,20 +250,6 @@ mod tests {
     fn rejects_pub_at_entrypoint_root() {
         run(r#"
             pub let f : Type = Type;
-            Type
-        "#);
-    }
-
-    #[test]
-    #[should_panic(expected = "pub on top-level entrypoint item")]
-    fn rejects_pub_use_at_entrypoint_root() {
-        run(r#"
-            mod Foo
-                pub mod Bar
-                    pub let f : Type = Type;
-                end
-            end
-            pub use /Foo/Bar;
             Type
         "#);
     }
