@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, Func, FuncType, Let, Match, Nat, NatFold, NatMatch, Prim, Rec,
-        Name, Split, Term, Tuple, TupleType,
+        Apply, Atom, AtomType, Bin, From, Func, FuncType, Into, Let, Match, Nat, NatFold,
+        NatMatch, Prim, Rec, Name, Split, Term, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -321,6 +321,12 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure(";"),
                 flat(case_printers.collect::<Vec<_>>()),
             ])
+        }
+        Term::From(From { label, body }) => {
+            flat([pure(label), pure(".from "), print_term(*body)])
+        }
+        Term::Into(Into { label, body }) => {
+            flat([pure(label), pure(".into "), print_term(*body)])
         }
         Term::Let(Let {
             label,

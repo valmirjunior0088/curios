@@ -1,5 +1,5 @@
 use {
-    super::ModuleInfo,
+    super::{DefStack, ModuleInfo},
     crate::{
         core,
         text::{Bin, Name, Nat, Prim, Term},
@@ -10,11 +10,16 @@ use {
 pub struct Elaborate<'a> {
     scope: &'a HashMap<String, Name>,
     table: &'a HashMap<Name, ModuleInfo>,
+    def_stack: &'a DefStack,
 }
 
 impl<'a> Elaborate<'a> {
-    pub fn new(scope: &'a HashMap<String, Name>, table: &'a HashMap<Name, ModuleInfo>) -> Self {
-        Self { scope, table }
+    pub fn new(
+        scope: &'a HashMap<String, Name>,
+        table: &'a HashMap<Name, ModuleInfo>,
+        def_stack: &'a DefStack,
+    ) -> Self {
+        Self { scope, table, def_stack }
     }
 
     pub fn term(&self, term: &Term) -> core::Term {
@@ -23,12 +28,21 @@ impl<'a> Elaborate<'a> {
 
             Term::Prim(prim) => core::Term::Prim(self.prim(prim)),
 
-            Term::Name(name) => core::Var::free(if name.path.len() == 1 {
-                name.path[0].clone()
-            } else {
-                self.resolve_name(name).path.join("/")
-            })
-            .into(),
+            Term::Name(name) => {
+                let path = if name.path.len() == 1 {
+                    let label = &name.path[0];
+                    if let Some(full) = self.scope.get(label) {
+                        full.path.join("/")
+                    } else if let Some(full) = self.def_stack.get(label) {
+                        full.path.join("/")
+                    } else {
+                        label.clone()
+                    }
+                } else {
+                    self.resolve_name(name).path.join("/")
+                };
+                core::Var::free(path).into()
+            }
 
             Term::Atom(atom) => core::Term::Atom(core::Atom::from(atom.string.clone())),
 
@@ -101,6 +115,22 @@ impl<'a> Elaborate<'a> {
                     .map(|(atom, body)| (core::Atom::from(atom.string.clone()), self.term(body))),
             )
             .into(),
+
+            Term::From(from) => {
+                let name = self
+                    .def_stack
+                    .get(&from.label)
+                    .unwrap_or_else(|| panic!("coercion outside def block: {}", from.label));
+                core::Seal::new(core::Var::free(name.path.join("/")), self.term(&from.body)).into()
+            }
+
+            Term::Into(into) => {
+                let name = self
+                    .def_stack
+                    .get(&into.label)
+                    .unwrap_or_else(|| panic!("coercion outside def block: {}", into.label));
+                core::Unseal::new(core::Var::free(name.path.join("/")), self.term(&into.body)).into()
+            }
 
             Term::Let(let_) => core::Let::new(
                 let_.label.clone(),

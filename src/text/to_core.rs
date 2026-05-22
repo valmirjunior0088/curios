@@ -6,30 +6,35 @@ use elaborate::*;
 
 use {super::*, crate::core, std::collections::HashMap};
 
-fn process_items(items: &[TopItem], context: &mut Context, flat: &mut Vec<FlatItem>) {
-    let mut info = ModuleInfo {
-        children: HashMap::new(),
-        bindings: HashMap::new(),
-    };
+fn process_items(
+    items: &[TopItem],
+    context: &mut Context,
+    flat: &mut Vec<FlatItem>,
+    def_stack: &DefStack,
+) {
+    let mut info = ModuleInfo::new();
+
     for item in items {
         match item {
             TopItem::Mod(mod_item) => {
                 context
                     .scope
                     .insert(mod_item.label.clone(), context.prefix.with(&mod_item.label));
-                info.children.insert(mod_item.label.clone(), mod_item.is_pub);
+                info.children
+                    .insert(mod_item.label.clone(), mod_item.is_pub);
                 let mut child = context.nested(&mod_item.label);
-                process_items(&mod_item.module.items, &mut child, flat);
+                process_items(&mod_item.module.items, &mut child, flat, def_stack);
             }
             TopItem::Use(use_item) => {
                 context.resolve_use(use_item);
             }
             TopItem::Let(let_item) => {
                 let name = context.prefix.with(&let_item.label);
-                let elab = Elaborate::new(&context.scope, &*context.table);
+                let elab = Elaborate::new(&context.scope, &*context.table, def_stack);
                 let type_ = elab.term(&let_item.type_);
                 let body = elab.term(&let_item.body);
-                info.bindings.insert(let_item.label.clone(), let_item.is_pub);
+                info.bindings
+                    .insert(let_item.label.clone(), let_item.is_pub);
                 flat.push(FlatItem::Let(FlatLet { name, type_, body }));
             }
             TopItem::Rec(ls) => {
@@ -37,14 +42,32 @@ fn process_items(items: &[TopItem], context: &mut Context, flat: &mut Vec<FlatIt
                     ls.iter()
                         .map(|let_item| {
                             let name = context.prefix.with(&let_item.label);
-                            let elab = Elaborate::new(&context.scope, &*context.table);
+                            let elab = Elaborate::new(&context.scope, &*context.table, def_stack);
                             let type_ = elab.term(&let_item.type_);
                             let body = elab.term(&let_item.body);
-                            info.bindings.insert(let_item.label.clone(), let_item.is_pub);
+                            info.bindings
+                                .insert(let_item.label.clone(), let_item.is_pub);
                             FlatLet { name, type_, body }
                         })
                         .collect(),
                 ));
+            }
+            TopItem::Def(def_item) => {
+                let name = context.prefix.with(&def_item.label);
+                let witness = Elaborate::new(&context.scope, &*context.table, def_stack)
+                    .term(&def_item.witness);
+                context.scope.insert(def_item.label.clone(), name.clone());
+                info.children
+                    .insert(def_item.label.clone(), def_item.is_pub);
+                info.bindings
+                    .insert(def_item.label.clone(), def_item.is_pub);
+                flat.push(FlatItem::Sealed(FlatSealed {
+                    name: name.clone(),
+                    witness,
+                }));
+                let new_def_stack = def_stack.push(def_item.label.clone(), name);
+                let mut child = context.nested(&def_item.label);
+                process_items(&def_item.module.items, &mut child, flat, &new_def_stack);
             }
         }
     }
@@ -56,6 +79,7 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
         match item {
             TopItem::Mod(mod_item) if mod_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Let(let_item) if let_item.is_pub => panic!("pub on top-level entrypoint item"),
+            TopItem::Def(def_item) if def_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Rec(ls) => {
                 for let_item in ls {
                     if let_item.is_pub {
@@ -67,16 +91,24 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
         }
     }
 
-    let mut table: HashMap<Name, ModuleInfo> = HashMap::new();
+    let mut table = HashMap::new();
     let mut context = Context::new(&mut table);
-    let mut flat: Vec<FlatItem> = Vec::new();
+    let mut flat = Vec::new();
 
-    process_items(&entrypoint.items, &mut context, &mut flat);
+    process_items(
+        &entrypoint.items,
+        &mut context,
+        &mut flat,
+        &DefStack::empty(),
+    );
 
-    let base = Elaborate::new(&context.scope, &*context.table).term(&entrypoint.tail);
+    let base =
+        Elaborate::new(&context.scope, &*context.table, &DefStack::empty()).term(&entrypoint.tail);
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
-        FlatItem::Let(let_) => core::Let::new(let_.name.path.join("/"), let_.type_, let_.body, acc).into(),
+        FlatItem::Let(let_) => {
+            core::Let::new(let_.name.path.join("/"), let_.type_, let_.body, acc).into()
+        }
         FlatItem::Rec(items) => core::Rec::new(
             items
                 .into_iter()
@@ -84,6 +116,7 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
             acc,
         )
         .into(),
+        FlatItem::Sealed(s) => core::Sealed::new(s.name.path.join("/"), s.witness, acc).into(),
     })
 }
 
@@ -233,6 +266,217 @@ mod tests {
     fn rejects_absolute_use_of_nonexistent_module() {
         run(r#"
             use /Nonexistent
+            Type
+        "#);
+    }
+
+    #[test]
+    fn def_elaborates_to_sealed() {
+        assert_eq!(
+            run(r#"
+                def Str = Bin in
+                    pub let from : Bin -> Str = bin => Str.from bin;
+                    pub let into : Str -> Bin = str => Str.into str;
+                end
+                Type
+            "#),
+            core::Sealed::new(
+                "Str",
+                core::Term::Prim(core::Prim::BinType),
+                core::Let::new(
+                    "Str/from",
+                    core::FuncType::new(
+                        "",
+                        core::Term::Prim(core::Prim::BinType),
+                        core::Var::free("Str")
+                    ),
+                    core::Func::new(
+                        "bin",
+                        core::Seal::new(core::Var::free("Str"), core::Var::free("bin"))
+                    ),
+                    core::Let::new(
+                        "Str/into",
+                        core::FuncType::new(
+                            "",
+                            core::Var::free("Str"),
+                            core::Term::Prim(core::Prim::BinType)
+                        ),
+                        core::Func::new(
+                            "str",
+                            core::Unseal::new(core::Var::free("Str"), core::Var::free("str"))
+                        ),
+                        core::Term::Type,
+                    ),
+                ),
+            )
+            .into()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "coercion outside def block")]
+    fn rejects_coercion_outside_def_block() {
+        run(r#"
+            def Str = Bin in
+            end
+            Str.from 00
+        "#);
+    }
+
+    #[test]
+    fn def_inside_module_uses_qualified_name() {
+        assert_eq!(
+            run(r#"
+                mod Foo
+                    def Str = Bin in
+                    end
+                end
+                Type
+            "#),
+            core::Sealed::new(
+                "Foo/Str",
+                core::Term::Prim(core::Prim::BinType),
+                core::Term::Type
+            )
+            .into()
+        );
+    }
+
+    #[test]
+    fn pub_def_type_referenceable_by_qualified_name() {
+        assert_eq!(
+            run(r#"
+                mod Foo
+                    pub def Str = Bin in
+                        pub let from : Bin -> Str = x => Str.from x;
+                    end
+                end
+                Foo/Str
+            "#),
+            core::Sealed::new(
+                "Foo/Str",
+                core::Term::Prim(core::Prim::BinType),
+                core::Let::new(
+                    "Foo/Str/from",
+                    core::FuncType::new("", core::Term::Prim(core::Prim::BinType), core::Var::free("Foo/Str")),
+                    core::Func::new("x", core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))),
+                    core::Var::free("Foo/Str"),
+                ),
+            )
+            .into()
+        );
+    }
+
+    #[test]
+    fn use_def_namespace_then_access_item() {
+        assert_eq!(
+            run(r#"
+                mod Foo
+                    pub def Str = Bin in
+                        pub let from : Bin -> Str = x => Str.from x;
+                    end
+                end
+                use Foo/Str
+                Str/from
+            "#),
+            core::Sealed::new(
+                "Foo/Str",
+                core::Term::Prim(core::Prim::BinType),
+                core::Let::new(
+                    "Foo/Str/from",
+                    core::FuncType::new("", core::Term::Prim(core::Prim::BinType), core::Var::free("Foo/Str")),
+                    core::Func::new("x", core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))),
+                    core::Var::free("Foo/Str/from"),
+                ),
+            )
+            .into()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "private binding")]
+    fn rejects_private_def_type_by_qualified_name() {
+        run(r#"
+            mod Foo
+                def Str = Bin in
+                end
+            end
+            Foo/Str
+        "#);
+    }
+
+    #[test]
+    fn lambda_param_shadowing_def_name_captures_param_not_type() {
+        assert_eq!(
+            run(r#"
+                def Str = Bin in
+                    pub let foo : Str -> Bin = Str => Str.from Str;
+                end
+                Type
+            "#),
+            core::Sealed::new(
+                "Str",
+                core::Term::Prim(core::Prim::BinType),
+                core::Let::new(
+                    "Str/foo",
+                    core::FuncType::new("", core::Var::free("Str"), core::Term::Prim(core::Prim::BinType)),
+                    core::Func::new("Str", core::Seal::new(core::Var::free("Str"), core::Var::free("Str"))),
+                    core::Term::Type,
+                ),
+            )
+            .into()
+        );
+    }
+
+    #[test]
+    fn lambda_param_shadows_def_in_nested_func() {
+        assert_eq!(
+            run(r#"
+                def Str = Bin in
+                    pub let foo : Str -> Str -> Bin = Str => str => Str.from str;
+                end
+                Type
+            "#),
+            core::Sealed::new(
+                "Str",
+                core::Term::Prim(core::Prim::BinType),
+                core::Let::new(
+                    "Str/foo",
+                    core::FuncType::new(
+                        "",
+                        core::Var::free("Str"),
+                        core::FuncType::new("", core::Var::free("Str"), core::Term::Prim(core::Prim::BinType)),
+                    ),
+                    core::Func::new(
+                        "Str",
+                        core::Func::new("str", core::Seal::new(core::Var::free("Str"), core::Var::free("str"))),
+                    ),
+                    core::Term::Type,
+                ),
+            )
+            .into()
+        );
+    }
+
+    #[test]
+    fn nested_def_outer_label_accessible_in_inner() {
+        run(r#"
+            def A = Bin in
+                def B = Nat in
+                    pub let f : Bin -> A = x => A.from x;
+                end
+            end
+            Type
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "coercion outside def block: Foo")]
+    fn rejects_coercion_with_wrong_def_label() {
+        run(r#"
+            def Str = Bin in
+                pub let bad : Bin -> Str = x => Foo.from x;
+            end
             Type
         "#);
     }

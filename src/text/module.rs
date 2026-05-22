@@ -22,11 +22,20 @@ pub struct TopLet {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TopDef {
+    pub is_pub: bool,
+    pub label: String,
+    pub witness: Subterm,
+    pub module: Module,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
     Mod(TopMod),
     Use(TopUse),
     Let(TopLet),
     Rec(Vec<TopLet>),
+    Def(TopDef),
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -88,6 +88,18 @@ pub struct Match {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct From {
+    pub label: String,
+    pub body: Subterm,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Into {
+    pub label: String,
+    pub body: Subterm,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     pub label: String,
     pub type_: Subterm,
@@ -123,6 +135,8 @@ pub enum Term {
     AtomType(AtomType),
     Atom(Atom),
     Match(Match),
+    From(From),
+    Into(Into),
     Let(Let),
     Rec(Rec),
     Name(Name),

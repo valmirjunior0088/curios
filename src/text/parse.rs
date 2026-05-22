@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, Entrypoint, Func, FuncType, Let, Match, Module, Name, Nat,
-        NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopItem, TopLet, TopMod, TopUse, Tuple,
-        TupleType,
+        Apply, Atom, AtomType, Bin, Entrypoint, Func, FuncType, From, Into, Let, Match, Module,
+        Name, Nat, NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopDef, TopItem, TopLet,
+        TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -12,7 +12,7 @@ use {
 };
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "split", "->", "=>", "mod", "use", "pub", "end",
+    "let", "match", "rec", "and", "split", "->", "=>", "mod", "use", "pub", "end", "def", "in",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, &'a str> {
@@ -537,7 +537,7 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(")"))
     .map(|(first, rest)| {
         Term::Tuple(Tuple {
-            fields: iter::once(first).chain(rest).map(Into::into).collect(),
+            fields: iter::once(first).chain(rest).map(|t| t.into()).collect(),
         })
     })
 }
@@ -768,6 +768,30 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         })
 }
 
+fn parse_coerce<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_identifier()
+            .flat_map(|id: &str| {
+                if let Some(label) = id.strip_suffix(".from") {
+                    pure((label.to_string(), false))
+                } else if let Some(label) = id.strip_suffix(".into") {
+                    pure((label.to_string(), true))
+                } else {
+                    fail("not a coercion")
+                }
+            })
+            .and_drop(parse_whitespace()),
+    )
+    .and(lazy(parse_atomic_term))
+    .map(|((label, is_into), body)| {
+        if is_into {
+            Term::Into(Into { label, body: body.into() })
+        } else {
+            Term::From(From { label, body: body.into() })
+        }
+    })
+}
+
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     parse_type()
         .or(parse_prim())
@@ -788,6 +812,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
         .or(parse_match())
         .or(parse_func_type())
         .or(parse_func())
+        .or(parse_coerce())
         .or(parse_atomic_term()
             .and(many0(parse_atomic_term))
             .map(|(head, params)| Apply::many(head, params)))
@@ -854,6 +879,25 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
         .map(TopItem::Rec)
 }
 
+fn parse_top_def<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("def"))).flat_map(|(is_pub, ())| {
+        parse_identifier()
+            .and_drop(parse_literal("="))
+            .and(lazy(parse_term))
+            .and_drop(parse_keyword("in"))
+            .and(many0(parse_top_item))
+            .and_drop(parse_keyword("end"))
+            .map(move |((label, witness), items)| {
+                TopItem::Def(TopDef {
+                    is_pub,
+                    label: label.to_string(),
+                    witness: witness.into(),
+                    module: Module { items },
+                })
+            })
+    })
+}
+
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
         parse_identifier().flat_map(move |name| {
@@ -878,7 +922,8 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {
-    parse_top_mod()
+    parse_top_def()
+        .or(parse_top_mod())
         .or(parse_top_use())
         .or(parse_top_let())
         .or(parse_top_rec())

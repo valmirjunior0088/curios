@@ -1,19 +1,52 @@
 use {crate::{core, text::{Name, TopUse}}, std::collections::HashMap};
 
+pub struct DefStack(Vec<(String, Name)>);
+
+impl DefStack {
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn push(&self, label: String, name: Name) -> Self {
+        let mut entries = self.0.clone();
+        entries.push((label, name));
+        Self(entries)
+    }
+
+    pub fn get(&self, label: &str) -> Option<&Name> {
+        self.0.iter().rev().find(|(l, _)| l == label).map(|(_, n)| n)
+    }
+}
+
 pub struct FlatLet {
     pub name: Name,
     pub type_: core::Term,
     pub body: core::Term,
 }
 
+pub struct FlatSealed {
+    pub name: Name,
+    pub witness: core::Term,
+}
+
 pub enum FlatItem {
     Let(FlatLet),
     Rec(Vec<FlatLet>),
+    Sealed(FlatSealed),
 }
 
 pub struct ModuleInfo {
     pub children: HashMap<String, bool>,
     pub bindings: HashMap<String, bool>,
+}
+
+impl ModuleInfo {
+    pub fn new() -> Self {
+        Self {
+            children: HashMap::new(),
+            bindings: HashMap::new(),
+        }
+    }
 }
 
 pub struct Context<'a> {
