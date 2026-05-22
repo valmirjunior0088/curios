@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, From, Func, FuncType, Into, Let, Match, Nat, NatFold,
+        Apply, Atom, AtomType, Bin, DefFrom, DefInto, Func, FuncType, Let, Match, Nat, NatFold,
         NatMatch, Prim, Rec, Split, Term, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -33,94 +33,94 @@ fn print_prim(prim: Prim) -> Printer<'static> {
     match prim {
         Prim::NatType => pure("Nat"),
         Prim::Nat(nat) => match nat {
-            Nat::Number(n) => pure(format!("{n}")),
-            Nat::Char(c) => {
-                let escaped = match c {
+            Nat::Number(number) => pure(format!("{number}")),
+            Nat::Char(character) => {
+                let escaped = match character {
                     '\'' => "\\'".to_string(),
                     '\\' => "\\\\".to_string(),
                     '\n' => "\\n".to_string(),
                     '\t' => "\\t".to_string(),
                     '\r' => "\\r".to_string(),
-                    _ => c.to_string(),
+                    _ => character.to_string(),
                 };
                 pure(format!("'{escaped}'"))
             }
         },
-        Prim::NatEql(l, r) => flat([pure("Nat.eql "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatNeq(l, r) => flat([pure("Nat.neq "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatAdd(l, r) => flat([pure("Nat.add "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatSub(l, r) => flat([pure("Nat.sub "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatMul(l, r) => flat([pure("Nat.mul "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatLt(l, r) => flat([pure("Nat.lt "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatDiv(l, r) => flat([pure("Nat.div "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatRem(l, r) => flat([pure("Nat.rem "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatGt(l, r) => flat([pure("Nat.gt "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatLte(l, r) => flat([pure("Nat.lte "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::NatGte(l, r) => flat([pure("Nat.gte "), print_term(*l), pure(" "), print_term(*r)]),
+        Prim::NatEql(left, right) => flat([pure("Nat.eql "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatNeq(left, right) => flat([pure("Nat.neq "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatAdd(left, right) => flat([pure("Nat.add "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatSub(left, right) => flat([pure("Nat.sub "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatMul(left, right) => flat([pure("Nat.mul "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatLt(left, right) => flat([pure("Nat.lt "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatDiv(left, right) => flat([pure("Nat.div "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatRem(left, right) => flat([pure("Nat.rem "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatGt(left, right) => flat([pure("Nat.gt "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatLte(left, right) => flat([pure("Nat.lte "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::NatGte(left, right) => flat([pure("Nat.gte "), print_term(*left), pure(" "), print_term(*right)]),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{value:+}")),
-        Prim::IntEql(l, r) => flat([pure("Int.eql "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntNeq(l, r) => flat([pure("Int.neq "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntAdd(l, r) => flat([pure("Int.add "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntSub(l, r) => flat([pure("Int.sub "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntMul(l, r) => flat([pure("Int.mul "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntDiv(l, r) => flat([pure("Int.div "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntRem(l, r) => flat([pure("Int.rem "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntLt(l, r) => flat([pure("Int.lt "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntGt(l, r) => flat([pure("Int.gt "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntLte(l, r) => flat([pure("Int.lte "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::IntGte(l, r) => flat([pure("Int.gte "), print_term(*l), pure(" "), print_term(*r)]),
+        Prim::IntEql(left, right) => flat([pure("Int.eql "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntNeq(left, right) => flat([pure("Int.neq "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntAdd(left, right) => flat([pure("Int.add "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntSub(left, right) => flat([pure("Int.sub "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntMul(left, right) => flat([pure("Int.mul "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntDiv(left, right) => flat([pure("Int.div "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntRem(left, right) => flat([pure("Int.rem "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntLt(left, right) => flat([pure("Int.lt "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntGt(left, right) => flat([pure("Int.gt "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntLte(left, right) => flat([pure("Int.lte "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::IntGte(left, right) => flat([pure("Int.gte "), print_term(*left), pure(" "), print_term(*right)]),
         Prim::FltType => pure("Flt"),
         Prim::Flt(value) => print_flt(value),
-        Prim::FltAdd(l, r) => flat([pure("Flt.add "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltSub(l, r) => flat([pure("Flt.sub "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltMul(l, r) => flat([pure("Flt.mul "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltDiv(l, r) => flat([pure("Flt.div "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltEql(l, r) => flat([pure("Flt.eql "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltNeq(l, r) => flat([pure("Flt.neq "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltLt(l, r) => flat([pure("Flt.lt "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltGt(l, r) => flat([pure("Flt.gt "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltLte(l, r) => flat([pure("Flt.lte "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltGte(l, r) => flat([pure("Flt.gte "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltMin(l, r) => flat([pure("Flt.min "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltMax(l, r) => flat([pure("Flt.max "), print_term(*l), pure(" "), print_term(*r)]),
-        Prim::FltNeg(t) => flat([pure("Flt.neg "), print_term(*t)]),
-        Prim::FltAbs(t) => flat([pure("Flt.abs "), print_term(*t)]),
-        Prim::FltSqrt(t) => flat([pure("Flt.sqrt "), print_term(*t)]),
-        Prim::FltFloor(t) => flat([pure("Flt.floor "), print_term(*t)]),
-        Prim::FltCeil(t) => flat([pure("Flt.ceil "), print_term(*t)]),
-        Prim::FltTrunc(t) => flat([pure("Flt.trunc "), print_term(*t)]),
-        Prim::FltNearest(t) => flat([pure("Flt.nearest "), print_term(*t)]),
-        Prim::NatToInt(t) => flat([pure("Nat.to_int "), print_term(*t)]),
-        Prim::NatToFlt(t) => flat([pure("Nat.to_flt "), print_term(*t)]),
-        Prim::IntToNat(t) => flat([pure("Int.to_nat "), print_term(*t)]),
-        Prim::IntToFlt(t) => flat([pure("Int.to_flt "), print_term(*t)]),
-        Prim::FltToNat(t) => flat([pure("Flt.to_nat "), print_term(*t)]),
-        Prim::FltToInt(t) => flat([pure("Flt.to_int "), print_term(*t)]),
+        Prim::FltAdd(left, right) => flat([pure("Flt.add "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltSub(left, right) => flat([pure("Flt.sub "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltMul(left, right) => flat([pure("Flt.mul "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltDiv(left, right) => flat([pure("Flt.div "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltEql(left, right) => flat([pure("Flt.eql "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltNeq(left, right) => flat([pure("Flt.neq "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltLt(left, right) => flat([pure("Flt.lt "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltGt(left, right) => flat([pure("Flt.gt "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltLte(left, right) => flat([pure("Flt.lte "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltGte(left, right) => flat([pure("Flt.gte "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltMin(left, right) => flat([pure("Flt.min "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltMax(left, right) => flat([pure("Flt.max "), print_term(*left), pure(" "), print_term(*right)]),
+        Prim::FltNeg(operand) => flat([pure("Flt.neg "), print_term(*operand)]),
+        Prim::FltAbs(operand) => flat([pure("Flt.abs "), print_term(*operand)]),
+        Prim::FltSqrt(operand) => flat([pure("Flt.sqrt "), print_term(*operand)]),
+        Prim::FltFloor(operand) => flat([pure("Flt.floor "), print_term(*operand)]),
+        Prim::FltCeil(operand) => flat([pure("Flt.ceil "), print_term(*operand)]),
+        Prim::FltTrunc(operand) => flat([pure("Flt.trunc "), print_term(*operand)]),
+        Prim::FltNearest(operand) => flat([pure("Flt.nearest "), print_term(*operand)]),
+        Prim::NatToInt(operand) => flat([pure("Nat.to_int "), print_term(*operand)]),
+        Prim::NatToFlt(operand) => flat([pure("Nat.to_flt "), print_term(*operand)]),
+        Prim::IntToNat(operand) => flat([pure("Int.to_nat "), print_term(*operand)]),
+        Prim::IntToFlt(operand) => flat([pure("Int.to_flt "), print_term(*operand)]),
+        Prim::FltToNat(operand) => flat([pure("Flt.to_nat "), print_term(*operand)]),
+        Prim::FltToInt(operand) => flat([pure("Flt.to_int "), print_term(*operand)]),
         Prim::BinType => pure("Bin"),
         Prim::Bin(bin) => match bin {
             Bin::Bytes(bytes) => pure(
                 bytes
                     .iter()
-                    .map(|b| format!("\\{:02x}", b))
+                    .map(|byte| format!("\\{:02x}", byte))
                     .collect::<String>(),
             ),
-            Bin::String(s) => {
-                let escaped = s
+            Bin::String(content) => {
+                let escaped = content
                     .chars()
-                    .map(|c| match c {
+                    .map(|character| match character {
                         '"' => "\\\"".to_string(),
                         '\\' => "\\\\".to_string(),
                         '\n' => "\\n".to_string(),
                         '\t' => "\\t".to_string(),
                         '\r' => "\\r".to_string(),
-                        _ => c.to_string(),
+                        _ => character.to_string(),
                     })
                     .collect::<String>();
                 pure(format!("\"{escaped}\""))
             }
         },
-        Prim::BinLen(t) => flat([pure("Bin.len "), print_term(*t)]),
+        Prim::BinLen(operand) => flat([pure("Bin.len "), print_term(*operand)]),
         Prim::BinEql(left, right) => flat([
             pure("Bin.eql "),
             print_term(*left),
@@ -149,15 +149,15 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         ]),
         Prim::BinConcat(operands) => flat([
             pure("Bin.concat "),
-            sep_flat(operands.into_iter().map(|t| print_term(*t)), || pure(", ")),
+            sep_flat(operands.into_iter().map(|operand| print_term(*operand)), || pure(", ")),
         ]),
         Prim::ArrType(elem) => flat([pure("Arr "), print_term(*elem)]),
         Prim::Arr(elems) => flat([
             pure("["),
-            sep_flat(elems.into_iter().map(|t| print_term(*t)), || pure(", ")),
+            sep_flat(elems.into_iter().map(|operand| print_term(*operand)), || pure(", ")),
             pure("]"),
         ]),
-        Prim::ArrLen(t) => flat([pure("Arr.len "), print_term(*t)]),
+        Prim::ArrLen(operand) => flat([pure("Arr.len "), print_term(*operand)]),
         Prim::ArrGet(list, index) => flat([
             pure("Arr.get "),
             print_term(*list),
@@ -180,7 +180,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         ]),
         Prim::ArrConcat(operands) => flat([
             pure("Arr.concat "),
-            sep_flat(operands.into_iter().map(|t| print_term(*t)), || pure(", ")),
+            sep_flat(operands.into_iter().map(|operand| print_term(*operand)), || pure(", ")),
         ]),
     }
 }
@@ -193,7 +193,7 @@ fn print_term(term: Term) -> Printer<'static> {
         Term::Atom(atom) => print_atom(atom),
         Term::AtomType(AtomType { atoms }) => flat([
             pure("'["),
-            sep_flat(atoms.into_iter().map(|a| pure(a.as_string())), || pure(", ")),
+            sep_flat(atoms.into_iter().map(|atom| pure(atom.as_string())), || pure(", ")),
             pure("]"),
         ]),
         Term::FuncType(FuncType {
@@ -218,15 +218,15 @@ fn print_term(term: Term) -> Printer<'static> {
             flat([print_term(*head), pure(" "), print_term(*param)])
         }
         Term::TupleType(TupleType { fields }) => {
-            let items = fields.into_iter().map(|(label, t)| match label {
-                Some(label) => indent(flat([pure(label), pure(" : "), print_term(*t)])),
-                None => indent(print_term(*t)),
+            let items = fields.into_iter().map(|(label, field_type)| match label {
+                Some(label) => indent(flat([pure(label), pure(" : "), print_term(*field_type)])),
+                None => indent(print_term(*field_type)),
             });
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Term::Tuple(Tuple { fields }) => flat([
             pure("("),
-            sep_flat(fields.into_iter().map(|f| print_term(*f)), || pure(", ")),
+            sep_flat(fields.into_iter().map(|field| print_term(*field)), || pure(", ")),
             pure(")"),
         ]),
         Term::NatFold(NatFold {
@@ -260,9 +260,9 @@ fn print_term(term: Term) -> Printer<'static> {
             cases,
             default,
         }) => {
-            let case_printers = cases.into_iter().map(|(n, body)| {
+            let case_printers = cases.into_iter().map(|(nat, body)| {
                 flat([
-                    pure(format!("\n| {n}n =>\n")),
+                    pure(format!("\n| {nat}n =>\n")),
                     indent(flat([print_term(*body), pure(";")])),
                 ])
             });
@@ -322,10 +322,10 @@ fn print_term(term: Term) -> Printer<'static> {
                 flat(case_printers.collect::<Vec<_>>()),
             ])
         }
-        Term::From(From { label, body }) => {
+        Term::DefFrom(DefFrom { label, body }) => {
             flat([pure(label), pure(".from "), print_term(*body)])
         }
-        Term::Into(Into { label, body }) => {
+        Term::DefInto(DefInto { label, body }) => {
             flat([pure(label), pure(".into "), print_term(*body)])
         }
         Term::Let(Let {
@@ -344,13 +344,13 @@ fn print_term(term: Term) -> Printer<'static> {
             print_term(*tail),
         ]),
         Term::Rec(Rec { items, tail }) => {
-            let bindings = items.into_iter().map(|it| {
+            let bindings = items.into_iter().map(|item| {
                 flat([
-                    pure(it.label),
+                    pure(item.label),
                     pure(" : "),
-                    print_term(*it.type_),
+                    print_term(*item.type_),
                     pure(" =\n"),
-                    indent(print_term(*it.value)),
+                    indent(print_term(*item.value)),
                 ])
             });
             flat([

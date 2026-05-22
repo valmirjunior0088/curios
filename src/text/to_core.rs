@@ -61,7 +61,7 @@ fn process_items(
                     .insert(def_item.label.clone(), def_item.is_pub);
                 info.bindings
                     .insert(def_item.label.clone(), def_item.is_pub);
-                flat.push(FlatItem::Sealed(FlatSealed {
+                flat.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
                     witness,
                 }));
@@ -106,17 +106,17 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
         Elaborate::new(&context.scope, &*context.table, &DefStack::empty()).term(&entrypoint.tail);
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
+        FlatItem::Def(def) => core::Sealed::new(def.name.join(), def.witness, acc).into(),
         FlatItem::Let(let_) => {
             core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into()
         }
         FlatItem::Rec(items) => core::Rec::new(
             items
                 .into_iter()
-                .map(|it| (it.name.join(), it.type_, it.body)),
+                .map(|item| (item.name.join(), item.type_, item.body)),
             acc,
         )
         .into(),
-        FlatItem::Sealed(s) => core::Sealed::new(s.name.join(), s.witness, acc).into(),
     })
 }
 

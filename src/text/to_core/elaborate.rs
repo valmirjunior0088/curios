@@ -29,11 +29,9 @@ impl<'a> Elaborate<'a> {
     pub fn term(&self, term: &Term) -> core::Term {
         match term {
             Term::Type => core::Term::Type,
-
             Term::Prim(prim) => core::Term::Prim(self.prim(prim)),
-
-            Term::Name(name) => {
-                let path = if name.is_single() {
+            Term::Name(name) => core::Var::free(match name.is_single() {
+                true => {
                     let label = name.head();
 
                     if let Some(full) = self.scope.get(label) {
@@ -43,45 +41,31 @@ impl<'a> Elaborate<'a> {
                     } else {
                         label.to_string()
                     }
-                } else {
-                    self.resolve_name(name).join()
-                };
-
-                core::Var::free(path).into()
-            }
-
-            Term::Atom(atom) => core::Term::Atom(core::Atom::from(atom.as_str())),
-
-            Term::AtomType(at) => core::AtomType::new(
-                at.atoms
-                    .iter()
-                    .map(|atom| core::Atom::from(atom.as_str())),
-            )
+                }
+                false => self.resolve_name(name).join(),
+            })
             .into(),
-
+            Term::Atom(atom) => core::Term::Atom(core::Atom::from(atom.as_str())),
+            Term::AtomType(at) => {
+                core::AtomType::new(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
+                    .into()
+            }
             Term::FuncType(ft) => core::FuncType::new(
                 ft.label.clone().unwrap_or_default(),
                 self.term(&ft.input),
                 self.term(&ft.output),
             )
             .into(),
-
             Term::Func(func) => core::Func::new(func.label.clone(), self.term(&func.body)).into(),
-
             Term::Apply(ap) => core::Apply::new(self.term(&ap.head), self.term(&ap.param)).into(),
-
-            Term::TupleType(tt) => {
-                let fields = tt.fields.iter().map(|(label, type_)| {
-                    let label = label.clone().unwrap_or_default();
-                    (label, self.term(type_))
-                });
-                core::TupleType::new(fields).into()
-            }
-
+            Term::TupleType(tt) => core::TupleType::new(tt.fields.iter().map(|(label, type_)| {
+                let label = label.clone().unwrap_or_default();
+                (label, self.term(type_))
+            }))
+            .into(),
             Term::Tuple(tuple) => {
                 core::Tuple::new(tuple.fields.iter().map(|field| self.term(field))).into()
             }
-
             Term::NatFold(nat_fold) => core::NatFold::new(
                 self.term(&nat_fold.head),
                 nat_fold.motive_label.clone(),
@@ -92,7 +76,6 @@ impl<'a> Elaborate<'a> {
                 self.term(&nat_fold.succ_case),
             )
             .into(),
-
             Term::NatMatch(nm) => core::NatMatch::new(
                 self.term(&nm.head),
                 nm.motive_label.clone(),
@@ -101,7 +84,6 @@ impl<'a> Elaborate<'a> {
                 self.term(&nm.default),
             )
             .into(),
-
             Term::Split(split) => core::Split::new(
                 self.term(&split.head),
                 split.motive_label.clone(),
@@ -110,7 +92,6 @@ impl<'a> Elaborate<'a> {
                 self.term(&split.tail),
             )
             .into(),
-
             Term::Match(match_) => core::Match::new(
                 self.term(&match_.head),
                 match_.motive_label.clone(),
@@ -121,16 +102,17 @@ impl<'a> Elaborate<'a> {
                     .map(|(atom, body)| (core::Atom::from(atom.as_str()), self.term(body))),
             )
             .into(),
-
-            Term::From(from) => {
-                let name = self
-                    .def_stack
-                    .get(&from.label)
-                    .unwrap_or_else(|| panic!("coercion outside def block: {}", from.label));
-                core::Seal::new(core::Var::free(name.join()), self.term(&from.body)).into()
-            }
-
-            Term::Into(into) => core::Unseal::new(
+            Term::DefFrom(from) => core::Seal::new(
+                core::Var::free(
+                    self.def_stack
+                        .get(&from.label)
+                        .unwrap_or_else(|| panic!("coercion outside def block: {}", from.label))
+                        .join(),
+                ),
+                self.term(&from.body),
+            )
+            .into(),
+            Term::DefInto(into) => core::Unseal::new(
                 core::Var::free(
                     self.def_stack
                         .get(&into.label)
@@ -140,7 +122,6 @@ impl<'a> Elaborate<'a> {
                 self.term(&into.body),
             )
             .into(),
-
             Term::Let(let_) => core::Let::new(
                 let_.label.clone(),
                 self.term(&let_.type_),
@@ -148,7 +129,6 @@ impl<'a> Elaborate<'a> {
                 self.term(&let_.tail),
             )
             .into(),
-
             Term::Rec(rec) => core::Rec::new(
                 rec.items
                     .iter()

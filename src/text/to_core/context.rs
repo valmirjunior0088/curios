@@ -1,20 +1,39 @@
-use {crate::{core, text::{Name, TopUse}}, std::collections::HashMap};
+use {
+    crate::{
+        core,
+        text::{Name, TopUse},
+    },
+    std::collections::HashMap,
+};
 
-pub struct DefStack(Vec<(String, Name)>);
+pub struct DefStack {
+    entries: Vec<(String, Name)>,
+}
 
 impl DefStack {
     pub fn empty() -> Self {
-        Self(Vec::new())
+        Self {
+            entries: Vec::new(),
+        }
     }
 
     pub fn push(&self, label: String, name: Name) -> Self {
-        let mut entries = self.0.clone();
-        entries.push((label, name));
-        Self(entries)
+        Self {
+            entries: self
+                .entries
+                .iter()
+                .cloned()
+                .chain([(label, name)])
+                .collect(),
+        }
     }
 
     pub fn get(&self, label: &str) -> Option<&Name> {
-        self.0.iter().rev().find(|(l, _)| l == label).map(|(_, n)| n)
+        self.entries
+            .iter()
+            .rev()
+            .find(|(entry_label, _)| entry_label == label)
+            .map(|(_, name)| name)
     }
 }
 
@@ -24,15 +43,15 @@ pub struct FlatLet {
     pub body: core::Term,
 }
 
-pub struct FlatSealed {
+pub struct FlatDef {
     pub name: Name,
     pub witness: core::Term,
 }
 
 pub enum FlatItem {
+    Def(FlatDef),
     Let(FlatLet),
     Rec(Vec<FlatLet>),
-    Sealed(FlatSealed),
 }
 
 pub struct ModuleInfo {
@@ -82,57 +101,72 @@ impl<'a> Context<'a> {
 
         let resolved_path = if top_use.is_abs {
             let mut current = Name::single(top_use.name.head());
+
             if !self.table.contains_key(&current) {
                 panic!("module not found: {}", top_use.name.head());
             }
+
             for seg in top_use.name.tail() {
                 let info = self
                     .table
                     .get(&current)
                     .unwrap_or_else(|| panic!("module not found: {}", current.join()));
+
                 let is_pub = info
                     .children
                     .get(seg)
                     .unwrap_or_else(|| panic!("child module not found: {seg}"));
+
                 if !is_pub {
                     panic!("private child module: {seg}");
                 }
+
                 current = current.with(seg);
+
                 if !self.table.contains_key(&current) {
                     panic!("module not found: {}", current.join());
                 }
             }
+
             current
         } else {
             let first = top_use.name.head();
+
             let mut current = self
                 .scope
                 .get(first)
                 .unwrap_or_else(|| panic!("undeclared child in relative use: {first}"))
                 .clone();
+
             for seg in top_use.name.tail() {
                 let info = self
                     .table
                     .get(&current)
                     .unwrap_or_else(|| panic!("module not found: {}", current.join()));
+
                 let is_pub = info
                     .children
                     .get(seg)
                     .unwrap_or_else(|| panic!("child module not found: {seg}"));
+
                 if !is_pub {
                     panic!("private child module: {seg}");
                 }
+
                 current = current.with(seg);
             }
+
             if !self.table.contains_key(&current) {
                 panic!("module not found: {}", current.join());
             }
+
             current
         };
 
         if self.scope.contains_key(&qualifier) {
             panic!("use qualifier conflicts with existing scope entry: {qualifier}");
         }
+
         self.scope.insert(qualifier, resolved_path);
     }
 }
