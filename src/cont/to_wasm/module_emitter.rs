@@ -321,9 +321,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         self.table
                             .find_clsr(name)
                             .find_param(value_name)
-                            .unwrap_or_else(|| {
-                                panic!("`ClsrData` lacks param `{}`", value_name)
-                            })
+                            .unwrap_or_else(|| panic!("`ClsrData` lacks param `{}`", value_name))
                     }))
                     .collect(),
                 locals,
@@ -359,9 +357,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         self.table
                             .find_func(name)
                             .find_param(value_name)
-                            .unwrap_or_else(|| {
-                                panic!("`FuncData` lacks param `{}`", value_name)
-                            })
+                            .unwrap_or_else(|| panic!("`FuncData` lacks param `{}`", value_name))
                     })
                     .collect(),
                 locals,

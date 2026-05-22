@@ -14,7 +14,6 @@ fn nat_fold_computes_triangular_sum() {
     .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-
     let core_term = text::to_core(&text_entrypoint);
 
     println!("=== core ===");

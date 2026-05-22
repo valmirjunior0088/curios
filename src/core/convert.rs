@@ -470,7 +470,8 @@ mod tests {
     use {
         super::*,
         crate::core::{
-            Apply, Atom, AtomType, Func, FuncType, Match, Rec, Sealed, Split, Tuple, TupleType, Type, Var,
+            Apply, Atom, AtomType, Func, FuncType, Match, Rec, Sealed, Split, Tuple, TupleType,
+            Type, Var,
         },
         std::time::Duration,
     };

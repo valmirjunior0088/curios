@@ -2424,7 +2424,10 @@ mod tests {
         let term = Term::from(Sealed::new(
             "x",
             Term::Prim(Prim::NatType),
-            Unseal::new(Var::free("x"), Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42)))),
+            Unseal::new(
+                Var::free("x"),
+                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42))),
+            ),
         ));
 
         erase(&mut context, &term, &Term::Prim(Prim::NatType)).unwrap();
@@ -2437,7 +2440,10 @@ mod tests {
         let term = Term::from(Sealed::new(
             "x",
             Term::Prim(Prim::NatType),
-            Unseal::new(Var::free("x"), Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42)))),
+            Unseal::new(
+                Var::free("x"),
+                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42))),
+            ),
         ));
 
         let result = erase(&mut context, &term, &Term::Prim(Prim::NatType)).unwrap();

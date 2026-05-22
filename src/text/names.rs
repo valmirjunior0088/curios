@@ -13,7 +13,9 @@ impl Name {
     }
 
     pub fn single(seg: &str) -> Self {
-        Self { path: vec![seg.to_string()] }
+        Self {
+            path: vec![seg.to_string()],
+        }
     }
 
     pub fn with(&self, segment: &str) -> Self {

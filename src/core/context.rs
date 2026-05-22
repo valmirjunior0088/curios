@@ -103,7 +103,10 @@ impl Context {
     {
         let label = label.into();
         self.assume(label.as_str(), &Type.into());
-        self.witnesses.last_mut().unwrap().insert(label, witness.clone());
+        self.witnesses
+            .last_mut()
+            .unwrap()
+            .insert(label, witness.clone());
     }
 
     pub fn witness(&self, label: &str) -> Option<&Term> {

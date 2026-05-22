@@ -107,9 +107,7 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
         FlatItem::Def(def) => core::Sealed::new(def.name.join(), def.witness, acc).into(),
-        FlatItem::Let(let_) => {
-            core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into()
-        }
+        FlatItem::Let(let_) => core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into(),
         FlatItem::Rec(items) => core::Rec::new(
             items
                 .into_iter()
@@ -358,8 +356,15 @@ mod tests {
                 core::Term::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Foo/Str/from",
-                    core::FuncType::new("", core::Term::Prim(core::Prim::BinType), core::Var::free("Foo/Str")),
-                    core::Func::new("x", core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))),
+                    core::FuncType::new(
+                        "",
+                        core::Term::Prim(core::Prim::BinType),
+                        core::Var::free("Foo/Str")
+                    ),
+                    core::Func::new(
+                        "x",
+                        core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))
+                    ),
                     core::Var::free("Foo/Str"),
                 ),
             )
@@ -384,8 +389,15 @@ mod tests {
                 core::Term::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Foo/Str/from",
-                    core::FuncType::new("", core::Term::Prim(core::Prim::BinType), core::Var::free("Foo/Str")),
-                    core::Func::new("x", core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))),
+                    core::FuncType::new(
+                        "",
+                        core::Term::Prim(core::Prim::BinType),
+                        core::Var::free("Foo/Str")
+                    ),
+                    core::Func::new(
+                        "x",
+                        core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))
+                    ),
                     core::Var::free("Foo/Str/from"),
                 ),
             )
@@ -419,8 +431,15 @@ mod tests {
                 core::Term::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Str/foo",
-                    core::FuncType::new("", core::Var::free("Str"), core::Term::Prim(core::Prim::BinType)),
-                    core::Func::new("Str", core::Seal::new(core::Var::free("Str"), core::Var::free("Str"))),
+                    core::FuncType::new(
+                        "",
+                        core::Var::free("Str"),
+                        core::Term::Prim(core::Prim::BinType)
+                    ),
+                    core::Func::new(
+                        "Str",
+                        core::Seal::new(core::Var::free("Str"), core::Var::free("Str"))
+                    ),
                     core::Term::Type,
                 ),
             )
@@ -445,11 +464,18 @@ mod tests {
                     core::FuncType::new(
                         "",
                         core::Var::free("Str"),
-                        core::FuncType::new("", core::Var::free("Str"), core::Term::Prim(core::Prim::BinType)),
+                        core::FuncType::new(
+                            "",
+                            core::Var::free("Str"),
+                            core::Term::Prim(core::Prim::BinType)
+                        ),
                     ),
                     core::Func::new(
                         "Str",
-                        core::Func::new("str", core::Seal::new(core::Var::free("Str"), core::Var::free("str"))),
+                        core::Func::new(
+                            "str",
+                            core::Seal::new(core::Var::free("Str"), core::Var::free("str"))
+                        ),
                     ),
                     core::Term::Type,
                 ),

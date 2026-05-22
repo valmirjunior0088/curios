@@ -15,7 +15,6 @@ fn main() {
     .parse::<text::Entrypoint>()
     .expect("expected text term");
 
-
     let core_term = text::to_core(&text_entrypoint);
 
     println!("=== core ===");

@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Seal,
-        Split, Term, Tuple, Unseal, Var,
+        Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Seal, Split,
+        Term, Tuple, Unseal, Var,
     },
     std::time::{Duration, Instant},
 };
@@ -788,15 +788,20 @@ impl Reduce {
         }
     }
 
-    fn reduce_unseal(
-        &mut self,
-        context: &mut Context,
-        unseal: Unseal,
-    ) -> Result<Step, Preempted> {
+    fn reduce_unseal(&mut self, context: &mut Context, unseal: Unseal) -> Result<Step, Preempted> {
         let Unseal { witness, value } = unseal;
         match self.reduce(context, *value)? {
-            Term::Seal(Seal { value: sealed_value, .. }) => Ok(Step::Continue(*sealed_value)),
-            value => Ok(Step::Break(Unseal { witness, value: value.into() }.into())),
+            Term::Seal(Seal {
+                value: sealed_value,
+                ..
+            }) => Ok(Step::Continue(*sealed_value)),
+            value => Ok(Step::Break(
+                Unseal {
+                    witness,
+                    value: value.into(),
+                }
+                .into(),
+            )),
         }
     }
 
@@ -842,7 +847,9 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, AtomType, Let, Match, NatFold, Prim, Seal, Sealed, Tuple, Type, Unseal, Var},
+        crate::core::{
+            Atom, AtomType, Let, Match, NatFold, Prim, Seal, Sealed, Tuple, Type, Unseal, Var,
+        },
         std::time::Duration,
     };
 

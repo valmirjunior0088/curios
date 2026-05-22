@@ -184,12 +184,7 @@ impl<'a> Table<'a> {
         self.fields
             .get(&(parent_name, name))
             .copied()
-            .unwrap_or_else(|| {
-                panic!(
-                    "`Table` lacks field `{}` of type `{}`",
-                    name, parent_name
-                )
-            })
+            .unwrap_or_else(|| panic!("`Table` lacks field `{}` of type `{}`", name, parent_name))
     }
 
     fn resolve_func(&self, name: &'a FuncName) -> usize {
@@ -203,12 +198,7 @@ impl<'a> Table<'a> {
         self.locals
             .get(&(parent_name, name))
             .copied()
-            .unwrap_or_else(|| {
-                panic!(
-                    "`Table` lacks local `{}` of func `{}`",
-                    name, parent_name
-                )
-            })
+            .unwrap_or_else(|| panic!("`Table` lacks local `{}` of func `{}`", name, parent_name))
     }
 
     fn resolve_global(&self, name: &'a GlobalName) -> usize {

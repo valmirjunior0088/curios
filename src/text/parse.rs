@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, DefFrom, DefInto, Entrypoint, Func, FuncType, Let, Match, Module,
-        Name, Nat, NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopDef, TopItem, TopLet,
-        TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomType, Bin, DefFrom, DefInto, Entrypoint, Func, FuncType, Let, Match,
+        Module, Name, Nat, NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopDef, TopItem,
+        TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -537,7 +537,10 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(")"))
     .map(|(first, rest)| {
         Term::Tuple(Tuple {
-            fields: iter::once(first).chain(rest).map(|term| term.into()).collect(),
+            fields: iter::once(first)
+                .chain(rest)
+                .map(|term| term.into())
+                .collect(),
         })
     })
 }
@@ -785,9 +788,15 @@ fn parse_coerce<'a>() -> Parser<'a, Term> {
     .and(lazy(parse_atomic_term))
     .map(|((label, is_into), body)| {
         if is_into {
-            Term::DefInto(DefInto { label, body: body.into() })
+            Term::DefInto(DefInto {
+                label,
+                body: body.into(),
+            })
         } else {
-            Term::DefFrom(DefFrom { label, body: body.into() })
+            Term::DefFrom(DefFrom {
+                label,
+                body: body.into(),
+            })
         }
     })
 }
