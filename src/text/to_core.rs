@@ -1,11 +1,8 @@
 mod context;
 use context::*;
 
-mod resolve;
-use resolve::*;
-
-mod term;
-use term::*;
+mod elaborate;
+use elaborate::*;
 
 use {super::*, crate::core, std::collections::HashMap};
 
@@ -25,12 +22,13 @@ fn process_items(items: &[TopItem], context: &mut Context, flat: &mut Vec<FlatIt
                 process_items(&mod_item.module.items, &mut child, flat);
             }
             TopItem::Use(use_item) => {
-                resolve_use(use_item, context);
+                context.resolve_use(use_item);
             }
             TopItem::Let(let_item) => {
                 let name = context.prefix.with(&let_item.label);
-                let type_ = elaborate_term(&let_item.type_, &context.scope, &*context.table);
-                let body = elaborate_term(&let_item.body, &context.scope, &*context.table);
+                let elab = Elaborate::new(&context.scope, &*context.table);
+                let type_ = elab.term(&let_item.type_);
+                let body = elab.term(&let_item.body);
                 info.bindings.insert(let_item.label.clone(), let_item.is_pub);
                 flat.push(FlatItem::Let(FlatLet { name, type_, body }));
             }
@@ -39,8 +37,9 @@ fn process_items(items: &[TopItem], context: &mut Context, flat: &mut Vec<FlatIt
                     ls.iter()
                         .map(|let_item| {
                             let name = context.prefix.with(&let_item.label);
-                            let type_ = elaborate_term(&let_item.type_, &context.scope, &*context.table);
-                            let body = elaborate_term(&let_item.body, &context.scope, &*context.table);
+                            let elab = Elaborate::new(&context.scope, &*context.table);
+                            let type_ = elab.term(&let_item.type_);
+                            let body = elab.term(&let_item.body);
                             info.bindings.insert(let_item.label.clone(), let_item.is_pub);
                             FlatLet { name, type_, body }
                         })
@@ -74,7 +73,7 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
 
     process_items(&entrypoint.items, &mut context, &mut flat);
 
-    let base = elaborate_term(&entrypoint.tail, &context.scope, &*context.table);
+    let base = Elaborate::new(&context.scope, &*context.table).term(&entrypoint.tail);
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
         FlatItem::Let(let_) => core::Let::new(let_.name.path.join("/"), let_.type_, let_.body, acc).into(),
