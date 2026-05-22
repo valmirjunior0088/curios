@@ -58,10 +58,11 @@ impl<'a> Elaborate<'a> {
             .into(),
             Term::Func(func) => core::Func::new(func.label.clone(), self.term(&func.body)).into(),
             Term::Apply(ap) => core::Apply::new(self.term(&ap.head), self.term(&ap.param)).into(),
-            Term::TupleType(tt) => core::TupleType::new(tt.fields.iter().map(|(label, type_)| {
-                let label = label.clone().unwrap_or_default();
-                (label, self.term(type_))
-            }))
+            Term::TupleType(tt) => core::TupleType::new(
+                tt.fields
+                    .iter()
+                    .map(|(label, type_)| (label.clone().unwrap_or_default(), self.term(type_))),
+            )
             .into(),
             Term::Tuple(tuple) => {
                 core::Tuple::new(tuple.fields.iter().map(|field| self.term(field))).into()
