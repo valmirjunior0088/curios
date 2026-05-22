@@ -130,8 +130,8 @@ impl<'a> Context<'a> {
     }
 
     pub fn register_alias(&mut self, qualifier: &str) {
-        let resolved = self.scope[qualifier].clone();
-        self.aliases.insert(self.prefix.with(qualifier), resolved);
+        self.aliases
+            .insert(self.prefix.with(qualifier), self.scope[qualifier].clone());
     }
 
     pub fn finalize(&mut self, info: ModuleInfo) {
@@ -142,6 +142,7 @@ impl<'a> Context<'a> {
         if self.scope.contains_key(&qualifier) {
             panic!("qualifier conflicts with existing scope entry: {qualifier}");
         }
+
         self.scope.insert(qualifier, name);
     }
 

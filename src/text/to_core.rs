@@ -7,23 +7,29 @@ use elaborate::*;
 use {super::*, crate::core, std::collections::HashMap};
 
 fn process_items(
-    items: &[TopItem],
+    top_items: &[TopItem],
     context: &mut Context,
-    flat: &mut Vec<FlatItem>,
+    flat_items: &mut Vec<FlatItem>,
     def_stack: &DefStack,
 ) {
     let mut info = ModuleInfo::new();
 
-    for item in items {
-        match item {
+    for top_item in top_items {
+        match top_item {
             TopItem::Mod(mod_item) => {
                 context.insert_scope(mod_item.label.clone(), context.prefixed(&mod_item.label));
                 info.insert_child(mod_item.label.clone(), mod_item.is_pub);
-                let mut child = context.nested(&mod_item.label);
-                process_items(&mod_item.module.items, &mut child, flat, def_stack);
+
+                process_items(
+                    &mod_item.module.items,
+                    &mut context.nested(&mod_item.label),
+                    flat_items,
+                    def_stack,
+                );
             }
             TopItem::Use(use_item) => {
                 context.resolve_use(use_item);
+
                 if use_item.is_pub {
                     let qualifier = use_item.name.last().to_string();
                     context.register_alias(&qualifier);
@@ -31,81 +37,95 @@ fn process_items(
                 }
             }
             TopItem::Let(let_item) => {
-                let name = context.prefixed(&let_item.label);
-                let elab = Elaborate::new(context.scope(), context.table(), context.aliases(), def_stack);
-                let type_ = elab.term(&let_item.type_);
-                let body = elab.term(&let_item.body);
+                let elab = Elaborate::new(
+                    context.scope(),
+                    context.table(),
+                    context.aliases(),
+                    def_stack,
+                );
+
                 info.insert_binding(let_item.label.clone(), let_item.is_pub);
-                flat.push(FlatItem::Let(FlatLet { name, type_, body }));
+
+                flat_items.push(FlatItem::Let(FlatLet {
+                    name: context.prefixed(&let_item.label),
+                    type_: elab.term(&let_item.type_),
+                    body: elab.term(&let_item.body),
+                }));
             }
             TopItem::Rec(ls) => {
-                flat.push(FlatItem::Rec(
+                flat_items.push(FlatItem::Rec(
                     ls.iter()
                         .map(|let_item| {
-                            let name = context.prefixed(&let_item.label);
-                            let elab = Elaborate::new(context.scope(), context.table(), context.aliases(), def_stack);
-                            let type_ = elab.term(&let_item.type_);
-                            let body = elab.term(&let_item.body);
+                            let elaborate = Elaborate::new(
+                                context.scope(),
+                                context.table(),
+                                context.aliases(),
+                                def_stack,
+                            );
+
                             info.insert_binding(let_item.label.clone(), let_item.is_pub);
-                            FlatLet { name, type_, body }
+
+                            FlatLet {
+                                name: context.prefixed(&let_item.label),
+                                type_: elaborate.term(&let_item.type_),
+                                body: elaborate.term(&let_item.body),
+                            }
                         })
                         .collect(),
                 ));
             }
             TopItem::Def(def_item) => {
                 let name = context.prefixed(&def_item.label);
-                let witness = Elaborate::new(context.scope(), context.table(), context.aliases(), def_stack)
-                    .term(&def_item.witness);
+
+                let witness = Elaborate::new(
+                    context.scope(),
+                    context.table(),
+                    context.aliases(),
+                    def_stack,
+                )
+                .term(&def_item.witness);
+
                 context.insert_scope(def_item.label.clone(), name.clone());
                 info.insert_child(def_item.label.clone(), def_item.is_pub);
                 info.insert_binding(def_item.label.clone(), def_item.is_pub);
-                flat.push(FlatItem::Def(FlatDef {
+
+                flat_items.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
                     witness,
                 }));
+
                 let new_def_stack = def_stack.push(def_item.label.clone(), name);
-                let mut child = context.nested(&def_item.label);
-                process_items(&def_item.module.items, &mut child, flat, &new_def_stack);
+
+                process_items(
+                    &def_item.module.items,
+                    &mut context.nested(&def_item.label),
+                    flat_items,
+                    &new_def_stack,
+                );
             }
         }
     }
+
     context.finalize(info);
 }
 
-pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
-    for item in &entrypoint.items {
+fn check_entrypoint(items: &[TopItem]) {
+    for item in items {
         match item {
             TopItem::Mod(mod_item) if mod_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Use(use_item) if use_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Let(let_item) if let_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Def(def_item) if def_item.is_pub => panic!("pub on top-level entrypoint item"),
-            TopItem::Rec(ls) => {
-                for let_item in ls {
-                    if let_item.is_pub {
-                        panic!("pub on top-level entrypoint item");
-                    }
-                }
+            TopItem::Rec(let_items) if let_items.iter().any(|let_item| let_item.is_pub) => {
+                panic!("pub on top-level entrypoint item")
             }
             _ => {}
         }
     }
+}
 
-    let mut table = HashMap::new();
-    let mut aliases = HashMap::new();
-    let mut context = Context::new(&mut table, &mut aliases);
-    let mut flat = Vec::new();
-
-    process_items(
-        &entrypoint.items,
-        &mut context,
-        &mut flat,
-        &DefStack::empty(),
-    );
-
-    let base = Elaborate::new(context.scope(), context.table(), context.aliases(), &DefStack::empty())
-        .term(&entrypoint.tail);
-
-    flat.into_iter().rev().fold(base, |acc, item| match item {
+fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
+    match item {
         FlatItem::Def(def) => core::Sealed::new(def.name.join(), def.witness, acc).into(),
         FlatItem::Let(let_) => core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into(),
         FlatItem::Rec(items) => core::Rec::new(
@@ -115,7 +135,34 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
             acc,
         )
         .into(),
-    })
+    }
+}
+
+pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
+    check_entrypoint(&entrypoint.items);
+
+    let mut table = HashMap::new();
+    let mut aliases = HashMap::new();
+    let mut context = Context::new(&mut table, &mut aliases);
+    let mut flat_items = Vec::new();
+
+    process_items(
+        &entrypoint.items,
+        &mut context,
+        &mut flat_items,
+        &DefStack::empty(),
+    );
+
+    flat_items.into_iter().rev().fold(
+        Elaborate::new(
+            context.scope(),
+            context.table(),
+            context.aliases(),
+            &DefStack::empty(),
+        )
+        .term(&entrypoint.tail),
+        fold_flat_item,
+    )
 }
 
 #[cfg(test)]
