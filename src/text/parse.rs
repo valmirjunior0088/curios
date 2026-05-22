@@ -924,10 +924,13 @@ fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_use<'a>() -> Parser<'a, TopItem> {
-    catch(parse_keyword("use"))
-        .and_keep(catch(take_exact("/")).map(|()| true).or(pure(false)))
-        .and(parse_name())
-        .map(|(is_abs, name)| TopItem::Use(TopUse { is_abs, name }))
+    catch(parse_pub().and(parse_keyword("use"))).flat_map(|(is_pub, ())| {
+        catch(take_exact("/"))
+            .map(|()| true)
+            .or(pure(false))
+            .and(parse_name())
+            .map(move |(is_abs, name)| TopItem::Use(TopUse { is_pub, is_abs, name }))
+    })
 }
 
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {

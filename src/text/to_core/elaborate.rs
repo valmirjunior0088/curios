@@ -10,6 +10,7 @@ use {
 pub struct Elaborate<'a> {
     scope: &'a HashMap<String, Name>,
     table: &'a HashMap<Name, ModuleInfo>,
+    aliases: &'a HashMap<Name, Name>,
     def_stack: &'a DefStack,
 }
 
@@ -17,11 +18,13 @@ impl<'a> Elaborate<'a> {
     pub fn new(
         scope: &'a HashMap<String, Name>,
         table: &'a HashMap<Name, ModuleInfo>,
+        aliases: &'a HashMap<Name, Name>,
         def_stack: &'a DefStack,
     ) -> Self {
         Self {
             scope,
             table,
+            aliases,
             def_stack,
         }
     }
@@ -228,19 +231,17 @@ impl<'a> Elaborate<'a> {
     fn resolve_name(&self, name: &Name) -> Name {
         let qualifier = name.head();
 
-        let base = self
+        let mut current = self
             .scope
             .get(qualifier)
             .unwrap_or_else(|| panic!("unresolved qualifier: {qualifier}"))
             .clone();
 
-        let mut current_prefix = base.clone();
-
         for segment in name.interior() {
             let info = self
                 .table
-                .get(&current_prefix)
-                .unwrap_or_else(|| panic!("module not found: {}", current_prefix.join()));
+                .get(&current)
+                .unwrap_or_else(|| panic!("module not found: {}", current.join()));
 
             let is_pub = info
                 .children
@@ -251,15 +252,19 @@ impl<'a> Elaborate<'a> {
                 panic!("private child module: {segment}");
             }
 
-            current_prefix = current_prefix.with(segment);
+            current = current.with(segment);
+
+            if let Some(canonical) = self.aliases.get(&current) {
+                current = canonical.clone();
+            }
         }
 
         let last = name.last();
 
         let info = self
             .table
-            .get(&current_prefix)
-            .unwrap_or_else(|| panic!("module not found: {}", current_prefix.join()));
+            .get(&current)
+            .unwrap_or_else(|| panic!("module not found: {}", current.join()));
 
         let is_pub = info
             .bindings
@@ -270,6 +275,6 @@ impl<'a> Elaborate<'a> {
             panic!("private binding: {last}");
         }
 
-        base.extend(name.tail())
+        current.with(last)
     }
 }

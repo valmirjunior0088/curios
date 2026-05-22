@@ -27,10 +27,17 @@ fn process_items(
             }
             TopItem::Use(use_item) => {
                 context.resolve_use(use_item);
+                if use_item.is_pub {
+                    let qualifier = use_item.name.last().to_string();
+                    let resolved = context.scope[&qualifier].clone();
+                    context.aliases.insert(context.prefix.with(&qualifier), resolved);
+                    info.children.insert(qualifier, true);
+                }
             }
             TopItem::Let(let_item) => {
                 let name = context.prefix.with(&let_item.label);
-                let elab = Elaborate::new(&context.scope, &*context.table, def_stack);
+                let elab =
+                    Elaborate::new(&context.scope, &*context.table, &*context.aliases, def_stack);
                 let type_ = elab.term(&let_item.type_);
                 let body = elab.term(&let_item.body);
                 info.bindings
@@ -42,7 +49,12 @@ fn process_items(
                     ls.iter()
                         .map(|let_item| {
                             let name = context.prefix.with(&let_item.label);
-                            let elab = Elaborate::new(&context.scope, &*context.table, def_stack);
+                            let elab = Elaborate::new(
+                                &context.scope,
+                                &*context.table,
+                                &*context.aliases,
+                                def_stack,
+                            );
                             let type_ = elab.term(&let_item.type_);
                             let body = elab.term(&let_item.body);
                             info.bindings
@@ -54,8 +66,9 @@ fn process_items(
             }
             TopItem::Def(def_item) => {
                 let name = context.prefix.with(&def_item.label);
-                let witness = Elaborate::new(&context.scope, &*context.table, def_stack)
-                    .term(&def_item.witness);
+                let witness =
+                    Elaborate::new(&context.scope, &*context.table, &*context.aliases, def_stack)
+                        .term(&def_item.witness);
                 context.scope.insert(def_item.label.clone(), name.clone());
                 info.children
                     .insert(def_item.label.clone(), def_item.is_pub);
@@ -78,6 +91,7 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
     for item in &entrypoint.items {
         match item {
             TopItem::Mod(mod_item) if mod_item.is_pub => panic!("pub on top-level entrypoint item"),
+            TopItem::Use(use_item) if use_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Let(let_item) if let_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Def(def_item) if def_item.is_pub => panic!("pub on top-level entrypoint item"),
             TopItem::Rec(ls) => {
@@ -92,7 +106,8 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
     }
 
     let mut table = HashMap::new();
-    let mut context = Context::new(&mut table);
+    let mut aliases = HashMap::new();
+    let mut context = Context::new(&mut table, &mut aliases);
     let mut flat = Vec::new();
 
     process_items(
@@ -103,7 +118,8 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
     );
 
     let base =
-        Elaborate::new(&context.scope, &*context.table, &DefStack::empty()).term(&entrypoint.tail);
+        Elaborate::new(&context.scope, &*context.table, &*context.aliases, &DefStack::empty())
+            .term(&entrypoint.tail);
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
         FlatItem::Def(def) => core::Sealed::new(def.name.join(), def.witness, acc).into(),
@@ -182,6 +198,20 @@ mod tests {
     fn rejects_pub_at_entrypoint_root() {
         run(r#"
             pub let f : Type = Type;
+            Type
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "pub on top-level entrypoint item")]
+    fn rejects_pub_use_at_entrypoint_root() {
+        run(r#"
+            mod Foo
+                pub mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            pub use /Foo/Bar
             Type
         "#);
     }
@@ -504,6 +534,83 @@ mod tests {
                 pub let bad : Bin -> Str = x => Foo.from x;
             end
             Type
+        "#);
+    }
+
+    #[test]
+    fn pub_use_exposes_qualifier() {
+        assert_eq!(
+            run(r#"
+                mod Foo
+                    pub mod Bar
+                        pub let f : Type = Type;
+                    end
+                end
+                mod MyMod
+                    pub use /Foo/Bar
+                end
+                MyMod/Bar/f
+            "#),
+            core::Let::new("Foo/Bar/f", core::Type, core::Type, core::Var::free("Foo/Bar/f"))
+                .into(),
+        );
+    }
+
+    #[test]
+    fn use_of_pub_use_path_resolves_through_alias() {
+        assert_eq!(
+            run(r#"
+                mod Foo
+                    pub mod Bar
+                        pub let f : Type = Type;
+                    end
+                end
+                mod MyMod
+                    pub use /Foo/Bar
+                end
+                use /MyMod/Bar
+                Bar/f
+            "#),
+            core::Let::new("Foo/Bar/f", core::Type, core::Type, core::Var::free("Foo/Bar/f"))
+                .into(),
+        );
+    }
+
+    #[test]
+    fn chained_pub_use_re_exports_transitively() {
+        assert_eq!(
+            run(r#"
+                mod A
+                    pub mod X
+                        pub let f : Type = Type;
+                    end
+                end
+                mod B
+                    pub use /A/X
+                end
+                mod C
+                    pub use /B/X
+                end
+                C/X/f
+            "#),
+            core::Let::new("A/X/f", core::Type, core::Type, core::Var::free("A/X/f"))
+                .into(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "child module not found")]
+    fn private_use_does_not_expose_qualifier() {
+        run(r#"
+            mod Foo
+                pub mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            mod MyMod
+                use /Foo/Bar
+            end
+            MyMod/Bar/f
         "#);
     }
 }

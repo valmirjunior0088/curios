@@ -9,6 +9,7 @@ pub struct TopMod {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopUse {
+    pub is_pub: bool,
     pub is_abs: bool,
     pub name: Name,
 }

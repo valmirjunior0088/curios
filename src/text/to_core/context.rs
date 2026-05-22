@@ -71,14 +71,19 @@ impl ModuleInfo {
 pub struct Context<'a> {
     pub prefix: Name,
     pub table: &'a mut HashMap<Name, ModuleInfo>,
+    pub aliases: &'a mut HashMap<Name, Name>,
     pub scope: HashMap<String, Name>,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(table: &'a mut HashMap<Name, ModuleInfo>) -> Context<'a> {
+    pub fn new(
+        table: &'a mut HashMap<Name, ModuleInfo>,
+        aliases: &'a mut HashMap<Name, Name>,
+    ) -> Context<'a> {
         Context {
             prefix: Name::empty(),
             table,
+            aliases,
             scope: HashMap::new(),
         }
     }
@@ -87,14 +92,17 @@ impl<'a> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
             table: &mut *self.table,
+            aliases: &mut *self.aliases,
             scope: HashMap::new(),
         }
     }
 
     pub fn resolve_use(&mut self, top_use: &TopUse) {
         if !top_use.is_abs && top_use.name.is_single() {
-            let seg = top_use.name.head();
-            panic!("single-segment relative use is forbidden: {seg}");
+            panic!(
+                "single-segment relative use is forbidden: {}",
+                top_use.name.head()
+            );
         }
 
         let qualifier = top_use.name.last().to_string();
@@ -122,6 +130,10 @@ impl<'a> Context<'a> {
                 }
 
                 current = current.with(seg);
+
+                if let Some(canonical) = self.aliases.get(&current) {
+                    current = canonical.clone();
+                }
 
                 if !self.table.contains_key(&current) {
                     panic!("module not found: {}", current.join());
@@ -154,6 +166,10 @@ impl<'a> Context<'a> {
                 }
 
                 current = current.with(seg);
+
+                if let Some(canonical) = self.aliases.get(&current) {
+                    current = canonical.clone();
+                }
             }
 
             if !self.table.contains_key(&current) {
