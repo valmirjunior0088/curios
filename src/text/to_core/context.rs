@@ -77,7 +77,7 @@ pub struct Context<'a> {
 impl<'a> Context<'a> {
     pub fn new(table: &'a mut HashMap<Name, ModuleInfo>) -> Context<'a> {
         Context {
-            prefix: Name::new(),
+            prefix: Name::empty(),
             table,
             scope: HashMap::new(),
         }
@@ -100,7 +100,7 @@ impl<'a> Context<'a> {
         let qualifier = top_use.name.last().to_string();
 
         let resolved_path = if top_use.is_abs {
-            let mut current = Name::single(top_use.name.head());
+            let mut current = Name::from([top_use.name.head()]);
 
             if !self.table.contains_key(&current) {
                 panic!("module not found: {}", top_use.name.head());

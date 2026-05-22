@@ -8,14 +8,8 @@ pub struct Name {
 }
 
 impl Name {
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self { path: vec![] }
-    }
-
-    pub fn single(seg: &str) -> Self {
-        Self {
-            path: vec![seg.to_string()],
-        }
     }
 
     pub fn with(&self, segment: &str) -> Self {
@@ -58,10 +52,14 @@ impl Name {
     }
 }
 
-impl<I: IntoIterator<Item = String>> From<I> for Name {
+impl<S, I> From<I> for Name
+where
+    S: Into<String>,
+    I: IntoIterator<Item = S>,
+{
     fn from(iter: I) -> Self {
         Self {
-            path: iter.into_iter().collect(),
+            path: iter.into_iter().map(Into::into).collect(),
         }
     }
 }
