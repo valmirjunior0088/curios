@@ -244,8 +244,7 @@ impl<'a> Elaborate<'a> {
                 .unwrap_or_else(|| panic!("module not found: {}", current.join()));
 
             let is_pub = info
-                .children
-                .get(segment)
+                .get_child(segment)
                 .unwrap_or_else(|| panic!("child module not found: {segment}"));
 
             if !is_pub {
@@ -267,8 +266,7 @@ impl<'a> Elaborate<'a> {
             .unwrap_or_else(|| panic!("module not found: {}", current.join()));
 
         let is_pub = info
-            .bindings
-            .get(last)
+            .get_binding(last)
             .unwrap_or_else(|| panic!("binding not found: {last}"));
 
         if !is_pub {

@@ -55,8 +55,8 @@ pub enum FlatItem {
 }
 
 pub struct ModuleInfo {
-    pub children: HashMap<String, bool>,
-    pub bindings: HashMap<String, bool>,
+    children: HashMap<String, bool>,
+    bindings: HashMap<String, bool>,
 }
 
 impl ModuleInfo {
@@ -66,13 +66,29 @@ impl ModuleInfo {
             bindings: HashMap::new(),
         }
     }
+
+    pub fn insert_child(&mut self, label: String, is_pub: bool) {
+        self.children.insert(label, is_pub);
+    }
+
+    pub fn insert_binding(&mut self, label: String, is_pub: bool) {
+        self.bindings.insert(label, is_pub);
+    }
+
+    pub fn get_child(&self, label: &str) -> Option<bool> {
+        self.children.get(label).copied()
+    }
+
+    pub fn get_binding(&self, label: &str) -> Option<bool> {
+        self.bindings.get(label).copied()
+    }
 }
 
 pub struct Context<'a> {
-    pub prefix: Name,
-    pub table: &'a mut HashMap<Name, ModuleInfo>,
-    pub aliases: &'a mut HashMap<Name, Name>,
-    pub scope: HashMap<String, Name>,
+    prefix: Name,
+    table: &'a mut HashMap<Name, ModuleInfo>,
+    aliases: &'a mut HashMap<Name, Name>,
+    scope: HashMap<String, Name>,
 }
 
 impl<'a> Context<'a> {
@@ -95,6 +111,38 @@ impl<'a> Context<'a> {
             aliases: &mut *self.aliases,
             scope: HashMap::new(),
         }
+    }
+
+    pub fn prefixed(&self, label: &str) -> Name {
+        self.prefix.with(label)
+    }
+
+    pub fn scope(&self) -> &HashMap<String, Name> {
+        &self.scope
+    }
+
+    pub fn table(&self) -> &HashMap<Name, ModuleInfo> {
+        &*self.table
+    }
+
+    pub fn aliases(&self) -> &HashMap<Name, Name> {
+        &*self.aliases
+    }
+
+    pub fn register_alias(&mut self, qualifier: &str) {
+        let resolved = self.scope[qualifier].clone();
+        self.aliases.insert(self.prefix.with(qualifier), resolved);
+    }
+
+    pub fn finalize(&mut self, info: ModuleInfo) {
+        self.table.insert(self.prefix.clone(), info);
+    }
+
+    pub fn insert_scope(&mut self, qualifier: String, name: Name) {
+        if self.scope.contains_key(&qualifier) {
+            panic!("qualifier conflicts with existing scope entry: {qualifier}");
+        }
+        self.scope.insert(qualifier, name);
     }
 
     pub fn resolve_use(&mut self, top_use: &TopUse) {
@@ -121,8 +169,7 @@ impl<'a> Context<'a> {
                     .unwrap_or_else(|| panic!("module not found: {}", current.join()));
 
                 let is_pub = info
-                    .children
-                    .get(seg)
+                    .get_child(seg)
                     .unwrap_or_else(|| panic!("child module not found: {seg}"));
 
                 if !is_pub {
@@ -157,8 +204,7 @@ impl<'a> Context<'a> {
                     .unwrap_or_else(|| panic!("module not found: {}", current.join()));
 
                 let is_pub = info
-                    .children
-                    .get(seg)
+                    .get_child(seg)
                     .unwrap_or_else(|| panic!("child module not found: {seg}"));
 
                 if !is_pub {
@@ -179,10 +225,6 @@ impl<'a> Context<'a> {
             current
         };
 
-        if self.scope.contains_key(&qualifier) {
-            panic!("use qualifier conflicts with existing scope entry: {qualifier}");
-        }
-
-        self.scope.insert(qualifier, resolved_path);
+        self.insert_scope(qualifier, resolved_path);
     }
 }

@@ -17,11 +17,8 @@ fn process_items(
     for item in items {
         match item {
             TopItem::Mod(mod_item) => {
-                context
-                    .scope
-                    .insert(mod_item.label.clone(), context.prefix.with(&mod_item.label));
-                info.children
-                    .insert(mod_item.label.clone(), mod_item.is_pub);
+                context.insert_scope(mod_item.label.clone(), context.prefixed(&mod_item.label));
+                info.insert_child(mod_item.label.clone(), mod_item.is_pub);
                 let mut child = context.nested(&mod_item.label);
                 process_items(&mod_item.module.items, &mut child, flat, def_stack);
             }
@@ -29,51 +26,39 @@ fn process_items(
                 context.resolve_use(use_item);
                 if use_item.is_pub {
                     let qualifier = use_item.name.last().to_string();
-                    let resolved = context.scope[&qualifier].clone();
-                    context.aliases.insert(context.prefix.with(&qualifier), resolved);
-                    info.children.insert(qualifier, true);
+                    context.register_alias(&qualifier);
+                    info.insert_child(qualifier, true);
                 }
             }
             TopItem::Let(let_item) => {
-                let name = context.prefix.with(&let_item.label);
-                let elab =
-                    Elaborate::new(&context.scope, &*context.table, &*context.aliases, def_stack);
+                let name = context.prefixed(&let_item.label);
+                let elab = Elaborate::new(context.scope(), context.table(), context.aliases(), def_stack);
                 let type_ = elab.term(&let_item.type_);
                 let body = elab.term(&let_item.body);
-                info.bindings
-                    .insert(let_item.label.clone(), let_item.is_pub);
+                info.insert_binding(let_item.label.clone(), let_item.is_pub);
                 flat.push(FlatItem::Let(FlatLet { name, type_, body }));
             }
             TopItem::Rec(ls) => {
                 flat.push(FlatItem::Rec(
                     ls.iter()
                         .map(|let_item| {
-                            let name = context.prefix.with(&let_item.label);
-                            let elab = Elaborate::new(
-                                &context.scope,
-                                &*context.table,
-                                &*context.aliases,
-                                def_stack,
-                            );
+                            let name = context.prefixed(&let_item.label);
+                            let elab = Elaborate::new(context.scope(), context.table(), context.aliases(), def_stack);
                             let type_ = elab.term(&let_item.type_);
                             let body = elab.term(&let_item.body);
-                            info.bindings
-                                .insert(let_item.label.clone(), let_item.is_pub);
+                            info.insert_binding(let_item.label.clone(), let_item.is_pub);
                             FlatLet { name, type_, body }
                         })
                         .collect(),
                 ));
             }
             TopItem::Def(def_item) => {
-                let name = context.prefix.with(&def_item.label);
-                let witness =
-                    Elaborate::new(&context.scope, &*context.table, &*context.aliases, def_stack)
-                        .term(&def_item.witness);
-                context.scope.insert(def_item.label.clone(), name.clone());
-                info.children
-                    .insert(def_item.label.clone(), def_item.is_pub);
-                info.bindings
-                    .insert(def_item.label.clone(), def_item.is_pub);
+                let name = context.prefixed(&def_item.label);
+                let witness = Elaborate::new(context.scope(), context.table(), context.aliases(), def_stack)
+                    .term(&def_item.witness);
+                context.insert_scope(def_item.label.clone(), name.clone());
+                info.insert_child(def_item.label.clone(), def_item.is_pub);
+                info.insert_binding(def_item.label.clone(), def_item.is_pub);
                 flat.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
                     witness,
@@ -84,7 +69,7 @@ fn process_items(
             }
         }
     }
-    context.table.insert(context.prefix.clone(), info);
+    context.finalize(info);
 }
 
 pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
@@ -117,9 +102,8 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
         &DefStack::empty(),
     );
 
-    let base =
-        Elaborate::new(&context.scope, &*context.table, &*context.aliases, &DefStack::empty())
-            .term(&entrypoint.tail);
+    let base = Elaborate::new(context.scope(), context.table(), context.aliases(), &DefStack::empty())
+        .term(&entrypoint.tail);
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
         FlatItem::Def(def) => core::Sealed::new(def.name.join(), def.witness, acc).into(),
@@ -259,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "use qualifier conflicts")]
+    #[should_panic(expected = "qualifier conflicts with existing scope entry")]
     fn rejects_conflicting_use_qualifiers() {
         run(r#"
             mod Foo
@@ -551,9 +535,46 @@ mod tests {
                 end
                 MyMod/Bar/f
             "#),
-            core::Let::new("Foo/Bar/f", core::Type, core::Type, core::Var::free("Foo/Bar/f"))
-                .into(),
+            core::Let::new(
+                "Foo/Bar/f",
+                core::Type,
+                core::Type,
+                core::Var::free("Foo/Bar/f")
+            )
+            .into(),
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "qualifier conflicts with existing scope entry: Bar")]
+    fn rejects_mod_that_overwrites_prior_use() {
+        run(r#"
+            mod Foo
+                pub mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            use Foo/Bar
+            mod Bar
+            end
+            Type
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "qualifier conflicts with existing scope entry: Bar")]
+    fn rejects_def_that_overwrites_prior_use() {
+        run(r#"
+            mod Foo
+                pub mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            use Foo/Bar
+            def Bar = Bin in
+            end
+            Type
+        "#);
     }
 
     #[test]
@@ -571,8 +592,13 @@ mod tests {
                 use /MyMod/Bar
                 Bar/f
             "#),
-            core::Let::new("Foo/Bar/f", core::Type, core::Type, core::Var::free("Foo/Bar/f"))
-                .into(),
+            core::Let::new(
+                "Foo/Bar/f",
+                core::Type,
+                core::Type,
+                core::Var::free("Foo/Bar/f")
+            )
+            .into(),
         );
     }
 
@@ -593,8 +619,7 @@ mod tests {
                 end
                 C/X/f
             "#),
-            core::Let::new("A/X/f", core::Type, core::Type, core::Var::free("A/X/f"))
-                .into(),
+            core::Let::new("A/X/f", core::Type, core::Type, core::Var::free("A/X/f")).into(),
         );
     }
 
