@@ -39,16 +39,16 @@ pub struct ClsrData<'a> {
 impl<'a> ClsrData<'a> {
     pub fn new(clsr_name: &'a cont::ClsrName, clsr: &'a cont::Clsr) -> Self {
         Self {
-            func_name: wasm::FuncName::from(format!("clsr/{}", clsr_name.string)),
-            clsr_type: wasm::TypeName::from(format!("clsr/{}", clsr_name.string)),
-            envr_type: wasm::TypeName::from(format!("envr/{}", clsr_name.string)),
+            func_name: wasm::FuncName::from(format!("clsr/{}", clsr_name)),
+            clsr_type: wasm::TypeName::from(format!("clsr/{}", clsr_name)),
+            envr_type: wasm::TypeName::from(format!("envr/{}", clsr_name)),
             fields: clsr
                 .fields
                 .iter()
                 .map(|field_name| {
                     (
                         field_name,
-                        wasm::FieldName::from(format!("${}", field_name.string)),
+                        wasm::FieldName::from(format!("${}", field_name)),
                     )
                 })
                 .collect(),
@@ -58,7 +58,7 @@ impl<'a> ClsrData<'a> {
                 .map(|param_name| {
                     (
                         param_name,
-                        wasm::LocalName::from(format!("${}", param_name.string)),
+                        wasm::LocalName::from(format!("${}", param_name)),
                     )
                 })
                 .collect(),
@@ -119,14 +119,14 @@ pub struct FuncData<'a> {
 impl<'a> FuncData<'a> {
     pub fn new(func_name: &'a cont::FuncName, func: &'a cont::Func) -> Self {
         Self {
-            func_name: wasm::FuncName::from(format!("func/{}", func_name.string)),
+            func_name: wasm::FuncName::from(format!("func/{}", func_name)),
             params: func
                 .params
                 .iter()
                 .map(|param_name| {
                     (
                         param_name,
-                        wasm::LocalName::from(format!("${}", param_name.string)),
+                        wasm::LocalName::from(format!("${}", param_name)),
                     )
                 })
                 .collect(),
@@ -254,7 +254,7 @@ impl<'a> Table<'a> {
                 .map(|(const_name, _)| {
                     (
                         const_name,
-                        wasm::GlobalName::from(format!("${}", const_name.string)),
+                        wasm::GlobalName::from(format!("${}", const_name)),
                     )
                 })
                 .collect(),
@@ -368,7 +368,7 @@ impl<'a> Table<'a> {
     pub fn find_const(&self, const_name: &cont::ValueName) -> wasm::GlobalName {
         self.consts
             .get(const_name)
-            .unwrap_or_else(|| panic!("`Table` lacks const `{}`", const_name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks const `{}`", const_name))
             .clone()
     }
 
@@ -379,12 +379,12 @@ impl<'a> Table<'a> {
     pub fn find_clsr(&self, clsr_name: &cont::ClsrName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)
-            .unwrap_or_else(|| panic!("`Table` lacks closure `{}`", clsr_name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks closure `{}`", clsr_name))
     }
 
     pub fn find_func(&self, func_name: &cont::FuncName) -> &FuncData<'a> {
         self.funcs
             .get(func_name)
-            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name))
     }
 }

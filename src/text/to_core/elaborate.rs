@@ -19,7 +19,11 @@ impl<'a> Elaborate<'a> {
         table: &'a HashMap<Name, ModuleInfo>,
         def_stack: &'a DefStack,
     ) -> Self {
-        Self { scope, table, def_stack }
+        Self {
+            scope,
+            table,
+            def_stack,
+        }
     }
 
     pub fn term(&self, term: &Term) -> core::Term {
@@ -29,27 +33,29 @@ impl<'a> Elaborate<'a> {
             Term::Prim(prim) => core::Term::Prim(self.prim(prim)),
 
             Term::Name(name) => {
-                let path = if name.path.len() == 1 {
-                    let label = &name.path[0];
+                let path = if name.is_single() {
+                    let label = name.head();
+
                     if let Some(full) = self.scope.get(label) {
-                        full.path.join("/")
+                        full.join()
                     } else if let Some(full) = self.def_stack.get(label) {
-                        full.path.join("/")
+                        full.join()
                     } else {
-                        label.clone()
+                        label.to_string()
                     }
                 } else {
-                    self.resolve_name(name).path.join("/")
+                    self.resolve_name(name).join()
                 };
+
                 core::Var::free(path).into()
             }
 
-            Term::Atom(atom) => core::Term::Atom(core::Atom::from(atom.string.clone())),
+            Term::Atom(atom) => core::Term::Atom(core::Atom::from(atom.as_str())),
 
             Term::AtomType(at) => core::AtomType::new(
                 at.atoms
                     .iter()
-                    .map(|atom| core::Atom::from(atom.string.clone())),
+                    .map(|atom| core::Atom::from(atom.as_str())),
             )
             .into(),
 
@@ -112,7 +118,7 @@ impl<'a> Elaborate<'a> {
                 match_
                     .cases
                     .iter()
-                    .map(|(atom, body)| (core::Atom::from(atom.string.clone()), self.term(body))),
+                    .map(|(atom, body)| (core::Atom::from(atom.as_str()), self.term(body))),
             )
             .into(),
 
@@ -121,16 +127,19 @@ impl<'a> Elaborate<'a> {
                     .def_stack
                     .get(&from.label)
                     .unwrap_or_else(|| panic!("coercion outside def block: {}", from.label));
-                core::Seal::new(core::Var::free(name.path.join("/")), self.term(&from.body)).into()
+                core::Seal::new(core::Var::free(name.join()), self.term(&from.body)).into()
             }
 
-            Term::Into(into) => {
-                let name = self
-                    .def_stack
-                    .get(&into.label)
-                    .unwrap_or_else(|| panic!("coercion outside def block: {}", into.label));
-                core::Unseal::new(core::Var::free(name.path.join("/")), self.term(&into.body)).into()
-            }
+            Term::Into(into) => core::Unseal::new(
+                core::Var::free(
+                    self.def_stack
+                        .get(&into.label)
+                        .unwrap_or_else(|| panic!("coercion outside def block: {}", into.label))
+                        .join(),
+                ),
+                self.term(&into.body),
+            )
+            .into(),
 
             Term::Let(let_) => core::Let::new(
                 let_.label.clone(),
@@ -236,46 +245,50 @@ impl<'a> Elaborate<'a> {
     }
 
     fn resolve_name(&self, name: &Name) -> Name {
-        let qualifier = &name.path[0];
+        let qualifier = name.head();
+
         let base = self
             .scope
             .get(qualifier)
             .unwrap_or_else(|| panic!("unresolved qualifier: {qualifier}"))
             .clone();
+
         let mut current_prefix = base.clone();
-        for seg in &name.path[1..name.path.len() - 1] {
+
+        for segment in name.interior() {
             let info = self
                 .table
                 .get(&current_prefix)
-                .unwrap_or_else(|| panic!("module not found: {}", current_prefix.path.join("/")));
+                .unwrap_or_else(|| panic!("module not found: {}", current_prefix.join()));
+
             let is_pub = info
                 .children
-                .get(seg)
-                .unwrap_or_else(|| panic!("child module not found: {seg}"));
+                .get(segment)
+                .unwrap_or_else(|| panic!("child module not found: {segment}"));
+
             if !is_pub {
-                panic!("private child module: {seg}");
+                panic!("private child module: {segment}");
             }
-            current_prefix = current_prefix.with(seg);
+
+            current_prefix = current_prefix.with(segment);
         }
-        let last = name.path.last().unwrap();
+
+        let last = name.last();
+
         let info = self
             .table
             .get(&current_prefix)
-            .unwrap_or_else(|| panic!("module not found: {}", current_prefix.path.join("/")));
+            .unwrap_or_else(|| panic!("module not found: {}", current_prefix.join()));
+
         let is_pub = info
             .bindings
             .get(last)
             .unwrap_or_else(|| panic!("binding not found: {last}"));
+
         if !is_pub {
             panic!("private binding: {last}");
         }
-        Name {
-            path: base
-                .path
-                .iter()
-                .cloned()
-                .chain(name.path[1..].iter().cloned())
-                .collect(),
-        }
+
+        base.extend(name.tail())
     }
 }

@@ -64,7 +64,7 @@ mod tests {
         assert!(module.consts().is_empty());
         assert!(module.clsrs().is_empty());
         assert_eq!(module.funcs().len(), 1);
-        assert_eq!(module.funcs()[0].0.string, "main");
+        assert_eq!(module.funcs()[0].0.as_str(), "main");
 
         let func = &module.funcs()[0].1;
         assert!(func.region.blocks.is_empty());
@@ -86,21 +86,21 @@ mod tests {
         assert!(
             recursive_pairs
                 .iter()
-                .any(|(name, left, _)| name.string == "v0" && left.string == "v1")
+                .any(|(name, left, _)| name.as_str() == "v0" && left.as_str() == "v1")
         );
         assert!(
             recursive_pairs
                 .iter()
-                .any(|(name, _, right)| name.string == "v1" && right.string == "v0")
+                .any(|(name, _, right)| name.as_str() == "v1" && right.as_str() == "v0")
         );
 
         let cont::Tail::Jump(target) = &func.region.tail else {
             panic!("expected main tail jump");
         };
 
-        assert_eq!(target.target.string, func.resume.string);
+        assert_eq!(target.target.as_str(), func.resume.as_str());
         assert_eq!(target.params.len(), 1);
-        assert_eq!(target.params[0].string, "v0");
+        assert_eq!(target.params[0].as_str(), "v0");
     }
 
     #[test]
@@ -126,7 +126,7 @@ mod tests {
             panic!("expected indirect call in main tail");
         };
 
-        assert_eq!(resume.string, func.resume.string);
+        assert_eq!(resume.as_str(), func.resume.as_str());
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
         };
 
         let (block_name, block) = &func.region.blocks[0];
-        assert_eq!(block_name.string, resume.string);
+        assert_eq!(block_name.as_str(), resume.as_str());
         assert_eq!(block.params.len(), 1);
         assert!(
             block

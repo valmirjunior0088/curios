@@ -98,7 +98,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             }
             cont::Data::Bin(bytes) => {
                 let bin_type = self.context.table().bin_type();
-                let data_name = wasm::DataName::from(value_name.string.clone());
+                let data_name = wasm::DataName::from(value_name.as_string());
                 self.module.add_data(
                     data_name.clone(),
                     wasm::DataSegment {
@@ -138,7 +138,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .context
             .find_local(value_name)
             .map(|ld| ld.local_name)
-            .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string));
+            .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name));
 
         match op {
             cont::Code::NatEql(left, right) => {
@@ -801,9 +801,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     .context
                     .push_local("eql", wasm::ValType::Num(wasm::NumType::I32));
 
-                let done_label = wasm::LabelName::from(format!("{}_done", result_local.string));
-                let loop_label = wasm::LabelName::from(format!("{}_loop", result_local.string));
-                let if_label = wasm::LabelName::from(format!("{}_if", result_local.string));
+                let done_label = wasm::LabelName::from(format!("{}_done", result_local));
+                let loop_label = wasm::LabelName::from(format!("{}_loop", result_local));
+                let if_label = wasm::LabelName::from(format!("{}_if", result_local));
 
                 let load_left = self.context.load_value_instrs(left, LoadAs::Bin);
                 let load_right = self.context.load_value_instrs(right, LoadAs::Bin);
@@ -1287,7 +1287,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
         });
     }
 
@@ -1305,7 +1305,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
         });
     }
 
@@ -1317,7 +1317,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
         });
     }
 
@@ -1370,7 +1370,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
         });
     }
 
@@ -1425,7 +1425,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .find_local(value_name)
                 .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name.string)),
+                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
         });
     }
 
@@ -1501,7 +1501,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .map(|(value_name, _)| {
                 let local_name = self
                     .context
-                    .push_local(&value_name.string, self.context.table().top_type(true));
+                    .push_local(value_name.as_str(), self.context.table().top_type(true));
 
                 (value_name, local_name)
             })
@@ -1516,7 +1516,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .push_local("", wasm::ValType::Num(wasm::NumType::I32));
 
-            let dispatcher_label = wasm::LabelName::from(&dispatcher_local.string);
+            let dispatcher_label = wasm::LabelName::from(dispatcher_local.as_str());
 
             let blocks = region
                 .blocks
@@ -1528,7 +1528,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                         .iter()
                         .map(|value_name| {
                             let local_name = self.context.push_local(
-                                &value_name.string,
+                                value_name.as_str(),
                                 self.context.table().top_type(true),
                             );
 

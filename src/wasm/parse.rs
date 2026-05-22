@@ -949,7 +949,7 @@ mod tests {
             panic!("expected two struct fields");
         };
 
-        assert_eq!(x.string, "x");
+        assert_eq!(x.as_str(), "x");
 
         assert!(matches!(
             x_type.storage_type,
@@ -958,7 +958,7 @@ mod tests {
 
         assert!(matches!(x_type.mutability, Mutability::Const));
 
-        assert_eq!(y.string, "y");
+        assert_eq!(y.as_str(), "y");
 
         assert!(matches!(
             y_type.storage_type,
@@ -994,35 +994,35 @@ mod tests {
             Import::Func {
                 func_name,
                 type_name
-            } if func_name.string == "ext_add" && type_name.string == "id"
+            } if func_name.as_str() == "ext_add" && type_name.as_str() == "id"
         ));
 
         let [(func_name, func)] = module.funcs() else {
             panic!("expected one func");
         };
 
-        assert_eq!(func_name.string, "demo");
-        assert_eq!(func.type_name.string, "id");
+        assert_eq!(func_name.as_str(), "demo");
+        assert_eq!(func.type_name.as_str(), "id");
         assert_eq!(func.params.len(), 1);
-        assert_eq!(func.params[0].string, "x");
+        assert_eq!(func.params[0].as_str(), "x");
 
         let [(local_name, local_type)] = func.locals.as_slice() else {
             panic!("expected one local");
         };
 
-        assert_eq!(local_name.string, "tmp");
+        assert_eq!(local_name.as_str(), "tmp");
         assert_eq!(local_type, &ValType::Num(NumType::I32));
         assert_eq!(func.expr.instrs.len(), 12);
         assert!(matches!(func.expr.instrs[0], Instr::I32Const { value: 41 }));
 
         assert!(matches!(
             &func.expr.instrs[1],
-            Instr::LocalSet { local_name } if local_name.string == "tmp"
+            Instr::LocalSet { local_name } if local_name.as_str() == "tmp"
         ));
 
         assert!(matches!(
             &func.expr.instrs[2],
-            Instr::LocalGet { local_name } if local_name.string == "x"
+            Instr::LocalGet { local_name } if local_name.as_str() == "x"
         ));
 
         assert!(matches!(func.expr.instrs[3], Instr::I32Const { value: 1 }));
@@ -1031,7 +1031,7 @@ mod tests {
 
         assert!(matches!(
             &func.expr.instrs[6],
-            Instr::StructNew { type_name } if type_name.string == "point"
+            Instr::StructNew { type_name } if type_name.as_str() == "point"
         ));
 
         assert!(matches!(func.expr.instrs[7], Instr::Drop));
@@ -1040,21 +1040,21 @@ mod tests {
         assert!(matches!(
             &func.expr.instrs[9],
             Instr::ArrayNewFixed { type_name, length }
-                if type_name.string == "bytes" && *length == 1
+                if type_name.as_str() == "bytes" && *length == 1
         ));
 
         assert!(matches!(func.expr.instrs[10], Instr::Drop));
 
         assert!(matches!(
             &func.expr.instrs[11],
-            Instr::LocalGet { local_name } if local_name.string == "tmp"
+            Instr::LocalGet { local_name } if local_name.as_str() == "tmp"
         ));
 
         let [(global_name, global)] = module.globals() else {
             panic!("expected one global");
         };
 
-        assert_eq!(global_name.string, "answer");
+        assert_eq!(global_name.as_str(), "answer");
 
         assert!(matches!(
             global.global_type.val_type,
@@ -1072,7 +1072,7 @@ mod tests {
         assert!(
             module.exports().iter().any(|(name, export)| matches!(
                 (name.as_str(), export),
-                ("demo", Export::Func(func_name)) if func_name.string == "demo"
+                ("demo", Export::Func(func_name)) if func_name.as_str() == "demo"
             )),
             "expected func export"
         );
@@ -1080,7 +1080,7 @@ mod tests {
         assert!(
             module.exports().iter().any(|(name, export)| matches!(
                 (name.as_str(), export),
-                ("answer", Export::Global(global_name)) if global_name.string == "answer"
+                ("answer", Export::Global(global_name)) if global_name.as_str() == "answer"
             )),
             "expected global export"
         );
@@ -1089,7 +1089,7 @@ mod tests {
             panic!("expected one data segment");
         };
 
-        assert_eq!(data_name.string, "greeting");
+        assert_eq!(data_name.as_str(), "greeting");
         assert_eq!(data_segment.bytes, b"hello");
     }
 }

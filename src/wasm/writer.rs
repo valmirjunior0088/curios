@@ -177,7 +177,7 @@ impl<'a> Table<'a> {
         self.types
             .get(name)
             .cloned()
-            .unwrap_or_else(|| panic!("`Table` lacks type `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks type `{}`", name))
     }
 
     fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
@@ -187,7 +187,7 @@ impl<'a> Table<'a> {
             .unwrap_or_else(|| {
                 panic!(
                     "`Table` lacks field `{}` of type `{}`",
-                    name.string, parent_name.string
+                    name, parent_name
                 )
             })
     }
@@ -196,7 +196,7 @@ impl<'a> Table<'a> {
         self.funcs
             .get(name)
             .cloned()
-            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", name))
     }
 
     fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
@@ -206,7 +206,7 @@ impl<'a> Table<'a> {
             .unwrap_or_else(|| {
                 panic!(
                     "`Table` lacks local `{}` of func `{}`",
-                    name.string, parent_name.string
+                    name, parent_name
                 )
             })
     }
@@ -215,14 +215,14 @@ impl<'a> Table<'a> {
         self.globals
             .get(name)
             .cloned()
-            .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name))
     }
 
     fn resolve_data(&self, name: &'a DataName) -> usize {
         self.datas
             .get(name)
             .cloned()
-            .unwrap_or_else(|| panic!("`Table` lacks data `{}`", name.string))
+            .unwrap_or_else(|| panic!("`Table` lacks data `{}`", name))
     }
 }
 
@@ -351,7 +351,7 @@ impl<'f, 'l> State<'f, 'l> {
                 .iter()
                 .rev()
                 .position(|&label_name| target_name == label_name)
-                .unwrap_or_else(|| panic!("`State` lacks label `{}`", target_name.string)),
+                .unwrap_or_else(|| panic!("`State` lacks label `{}`", target_name)),
         }
     }
 }
@@ -1628,7 +1628,7 @@ where
 
     fn write_code_expr(&mut self, func_name: &FuncName, expr: &Expr) -> Result<()> {
         self.write_instrs(
-            &mut State::new_func(func_name, &LabelName::from(&func_name.string)),
+            &mut State::new_func(func_name, &LabelName::from(func_name.as_str())),
             &expr.instrs,
         )?;
 
@@ -1874,7 +1874,7 @@ where
                     .map(|func_name| {
                         (
                             self.table.resolve_func(func_name) as u64,
-                            func_name.string.as_str(),
+                            func_name.as_str(),
                         )
                     })
                     .collect::<Vec<_>>(),
@@ -1902,7 +1902,7 @@ where
                                 .map(|local_name| {
                                     (
                                         self.table.resolve_local(func_name, local_name) as u64,
-                                        local_name.string.as_str(),
+                                        local_name.as_str(),
                                     )
                                 })
                                 .collect::<Vec<_>>(),
@@ -1930,7 +1930,7 @@ where
                     .map(|(type_name, _)| {
                         (
                             self.table.resolve_type(type_name) as u64,
-                            type_name.string.as_str(),
+                            type_name.as_str(),
                         )
                     })
                     .collect::<Vec<_>>(),
@@ -1961,7 +1961,7 @@ where
                                     .map(|field_name| {
                                         (
                                             self.table.resolve_field(type_name, field_name) as u64,
-                                            field_name.string.as_str(),
+                                            field_name.as_str(),
                                         )
                                     })
                                     .collect::<Vec<_>>(),

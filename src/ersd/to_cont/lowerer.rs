@@ -165,7 +165,7 @@ impl<'a> Lowerer<'a> {
         builder: &mut RegionBuilder,
     ) -> cont::ValueName {
         match term {
-            ersd::Term::Name(name) => frame.find(&name.string),
+            ersd::Term::Name(name) => frame.find(name.as_str()),
             ersd::Term::Erased => {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit))
             }
@@ -1209,7 +1209,7 @@ impl<'a> Lowerer<'a> {
                 self.lower_letrec_item(&letrec.tail, target, &frame, state, builder);
             }
             ersd::Term::Name(name) => {
-                builder.add_value(target, cont::Value::Alias(frame.find(&name.string)));
+                builder.add_value(target, cont::Value::Alias(frame.find(name.as_str())));
             }
             ersd::Term::Apply(_)
             | ersd::Term::Split(_)
@@ -1240,7 +1240,7 @@ impl<'a> Lowerer<'a> {
         cont: Cont<'_>,
     ) -> cont::Tail {
         match term {
-            ersd::Term::Name(name) => cont(self, state, builder, frame.find(&name.string)),
+            ersd::Term::Name(name) => cont(self, state, builder, frame.find(name.as_str())),
             ersd::Term::Erased => {
                 let value = emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit));
 

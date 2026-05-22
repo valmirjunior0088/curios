@@ -14,31 +14,31 @@ fn print_dollar_ident<'a>(name: &'a str) -> Printer<'a> {
 }
 
 fn print_type_name<'a>(type_name: &'a TypeName) -> Printer<'a> {
-    print_dollar_ident(&type_name.string)
+    print_dollar_ident(type_name.as_str())
 }
 
 fn print_field_name<'a>(field_name: &'a FieldName) -> Printer<'a> {
-    print_dollar_ident(&field_name.string)
+    print_dollar_ident(field_name.as_str())
 }
 
 fn print_func_name<'a>(func_name: &'a FuncName) -> Printer<'a> {
-    print_dollar_ident(&func_name.string)
+    print_dollar_ident(func_name.as_str())
 }
 
 fn print_global_name<'a>(global_name: &'a GlobalName) -> Printer<'a> {
-    print_dollar_ident(&global_name.string)
+    print_dollar_ident(global_name.as_str())
 }
 
 fn print_local_name<'a>(local_name: &'a LocalName) -> Printer<'a> {
-    print_dollar_ident(&local_name.string)
+    print_dollar_ident(local_name.as_str())
 }
 
 fn print_label_name<'a>(label_name: &'a LabelName) -> Printer<'a> {
-    print_dollar_ident(&label_name.string)
+    print_dollar_ident(label_name.as_str())
 }
 
 fn print_data_name<'a>(data_name: &'a DataName) -> Printer<'a> {
-    print_dollar_ident(&data_name.string)
+    print_dollar_ident(data_name.as_str())
 }
 
 fn print_quoted_ident<'a>(string: &'a str) -> Printer<'a> {
@@ -661,7 +661,7 @@ fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -
         .unwrap_or_else(|| {
             panic!(
                 "Unexpected error while getting func type `{}`",
-                func_name.string
+                func_name.as_str()
             )
         });
 

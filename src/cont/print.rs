@@ -8,7 +8,7 @@ use {
 };
 
 fn print_value_name<'a>(name: &'a ValueName) -> Printer<'a> {
-    flat([pure("%"), pure(&name.string)])
+    flat([pure("%"), pure(name.as_str())])
 }
 
 fn print_value_names<'a>(names: &'a [ValueName]) -> Printer<'a> {
@@ -16,15 +16,15 @@ fn print_value_names<'a>(names: &'a [ValueName]) -> Printer<'a> {
 }
 
 fn print_block_name<'a>(name: &'a BlockName) -> Printer<'a> {
-    pure(&name.string)
+    pure(name.as_str())
 }
 
 fn print_func_name<'a>(name: &'a FuncName) -> Printer<'a> {
-    pure(&name.string)
+    pure(name.as_str())
 }
 
 fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
-    pure(&name.string)
+    pure(name.as_str())
 }
 
 fn print_data<'a>(value: &'a Data) -> Printer<'a> {

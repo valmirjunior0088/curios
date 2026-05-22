@@ -188,7 +188,7 @@ impl<'a, 'b> Context<'a, 'b> {
                             (&block_name == frame_block_name).then_some(block_data)
                         })
                 })
-                .unwrap_or_else(|| panic!("`Context` lacks block `{}`", block_name.string)),
+                .unwrap_or_else(|| panic!("`Context` lacks block `{}`", block_name)),
         }
     }
 
@@ -301,7 +301,7 @@ impl<'a, 'b> Context<'a, 'b> {
             if target.params.len() != 1 {
                 panic!(
                     "resume block `{}` expects 1 param, got {}",
-                    target.target.string,
+                    target.target,
                     target.params.len(),
                 );
             }
@@ -313,7 +313,7 @@ impl<'a, 'b> Context<'a, 'b> {
             if target.params.len() != block_data.params.len() {
                 panic!(
                     "block `{}` expects {} params, got {}",
-                    target.target.string,
+                    target.target,
                     block_data.params.len(),
                     target.params.len(),
                 );
@@ -473,7 +473,7 @@ impl<'a, 'b> Context<'a, 'b> {
         if params.len() != self.table().find_func(target).arity() {
             panic!(
                 "call to `{}` expects {} params, got {}",
-                target.string,
+                target,
                 self.table().find_func(target).arity(),
                 params.len(),
             );
@@ -497,7 +497,7 @@ impl<'a, 'b> Context<'a, 'b> {
             if block_data.params.len() != 1 {
                 panic!(
                     "block `{}` expects {} params, got {}",
-                    resume.string,
+                    resume,
                     block_data.params.len(),
                     1,
                 );
@@ -565,7 +565,7 @@ impl<'a, 'b> Context<'a, 'b> {
             if block_data.params.len() != 1 {
                 panic!(
                     "block `{}` expects {} params, got {}",
-                    resume.string,
+                    resume,
                     block_data.params.len(),
                     1,
                 );

@@ -2017,7 +2017,7 @@ mod tests {
 
         assert!(matches!(
             *head,
-            ersd::Term::Name(ersd::Name { string }) if string == "0"
+            ersd::Term::Name(name) if name.as_str() == "0"
         ));
 
         assert_eq!(cases.len(), 3);
@@ -2032,7 +2032,7 @@ mod tests {
 
         assert!(matches!(
             &**alpha_head,
-            ersd::Term::Name(ersd::Name { string }) if string == "3"
+            ersd::Term::Name(name) if name.as_str() == "3"
         ));
 
         assert_eq!(alpha_cases.len(), 3);
@@ -2059,7 +2059,7 @@ mod tests {
 
         assert!(matches!(
             &**mu_head,
-            ersd::Term::Name(ersd::Name { string }) if string == "2"
+            ersd::Term::Name(name) if name.as_str() == "2"
         ));
 
         assert_eq!(mu_cases.len(), 3);
@@ -2089,7 +2089,7 @@ mod tests {
 
         assert!(matches!(
             &**zeta_head,
-            ersd::Term::Name(ersd::Name { string }) if string == "1"
+            ersd::Term::Name(name) if name.as_str() == "1"
         ));
 
         assert_eq!(zeta_cases.len(), 3);

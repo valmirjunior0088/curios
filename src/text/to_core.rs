@@ -107,16 +107,16 @@ pub fn to_core(entrypoint: &Entrypoint) -> core::Term {
 
     flat.into_iter().rev().fold(base, |acc, item| match item {
         FlatItem::Let(let_) => {
-            core::Let::new(let_.name.path.join("/"), let_.type_, let_.body, acc).into()
+            core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into()
         }
         FlatItem::Rec(items) => core::Rec::new(
             items
                 .into_iter()
-                .map(|it| (it.name.path.join("/"), it.type_, it.body)),
+                .map(|it| (it.name.join(), it.type_, it.body)),
             acc,
         )
         .into(),
-        FlatItem::Sealed(s) => core::Sealed::new(s.name.path.join("/"), s.witness, acc).into(),
+        FlatItem::Sealed(s) => core::Sealed::new(s.name.join(), s.witness, acc).into(),
     })
 }
 

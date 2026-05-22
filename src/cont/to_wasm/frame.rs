@@ -41,7 +41,7 @@ impl<'a> BlockData<'a> {
             dispatcher_label,
             dispatcher_local,
             index,
-            label_name: wasm::LabelName::from(format!("${}", block_name.string)),
+            label_name: wasm::LabelName::from(format!("${}", block_name)),
             params,
             region,
         }

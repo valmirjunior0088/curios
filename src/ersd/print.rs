@@ -273,7 +273,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 print_term(tail),
             ])
         }
-        Term::Name(name) => pure(format!("#{}", name.string.as_str())),
+        Term::Name(name) => pure(format!("#{}", name.as_str())),
     }
 }
 

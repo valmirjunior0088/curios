@@ -73,26 +73,23 @@ impl<'a> Context<'a> {
     }
 
     pub fn resolve_use(&mut self, top_use: &TopUse) {
-        if !top_use.is_abs && top_use.name.path.len() == 1 {
-            let seg = &top_use.name.path[0];
+        if !top_use.is_abs && top_use.name.is_single() {
+            let seg = top_use.name.head();
             panic!("single-segment relative use is forbidden: {seg}");
         }
 
-        let qualifier = top_use.name.path.last().unwrap().clone();
+        let qualifier = top_use.name.last().to_string();
 
         let resolved_path = if top_use.is_abs {
-            let segments = &top_use.name.path;
-            let mut current = Name {
-                path: vec![segments[0].clone()],
-            };
+            let mut current = Name::single(top_use.name.head());
             if !self.table.contains_key(&current) {
-                panic!("module not found: {}", segments[0]);
+                panic!("module not found: {}", top_use.name.head());
             }
-            for seg in &segments[1..] {
+            for seg in top_use.name.tail() {
                 let info = self
                     .table
                     .get(&current)
-                    .unwrap_or_else(|| panic!("module not found: {}", current.path.join("/")));
+                    .unwrap_or_else(|| panic!("module not found: {}", current.join()));
                 let is_pub = info
                     .children
                     .get(seg)
@@ -102,22 +99,22 @@ impl<'a> Context<'a> {
                 }
                 current = current.with(seg);
                 if !self.table.contains_key(&current) {
-                    panic!("module not found: {}", current.path.join("/"));
+                    panic!("module not found: {}", current.join());
                 }
             }
             current
         } else {
-            let first = &top_use.name.path[0];
+            let first = top_use.name.head();
             let mut current = self
                 .scope
                 .get(first)
                 .unwrap_or_else(|| panic!("undeclared child in relative use: {first}"))
                 .clone();
-            for seg in &top_use.name.path[1..] {
+            for seg in top_use.name.tail() {
                 let info = self
                     .table
                     .get(&current)
-                    .unwrap_or_else(|| panic!("module not found: {}", current.path.join("/")));
+                    .unwrap_or_else(|| panic!("module not found: {}", current.join()));
                 let is_pub = info
                     .children
                     .get(seg)
@@ -128,7 +125,7 @@ impl<'a> Context<'a> {
                 current = current.with(seg);
             }
             if !self.table.contains_key(&current) {
-                panic!("module not found: {}", current.path.join("/"));
+                panic!("module not found: {}", current.join());
             }
             current
         };

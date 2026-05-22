@@ -228,7 +228,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_let_bin_data(&mut self, name: &'a cont::ValueName, bytes: &[u8]) {
         let bin_type = self.table.bin_type();
         let global_name = self.table.find_const(name);
-        let data_name = wasm::DataName::from(name.string.clone());
+        let data_name = wasm::DataName::from(name.as_string());
 
         self.module.add_data(
             data_name.clone(),
@@ -258,7 +258,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
 
         self.module.add_export(
-            global_name.string.clone(),
+            global_name.as_string(),
             wasm::Export::Global(global_name.clone()),
         );
 
@@ -296,7 +296,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
 
         self.module.add_export(
-            self.table.find_const(name).string,
+            self.table.find_const(name).as_string(),
             wasm::Export::Global(self.table.find_const(name)),
         );
     }
@@ -322,7 +322,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                             .find_clsr(name)
                             .find_param(value_name)
                             .unwrap_or_else(|| {
-                                panic!("`ClsrData` lacks param `{}`", value_name.string)
+                                panic!("`ClsrData` lacks param `{}`", value_name)
                             })
                     }))
                     .collect(),
@@ -332,7 +332,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
 
         self.module.add_export(
-            self.table.find_clsr(name).func_name().string,
+            self.table.find_clsr(name).func_name().as_string(),
             wasm::Export::Func(self.table.find_clsr(name).func_name()),
         );
     }
@@ -360,7 +360,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                             .find_func(name)
                             .find_param(value_name)
                             .unwrap_or_else(|| {
-                                panic!("`FuncData` lacks param `{}`", value_name.string)
+                                panic!("`FuncData` lacks param `{}`", value_name)
                             })
                     })
                     .collect(),
@@ -370,7 +370,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
 
         self.module.add_export(
-            self.table.find_func(name).func_name().string,
+            self.table.find_func(name).func_name().as_string(),
             wasm::Export::Func(self.table.find_func(name).func_name()),
         );
     }
