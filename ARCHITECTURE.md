@@ -54,8 +54,8 @@ The grammar covers:
 - Tuple types `{x: A, B, z: C}` (curly braces, fields optionally labeled), tuple values `(a, b)` or `(a, b, c)`
 - Atom types `'[left, right]`, atom values `'left`
 - Tuple elimination `split tuple : m => motive; | (x, y) => tail`
-- Natural-number induction `Nat.fold n : k => motive; | 0n => zero; | pred ih => succ;`
-- Sparse natural-number dispatch `Nat.match n : k => motive; | 34n => body; | _ => default;`
+- Natural-number induction `Nat.fold n : k => motive; | 0 => zero; | pred ih => succ;`
+- Sparse natural-number dispatch `Nat.match n : k => motive; | 34 => body; | _ => default;`
 - Char literals as nat values: single-character string with `n` suffix (`"["n`, `"\""n`) parses to the Unicode codepoint
 - Pattern matching `match x : k => Type; | 'tag => body;`
 - Non-recursive let bindings `let x : T = body; tail`
@@ -66,7 +66,7 @@ The grammar covers:
 - Module blocks `mod Label ... end` / `pub mod Label ... end` — group bindings under a namespace; only `pub` items are accessible from outside
 - Import declarations `use Path/qualifier` (relative) / `use /abs/Path` (absolute) / `pub use ...` to re-export a qualifier; single-segment relative `use` is forbidden
 - Qualified names `Namespace/name` (slash-separated) used to reference items inside modules
-- Opaque-type blocks `def Label = witness in ... end` — introduces an opaque type named `Label` backed by `witness`; `Label.from value` coerces into the opaque type, `Label.into value` coerces out; coercions are only valid inside the `def` block
+- Opaque-type blocks `def Label(witness) ... end` — introduces an opaque type named `Label` backed by `witness`; `Label.from value` coerces into the opaque type, `Label.into value` coerces out; coercions are only valid inside the `def` block
 
 ---
 
@@ -79,7 +79,7 @@ Converts a `text::Entrypoint` into `core::Term` via the public `text::to_core()`
 **Module processing** (`src/text/to_core.rs`): `process_items()` walks the `TopItem` list recursively, building a name-resolution scope. It:
 - Resolves `use` declarations, registering qualifiers and enforcing `pub`/private visibility.
 - Translates `mod` blocks into nested scopes, qualifying each binding name (e.g. `Foo/bar`).
-- Translates `def Label = witness in ... end` into `core::Sealed` nodes, binding the opaque-type label over the elaborated body.
+- Translates `def Label(witness) ... end` into `core::Sealed` nodes, binding the opaque-type label over the elaborated body.
 - Collects `let`/`rec` groups as flat items, then folds them right-to-left into the tail expression.
 
 **Term elaboration** (`src/text/to_core/elaborate.rs`): `Elaborate` converts each `text::Term` into the corresponding `core::Term` constructor via structural recursion, calling `Scope::close()` to bind free variable labels as de Bruijn indices.

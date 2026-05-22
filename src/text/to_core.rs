@@ -333,7 +333,7 @@ mod tests {
     fn def_elaborates_to_sealed() {
         assert_eq!(
             run(r#"
-                def Str = Bin in
+                def Str(Bin)
                     pub let from : Bin -> Str = bin => Str.from bin;
                     pub let into : Str -> Bin = str => Str.into str;
                 end
@@ -376,7 +376,7 @@ mod tests {
     #[should_panic(expected = "coercion outside def block")]
     fn rejects_coercion_outside_def_block() {
         run(r#"
-            def Str = Bin in
+            def Str(Bin)
             end
             Str.from 00
         "#);
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(
             run(r#"
                 mod Foo
-                    def Str = Bin in
+                    def Str(Bin)
                     end
                 end
                 Type
@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(
             run(r#"
                 mod Foo
-                    pub def Str = Bin in
+                    pub def Str(Bin)
                         pub let from : Bin -> Str = x => Str.from x;
                     end
                 end
@@ -438,7 +438,7 @@ mod tests {
         assert_eq!(
             run(r#"
                 mod Foo
-                    pub def Str = Bin in
+                    pub def Str(Bin)
                         pub let from : Bin -> Str = x => Str.from x;
                     end
                 end
@@ -471,7 +471,7 @@ mod tests {
     fn rejects_private_def_type_by_qualified_name() {
         run(r#"
             mod Foo
-                def Str = Bin in
+                def Str(Bin)
                 end
             end
             Foo/Str
@@ -482,7 +482,7 @@ mod tests {
     fn lambda_param_shadowing_def_name_captures_param_not_type() {
         assert_eq!(
             run(r#"
-                def Str = Bin in
+                def Str(Bin)
                     pub let foo : Str -> Bin = Str => Str.from Str;
                 end
                 Type
@@ -512,7 +512,7 @@ mod tests {
     fn lambda_param_shadows_def_in_nested_func() {
         assert_eq!(
             run(r#"
-                def Str = Bin in
+                def Str(Bin)
                     pub let foo : Str -> Str -> Bin = Str => str => Str.from str;
                 end
                 Type
@@ -548,8 +548,8 @@ mod tests {
     #[test]
     fn nested_def_outer_label_accessible_in_inner() {
         run(r#"
-            def A = Bin in
-                def B = Nat in
+            def A(Bin)
+                def B(Nat)
                     pub let f : Bin -> A = x => A.from x;
                 end
             end
@@ -561,7 +561,7 @@ mod tests {
     #[should_panic(expected = "coercion outside def block: Foo")]
     fn rejects_coercion_with_wrong_def_label() {
         run(r#"
-            def Str = Bin in
+            def Str(Bin)
                 pub let bad : Bin -> Str = x => Foo.from x;
             end
             Type
@@ -618,7 +618,7 @@ mod tests {
                 end
             end
             use Foo/Bar
-            def Bar = Bin in
+            def Bar(Bin)
             end
             Type
         "#);
