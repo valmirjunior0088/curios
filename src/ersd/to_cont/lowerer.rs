@@ -167,7 +167,7 @@ impl<'a> Lowerer<'a> {
         match term {
             ersd::Term::Name(name) => frame.find(name.as_str()),
             ersd::Term::Erased => {
-                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit))
+                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])))
             }
             ersd::Term::Prim(ersd::Prim::Nat(value)) => {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Nat(*value)))
@@ -804,7 +804,7 @@ impl<'a> Lowerer<'a> {
                 )
             }
             ersd::Term::Prim(ersd::Prim::Unit) => {
-                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit))
+                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])))
             }
             ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
@@ -851,7 +851,7 @@ impl<'a> Lowerer<'a> {
     ) {
         match term {
             ersd::Term::Erased => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Unit));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![])));
             }
             ersd::Term::Prim(ersd::Prim::Nat(value)) => {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Nat(*value)));
@@ -1250,7 +1250,7 @@ impl<'a> Lowerer<'a> {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(field_names)));
             }
             ersd::Term::Prim(ersd::Prim::Unit) => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Unit));
+                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![])));
             }
             ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
@@ -1308,7 +1308,7 @@ impl<'a> Lowerer<'a> {
         match term {
             ersd::Term::Name(name) => cont(self, state, builder, frame.find(name.as_str())),
             ersd::Term::Erased => {
-                let value = emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit));
+                let value = emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])));
 
                 cont(self, state, builder, value)
             }
@@ -2592,7 +2592,7 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Prim(ersd::Prim::Unit) => {
                 let value =
-                    emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit));
+                    emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])));
                 cont(self, state, builder, value)
             }
             ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => self.lower_to_name(

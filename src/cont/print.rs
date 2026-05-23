@@ -29,7 +29,6 @@ fn print_clsr_name<'a>(name: &'a ClsrName) -> Printer<'a> {
 
 fn print_data<'a>(value: &'a Data) -> Printer<'a> {
     match value {
-        Data::Unit => pure("()"),
         Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),

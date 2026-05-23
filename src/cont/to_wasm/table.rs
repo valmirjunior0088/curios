@@ -187,7 +187,6 @@ fn max_region_tpl_arity(region: &cont::Region) -> usize {
 pub struct Table<'a> {
     special_field: wasm::FieldName,
     special_local: wasm::LocalName,
-    unit_type: wasm::TypeName,
     flt_type: wasm::TypeName,
     bin_type: wasm::TypeName,
     arr_type: wasm::TypeName,
@@ -209,7 +208,6 @@ impl<'a> Table<'a> {
         Self {
             special_field: wasm::FieldName::from("!"),
             special_local: wasm::LocalName::from("!"),
-            unit_type: wasm::TypeName::from("unit"),
             flt_type: wasm::TypeName::from("flt"),
             bin_type: wasm::TypeName::from("bin"),
             arr_type: wasm::TypeName::from("arr"),
@@ -237,7 +235,7 @@ impl<'a> Table<'a> {
                     .max()
                     .unwrap_or(0);
 
-                (1..=max)
+                (0..=max)
                     .map(|arity| (arity, wasm::TypeName::from(format!("tpl/{}", arity))))
                     .collect()
             },
@@ -295,10 +293,6 @@ impl<'a> Table<'a> {
             is_nullable,
             heap_type: wasm::HeapType::Abstract(wasm::AbsHeapType::Any),
         })
-    }
-
-    pub fn unit_type(&self) -> wasm::TypeName {
-        self.unit_type.clone()
     }
 
     pub fn int_type(&self, is_nullable: bool) -> wasm::RefType {

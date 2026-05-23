@@ -161,21 +161,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_unit_type(&mut self) {
-        self.module.add_type(
-            self.table.unit_type(),
-            wasm::SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([])),
-            },
-        );
-    }
-
     fn emit_tpl_types(&mut self) {
         for (arity, type_name) in self.table.tpl_types() {
             let super_types = match arity {
-                1 => vec![],
+                0 => vec![],
                 n => vec![self.table.find_tpl_type(n - 1)],
             };
 
@@ -466,7 +455,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     pub fn emit_module(&mut self, module: &'a cont::Module) {
-        self.emit_unit_type();
         self.emit_flt_type();
         self.emit_bin_type();
         self.emit_arr_type();

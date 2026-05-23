@@ -55,9 +55,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     pub fn emit_data(&mut self, value_name: &'a cont::ValueName, value: &'a cont::Data) {
         match value {
-            cont::Data::Unit => self.emit_instr(wasm::Instr::StructNew {
-                type_name: self.context.table().unit_type(),
-            }),
             &cont::Data::Nat(value) => self.emit_instrs([
                 wasm::Instr::I32Const {
                     value: value as i32,
@@ -1292,7 +1289,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     func_name: self.context.table().sys_print_func().clone(),
                 });
                 self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.table().unit_type(),
+                    type_name: self.context.table().find_tpl_type(0),
                 });
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local,

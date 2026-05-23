@@ -358,7 +358,7 @@ mod tests {
                 region: cont::Region {
                     values: vec![(
                         cont::ValueName::from("unit"),
-                        cont::Value::Pure(cont::Data::Unit),
+                        cont::Value::Pure(cont::Data::Tpl(vec![])),
                     )],
                     blocks: vec![],
                     tail: cont::Tail::Jump(cont::JumpTarget {

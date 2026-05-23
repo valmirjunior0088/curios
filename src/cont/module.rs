@@ -5,7 +5,6 @@ use {
 
 #[derive(Debug)]
 pub enum Data {
-    Unit,
     Nat(u32),
     Int(i32),
     Flt(f32),

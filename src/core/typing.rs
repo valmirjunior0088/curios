@@ -257,7 +257,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         Prim::ArrConcat(_) => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
         Prim::SysPrint(inner) => {
             erase(context, inner, &Term::Prim(Prim::BinType))?;
-            Ok(Term::AtomType(AtomType::new(["unit"])))
+            Ok(Term::TupleType(TupleType::new([] as [(&str, Term); 0])))
         }
     }
 }
@@ -1216,7 +1216,7 @@ fn erase_prim(
             Ok(ersd::Prim::ArrConcat(erased).into())
         }
         Prim::SysPrint(inner) => {
-            expect(context, term, &Term::AtomType(AtomType::new(["unit"])), expected)?;
+            expect(context, term, &Term::TupleType(TupleType::new([] as [(&str, Term); 0])), expected)?;
             Ok(
                 ersd::Prim::SysPrint(erase(context, inner, &Term::Prim(Prim::BinType))?.into())
                     .into(),
