@@ -792,8 +792,15 @@ impl<'a> Lowerer<'a> {
 
                 self.lower_letrec_name(&letrec.tail, &frame, state, builder)
             }
+            ersd::Term::Proj(proj) => {
+                let head = self.lower_letrec_name(&proj.head, frame, state, builder);
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::TplGet(head, proj.index)),
+                )
+            }
             ersd::Term::Apply(_)
-            | ersd::Term::Split(_)
             | ersd::Term::Match(_)
             | ersd::Term::NatFold(_)
             | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
@@ -1211,8 +1218,11 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Name(name) => {
                 builder.add_value(target, cont::Value::Alias(frame.find(name.as_str())));
             }
+            ersd::Term::Proj(proj) => {
+                let head = self.lower_letrec_name(&proj.head, frame, state, builder);
+                builder.add_value(target, cont::Value::Eval(cont::Code::TplGet(head, proj.index)));
+            }
             ersd::Term::Apply(_)
-            | ersd::Term::Split(_)
             | ersd::Term::Match(_)
             | ersd::Term::NatFold(_)
             | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
@@ -2507,8 +2517,26 @@ impl<'a> Lowerer<'a> {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
                 self.lower_to_name(&letrec.tail, &frame, state, builder, cont)
             }
+            ersd::Term::Proj(proj) => {
+                let index = proj.index;
+
+                self.lower_to_name(
+                    &proj.head,
+                    frame,
+                    state,
+                    builder,
+                    Box::new(move |this, state, builder, head| {
+                        let v = emit_fresh_value(
+                            state,
+                            builder,
+                            cont::Value::Eval(cont::Code::TplGet(head, index)),
+                        );
+
+                        cont(this, state, builder, v)
+                    }),
+                )
+            }
             ersd::Term::Apply(_)
-            | ersd::Term::Split(_)
             | ersd::Term::Match(_)
             | ersd::Term::NatFold(_)
             | ersd::Term::NatMatch(_) => {
@@ -2917,31 +2945,6 @@ impl<'a> Lowerer<'a> {
                             params: vec![],
                         }),
                     })
-                }),
-            ),
-            ersd::Term::Split(split) => self.lower_to_name(
-                &split.head,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, head| {
-                    let bindings = split
-                        .fields
-                        .iter()
-                        .enumerate()
-                        .map(|(i, name)| {
-                            let v = state.fresh_value();
-                            builder.add_value(
-                                v.clone(),
-                                cont::Value::Eval(cont::Code::TplGet(head.clone(), i)),
-                            );
-                            (name.clone(), v)
-                        })
-                        .collect::<Vec<_>>();
-
-                    let frame = frame.extended(bindings);
-
-                    this.lower_tail(&split.tail, &frame, resume, state, builder)
                 }),
             ),
             ersd::Term::Let(let_) => {

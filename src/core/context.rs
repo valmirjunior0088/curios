@@ -10,6 +10,7 @@ pub struct Context {
     assumptions: Vec<HashMap<String, Term>>,
     definitions: Vec<HashMap<String, Term>>,
     witnesses: Vec<HashMap<String, Term>>,
+    projections: Vec<HashMap<(Term, usize), Term>>,
 }
 
 impl Context {
@@ -20,6 +21,7 @@ impl Context {
             assumptions: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
             witnesses: vec![HashMap::new()],
+            projections: vec![HashMap::new()],
         }
     }
 
@@ -38,12 +40,14 @@ impl Context {
         self.assumptions.push(HashMap::new());
         self.definitions.push(HashMap::new());
         self.witnesses.push(HashMap::new());
+        self.projections.push(HashMap::new());
     }
 
     fn leave_frame(&mut self) {
         self.assumptions.pop().unwrap();
         self.definitions.pop().unwrap();
         self.witnesses.pop().unwrap();
+        self.projections.pop().unwrap();
     }
 
     pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -111,5 +115,19 @@ impl Context {
 
     pub fn witness(&self, label: &str) -> Option<&Term> {
         self.witnesses.iter().rev().find_map(|s| s.get(label))
+    }
+
+    pub fn define_proj(&mut self, base: Term, index: usize, value: &Term) {
+        self.projections
+            .last_mut()
+            .unwrap()
+            .insert((base, index), value.clone());
+    }
+
+    pub fn projection(&self, base: &Term, index: usize) -> Option<&Term> {
+        self.projections
+            .iter()
+            .rev()
+            .find_map(|p| p.get(&(base.clone(), index)))
     }
 }

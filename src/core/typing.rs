@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, AtomType, Context, Error, Func, FuncType, Let, Match, NatFold, NatMatch, Preempted,
-        Prim, Rec, Seal, Sealed, Split, Term, Tuple, TupleType, Type, Unseal, Var,
+        Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
     },
     crate::ersd,
 };
@@ -11,7 +11,7 @@ fn reduce(context: &mut Context, term: &Term) -> Result<Term, Error> {
 }
 
 fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
-    super::convert(context, this, that)
+    super::convert(context, &Type.into(), this, that)
         .map_err(|Preempted| Error::convert_preempted(this.clone(), that.clone()))
 }
 
@@ -395,8 +395,8 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
     Ok(motive.open(&[head.as_ref()]))
 }
 
-fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term, Error> {
-    let Split { head, motive, tail } = split;
+fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, Error> {
+    let Proj { head, index } = proj;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
@@ -407,50 +407,16 @@ fn infer_split(context: &mut Context, split: &Split, term: &Term) -> Result<Term
         return Err(Error::cannot_infer(term.clone()));
     };
 
-    let n = fields.len();
-    let head_label = context.fresh();
+    if *index >= fields.len() {
+        return Err(Error::cannot_infer(term.clone()));
+    }
 
-    context.with_frame(|context| {
-        context.assume(
-            &head_label,
-            &TupleType {
-                fields: fields.clone(),
-            }
-            .into(),
-        );
+    let prefix: Vec<Term> = (0..*index)
+        .map(|j| Proj::new(*head.clone(), j).into())
+        .collect();
+    let prefix_refs: Vec<&Term> = prefix.iter().collect();
 
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
-    })?;
-
-    let field_labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
-    let field_terms = field_labels
-        .iter()
-        .map(|l| Term::from(Var::free(l)))
-        .collect::<Vec<_>>();
-    let field_refs = field_terms.iter().collect::<Vec<_>>();
-    let tuple_term: Term = Tuple::new(field_terms.clone()).into();
-    let type_ = motive.open(&[head.as_ref()]);
-
-    context.with_frame(|context| {
-        for i in 0..n {
-            let field_ty = fields[i].open(&field_refs[..i]);
-            context.assume(&field_labels[i], &field_ty);
-        }
-
-        erase(
-            context,
-            &tail.open(&field_refs),
-            &motive.open(&[&tuple_term]),
-        )
-        .map(|_| ())
-    })?;
-
-    Ok(type_)
+    Ok(fields[*index].open(&prefix_refs))
 }
 
 fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Error> {
@@ -486,6 +452,8 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         return Err(Error::cannot_infer(term.clone()));
     }
 
+    let canonical = reduce(context, head.as_ref())?;
+
     for atom in &atoms {
         let body = if let Some(body) = cases.get(atom) {
             body
@@ -496,8 +464,14 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         let expected = motive.open(&[&atom.clone().into()]);
 
         context.with_frame(|context| {
-            if let Term::Var(var) = head.as_ref() {
-                context.define(var.unwrap(), &atom.clone().into());
+            match &canonical {
+                Term::Var(var) => {
+                    context.define(var.unwrap(), &atom.clone().into());
+                }
+                Term::Proj(Proj { head: base, index }) => {
+                    context.define_proj((**base).clone(), *index, &atom.clone().into());
+                }
+                _ => {}
             }
 
             erase(context, body, &expected)
@@ -574,7 +548,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::FuncType(ft) => infer_func_type(context, ft),
         Term::Apply(apply) => infer_apply(context, apply, term),
         Term::TupleType(tt) => infer_tuple_type(context, tt),
-        Term::Split(split) => infer_split(context, split, term),
+        Term::Proj(proj) => infer_proj(context, proj, term),
         Term::AtomType(_) => Ok(Type.into()),
         Term::Match(m) => infer_match(context, m, term),
         Term::Let(let_) => infer_let(context, let_),
@@ -1408,68 +1382,40 @@ fn erase_nat_match(
     .into())
 }
 
-fn erase_split(
+fn erase_proj(
     context: &mut Context,
-    split: &Split,
+    proj: &Proj,
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Split { head, motive, tail } = split;
+    let Proj { head, index } = proj;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let type_fields = if let Term::TupleType(TupleType { fields }) = &head_type {
-        fields.clone()
+    let TupleType { fields } = if let Term::TupleType(tt) = &head_type {
+        tt.clone()
     } else {
         return Err(Error::cannot_infer(term.clone()));
     };
 
-    let n = type_fields.len();
-    let head_label = context.fresh();
+    if *index >= fields.len() {
+        return Err(Error::cannot_infer(term.clone()));
+    }
 
-    context.with_frame(|context| {
-        context.assume(
-            &head_label,
-            &TupleType {
-                fields: type_fields.clone(),
-            }
-            .into(),
-        );
+    let prefix: Vec<Term> = (0..*index)
+        .map(|j| Proj::new(*head.clone(), j).into())
+        .collect();
+    let prefix_refs: Vec<&Term> = prefix.iter().collect();
+    let field_type = fields[*index].open(&prefix_refs);
 
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-    })?;
+    expect(context, term, &field_type, expected)?;
 
-    let field_labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
-    let field_terms = field_labels
-        .iter()
-        .map(|l| Term::from(Var::free(l)))
-        .collect::<Vec<_>>();
-    let field_refs = field_terms.iter().collect::<Vec<_>>();
-    let tail_opened = tail.open(&field_refs);
-    let tuple_term: Term = Tuple::new(field_terms.clone()).into();
-    let tail_type = motive.open(&[&tuple_term]);
-
-    let erased = context.with_frame(|context| {
-        for i in 0..n {
-            let field_ty = type_fields[i].open(&field_refs[..i]);
-            context.assume(&field_labels[i], &field_ty);
-        }
-
-        Ok::<_, Error>(ersd::Split {
-            head: erase(context, head, &head_type)?.into(),
-            fields: field_labels.clone(),
-            tail: erase(context, &tail_opened, &tail_type)?.into(),
-        })
-    })?;
-
-    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-    Ok(erased.into())
+    Ok(ersd::Proj {
+        head: erase(context, head, &head_type)?.into(),
+        index: *index,
+    }
+    .into())
 }
 
 fn erase_atom(
@@ -1527,6 +1473,8 @@ fn erase_match(
         return Err(Error::cannot_infer(term.clone()));
     }
 
+    let canonical = reduce(context, head.as_ref())?;
+
     let cases = atoms
         .iter()
         .map(|atom| {
@@ -1539,8 +1487,14 @@ fn erase_match(
             let expected = motive.open(&[&atom.clone().into()]);
 
             context.with_frame(|context| {
-                if let Term::Var(var) = head.as_ref() {
-                    context.define(var.unwrap(), &atom.clone().into());
+                match &canonical {
+                    Term::Var(var) => {
+                        context.define(var.unwrap(), &atom.clone().into());
+                    }
+                    Term::Proj(Proj { head: base, index }) => {
+                        context.define_proj((**base).clone(), *index, &atom.clone().into());
+                    }
+                    _ => {}
                 }
 
                 erase(context, body, &expected).map(Into::into)
@@ -1710,7 +1664,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
             Ok(ersd::Term::Erased)
         }
         Term::Tuple(tuple) => erase_tuple(context, tuple, expected),
-        Term::Split(split) => erase_split(context, split, term, expected),
+        Term::Proj(proj) => erase_proj(context, proj, term, expected),
         Term::AtomType(_) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
@@ -2311,54 +2265,6 @@ mod tests {
         ]));
 
         erase(&mut context, &tuple, &tuple_type).unwrap();
-    }
-
-    #[test]
-    fn infer_split_returns_motive_applied_to_head() {
-        let mut context = context();
-
-        let tuple_type = Term::from(TupleType::new([
-            ("x", Term::from(AtomType::new(["a", "b"]))),
-            ("y", Term::from(AtomType::new(["c"]))),
-        ]));
-
-        context.assume("p", &tuple_type);
-
-        let split = Term::from(Split::new(
-            Var::free("p"),
-            "m",
-            AtomType::new(["a", "b"]),
-            ["x", "y"],
-            Var::free("x"),
-        ));
-
-        assert_eq!(
-            infer(&mut context, &split).unwrap(),
-            Term::from(AtomType::new(["a", "b"])),
-        );
-    }
-
-    #[test]
-    fn erase_split_three_field_tuple() {
-        let mut context = context();
-
-        let tuple_type = Term::from(TupleType::new([
-            ("x", Term::from(AtomType::new(["a", "b"]))),
-            ("y", Term::from(AtomType::new(["c"]))),
-            ("z", Term::from(AtomType::new(["d", "e"]))),
-        ]));
-
-        context.assume("p", &tuple_type);
-
-        let split = Term::from(Split::new(
-            Var::free("p"),
-            "m",
-            AtomType::new(["c"]),
-            ["x", "y", "z"],
-            Var::free("y"),
-        ));
-
-        erase(&mut context, &split, &Term::from(AtomType::new(["c"]))).unwrap();
     }
 
     #[test]

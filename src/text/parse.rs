@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Bin, DefFrom, DefInto, Entrypoint, Func, FuncType, Let, Match,
-        Module, Name, Nat, NatFold, NatMatch, Prim, Rec, RecItem, Split, Term, TopDef, TopItem,
+        Module, Name, Nat, NatFold, NatMatch, Prim, Proj, Rec, RecItem, Term, TopDef, TopItem,
         TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
@@ -14,7 +14,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "split", "mod", "use", "pub", "end", "def",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "def",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -732,34 +732,6 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         })
 }
 
-fn parse_split<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("split"))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(":"))
-        .and(parse_identifier())
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(";"))
-        .and_drop(parse_literal("|"))
-        .and_drop(parse_literal("("))
-        .and(sep_by1(parse_identifier, || parse_literal(",")))
-        .and_drop(parse_literal(")"))
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .map(|((((head, motive_label), motive), field_labels), tail)| {
-            Term::Split(Split {
-                head: head.into(),
-                motive_label: motive_label.to_string(),
-                motive: motive.into(),
-                field_labels: field_labels
-                    .into_iter()
-                    .map(|label| label.to_string())
-                    .collect(),
-                tail: tail.into(),
-            })
-        })
-}
-
 fn parse_let<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("let"))
         .and_keep(parse_identifier())
@@ -803,6 +775,24 @@ fn parse_coerce<'a>() -> Parser<'a, Term> {
     })
 }
 
+fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
+    catch(
+        take_exact(".")
+            .and_keep(take_while(|c: char| c.is_ascii_digit()))
+            .flat_map(|digits: &str| {
+                if digits.is_empty() {
+                    fail("Expected numeric index after '.'")
+                } else {
+                    match digits.parse::<usize>() {
+                        Ok(n) => pure(n),
+                        Err(_) => fail("Numeric index out of range"),
+                    }
+                }
+            })
+            .and_drop(parse_whitespace()),
+    )
+}
+
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     parse_type()
         .or(parse_prim())
@@ -812,11 +802,19 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
         .or(parse_tuple())
         .or(parse_parens())
         .or(parse_name().map(Term::Name))
+        .and(many0(parse_proj_suffix))
+        .map(|(head, indices)| {
+            indices.into_iter().fold(head, |acc, index| {
+                Term::Proj(Proj {
+                    head: acc.into(),
+                    index,
+                })
+            })
+        })
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
     parse_rec()
-        .or(parse_split())
         .or(parse_let())
         .or(parse_nat_fold())
         .or(parse_nat_match())
@@ -1037,28 +1035,6 @@ mod tests {
                     ],
                 })
                 .into(),
-            })
-        );
-    }
-
-    #[test]
-    fn parse_split_with_motive() {
-        assert_eq!(
-            "split ('left, 'right) : p => Type; | (x, y) => p"
-                .parse::<Term>()
-                .unwrap(),
-            Term::Split(Split {
-                head: Term::Tuple(Tuple {
-                    fields: vec![
-                        Term::Atom(Atom::from("left")).into(),
-                        Term::Atom(Atom::from("right")).into(),
-                    ],
-                })
-                .into(),
-                motive_label: "p".to_string(),
-                motive: Term::Type.into(),
-                field_labels: vec!["x".to_string(), "y".to_string()],
-                tail: Term::Name(Name::from(["p".to_string()])).into(),
             })
         );
     }
@@ -1304,6 +1280,43 @@ mod tests {
                 "bar".to_string(),
                 "baz".to_string()
             ]))
+        );
+    }
+
+    #[test]
+    fn parse_proj_numeric_suffix() {
+        assert_eq!(
+            "(r).0".parse::<Term>().unwrap(),
+            Term::Proj(Proj {
+                head: Term::Name(Name::from(["r".to_string()])).into(),
+                index: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_proj_chained_suffixes() {
+        assert_eq!(
+            "(r).1.0".parse::<Term>().unwrap(),
+            Term::Proj(Proj {
+                head: Term::Proj(Proj {
+                    head: Term::Name(Name::from(["r".to_string()])).into(),
+                    index: 1,
+                })
+                .into(),
+                index: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_proj_on_name_directly() {
+        assert_eq!(
+            "r.2".parse::<Term>().unwrap(),
+            Term::Proj(Proj {
+                head: Term::Name(Name::from(["r".to_string()])).into(),
+                index: 2,
+            })
         );
     }
 }

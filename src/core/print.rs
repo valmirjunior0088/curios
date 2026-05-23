@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim, Rec,
-        Scope, Seal, Sealed, Split, Term, Tuple, TupleType, Two, Unseal, Var,
+        Apply, Atom, AtomType, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim,
+        Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -482,28 +482,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ),
             pure(")"),
         ]),
-        Term::Split(Split { head, motive, tail }) => {
-            let (motive_label, motive) = open_scope_one(motive, depth + 2);
-            let n = tail.arity();
-            let labels = labels_from(depth, n);
-            let label_terms_vec = label_terms(&labels);
-            let label_refs = label_terms_vec.iter().collect::<Vec<_>>();
-            let tail = tail.open(&label_refs);
-
-            flat([
-                pure("split "),
-                print_term(*head, depth),
-                pure(" : "),
-                pure(motive_label),
-                pure(" => "),
-                print_term(motive, depth + 3),
-                pure(";"),
-                pure("\n| ("),
-                sep_flat(labels.into_iter().map(pure), || pure(", ")),
-                pure(") => "),
-                print_term(tail, depth + 2),
-            ])
-        }
+        Term::Proj(Proj { head, index }) => flat([
+            pure("("),
+            print_term(*head, depth),
+            pure(format!(").{index}")),
+        ]),
         Term::AtomType(AtomType { atoms }) => flat([
             pure("'["),
             sep_flat(atoms.into_iter().map(|atom| pure(atom.as_string())), || {

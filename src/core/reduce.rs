@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Seal, Split,
-        Term, Tuple, Unseal, Var,
+        Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Proj, Seal, Term,
+        Tuple, Unseal, Var,
     },
     std::time::{Duration, Instant},
 };
@@ -677,6 +677,58 @@ impl Reduce {
         }
     }
 
+    fn reduce_proj(&mut self, context: &mut Context, proj: Proj) -> Result<Step, Preempted> {
+        let Proj { head, index } = proj;
+        match self.reduce(context, *head)? {
+            Term::Tuple(Tuple { fields }) => Ok(Step::Continue(
+                *fields
+                    .into_iter()
+                    .nth(index)
+                    .expect("Proj: index out of bounds"),
+            )),
+            head => match context.projection(&head, index) {
+                Some(v) => Ok(Step::Continue(v.clone())),
+                None => Ok(Step::Break(Proj { head: head.into(), index }.into())),
+            },
+        }
+    }
+
+    fn reduce_func_eta(&mut self, context: &mut Context, func: Func) -> Result<Step, Preempted> {
+        let fresh = context.fresh();
+        let y: Term = Var::free(&fresh).into();
+        match func.body.open(&[&y]) {
+            Term::Apply(Apply { head, param })
+                if matches!(param.as_ref(), Term::Var(v) if v.unwrap() == fresh.as_str())
+                    && !head.free_vars().contains(&fresh) =>
+            {
+                Ok(Step::Continue(*head))
+            }
+            _ => Ok(Step::Break(func.into())),
+        }
+    }
+
+    fn eta_reduce_tuple(tuple: Tuple) -> Term {
+        let n = tuple.fields.len();
+        if n == 0 {
+            return tuple.into();
+        }
+        let mut base: Option<Term> = None;
+        for (i, f) in tuple.fields.iter().enumerate() {
+            match f.as_ref() {
+                Term::Proj(Proj { head, index }) if *index == i => {
+                    let h = (**head).clone();
+                    match &base {
+                        None => base = Some(h),
+                        Some(b) if b == &h => {}
+                        _ => return tuple.into(),
+                    }
+                }
+                _ => return tuple.into(),
+            }
+        }
+        base.unwrap()
+    }
+
     fn reduce_nat_fold(
         &mut self,
         context: &mut Context,
@@ -707,24 +759,6 @@ impl Reduce {
                     motive,
                     zero_case,
                     succ_case,
-                }
-                .into(),
-            )),
-        }
-    }
-
-    fn reduce_split(&mut self, context: &mut Context, split: Split) -> Result<Step, Preempted> {
-        let Split { head, motive, tail } = split;
-        match self.reduce(context, *head)? {
-            Term::Tuple(Tuple { fields }) => {
-                let refs = fields.iter().map(|f| f.as_ref()).collect::<Vec<_>>();
-                Ok(Step::Continue(tail.open(&refs)))
-            }
-            head => Ok(Step::Break(
-                Split {
-                    head: head.into(),
-                    motive,
-                    tail,
                 }
                 .into(),
             )),
@@ -827,11 +861,13 @@ impl Reduce {
                 Term::NatFold(nat_fold) => self.reduce_nat_fold(context, nat_fold)?,
                 Term::NatMatch(nm) => self.reduce_nat_match(context, nm)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
-                Term::Split(split) => self.reduce_split(context, split)?,
+                Term::Proj(proj) => self.reduce_proj(context, proj)?,
+                Term::Func(func) => self.reduce_func_eta(context, func)?,
                 Term::Match(m) => self.reduce_match(context, m)?,
                 Term::Let(let_) => self.reduce_let(let_),
                 Term::Unseal(unseal) => self.reduce_unseal(context, unseal)?,
                 Term::Var(var) => self.reduce_var(context, var),
+                Term::Tuple(t) => Step::Break(Self::eta_reduce_tuple(t)),
                 term => Step::Break(term),
             };
 
@@ -864,25 +900,6 @@ mod tests {
         let term = Apply::many(Func::new("x", Var::free("x")), [Atom::from("ok")]);
 
         assert_eq!(reduce(&mut context, &term), Ok(Atom::from("ok").into()));
-    }
-
-    #[test]
-    fn reduce_split_opens_pair_tail() {
-        let mut context = context();
-
-        let term = Split::new(
-            Tuple::new([Atom::from("left"), Atom::from("right")]),
-            "p",
-            Type,
-            ["x", "y"],
-            Tuple::new([Var::free("x"), Var::free("y")]),
-        )
-        .into();
-
-        assert_eq!(
-            reduce(&mut context, &term),
-            Ok(Tuple::new([Atom::from("left"), Atom::from("right")]).into())
-        );
     }
 
     #[test]
@@ -1099,5 +1116,49 @@ mod tests {
                 Term::Prim(Prim::Nat(30)),
             ])))
         );
+    }
+
+    #[test]
+    fn reduce_proj_beta_reduces() {
+        let mut context = context();
+
+        let term: Term =
+            Proj::new(Tuple::new([Atom::from("a"), Atom::from("b")]), 1).into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(Atom::from("b").into()));
+    }
+
+    #[test]
+    fn reduce_proj_table_lookup() {
+        let mut context = context();
+
+        context.define_proj(Var::free("r").into(), 0, &Atom::from("ok").into());
+
+        let term: Term = Proj::new(Var::free("r"), 0).into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(Atom::from("ok").into()));
+    }
+
+    #[test]
+    fn eta_reduce_tuple_fires() {
+        let mut context = context();
+
+        let term: Term = Tuple::new([
+            Proj::new(Var::free("r"), 0),
+            Proj::new(Var::free("r"), 1),
+        ])
+        .into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(Var::free("r").into()));
+    }
+
+    #[test]
+    fn eta_reduce_func_fires() {
+        let mut context = context();
+
+        let term: Term =
+            Func::new("y", Apply::new(Var::free("f"), Var::free("y"))).into();
+
+        assert_eq!(reduce(&mut context, &term), Ok(Var::free("f").into()));
     }
 }

@@ -228,6 +228,21 @@ impl Tuple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Proj {
+    pub head: Subterm,
+    pub index: usize,
+}
+
+impl Proj {
+    pub fn new<H: Into<Term>>(head: H, index: usize) -> Self {
+        Self {
+            head: head.into().into(),
+            index,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NatFold {
     pub head: Subterm,
     pub motive: Scope<One>,
@@ -300,44 +315,6 @@ impl NatMatch {
                 .map(|(n, b)| (n, b.into().into()))
                 .collect(),
             default: default.into().into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Split {
-    pub head: Subterm,
-    pub motive: Scope<One>,
-    pub tail: Scope<Many>,
-}
-
-impl Split {
-    pub fn new<H, ML, M, I, L, T>(
-        head: H,
-        motive_label: ML,
-        motive: M,
-        field_labels: I,
-        tail: T,
-    ) -> Self
-    where
-        H: Into<Term>,
-        ML: Into<String>,
-        M: Into<Term>,
-        I: IntoIterator<Item = L>,
-        L: Into<String>,
-        T: Into<Term>,
-    {
-        let motive_label = motive_label.into();
-        let field_labels = field_labels
-            .into_iter()
-            .map(Into::into)
-            .collect::<Vec<String>>();
-        let label_strs = field_labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-
-        Self {
-            head: head.into().into(),
-            motive: Scope::close(One, &[motive_label.as_str()], motive),
-            tail: Scope::close(Many(field_labels.len()), &label_strs, tail),
         }
     }
 }
@@ -529,7 +506,7 @@ pub enum Term {
     Apply(Apply),
     TupleType(TupleType),
     Tuple(Tuple),
-    Split(Split),
+    Proj(Proj),
     AtomType(AtomType),
     Atom(Atom),
     Match(Match),
@@ -653,9 +630,9 @@ impl From<NatMatch> for Term {
     }
 }
 
-impl From<Split> for Term {
-    fn from(value: Split) -> Self {
-        Self::Split(value)
+impl From<Proj> for Term {
+    fn from(value: Proj) -> Self {
+        Self::Proj(value)
     }
 }
 
@@ -967,11 +944,10 @@ where
         }
     }
 
-    fn visit_split(&mut self, split: &Split) -> Split {
-        Split {
-            head: self.visit_subterm(&split.head),
-            motive: self.visit_scope(&split.motive),
-            tail: self.visit_scope(&split.tail),
+    fn visit_proj(&mut self, proj: &Proj) -> Proj {
+        Proj {
+            head: self.visit_subterm(&proj.head),
+            index: proj.index,
         }
     }
 
@@ -1038,7 +1014,7 @@ where
             Term::Apply(apply) => self.visit_apply(apply).into(),
             Term::TupleType(tt) => self.visit_tuple_type(tt).into(),
             Term::Tuple(t) => self.visit_tuple(t).into(),
-            Term::Split(split) => self.visit_split(split).into(),
+            Term::Proj(proj) => self.visit_proj(proj).into(),
             Term::AtomType(at) => at.clone().into(),
             Term::Atom(atom) => atom.clone().into(),
             Term::Match(m) => self.visit_match(m).into(),

@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Func, Let, Match, NatFold, Prim, Rec, Split, Term, Tuple},
+    super::{Atom, Func, Let, Match, NatFold, Prim, Proj, Rec, Term, Tuple},
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
@@ -219,16 +219,10 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             sep_flat(fields.iter().map(|f| print_term(f)), || pure(", ")),
             pure(")"),
         ]),
-        Term::Split(Split { head, fields, tail }) => flat([
-            pure("split "),
+        Term::Proj(Proj { head, index }) => flat([
+            pure("("),
             print_term(head),
-            pure("; | ("),
-            sep_flat(
-                fields.iter().map(|s| pure(format!("#{}", s.as_str()))),
-                || pure(", "),
-            ),
-            pure(") =>\n"),
-            print_term(tail),
+            pure(format!(").{index}")),
         ]),
         Term::Atom(atom) => print_atom(atom),
         Term::Match(Match { head, cases }) => {

@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Bin, DefFrom, DefInto, Entrypoint, Func, FuncType, Let, Match,
-        Module, Nat, NatFold, NatMatch, Prim, Rec, Split, Term, TopDef, TopItem, TopLet, TopMod,
+        Module, Nat, NatFold, NatMatch, Prim, Proj, Rec, Term, TopDef, TopItem, TopLet, TopMod,
         TopUse, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -463,24 +463,9 @@ fn print_term(term: Term) -> Printer<'static> {
                 indent(flat([print_term(*default), pure(";")])),
             ])
         }
-        Term::Split(Split {
-            head,
-            motive_label,
-            motive,
-            field_labels,
-            tail,
-        }) => flat([
-            pure("split "),
-            print_term(*head),
-            pure(" : "),
-            pure(motive_label),
-            pure(" => "),
-            print_term(*motive),
-            pure("; | ("),
-            sep_flat(field_labels.into_iter().map(pure), || pure(", ")),
-            pure(") =>\n"),
-            print_term(*tail),
-        ]),
+        Term::Proj(Proj { head, index }) => {
+            flat([pure("("), print_term(*head), pure(format!(").{index}"))])
+        }
         Term::Match(Match {
             head,
             motive_label,

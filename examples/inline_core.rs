@@ -35,25 +35,29 @@ fn main() {
                     core::Term::from(core::Atom::from("left")),
                     core::Type.into(),
                 ]),
-                core::Split::new(
-                    core::Var::free("p"),
-                    "_",
-                    core::Type,
-                    ["label", "value"],
-                    core::Match::new(
-                        core::Var::free("label"),
-                        "_",
+                core::Let::new(
+                    "label",
+                    core::AtomType::new(["left", "right"]),
+                    core::Proj::new(core::Var::free("p"), 0),
+                    core::Let::new(
+                        "value",
                         core::Type,
-                        [
-                            (
-                                "left",
-                                core::Apply::many(
-                                    core::Var::free("id"),
-                                    [core::Var::free("value")],
+                        core::Proj::new(core::Var::free("p"), 1),
+                        core::Match::new(
+                            core::Var::free("label"),
+                            "_",
+                            core::Type,
+                            [
+                                (
+                                    "left",
+                                    core::Apply::many(
+                                        core::Var::free("id"),
+                                        [core::Var::free("value")],
+                                    ),
                                 ),
-                            ),
-                            ("right", core::Type.into()),
-                        ],
+                                ("right", core::Type.into()),
+                            ],
+                        ),
                     ),
                 ),
             ),

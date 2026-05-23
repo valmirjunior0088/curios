@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, NatMatch, Preempted, Prim,
-        Rec, Seal, Sealed, Split, Term, Tuple, TupleType, Unseal, Var, reduce,
+        Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -9,35 +9,47 @@ use {
     },
 };
 
-pub fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Preempted> {
-    Convert::new(context.timeout(), this.clone(), that.clone()).convert(context)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Goal {
+    pub type_: Term,
+    pub this: Term,
+    pub that: Term,
+}
+
+pub fn convert(
+    context: &mut Context,
+    type_: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, Preempted> {
+    Convert::new(context.timeout(), type_.clone(), this.clone(), that.clone()).convert(context)
 }
 
 #[derive(Debug)]
 struct Convert {
     deadline: Instant,
-    history: HashSet<(Term, Term)>,
-    pending: VecDeque<(Term, Term)>,
+    history: HashSet<Goal>,
+    pending: VecDeque<Goal>,
 }
 
 impl Convert {
-    fn new(timeout: Duration, this: Term, that: Term) -> Self {
+    fn new(timeout: Duration, type_: Term, this: Term, that: Term) -> Self {
         Self {
             deadline: Instant::now() + timeout,
             history: HashSet::new(),
-            pending: VecDeque::from([(this, that)]),
+            pending: VecDeque::from([Goal { type_, this, that }]),
         }
     }
 
-    fn in_history(&mut self, this: &Term, that: &Term) -> bool {
-        !self.history.insert((this.clone(), that.clone()))
+    fn in_history(&mut self, goal: &Goal) -> bool {
+        !self.history.insert(goal.clone())
     }
 
-    fn enqueue(&mut self, this: Term, that: Term) {
-        self.pending.push_back((this, that));
+    fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
+        self.pending.push_back(Goal { type_, this, that });
     }
 
-    fn dequeue(&mut self) -> Result<Option<(Term, Term)>, Preempted> {
+    fn dequeue(&mut self) -> Result<Option<Goal>, Preempted> {
         if Instant::now() > self.deadline {
             return Err(Preempted);
         }
@@ -56,7 +68,7 @@ impl Convert {
             (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
             (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
             (Prim::ArrType(this), Prim::ArrType(that)) => {
-                self.enqueue(*this, *that);
+                self.enqueue(Type.into(), *this, *that);
 
                 Ok(true)
             }
@@ -99,8 +111,8 @@ impl Convert {
             | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
             | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
-                self.enqueue(*this_left, *that_left);
-                self.enqueue(*this_right, *that_right);
+                self.enqueue(Type.into(), *this_left, *that_left);
+                self.enqueue(Type.into(), *this_right, *that_right);
 
                 Ok(true)
             }
@@ -119,7 +131,7 @@ impl Convert {
             | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::ArrLen(this), Prim::ArrLen(that))
             | (Prim::BinLen(this), Prim::BinLen(that)) => {
-                self.enqueue(*this, *that);
+                self.enqueue(Type.into(), *this, *that);
 
                 Ok(true)
             }
@@ -127,9 +139,9 @@ impl Convert {
                 Prim::BinSlice(this_bin, this_start, this_end),
                 Prim::BinSlice(that_bin, that_start, that_end),
             ) => {
-                self.enqueue(*this_bin, *that_bin);
-                self.enqueue(*this_start, *that_start);
-                self.enqueue(*this_end, *that_end);
+                self.enqueue(Type.into(), *this_bin, *that_bin);
+                self.enqueue(Type.into(), *this_start, *that_start);
+                self.enqueue(Type.into(), *this_end, *that_end);
 
                 Ok(true)
             }
@@ -137,9 +149,9 @@ impl Convert {
                 Prim::ArrSlice(this_list, this_start, this_end),
                 Prim::ArrSlice(that_list, that_start, that_end),
             ) => {
-                self.enqueue(*this_list, *that_list);
-                self.enqueue(*this_start, *that_start);
-                self.enqueue(*this_end, *that_end);
+                self.enqueue(Type.into(), *this_list, *that_list);
+                self.enqueue(Type.into(), *this_start, *that_start);
+                self.enqueue(Type.into(), *this_end, *that_end);
 
                 Ok(true)
             }
@@ -149,7 +161,7 @@ impl Convert {
                 }
 
                 for (this, that) in this_elems.into_iter().zip(that_elems) {
-                    self.enqueue(*this, *that);
+                    self.enqueue(Type.into(), *this, *that);
                 }
 
                 Ok(true)
@@ -159,7 +171,7 @@ impl Convert {
                     return Ok(false);
                 }
                 for (this, that) in this_ops.into_iter().zip(that_ops) {
-                    self.enqueue(*this, *that);
+                    self.enqueue(Type.into(), *this, *that);
                 }
                 Ok(true)
             }
@@ -168,7 +180,7 @@ impl Convert {
                     return Ok(false);
                 }
                 for (this, that) in this_ops.into_iter().zip(that_ops) {
-                    self.enqueue(*this, *that);
+                    self.enqueue(Type.into(), *this, *that);
                 }
                 Ok(true)
             }
@@ -182,10 +194,14 @@ impl Convert {
         this: FuncType,
         that: FuncType,
     ) -> Result<bool, Preempted> {
-        self.enqueue(*this.input, *that.input);
+        self.enqueue(Type.into(), *this.input, *that.input);
 
         let label = Var::free(context.fresh()).into();
-        self.enqueue(this.output.open(&[&label]), that.output.open(&[&label]));
+        self.enqueue(
+            Type.into(),
+            this.output.open(&[&label]),
+            that.output.open(&[&label]),
+        );
 
         Ok(true)
     }
@@ -195,16 +211,21 @@ impl Convert {
         context: &mut Context,
         this: Func,
         that: Func,
+        type_: Term,
     ) -> Result<bool, Preempted> {
-        let label = Var::free(context.fresh()).into();
-        self.enqueue(this.body.open(&[&label]), that.body.open(&[&label]));
+        let y: Term = Var::free(context.fresh()).into();
+        let output_type = match reduce(context, &type_)? {
+            Term::FuncType(FuncType { output, .. }) => output.open(&[&y]),
+            _ => Type.into(),
+        };
+        self.enqueue(output_type, this.body.open(&[&y]), that.body.open(&[&y]));
 
         Ok(true)
     }
 
     fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, Preempted> {
-        self.enqueue(*this.head, *that.head);
-        self.enqueue(*this.param, *that.param);
+        self.enqueue(Type.into(), *this.head, *that.head);
+        self.enqueue(Type.into(), *this.param, *that.param);
 
         Ok(true)
     }
@@ -227,6 +248,7 @@ impl Convert {
 
         for i in 0..n {
             self.enqueue(
+                Type.into(),
                 this.fields[i].open(&label_refs[..i]),
                 that.fields[i].open(&label_refs[..i]),
             );
@@ -241,9 +263,17 @@ impl Convert {
         }
 
         for (a, b) in this.fields.into_iter().zip(that.fields) {
-            self.enqueue(*a, *b);
+            self.enqueue(Type.into(), *a, *b);
         }
 
+        Ok(true)
+    }
+
+    fn compare_proj(&mut self, this: Proj, that: Proj) -> Result<bool, Preempted> {
+        if this.index != that.index {
+            return Ok(false);
+        }
+        self.enqueue(Type.into(), *this.head, *that.head);
         Ok(true)
     }
 
@@ -253,46 +283,24 @@ impl Convert {
         this: NatFold,
         that: NatFold,
     ) -> Result<bool, Preempted> {
-        self.enqueue(*this.head, *that.head);
+        self.enqueue(Type.into(), *this.head, *that.head);
 
         let motive_label = Var::free(context.fresh()).into();
         self.enqueue(
+            Type.into(),
             this.motive.open(&[&motive_label]),
             that.motive.open(&[&motive_label]),
         );
 
-        self.enqueue(*this.zero_case, *that.zero_case);
+        self.enqueue(Type.into(), *this.zero_case, *that.zero_case);
 
         let pred_label: Term = Var::free(context.fresh()).into();
         let ih_label: Term = Var::free(context.fresh()).into();
         self.enqueue(
+            Type.into(),
             this.succ_case.open(&[&pred_label, &ih_label]),
             that.succ_case.open(&[&pred_label, &ih_label]),
         );
-
-        Ok(true)
-    }
-
-    fn compare_split(
-        &mut self,
-        context: &mut Context,
-        this: Split,
-        that: Split,
-    ) -> Result<bool, Preempted> {
-        self.enqueue(*this.head, *that.head);
-
-        let motive_label = Var::free(context.fresh()).into();
-        self.enqueue(
-            this.motive.open(&[&motive_label]),
-            that.motive.open(&[&motive_label]),
-        );
-
-        let n = this.tail.arity();
-        let labels = (0..n)
-            .map(|_| Term::from(Var::free(context.fresh())))
-            .collect::<Vec<_>>();
-        let label_refs = labels.iter().collect::<Vec<_>>();
-        self.enqueue(this.tail.open(&label_refs), that.tail.open(&label_refs));
 
         Ok(true)
     }
@@ -311,10 +319,14 @@ impl Convert {
         this: NatMatch,
         that: NatMatch,
     ) -> Result<bool, Preempted> {
-        self.enqueue(*this.head, *that.head);
+        self.enqueue(Type.into(), *this.head, *that.head);
 
         let label = Var::free(context.fresh()).into();
-        self.enqueue(this.motive.open(&[&label]), that.motive.open(&[&label]));
+        self.enqueue(
+            Type.into(),
+            this.motive.open(&[&label]),
+            that.motive.open(&[&label]),
+        );
 
         if this.cases.len() != that.cases.len() {
             return Ok(false);
@@ -324,10 +336,10 @@ impl Convert {
             if kl != kr {
                 return Ok(false);
             }
-            self.enqueue(*vl, *vr);
+            self.enqueue(Type.into(), *vl, *vr);
         }
 
-        self.enqueue(*this.default, *that.default);
+        self.enqueue(Type.into(), *this.default, *that.default);
         Ok(true)
     }
 
@@ -337,10 +349,14 @@ impl Convert {
         this: Match,
         that: Match,
     ) -> Result<bool, Preempted> {
-        self.enqueue(*this.head, *that.head);
+        self.enqueue(Type.into(), *this.head, *that.head);
 
         let label = Var::free(context.fresh()).into();
-        self.enqueue(this.motive.open(&[&label]), that.motive.open(&[&label]));
+        self.enqueue(
+            Type.into(),
+            this.motive.open(&[&label]),
+            that.motive.open(&[&label]),
+        );
 
         if this.cases.len() != that.cases.len() {
             return Ok(false);
@@ -353,7 +369,7 @@ impl Convert {
                 return Ok(false);
             }
 
-            self.enqueue(*this_body, *that_body);
+            self.enqueue(Type.into(), *this_body, *that_body);
         }
 
         Ok(true)
@@ -366,20 +382,24 @@ impl Convert {
         that: Sealed,
     ) -> Result<bool, Preempted> {
         let label = Var::free(context.fresh()).into();
-        self.enqueue(*this.witness, *that.witness);
-        self.enqueue(this.tail.open(&[&label]), that.tail.open(&[&label]));
+        self.enqueue(Type.into(), *this.witness, *that.witness);
+        self.enqueue(
+            Type.into(),
+            this.tail.open(&[&label]),
+            that.tail.open(&[&label]),
+        );
         Ok(true)
     }
 
     fn compare_seal(&mut self, this: Seal, that: Seal) -> Result<bool, Preempted> {
-        self.enqueue(*this.witness, *that.witness);
-        self.enqueue(*this.value, *that.value);
+        self.enqueue(Type.into(), *this.witness, *that.witness);
+        self.enqueue(Type.into(), *this.value, *that.value);
         Ok(true)
     }
 
     fn compare_unseal(&mut self, this: Unseal, that: Unseal) -> Result<bool, Preempted> {
-        self.enqueue(*this.witness, *that.witness);
-        self.enqueue(*this.value, *that.value);
+        self.enqueue(Type.into(), *this.witness, *that.witness);
+        self.enqueue(Type.into(), *this.value, *that.value);
         Ok(true)
     }
 
@@ -402,21 +422,86 @@ impl Convert {
         for ((this_type, this_body), (that_type, that_body)) in
             this.items.into_iter().zip(that.items)
         {
-            self.enqueue(this_type.open(&labels), that_type.open(&labels));
-            self.enqueue(this_body.open(&labels), that_body.open(&labels));
+            self.enqueue(Type.into(), this_type.open(&labels), that_type.open(&labels));
+            self.enqueue(Type.into(), this_body.open(&labels), that_body.open(&labels));
         }
 
-        self.enqueue(this.tail.open(&labels), that.tail.open(&labels));
+        self.enqueue(Type.into(), this.tail.open(&labels), that.tail.open(&labels));
 
         Ok(true)
     }
 
+    fn eta_expand_func(
+        &mut self,
+        context: &mut Context,
+        func: Func,
+        other: Term,
+        type_: Term,
+    ) -> Result<bool, Preempted> {
+        let y: Term = Var::free(context.fresh()).into();
+        let output_type = match reduce(context, &type_)? {
+            Term::FuncType(FuncType { output, .. }) => output.open(&[&y]),
+            _ => Type.into(),
+        };
+        self.enqueue(
+            output_type,
+            func.body.open(&[&y]),
+            Apply::new(other, y).into(),
+        );
+        Ok(true)
+    }
+
+    fn eta_expand_tuple(&mut self, tuple: Tuple, other: Term) -> Result<bool, Preempted> {
+        for (i, field) in tuple.fields.into_iter().enumerate() {
+            self.enqueue(Type.into(), *field, Proj::new(other.clone(), i).into());
+        }
+        Ok(true)
+    }
+
+    fn eta_expand_neutral(
+        &mut self,
+        context: &mut Context,
+        this: Term,
+        that: Term,
+        type_: Term,
+    ) -> Result<bool, Preempted> {
+        match reduce(context, &type_)? {
+            Term::FuncType(FuncType { output, .. }) => {
+                let y: Term = Var::free(context.fresh()).into();
+                let output_type = output.open(&[&y]);
+                self.enqueue(
+                    output_type,
+                    Apply::new(this, y.clone()).into(),
+                    Apply::new(that, y).into(),
+                );
+                Ok(true)
+            }
+            Term::TupleType(TupleType { fields }) => {
+                for i in 0..fields.len() {
+                    self.enqueue(
+                        Type.into(),
+                        Proj::new(this.clone(), i).into(),
+                        Proj::new(that.clone(), i).into(),
+                    );
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
-        while let Some((this, that)) = self.dequeue()? {
+        while let Some(Goal { type_, this, that }) = self.dequeue()? {
             let this = reduce(context, &this)?;
             let that = reduce(context, &that)?;
 
-            if this == that || self.in_history(&this, &that) {
+            let goal = Goal {
+                type_: type_.clone(),
+                this: this.clone(),
+                that: that.clone(),
+            };
+
+            if this == that || self.in_history(&goal) {
                 continue;
             }
 
@@ -431,15 +516,23 @@ impl Convert {
                 (Term::FuncType(this), Term::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?
                 }
-                (Term::Func(this), Term::Func(that)) => self.compare_func(context, this, that)?,
+                (Term::Func(this), Term::Func(that)) => {
+                    self.compare_func(context, this, that, type_.clone())?
+                }
+                (Term::Func(func), other) => {
+                    self.eta_expand_func(context, func, other, type_.clone())?
+                }
+                (other, Term::Func(func)) => {
+                    self.eta_expand_func(context, func, other, type_.clone())?
+                }
                 (Term::Apply(this), Term::Apply(that)) => self.compare_apply(this, that)?,
                 (Term::TupleType(this), Term::TupleType(that)) => {
                     self.compare_tuple_type(context, this, that)?
                 }
                 (Term::Tuple(this), Term::Tuple(that)) => self.compare_tuple(this, that)?,
-                (Term::Split(this), Term::Split(that)) => {
-                    self.compare_split(context, this, that)?
-                }
+                (Term::Tuple(tuple), other) => self.eta_expand_tuple(tuple, other)?,
+                (other, Term::Tuple(tuple)) => self.eta_expand_tuple(tuple, other)?,
+                (Term::Proj(this), Term::Proj(that)) => self.compare_proj(this, that)?,
                 (Term::AtomType(this), Term::AtomType(that)) => {
                     self.compare_atom_type(this, that)?
                 }
@@ -453,7 +546,9 @@ impl Convert {
                 }
                 (Term::Seal(this), Term::Seal(that)) => self.compare_seal(this, that)?,
                 (Term::Unseal(this), Term::Unseal(that)) => self.compare_unseal(this, that)?,
-                (_, _) => return Ok(false),
+                (this_n, that_n) => {
+                    self.eta_expand_neutral(context, this_n, that_n, type_)?
+                }
             };
 
             if !ok {
@@ -470,7 +565,7 @@ mod tests {
     use {
         super::*,
         crate::core::{
-            Apply, Atom, AtomType, Func, FuncType, Match, Rec, Sealed, Split, Tuple, TupleType,
+            Apply, Atom, AtomType, Func, FuncType, Match, Proj, Rec, Sealed, Tuple, TupleType,
             Type, Var,
         },
         std::time::Duration,
@@ -478,6 +573,10 @@ mod tests {
 
     fn context() -> Context {
         Context::new(Duration::from_millis(10))
+    }
+
+    fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Preempted> {
+        convert(context, &Type.into(), this, that)
     }
 
     #[test]
@@ -488,7 +587,7 @@ mod tests {
 
         let that = Term::from(FuncType::new("y", Type, Var::free("y")));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -499,7 +598,7 @@ mod tests {
 
         let that = Term::from(Func::new("y", Var::free("y")));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -520,7 +619,7 @@ mod tests {
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -537,7 +636,7 @@ mod tests {
             Term::Prim(Prim::int_add(Var::free("y"), Term::Prim(Prim::Int(1)))),
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -554,7 +653,7 @@ mod tests {
             Term::Prim(Prim::int_sub(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(false));
+        assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
 
     #[test]
@@ -565,7 +664,7 @@ mod tests {
 
         let that = Term::from(Rec::new(vec![("y", Type, Var::free("y"))], Var::free("y")));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -582,7 +681,7 @@ mod tests {
             Term::Prim(Prim::nat_add(Var::free("y"), Term::Prim(Prim::Nat(1)))),
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -593,7 +692,7 @@ mod tests {
 
         let that = Term::from(Func::new("y", Term::Prim(Prim::flt_neg(Var::free("y")))));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -604,7 +703,7 @@ mod tests {
 
         let that = Term::from(Func::new("y", Term::Prim(Prim::nat_to_int(Var::free("y")))));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -621,7 +720,7 @@ mod tests {
             Term::Prim(Prim::Nat(2)),
         ]));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -635,7 +734,7 @@ mod tests {
             Term::Prim(Prim::Nat(2)),
         ]));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(false));
+        assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
 
     #[test]
@@ -645,7 +744,7 @@ mod tests {
         let this = Term::Prim(Prim::BinType);
         let that = Term::Prim(Prim::BinType);
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -653,7 +752,7 @@ mod tests {
         let mut context = context();
 
         assert_eq!(
-            convert(
+            conv(
                 &mut context,
                 &Term::Prim(Prim::Bin(vec![1, 2])),
                 &Term::Prim(Prim::Bin(vec![1, 2])),
@@ -662,7 +761,7 @@ mod tests {
         );
 
         assert_eq!(
-            convert(
+            conv(
                 &mut context,
                 &Term::Prim(Prim::Bin(vec![1, 2])),
                 &Term::Prim(Prim::Bin(vec![1, 3])),
@@ -678,7 +777,7 @@ mod tests {
         let this = Term::from(Func::new("x", Term::Prim(Prim::bin_len(Var::free("x")))));
         let that = Term::from(Func::new("y", Term::Prim(Prim::bin_len(Var::free("y")))));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -701,7 +800,7 @@ mod tests {
             ),
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -724,7 +823,7 @@ mod tests {
             ),
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -761,7 +860,7 @@ mod tests {
             ),
         ));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -777,7 +876,7 @@ mod tests {
             Term::from(Atom::from("y")),
         ]));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -793,29 +892,51 @@ mod tests {
             Term::from(Atom::from("z")),
         ]));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(false));
+        assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
 
     #[test]
-    fn convert_split_is_alpha_equivalent() {
+    fn convert_proj_same_index_and_head() {
         let mut context = context();
 
-        let this = Term::from(Split::new(
-            Var::free("p"),
-            "m",
-            AtomType::new(["a"]),
-            ["x", "y"],
-            Var::free("x"),
-        ));
-        let that = Term::from(Split::new(
-            Var::free("p"),
-            "n",
-            AtomType::new(["a"]),
-            ["u", "v"],
-            Var::free("u"),
-        ));
+        let this = Term::from(Proj::new(Var::free("r"), 0));
+        let that = Term::from(Proj::new(Var::free("r"), 0));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    }
+
+    #[test]
+    fn convert_proj_different_index_is_false() {
+        let mut context = context();
+
+        let this = Term::from(Proj::new(Var::free("r"), 0));
+        let that = Term::from(Proj::new(Var::free("r"), 1));
+
+        assert_eq!(conv(&mut context, &this, &that), Ok(false));
+    }
+
+    #[test]
+    fn convert_eta_tuple_neutral_with_known_type() {
+        let mut context = context();
+
+        let tuple_type: Term = TupleType::new([
+            ("x", AtomType::new(["a", "b"])),
+            ("y", AtomType::new(["c", "d"])),
+        ])
+        .into();
+
+        let r: Term = Var::free("r").into();
+        let s: Term = Var::free("s").into();
+
+        assert_eq!(
+            convert(&mut context, &tuple_type, &r, &r),
+            Ok(true)
+        );
+
+        assert_eq!(
+            convert(&mut context, &tuple_type, &r, &s),
+            Ok(false)
+        );
     }
 
     #[test]
@@ -837,7 +958,7 @@ mod tests {
             ("y", Var::free("x")),
         ]));
 
-        assert_eq!(convert(&mut context, &this, &that), Err(Preempted));
+        assert_eq!(conv(&mut context, &this, &that), Err(Preempted));
     }
 
     #[test]
@@ -847,7 +968,7 @@ mod tests {
         let this = Term::from(Sealed::new("x", Type, Var::free("x")));
         let that = Term::from(Sealed::new("y", Type, Var::free("y")));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(true));
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
 
     #[test]
@@ -857,6 +978,6 @@ mod tests {
         let this = Term::from(Sealed::new("x", Type, Var::free("x")));
         let that = Term::from(Sealed::new("x", AtomType::new(["a"]), Var::free("x")));
 
-        assert_eq!(convert(&mut context, &this, &that), Ok(false));
+        assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
 }

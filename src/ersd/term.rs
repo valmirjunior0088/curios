@@ -37,10 +37,9 @@ pub struct Tuple {
 }
 
 #[derive(Debug)]
-pub struct Split {
+pub struct Proj {
     pub head: Subterm,
-    pub fields: Vec<String>,
-    pub tail: Subterm,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -77,7 +76,7 @@ pub enum Term {
     Func(Func),
     Apply(Apply),
     Tuple(Tuple),
-    Split(Split),
+    Proj(Proj),
     Atom(Atom),
     Match(Match),
     Let(Let),
@@ -121,9 +120,9 @@ impl From<Tuple> for Term {
     }
 }
 
-impl From<Split> for Term {
-    fn from(value: Split) -> Self {
-        Self::Split(value)
+impl From<Proj> for Term {
+    fn from(value: Proj) -> Self {
+        Self::Proj(value)
     }
 }
 

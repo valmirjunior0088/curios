@@ -66,12 +66,9 @@ pub struct NatMatch {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Split {
+pub struct Proj {
     pub head: Subterm,
-    pub motive_label: String,
-    pub motive: Subterm,
-    pub field_labels: Vec<String>,
-    pub tail: Subterm,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,7 +128,7 @@ pub enum Term {
     Apply(Apply),
     TupleType(TupleType),
     Tuple(Tuple),
-    Split(Split),
+    Proj(Proj),
     AtomType(AtomType),
     Atom(Atom),
     Match(Match),

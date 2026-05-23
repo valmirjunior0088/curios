@@ -88,14 +88,7 @@ impl<'a> Elaborate<'a> {
                 self.term(&nm.default),
             )
             .into(),
-            Term::Split(split) => core::Split::new(
-                self.term(&split.head),
-                split.motive_label.clone(),
-                self.term(&split.motive),
-                split.field_labels.iter().cloned(),
-                self.term(&split.tail),
-            )
-            .into(),
+            Term::Proj(proj) => core::Proj::new(self.term(&proj.head), proj.index).into(),
             Term::Match(match_) => core::Match::new(
                 self.term(&match_.head),
                 match_.motive_label.clone(),

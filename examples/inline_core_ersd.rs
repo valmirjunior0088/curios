@@ -82,21 +82,33 @@ fn main() {
                             param: ersd::Term::Prim(ersd::Prim::Int(2)).into(),
                         })
                         .into(),
-                        tail: ersd::Term::Split(ersd::Split {
-                            head: ersd::Term::Name(ersd::Name::from("applied")).into(),
-                            fields: vec!["sum".into(), "pair".into()],
-                            tail: ersd::Term::Match(ersd::Match {
-                                head: ersd::Term::Atom(ersd::Atom { index: 0 }).into(),
-                                cases: vec![
-                                    ersd::Term::Split(ersd::Split {
-                                        head: ersd::Term::Name(ersd::Name::from("pair")).into(),
-                                        fields: vec!["loop".into(), "captured_bias".into()],
-                                        tail: ersd::Term::Name(ersd::Name::from("captured_bias"))
-                                            .into(),
-                                    })
-                                    .into(),
-                                    ersd::Term::Prim(ersd::Prim::Int(0)).into(),
-                                ],
+                        tail: ersd::Term::Let(ersd::Let {
+                            name: "sum".into(),
+                            body: ersd::Term::Proj(ersd::Proj {
+                                head: ersd::Term::Name(ersd::Name::from("applied")).into(),
+                                index: 0,
+                            })
+                            .into(),
+                            tail: ersd::Term::Let(ersd::Let {
+                                name: "pair".into(),
+                                body: ersd::Term::Proj(ersd::Proj {
+                                    head: ersd::Term::Name(ersd::Name::from("applied")).into(),
+                                    index: 1,
+                                })
+                                .into(),
+                                tail: ersd::Term::Match(ersd::Match {
+                                    head: ersd::Term::Atom(ersd::Atom { index: 0 }).into(),
+                                    cases: vec![
+                                        ersd::Term::Proj(ersd::Proj {
+                                            head: ersd::Term::Name(ersd::Name::from("pair"))
+                                                .into(),
+                                            index: 1,
+                                        })
+                                        .into(),
+                                        ersd::Term::Prim(ersd::Prim::Int(0)).into(),
+                                    ],
+                                })
+                                .into(),
                             })
                             .into(),
                         })
