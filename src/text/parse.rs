@@ -540,7 +540,7 @@ fn parse_tuple_type_field<'a>() -> Parser<'a, (Option<String>, Term)> {
 
 fn parse_tuple_type<'a>() -> Parser<'a, Term> {
     catch(parse_literal("{"))
-        .and_keep(sep_by1(parse_tuple_type_field, || parse_literal(",")))
+        .and_keep(sep_by0(parse_tuple_type_field, || parse_literal(",")))
         .and_drop(parse_literal("}"))
         .map(|fields| {
             Term::TupleType(TupleType {
@@ -803,12 +803,18 @@ fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
     )
 }
 
+fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
+    catch(parse_literal("(").and_keep(parse_literal(")")))
+        .map(|_| Term::Tuple(Tuple { fields: vec![] }))
+}
+
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     parse_type()
         .or(parse_prim())
         .or(parse_atom_type())
         .or(parse_atom())
         .or(parse_tuple_type())
+        .or(parse_empty_tuple())
         .or(parse_tuple())
         .or(parse_parens())
         .or(parse_name().map(Term::Name))
@@ -1327,6 +1333,22 @@ mod tests {
                 head: Term::Name(Name::from(["r".to_string()])).into(),
                 index: 2,
             })
+        );
+    }
+
+    #[test]
+    fn parse_empty_tuple_type() {
+        assert_eq!(
+            "{}".parse::<Term>().unwrap(),
+            Term::TupleType(TupleType { fields: vec![] })
+        );
+    }
+
+    #[test]
+    fn parse_empty_tuple() {
+        assert_eq!(
+            "()".parse::<Term>().unwrap(),
+            Term::Tuple(Tuple { fields: vec![] })
         );
     }
 }
