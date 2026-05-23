@@ -41,6 +41,7 @@ The primitive types map to Rust as follows:
 
 | Curios | Rust equivalent |
 |--------|-----------------|
+| `Bln`  | `bool`          |
 | `Nat`  | `u32`           |
 | `Int`  | `i32`           |
 | `Flt`  | `f32`           |

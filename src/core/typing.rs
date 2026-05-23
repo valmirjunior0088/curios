@@ -631,7 +631,7 @@ fn erase_prim(
         &Prim::Bln(value) => {
             expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
-            Ok(ersd::Atom { index: if value { 1 } else { 0 } }.into())
+            Ok(ersd::Prim::Nat(if value { 1 } else { 0 }).into())
         }
         Prim::NatType => {
             expect(context, term, &Type.into(), expected)?;

@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~27,400 lines in `src/`, ~1,500 in `examples/`.
+**Codebase size:** ~28,400 lines in `src/`, ~1,500 in `examples/`.
 
 ---
 
@@ -37,9 +37,9 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,332  |
+| Parsing                 | `text/parse.rs`                                | 1,406  |
 | Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,000 |
-| Type checking + erasure | `core/typing.rs`                               | 2,483  |
+| Type checking + erasure | `core/typing.rs`                               | 2,539  |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,200 |
 | CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,101  |
 | WASM codegen            | `cont/to_wasm/` (5 files)                      | ~3,300 |
@@ -140,9 +140,9 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 | `A`       | Used by                     |
 | --------- | --------------------------- |
-| `One`     | `Func`, `FuncType`          |
-| `Two`     | `NatFold`                   |
-| `Many(n)` | `TupleType`, `Rec`          |
+| `One`     | `Func`, `FuncType`, `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail) |
+| `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                                     |
+| `Many(n)` | `TupleType` (fields), `Rec` (items and tail)                                                                                      |
 
 A private `Visit<F>` struct drives all variable traversals (`shift`, `capture`, `release`, `free_vars`). The closure `F: FnMut(depth, &Var) -> Option<Term>` can return a replacement or `None` to leave the variable unchanged.
 
@@ -174,11 +174,13 @@ Maintains separate stacks for **assumptions** (name → type) and **definitions*
 
 Erasure is performed inside `core::typing.rs` (the `erase` function), not as a standalone pass. The output is `ersd::Term`.
 
-| Removed                                     | Preserved                                                         |
-| ------------------------------------------- | ----------------------------------------------------------------- |
-| `Type`, `FuncType`, `TupleType`, `AtomType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match`  |
-| `Sealed`, `Seal`, `Unseal`                  | `Let`, `Rec`, all control flow                                    |
-| Type annotations on binders                 | `Prim`, `Bin`, `Arr`, `Name`                                      |
+| Removed                                              | Preserved                                                         |
+| ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match`  |
+| `Sealed`, `Seal`, `Unseal`                           | `Let`, `Rec`, all control flow                                    |
+| Type annotations on binders                          | `Prim`, `Bin`, `Arr`, `Name`                                      |
+
+`Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `BlnMatch` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
 
 Type-level positions are replaced with `ersd::Term::Erased` (not dropped), so the tree shape is preserved for later phases.
 
@@ -196,7 +198,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is the most complex transformation in the pipeline (2,978 lines).
+This is the most complex transformation in the pipeline (3,101 lines).
 
 ### CPS IR structure
 
@@ -252,16 +254,17 @@ When a call appears in value position, the lowerer creates a **join block** that
 
 ### Value representation
 
-| Curios value | WASM representation                                                       |
-| ------------ | ------------------------------------------------------------------------- |
-| `Nat`        | `i31ref` (packed i32)                                                     |
-| `Int`        | `i31ref` (packed i32)                                                     |
-| `Flt`        | GC struct with single `f32` field                                         |
+| Curios value | WASM representation                                                        |
+| ------------ | -------------------------------------------------------------------------- |
+| `Nat`        | `i31ref` (packed i32)                                                      |
+| `Int`        | `i31ref` (packed i32)                                                      |
+| `Bln`        | `i31ref` (erases to `Nat`; false → 0, true → 1)                           |
+| `Flt`        | GC struct with single `f32` field                                          |
 | `Tuple(n)`   | GC struct with N `anyref` fields; subtype chain `tpl/1 ← tpl/2 ← tpl/3 …` |
-| `Closure`    | GC struct: funcref field + captured values as fields                      |
-| `Atom`       | `i31ref` (the index)                                                      |
-| `Bin`        | GC array of packed `i8`                                                   |
-| `Arr`        | GC array of nullable `anyref`                                             |
+| `Closure`    | GC struct: funcref field + captured values as fields                       |
+| `Atom`       | `i31ref` (the index)                                                       |
+| `Bin`        | GC array of packed `i8`                                                    |
+| `Arr`        | GC array of nullable `anyref`                                              |
 
 ### Closure calling convention
 
@@ -285,7 +288,7 @@ The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`,
 
 ### Binary serialization (`src/wasm/writer.rs`)
 
-The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. 2,063 lines.
+The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. 2,018 lines.
 
 ### WAT parser (`src/wasm/parse.rs`)
 
