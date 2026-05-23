@@ -105,6 +105,21 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Term::Prim(Prim::NatType))
         }
+        Prim::NatToStr(inner) => {
+            erase(context, inner, &Term::Prim(Prim::NatType))?;
+
+            Ok(Term::Prim(Prim::BinType))
+        }
+        Prim::IntToStr(inner) => {
+            erase(context, inner, &Term::Prim(Prim::IntType))?;
+
+            Ok(Term::Prim(Prim::BinType))
+        }
+        Prim::FltToStr(inner) => {
+            erase(context, inner, &Term::Prim(Prim::FltType))?;
+
+            Ok(Term::Prim(Prim::BinType))
+        }
         Prim::NatToInt(inner) => {
             erase(context, inner, &Term::Prim(Prim::NatType))?;
 
@@ -959,6 +974,30 @@ fn erase_prim(
                 erase(context, right, &Term::Prim(Prim::FltType))?.into(),
             )
             .into())
+        }
+        Prim::NatToStr(inner) => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
+
+            Ok(
+                ersd::Prim::NatToStr(erase(context, inner, &Term::Prim(Prim::NatType))?.into())
+                    .into(),
+            )
+        }
+        Prim::IntToStr(inner) => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
+
+            Ok(
+                ersd::Prim::IntToStr(erase(context, inner, &Term::Prim(Prim::IntType))?.into())
+                    .into(),
+            )
+        }
+        Prim::FltToStr(inner) => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
+
+            Ok(
+                ersd::Prim::FltToStr(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
+                    .into(),
+            )
         }
         Prim::NatToInt(inner) => {
             expect(context, term, &Term::Prim(Prim::IntType), expected)?;

@@ -581,6 +581,33 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::FltNearest(operand)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::NatToStr(operand)),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::IntToStr(operand)),
+                )
+            }
+            ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::FltToStr(operand)),
+                )
+            }
             ersd::Term::Prim(ersd::Prim::NatToInt(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
 
@@ -1066,6 +1093,21 @@ impl<'a> Lowerer<'a> {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
 
                 builder.add_value(target, cont::Value::Eval(cont::Code::FltNearest(operand)));
+            }
+            ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::NatToStr(operand)));
+            }
+            ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::IntToStr(operand)));
+            }
+            ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+
+                builder.add_value(target, cont::Value::Eval(cont::Code::FltToStr(operand)));
             }
             ersd::Term::Prim(ersd::Prim::NatToInt(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
@@ -2156,6 +2198,51 @@ impl<'a> Lowerer<'a> {
                         state,
                         builder,
                         cont::Value::Eval(cont::Code::FltNearest(operand)),
+                    );
+
+                    cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => self.lower_to_name(
+                operand,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, operand| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::NatToStr(operand)),
+                    );
+
+                    cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => self.lower_to_name(
+                operand,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, operand| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::IntToStr(operand)),
+                    );
+
+                    cont(this, state, builder, value)
+                }),
+            ),
+            ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => self.lower_to_name(
+                operand,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, operand| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::FltToStr(operand)),
                     );
 
                     cont(this, state, builder, value)

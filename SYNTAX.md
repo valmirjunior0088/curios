@@ -307,6 +307,7 @@ All primitive operations are prefix and take **atomic** arguments. Parenthesise 
 | `Nat.gte a b`    | 2     | Greater than or equal |
 | `Nat.to_int a`   | 1     | Convert to Int        |
 | `Nat.to_flt a`   | 1     | Convert to Flt        |
+| `Nat.to_str a`   | 1     | Convert to Bin        |
 
 ### Nat.fold
 
@@ -346,6 +347,7 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 | `Int.gte a b`    | 2     | Greater than or equal |
 | `Int.to_nat a`   | 1     | Convert to Nat        |
 | `Int.to_flt a`   | 1     | Convert to Flt        |
+| `Int.to_str a`   | 1     | Convert to Bin        |
 
 ### Flt
 
@@ -372,6 +374,7 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 | `Flt.nearest a`    | 1     | Round to nearest      |
 | `Flt.to_nat a`     | 1     | Convert to Nat        |
 | `Flt.to_int a`     | 1     | Convert to Int        |
+| `Flt.to_str a`     | 1     | Convert to Bin        |
 
 ### Bin
 

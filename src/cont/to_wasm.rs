@@ -25,52 +25,32 @@ pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
 
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store},
-    };
+    use super::*;
 
-    fn run_main(module: &cont::Module) -> (Store<()>, Rooted<AnyRef>) {
-        let mut config = Config::new();
-        config.wasm_reference_types(true);
-        config.wasm_function_references(true);
-        config.wasm_gc(true);
-        config.wasm_tail_call(true);
-
-        let engine = Engine::new(&config).expect("expected wasmtime engine");
-
-        let module = Module::from_binary(&engine, &wasm::to_bytes(&to_wasm(module)))
-            .expect("expected wasm module");
-
-        let mut store = Store::new(&engine, ());
-
-        let instance = Instance::new(&mut store, &module, &[]).expect("expected instance");
-
-        let run = instance
-            .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
-            .expect("expected exported func/main");
-
-        let result = run.call(&mut store, ()).expect("expected call result");
-
-        (store, result)
+    fn run(module: &cont::Module) -> String {
+        crate::run_wasm(&to_wasm(module)).expect("expected result")
     }
 
     fn i32_result(module: &cont::Module) -> i32 {
-        let (store, result) = run_main(module);
-        result
-            .unwrap_i31(&store)
-            .expect("expected i31 result")
-            .get_i32()
+        run(module)
+            .split("value=")
+            .nth(1)
+            .unwrap()
+            .trim_end_matches(')')
+            .parse()
+            .unwrap()
     }
 
     fn f32_result(module: &cont::Module) -> f32 {
-        let (mut store, result) = run_main(module);
-        result
-            .unwrap_struct(&store)
-            .expect("expected float struct")
-            .field(&mut store, 0)
-            .expect("expected float field")
-            .unwrap_f32()
+        run(module)
+            .split("value=")
+            .nth(1)
+            .unwrap()
+            .split(')')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap()
     }
 
     #[test]
@@ -389,18 +369,7 @@ mod tests {
             },
         );
 
-        let (store, result) = run_main(&module);
-
-        let result = result.unwrap_struct(&store).expect("expected unit struct");
-
-        assert_eq!(
-            result
-                .ty(&store)
-                .expect("expected struct type")
-                .fields()
-                .len(),
-            0
-        );
+        assert_eq!(run(&module), "#0 = struct {}");
     }
 
     #[test]

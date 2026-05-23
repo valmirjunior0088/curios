@@ -129,6 +129,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
+        Prim::NatToStr(inner) => flat([pure("Nat.to_str "), print_term(*inner, depth)]),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{value}i")),
         Prim::IntEql(left, right) => flat([
@@ -197,6 +198,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(*right, depth),
         ]),
+        Prim::IntToStr(inner) => flat([pure("Int.to_str "), print_term(*inner, depth)]),
         Prim::FltType => pure("Flt"),
         Prim::Flt(flt) => print_flt(flt),
         Prim::FltAdd(left, right) => flat([
@@ -278,6 +280,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::FltCeil(inner) => flat([pure("Flt.ceil "), print_term(*inner, depth)]),
         Prim::FltTrunc(inner) => flat([pure("Flt.trunc "), print_term(*inner, depth)]),
         Prim::FltNearest(inner) => flat([pure("Flt.nearest "), print_term(*inner, depth)]),
+        Prim::FltToStr(inner) => flat([pure("Flt.to_str "), print_term(*inner, depth)]),
         Prim::NatToInt(inner) => flat([pure("Nat.to_int "), print_term(*inner, depth)]),
         Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(*inner, depth)]),
         Prim::IntToNat(inner) => flat([pure("Int.to_nat "), print_term(*inner, depth)]),

@@ -2,7 +2,10 @@ use {
     crate::printer::{Printer, flat, indent, pure, sep_flat},
     crate::{cont, core, ersd, text, wasm},
     std::{collections::HashMap, path::Path, time::Duration},
-    wasmtime::{AnyRef, Config, Engine, Instance, Module, Rooted, Store, Val},
+    wasmtime::{
+        AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Config, Engine, FieldType, FuncType,
+        HeapType, Linker, Module, Mutability, RefType, Rooted, StorageType, Store, Val, ValType,
+    },
 };
 
 fn raw_ref_id(store: &mut Store<()>, reference: &Rooted<AnyRef>) -> u32 {
@@ -172,9 +175,88 @@ pub fn run_wasm(wasm_module: &wasm::Module) -> Result<String, String> {
     let module = Module::from_binary(&engine, &wasm::to_bytes(wasm_module))
         .map_err(|error| format!("failed to load wasm module: {error}"))?;
 
+    let bin_array_type = ArrayType::new(&engine, FieldType::new(Mutability::Var, StorageType::I8));
+
+    let bin_ref = ValType::Ref(RefType::new(
+        false,
+        HeapType::ConcreteArray(bin_array_type.clone()),
+    ));
+
+    let i32_to_bin = FuncType::new(&engine, [ValType::I32], [bin_ref.clone()]);
+    let f32_to_bin = FuncType::new(&engine, [ValType::F32], [bin_ref]);
+
+    let mut linker: Linker<()> = Linker::new(&engine);
+
+    {
+        let bin_array_type = bin_array_type.clone();
+
+        linker
+            .func_new(
+                "env",
+                "nat_to_str",
+                i32_to_bin.clone(),
+                move |mut caller: Caller<'_, ()>, params, results| {
+                    let value = params[0].unwrap_i32() as u32;
+                    let bytes = format!("{value}").into_bytes();
+                    let pre = ArrayRefPre::new(&mut caller, bin_array_type.clone());
+                    let elems: Vec<Val> = bytes.into_iter().map(|b| Val::I32(b as i32)).collect();
+                    results[0] = Val::AnyRef(Some(
+                        ArrayRef::new_fixed(&mut caller, &pre, &elems)?.to_anyref(),
+                    ));
+                    Ok(())
+                },
+            )
+            .map_err(|e| format!("failed to define nat_to_str: {e}"))?;
+    }
+
+    {
+        let bin_array_type = bin_array_type.clone();
+
+        linker
+            .func_new(
+                "env",
+                "int_to_str",
+                i32_to_bin,
+                move |mut caller: Caller<'_, ()>, params, results| {
+                    let value = params[0].unwrap_i32();
+                    let bytes = format!("{value}").into_bytes();
+                    let pre = ArrayRefPre::new(&mut caller, bin_array_type.clone());
+                    let elems: Vec<Val> = bytes.into_iter().map(|b| Val::I32(b as i32)).collect();
+                    results[0] = Val::AnyRef(Some(
+                        ArrayRef::new_fixed(&mut caller, &pre, &elems)?.to_anyref(),
+                    ));
+                    Ok(())
+                },
+            )
+            .map_err(|e| format!("failed to define int_to_str: {e}"))?;
+    }
+
+    {
+        let bin_array_type = bin_array_type.clone();
+
+        linker
+            .func_new(
+                "env",
+                "flt_to_str",
+                f32_to_bin,
+                move |mut caller: Caller<'_, ()>, params, results| {
+                    let value = params[0].unwrap_f32();
+                    let bytes = format!("{value}").into_bytes();
+                    let pre = ArrayRefPre::new(&mut caller, bin_array_type.clone());
+                    let elems: Vec<Val> = bytes.into_iter().map(|b| Val::I32(b as i32)).collect();
+                    results[0] = Val::AnyRef(Some(
+                        ArrayRef::new_fixed(&mut caller, &pre, &elems)?.to_anyref(),
+                    ));
+                    Ok(())
+                },
+            )
+            .map_err(|e| format!("failed to define flt_to_str: {e}"))?;
+    }
+
     let mut store = Store::new(&engine, ());
 
-    let instance = Instance::new(&mut store, &module, &[])
+    let instance = linker
+        .instantiate(&mut store, &module)
         .map_err(|error| format!("failed to instantiate module: {error}"))?;
 
     let function = instance

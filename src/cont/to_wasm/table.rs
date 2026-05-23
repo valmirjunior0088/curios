@@ -1,6 +1,9 @@
 use {
     crate::{cont, wasm},
-    std::collections::{BTreeMap, HashMap},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeMap, HashMap},
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -188,6 +191,9 @@ pub struct Table<'a> {
     flt_type: wasm::TypeName,
     bin_type: wasm::TypeName,
     arr_type: wasm::TypeName,
+    nat_to_str: OnceCell<wasm::FuncName>,
+    int_to_str: OnceCell<wasm::FuncName>,
+    flt_to_str: OnceCell<wasm::FuncName>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -206,6 +212,9 @@ impl<'a> Table<'a> {
             flt_type: wasm::TypeName::from("flt"),
             bin_type: wasm::TypeName::from("bin"),
             arr_type: wasm::TypeName::from("arr"),
+            nat_to_str: OnceCell::new(),
+            int_to_str: OnceCell::new(),
+            flt_to_str: OnceCell::new(),
             tpl_types: {
                 let max = module
                     .consts()
@@ -307,6 +316,30 @@ impl<'a> Table<'a> {
 
     pub fn arr_type(&self) -> wasm::TypeName {
         self.arr_type.clone()
+    }
+
+    pub fn nat_to_str_func(&self) -> &wasm::FuncName {
+        self.nat_to_str.get_or_init(|| wasm::FuncName::from("nat_to_str"))
+    }
+
+    pub fn int_to_str_func(&self) -> &wasm::FuncName {
+        self.int_to_str.get_or_init(|| wasm::FuncName::from("int_to_str"))
+    }
+
+    pub fn flt_to_str_func(&self) -> &wasm::FuncName {
+        self.flt_to_str.get_or_init(|| wasm::FuncName::from("flt_to_str"))
+    }
+
+    pub fn nat_to_str_used(&self) -> bool {
+        self.nat_to_str.get().is_some()
+    }
+
+    pub fn int_to_str_used(&self) -> bool {
+        self.int_to_str.get().is_some()
+    }
+
+    pub fn flt_to_str_used(&self) -> bool {
+        self.flt_to_str.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

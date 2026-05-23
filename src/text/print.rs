@@ -113,6 +113,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             pure(" "),
             print_term(*right),
         ]),
+        Prim::NatToStr(operand) => flat([pure("Nat.to_str "), print_term(*operand)]),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{value:+}")),
         Prim::IntEql(left, right) => flat([
@@ -181,6 +182,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             pure(" "),
             print_term(*right),
         ]),
+        Prim::IntToStr(operand) => flat([pure("Int.to_str "), print_term(*operand)]),
         Prim::FltType => pure("Flt"),
         Prim::Flt(value) => print_flt(value),
         Prim::FltAdd(left, right) => flat([
@@ -262,6 +264,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltCeil(operand) => flat([pure("Flt.ceil "), print_term(*operand)]),
         Prim::FltTrunc(operand) => flat([pure("Flt.trunc "), print_term(*operand)]),
         Prim::FltNearest(operand) => flat([pure("Flt.nearest "), print_term(*operand)]),
+        Prim::FltToStr(operand) => flat([pure("Flt.to_str "), print_term(*operand)]),
         Prim::NatToInt(operand) => flat([pure("Nat.to_int "), print_term(*operand)]),
         Prim::NatToFlt(operand) => flat([pure("Nat.to_flt "), print_term(*operand)]),
         Prim::IntToNat(operand) => flat([pure("Int.to_nat "), print_term(*operand)]),

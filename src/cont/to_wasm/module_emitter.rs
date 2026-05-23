@@ -34,6 +34,71 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    fn emit_to_str_imports(&mut self) {
+        let bin_ref = wasm::ValType::Ref(wasm::RefType {
+            is_nullable: false,
+            heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+        });
+
+        let i32_to_bin_type = wasm::SubType {
+            is_final: true,
+            super_types: vec![],
+            comp_type: wasm::CompType::Func(wasm::FuncType {
+                inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
+                outputs: wasm::ResultType::from([bin_ref.clone()]),
+            }),
+        };
+
+        if self.table.nat_to_str_used() {
+            let nat_to_str_type = wasm::TypeName::from("nat_to_str_type");
+            self.module.add_type(nat_to_str_type.clone(), i32_to_bin_type.clone());
+            self.module.add_import(
+                "env",
+                "nat_to_str",
+                wasm::Import::Func {
+                    func_name: self.table.nat_to_str_func().clone(),
+                    type_name: nat_to_str_type,
+                },
+            );
+        }
+
+        if self.table.int_to_str_used() {
+            let int_to_str_type = wasm::TypeName::from("int_to_str_type");
+            self.module.add_type(int_to_str_type.clone(), i32_to_bin_type);
+            self.module.add_import(
+                "env",
+                "int_to_str",
+                wasm::Import::Func {
+                    func_name: self.table.int_to_str_func().clone(),
+                    type_name: int_to_str_type,
+                },
+            );
+        }
+
+        if self.table.flt_to_str_used() {
+            let flt_to_str_type = wasm::TypeName::from("flt_to_str_type");
+            self.module.add_type(
+                flt_to_str_type.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::F32)]),
+                        outputs: wasm::ResultType::from([bin_ref]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "flt_to_str",
+                wasm::Import::Func {
+                    func_name: self.table.flt_to_str_func().clone(),
+                    type_name: flt_to_str_type,
+                },
+            );
+        }
+    }
+
     fn emit_arr_type(&mut self) {
         self.module.add_type(
             self.table.arr_type(),
@@ -394,6 +459,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);
         }
+
+        self.emit_to_str_imports();
 
         let start_type_name = wasm::TypeName::from("start");
 

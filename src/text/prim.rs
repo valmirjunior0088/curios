@@ -27,6 +27,7 @@ pub enum Prim {
     NatGt(Subterm, Subterm),
     NatLte(Subterm, Subterm),
     NatGte(Subterm, Subterm),
+    NatToStr(Subterm),
     IntType,
     Int(i32),
     IntEql(Subterm, Subterm),
@@ -40,6 +41,7 @@ pub enum Prim {
     IntGt(Subterm, Subterm),
     IntLte(Subterm, Subterm),
     IntGte(Subterm, Subterm),
+    IntToStr(Subterm),
     FltType,
     Flt(f32),
     FltAdd(Subterm, Subterm),
@@ -61,6 +63,7 @@ pub enum Prim {
     FltCeil(Subterm),
     FltTrunc(Subterm),
     FltNearest(Subterm),
+    FltToStr(Subterm),
     NatToInt(Subterm),
     NatToFlt(Subterm),
     IntToNat(Subterm),
@@ -413,6 +416,13 @@ impl Prim {
         Self::NatToInt(inner.into().into())
     }
 
+    pub fn nat_to_str<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::NatToStr(inner.into().into())
+    }
+
     pub fn int_to_nat<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -425,6 +435,13 @@ impl Prim {
         T: Into<Term>,
     {
         Self::IntToFlt(inner.into().into())
+    }
+
+    pub fn int_to_str<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::IntToStr(inner.into().into())
     }
 
     pub fn nat_to_flt<T>(inner: T) -> Self
@@ -446,6 +463,13 @@ impl Prim {
         T: Into<Term>,
     {
         Self::FltToNat(inner.into().into())
+    }
+
+    pub fn flt_to_str<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::FltToStr(inner.into().into())
     }
 
     pub fn bin_len<B>(bin: B) -> Self

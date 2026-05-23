@@ -119,7 +119,13 @@ fn main() {
     println!("=== cont ===");
     println!("{module}");
 
+    let wasm_module = cont::to_wasm(&module);
+
     println!();
     println!("=== wasm ===");
-    println!("{}", cont::to_wasm(&module));
+    println!("{wasm_module}");
+
+    println!();
+    println!("=== result ===");
+    println!("{}", curios::run_wasm(&wasm_module).unwrap());
 }

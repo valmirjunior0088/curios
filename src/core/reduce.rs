@@ -465,6 +465,32 @@ impl Reduce {
                     inner => Term::Prim(Prim::flt_nearest(inner)),
                 })
             }
+            Prim::NatToStr(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Nat(v)) => Term::Prim(Prim::Bin(format!("{v}").into_bytes())),
+                    inner => Term::Prim(Prim::nat_to_str(inner)),
+                })
+            }
+            Prim::IntToStr(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Int(v)) => Term::Prim(Prim::Bin(format!("{v}").into_bytes())),
+                    inner => Term::Prim(Prim::int_to_str(inner)),
+                })
+            }
+            Prim::FltToStr(inner) => {
+                let inner = self.reduce(context, inner.as_ref().clone())?;
+
+                Ok(match inner {
+                    Term::Prim(Prim::Flt(v)) => {
+                        Term::Prim(Prim::Bin(format!("{}", v.to_f32()).into_bytes()))
+                    }
+                    inner => Term::Prim(Prim::flt_to_str(inner)),
+                })
+            }
             Prim::NatToInt(inner) => {
                 let inner = self.reduce(context, inner.as_ref().clone())?;
 

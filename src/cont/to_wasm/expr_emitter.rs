@@ -733,6 +733,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
+            cont::Code::NatToStr(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::Call {
+                    func_name: self.context.table().nat_to_str_func().clone(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::NatToInt(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
                 self.emit_instr(wasm::Instr::RefI31);
@@ -750,6 +759,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
+            cont::Code::IntToStr(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(wasm::Instr::Call {
+                    func_name: self.context.table().int_to_str_func().clone(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::IntToNat(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
                 self.emit_instr(wasm::Instr::RefI31);
@@ -762,6 +780,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instr(wasm::Instr::F32ConvertI32S);
                 self.emit_instr(wasm::Instr::StructNew {
                     type_name: self.context.table().flt_type(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::FltToStr(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::Call {
+                    func_name: self.context.table().flt_to_str_func().clone(),
                 });
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
