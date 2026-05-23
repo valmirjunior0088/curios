@@ -144,6 +144,8 @@ fn print_prim<'a>(prim: &'a Prim) -> Printer<'a> {
             pure("Arr.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
+        Prim::Unit => pure("()"),
+        Prim::SysPrint(t) => flat([pure("Sys.print "), print_term(t)]),
     }
 }
 

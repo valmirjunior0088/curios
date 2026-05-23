@@ -803,6 +803,13 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Pure(cont::Data::Tpl(field_names)),
                 )
             }
+            ersd::Term::Prim(ersd::Prim::Unit) => {
+                emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit))
+            }
+            ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::SysPrint(operand)))
+            }
             ersd::Term::Atom(atom) => emit_fresh_value(
                 state,
                 builder,
@@ -1241,6 +1248,13 @@ impl<'a> Lowerer<'a> {
                     .collect::<Vec<_>>();
 
                 builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(field_names)));
+            }
+            ersd::Term::Prim(ersd::Prim::Unit) => {
+                builder.add_value(target, cont::Value::Pure(cont::Data::Unit));
+            }
+            ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
+                let operand = self.lower_letrec_name(operand, frame, state, builder);
+                builder.add_value(target, cont::Value::Eval(cont::Code::SysPrint(operand)));
             }
             ersd::Term::Atom(atom) => {
                 builder.add_value(
@@ -2576,6 +2590,25 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Tuple(s) => {
                 self.lower_struct(&s.fields, frame, state, builder, vec![], cont)
             }
+            ersd::Term::Prim(ersd::Prim::Unit) => {
+                let value =
+                    emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Unit));
+                cont(self, state, builder, value)
+            }
+            ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => self.lower_to_name(
+                operand,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, operand| {
+                    let value = emit_fresh_value(
+                        state,
+                        builder,
+                        cont::Value::Eval(cont::Code::SysPrint(operand)),
+                    );
+                    cont(this, state, builder, value)
+                }),
+            ),
             ersd::Term::Atom(atom) => {
                 let value = emit_fresh_value(
                     state,

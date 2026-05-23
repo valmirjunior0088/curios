@@ -488,12 +488,19 @@ fn parse_arr_prim<'a>() -> Parser<'a, Term> {
         .or(parse_arr_literal())
 }
 
+fn parse_io_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_literal("Sys.print"))
+        .and_keep(lazy(parse_atomic_term))
+        .map(|inner| Term::Prim(Prim::sys_print(inner)))
+}
+
 fn parse_prim<'a>() -> Parser<'a, Term> {
     parse_flt_prim()
         .or(parse_int_prim())
         .or(parse_nat_prim())
         .or(parse_bin_prim())
         .or(parse_arr_prim())
+        .or(parse_io_prim())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {

@@ -79,13 +79,7 @@ pub fn cli() -> Result<(), String> {
     }
 
     if !cli.check {
-        let result = crate::run_wasm(&wasm_module)?;
-
-        if cli.print {
-            println!("=== result ===");
-        }
-
-        println!("{result}");
+        crate::run_wasm(&wasm_module, crate::pipe_to_stdout())?;
     }
 
     Ok(())

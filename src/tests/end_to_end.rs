@@ -1,11 +1,8 @@
-use {
-    crate::{cont, core, ersd, text},
-    std::time::Duration,
-};
+use std::time::Duration;
 
 #[test]
-fn pipeline_lowers_and_runs_core_term() {
-    let text_entrypoint = r#"
+fn end_to_end() {
+    let source = r#"
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
@@ -16,51 +13,18 @@ fn pipeline_lowers_and_runs_core_term() {
             match p.0 : _ => Int;
             | 'left => +42;
             | 'right => +7;;
-        score pair
-        "#
-    .parse::<text::Entrypoint>()
-    .expect("expected text term");
+        Sys.print (Int.to_str (score pair))
+        "#;
 
-    println!("=== text ===");
-    println!("{text_entrypoint}");
+    let (on_print, receiver) = crate::pipe_to_channel();
+    crate::run_text(Duration::from_secs(5), source, on_print).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+}
 
-    let core_term = text::to_core(&text_entrypoint, &crate::text::PanicLoader);
-
-    println!();
-    println!("=== core ===");
-    println!("{core_term}");
-
-    let ersd_term = core::erase(
-        &mut core::Context::new(Duration::from_secs(5)),
-        &core_term,
-        &text::to_core(
-            &"Int".parse().expect("expected result type"),
-            &crate::text::PanicLoader,
-        ),
-    )
-    .expect("expected erased term");
-
-    println!();
-    println!("=== ersd ===");
-    println!("{ersd_term}");
-
-    let cont_module = ersd::to_cont(&ersd_term);
-
-    println!();
-    println!("=== cont ===");
-    println!("{cont_module}");
-
-    let wasm_module = cont::to_wasm(&cont_module);
-
-    println!();
-    println!("=== wasm ===");
-    println!("{wasm_module}");
-
-    let result = crate::run_wasm(&wasm_module).expect("expected result");
-
-    println!();
-    println!("=== result ===");
-    println!("{result}");
-
-    assert_eq!(result, "#0 = i31(bits=0x0000002a, value=42)");
+#[test]
+fn sys_print() {
+    let (on_print, receiver) = crate::pipe_to_channel();
+    crate::run_text(Duration::from_secs(5), r#"Sys.print "hello""#, on_print)
+        .expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"hello".to_vec()]);
 }

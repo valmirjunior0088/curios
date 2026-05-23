@@ -365,6 +365,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
+        Prim::SysPrint(inner) => flat([pure("Sys.print "), print_term(*inner, depth)]),
     }
 }
 

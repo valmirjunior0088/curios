@@ -28,7 +28,7 @@ mod tests {
     use super::*;
 
     fn run(module: &cont::Module) -> String {
-        crate::run_wasm(&to_wasm(module)).expect("expected result")
+        crate::run_wasm(&to_wasm(module), |_| {}).expect("expected result")
     }
 
     fn i32_result(module: &cont::Module) -> i32 {

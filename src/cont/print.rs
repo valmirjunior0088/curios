@@ -492,6 +492,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(" "),
             pure(index.to_string()),
         ]),
+        Code::SysPrint(operand) => flat([pure("Sys.print"), pure(" "), print_value_name(operand)]),
     }
 }
 

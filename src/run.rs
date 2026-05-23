@@ -1,7 +1,15 @@
 use {
     crate::printer::{Printer, flat, indent, pure, sep_flat},
     crate::{cont, core, ersd, text, wasm},
-    std::{collections::HashMap, path::Path, time::Duration},
+    std::{
+        collections::HashMap,
+        path::Path,
+        sync::{
+            Arc, Mutex,
+            mpsc::{self, Receiver},
+        },
+        time::Duration,
+    },
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Config, Engine, FieldType, FuncType,
         HeapType, Linker, Module, Mutability, RefType, Rooted, StorageType, Store, Val, ValType,
@@ -145,7 +153,30 @@ fn print_ref(
     pure(format!("#{id} = anyref"))
 }
 
-pub fn run(timeout: Duration, source: &str, loader: &dyn text::Loader) -> Result<String, String> {
+pub fn pipe_to_stdout() -> impl Fn(&[u8]) + Send + Sync + 'static {
+    |bytes| {
+        std::io::Write::write_all(&mut std::io::stdout(), bytes).unwrap();
+    }
+}
+
+pub fn pipe_to_channel() -> (impl Fn(&[u8]) + Send + Sync + 'static, Receiver<Vec<u8>>) {
+    let (sender, receiver) = mpsc::channel();
+    let sender = Arc::new(Mutex::new(sender));
+
+    (
+        move |bytes| {
+            sender.lock().unwrap().send(bytes.to_vec()).unwrap();
+        },
+        receiver,
+    )
+}
+
+pub fn run(
+    timeout: Duration,
+    source: &str,
+    loader: &dyn text::Loader,
+    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+) -> Result<(), String> {
     let term = text::to_core(
         &source
             .parse()
@@ -159,10 +190,15 @@ pub fn run(timeout: Duration, source: &str, loader: &dyn text::Loader) -> Result
     let term = core::erase(&mut core::Context::new(timeout), &term, &type_)
         .map_err(|error| format!("failed to erase term: {error:?}"))?;
 
-    run_wasm(&cont::to_wasm(&ersd::to_cont(&term)))
+    run_wasm(&cont::to_wasm(&ersd::to_cont(&term)), on_print)?;
+
+    Ok(())
 }
 
-pub fn run_wasm(wasm_module: &wasm::Module) -> Result<String, String> {
+pub fn run_wasm(
+    wasm_module: &wasm::Module,
+    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+) -> Result<String, String> {
     let mut config = Config::new();
     config.wasm_reference_types(true);
     config.wasm_function_references(true);
@@ -183,7 +219,7 @@ pub fn run_wasm(wasm_module: &wasm::Module) -> Result<String, String> {
     ));
 
     let i32_to_bin = FuncType::new(&engine, [ValType::I32], [bin_ref.clone()]);
-    let f32_to_bin = FuncType::new(&engine, [ValType::F32], [bin_ref]);
+    let f32_to_bin = FuncType::new(&engine, [ValType::F32], [bin_ref.clone()]);
 
     let mut linker: Linker<()> = Linker::new(&engine);
 
@@ -253,6 +289,32 @@ pub fn run_wasm(wasm_module: &wasm::Module) -> Result<String, String> {
             .map_err(|e| format!("failed to define flt_to_str: {e}"))?;
     }
 
+    {
+        let bin_to_unit = FuncType::new(&engine, [bin_ref.clone()], []);
+
+        linker
+            .func_new(
+                "env",
+                "sys_print",
+                bin_to_unit,
+                move |mut caller: Caller<'_, ()>, params, _results| {
+                    let Val::AnyRef(Some(anyref)) = &params[0] else {
+                        return Err(wasmtime::Error::msg("sys_print: expected non-null anyref"));
+                    };
+                    let array_ref = anyref
+                        .as_array(&caller)?
+                        .ok_or_else(|| wasmtime::Error::msg("sys_print: expected array ref"))?;
+                    let len = array_ref.len(&caller)?;
+                    let bytes: Vec<u8> = (0..len)
+                        .map(|i| array_ref.get(&mut caller, i).map(|v| v.unwrap_i32() as u8))
+                        .collect::<Result<Vec<u8>, _>>()?;
+                    on_print(&bytes);
+                    Ok(())
+                },
+            )
+            .map_err(|e| format!("failed to define sys_print: {e}"))?;
+    }
+
     let mut store = Store::new(&engine, ());
 
     let instance = linker
@@ -272,15 +334,23 @@ pub fn run_wasm(wasm_module: &wasm::Module) -> Result<String, String> {
         .to_string())
 }
 
-pub fn run_text(timeout: Duration, source: &str) -> Result<String, String> {
-    run(timeout, source, &text::PanicLoader)
+pub fn run_text(
+    timeout: Duration,
+    source: &str,
+    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+) -> Result<(), String> {
+    run(timeout, source, &text::PanicLoader, on_print)
 }
 
-pub fn run_file(timeout: Duration, path: &Path) -> Result<String, String> {
+pub fn run_file(
+    timeout: Duration,
+    path: &Path,
+    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+) -> Result<(), String> {
     let source = std::fs::read_to_string(path)
         .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
 
     let base = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
-    run(timeout, &source, &text::FileLoader::new(base))
+    run(timeout, &source, &text::FileLoader::new(base), on_print)
 }

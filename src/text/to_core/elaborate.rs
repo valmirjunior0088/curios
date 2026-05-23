@@ -187,6 +187,7 @@ impl<'a> Elaborate<'a> {
             Prim::FltTrunc(inner) => core::Prim::flt_trunc(self.term(inner)),
             Prim::FltNearest(inner) => core::Prim::flt_nearest(self.term(inner)),
             Prim::NatToStr(inner) => core::Prim::nat_to_str(self.term(inner)),
+            Prim::SysPrint(inner) => core::Prim::sys_print(self.term(inner)),
             Prim::IntToStr(inner) => core::Prim::int_to_str(self.term(inner)),
             Prim::FltToStr(inner) => core::Prim::flt_to_str(self.term(inner)),
             Prim::NatToInt(inner) => core::Prim::nat_to_int(self.term(inner)),

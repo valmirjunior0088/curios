@@ -1286,6 +1286,18 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local,
                 });
             }
+            cont::Code::SysPrint(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
+                self.emit_instr(wasm::Instr::Call {
+                    func_name: self.context.table().sys_print_func().clone(),
+                });
+                self.emit_instr(wasm::Instr::StructNew {
+                    type_name: self.context.table().unit_type(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local,
+                });
+            }
         }
     }
 

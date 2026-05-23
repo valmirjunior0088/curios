@@ -686,6 +686,7 @@ impl Reduce {
                     )),
                 })
             }
+            Prim::SysPrint(_) => panic!("SysPrint cannot appear at the type level"),
         }
     }
 

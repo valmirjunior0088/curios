@@ -365,6 +365,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
+        Prim::SysPrint(operand) => flat([pure("Sys.print "), print_term(*operand)]),
     }
 }
 

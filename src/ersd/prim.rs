@@ -68,6 +68,8 @@ pub enum Prim {
     ArrSlice(Subterm, Subterm, Subterm),
     ArrAppend(Subterm, Subterm),
     ArrConcat(Vec<Subterm>),
+    Unit,
+    SysPrint(Subterm),
 }
 
 impl From<u32> for Prim {

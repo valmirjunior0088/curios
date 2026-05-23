@@ -255,6 +255,10 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             }
         }
         Prim::ArrConcat(_) => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+        Prim::SysPrint(inner) => {
+            erase(context, inner, &Term::Prim(Prim::BinType))?;
+            Ok(Term::AtomType(AtomType::new(["unit"])))
+        }
     }
 }
 
@@ -1211,6 +1215,13 @@ fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ersd::Prim::ArrConcat(erased).into())
         }
+        Prim::SysPrint(inner) => {
+            expect(context, term, &Term::AtomType(AtomType::new(["unit"])), expected)?;
+            Ok(
+                ersd::Prim::SysPrint(erase(context, inner, &Term::Prim(Prim::BinType))?.into())
+                    .into(),
+            )
+        }
     }
 }
 
@@ -1467,6 +1478,15 @@ fn erase_atom(
         return Err(Error::type_mismatch(term.clone(), expected.clone()));
     };
 
+    if atoms.len() == 1 {
+        atoms
+            .iter()
+            .position(|candidate| candidate == atom)
+            .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone()))?;
+
+        return Ok(ersd::Prim::Unit.into());
+    }
+
     let index = atoms
         .iter()
         .position(|candidate| candidate == atom)
@@ -1513,6 +1533,30 @@ fn erase_match(
     }
 
     let canonical = reduce(context, head.as_ref())?;
+
+    if atoms.len() == 1 {
+        let atom = atoms.iter().next().unwrap();
+
+        let body = cases.get(atom).ok_or_else(|| Error::cannot_infer(term.clone()))?;
+        let expected_body = motive.open(&[&atom.clone().into()]);
+
+        erase(context, head, &head_type)?;
+        expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
+
+        return context.with_frame(|context| {
+            match &canonical {
+                Term::Var(var) => {
+                    context.define(var.unwrap(), &atom.clone().into());
+                }
+                Term::Proj(Proj { head: base, index }) => {
+                    context.define_proj((**base).clone(), *index, &atom.clone().into());
+                }
+                _ => {}
+            }
+
+            erase(context, body, &expected_body)
+        });
+    }
 
     let cases = atoms
         .iter()
@@ -1799,6 +1843,34 @@ mod tests {
             erase(&mut context, &tuple, &tuple_type),
             Err(Error::TypeMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn erase_match_singleton_lowers_to_body() {
+        let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::PanicLoader);
+
+        let term = text::to_core(
+            &r#"
+                let x : '[unit] = 'unit;
+                match x : _ => '[yes, no];
+                | 'unit => 'yes;
+            "#
+            .parse()
+            .unwrap(),
+            &text::PanicLoader,
+        );
+
+        let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
+
+        let ersd::Term::Let(ersd::Let { body, tail, .. }) = erased else {
+            panic!("expected let");
+        };
+
+        assert!(matches!(*body, ersd::Term::Prim(ersd::Prim::Unit)));
+
+        // singleton match lowers directly to the branch body, not ersd::Match
+        assert!(!matches!(*tail, ersd::Term::Match(_)));
+        assert!(matches!(*tail, ersd::Term::Atom(ersd::Atom { index: 1 })));
     }
 
     #[test]

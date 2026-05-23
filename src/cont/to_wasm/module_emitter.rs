@@ -99,6 +99,35 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    fn emit_sys_imports(&mut self) {
+        if self.table.sys_print_used() {
+            let bin_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+            });
+            let sys_print_type = wasm::TypeName::from("sys_print_type");
+            self.module.add_type(
+                sys_print_type.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([bin_ref]),
+                        outputs: wasm::ResultType::from([]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "sys_print",
+                wasm::Import::Func {
+                    func_name: self.table.sys_print_func().clone(),
+                    type_name: sys_print_type,
+                },
+            );
+        }
+    }
+
     fn emit_arr_type(&mut self) {
         self.module.add_type(
             self.table.arr_type(),
@@ -461,6 +490,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         self.emit_to_str_imports();
+        self.emit_sys_imports();
 
         let start_type_name = wasm::TypeName::from("start");
 

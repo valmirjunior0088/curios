@@ -871,6 +871,7 @@ where
             Prim::ArrConcat(operands) => {
                 Prim::ArrConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
             }
+            Prim::SysPrint(inner) => Prim::SysPrint(self.visit_subterm(inner)),
         }
     }
 

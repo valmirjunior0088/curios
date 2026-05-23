@@ -73,6 +73,7 @@ pub enum Prim {
     ArrSlice(Subterm, Subterm, Subterm),
     ArrAppend(Subterm, Subterm),
     ArrConcat(Vec<Subterm>),
+    SysPrint(Subterm),
 }
 
 impl Prim {
@@ -553,6 +554,13 @@ impl Prim {
         I::Item: Into<Term>,
     {
         Self::ArrConcat(operands.into_iter().map(|e| e.into().into()).collect())
+    }
+
+    pub fn sys_print<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::SysPrint(inner.into().into())
     }
 }
 

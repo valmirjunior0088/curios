@@ -139,5 +139,5 @@ fn main() {
 
     println!();
     println!("=== result ===");
-    println!("{}", curios::run_wasm(&wasm_module).unwrap());
+    println!("{}", curios::run_wasm(&wasm_module, |_| {}).unwrap());
 }
