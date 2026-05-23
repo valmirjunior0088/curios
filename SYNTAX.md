@@ -4,7 +4,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `split` `mod` `use` `end` `def`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `def`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules.
 
@@ -82,6 +82,8 @@ Brings the names exported by `path` into scope. An absolute path (from the root 
 use /Std/Prelude;
 ```
 
+When using an absolute path, the first segment must refer to a `pub mod` at the root. A private root module cannot be accessed via an absolute path.
+
 ## Terms
 
 ### Application
@@ -135,16 +137,16 @@ match head : label => Motive;
 
 `label` names the scrutinee in the motive. Every atom in the type must have a branch. No default branch.
 
-### Split
+### Field access
 
-Eliminates a tuple:
+Reads a field from a tuple by numeric index:
 
 ```
-split head : label => Motive;
-| (f1, f2, ...) => body
+e.0
+e.1
 ```
 
-Binds each field of `head` to the listed names. There is exactly one branch.
+Indices are zero-based. Chains are supported: `e.0.1` reads field 1 of field 0 of `e`.
 
 ### Coercion
 
@@ -428,17 +430,16 @@ A value is a two-element tuple of the variant atom and its payload.
 
 **Elimination**
 
-Use `split` to unpack the tuple, then `match` on the tag with the payload in scope:
+Use `match` on the first field to dispatch on the tag, then access the second field for the payload:
 
 ```
 let unwrap_or : (A : Type) -> (_ : Result A Bin) -> (_ : A) -> A = A => r => default =>
-    split r : _ => A; | (tag, payload) =>
-    match tag : _ => A;
-    | 'ok  => payload;
-    | 'err => default;;
+    match r.0 : _ => A;
+    | 'ok  => r.1;
+    | 'err => default;
 ```
 
-The `;;` at the end closes the last `match` branch and then the surrounding `let` (or whatever expression contains the `split`).
+The trailing `;` closes the last `match` branch.
 
 ### Recursive types
 
@@ -470,12 +471,9 @@ A recursive function over the list is itself written with `rec`:
 
 ```
 rec length : (A : Type) -> (_ : List A) -> Nat = A => list =>
-    split list : _ => Nat; | (tag, payload) =>
-    match tag : _ => Nat;
+    match list.0 : _ => Nat;
     | 'nil  => 0;
-    | 'cons =>
-        split payload : _ => Nat; | (head, tail) =>
-        Nat.add 1 (length A tail);;
+    | 'cons => Nat.add 1 (length A list.1.1);
 ```
 
 The `;;` at the end closes the last `match` branch and then the top-level `rec` binding.

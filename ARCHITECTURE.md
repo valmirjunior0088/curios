@@ -88,7 +88,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Π-types `(x: A) -> B`, lambdas `x => body`
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
 - Atoms `'[left, right]`, `'left`; pattern matching `match x : k => T; | 'tag => body;`
-- `split` (Σ-elimination), `Nat.fold` (structural induction), `Nat.match` (sparse dispatch)
+- `e.0`, `e.1` (field access / Σ-elimination), `Nat.fold` (structural induction), `Nat.match` (sparse dispatch)
 - `Nat`, `Int`, `Flt`, `Bin`, `Arr` primitives with all built-in operations
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/name;`, `pub use ...;`
 - Opaque types: `def Label(witness) ... end`
@@ -122,7 +122,7 @@ The central `core::Term` enum:
 | ------------------------------- | ---------------------------------------------------- |
 | `Type`                          | The sort (no universe hierarchy)                     |
 | `FuncType` / `Func` / `Apply`   | Π-types, λ-abstraction, application                  |
-| `TupleType` / `Tuple` / `Split` | Σ-types (n-ary), construction, elimination           |
+| `TupleType` / `Tuple` / `Proj`  | Σ-types (n-ary), construction, field access          |
 | `NatFold`                       | Structural induction on `Nat` (zero + pred/IH cases) |
 | `NatMatch`                      | Sparse dispatch on specific `Nat` values             |
 | `AtomType` / `Atom` / `Match`   | Labeled unions, tags, pattern matching               |
@@ -141,7 +141,7 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 | --------- | --------------------------- |
 | `One`     | `Func`, `FuncType`          |
 | `Two`     | —                           |
-| `Many(n)` | `TupleType`, `Split`, `Rec` |
+| `Many(n)` | `TupleType`, `Rec`          |
 
 A private `Visit<F>` struct drives all variable traversals (`shift`, `capture`, `release`, `free_vars`). The closure `F: FnMut(depth, &Var) -> Option<Term>` can return a replacement or `None` to leave the variable unchanged.
 
@@ -175,7 +175,7 @@ Erasure is performed inside `core::typing.rs` (the `erase` function), not as a s
 
 | Removed                                     | Preserved                                                         |
 | ------------------------------------------- | ----------------------------------------------------------------- |
-| `Type`, `FuncType`, `TupleType`, `AtomType` | `Func`, `Apply`, `Tuple`, `Split`, `NatFold`, `NatMatch`, `Match` |
+| `Type`, `FuncType`, `TupleType`, `AtomType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match`  |
 | `Sealed`, `Seal`, `Unseal`                  | `Let`, `Rec`, all control flow                                    |
 | Type annotations on binders                 | `Prim`, `Bin`, `Arr`, `Name`                                      |
 
@@ -333,12 +333,12 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-172 tests across 14 files, covering every layer:
+178 tests across 14 files, covering every layer:
 
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |
 | Term operations | `Scope` open/close symmetry, shift, capture, release                                    |
-| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, split/case          |
+| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access         |
 | Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement    |
 | Type checking   | Dependent tuples, `Nat.fold`, recursion, primitive operand validation, arrays, binaries |
 | Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                           |

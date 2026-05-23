@@ -96,6 +96,15 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
     .map(|value| Term::Prim(Prim::Int(value)))
 }
 
+fn parse_u32<'a>() -> Parser<'a, u32> {
+    take_while(|char: char| char.is_ascii_digit())
+        .flat_map(|digits| match digits.parse::<u32>() {
+            Ok(value) => pure(value),
+            Err(_) => fail("expected u32"),
+        })
+        .and_drop(parse_whitespace())
+}
+
 fn parse_nat<'a>() -> Parser<'a, Nat> {
     catch(
         take_exact("'")
@@ -104,15 +113,7 @@ fn parse_nat<'a>() -> Parser<'a, Nat> {
             .and_drop(parse_whitespace()),
     )
     .map(Nat::Char)
-    .or(catch(
-        take_while(|char| char.is_ascii_digit())
-            .flat_map::<u32, _>(|digits| match digits.parse() {
-                Ok(value) => pure(value),
-                Err(_) => fail("expected natural number"),
-            })
-            .and_drop(parse_whitespace()),
-    )
-    .map(Nat::Number))
+    .or(catch(parse_u32()).map(Nat::Number))
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
@@ -778,18 +779,11 @@ fn parse_coerce<'a>() -> Parser<'a, Term> {
 fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
     catch(
         take_exact(".")
-            .and_keep(take_while(|c: char| c.is_ascii_digit()))
-            .flat_map(|digits: &str| {
-                if digits.is_empty() {
-                    fail("Expected numeric index after '.'")
-                } else {
-                    match digits.parse::<usize>() {
-                        Ok(n) => pure(n),
-                        Err(_) => fail("Numeric index out of range"),
-                    }
-                }
-            })
-            .and_drop(parse_whitespace()),
+            .and_keep(
+                parse_u32()
+                    .map_err("Expected numeric index after '.'")
+                    .map(|n| n as usize),
+            ),
     )
 }
 

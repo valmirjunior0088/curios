@@ -62,11 +62,11 @@ let point : { x : Nat, y : Nat } = (3, 4);
 
 There are no struct declarations. The type expression is the definition. Named and unnamed field types are identical to the type checker; labels exist only for readers.
 
-To extract fields, use `split`:
+To extract a field, use dot notation:
 
 ```
 let x_coord : (_ : { Nat, Nat }) -> Nat = p =>
-    split p : _ => Nat; | (x, y) => x;
+    p.0;
 ```
 
 Atoms are Curios's replacement for fieldless `enum` variants. An atom value is written `'foo`; its type is the set of atoms it can belong to, written `'[foo, bar]`.
@@ -121,19 +121,16 @@ let c : Shape = ('circle, +3.0);
 let r : Shape = ('rectangle, (+2.0, +4.0));
 ```
 
-Elimination uses `split` to unpack tag and payload, then `match` to dispatch on the tag. Inside each branch the type checker knows the concrete type of `payload`:
+Elimination matches on `s.0` to dispatch on the tag, then accesses `s.1` for the payload. Inside each branch the type checker knows the concrete type of `s.1`:
 
 ```
 let area : (_ : Shape) -> Flt = s =>
-    split s : _ => Flt; | (tag, payload) =>
-    match tag : _ => Flt;
-    | 'circle    => Flt.mul payload payload;
-    | 'rectangle =>
-        split payload : _ => Flt; | (w, h) =>
-        Flt.mul w h;;
+    match s.0 : _ => Flt;
+    | 'circle    => Flt.mul s.1 s.1;
+    | 'rectangle => Flt.mul s.1.0 s.1.1;
 ```
 
-In the `'circle` branch `payload : Flt`; in the `'rectangle` branch `payload : { Flt, Flt }`. No downcasting, no `unwrap`.
+In the `'circle` branch `s.1 : Flt`; in the `'rectangle` branch `s.1 : { Flt, Flt }`. No downcasting, no `unwrap`.
 
 ## Dependent function types
 
@@ -147,7 +144,7 @@ let id : (T : Type) -> T -> T = T => x => x;
 
 In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id Nat 42` or `id Bin "hello"`. There are no angle brackets.
 
-The motive in `match` and `split` is the same mechanism: `match head : label => T;` computes the return type from the scrutinee's value. When the return type actually varies per branch, that computation is non-trivial:
+The motive in `match` is the same mechanism: `match head : label => T;` computes the return type from the scrutinee's value. When the return type actually varies per branch, that computation is non-trivial:
 
 ```
 let default_for : (tag : '[nat, bin]) ->
@@ -192,7 +189,7 @@ let two  : Vec Nat 2 = (1, (2, 'nil));
 
 ```
 let head : (T : Type) -> (n : Nat) -> (_ : Vec T (Nat.add n 1)) -> T = T => n => v =>
-    split v : _ => T; | (x, xs) => x;
+    v.0;
 ```
 
-`Vec T (Nat.add n 1)` expands to `{ T, Vec T n }`, so `split` unpacks it into `x : T` and `xs : Vec T n`. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+`Vec T (Nat.add n 1)` expands to `{ T, Vec T n }`, so `v.0 : T` and `v.1 : Vec T n`. There is no runtime check and no `Option` in the return type — the length guarantee is structural.

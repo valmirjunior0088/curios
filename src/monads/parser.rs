@@ -88,6 +88,13 @@ impl ParserError {
         }
     }
 
+    fn with_message<M: Into<String>>(self, message: M) -> Self {
+        Self {
+            message: message.into(),
+            ..self
+        }
+    }
+
     fn is_uncaught(&self, state: ParserState) -> bool {
         self.fatal && self.offset != state.offset
     }
@@ -205,6 +212,15 @@ where
             let (item, state) = self.parse(state)?;
 
             Ok(((f)(item), state))
+        })
+    }
+
+    pub fn map_err<M>(self, message: M) -> Parser<'a, A>
+    where
+        M: Into<String> + 'a,
+    {
+        Parser::new(move |state| {
+            self.parse(state).map_err(|error| error.with_message(message))
         })
     }
 
