@@ -79,7 +79,7 @@ pub fn cli() -> Result<(), String> {
     }
 
     if !cli.check {
-        crate::run_wasm(&wasm_module, crate::pipe_to_stdout())?;
+        crate::run_wasm(&wasm_module, crate::StdoutProvider)?;
     }
 
     Ok(())

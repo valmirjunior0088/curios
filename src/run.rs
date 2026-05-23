@@ -1,42 +1,20 @@
+mod provider;
+pub use provider::*;
+
 use {
     crate::{cont, core, ersd, text, wasm},
-    std::{
-        path::Path,
-        sync::{
-            Arc, Mutex,
-            mpsc::{self, Receiver},
-        },
-        time::Duration,
-    },
+    std::{path::Path, sync::Arc, time::Duration},
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Config, Engine, FieldType, FuncType,
         HeapType, Linker, Module, Mutability, RefType, Rooted, StorageType, Store, Val, ValType,
     },
 };
 
-pub fn pipe_to_stdout() -> impl Fn(&[u8]) + Send + Sync + 'static {
-    |bytes| {
-        std::io::Write::write_all(&mut std::io::stdout(), bytes).unwrap();
-    }
-}
-
-pub fn pipe_to_channel() -> (impl Fn(&[u8]) + Send + Sync + 'static, Receiver<Vec<u8>>) {
-    let (sender, receiver) = mpsc::channel();
-    let sender = Arc::new(Mutex::new(sender));
-
-    (
-        move |bytes| {
-            sender.lock().unwrap().send(bytes.to_vec()).unwrap();
-        },
-        receiver,
-    )
-}
-
-pub fn run(
+pub fn run<P: Provider + Send + Sync + 'static>(
     timeout: Duration,
     source: &str,
     loader: &dyn text::Loader,
-    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+    provider: P,
 ) -> Result<(), String> {
     let term = text::to_core(
         &source
@@ -51,14 +29,14 @@ pub fn run(
     let term = core::erase(&mut core::Context::new(timeout), &term, &type_)
         .map_err(|error| format!("failed to erase term: {error:?}"))?;
 
-    run_wasm(&cont::to_wasm(&ersd::to_cont(&term)), on_print)?;
+    run_wasm(&cont::to_wasm(&ersd::to_cont(&term)), provider)?;
 
     Ok(())
 }
 
-pub fn run_wasm(
+pub fn run_wasm<P: Provider + Send + Sync + 'static>(
     wasm_module: &wasm::Module,
-    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+    provider: P,
 ) -> Result<(), String> {
     let mut config = Config::new();
     config.wasm_reference_types(true);
@@ -152,6 +130,7 @@ pub fn run_wasm(
 
     {
         let bin_to_unit = FuncType::new(&engine, [bin_ref.clone()], []);
+        let provider = Arc::new(provider);
 
         linker
             .func_new(
@@ -169,7 +148,7 @@ pub fn run_wasm(
                     let bytes: Vec<u8> = (0..len)
                         .map(|i| array_ref.get(&mut caller, i).map(|v| v.unwrap_i32() as u8))
                         .collect::<Result<Vec<u8>, _>>()?;
-                    on_print(&bytes);
+                    provider.print(&bytes);
                     Ok(())
                 },
             )
@@ -193,23 +172,23 @@ pub fn run_wasm(
     Ok(())
 }
 
-pub fn run_text(
+pub fn run_text<P: Provider + Send + Sync + 'static>(
     timeout: Duration,
     source: &str,
-    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+    provider: P,
 ) -> Result<(), String> {
-    run(timeout, source, &text::PanicLoader, on_print)
+    run(timeout, source, &text::PanicLoader, provider)
 }
 
-pub fn run_file(
+pub fn run_file<P: Provider + Send + Sync + 'static>(
     timeout: Duration,
     path: &Path,
-    on_print: impl Fn(&[u8]) + Send + Sync + 'static,
+    provider: P,
 ) -> Result<(), String> {
     let source = std::fs::read_to_string(path)
         .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
 
     let base = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
-    run(timeout, &source, &text::FileLoader::new(base), on_print)
+    run(timeout, &source, &text::FileLoader::new(base), provider)
 }

@@ -52,5 +52,5 @@ fn main() {
 
     println!();
     println!("=== result ===");
-    curios::run_wasm(&wasm_module, curios::pipe_to_stdout()).unwrap();
+    curios::run_wasm(&wasm_module, curios::StdoutProvider).unwrap();
 }
