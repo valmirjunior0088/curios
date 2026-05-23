@@ -6,6 +6,30 @@ use elaborate::*;
 
 use {super::*, crate::core, std::collections::HashMap};
 
+fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
+    let mut info = ModuleInfo::new();
+
+    for item in items {
+        match item {
+            TopItem::Mod(m) => info.insert_child(m.label.clone(), m.is_pub),
+            TopItem::Use(u) if u.is_pub => info.insert_child(u.name.last().to_string(), true),
+            TopItem::Let(l) => info.insert_binding(l.label.clone(), l.is_pub),
+            TopItem::Def(d) => {
+                info.insert_child(d.label.clone(), d.is_pub);
+                info.insert_binding(d.label.clone(), d.is_pub);
+            }
+            TopItem::Rec(ls) => {
+                for l in ls {
+                    info.insert_binding(l.label.clone(), l.is_pub);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    info
+}
+
 fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
@@ -13,13 +37,12 @@ fn process_items(
     def_stack: &DefStack,
     loader: &dyn Loader,
 ) {
-    let mut info = ModuleInfo::new();
+    context.finalize(scan_module_info(top_items));
 
     for top_item in top_items {
         match top_item {
             TopItem::Mod(mod_item) => {
                 context.insert_scope(mod_item.label.clone(), context.prefixed(&mod_item.label));
-                info.insert_child(mod_item.label.clone(), mod_item.is_pub);
 
                 match &mod_item.module {
                     Some(module) => process_items(
@@ -50,7 +73,6 @@ fn process_items(
                 if use_item.is_pub {
                     let qualifier = use_item.name.last().to_string();
                     context.register_alias(&qualifier);
-                    info.insert_child(qualifier, true);
                 }
             }
             TopItem::Let(let_item) => {
@@ -60,8 +82,6 @@ fn process_items(
                     context.aliases(),
                     def_stack,
                 );
-
-                info.insert_binding(let_item.label.clone(), let_item.is_pub);
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
@@ -79,8 +99,6 @@ fn process_items(
                                 context.aliases(),
                                 def_stack,
                             );
-
-                            info.insert_binding(let_item.label.clone(), let_item.is_pub);
 
                             FlatLet {
                                 name: context.prefixed(&let_item.label),
@@ -103,8 +121,6 @@ fn process_items(
                 .term(&def_item.witness);
 
                 context.insert_scope(def_item.label.clone(), name.clone());
-                info.insert_child(def_item.label.clone(), def_item.is_pub);
-                info.insert_binding(def_item.label.clone(), def_item.is_pub);
 
                 flat_items.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
@@ -121,22 +137,6 @@ fn process_items(
                     loader,
                 );
             }
-        }
-    }
-
-    context.finalize(info);
-}
-
-fn check_entrypoint(items: &[TopItem]) {
-    for item in items {
-        match item {
-            TopItem::Mod(mod_item) if mod_item.is_pub => panic!("pub on top-level entrypoint item"),
-            TopItem::Let(let_item) if let_item.is_pub => panic!("pub on top-level entrypoint item"),
-            TopItem::Def(def_item) if def_item.is_pub => panic!("pub on top-level entrypoint item"),
-            TopItem::Rec(let_items) if let_items.iter().any(|let_item| let_item.is_pub) => {
-                panic!("pub on top-level entrypoint item")
-            }
-            _ => {}
         }
     }
 }
@@ -156,8 +156,6 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
 }
 
 pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> core::Term {
-    check_entrypoint(&entrypoint.items);
-
     let mut table = HashMap::new();
     let mut aliases = HashMap::new();
     let mut context = Context::new(&mut table, &mut aliases);
@@ -246,10 +244,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "pub on top-level entrypoint item")]
-    fn rejects_pub_at_entrypoint_root() {
+    fn allows_pub_on_root_items() {
         run(r#"
-            pub let f : Type = Type;
+            pub mod Foo
+                pub let f : Type = Type;
+            end
+            pub let g : Type = Type;
+            pub def D(Bin)
+            end
             Type
         "#);
     }
@@ -579,12 +581,12 @@ mod tests {
     fn pub_use_exposes_qualifier() {
         assert_eq!(
             run(r#"
-                mod Foo
+                pub mod Foo
                     pub mod Bar
                         pub let f : Type = Type;
                     end
                 end
-                mod MyMod
+                pub mod MyMod
                     pub use /Foo/Bar;
                 end
                 MyMod/Bar/f
@@ -635,12 +637,12 @@ mod tests {
     fn use_of_pub_use_path_resolves_through_alias() {
         assert_eq!(
             run(r#"
-                mod Foo
+                pub mod Foo
                     pub mod Bar
                         pub let f : Type = Type;
                     end
                 end
-                mod MyMod
+                pub mod MyMod
                     pub use /Foo/Bar;
                 end
                 use /MyMod/Bar;
@@ -660,15 +662,15 @@ mod tests {
     fn chained_pub_use_re_exports_transitively() {
         assert_eq!(
             run(r#"
-                mod A
+                pub mod A
                     pub mod X
                         pub let f : Type = Type;
                     end
                 end
-                mod B
+                pub mod B
                     pub use /A/X;
                 end
-                mod C
+                pub mod C
                     pub use /B/X;
                 end
                 C/X/f
@@ -678,15 +680,42 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "private child module")]
+    fn rejects_private_root_module_via_absolute_path() {
+        run(r#"
+            mod Foo
+                pub let f : Type = Type;
+            end
+            pub mod Bar
+                use /Foo;
+            end
+            Type
+        "#);
+    }
+
+    #[test]
+    fn allows_pub_root_module_via_absolute_path() {
+        run(r#"
+            pub mod Foo
+                pub let f : Type = Type;
+            end
+            pub mod Bar
+                use /Foo;
+            end
+            Type
+        "#);
+    }
+
+    #[test]
     #[should_panic(expected = "child module not found")]
     fn private_use_does_not_expose_qualifier() {
         run(r#"
-            mod Foo
+            pub mod Foo
                 pub mod Bar
                     pub let f : Type = Type;
                 end
             end
-            mod MyMod
+            pub mod MyMod
                 use /Foo/Bar;
             end
             MyMod/Bar/f

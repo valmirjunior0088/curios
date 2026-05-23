@@ -161,10 +161,25 @@ impl<'a> Context<'a> {
         let qualifier = top_use.name.last().to_string();
 
         let resolved_path = if top_use.is_abs {
-            let mut current = Name::from([top_use.name.head()]);
+            let head = top_use.name.head();
+
+            let root_info = self
+                .table
+                .get(&Name::empty())
+                .expect("root module info not present");
+
+            let is_pub = root_info
+                .get_child(head)
+                .unwrap_or_else(|| panic!("child module not found: {head}"));
+
+            if !is_pub {
+                panic!("private child module: {head}");
+            }
+
+            let mut current = Name::from([head]);
 
             if !self.table.contains_key(&current) {
-                panic!("module not found: {}", top_use.name.head());
+                panic!("module not found: {head}");
             }
 
             for seg in top_use.name.tail() {
