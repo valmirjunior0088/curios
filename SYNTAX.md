@@ -280,11 +280,12 @@ A single atom value. Its type is any atom type that includes `foo`.
 ### Tuples
 
 ```
+()
 (a, b)
 (a, b, c)
 ```
 
-At least two elements are required.
+Zero or more elements.
 
 ## Primitive operations
 
@@ -408,7 +409,7 @@ Arr.concat [1, 2], [3, 4], [5]
 
 | Operation     | Arity | Description                | Returns    |
 |---------------|-------|----------------------------|------------|
-| `Sys.print a` | 1     | Print `a : Bin` to stdout  | `'[unit]`  |
+| `Sys.print a` | 1     | Print `a : Bin` to stdout  | `{}`       |
 
 ## Idioms
 

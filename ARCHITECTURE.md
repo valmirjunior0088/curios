@@ -214,7 +214,7 @@ Module
 
 | Tier               | Variants                                                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Pure(Data)`       | `Unit`, `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Arr(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)` |
+| `Pure(Data)`       | `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Arr(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)` |
 | `Eval(Code)`       | arithmetic, comparisons, conversions, bitwise/counting ops, `TplGet`, `BinLen`/`BinGet`/etc., `ArrLen`/`ArrGet`/etc.                       |
 | `Alias(ValueName)` | forward reference within a region                                                                                                          |
 
@@ -256,7 +256,6 @@ When a call appears in value position, the lowerer creates a **join block** that
 | `Nat`        | `i31ref` (packed i32)                                                     |
 | `Int`        | `i31ref` (packed i32)                                                     |
 | `Flt`        | GC struct with single `f32` field                                         |
-| `Unit`       | empty GC struct                                                           |
 | `Tuple(n)`   | GC struct with N `anyref` fields; subtype chain `tpl/1 ← tpl/2 ← tpl/3 …` |
 | `Closure`    | GC struct: funcref field + captured values as fields                      |
 | `Atom`       | `i31ref` (the index)                                                      |
@@ -306,7 +305,7 @@ Two helpers produce `on_print` values: `pipe_to_stdout` writes bytes directly to
 
 Four operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `sys_print` reads the `Bin` argument and forwards its bytes to `on_print`.
 
-Wasmtime is configured with reference types, function references, GC, and tail calls. The result printer (`src/run.rs`) uses `RefIds` to track GC reference identities for cycle detection and formats `i31ref`, struct, and array values recursively.
+Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all program output is produced via `Sys.print` calls through the `on_print` callback.
 
 ---
 
