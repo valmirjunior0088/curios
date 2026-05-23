@@ -292,22 +292,22 @@ All primitive operations are prefix and take **atomic** arguments. Parenthesise 
 
 ### Nat
 
-| Operation        | Arity | Description           |
-|------------------|-------|-----------------------|
-| `Nat.add a b`    | 2     | Addition              |
-| `Nat.sub a b`    | 2     | Subtraction           |
-| `Nat.mul a b`    | 2     | Multiplication        |
-| `Nat.div a b`    | 2     | Division              |
-| `Nat.rem a b`    | 2     | Remainder             |
-| `Nat.eql a b`    | 2     | Equality              |
-| `Nat.neq a b`    | 2     | Inequality            |
-| `Nat.lt a b`     | 2     | Less than             |
-| `Nat.gt a b`     | 2     | Greater than          |
-| `Nat.lte a b`    | 2     | Less than or equal    |
-| `Nat.gte a b`    | 2     | Greater than or equal |
-| `Nat.to_int a`   | 1     | Convert to Int        |
-| `Nat.to_flt a`   | 1     | Convert to Flt        |
-| `Nat.to_str a`   | 1     | Convert to Bin        |
+| Operation        | Arity | Description           | Returns          |
+|------------------|-------|-----------------------|------------------|
+| `Nat.add a b`    | 2     | Addition              | `Nat`            |
+| `Nat.sub a b`    | 2     | Subtraction           | `Nat`            |
+| `Nat.mul a b`    | 2     | Multiplication        | `Nat`            |
+| `Nat.div a b`    | 2     | Division              | `Nat`            |
+| `Nat.rem a b`    | 2     | Remainder             | `Nat`            |
+| `Nat.eql a b`    | 2     | Equality              | `'[false, true]` |
+| `Nat.neq a b`    | 2     | Inequality            | `'[false, true]` |
+| `Nat.lt a b`     | 2     | Less than             | `'[false, true]` |
+| `Nat.gt a b`     | 2     | Greater than          | `'[false, true]` |
+| `Nat.lte a b`    | 2     | Less than or equal    | `'[false, true]` |
+| `Nat.gte a b`    | 2     | Greater than or equal | `'[false, true]` |
+| `Nat.to_int a`   | 1     | Convert to Int        | `Int`            |
+| `Nat.to_flt a`   | 1     | Convert to Flt        | `Flt`            |
+| `Nat.to_str a`   | 1     | Convert to Bin        | `Bin`            |
 
 ### Nat.fold
 
@@ -332,77 +332,83 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 
 ### Int
 
-| Operation        | Arity | Description           |
-|------------------|-------|-----------------------|
-| `Int.add a b`    | 2     | Addition              |
-| `Int.sub a b`    | 2     | Subtraction           |
-| `Int.mul a b`    | 2     | Multiplication        |
-| `Int.div a b`    | 2     | Division              |
-| `Int.rem a b`    | 2     | Remainder             |
-| `Int.eql a b`    | 2     | Equality              |
-| `Int.neq a b`    | 2     | Inequality            |
-| `Int.lt a b`     | 2     | Less than             |
-| `Int.gt a b`     | 2     | Greater than          |
-| `Int.lte a b`    | 2     | Less than or equal    |
-| `Int.gte a b`    | 2     | Greater than or equal |
-| `Int.to_nat a`   | 1     | Convert to Nat        |
-| `Int.to_flt a`   | 1     | Convert to Flt        |
-| `Int.to_str a`   | 1     | Convert to Bin        |
+| Operation        | Arity | Description           | Returns          |
+|------------------|-------|-----------------------|------------------|
+| `Int.add a b`    | 2     | Addition              | `Int`            |
+| `Int.sub a b`    | 2     | Subtraction           | `Int`            |
+| `Int.mul a b`    | 2     | Multiplication        | `Int`            |
+| `Int.div a b`    | 2     | Division              | `Int`            |
+| `Int.rem a b`    | 2     | Remainder             | `Int`            |
+| `Int.eql a b`    | 2     | Equality              | `'[false, true]` |
+| `Int.neq a b`    | 2     | Inequality            | `'[false, true]` |
+| `Int.lt a b`     | 2     | Less than             | `'[false, true]` |
+| `Int.gt a b`     | 2     | Greater than          | `'[false, true]` |
+| `Int.lte a b`    | 2     | Less than or equal    | `'[false, true]` |
+| `Int.gte a b`    | 2     | Greater than or equal | `'[false, true]` |
+| `Int.to_nat a`   | 1     | Convert to Nat        | `Nat`            |
+| `Int.to_flt a`   | 1     | Convert to Flt        | `Flt`            |
+| `Int.to_str a`   | 1     | Convert to Bin        | `Bin`            |
 
 ### Flt
 
-| Operation          | Arity | Description           |
-|--------------------|-------|-----------------------|
-| `Flt.add a b`      | 2     | Addition              |
-| `Flt.sub a b`      | 2     | Subtraction           |
-| `Flt.mul a b`      | 2     | Multiplication        |
-| `Flt.div a b`      | 2     | Division              |
-| `Flt.eql a b`      | 2     | Equality              |
-| `Flt.neq a b`      | 2     | Inequality            |
-| `Flt.lt a b`       | 2     | Less than             |
-| `Flt.gt a b`       | 2     | Greater than          |
-| `Flt.lte a b`      | 2     | Less than or equal    |
-| `Flt.gte a b`      | 2     | Greater than or equal |
-| `Flt.min a b`      | 2     | Minimum               |
-| `Flt.max a b`      | 2     | Maximum               |
-| `Flt.neg a`        | 1     | Negation              |
-| `Flt.abs a`        | 1     | Absolute value        |
-| `Flt.sqrt a`       | 1     | Square root           |
-| `Flt.floor a`      | 1     | Floor                 |
-| `Flt.ceil a`       | 1     | Ceiling               |
-| `Flt.trunc a`      | 1     | Truncate toward zero  |
-| `Flt.nearest a`    | 1     | Round to nearest      |
-| `Flt.to_nat a`     | 1     | Convert to Nat        |
-| `Flt.to_int a`     | 1     | Convert to Int        |
-| `Flt.to_str a`     | 1     | Convert to Bin        |
+| Operation          | Arity | Description           | Returns          |
+|--------------------|-------|-----------------------|------------------|
+| `Flt.add a b`      | 2     | Addition              | `Flt`            |
+| `Flt.sub a b`      | 2     | Subtraction           | `Flt`            |
+| `Flt.mul a b`      | 2     | Multiplication        | `Flt`            |
+| `Flt.div a b`      | 2     | Division              | `Flt`            |
+| `Flt.eql a b`      | 2     | Equality              | `'[false, true]` |
+| `Flt.neq a b`      | 2     | Inequality            | `'[false, true]` |
+| `Flt.lt a b`       | 2     | Less than             | `'[false, true]` |
+| `Flt.gt a b`       | 2     | Greater than          | `'[false, true]` |
+| `Flt.lte a b`      | 2     | Less than or equal    | `'[false, true]` |
+| `Flt.gte a b`      | 2     | Greater than or equal | `'[false, true]` |
+| `Flt.min a b`      | 2     | Minimum               | `Flt`            |
+| `Flt.max a b`      | 2     | Maximum               | `Flt`            |
+| `Flt.neg a`        | 1     | Negation              | `Flt`            |
+| `Flt.abs a`        | 1     | Absolute value        | `Flt`            |
+| `Flt.sqrt a`       | 1     | Square root           | `Flt`            |
+| `Flt.floor a`      | 1     | Floor                 | `Flt`            |
+| `Flt.ceil a`       | 1     | Ceiling               | `Flt`            |
+| `Flt.trunc a`      | 1     | Truncate toward zero  | `Flt`            |
+| `Flt.nearest a`    | 1     | Round to nearest      | `Flt`            |
+| `Flt.to_nat a`     | 1     | Convert to Nat        | `Nat`            |
+| `Flt.to_int a`     | 1     | Convert to Int        | `Int`            |
+| `Flt.to_str a`     | 1     | Convert to Bin        | `Bin`            |
 
 ### Bin
 
-| Operation              | Arity    | Description                         |
-|------------------------|----------|-------------------------------------|
-| `Bin.len a`            | 1        | Byte length                         |
-| `Bin.eql a b`          | 2        | Equality                            |
-| `Bin.get a i`          | 2        | Byte at index `i`                   |
-| `Bin.slice a start end`| 3        | Subsequence from `start` to `end`   |
-| `Bin.append a byte`    | 2        | Append a single byte                |
-| `Bin.concat a, b, ...` | variadic | Concatenate any number of sequences |
+| Operation              | Arity    | Description                         | Returns          |
+|------------------------|----------|-------------------------------------|------------------|
+| `Bin.len a`            | 1        | Byte length                         | `Nat`            |
+| `Bin.eql a b`          | 2        | Equality                            | `'[false, true]` |
+| `Bin.get a i`          | 2        | Byte at index `i`                   | `Nat`            |
+| `Bin.slice a start end`| 3        | Subsequence from `start` to `end`   | `Bin`            |
+| `Bin.append a byte`    | 2        | Append a single byte                | `Bin`            |
+| `Bin.concat a, b, ...` | variadic | Concatenate any number of sequences | `Bin`            |
 
 ### Arr
 
-| Operation               | Arity    | Description                         |
-|-------------------------|----------|-------------------------------------|
-| `Arr.len a`             | 1        | Element count                       |
-| `Arr.get a i`           | 2        | Element at index `i`                |
-| `Arr.slice a start end` | 3        | Subarray from `start` to `end`      |
-| `Arr.append a elem`     | 2        | Append a single element             |
-| `Arr.concat a, b, ...`  | variadic | Concatenate any number of arrays    |
+| Operation               | Arity    | Description                         | Returns  |
+|-------------------------|----------|-------------------------------------|----------|
+| `Arr.len a`             | 1        | Element count                       | `Nat`    |
+| `Arr.get a i`           | 2        | Element at index `i`                | `T`      |
+| `Arr.slice a start end` | 3        | Subarray from `start` to `end`      | `Arr T`  |
+| `Arr.append a elem`     | 2        | Append a single element             | `Arr T`  |
+| `Arr.concat a, b, ...`  | variadic | Concatenate any number of arrays    | `Arr T`  |
 
 `Bin.concat` and `Arr.concat` take comma-separated atomic arguments (not juxtaposed):
 
 ```
-Bin.concat "hello" ", " "world"
-Arr.concat [1, 2] [3, 4] [5]
+Bin.concat "hello", ", ", "world"
+Arr.concat [1, 2], [3, 4], [5]
 ```
+
+### Sys
+
+| Operation     | Arity | Description                | Returns    |
+|---------------|-------|----------------------------|------------|
+| `Sys.print a` | 1     | Print `a : Bin` to stdout  | `'[unit]`  |
 
 ## Idioms
 

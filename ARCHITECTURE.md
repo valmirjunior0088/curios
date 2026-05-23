@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~27,000 lines in `src/`, ~1,400 in `examples/`.
+**Codebase size:** ~27,400 lines in `src/`, ~1,500 in `examples/`.
 
 ---
 
@@ -37,13 +37,13 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,300  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~990   |
-| Type checking + erasure | `core/typing.rs`                               | 2,481  |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~1,970 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 2,978  |
-| WASM codegen            | `cont/to_wasm/` (5 files)                      | ~2,600 |
-| Binary serialization    | `wasm/writer.rs`                               | 2,063  |
+| Parsing                 | `text/parse.rs`                                | 1,332  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,000 |
+| Type checking + erasure | `core/typing.rs`                               | 2,483  |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,200 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,101  |
+| WASM codegen            | `cont/to_wasm/` (5 files)                      | ~3,300 |
+| Binary serialization    | `wasm/writer.rs`                               | 2,018  |
 
 ---
 
@@ -140,7 +140,7 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 | `A`       | Used by                     |
 | --------- | --------------------------- |
 | `One`     | `Func`, `FuncType`          |
-| `Two`     | —                           |
+| `Two`     | `NatFold`                   |
 | `Many(n)` | `TupleType`, `Rec`          |
 
 A private `Visit<F>` struct drives all variable traversals (`shift`, `capture`, `release`, `free_vars`). The closure `F: FnMut(depth, &Var) -> Option<Term>` can return a replacement or `None` to leave the variable unchanged.
@@ -279,7 +279,7 @@ Direct calls use `return_call`; indirect calls use `return_call_ref`. This elimi
 | `context.rs`        | Tracks locals, frames, and value classification (`LoadAs` enum) for correct casting            |
 | `frame.rs`          | Represents nested WASM blocks; accumulates instructions; manages label-based branching         |
 | `expr_emitter.rs`   | Emits instructions for CPS values: closure allocation, tuple projection, arithmetic, constants |
-| `module_emitter.rs` | Emits the top-level WASM module: imports, type definitions, function bodies, exports           |
+| `module_emitter.rs` | Emits the top-level WASM module: type definitions, function bodies, exports, and host imports when the corresponding operations are used |
 
 The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`, `Arr`) drives which cast or unboxing sequence the emitter generates for each value.
 
@@ -295,12 +295,16 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 
 ## Execution (`src/run.rs`)
 
-Four public entry points:
+Four public entry points, all accepting an `on_print: impl Fn(&[u8])` callback invoked by `Sys.print`:
 
-- `run_text(timeout, source)` — inline source with `PanicLoader`
-- `run_file(timeout, path)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
-- `run(timeout, source, loader)` — shared core: full pipeline → `run_wasm`
-- `run_wasm(wasm_module)` — executes a `wasm::Module` directly via Wasmtime and returns the printed result
+- `run_text(timeout, source, on_print)` — inline source with `PanicLoader`
+- `run_file(timeout, path, on_print)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
+- `run(timeout, source, loader, on_print)` — shared core: full pipeline → `run_wasm`
+- `run_wasm(wasm_module, on_print)` — executes a `wasm::Module` directly via Wasmtime and returns the printed result
+
+Two helpers produce `on_print` values: `pipe_to_stdout` writes bytes directly to standard output; `pipe_to_channel` returns a callback plus a `Receiver<Vec<u8>>` for capturing output in tests.
+
+Four operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `sys_print` reads the `Bin` argument and forwards its bytes to `on_print`.
 
 Wasmtime is configured with reference types, function references, GC, and tail calls. The result printer (`src/run.rs`) uses `RefIds` to track GC reference identities for cycle detection and formats `i31ref`, struct, and array values recursively.
 
@@ -333,7 +337,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-178 tests across 14 files, covering every layer:
+179 tests across 13 files, covering every layer:
 
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |
