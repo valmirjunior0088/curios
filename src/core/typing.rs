@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, AtomType, Context, Error, Func, FuncType, Let, Match, NatFold, NatMatch, Preempted,
-        Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
+        Apply, AtomType, BlnMatch, Context, Error, Func, FuncType, Let, Match, NatFold, NatMatch,
+        Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
     },
     crate::ersd,
 };
@@ -29,6 +29,8 @@ fn expect(
 
 fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
     match prim {
+        Prim::BlnType => Ok(Type.into()),
+        Prim::Bln(_) => Ok(Term::Prim(Prim::BlnType)),
         Prim::NatType => Ok(Type.into()),
         Prim::Nat(_) => Ok(Term::Prim(Prim::NatType)),
         Prim::NatEql(left, right)
@@ -45,7 +47,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, left, &Term::Prim(Prim::NatType))?;
             erase(context, right, &Term::Prim(Prim::NatType))?;
 
-            Ok(Term::from(AtomType::new(["false", "true"])))
+            Ok(Term::Prim(Prim::BlnType))
         }
         Prim::IntType => Ok(Type.into()),
         Prim::Int(_) => Ok(Term::Prim(Prim::IntType)),
@@ -58,7 +60,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, left, &Term::Prim(Prim::IntType))?;
             erase(context, right, &Term::Prim(Prim::IntType))?;
 
-            Ok(Term::from(AtomType::new(["false", "true"])))
+            Ok(Term::Prim(Prim::BlnType))
         }
         Prim::IntAdd(left, right)
         | Prim::IntSub(left, right)
@@ -103,7 +105,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, left, &Term::Prim(Prim::FltType))?;
             erase(context, right, &Term::Prim(Prim::FltType))?;
 
-            Ok(Term::from(AtomType::new(["false", "true"])))
+            Ok(Term::Prim(Prim::BlnType))
         }
         Prim::NatToStr(inner) => {
             erase(context, inner, &Term::Prim(Prim::NatType))?;
@@ -164,7 +166,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, left, &Term::Prim(Prim::BinType))?;
             erase(context, right, &Term::Prim(Prim::BinType))?;
 
-            Ok(Term::from(AtomType::new(["false", "true"])))
+            Ok(Term::Prim(Prim::BlnType))
         }
         Prim::BinGet(bin, index) => {
             let bin_type = infer(context, bin)?;
@@ -414,6 +416,39 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
     Ok(motive.open(&[head.as_ref()]))
 }
 
+fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<Term, Error> {
+    let BlnMatch {
+        head,
+        motive,
+        false_case,
+        true_case,
+    } = bm;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    if !matches!(head_type, Term::Prim(Prim::BlnType)) {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &Term::Prim(Prim::BlnType));
+        erase(
+            context,
+            &motive.open(&[&Var::free(head_label).into()]),
+            &Type.into(),
+        )
+        .map(|_| ())
+    })?;
+
+    erase(context, false_case, &motive.open(&[&Term::Prim(Prim::Bln(false))]))?;
+    erase(context, true_case, &motive.open(&[&Term::Prim(Prim::Bln(true))]))?;
+
+    Ok(motive.open(&[head.as_ref()]))
+}
+
 fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, Error> {
     let Proj { head, index } = proj;
 
@@ -562,6 +597,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     match term {
         Term::Type => Ok(Type.into()),
         Term::Prim(prim) => infer_prim(context, prim),
+        Term::BlnMatch(bm) => infer_bln_match(context, bm, term),
         Term::NatFold(nat_fold) => infer_nat_fold(context, nat_fold, term),
         Term::NatMatch(nm) => infer_nat_match(context, nm, term),
         Term::FuncType(ft) => infer_func_type(context, ft),
@@ -587,6 +623,16 @@ fn erase_prim(
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
     match prim {
+        Prim::BlnType => {
+            expect(context, term, &Type.into(), expected)?;
+
+            Ok(ersd::Term::Erased)
+        }
+        &Prim::Bln(value) => {
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
+
+            Ok(ersd::Atom { index: if value { 1 } else { 0 } }.into())
+        }
         Prim::NatType => {
             expect(context, term, &Type.into(), expected)?;
 
@@ -598,7 +644,7 @@ fn erase_prim(
             Ok(ersd::Prim::Nat(value).into())
         }
         Prim::NatEql(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::NatEql(
                 erase(context, left, &Term::Prim(Prim::NatType))?.into(),
@@ -634,7 +680,7 @@ fn erase_prim(
             .into())
         }
         Prim::NatNeq(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::NatNeq(
                 erase(context, left, &Term::Prim(Prim::NatType))?.into(),
@@ -661,7 +707,7 @@ fn erase_prim(
             .into())
         }
         Prim::NatLt(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::NatLt(
                 erase(context, left, &Term::Prim(Prim::NatType))?.into(),
@@ -670,7 +716,7 @@ fn erase_prim(
             .into())
         }
         Prim::NatGt(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::NatGt(
                 erase(context, left, &Term::Prim(Prim::NatType))?.into(),
@@ -679,7 +725,7 @@ fn erase_prim(
             .into())
         }
         Prim::NatLte(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::NatLte(
                 erase(context, left, &Term::Prim(Prim::NatType))?.into(),
@@ -688,7 +734,7 @@ fn erase_prim(
             .into())
         }
         Prim::NatGte(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::NatGte(
                 erase(context, left, &Term::Prim(Prim::NatType))?.into(),
@@ -707,7 +753,7 @@ fn erase_prim(
             Ok(ersd::Prim::Int(value).into())
         }
         Prim::IntEql(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::IntEql(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
@@ -716,7 +762,7 @@ fn erase_prim(
             .into())
         }
         Prim::IntNeq(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::IntNeq(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
@@ -770,7 +816,7 @@ fn erase_prim(
             .into())
         }
         Prim::IntLt(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::IntLt(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
@@ -779,7 +825,7 @@ fn erase_prim(
             .into())
         }
         Prim::IntGt(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::IntGt(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
@@ -788,7 +834,7 @@ fn erase_prim(
             .into())
         }
         Prim::IntLte(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::IntLte(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
@@ -797,7 +843,7 @@ fn erase_prim(
             .into())
         }
         Prim::IntGte(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::IntGte(
                 erase(context, left, &Term::Prim(Prim::IntType))?.into(),
@@ -926,7 +972,7 @@ fn erase_prim(
             .into())
         }
         Prim::FltEql(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::FltEql(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
@@ -935,7 +981,7 @@ fn erase_prim(
             .into())
         }
         Prim::FltNeq(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::FltNeq(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
@@ -944,7 +990,7 @@ fn erase_prim(
             .into())
         }
         Prim::FltLt(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::FltLt(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
@@ -953,7 +999,7 @@ fn erase_prim(
             .into())
         }
         Prim::FltGt(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::FltGt(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
@@ -962,7 +1008,7 @@ fn erase_prim(
             .into())
         }
         Prim::FltLte(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::FltLte(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
@@ -971,7 +1017,7 @@ fn erase_prim(
             .into())
         }
         Prim::FltGte(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::FltGte(
                 erase(context, left, &Term::Prim(Prim::FltType))?.into(),
@@ -1070,7 +1116,7 @@ fn erase_prim(
             Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
         }
         Prim::BinEql(left, right) => {
-            expect(context, term, &Term::from(AtomType::new(["false", "true"])), expected)?;
+            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
 
             Ok(ersd::Prim::BinEql(
                 erase(context, left, &Term::Prim(Prim::BinType))?.into(),
@@ -1432,6 +1478,51 @@ fn erase_nat_match(
     .into())
 }
 
+fn erase_bln_match(
+    context: &mut Context,
+    bm: &BlnMatch,
+    term: &Term,
+    expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let BlnMatch {
+        head,
+        motive,
+        false_case,
+        true_case,
+    } = bm;
+
+    let head_type = infer(context, head)?;
+    let head_type = reduce(context, &head_type)?;
+
+    if !matches!(head_type, Term::Prim(Prim::BlnType)) {
+        return Err(Error::cannot_infer(term.clone()));
+    }
+
+    let head_label = context.fresh();
+
+    context.with_frame(|context| {
+        context.assume(&head_label, &Term::Prim(Prim::BlnType));
+        erase(
+            context,
+            &motive.open(&[&Var::free(head_label).into()]),
+            &Type.into(),
+        )
+    })?;
+
+    let erased_false = erase(context, false_case, &motive.open(&[&Term::Prim(Prim::Bln(false))]))?;
+    let erased_true = erase(context, true_case, &motive.open(&[&Term::Prim(Prim::Bln(true))]))?;
+    let erased_head = erase(context, head, &head_type)?;
+
+    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
+
+    Ok(ersd::NatMatch {
+        head: erased_head.into(),
+        cases: vec![(0, erased_false.into())],
+        default: erased_true.into(),
+    }
+    .into())
+}
+
 fn erase_proj(
     context: &mut Context,
     proj: &Proj,
@@ -1477,15 +1568,6 @@ fn erase_atom(
     let Term::AtomType(AtomType { atoms }) = reduce(context, expected)? else {
         return Err(Error::type_mismatch(term.clone(), expected.clone()));
     };
-
-    if atoms.len() == 1 {
-        atoms
-            .iter()
-            .position(|candidate| candidate == atom)
-            .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone()))?;
-
-        return Ok(ersd::Prim::Unit.into());
-    }
 
     let index = atoms
         .iter()
@@ -1533,30 +1615,6 @@ fn erase_match(
     }
 
     let canonical = reduce(context, head.as_ref())?;
-
-    if atoms.len() == 1 {
-        let atom = atoms.iter().next().unwrap();
-
-        let body = cases.get(atom).ok_or_else(|| Error::cannot_infer(term.clone()))?;
-        let expected_body = motive.open(&[&atom.clone().into()]);
-
-        erase(context, head, &head_type)?;
-        expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-        return context.with_frame(|context| {
-            match &canonical {
-                Term::Var(var) => {
-                    context.define(var.unwrap(), &atom.clone().into());
-                }
-                Term::Proj(Proj { head: base, index }) => {
-                    context.define_proj((**base).clone(), *index, &atom.clone().into());
-                }
-                _ => {}
-            }
-
-            erase(context, body, &expected_body)
-        });
-    }
 
     let cases = atoms
         .iter()
@@ -1728,6 +1786,7 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
     match term {
         Term::Prim(prim) => erase_prim(context, term, prim, expected),
+        Term::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
         Term::NatFold(nat_fold) => erase_nat_fold(context, nat_fold, term, expected),
         Term::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
         Term::Type => {
@@ -1846,7 +1905,7 @@ mod tests {
     }
 
     #[test]
-    fn erase_match_singleton_lowers_to_body() {
+    fn erase_match_singleton_lowers_to_match() {
         let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::PanicLoader);
 
         let term = text::to_core(
@@ -1866,11 +1925,8 @@ mod tests {
             panic!("expected let");
         };
 
-        assert!(matches!(*body, ersd::Term::Prim(ersd::Prim::Unit)));
-
-        // singleton match lowers directly to the branch body, not ersd::Match
-        assert!(!matches!(*tail, ersd::Term::Match(_)));
-        assert!(matches!(*tail, ersd::Term::Atom(ersd::Atom { index: 1 })));
+        assert!(matches!(*body, ersd::Term::Atom(ersd::Atom { index: 0 })));
+        assert!(matches!(*tail, ersd::Term::Match(_)));
     }
 
     #[test]
@@ -1927,7 +1983,7 @@ mod tests {
                 Term::Prim(Prim::Int(1)),
                 Term::Prim(Prim::Int(1)),
             )),
-            &Term::from(AtomType::new(["false", "true"])),
+            &Term::Prim(Prim::BlnType),
         )
         .unwrap();
 
@@ -2246,7 +2302,7 @@ mod tests {
         let mut context = context();
 
         let bin_type = Term::Prim(Prim::BinType);
-        let bool_type = Term::from(AtomType::new(["false", "true"]));
+        let bool_type = Term::Prim(Prim::BlnType);
         context.assume("a", &bin_type);
         context.assume("b", &bin_type);
 
@@ -2259,7 +2315,7 @@ mod tests {
     fn erase_nat_eql_returns_bool_atom() {
         let mut context = context();
 
-        let bool_type = Term::from(AtomType::new(["false", "true"]));
+        let bool_type = Term::Prim(Prim::BlnType);
 
         let eql = Term::Prim(Prim::nat_eql(
             Term::Prim(Prim::Nat(0)),

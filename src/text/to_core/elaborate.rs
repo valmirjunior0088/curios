@@ -70,6 +70,14 @@ impl<'a> Elaborate<'a> {
             Term::Tuple(tuple) => {
                 core::Tuple::new(tuple.fields.iter().map(|field| self.term(field))).into()
             }
+            Term::BlnMatch(bm) => core::BlnMatch::new(
+                self.term(&bm.head),
+                bm.motive_label.clone(),
+                self.term(&bm.motive),
+                self.term(&bm.false_case),
+                self.term(&bm.true_case),
+            )
+            .into(),
             Term::NatFold(nat_fold) => core::NatFold::new(
                 self.term(&nat_fold.head),
                 nat_fold.motive_label.clone(),
@@ -138,6 +146,8 @@ impl<'a> Elaborate<'a> {
 
     pub fn prim(&self, prim: &Prim) -> core::Prim {
         match prim {
+            Prim::BlnType => core::Prim::BlnType,
+            Prim::Bln(b) => core::Prim::Bln(*b),
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Number(number)) => core::Prim::Nat(*number),
             Prim::Nat(Nat::Char(character)) => core::Prim::Nat(*character as u32),

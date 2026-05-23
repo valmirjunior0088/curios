@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, DefFrom, DefInto, Entrypoint, Func, FuncType, Let, Match,
-        Module, Name, Nat, NatFold, NatMatch, Prim, Proj, Rec, RecItem, Term, TopDef, TopItem,
-        TopLet, TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomType, Bin, BlnMatch, DefFrom, DefInto, Entrypoint, Func, FuncType, Let,
+        Match, Module, Name, Nat, NatFold, NatMatch, Prim, Proj, Rec, RecItem, Term, TopDef,
+        TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -494,8 +494,15 @@ fn parse_io_prim<'a>() -> Parser<'a, Term> {
         .map(|inner| Term::Prim(Prim::sys_print(inner)))
 }
 
+fn parse_bln_prim<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Bln")).map(|()| Term::Prim(Prim::BlnType))
+        .or(catch(parse_keyword("false")).map(|()| Term::Prim(Prim::Bln(false))))
+        .or(catch(parse_keyword("true")).map(|()| Term::Prim(Prim::Bln(true))))
+}
+
 fn parse_prim<'a>() -> Parser<'a, Term> {
-    parse_flt_prim()
+    parse_bln_prim()
+        .or(parse_flt_prim())
         .or(parse_int_prim())
         .or(parse_nat_prim())
         .or(parse_bin_prim())
@@ -654,6 +661,49 @@ fn parse_nat_fold<'a>() -> Parser<'a, Term> {
                 })
             },
         )
+}
+
+fn parse_bln_false_branch<'a>() -> Parser<'a, Term> {
+    parse_literal("|")
+        .and_keep(parse_keyword("false"))
+        .and_drop(parse_literal("=>"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+}
+
+fn parse_bln_true_branch<'a>() -> Parser<'a, Term> {
+    parse_literal("|")
+        .and_keep(parse_keyword("true"))
+        .and_drop(parse_literal("=>"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+}
+
+fn parse_bln_match<'a>() -> Parser<'a, Term> {
+    catch(parse_literal("Bln.match"))
+        .and_keep(lazy(parse_term))
+        .and_drop(parse_literal(":"))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .and(
+            catch(parse_bln_false_branch())
+                .and(parse_bln_true_branch())
+                .map(|(false_case, true_case)| (false_case, true_case))
+                .or(parse_bln_true_branch()
+                    .and(parse_bln_false_branch())
+                    .map(|(true_case, false_case)| (false_case, true_case))),
+        )
+        .map(|(((head, motive_label), motive), (false_case, true_case))| {
+            Term::BlnMatch(BlnMatch {
+                head: head.into(),
+                motive_label: motive_label.to_string(),
+                motive: motive.into(),
+                false_case: false_case.into(),
+                true_case: true_case.into(),
+            })
+        })
 }
 
 fn parse_nat_match_case<'a>() -> Parser<'a, (u32, Term)> {
@@ -833,6 +883,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     parse_rec()
         .or(parse_let())
         .or(parse_nat_fold())
+        .or(parse_bln_match())
         .or(parse_nat_match())
         .or(parse_match())
         .or(parse_func_type())

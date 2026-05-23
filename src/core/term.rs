@@ -320,6 +320,33 @@ impl NatMatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BlnMatch {
+    pub head: Subterm,
+    pub motive: Scope<One>,
+    pub false_case: Subterm,
+    pub true_case: Subterm,
+}
+
+impl BlnMatch {
+    pub fn new<H, ML, M, F, T>(head: H, motive_label: ML, motive: M, false_case: F, true_case: T) -> Self
+    where
+        H: Into<Term>,
+        ML: Into<String>,
+        M: Into<Term>,
+        F: Into<Term>,
+        T: Into<Term>,
+    {
+        let motive_label = motive_label.into();
+        Self {
+            head: head.into().into(),
+            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            false_case: false_case.into().into(),
+            true_case: true_case.into().into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AtomType {
     pub atoms: BTreeSet<Atom>,
 }
@@ -499,6 +526,7 @@ impl Unseal {
 pub enum Term {
     Type,
     Prim(Prim),
+    BlnMatch(BlnMatch),
     NatFold(NatFold),
     NatMatch(NatMatch),
     FuncType(FuncType),
@@ -618,6 +646,12 @@ impl From<Tuple> for Term {
     }
 }
 
+impl From<BlnMatch> for Term {
+    fn from(value: BlnMatch) -> Self {
+        Self::BlnMatch(value)
+    }
+}
+
 impl From<NatFold> for Term {
     fn from(value: NatFold) -> Self {
         Self::NatFold(value)
@@ -710,6 +744,8 @@ where
 
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
         match prim {
+            Prim::BlnType => Prim::BlnType,
+            Prim::Bln(value) => Prim::Bln(*value),
             Prim::NatType => Prim::NatType,
             Prim::Nat(value) => Prim::Nat(*value),
             Prim::NatEql(left, right) => {
@@ -935,6 +971,15 @@ where
         }
     }
 
+    fn visit_bln_match(&mut self, bm: &BlnMatch) -> BlnMatch {
+        BlnMatch {
+            head: self.visit_subterm(&bm.head),
+            motive: self.visit_scope(&bm.motive),
+            false_case: self.visit_subterm(&bm.false_case),
+            true_case: self.visit_subterm(&bm.true_case),
+        }
+    }
+
     fn visit_nat_match(&mut self, nm: &NatMatch) -> NatMatch {
         NatMatch {
             head: self.visit_subterm(&nm.head),
@@ -1011,6 +1056,7 @@ where
         match term {
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
+            Term::BlnMatch(bm) => self.visit_bln_match(bm).into(),
             Term::NatFold(nat_fold) => self.visit_nat_fold(nat_fold).into(),
             Term::NatMatch(nm) => self.visit_nat_match(nm).into(),
             Term::FuncType(ft) => self.visit_func_type(ft).into(),

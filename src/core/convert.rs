@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Context, Func, FuncType, Match, NatFold, NatMatch, Preempted, Prim,
-        Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var, reduce,
+        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatFold, NatMatch,
+        Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
+        reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -316,6 +317,26 @@ impl Convert {
         Ok(this == that)
     }
 
+    fn compare_bln_match(
+        &mut self,
+        context: &mut Context,
+        this: BlnMatch,
+        that: BlnMatch,
+    ) -> Result<bool, Preempted> {
+        self.enqueue(Type.into(), *this.head, *that.head);
+
+        let label = Var::free(context.fresh()).into();
+        self.enqueue(
+            Type.into(),
+            this.motive.open(&[&label]),
+            that.motive.open(&[&label]),
+        );
+
+        self.enqueue(Type.into(), *this.false_case, *that.false_case);
+        self.enqueue(Type.into(), *this.true_case, *that.true_case);
+        Ok(true)
+    }
+
     fn compare_nat_match(
         &mut self,
         context: &mut Context,
@@ -510,6 +531,9 @@ impl Convert {
 
             let ok = match (this, that) {
                 (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
+                (Term::BlnMatch(this), Term::BlnMatch(that)) => {
+                    self.compare_bln_match(context, this, that)?
+                }
                 (Term::NatFold(this), Term::NatFold(that)) => {
                     self.compare_nat_fold(context, this, that)?
                 }

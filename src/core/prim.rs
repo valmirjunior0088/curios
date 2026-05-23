@@ -2,6 +2,8 @@ use super::{Flt, Subterm, Term};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
+    BlnType,
+    Bln(bool),
     NatType,
     Nat(u32),
     NatEql(Subterm, Subterm),

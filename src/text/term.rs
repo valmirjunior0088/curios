@@ -66,6 +66,15 @@ pub struct NatMatch {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct BlnMatch {
+    pub head: Subterm,
+    pub motive_label: String,
+    pub motive: Subterm,
+    pub false_case: Subterm,
+    pub true_case: Subterm,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Proj {
     pub head: Subterm,
     pub index: usize,
@@ -121,6 +130,7 @@ pub struct Rec {
 pub enum Term {
     Type,
     Prim(Prim),
+    BlnMatch(BlnMatch),
     NatFold(NatFold),
     NatMatch(NatMatch),
     FuncType(FuncType),

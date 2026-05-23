@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One, Prim,
-        Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
+        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One,
+        Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -61,6 +61,9 @@ fn print_flt(flt: Flt) -> Printer<'static> {
 
 fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     match prim {
+        Prim::BlnType => pure("Bln"),
+        Prim::Bln(false) => pure("false"),
+        Prim::Bln(true) => pure("true"),
         Prim::NatType => pure("Nat"),
         Prim::Nat(value) => pure(format!("{value}n")),
         Prim::NatEql(left, right) => flat([
@@ -398,6 +401,27 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(ih_label),
                 pure(" =>\n"),
                 indent(flat([print_term(succ_case, depth), pure(";")])),
+            ])
+        }
+        Term::BlnMatch(BlnMatch {
+            head,
+            motive,
+            false_case,
+            true_case,
+        }) => {
+            let (motive_label, motive) = open_scope_one(motive, depth);
+            flat([
+                pure("Bln.match "),
+                print_term(*head, depth),
+                pure(" : "),
+                pure(motive_label),
+                pure(" => "),
+                print_term(motive, depth + 1),
+                pure(";"),
+                pure("\n| false =>\n"),
+                indent(flat([print_term(*false_case, depth), pure(";")])),
+                pure("\n| true =>\n"),
+                indent(flat([print_term(*true_case, depth), pure(";")])),
             ])
         }
         Term::NatMatch(NatMatch {

@@ -1,7 +1,7 @@
 use {
     super::{
-        Atom, Apply, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Proj,
-        Seal, Term, Tuple, Unseal, Var,
+        Apply, BlnMatch, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim,
+        Proj, Seal, Term, Tuple, Unseal, Var,
     },
     std::time::{Duration, Instant},
 };
@@ -29,6 +29,8 @@ impl Reduce {
 
     fn reduce_prim(&mut self, context: &mut Context, prim: &Prim) -> Result<Term, Preempted> {
         match prim {
+            Prim::BlnType => Ok(Term::Prim(Prim::BlnType)),
+            Prim::Bln(value) => Ok(Term::Prim(Prim::Bln(*value))),
             Prim::NatType => Ok(Term::Prim(Prim::NatType)),
             Prim::Nat(value) => Ok(Term::Prim(Prim::Nat(*value))),
             Prim::NatEql(left, right) => {
@@ -37,7 +39,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Atom(Atom::from(if left == right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left == right))
                     }
                     (left, right) => Term::Prim(Prim::nat_eql(left, right)),
                 })
@@ -48,7 +50,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Atom(Atom::from(if left != right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left != right))
                     }
                     (left, right) => Term::Prim(Prim::nat_neq(left, right)),
                 })
@@ -92,7 +94,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Atom(Atom::from(if left < right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left < right))
                     }
                     (left, right) => Term::Prim(Prim::nat_lt(left, right)),
                 })
@@ -125,7 +127,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Atom(Atom::from(if left > right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left > right))
                     }
                     (left, right) => Term::Prim(Prim::nat_gt(left, right)),
                 })
@@ -136,7 +138,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Atom(Atom::from(if left <= right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left <= right))
                     }
                     (left, right) => Term::Prim(Prim::nat_lte(left, right)),
                 })
@@ -147,7 +149,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Nat(left)), Term::Prim(Prim::Nat(right))) => {
-                        Term::Atom(Atom::from(if left >= right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left >= right))
                     }
                     (left, right) => Term::Prim(Prim::nat_gte(left, right)),
                 })
@@ -160,7 +162,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Atom(Atom::from(if left == right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left == right))
                     }
                     (left, right) => Term::Prim(Prim::int_eql(left, right)),
                 })
@@ -171,7 +173,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Atom(Atom::from(if left != right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left != right))
                     }
                     (left, right) => Term::Prim(Prim::int_neq(left, right)),
                 })
@@ -237,7 +239,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Atom(Atom::from(if left < right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left < right))
                     }
                     (left, right) => Term::Prim(Prim::int_lt(left, right)),
                 })
@@ -248,7 +250,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Atom(Atom::from(if left > right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left > right))
                     }
                     (left, right) => Term::Prim(Prim::int_gt(left, right)),
                 })
@@ -259,7 +261,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Atom(Atom::from(if left <= right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left <= right))
                     }
                     (left, right) => Term::Prim(Prim::int_lte(left, right)),
                 })
@@ -270,7 +272,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Int(left)), Term::Prim(Prim::Int(right))) => {
-                        Term::Atom(Atom::from(if left >= right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left >= right))
                     }
                     (left, right) => Term::Prim(Prim::int_gte(left, right)),
                 })
@@ -349,7 +351,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Atom(Atom::from(if left.eql(right) { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left.eql(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_eql(left, right)),
                 })
@@ -360,7 +362,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Atom(Atom::from(if left.neq(right) { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left.neq(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_neq(left, right)),
                 })
@@ -371,7 +373,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Atom(Atom::from(if left.lt(right) { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left.lt(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_lt(left, right)),
                 })
@@ -382,7 +384,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Atom(Atom::from(if left.gt(right) { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left.gt(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_gt(left, right)),
                 })
@@ -393,7 +395,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Atom(Atom::from(if left.lte(right) { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left.lte(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_lte(left, right)),
                 })
@@ -404,7 +406,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Flt(left)), Term::Prim(Prim::Flt(right))) => {
-                        Term::Atom(Atom::from(if left.gte(right) { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left.gte(right)))
                     }
                     (left, right) => Term::Prim(Prim::flt_gte(left, right)),
                 })
@@ -554,7 +556,7 @@ impl Reduce {
 
                 Ok(match (left, right) {
                     (Term::Prim(Prim::Bin(left)), Term::Prim(Prim::Bin(right))) => {
-                        Term::Atom(Atom::from(if left == right { "true" } else { "false" }))
+                        Term::Prim(Prim::Bln(left == right))
                     }
                     (left, right) => Term::Prim(Prim::bin_eql(left, right)),
                 })
@@ -792,6 +794,28 @@ impl Reduce {
         }
     }
 
+    fn reduce_bln_match(&mut self, context: &mut Context, bm: BlnMatch) -> Result<Step, Preempted> {
+        let BlnMatch {
+            head,
+            motive,
+            false_case,
+            true_case,
+        } = bm;
+        match self.reduce(context, *head)? {
+            Term::Prim(Prim::Bln(false)) => Ok(Step::Continue(*false_case)),
+            Term::Prim(Prim::Bln(true)) => Ok(Step::Continue(*true_case)),
+            head => Ok(Step::Break(
+                BlnMatch {
+                    head: head.into(),
+                    motive,
+                    false_case,
+                    true_case,
+                }
+                .into(),
+            )),
+        }
+    }
+
     fn reduce_nat_match(&mut self, context: &mut Context, nm: NatMatch) -> Result<Step, Preempted> {
         let NatMatch {
             head,
@@ -885,6 +909,7 @@ impl Reduce {
 
             let step = match term {
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
+                Term::BlnMatch(bm) => self.reduce_bln_match(context, bm)?,
                 Term::NatFold(nat_fold) => self.reduce_nat_fold(context, nat_fold)?,
                 Term::NatMatch(nm) => self.reduce_nat_match(context, nm)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
@@ -1013,7 +1038,7 @@ mod tests {
                     Term::Prim(Prim::Int(4))
                 ))
             ),
-            Ok(Term::Atom(Atom::from("true")))
+            Ok(Term::Prim(Prim::Bln(true)))
         );
         assert_eq!(
             reduce(
@@ -1023,7 +1048,7 @@ mod tests {
                     Term::Prim(Prim::Int(5))
                 ))
             ),
-            Ok(Term::Atom(Atom::from("false")))
+            Ok(Term::Prim(Prim::Bln(false)))
         );
     }
 

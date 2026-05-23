@@ -14,6 +14,8 @@ pub enum Bin {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
+    BlnType,
+    Bln(bool),
     NatType,
     Nat(Nat),
     NatEql(Subterm, Subterm),
