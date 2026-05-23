@@ -4,7 +4,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `def`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `def` `Type` `Bln` `false` `true` `Nat` `Int` `Flt` `Bin` `Arr`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules.
 
@@ -137,6 +137,18 @@ match head : label => Motive;
 
 `label` names the scrutinee in the motive. Every atom in the type must have a branch. No default branch.
 
+### Bln.match
+
+Eliminates a boolean:
+
+```
+Bln.match head : label => Motive;
+| false => false_body;
+| true  => true_body;
+```
+
+`label` names the scrutinee in the motive. Both branches are required; either order is accepted.
+
 ### Field access
 
 Reads a field from a tuple by numeric index:
@@ -210,6 +222,7 @@ A homogeneous array of elements of type `T`. `T` must be atomic; write `Arr (Arr
 
 | Type  | Description         |
 |-------|---------------------|
+| `Bln` | Boolean             |
 | `Nat` | Natural number (u32) |
 | `Int` | Signed integer (i32) |
 | `Flt` | Single-precision float (f32) |
@@ -277,6 +290,15 @@ Has type `Bin`.
 
 A single atom value. Its type is any atom type that includes `foo`.
 
+### Booleans
+
+```
+false
+true
+```
+
+Boolean literals. Their type is `Bln`.
+
 ### Tuples
 
 ```
@@ -300,12 +322,12 @@ All primitive operations are prefix and take **atomic** arguments. Parenthesise 
 | `Nat.mul a b`    | 2     | Multiplication        | `Nat`            |
 | `Nat.div a b`    | 2     | Division              | `Nat`            |
 | `Nat.rem a b`    | 2     | Remainder             | `Nat`            |
-| `Nat.eql a b`    | 2     | Equality              | `'[false, true]` |
-| `Nat.neq a b`    | 2     | Inequality            | `'[false, true]` |
-| `Nat.lt a b`     | 2     | Less than             | `'[false, true]` |
-| `Nat.gt a b`     | 2     | Greater than          | `'[false, true]` |
-| `Nat.lte a b`    | 2     | Less than or equal    | `'[false, true]` |
-| `Nat.gte a b`    | 2     | Greater than or equal | `'[false, true]` |
+| `Nat.eql a b`    | 2     | Equality              | `Bln` |
+| `Nat.neq a b`    | 2     | Inequality            | `Bln` |
+| `Nat.lt a b`     | 2     | Less than             | `Bln` |
+| `Nat.gt a b`     | 2     | Greater than          | `Bln` |
+| `Nat.lte a b`    | 2     | Less than or equal    | `Bln` |
+| `Nat.gte a b`    | 2     | Greater than or equal | `Bln` |
 | `Nat.to_int a`   | 1     | Convert to Int        | `Int`            |
 | `Nat.to_flt a`   | 1     | Convert to Flt        | `Flt`            |
 | `Nat.to_str a`   | 1     | Convert to Bin        | `Bin`            |
@@ -340,12 +362,12 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 | `Int.mul a b`    | 2     | Multiplication        | `Int`            |
 | `Int.div a b`    | 2     | Division              | `Int`            |
 | `Int.rem a b`    | 2     | Remainder             | `Int`            |
-| `Int.eql a b`    | 2     | Equality              | `'[false, true]` |
-| `Int.neq a b`    | 2     | Inequality            | `'[false, true]` |
-| `Int.lt a b`     | 2     | Less than             | `'[false, true]` |
-| `Int.gt a b`     | 2     | Greater than          | `'[false, true]` |
-| `Int.lte a b`    | 2     | Less than or equal    | `'[false, true]` |
-| `Int.gte a b`    | 2     | Greater than or equal | `'[false, true]` |
+| `Int.eql a b`    | 2     | Equality              | `Bln` |
+| `Int.neq a b`    | 2     | Inequality            | `Bln` |
+| `Int.lt a b`     | 2     | Less than             | `Bln` |
+| `Int.gt a b`     | 2     | Greater than          | `Bln` |
+| `Int.lte a b`    | 2     | Less than or equal    | `Bln` |
+| `Int.gte a b`    | 2     | Greater than or equal | `Bln` |
 | `Int.to_nat a`   | 1     | Convert to Nat        | `Nat`            |
 | `Int.to_flt a`   | 1     | Convert to Flt        | `Flt`            |
 | `Int.to_str a`   | 1     | Convert to Bin        | `Bin`            |
@@ -358,12 +380,12 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 | `Flt.sub a b`      | 2     | Subtraction           | `Flt`            |
 | `Flt.mul a b`      | 2     | Multiplication        | `Flt`            |
 | `Flt.div a b`      | 2     | Division              | `Flt`            |
-| `Flt.eql a b`      | 2     | Equality              | `'[false, true]` |
-| `Flt.neq a b`      | 2     | Inequality            | `'[false, true]` |
-| `Flt.lt a b`       | 2     | Less than             | `'[false, true]` |
-| `Flt.gt a b`       | 2     | Greater than          | `'[false, true]` |
-| `Flt.lte a b`      | 2     | Less than or equal    | `'[false, true]` |
-| `Flt.gte a b`      | 2     | Greater than or equal | `'[false, true]` |
+| `Flt.eql a b`      | 2     | Equality              | `Bln` |
+| `Flt.neq a b`      | 2     | Inequality            | `Bln` |
+| `Flt.lt a b`       | 2     | Less than             | `Bln` |
+| `Flt.gt a b`       | 2     | Greater than          | `Bln` |
+| `Flt.lte a b`      | 2     | Less than or equal    | `Bln` |
+| `Flt.gte a b`      | 2     | Greater than or equal | `Bln` |
 | `Flt.min a b`      | 2     | Minimum               | `Flt`            |
 | `Flt.max a b`      | 2     | Maximum               | `Flt`            |
 | `Flt.neg a`        | 1     | Negation              | `Flt`            |
@@ -382,7 +404,7 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 | Operation              | Arity    | Description                         | Returns          |
 |------------------------|----------|-------------------------------------|------------------|
 | `Bin.len a`            | 1        | Byte length                         | `Nat`            |
-| `Bin.eql a b`          | 2        | Equality                            | `'[false, true]` |
+| `Bin.eql a b`          | 2        | Equality                            | `Bln` |
 | `Bin.get a i`          | 2        | Byte at index `i`                   | `Nat`            |
 | `Bin.slice a start end`| 3        | Subsequence from `start` to `end`   | `Bin`            |
 | `Bin.append a byte`    | 2        | Append a single byte                | `Bin`            |

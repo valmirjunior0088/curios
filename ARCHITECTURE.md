@@ -123,6 +123,7 @@ The central `core::Term` enum:
 | `Type`                          | The sort (no universe hierarchy)                     |
 | `FuncType` / `Func` / `Apply`   | Π-types, λ-abstraction, application                  |
 | `TupleType` / `Tuple` / `Proj`  | Σ-types (n-ary), construction, field access          |
+| `BlnMatch`                      | Dependent elimination of `Bln` (false + true cases)  |
 | `NatFold`                       | Structural induction on `Nat` (zero + pred/IH cases) |
 | `NatMatch`                      | Sparse dispatch on specific `Nat` values             |
 | `AtomType` / `Atom` / `Match`   | Labeled unions, tags, pattern matching               |
@@ -336,7 +337,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-179 tests across 13 files, covering every layer:
+181 tests across 13 files, covering every layer:
 
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |

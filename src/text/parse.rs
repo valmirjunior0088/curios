@@ -15,6 +15,7 @@ const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
     "let", "match", "rec", "and", "mod", "use", "pub", "end", "def",
+    "Type", "Bln", "false", "true", "Nat", "Int", "Flt", "Bin", "Arr",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
