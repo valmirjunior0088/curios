@@ -8,20 +8,61 @@ pub struct Preempted;
 
 #[derive(Debug)]
 pub enum Error {
-    ReducePreempted { term: Term },
-    ConvertPreempted { this: Term, that: Term },
-    TypeMismatch { term: Term, inferred: Term, expected: Term },
-    NotAFunction { term: Term, head_type: Term },
-    NotATuple { term: Term, head_type: Term },
-    TupleIndexOutOfBounds { term: Term, index: usize, arity: usize },
-    NotAnAtomType { term: Term, head_type: Term },
-    NotNatType { term: Term, head_type: Term },
-    NotBlnType { term: Term, head_type: Term },
-    MatchArityMismatch { term: Term, expected: usize, got: usize },
-    MatchCaseMissing { term: Term, atom: Atom },
-    CannotInferLiteral { term: Term },
-    UnboundVariable { term: Term },
-    CannotInfer { term: Term },
+    ReducePreempted {
+        term: Term,
+    },
+    ConvertPreempted {
+        this: Term,
+        that: Term,
+    },
+    TypeMismatch {
+        term: Term,
+        inferred: Term,
+        expected: Term,
+    },
+    NotAFunction {
+        term: Term,
+        head_type: Term,
+    },
+    NotATuple {
+        term: Term,
+        head_type: Term,
+    },
+    TupleIndexOutOfBounds {
+        term: Term,
+        index: usize,
+        arity: usize,
+    },
+    NotAnAtomType {
+        term: Term,
+        head_type: Term,
+    },
+    NotNatType {
+        term: Term,
+        head_type: Term,
+    },
+    NotBlnType {
+        term: Term,
+        head_type: Term,
+    },
+    MatchArityMismatch {
+        term: Term,
+        expected: usize,
+        got: usize,
+    },
+    MatchCaseMissing {
+        term: Term,
+        atom: Atom,
+    },
+    CannotInferLiteral {
+        term: Term,
+    },
+    UnboundVariable {
+        term: Term,
+    },
+    CannotInfer {
+        term: Term,
+    },
 }
 
 impl Error {
@@ -30,7 +71,10 @@ impl Error {
     }
 
     pub fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
-        Self::ConvertPreempted { this: this.into(), that: that.into() }
+        Self::ConvertPreempted {
+            this: this.into(),
+            that: that.into(),
+        }
     }
 
     pub fn type_mismatch<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
@@ -46,35 +90,61 @@ impl Error {
     }
 
     pub fn not_a_function<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
-        Self::NotAFunction { term: term.into(), head_type: head_type.into() }
+        Self::NotAFunction {
+            term: term.into(),
+            head_type: head_type.into(),
+        }
     }
 
     pub fn not_a_tuple<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
-        Self::NotATuple { term: term.into(), head_type: head_type.into() }
+        Self::NotATuple {
+            term: term.into(),
+            head_type: head_type.into(),
+        }
     }
 
     pub fn tuple_index_out_of_bounds<T: Into<Term>>(term: T, index: usize, arity: usize) -> Self {
-        Self::TupleIndexOutOfBounds { term: term.into(), index, arity }
+        Self::TupleIndexOutOfBounds {
+            term: term.into(),
+            index,
+            arity,
+        }
     }
 
     pub fn not_an_atom_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
-        Self::NotAnAtomType { term: term.into(), head_type: head_type.into() }
+        Self::NotAnAtomType {
+            term: term.into(),
+            head_type: head_type.into(),
+        }
     }
 
     pub fn not_nat_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
-        Self::NotNatType { term: term.into(), head_type: head_type.into() }
+        Self::NotNatType {
+            term: term.into(),
+            head_type: head_type.into(),
+        }
     }
 
     pub fn not_bln_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
-        Self::NotBlnType { term: term.into(), head_type: head_type.into() }
+        Self::NotBlnType {
+            term: term.into(),
+            head_type: head_type.into(),
+        }
     }
 
     pub fn match_arity_mismatch<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
-        Self::MatchArityMismatch { term: term.into(), expected, got }
+        Self::MatchArityMismatch {
+            term: term.into(),
+            expected,
+            got,
+        }
     }
 
     pub fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
-        Self::MatchCaseMissing { term: term.into(), atom: atom.into() }
+        Self::MatchCaseMissing {
+            term: term.into(),
+            atom: atom.into(),
+        }
     }
 
     pub fn cannot_infer_literal<T: Into<Term>>(term: T) -> Self {
@@ -99,7 +169,11 @@ impl fmt::Display for Error {
             Error::ConvertPreempted { this, that } => {
                 write!(f, "conversion preempted between {this} and {that}")
             }
-            Error::TypeMismatch { term, inferred, expected } => {
+            Error::TypeMismatch {
+                term,
+                inferred,
+                expected,
+            } => {
                 write!(
                     f,
                     "type mismatch in {term}\n  inferred: {inferred}\n  expected: {expected}"
@@ -118,7 +192,10 @@ impl fmt::Display for Error {
                 )
             }
             Error::TupleIndexOutOfBounds { term, index, arity } => {
-                write!(f, "tuple index {index} out of bounds (arity {arity}): {term}")
+                write!(
+                    f,
+                    "tuple index {index} out of bounds (arity {arity}): {term}"
+                )
             }
             Error::NotAnAtomType { term, head_type } => {
                 write!(
@@ -132,7 +209,11 @@ impl fmt::Display for Error {
             Error::NotBlnType { term, head_type } => {
                 write!(f, "expected Bool but got {head_type}\n  in: {term}")
             }
-            Error::MatchArityMismatch { term, expected, got } => {
+            Error::MatchArityMismatch {
+                term,
+                expected,
+                got,
+            } => {
                 write!(
                     f,
                     "match has {got} case(s) but atom type has {expected}: {term}"

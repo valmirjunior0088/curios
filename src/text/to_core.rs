@@ -58,30 +58,28 @@ fn process_items(
 
     for top_item in top_items {
         match top_item {
-            TopItem::Mod(mod_item) => {
-                match &mod_item.module {
-                    Some(module) => process_items(
+            TopItem::Mod(mod_item) => match &mod_item.module {
+                Some(module) => process_items(
+                    &module.items,
+                    &mut context.nested(&mod_item.label),
+                    flat_items,
+                    def_stack,
+                    loader,
+                ),
+                None => {
+                    let module = loader
+                        .load(context.prefix(), &mod_item.label)
+                        .unwrap_or_else(|e| panic!("{e}"));
+
+                    process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
                         def_stack,
                         loader,
-                    ),
-                    None => {
-                        let module = loader
-                            .load(context.prefix(), &mod_item.label)
-                            .unwrap_or_else(|e| panic!("{e}"));
-
-                        process_items(
-                            &module.items,
-                            &mut context.nested(&mod_item.label),
-                            flat_items,
-                            def_stack,
-                            loader,
-                        );
-                    }
+                    );
                 }
-            }
+            },
             TopItem::Use(use_item) => {
                 context.resolve_use(use_item);
 

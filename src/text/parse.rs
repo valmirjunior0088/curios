@@ -709,16 +709,18 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
                     .and_drop(parse_literal(";")),
             ),
         )
-        .map(|((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
-            Term::Match(Match::NatFold(NatFold {
-                head: head.into(),
-                motive,
-                zero_case: zero_case.into(),
-                pred_label: pred_label.to_string(),
-                ih_label: ih_label.to_string(),
-                succ_case: succ_case.into(),
-            }))
-        })
+        .map(
+            |((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
+                Term::Match(Match::NatFold(NatFold {
+                    head: head.into(),
+                    motive,
+                    zero_case: zero_case.into(),
+                    pred_label: pred_label.to_string(),
+                    ih_label: ih_label.to_string(),
+                    succ_case: succ_case.into(),
+                }))
+            },
+        )
 }
 
 fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {

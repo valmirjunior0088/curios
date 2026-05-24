@@ -13,8 +13,6 @@ pub rec format_type_with : Type -> Fmt -> Type = result => f =>
     | 'str => Bin -> format_type_with result f.1;
     | 'nat => Nat -> format_type_with result f.1;;
 
-pub let format_type : Fmt -> Type = format_type_with Bin;
-
 rec collect_literal : Bin -> Nat -> Bin -> { Bin, Nat } = input => pos => acc =>
     match (Nat.lt pos (Bin.len input)) : { Bin, Nat };
     | false => (acc, pos);

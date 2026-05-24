@@ -425,7 +425,12 @@ fn print_term(term: Term) -> Printer<'static> {
             flat([pure("("), print_term(*head), pure(format!(").{index}"))])
         }
         Term::Match(match_) => match match_ {
-            Match::Bln(BlnMatch { head, motive, false_case, true_case }) => flat([
+            Match::Bln(BlnMatch {
+                head,
+                motive,
+                false_case,
+                true_case,
+            }) => flat([
                 pure("match "),
                 print_term(*head),
                 pure(" : "),
@@ -439,7 +444,14 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("\n| true =>\n"),
                 indent(flat([print_term(*true_case), pure(";")])),
             ]),
-            Match::NatFold(NatFold { head, motive, zero_case, pred_label, ih_label, succ_case }) => flat([
+            Match::NatFold(NatFold {
+                head,
+                motive,
+                zero_case,
+                pred_label,
+                ih_label,
+                succ_case,
+            }) => flat([
                 pure("match "),
                 print_term(*head),
                 pure(" : "),
@@ -457,7 +469,12 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure(" =>\n"),
                 indent(flat([print_term(*succ_case), pure(";")])),
             ]),
-            Match::Nat(NatMatch { head, motive, cases, default }) => flat([
+            Match::Nat(NatMatch {
+                head,
+                motive,
+                cases,
+                default,
+            }) => flat([
                 pure("match "),
                 print_term(*head),
                 pure(" : "),
@@ -466,17 +483,25 @@ fn print_term(term: Term) -> Printer<'static> {
                     None => print_term(*motive.body),
                 },
                 pure(";"),
-                flat(cases
-                    .into_iter()
-                    .map(|(nat, body)| flat([
-                        pure(format!("\n| {nat} =>\n")),
-                        indent(flat([print_term(*body), pure(";")])),
-                    ]))
-                    .collect::<Vec<_>>()),
+                flat(
+                    cases
+                        .into_iter()
+                        .map(|(nat, body)| {
+                            flat([
+                                pure(format!("\n| {nat} =>\n")),
+                                indent(flat([print_term(*body), pure(";")])),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
                 pure("\n| _ =>\n"),
                 indent(flat([print_term(*default), pure(";")])),
             ]),
-            Match::Atom(AtomMatch { head, motive, cases }) => flat([
+            Match::Atom(AtomMatch {
+                head,
+                motive,
+                cases,
+            }) => flat([
                 pure("match "),
                 print_term(*head),
                 pure(" : "),
@@ -485,15 +510,19 @@ fn print_term(term: Term) -> Printer<'static> {
                     None => print_term(*motive.body),
                 },
                 pure(";"),
-                flat(cases
-                    .into_iter()
-                    .map(|(atom, body)| flat([
-                        pure("\n| "),
-                        print_atom(atom),
-                        pure(" =>\n"),
-                        indent(flat([print_term(*body), pure(";")])),
-                    ]))
-                    .collect::<Vec<_>>()),
+                flat(
+                    cases
+                        .into_iter()
+                        .map(|(atom, body)| {
+                            flat([
+                                pure("\n| "),
+                                print_atom(atom),
+                                pure(" =>\n"),
+                                indent(flat([print_term(*body), pure(";")])),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
             ]),
         },
         Term::DefFrom(DefFrom { label, body }) => {

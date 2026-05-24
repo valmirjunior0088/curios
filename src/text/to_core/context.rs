@@ -141,8 +141,10 @@ impl<'a> Context<'a> {
     }
 
     pub fn register_alias(&mut self, qualifier: &str) {
-        self.aliases
-            .insert(self.prefix.with(qualifier), self.qualifiers[qualifier].clone());
+        self.aliases.insert(
+            self.prefix.with(qualifier),
+            self.qualifiers[qualifier].clone(),
+        );
     }
 
     pub fn finalize(&mut self, info: ModuleInfo) {

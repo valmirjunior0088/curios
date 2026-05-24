@@ -404,8 +404,18 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
         &motive.open(&[&Term::Prim(Prim::Nat(0))]),
     )?;
 
-    let pred_label = context.fresh(succ_case.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
-    let ih_label = context.fresh(succ_case.names().and_then(|ns| ns.get(1)).map(|s| s.as_str()));
+    let pred_label = context.fresh(
+        succ_case
+            .names()
+            .and_then(|ns| ns.first())
+            .map(|s| s.as_str()),
+    );
+    let ih_label = context.fresh(
+        succ_case
+            .names()
+            .and_then(|ns| ns.get(1))
+            .map(|s| s.as_str()),
+    );
 
     context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
@@ -618,7 +628,9 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     context.with_frame(|context| {
         context.define_assuming(&label, type_, body);
 
-        infer(context, &tail.open(&[&Var::free(label).into()]))
+        let tail_type = infer(context, &tail.open(&[&Var::free(label).into()]))?;
+
+        reduce(context, &tail_type)
     })
 }
 
@@ -661,7 +673,9 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
             erase(context, body, type_)?;
         }
 
-        infer(context, &tail)
+        let tail_type = infer(context, &tail)?;
+
+        reduce(context, &tail_type)
     })
 }
 
@@ -1520,8 +1534,18 @@ fn erase_nat_fold(
         &motive.open(&[&Term::Prim(Prim::Nat(0))]),
     )?;
 
-    let pred_label = context.fresh(succ_case.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
-    let ih_label = context.fresh(succ_case.names().and_then(|ns| ns.get(1)).map(|s| s.as_str()));
+    let pred_label = context.fresh(
+        succ_case
+            .names()
+            .and_then(|ns| ns.first())
+            .map(|s| s.as_str()),
+    );
+    let ih_label = context.fresh(
+        succ_case
+            .names()
+            .and_then(|ns| ns.get(1))
+            .map(|s| s.as_str()),
+    );
 
     let erased_succ_case = context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
