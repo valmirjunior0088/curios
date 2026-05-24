@@ -224,11 +224,9 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             sep_flat(fields.iter().map(|f| print_term(f)), || pure(", ")),
             pure(")"),
         ]),
-        Term::Proj(Proj { head, index }) => flat([
-            pure("("),
-            print_term(head),
-            pure(format!(").{index}")),
-        ]),
+        Term::Proj(Proj { head, index }) => {
+            flat([pure("("), print_term(head), pure(format!(").{index}"))])
+        }
         Term::Atom(atom) => print_atom(atom),
         Term::Match(Match { head, cases }) => {
             let cases = cases.iter().enumerate().map(|(i, body)| {

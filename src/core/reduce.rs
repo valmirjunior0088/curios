@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim,
-        Proj, Seal, Term, Tuple, Unseal, Var,
+        Apply, BlnMatch, Context, Flt, Func, Let, Match, NatFold, NatMatch, Preempted, Prim, Proj,
+        Seal, Term, Tuple, Unseal, Var,
     },
     std::time::{Duration, Instant},
 };
@@ -708,6 +708,9 @@ impl Reduce {
 
     fn reduce_proj(&mut self, context: &mut Context, proj: Proj) -> Result<Step, Preempted> {
         let Proj { head, index } = proj;
+        if let Some(v) = context.projection(&head, index) {
+            return Ok(Step::Continue(v.clone()));
+        }
         match self.reduce(context, *head)? {
             Term::Tuple(Tuple { fields }) => Ok(Step::Continue(
                 *fields
@@ -717,7 +720,13 @@ impl Reduce {
             )),
             head => match context.projection(&head, index) {
                 Some(v) => Ok(Step::Continue(v.clone())),
-                None => Ok(Step::Break(Proj { head: head.into(), index }.into())),
+                None => Ok(Step::Break(
+                    Proj {
+                        head: head.into(),
+                        index,
+                    }
+                    .into(),
+                )),
             },
         }
     }
@@ -1174,8 +1183,7 @@ mod tests {
     fn reduce_proj_beta_reduces() {
         let mut context = context();
 
-        let term: Term =
-            Proj::new(Tuple::new([Atom::from("a"), Atom::from("b")]), 1).into();
+        let term: Term = Proj::new(Tuple::new([Atom::from("a"), Atom::from("b")]), 1).into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Atom::from("b").into()));
     }
@@ -1195,11 +1203,8 @@ mod tests {
     fn eta_reduce_tuple_fires() {
         let mut context = context();
 
-        let term: Term = Tuple::new([
-            Proj::new(Var::free("r"), 0),
-            Proj::new(Var::free("r"), 1),
-        ])
-        .into();
+        let term: Term =
+            Tuple::new([Proj::new(Var::free("r"), 0), Proj::new(Var::free("r"), 1)]).into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Var::free("r").into()));
     }
@@ -1208,8 +1213,7 @@ mod tests {
     fn eta_reduce_func_fires() {
         let mut context = context();
 
-        let term: Term =
-            Func::new("y", Apply::new(Var::free("f"), Var::free("y"))).into();
+        let term: Term = Func::new("y", Apply::new(Var::free("f"), Var::free("y"))).into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Var::free("f").into()));
     }

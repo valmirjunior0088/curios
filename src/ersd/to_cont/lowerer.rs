@@ -808,7 +808,11 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
-                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::SysPrint(operand)))
+                emit_fresh_value(
+                    state,
+                    builder,
+                    cont::Value::Eval(cont::Code::SysPrint(operand)),
+                )
             }
             ersd::Term::Atom(atom) => emit_fresh_value(
                 state,
@@ -1276,7 +1280,10 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Proj(proj) => {
                 let head = self.lower_letrec_name(&proj.head, frame, state, builder);
-                builder.add_value(target, cont::Value::Eval(cont::Code::TplGet(head, proj.index)));
+                builder.add_value(
+                    target,
+                    cont::Value::Eval(cont::Code::TplGet(head, proj.index)),
+                );
             }
             ersd::Term::Apply(_)
             | ersd::Term::Match(_)
@@ -1308,7 +1315,8 @@ impl<'a> Lowerer<'a> {
         match term {
             ersd::Term::Name(name) => cont(self, state, builder, frame.find(name.as_str())),
             ersd::Term::Erased => {
-                let value = emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])));
+                let value =
+                    emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])));
 
                 cont(self, state, builder, value)
             }

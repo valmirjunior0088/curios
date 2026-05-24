@@ -51,7 +51,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.nat_to_str_used() {
             let nat_to_str_type = wasm::TypeName::from("nat_to_str_type");
-            self.module.add_type(nat_to_str_type.clone(), i32_to_bin_type.clone());
+            self.module
+                .add_type(nat_to_str_type.clone(), i32_to_bin_type.clone());
             self.module.add_import(
                 "env",
                 "nat_to_str",
@@ -64,7 +65,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.int_to_str_used() {
             let int_to_str_type = wasm::TypeName::from("int_to_str_type");
-            self.module.add_type(int_to_str_type.clone(), i32_to_bin_type);
+            self.module
+                .add_type(int_to_str_type.clone(), i32_to_bin_type);
             self.module.add_import(
                 "env",
                 "int_to_str",

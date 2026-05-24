@@ -446,11 +446,23 @@ impl Convert {
         for ((this_type, this_body), (that_type, that_body)) in
             this.items.into_iter().zip(that.items)
         {
-            self.enqueue(Type.into(), this_type.open(&labels), that_type.open(&labels));
-            self.enqueue(Type.into(), this_body.open(&labels), that_body.open(&labels));
+            self.enqueue(
+                Type.into(),
+                this_type.open(&labels),
+                that_type.open(&labels),
+            );
+            self.enqueue(
+                Type.into(),
+                this_body.open(&labels),
+                that_body.open(&labels),
+            );
         }
 
-        self.enqueue(Type.into(), this.tail.open(&labels), that.tail.open(&labels));
+        self.enqueue(
+            Type.into(),
+            this.tail.open(&labels),
+            that.tail.open(&labels),
+        );
 
         Ok(true)
     }
@@ -573,9 +585,7 @@ impl Convert {
                 }
                 (Term::Seal(this), Term::Seal(that)) => self.compare_seal(this, that)?,
                 (Term::Unseal(this), Term::Unseal(that)) => self.compare_unseal(this, that)?,
-                (this_n, that_n) => {
-                    self.eta_expand_neutral(context, this_n, that_n, type_)?
-                }
+                (this_n, that_n) => self.eta_expand_neutral(context, this_n, that_n, type_)?,
             };
 
             if !ok {
@@ -955,15 +965,9 @@ mod tests {
         let r: Term = Var::free("r").into();
         let s: Term = Var::free("s").into();
 
-        assert_eq!(
-            convert(&mut context, &tuple_type, &r, &r),
-            Ok(true)
-        );
+        assert_eq!(convert(&mut context, &tuple_type, &r, &r), Ok(true));
 
-        assert_eq!(
-            convert(&mut context, &tuple_type, &r, &s),
-            Ok(false)
-        );
+        assert_eq!(convert(&mut context, &tuple_type, &r, &s), Ok(false));
     }
 
     #[test]

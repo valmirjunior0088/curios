@@ -100,8 +100,7 @@ fn main() {
                                     head: ersd::Term::Atom(ersd::Atom { index: 0 }).into(),
                                     cases: vec![
                                         ersd::Term::Proj(ersd::Proj {
-                                            head: ersd::Term::Name(ersd::Name::from("pair"))
-                                                .into(),
+                                            head: ersd::Term::Name(ersd::Name::from("pair")).into(),
                                             index: 1,
                                         })
                                         .into(),

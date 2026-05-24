@@ -2015,4 +2015,3 @@ pub fn to_bytes(module: &Module) -> Vec<u8> {
 
     bytes
 }
-

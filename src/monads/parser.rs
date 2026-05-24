@@ -220,7 +220,8 @@ where
         M: Into<String> + 'a,
     {
         Parser::new(move |state| {
-            self.parse(state).map_err(|error| error.with_message(message))
+            self.parse(state)
+                .map_err(|error| error.with_message(message))
         })
     }
 

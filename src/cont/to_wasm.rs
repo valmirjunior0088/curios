@@ -603,7 +603,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -645,11 +647,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("LST"))),
+                            cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("LST"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -692,14 +696,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrGet(
-                            cont::ValueName::from("LST"),
-                            cont::ValueName::from("ONE"),
-                        )),
+                            cont::Value::Eval(cont::Code::ArrGet(
+                                cont::ValueName::from("LST"),
+                                cont::ValueName::from("ONE"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -757,7 +763,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -815,7 +823,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -849,11 +859,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltFloor(cont::ValueName::from("X"))),
+                            cont::Value::Eval(cont::Code::FltFloor(cont::ValueName::from("X"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -887,11 +899,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltCeil(cont::ValueName::from("X"))),
+                            cont::Value::Eval(cont::Code::FltCeil(cont::ValueName::from("X"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -925,11 +939,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltTrunc(cont::ValueName::from("X"))),
+                            cont::Value::Eval(cont::Code::FltTrunc(cont::ValueName::from("X"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -963,11 +979,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltNearest(cont::ValueName::from("X"))),
+                            cont::Value::Eval(cont::Code::FltNearest(cont::ValueName::from("X"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1002,14 +1020,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatDiv(
-                            cont::ValueName::from("TEN"),
-                            cont::ValueName::from("THREE"),
-                        )),
+                            cont::Value::Eval(cont::Code::NatDiv(
+                                cont::ValueName::from("TEN"),
+                                cont::ValueName::from("THREE"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1044,14 +1064,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatRem(
-                            cont::ValueName::from("TEN"),
-                            cont::ValueName::from("THREE"),
-                        )),
+                            cont::Value::Eval(cont::Code::NatRem(
+                                cont::ValueName::from("TEN"),
+                                cont::ValueName::from("THREE"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1086,14 +1108,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatLt(
-                            cont::ValueName::from("THREE"),
-                            cont::ValueName::from("FIVE"),
-                        )),
+                            cont::Value::Eval(cont::Code::NatLt(
+                                cont::ValueName::from("THREE"),
+                                cont::ValueName::from("FIVE"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1138,7 +1162,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1180,7 +1206,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1215,14 +1243,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntLt(
-                            cont::ValueName::from("NEG1"),
-                            cont::ValueName::from("ZERO"),
-                        )),
+                            cont::Value::Eval(cont::Code::IntLt(
+                                cont::ValueName::from("NEG1"),
+                                cont::ValueName::from("ZERO"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1257,14 +1287,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltDiv(
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("FOUR"),
-                        )),
+                            cont::Value::Eval(cont::Code::FltDiv(
+                                cont::ValueName::from("ONE"),
+                                cont::ValueName::from("FOUR"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1299,14 +1331,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltEql(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
+                            cont::Value::Eval(cont::Code::FltEql(
+                                cont::ValueName::from("A"),
+                                cont::ValueName::from("B"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1340,11 +1374,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltSqrt(cont::ValueName::from("FOUR"))),
+                            cont::Value::Eval(cont::Code::FltSqrt(cont::ValueName::from("FOUR"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1378,11 +1414,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntToFlt(cont::ValueName::from("THREE"))),
+                            cont::Value::Eval(cont::Code::IntToFlt(cont::ValueName::from("THREE"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1416,11 +1454,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatToFlt(cont::ValueName::from("FIVE"))),
+                            cont::Value::Eval(cont::Code::NatToFlt(cont::ValueName::from("FIVE"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1454,13 +1494,15 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from(
-                            "THREE_SEVEN",
-                        ))),
+                            cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from(
+                                "THREE_SEVEN",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1494,11 +1536,13 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatToInt(cont::ValueName::from("SEVEN"))),
+                            cont::Value::Eval(cont::Code::NatToInt(cont::ValueName::from("SEVEN"))),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1533,14 +1577,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatNeq(
-                            cont::ValueName::from("THREE"),
-                            cont::ValueName::from("FIVE"),
-                        )),
+                            cont::Value::Eval(cont::Code::NatNeq(
+                                cont::ValueName::from("THREE"),
+                                cont::ValueName::from("FIVE"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1575,14 +1621,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntNeq(
-                            cont::ValueName::from("NEG1"),
-                            cont::ValueName::from("NEG1B"),
-                        )),
+                            cont::Value::Eval(cont::Code::IntNeq(
+                                cont::ValueName::from("NEG1"),
+                                cont::ValueName::from("NEG1B"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1617,14 +1665,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltNeq(
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("TWO"),
-                        )),
+                            cont::Value::Eval(cont::Code::FltNeq(
+                                cont::ValueName::from("ONE"),
+                                cont::ValueName::from("TWO"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1659,14 +1709,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltMin(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
+                            cont::Value::Eval(cont::Code::FltMin(
+                                cont::ValueName::from("A"),
+                                cont::ValueName::from("B"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1701,14 +1753,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltMax(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
+                            cont::Value::Eval(cont::Code::FltMax(
+                                cont::ValueName::from("A"),
+                                cont::ValueName::from("B"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1749,7 +1803,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1787,14 +1843,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("HELLO"),
-                            cont::ValueName::from("IDX"),
-                        )),
+                            cont::Value::Eval(cont::Code::BinGet(
+                                cont::ValueName::from("HELLO"),
+                                cont::ValueName::from("IDX"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1847,7 +1905,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1888,14 +1948,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinEql(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
+                            cont::Value::Eval(cont::Code::BinEql(
+                                cont::ValueName::from("A"),
+                                cont::ValueName::from("B"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -1936,14 +1998,16 @@ mod tests {
                     values: vec![
                         (
                             cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinEql(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
+                            cont::Value::Eval(cont::Code::BinEql(
+                                cont::ValueName::from("A"),
+                                cont::ValueName::from("B"),
+                            )),
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),
@@ -2001,7 +2065,9 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("str"),
-                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                            cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                "result",
+                            ))),
                         ),
                         (
                             cont::ValueName::from("unit"),

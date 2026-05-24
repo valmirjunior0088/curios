@@ -380,6 +380,18 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
     Ok(motive.open(&[head.as_ref()]))
 }
 
+fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+    let canonical = reduce(context, head)?;
+
+    match canonical {
+        Term::Var(var) => context.define(var.unwrap(), value),
+        Term::Proj(Proj { head: base, index }) => context.define_proj(*base, index, value),
+        _ => {}
+    }
+
+    Ok(())
+}
+
 fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<Term, Error> {
     let NatMatch {
         head,
@@ -408,7 +420,10 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
     })?;
 
     for (n, body) in cases {
-        erase(context, body, &motive.open(&[&Term::Prim(Prim::Nat(*n))]))?;
+        context.with_frame(|context| {
+            refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(*n)))?;
+            erase(context, body, &motive.open(&[&Term::Prim(Prim::Nat(*n))])).map(|_| ())
+        })?;
     }
 
     erase(context, default, &motive.open(&[head.as_ref()]))?;
@@ -443,8 +458,25 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
         .map(|_| ())
     })?;
 
-    erase(context, false_case, &motive.open(&[&Term::Prim(Prim::Bln(false))]))?;
-    erase(context, true_case, &motive.open(&[&Term::Prim(Prim::Bln(true))]))?;
+    context.with_frame(|context| {
+        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(false)))?;
+        erase(
+            context,
+            false_case,
+            &motive.open(&[&Term::Prim(Prim::Bln(false))]),
+        )
+        .map(|_| ())
+    })?;
+
+    context.with_frame(|context| {
+        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(true)))?;
+        erase(
+            context,
+            true_case,
+            &motive.open(&[&Term::Prim(Prim::Bln(true))]),
+        )
+        .map(|_| ())
+    })?;
 
     Ok(motive.open(&[head.as_ref()]))
 }
@@ -506,8 +538,6 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         return Err(Error::cannot_infer(term.clone()));
     }
 
-    let canonical = reduce(context, head.as_ref())?;
-
     for atom in &atoms {
         let body = if let Some(body) = cases.get(atom) {
             body
@@ -518,16 +548,7 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         let expected = motive.open(&[&atom.clone().into()]);
 
         context.with_frame(|context| {
-            match &canonical {
-                Term::Var(var) => {
-                    context.define(var.unwrap(), &atom.clone().into());
-                }
-                Term::Proj(Proj { head: base, index }) => {
-                    context.define_proj((**base).clone(), *index, &atom.clone().into());
-                }
-                _ => {}
-            }
-
+            refine_head(context, head.as_ref(), &atom.clone().into())?;
             erase(context, body, &expected)
         })?;
     }
@@ -1262,7 +1283,12 @@ fn erase_prim(
             Ok(ersd::Prim::ArrConcat(erased).into())
         }
         Prim::SysPrint(inner) => {
-            expect(context, term, &Term::TupleType(TupleType::new([] as [(&str, Term); 0])), expected)?;
+            expect(
+                context,
+                term,
+                &Term::TupleType(TupleType::new([] as [(&str, Term); 0])),
+                expected,
+            )?;
             Ok(
                 ersd::Prim::SysPrint(erase(context, inner, &Term::Prim(Prim::BinType))?.into())
                     .into(),
@@ -1460,7 +1486,10 @@ fn erase_nat_match(
         .iter()
         .map(|(n, body)| {
             let case_expected = motive.open(&[&Term::Prim(Prim::Nat(*n))]);
-            erase(context, body, &case_expected).map(|e| (*n, e.into()))
+            context.with_frame(|context| {
+                refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(*n)))?;
+                erase(context, body, &case_expected).map(|e| (*n, e.into()))
+            })
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
@@ -1509,8 +1538,24 @@ fn erase_bln_match(
         )
     })?;
 
-    let erased_false = erase(context, false_case, &motive.open(&[&Term::Prim(Prim::Bln(false))]))?;
-    let erased_true = erase(context, true_case, &motive.open(&[&Term::Prim(Prim::Bln(true))]))?;
+    let erased_false = context.with_frame(|context| {
+        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(false)))?;
+        erase(
+            context,
+            false_case,
+            &motive.open(&[&Term::Prim(Prim::Bln(false))]),
+        )
+    })?;
+
+    let erased_true = context.with_frame(|context| {
+        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(true)))?;
+        erase(
+            context,
+            true_case,
+            &motive.open(&[&Term::Prim(Prim::Bln(true))]),
+        )
+    })?;
+
     let erased_head = erase(context, head, &head_type)?;
 
     expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
@@ -1614,8 +1659,6 @@ fn erase_match(
         return Err(Error::cannot_infer(term.clone()));
     }
 
-    let canonical = reduce(context, head.as_ref())?;
-
     let cases = atoms
         .iter()
         .map(|atom| {
@@ -1628,16 +1671,7 @@ fn erase_match(
             let expected = motive.open(&[&atom.clone().into()]);
 
             context.with_frame(|context| {
-                match &canonical {
-                    Term::Var(var) => {
-                        context.define(var.unwrap(), &atom.clone().into());
-                    }
-                    Term::Proj(Proj { head: base, index }) => {
-                        context.define_proj((**base).clone(), *index, &atom.clone().into());
-                    }
-                    _ => {}
-                }
-
+                refine_head(context, head.as_ref(), &atom.clone().into())?;
                 erase(context, body, &expected).map(Into::into)
             })
         })

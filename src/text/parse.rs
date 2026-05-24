@@ -14,8 +14,8 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "def",
-    "Type", "Bln", "false", "true", "Nat", "Int", "Flt", "Bin", "Arr",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "def", "Type", "Bln", "false",
+    "true", "Nat", "Int", "Flt", "Bin", "Arr",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -496,7 +496,8 @@ fn parse_io_prim<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_bln_prim<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Bln")).map(|()| Term::Prim(Prim::BlnType))
+    catch(parse_keyword("Bln"))
+        .map(|()| Term::Prim(Prim::BlnType))
         .or(catch(parse_keyword("false")).map(|()| Term::Prim(Prim::Bln(false))))
         .or(catch(parse_keyword("true")).map(|()| Term::Prim(Prim::Bln(true))))
 }
@@ -696,15 +697,17 @@ fn parse_bln_match<'a>() -> Parser<'a, Term> {
                     .and(parse_bln_false_branch())
                     .map(|(true_case, false_case)| (false_case, true_case))),
         )
-        .map(|(((head, motive_label), motive), (false_case, true_case))| {
-            Term::BlnMatch(BlnMatch {
-                head: head.into(),
-                motive_label: motive_label.to_string(),
-                motive: motive.into(),
-                false_case: false_case.into(),
-                true_case: true_case.into(),
-            })
-        })
+        .map(
+            |(((head, motive_label), motive), (false_case, true_case))| {
+                Term::BlnMatch(BlnMatch {
+                    head: head.into(),
+                    motive_label: motive_label.to_string(),
+                    motive: motive.into(),
+                    false_case: false_case.into(),
+                    true_case: true_case.into(),
+                })
+            },
+        )
 }
 
 fn parse_nat_match_case<'a>() -> Parser<'a, (u32, Term)> {
@@ -845,12 +848,11 @@ fn parse_coerce<'a>() -> Parser<'a, Term> {
 
 fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
     catch(
-        take_exact(".")
-            .and_keep(
-                parse_u32()
-                    .map_err("Expected numeric index after '.'")
-                    .map(|n| n as usize),
-            ),
+        take_exact(".").and_keep(
+            parse_u32()
+                .map_err("Expected numeric index after '.'")
+                .map(|n| n as usize),
+        ),
     )
 }
 

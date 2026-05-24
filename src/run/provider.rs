@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc, Mutex,
-    mpsc::{self, Receiver},
+use std::{
+    io::{Write, stdout},
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, Receiver},
+    },
 };
 
 pub trait Provider {
@@ -11,7 +14,7 @@ pub struct StdoutProvider;
 
 impl Provider for StdoutProvider {
     fn print(&self, bytes: &[u8]) {
-        std::io::Write::write_all(&mut std::io::stdout(), bytes).unwrap();
+        stdout().write_all(&bytes).unwrap();
     }
 }
 

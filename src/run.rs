@@ -3,7 +3,7 @@ pub use provider::*;
 
 use {
     crate::{cont, core, ersd, text, wasm},
-    std::{path::Path, sync::Arc, time::Duration},
+    std::{path::Path, time::Duration},
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Config, Engine, FieldType, FuncType,
         HeapType, Linker, Module, Mutability, RefType, Rooted, StorageType, Store, Val, ValType,
@@ -130,7 +130,6 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
 
     {
         let bin_to_unit = FuncType::new(&engine, [bin_ref.clone()], []);
-        let provider = Arc::new(provider);
 
         linker
             .func_new(

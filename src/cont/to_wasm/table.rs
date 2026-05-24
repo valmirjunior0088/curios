@@ -315,15 +315,18 @@ impl<'a> Table<'a> {
     }
 
     pub fn nat_to_str_func(&self) -> &wasm::FuncName {
-        self.nat_to_str.get_or_init(|| wasm::FuncName::from("nat_to_str"))
+        self.nat_to_str
+            .get_or_init(|| wasm::FuncName::from("nat_to_str"))
     }
 
     pub fn int_to_str_func(&self) -> &wasm::FuncName {
-        self.int_to_str.get_or_init(|| wasm::FuncName::from("int_to_str"))
+        self.int_to_str
+            .get_or_init(|| wasm::FuncName::from("int_to_str"))
     }
 
     pub fn flt_to_str_func(&self) -> &wasm::FuncName {
-        self.flt_to_str.get_or_init(|| wasm::FuncName::from("flt_to_str"))
+        self.flt_to_str
+            .get_or_init(|| wasm::FuncName::from("flt_to_str"))
     }
 
     pub fn nat_to_str_used(&self) -> bool {
@@ -339,7 +342,8 @@ impl<'a> Table<'a> {
     }
 
     pub fn sys_print_func(&self) -> &wasm::FuncName {
-        self.sys_print.get_or_init(|| wasm::FuncName::from("sys_print"))
+        self.sys_print
+            .get_or_init(|| wasm::FuncName::from("sys_print"))
     }
 
     pub fn sys_print_used(&self) -> bool {

@@ -328,7 +328,13 @@ pub struct BlnMatch {
 }
 
 impl BlnMatch {
-    pub fn new<H, ML, M, F, T>(head: H, motive_label: ML, motive: M, false_case: F, true_case: T) -> Self
+    pub fn new<H, ML, M, F, T>(
+        head: H,
+        motive_label: ML,
+        motive: M,
+        false_case: F,
+        true_case: T,
+    ) -> Self
     where
         H: Into<Term>,
         ML: Into<String>,

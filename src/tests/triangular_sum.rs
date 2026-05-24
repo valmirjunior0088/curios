@@ -12,5 +12,8 @@ fn triangular_sum() {
 
     let (system, receiver) = crate::ChannelProvider::new();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"10".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"10".to_vec()]
+    );
 }
