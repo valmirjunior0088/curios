@@ -1,0 +1,12 @@
+pub mod std;
+pub mod json;
+
+let v : json/Value = ('obj, [
+    ("name",   ('str, "Alice")),
+    ("score",  ('num, +9.5)),
+    ("active", ('bln, true)),
+    ("tags",   ('arr, [('str, "x"), ('str, "y")])),
+    ("extra",  ('null, ()))
+]);
+
+Sys.print (json/encode v)

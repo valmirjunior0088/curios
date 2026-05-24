@@ -1,2 +1,0 @@
-mod Foo;
-Sys.print (Nat.to_str Foo/value)

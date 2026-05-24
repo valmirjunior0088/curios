@@ -22,7 +22,7 @@ fn main() {
                     "value",
                     core::Term::from(core::Match::new(
                         core::Var::free("label"),
-                        "_",
+                        None,
                         core::Type,
                         [("left", core::Type), ("right", core::Type)],
                     )),
@@ -45,7 +45,7 @@ fn main() {
                         core::Proj::new(core::Var::free("p"), 1),
                         core::Match::new(
                             core::Var::free("label"),
-                            "_",
+                            None,
                             core::Type,
                             [
                                 (

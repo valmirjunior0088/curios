@@ -1,0 +1,65 @@
+use /std/bin;
+use /std/int;
+use /std/nat;
+
+pub let from_nat : Bin -> Nat = str =>
+    bin/fold Nat str 0 (byte => acc => Nat.add (Nat.mul acc 10) (Nat.sub byte 48));
+
+pub let from_int : Bin -> Int = str =>
+    Nat.match (Bin.get str 0) : Int;
+    | '+' => Nat.to_int (from_nat (Bin.slice str 1 (Bin.len str)));
+    | '-' => Int.sub +0 (Nat.to_int (from_nat (Bin.slice str 1 (Bin.len str))));
+    | _ => Nat.to_int (from_nat str);;
+
+pub let find_byte : Nat -> Bin -> Nat = target => str =>
+    Nat.fold (Bin.len str) : Nat;
+    | 0 => Bin.len str;
+    | pred ih =>
+        Bln.match (Nat.lt pred ih) : Nat;
+        | true =>
+            Bln.match (Nat.eql (Bin.get str pred) target) : Nat;
+            | true  => pred;
+            | false => ih;;
+        | false => ih;;;
+
+pub let pow10 : Nat -> Flt = n =>
+    Nat.fold n : Flt;
+    | 0 => +1.0;
+    | pred ih => Flt.mul ih +10.0;;
+
+pub let from_flt : Bin -> Flt = str =>
+    let neg : Bln = Nat.eql (Bin.get str 0) '-';
+
+    let start : Nat =
+        Nat.match (Bin.get str 0) : Nat;
+        | '+' => 1;
+        | '-' => 1;
+        | _ => 0;;
+
+    let len : Nat = Bin.len str;
+    let dot_pos : Nat = find_byte '.' str;
+    let e_pos : Nat = nat/min (find_byte 'e' str) (find_byte 'E' str);
+    let int_end : Nat = nat/min dot_pos e_pos;
+    let int_flt : Flt = Nat.to_flt (from_nat (Bin.slice str start int_end));
+
+    let frac_flt : Flt =
+        Bln.match (Nat.lt dot_pos e_pos) : Flt;
+        | true =>
+            let frac_slice : Bin = Bin.slice str (Nat.add dot_pos 1) e_pos;
+            Flt.div (Nat.to_flt (from_nat frac_slice)) (pow10 (Bin.len frac_slice));
+        | false => +0.0;;
+
+    let exp_flt : Flt =
+        Bln.match (Nat.lt e_pos len) : Flt;
+        | true =>
+            let exp_int : Int = from_int (Bin.slice str (Nat.add e_pos 1) len);
+            Bln.match (Int.gte exp_int +0) : Flt;
+            | true => pow10 (Int.to_nat exp_int);
+            | false => Flt.div +1.0 (pow10 (int/abs exp_int));;
+        | false => +1.0;;
+
+    let result : Flt = Flt.mul (Flt.add int_flt frac_flt) exp_flt;
+
+    Bln.match neg : Flt;
+    | true => Flt.neg result;
+    | false => result;;

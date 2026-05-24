@@ -1894,7 +1894,7 @@ mod tests {
                 "y",
                 Term::from(Match::new(
                     Var::free("x"),
-                    "m",
+                    Some("m"),
                     Type,
                     vec![
                         ("left", AtomType::new(["hot"])),
@@ -1925,7 +1925,7 @@ mod tests {
                 "y",
                 Term::from(Match::new(
                     Var::free("x"),
-                    "m",
+                    Some("m"),
                     Type,
                     vec![
                         ("left", AtomType::new(["hot"])),
@@ -2373,7 +2373,7 @@ mod tests {
 
         let nat_fold = Term::from(NatFold::new(
             Prim::Int(1),
-            "m",
+            Some("m"),
             AtomType::new(["false", "true"]),
             Atom::from("false"),
             "pred",
@@ -2395,7 +2395,7 @@ mod tests {
 
         let nat_match = Term::from(NatMatch::new(
             Prim::Nat(5),
-            "m",
+            Some("m"),
             AtomType::new(["false", "true"]),
             [(5u32, Term::from(Atom::from("true")))],
             Atom::from("false"),
@@ -2412,7 +2412,7 @@ mod tests {
 
         let nat_match = Term::from(NatMatch::new(
             Prim::Int(0),
-            "m",
+            Some("m"),
             AtomType::new(["false", "true"]),
             [(0u32, Term::from(Atom::from("true")))],
             Atom::from("false"),

@@ -220,13 +220,13 @@ A homogeneous array of elements of type `T`. `T` must be atomic; write `Arr (Arr
 
 ### Primitive types
 
-| Type  | Description         |
-|-------|---------------------|
-| `Bln` | Boolean             |
-| `Nat` | Natural number (u32) |
-| `Int` | Signed integer (i32) |
+| Type  | Description                  |
+| ----- | ---------------------------- |
+| `Bln` | Boolean                      |
+| `Nat` | Natural number (u32)         |
+| `Int` | Signed integer (i32)         |
 | `Flt` | Single-precision float (f32) |
-| `Bin` | Byte sequence |
+| `Bin` | Byte sequence                |
 
 ## Literals
 
@@ -315,22 +315,22 @@ All primitive operations are prefix and take **atomic** arguments. Parenthesise 
 
 ### Nat
 
-| Operation        | Arity | Description           | Returns          |
-|------------------|-------|-----------------------|------------------|
-| `Nat.add a b`    | 2     | Addition              | `Nat`            |
-| `Nat.sub a b`    | 2     | Subtraction           | `Nat`            |
-| `Nat.mul a b`    | 2     | Multiplication        | `Nat`            |
-| `Nat.div a b`    | 2     | Division              | `Nat`            |
-| `Nat.rem a b`    | 2     | Remainder             | `Nat`            |
-| `Nat.eql a b`    | 2     | Equality              | `Bln` |
-| `Nat.neq a b`    | 2     | Inequality            | `Bln` |
-| `Nat.lt a b`     | 2     | Less than             | `Bln` |
-| `Nat.gt a b`     | 2     | Greater than          | `Bln` |
-| `Nat.lte a b`    | 2     | Less than or equal    | `Bln` |
-| `Nat.gte a b`    | 2     | Greater than or equal | `Bln` |
-| `Nat.to_int a`   | 1     | Convert to Int        | `Int`            |
-| `Nat.to_flt a`   | 1     | Convert to Flt        | `Flt`            |
-| `Nat.to_str a`   | 1     | Convert to Bin        | `Bin`            |
+| Operation      | Arity | Description           | Returns |
+| -------------- | ----- | --------------------- | ------- |
+| `Nat.add a b`  | 2     | Addition              | `Nat`   |
+| `Nat.sub a b`  | 2     | Subtraction           | `Nat`   |
+| `Nat.mul a b`  | 2     | Multiplication        | `Nat`   |
+| `Nat.div a b`  | 2     | Division              | `Nat`   |
+| `Nat.rem a b`  | 2     | Remainder             | `Nat`   |
+| `Nat.eql a b`  | 2     | Equality              | `Bln`   |
+| `Nat.neq a b`  | 2     | Inequality            | `Bln`   |
+| `Nat.lt a b`   | 2     | Less than             | `Bln`   |
+| `Nat.gt a b`   | 2     | Greater than          | `Bln`   |
+| `Nat.lte a b`  | 2     | Less than or equal    | `Bln`   |
+| `Nat.gte a b`  | 2     | Greater than or equal | `Bln`   |
+| `Nat.to_int a` | 1     | Convert to Int        | `Int`   |
+| `Nat.to_flt a` | 1     | Convert to Flt        | `Flt`   |
+| `Nat.to_str a` | 1     | Convert to Bin        | `Bin`   |
 
 ### Nat.fold
 
@@ -355,70 +355,70 @@ Pattern match on specific natural number values. The default branch (`| _ =>`) i
 
 ### Int
 
-| Operation        | Arity | Description           | Returns          |
-|------------------|-------|-----------------------|------------------|
-| `Int.add a b`    | 2     | Addition              | `Int`            |
-| `Int.sub a b`    | 2     | Subtraction           | `Int`            |
-| `Int.mul a b`    | 2     | Multiplication        | `Int`            |
-| `Int.div a b`    | 2     | Division              | `Int`            |
-| `Int.rem a b`    | 2     | Remainder             | `Int`            |
-| `Int.eql a b`    | 2     | Equality              | `Bln` |
-| `Int.neq a b`    | 2     | Inequality            | `Bln` |
-| `Int.lt a b`     | 2     | Less than             | `Bln` |
-| `Int.gt a b`     | 2     | Greater than          | `Bln` |
-| `Int.lte a b`    | 2     | Less than or equal    | `Bln` |
-| `Int.gte a b`    | 2     | Greater than or equal | `Bln` |
-| `Int.to_nat a`   | 1     | Convert to Nat        | `Nat`            |
-| `Int.to_flt a`   | 1     | Convert to Flt        | `Flt`            |
-| `Int.to_str a`   | 1     | Convert to Bin        | `Bin`            |
+| Operation      | Arity | Description           | Returns |
+| -------------- | ----- | --------------------- | ------- |
+| `Int.add a b`  | 2     | Addition              | `Int`   |
+| `Int.sub a b`  | 2     | Subtraction           | `Int`   |
+| `Int.mul a b`  | 2     | Multiplication        | `Int`   |
+| `Int.div a b`  | 2     | Division              | `Int`   |
+| `Int.rem a b`  | 2     | Remainder             | `Int`   |
+| `Int.eql a b`  | 2     | Equality              | `Bln`   |
+| `Int.neq a b`  | 2     | Inequality            | `Bln`   |
+| `Int.lt a b`   | 2     | Less than             | `Bln`   |
+| `Int.gt a b`   | 2     | Greater than          | `Bln`   |
+| `Int.lte a b`  | 2     | Less than or equal    | `Bln`   |
+| `Int.gte a b`  | 2     | Greater than or equal | `Bln`   |
+| `Int.to_nat a` | 1     | Convert to Nat        | `Nat`   |
+| `Int.to_flt a` | 1     | Convert to Flt        | `Flt`   |
+| `Int.to_str a` | 1     | Convert to Bin        | `Bin`   |
 
 ### Flt
 
-| Operation          | Arity | Description           | Returns          |
-|--------------------|-------|-----------------------|------------------|
-| `Flt.add a b`      | 2     | Addition              | `Flt`            |
-| `Flt.sub a b`      | 2     | Subtraction           | `Flt`            |
-| `Flt.mul a b`      | 2     | Multiplication        | `Flt`            |
-| `Flt.div a b`      | 2     | Division              | `Flt`            |
-| `Flt.eql a b`      | 2     | Equality              | `Bln` |
-| `Flt.neq a b`      | 2     | Inequality            | `Bln` |
-| `Flt.lt a b`       | 2     | Less than             | `Bln` |
-| `Flt.gt a b`       | 2     | Greater than          | `Bln` |
-| `Flt.lte a b`      | 2     | Less than or equal    | `Bln` |
-| `Flt.gte a b`      | 2     | Greater than or equal | `Bln` |
-| `Flt.min a b`      | 2     | Minimum               | `Flt`            |
-| `Flt.max a b`      | 2     | Maximum               | `Flt`            |
-| `Flt.neg a`        | 1     | Negation              | `Flt`            |
-| `Flt.abs a`        | 1     | Absolute value        | `Flt`            |
-| `Flt.sqrt a`       | 1     | Square root           | `Flt`            |
-| `Flt.floor a`      | 1     | Floor                 | `Flt`            |
-| `Flt.ceil a`       | 1     | Ceiling               | `Flt`            |
-| `Flt.trunc a`      | 1     | Truncate toward zero  | `Flt`            |
-| `Flt.nearest a`    | 1     | Round to nearest      | `Flt`            |
-| `Flt.to_nat a`     | 1     | Convert to Nat        | `Nat`            |
-| `Flt.to_int a`     | 1     | Convert to Int        | `Int`            |
-| `Flt.to_str a`     | 1     | Convert to Bin        | `Bin`            |
+| Operation       | Arity | Description           | Returns |
+| --------------- | ----- | --------------------- | ------- |
+| `Flt.add a b`   | 2     | Addition              | `Flt`   |
+| `Flt.sub a b`   | 2     | Subtraction           | `Flt`   |
+| `Flt.mul a b`   | 2     | Multiplication        | `Flt`   |
+| `Flt.div a b`   | 2     | Division              | `Flt`   |
+| `Flt.eql a b`   | 2     | Equality              | `Bln`   |
+| `Flt.neq a b`   | 2     | Inequality            | `Bln`   |
+| `Flt.lt a b`    | 2     | Less than             | `Bln`   |
+| `Flt.gt a b`    | 2     | Greater than          | `Bln`   |
+| `Flt.lte a b`   | 2     | Less than or equal    | `Bln`   |
+| `Flt.gte a b`   | 2     | Greater than or equal | `Bln`   |
+| `Flt.min a b`   | 2     | Minimum               | `Flt`   |
+| `Flt.max a b`   | 2     | Maximum               | `Flt`   |
+| `Flt.neg a`     | 1     | Negation              | `Flt`   |
+| `Flt.abs a`     | 1     | Absolute value        | `Flt`   |
+| `Flt.sqrt a`    | 1     | Square root           | `Flt`   |
+| `Flt.floor a`   | 1     | Floor                 | `Flt`   |
+| `Flt.ceil a`    | 1     | Ceiling               | `Flt`   |
+| `Flt.trunc a`   | 1     | Truncate toward zero  | `Flt`   |
+| `Flt.nearest a` | 1     | Round to nearest      | `Flt`   |
+| `Flt.to_nat a`  | 1     | Convert to Nat        | `Nat`   |
+| `Flt.to_int a`  | 1     | Convert to Int        | `Int`   |
+| `Flt.to_str a`  | 1     | Convert to Bin        | `Bin`   |
 
 ### Bin
 
-| Operation              | Arity    | Description                         | Returns          |
-|------------------------|----------|-------------------------------------|------------------|
-| `Bin.len a`            | 1        | Byte length                         | `Nat`            |
-| `Bin.eql a b`          | 2        | Equality                            | `Bln` |
-| `Bin.get a i`          | 2        | Byte at index `i`                   | `Nat`            |
-| `Bin.slice a start end`| 3        | Subsequence from `start` to `end`   | `Bin`            |
-| `Bin.append a byte`    | 2        | Append a single byte                | `Bin`            |
-| `Bin.concat a, b, ...` | variadic | Concatenate any number of sequences | `Bin`            |
+| Operation               | Arity    | Description                         | Returns |
+| ----------------------- | -------- | ----------------------------------- | ------- |
+| `Bin.len a`             | 1        | Byte length                         | `Nat`   |
+| `Bin.eql a b`           | 2        | Equality                            | `Bln`   |
+| `Bin.get a i`           | 2        | Byte at index `i`                   | `Nat`   |
+| `Bin.slice a start end` | 3        | Subsequence from `start` to `end`   | `Bin`   |
+| `Bin.append a byte`     | 2        | Append a single byte                | `Bin`   |
+| `Bin.concat a, b, ...`  | variadic | Concatenate any number of sequences | `Bin`   |
 
 ### Arr
 
-| Operation               | Arity    | Description                         | Returns  |
-|-------------------------|----------|-------------------------------------|----------|
-| `Arr.len a`             | 1        | Element count                       | `Nat`    |
-| `Arr.get a i`           | 2        | Element at index `i`                | `T`      |
-| `Arr.slice a start end` | 3        | Subarray from `start` to `end`      | `Arr T`  |
-| `Arr.append a elem`     | 2        | Append a single element             | `Arr T`  |
-| `Arr.concat a, b, ...`  | variadic | Concatenate any number of arrays    | `Arr T`  |
+| Operation               | Arity    | Description                      | Returns |
+| ----------------------- | -------- | -------------------------------- | ------- |
+| `Arr.len a`             | 1        | Element count                    | `Nat`   |
+| `Arr.get a i`           | 2        | Element at index `i`             | `T`     |
+| `Arr.slice a start end` | 3        | Subarray from `start` to `end`   | `Arr T` |
+| `Arr.append a elem`     | 2        | Append a single element          | `Arr T` |
+| `Arr.concat a, b, ...`  | variadic | Concatenate any number of arrays | `Arr T` |
 
 `Bin.concat` and `Arr.concat` take comma-separated atomic arguments (not juxtaposed):
 
@@ -429,10 +429,10 @@ Arr.concat [1, 2], [3, 4], [5]
 
 ### Sys
 
-| Operation     | Arity | Description                                                        | Returns    |
-|---------------|----|-----------------------------------------------------------------------|------------|
-| `Sys.print a` | 1  | Print `a : Bin` to stdout                                             | `{}`       |
-| `Sys.read`    | 0  | Read a line from stdin (`\n` included); empty `Bin` means EOF         | `Bin`      |
+| Operation     | Arity | Description                                                   | Returns |
+| ------------- | ----- | ------------------------------------------------------------- | ------- |
+| `Sys.print a` | 1     | Print `a : Bin` to stdout                                     | `{}`    |
+| `Sys.read`    | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
 
 ## Idioms
 

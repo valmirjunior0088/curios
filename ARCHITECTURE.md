@@ -64,10 +64,10 @@ Transformation entry points (`to_cont.rs`, `to_wasm.rs`) declare submodules priv
 
 Two top-level modules fall outside this pattern:
 
-| Module          | Role                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| `src/run.rs`    | Wasmtime execution and result printing; gated behind the `run` Cargo feature              |
-| `src/cli.rs`    | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature           |
+| Module       | Role                                                                            |
+| ------------ | ------------------------------------------------------------------------------- |
+| `src/run.rs` | Wasmtime execution and result printing; gated behind the `run` Cargo feature    |
+| `src/cli.rs` | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
 
@@ -118,19 +118,19 @@ The `Loader` trait has two implementations: `FileLoader` (resolves `Label.crs` r
 
 The central `core::Term` enum:
 
-| Variant                         | Role                                                 |
-| ------------------------------- | ---------------------------------------------------- |
-| `Type`                          | The sort (no universe hierarchy)                     |
-| `FuncType` / `Func` / `Apply`   | Π-types, λ-abstraction, application                  |
-| `TupleType` / `Tuple` / `Proj`  | Σ-types (n-ary), construction, field access          |
-| `BlnMatch`                      | Dependent elimination of `Bln` (false + true cases)  |
-| `NatFold`                       | Structural induction on `Nat` (zero + pred/IH cases) |
-| `NatMatch`                      | Sparse dispatch on specific `Nat` values             |
-| `AtomType` / `Atom` / `Match`   | Labeled unions, tags, pattern matching               |
-| `Let` / `Rec`                   | Bindings and mutual recursion                        |
-| `Sealed` / `Seal` / `Unseal`    | Opaque type abstraction from `def`                   |
-| `Prim`                          | Built-in values and operations                       |
-| `Var`                           | Variables (free or bound)                            |
+| Variant                        | Role                                                 |
+| ------------------------------ | ---------------------------------------------------- |
+| `Type`                         | The sort (no universe hierarchy)                     |
+| `FuncType` / `Func` / `Apply`  | Π-types, λ-abstraction, application                  |
+| `TupleType` / `Tuple` / `Proj` | Σ-types (n-ary), construction, field access          |
+| `BlnMatch`                     | Dependent elimination of `Bln` (false + true cases)  |
+| `NatFold`                      | Structural induction on `Nat` (zero + pred/IH cases) |
+| `NatMatch`                     | Sparse dispatch on specific `Nat` values             |
+| `AtomType` / `Atom` / `Match`  | Labeled unions, tags, pattern matching               |
+| `Let` / `Rec`                  | Bindings and mutual recursion                        |
+| `Sealed` / `Seal` / `Unseal`   | Opaque type abstraction from `def`                   |
+| `Prim`                         | Built-in values and operations                       |
+| `Var`                          | Variables (free or bound)                            |
 
 ### De Bruijn indices and `Scope<A: Arity>`
 
@@ -138,8 +138,8 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 `Scope<A: Arity>` handles all binder arities via a single generic type:
 
-| `A`       | Used by                     |
-| --------- | --------------------------- |
+| `A`       | Used by                                                                                                                           |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `One`     | `Func`, `FuncType`, `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail) |
 | `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                                     |
 | `Many(n)` | `TupleType` (fields), `Rec` (items and tail)                                                                                      |
@@ -174,11 +174,11 @@ Maintains separate stacks for **assumptions** (name → type) and **definitions*
 
 Erasure is performed inside `core::typing.rs` (the `erase` function), not as a standalone pass. The output is `ersd::Term`.
 
-| Removed                                              | Preserved                                                         |
-| ---------------------------------------------------- | ----------------------------------------------------------------- |
-| `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match`  |
-| `Sealed`, `Seal`, `Unseal`                           | `Let`, `Rec`, all control flow                                    |
-| Type annotations on binders                          | `Prim`, `Bin`, `Arr`, `Name`                                      |
+| Removed                                                | Preserved                                                        |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match` |
+| `Sealed`, `Seal`, `Unseal`                             | `Let`, `Rec`, all control flow                                   |
+| Type annotations on binders                            | `Prim`, `Bin`, `Arr`, `Name`                                     |
 
 `Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `BlnMatch` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
 
@@ -215,11 +215,11 @@ Module
 
 **Values** (`cont/module.rs`) use a three-tier hierarchy:
 
-| Tier               | Variants                                                                                                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tier               | Variants                                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `Pure(Data)`       | `Nat(u32)`, `Int(i32)`, `Flt(f32)`, `Bin(Vec<u8>)`, `Arr(Vec<ValueName>)`, `Tpl(Vec<ValueName>)`, `Clsr(ClsrName, Vec<ValueName>)` |
-| `Eval(Code)`       | arithmetic, comparisons, conversions, bitwise/counting ops, `TplGet`, `BinLen`/`BinGet`/etc., `ArrLen`/`ArrGet`/etc.                       |
-| `Alias(ValueName)` | forward reference within a region                                                                                                          |
+| `Eval(Code)`       | arithmetic, comparisons, conversions, bitwise/counting ops, `TplGet`, `BinLen`/`BinGet`/etc., `ArrLen`/`ArrGet`/etc.               |
+| `Alias(ValueName)` | forward reference within a region                                                                                                  |
 
 **Tails** (terminators):
 
@@ -254,17 +254,17 @@ When a call appears in value position, the lowerer creates a **join block** that
 
 ### Value representation
 
-| Curios value | WASM representation                                                        |
-| ------------ | -------------------------------------------------------------------------- |
-| `Nat`        | `i31ref` (packed i32)                                                      |
-| `Int`        | `i31ref` (packed i32)                                                      |
+| Curios value | WASM representation                                                       |
+| ------------ | ------------------------------------------------------------------------- |
+| `Nat`        | `i31ref` (packed i32)                                                     |
+| `Int`        | `i31ref` (packed i32)                                                     |
 | `Bln`        | `i31ref` (erases to `Nat`; false → 0, true → 1)                           |
-| `Flt`        | GC struct with single `f32` field                                          |
+| `Flt`        | GC struct with single `f32` field                                         |
 | `Tuple(n)`   | GC struct with N `anyref` fields; subtype chain `tpl/1 ← tpl/2 ← tpl/3 …` |
-| `Closure`    | GC struct: funcref field + captured values as fields                       |
-| `Atom`       | `i31ref` (the index)                                                       |
-| `Bin`        | GC array of packed `i8`                                                    |
-| `Arr`        | GC array of nullable `anyref`                                              |
+| `Closure`    | GC struct: funcref field + captured values as fields                      |
+| `Atom`       | `i31ref` (the index)                                                      |
+| `Bin`        | GC array of packed `i8`                                                   |
+| `Arr`        | GC array of nullable `anyref`                                             |
 
 ### Closure calling convention
 
@@ -276,12 +276,12 @@ Direct calls use `return_call`; indirect calls use `return_call_ref`. This elimi
 
 ### Codegen submodules
 
-| File                | Responsibility                                                                                 |
-| ------------------- | ---------------------------------------------------------------------------------------------- |
-| `table.rs`          | Builds symbol tables; pre-allocates GC struct types for closures, tuples, floats               |
-| `context.rs`        | Tracks locals, frames, and value classification (`LoadAs` enum) for correct casting            |
-| `frame.rs`          | Represents nested WASM blocks; accumulates instructions; manages label-based branching         |
-| `expr_emitter.rs`   | Emits instructions for CPS values: closure allocation, tuple projection, arithmetic, constants |
+| File                | Responsibility                                                                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `table.rs`          | Builds symbol tables; pre-allocates GC struct types for closures, tuples, floats                                                         |
+| `context.rs`        | Tracks locals, frames, and value classification (`LoadAs` enum) for correct casting                                                      |
+| `frame.rs`          | Represents nested WASM blocks; accumulates instructions; manages label-based branching                                                   |
+| `expr_emitter.rs`   | Emits instructions for CPS values: closure allocation, tuple projection, arithmetic, constants                                           |
 | `module_emitter.rs` | Emits the top-level WASM module: type definitions, function bodies, exports, and host imports when the corresponding operations are used |
 
 The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`, `Arr`) drives which cast or unboxing sequence the emitter generates for each value.
@@ -354,7 +354,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |
 | Term operations | `Scope` open/close symmetry, shift, capture, release                                    |
-| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access         |
+| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access        |
 | Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement    |
 | Type checking   | Dependent tuples, `Nat.fold`, recursion, primitive operand validation, arrays, binaries |
 | Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                           |

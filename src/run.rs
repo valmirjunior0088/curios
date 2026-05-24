@@ -117,7 +117,13 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
                 f32_to_bin,
                 move |mut caller: Caller<'_, ()>, params, results| {
                     let value = params[0].unwrap_f32();
-                    let bytes = format!("{value}").into_bytes();
+                    let formatted = format!("{value}");
+                    let bytes = if formatted.starts_with('-') {
+                        formatted
+                    } else {
+                        format!("+{formatted}")
+                    }
+                    .into_bytes();
                     let pre = ArrayRefPre::new(&mut caller, bin_array_type.clone());
                     let elems: Vec<Val> = bytes.into_iter().map(|b| Val::I32(b as i32)).collect();
                     results[0] = Val::AnyRef(Some(

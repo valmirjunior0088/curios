@@ -46,10 +46,15 @@ pub struct Tuple {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Motive {
+    pub label: Option<String>,
+    pub body: Subterm,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct NatFold {
     pub head: Subterm,
-    pub motive_label: String,
-    pub motive: Subterm,
+    pub motive: Motive,
     pub zero_case: Subterm,
     pub pred_label: String,
     pub ih_label: String,
@@ -59,8 +64,7 @@ pub struct NatFold {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NatMatch {
     pub head: Subterm,
-    pub motive_label: String,
-    pub motive: Subterm,
+    pub motive: Motive,
     pub cases: BTreeMap<u32, Subterm>,
     pub default: Subterm,
 }
@@ -68,8 +72,7 @@ pub struct NatMatch {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlnMatch {
     pub head: Subterm,
-    pub motive_label: String,
-    pub motive: Subterm,
+    pub motive: Motive,
     pub false_case: Subterm,
     pub true_case: Subterm,
 }
@@ -88,8 +91,7 @@ pub struct AtomType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Match {
     pub head: Subterm,
-    pub motive_label: String,
-    pub motive: Subterm,
+    pub motive: Motive,
     pub cases: BTreeMap<Atom, Subterm>,
 }
 

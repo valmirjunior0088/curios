@@ -374,7 +374,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     .enumerate()
                     .map(|(index, (_, jump_target))| {
                         (
-                            wasm::LabelName::from(format!("{index}")),
+                            wasm::LabelName::from(format!("case${index}")),
                             self.jump_instrs(jump_target),
                         )
                     })

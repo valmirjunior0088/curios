@@ -41,9 +41,21 @@ fn process_items(
 
     for top_item in top_items {
         match top_item {
-            TopItem::Mod(mod_item) => {
-                context.insert_scope(mod_item.label.clone(), context.prefixed(&mod_item.label));
+            TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label)),
+            TopItem::Def(d) => context.insert_scope(d.label.clone(), context.prefixed(&d.label)),
+            TopItem::Let(l) => context.insert_scope(l.label.clone(), context.prefixed(&l.label)),
+            TopItem::Rec(labels) => {
+                for l in labels {
+                    context.insert_scope(l.label.clone(), context.prefixed(&l.label));
+                }
+            }
+            _ => {}
+        }
+    }
 
+    for top_item in top_items {
+        match top_item {
+            TopItem::Mod(mod_item) => {
                 match &mod_item.module {
                     Some(module) => process_items(
                         &module.items,
@@ -119,8 +131,6 @@ fn process_items(
                     def_stack,
                 )
                 .term(&def_item.witness);
-
-                context.insert_scope(def_item.label.clone(), name.clone());
 
                 flat_items.push(FlatItem::Def(FlatDef {
                     name: name.clone(),

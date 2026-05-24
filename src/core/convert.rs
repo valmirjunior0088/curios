@@ -644,14 +644,14 @@ mod tests {
 
         let this = Term::from(Match::new(
             Atom::from("a"),
-            "m",
+            Some("m"),
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
         ));
 
         let that = Term::from(Match::new(
             Atom::from("a"),
-            "n",
+            Some("n"),
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
         ));

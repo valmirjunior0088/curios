@@ -1,0 +1,4 @@
+pub let min : Nat -> Nat -> Nat = a => b =>
+    Bln.match (Nat.lt a b) : Nat;
+    | true => a;
+    | false => b;;

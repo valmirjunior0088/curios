@@ -95,7 +95,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             }
             cont::Data::Bin(bytes) => {
                 let bin_type = self.context.table().bin_type();
-                let data_name = wasm::DataName::from(value_name.as_string());
+                let data_name = wasm::DataName::from(format!("{}${}", value_name.as_string(), self.module.datas().len()));
                 self.module.add_data(
                     data_name.clone(),
                     wasm::DataSegment {

@@ -1,0 +1,5 @@
+pub let fold : (A : Type) -> Bin -> A -> (Nat -> A -> A) -> A =
+    A => str => init => f =>
+        Nat.fold (Bin.len str) : A;
+        | 0 => init;
+        | pred ih => f (Bin.get str pred) ih;;

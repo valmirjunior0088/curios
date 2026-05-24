@@ -93,6 +93,13 @@ where
         self.body.release(terms.as_ref())
     }
 
+    pub fn constant(arity: A, body: impl Into<Term>) -> Self {
+        Self {
+            arity,
+            body: body.into().into(),
+        }
+    }
+
     pub fn free_vars(&self) -> BTreeSet<String> {
         self.body.free_vars()
     }
@@ -251,9 +258,9 @@ pub struct NatFold {
 }
 
 impl NatFold {
-    pub fn new<H, ML, M, ZC, PL, IL, SC>(
+    pub fn new<H, M, ZC, PL, IL, SC>(
         head: H,
-        motive_label: ML,
+        motive_label: Option<&str>,
         motive: M,
         zero_case: ZC,
         pred_label: PL,
@@ -262,20 +269,21 @@ impl NatFold {
     ) -> Self
     where
         H: Into<Term>,
-        ML: Into<String>,
         M: Into<Term>,
         ZC: Into<Term>,
         PL: Into<String>,
         IL: Into<String>,
         SC: Into<Term>,
     {
-        let motive_label = motive_label.into();
         let pred_label = pred_label.into();
         let ih_label = ih_label.into();
 
         Self {
             head: head.into().into(),
-            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive),
+                None => Scope::constant(One, motive),
+            },
             zero_case: zero_case.into().into(),
             succ_case: Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_case),
         }
@@ -291,25 +299,26 @@ pub struct NatMatch {
 }
 
 impl NatMatch {
-    pub fn new<H, ML, M, I, B, D>(
+    pub fn new<H, M, I, B, D>(
         head: H,
-        motive_label: ML,
+        motive_label: Option<&str>,
         motive: M,
         cases: I,
         default: D,
     ) -> Self
     where
         H: Into<Term>,
-        ML: Into<String>,
         M: Into<Term>,
         I: IntoIterator<Item = (u32, B)>,
         B: Into<Term>,
         D: Into<Term>,
     {
-        let motive_label = motive_label.into();
         Self {
             head: head.into().into(),
-            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive),
+                None => Scope::constant(One, motive),
+            },
             cases: cases
                 .into_iter()
                 .map(|(n, b)| (n, b.into().into()))
@@ -328,24 +337,25 @@ pub struct BlnMatch {
 }
 
 impl BlnMatch {
-    pub fn new<H, ML, M, F, T>(
+    pub fn new<H, M, F, T>(
         head: H,
-        motive_label: ML,
+        motive_label: Option<&str>,
         motive: M,
         false_case: F,
         true_case: T,
     ) -> Self
     where
         H: Into<Term>,
-        ML: Into<String>,
         M: Into<Term>,
         F: Into<Term>,
         T: Into<Term>,
     {
-        let motive_label = motive_label.into();
         Self {
             head: head.into().into(),
-            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive),
+                None => Scope::constant(One, motive),
+            },
             false_case: false_case.into().into(),
             true_case: true_case.into().into(),
         }
@@ -377,20 +387,20 @@ pub struct Match {
 }
 
 impl Match {
-    pub fn new<H, L, M, I, A, B>(head: H, motive_label: L, motive: M, cases: I) -> Self
+    pub fn new<H, M, I, A, B>(head: H, motive_label: Option<&str>, motive: M, cases: I) -> Self
     where
         H: Into<Term>,
-        L: Into<String>,
         M: Into<Term>,
         I: IntoIterator<Item = (A, B)>,
         A: Into<Atom>,
         B: Into<Term>,
     {
-        let motive_label = motive_label.into();
-
         Self {
             head: head.into().into(),
-            motive: Scope::close(One, &[motive_label.as_str()], motive),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive),
+                None => Scope::constant(One, motive),
+            },
             cases: cases
                 .into_iter()
                 .map(|(atom, body)| (atom.into(), body.into().into()))

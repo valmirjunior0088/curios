@@ -72,16 +72,16 @@ impl<'a> Elaborate<'a> {
             }
             Term::BlnMatch(bm) => core::BlnMatch::new(
                 self.term(&bm.head),
-                bm.motive_label.clone(),
-                self.term(&bm.motive),
+                bm.motive.label.as_deref(),
+                self.term(&bm.motive.body),
                 self.term(&bm.false_case),
                 self.term(&bm.true_case),
             )
             .into(),
             Term::NatFold(nat_fold) => core::NatFold::new(
                 self.term(&nat_fold.head),
-                nat_fold.motive_label.clone(),
-                self.term(&nat_fold.motive),
+                nat_fold.motive.label.as_deref(),
+                self.term(&nat_fold.motive.body),
                 self.term(&nat_fold.zero_case),
                 nat_fold.pred_label.clone(),
                 nat_fold.ih_label.clone(),
@@ -90,8 +90,8 @@ impl<'a> Elaborate<'a> {
             .into(),
             Term::NatMatch(nm) => core::NatMatch::new(
                 self.term(&nm.head),
-                nm.motive_label.clone(),
-                self.term(&nm.motive),
+                nm.motive.label.as_deref(),
+                self.term(&nm.motive.body),
                 nm.cases.iter().map(|(&nat, body)| (nat, self.term(body))),
                 self.term(&nm.default),
             )
@@ -99,8 +99,8 @@ impl<'a> Elaborate<'a> {
             Term::Proj(proj) => core::Proj::new(self.term(&proj.head), proj.index).into(),
             Term::Match(match_) => core::Match::new(
                 self.term(&match_.head),
-                match_.motive_label.clone(),
-                self.term(&match_.motive),
+                match_.motive.label.as_deref(),
+                self.term(&match_.motive.body),
                 match_
                     .cases
                     .iter()

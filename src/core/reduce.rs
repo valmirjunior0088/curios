@@ -970,7 +970,7 @@ mod tests {
 
         let term = Match::new(
             Atom::from("a"),
-            "m",
+            Some("m"),
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
         )
@@ -985,7 +985,7 @@ mod tests {
 
         let term = NatFold::new(
             Prim::Nat(0),
-            "m",
+            Some("m"),
             AtomType::new(["false", "true"]),
             Atom::from("false"),
             "pred",

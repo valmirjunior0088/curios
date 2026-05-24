@@ -423,7 +423,6 @@ fn print_term(term: Term) -> Printer<'static> {
         ]),
         Term::NatFold(NatFold {
             head,
-            motive_label,
             motive,
             zero_case,
             pred_label,
@@ -433,9 +432,10 @@ fn print_term(term: Term) -> Printer<'static> {
             pure("Nat.fold "),
             print_term(*head),
             pure(" : "),
-            pure(motive_label),
-            pure(" => "),
-            print_term(*motive),
+            match motive.label {
+                Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                None => print_term(*motive.body),
+            },
             pure(";\n| 0n =>\n"),
             indent(flat([print_term(*zero_case), pure(";")])),
             pure("\n| "),
@@ -447,7 +447,6 @@ fn print_term(term: Term) -> Printer<'static> {
         ]),
         Term::BlnMatch(BlnMatch {
             head,
-            motive_label,
             motive,
             false_case,
             true_case,
@@ -455,9 +454,10 @@ fn print_term(term: Term) -> Printer<'static> {
             pure("Bln.match "),
             print_term(*head),
             pure(" : "),
-            pure(motive_label),
-            pure(" => "),
-            print_term(*motive),
+            match motive.label {
+                Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                None => print_term(*motive.body),
+            },
             pure(";"),
             pure("\n| false =>\n"),
             indent(flat([print_term(*false_case), pure(";")])),
@@ -466,7 +466,6 @@ fn print_term(term: Term) -> Printer<'static> {
         ]),
         Term::NatMatch(NatMatch {
             head,
-            motive_label,
             motive,
             cases,
             default,
@@ -481,9 +480,10 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("Nat.match "),
                 print_term(*head),
                 pure(" : "),
-                pure(motive_label),
-                pure(" => "),
-                print_term(*motive),
+                match motive.label {
+                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                    None => print_term(*motive.body),
+                },
                 pure(";"),
                 flat(case_printers.collect::<Vec<_>>()),
                 pure("\n| _ =>\n"),
@@ -495,7 +495,6 @@ fn print_term(term: Term) -> Printer<'static> {
         }
         Term::Match(Match {
             head,
-            motive_label,
             motive,
             cases,
         }) => {
@@ -511,9 +510,10 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("match "),
                 print_term(*head),
                 pure(" : "),
-                pure(motive_label),
-                pure(" => "),
-                print_term(*motive),
+                match motive.label {
+                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                    None => print_term(*motive.body),
+                },
                 pure(";"),
                 flat(case_printers.collect::<Vec<_>>()),
             ])

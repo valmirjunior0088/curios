@@ -337,7 +337,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_let_bin_data(&mut self, name: &'a cont::ValueName, bytes: &[u8]) {
         let bin_type = self.table.bin_type();
         let global_name = self.table.find_const(name);
-        let data_name = wasm::DataName::from(name.as_string());
+        let data_name = wasm::DataName::from(format!("{}${}", name.as_string(), self.module.datas().len()));
 
         self.module.add_data(
             data_name.clone(),

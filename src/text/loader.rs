@@ -29,7 +29,7 @@ impl Loader for FileLoader {
 
         source
             .parse::<Module>()
-            .map_err(|e| format!("failed to parse {}: {e:?}", path.display()))
+            .map_err(|e| format!("{}:\n{}", path.display(), e.format(&source)))
     }
 }
 
