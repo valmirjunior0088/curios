@@ -25,11 +25,14 @@ impl Context {
         }
     }
 
-    pub fn fresh(&mut self) -> String {
-        let entropy = self.entropy.to_string();
+    pub fn fresh(&mut self, hint: Option<&str>) -> String {
+        let counter = self.entropy;
         self.entropy += 1;
 
-        entropy
+        match hint {
+            Some(h) => format!("{h}#{counter}"),
+            None => format!("#{counter}"),
+        }
     }
 
     pub fn timeout(&self) -> Duration {

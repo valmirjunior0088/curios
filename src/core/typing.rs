@@ -306,7 +306,7 @@ fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> 
 
     erase(context, input, &Type.into())?;
 
-    let label = context.fresh();
+    let label = context.fresh(output.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&label, input);
@@ -342,7 +342,16 @@ fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error
     let TupleType { fields } = tt;
     let n = fields.len();
 
-    let labels = (0..n).map(|_| context.fresh()).collect::<Vec<_>>();
+    let labels = (0..n)
+        .map(|i| {
+            let hint = fields
+                .get(i + 1)
+                .and_then(|s| s.names())
+                .and_then(|ns| ns.get(i))
+                .map(|s| s.as_str());
+            context.fresh(hint)
+        })
+        .collect::<Vec<_>>();
     let label_terms = labels
         .iter()
         .map(|l| Term::from(Var::free(l)))
@@ -376,7 +385,7 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -395,8 +404,8 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
         &motive.open(&[&Term::Prim(Prim::Nat(0))]),
     )?;
 
-    let pred_label = context.fresh();
-    let ih_label = context.fresh();
+    let pred_label = context.fresh(succ_case.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let ih_label = context.fresh(succ_case.names().and_then(|ns| ns.get(1)).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
@@ -443,7 +452,7 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -482,7 +491,7 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
         return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::BlnType));
@@ -559,7 +568,7 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
@@ -604,7 +613,7 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     erase(context, type_, &Type.into())?;
     erase(context, body, type_)?;
 
-    let label = context.fresh();
+    let label = context.fresh(tail.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.define_assuming(&label, type_, body);
@@ -617,7 +626,7 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
     let Rec { items, tail } = rec;
 
     let labels = (0..items.len())
-        .map(|_| context.fresh())
+        .map(|i| context.fresh(tail.names().and_then(|ns| ns.get(i)).map(|s| s.as_str())))
         .collect::<Vec<_>>();
 
     let label_terms = labels
@@ -1399,7 +1408,7 @@ fn erase_func(
     };
 
     let captures = body.free_vars().into_iter().collect::<Vec<_>>();
-    let param = context.fresh();
+    let param = context.fresh(body.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
     let param_term = Var::free(&param).into();
     let body = body.open(&[&param_term]);
 
@@ -1493,7 +1502,7 @@ fn erase_nat_fold(
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -1511,8 +1520,8 @@ fn erase_nat_fold(
         &motive.open(&[&Term::Prim(Prim::Nat(0))]),
     )?;
 
-    let pred_label = context.fresh();
-    let ih_label = context.fresh();
+    let pred_label = context.fresh(succ_case.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let ih_label = context.fresh(succ_case.names().and_then(|ns| ns.get(1)).map(|s| s.as_str()));
 
     let erased_succ_case = context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
@@ -1562,7 +1571,7 @@ fn erase_nat_match(
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -1618,7 +1627,7 @@ fn erase_bln_match(
         return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::BlnType));
@@ -1737,7 +1746,7 @@ fn erase_match(
         other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
-    let head_label = context.fresh();
+    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
 
     context.with_frame(|context| {
         context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
@@ -1791,7 +1800,7 @@ fn erase_sealed(
 ) -> Result<ersd::Term, Error> {
     let Sealed { witness, tail } = sealed;
     erase(context, witness, &Type.into())?;
-    let label = context.fresh();
+    let label = context.fresh(tail.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
     let tail = tail.open(&[&Var::free(&label).into()]);
     context.with_frame(|context| {
         context.seal(&label, witness);
@@ -1846,7 +1855,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
 
     erase(context, body_type, &Type.into())?;
 
-    let name = context.fresh();
+    let name = context.fresh(tail.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
     let erased_body = erase(context, body, body_type)?;
     let var_term = Var::free(&name).into();
     let tail = tail.open(&[&var_term]);
@@ -1869,7 +1878,7 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
     let Rec { items, tail } = rec;
 
     let names = (0..items.len())
-        .map(|_| context.fresh())
+        .map(|i| context.fresh(tail.names().and_then(|ns| ns.get(i)).map(|s| s.as_str())))
         .collect::<Vec<_>>();
 
     let label_terms = names
@@ -2214,7 +2223,7 @@ mod tests {
             panic!("expected outer let");
         };
 
-        assert_eq!(outer_name, "0");
+        assert_eq!(outer_name, "outer#0");
         assert!(matches!(
             *outer_body,
             ersd::Term::Atom(ersd::Atom { index: 1 })
@@ -2229,7 +2238,7 @@ mod tests {
             panic!("expected alpha_case let");
         };
 
-        assert_eq!(alpha_name, "1");
+        assert_eq!(alpha_name, "alpha_case#1");
         assert!(matches!(
             *alpha_body,
             ersd::Term::Atom(ersd::Atom { index: 0 })
@@ -2244,7 +2253,7 @@ mod tests {
             panic!("expected mu_case let");
         };
 
-        assert_eq!(mu_name, "2");
+        assert_eq!(mu_name, "mu_case#2");
         assert!(matches!(
             *mu_body,
             ersd::Term::Atom(ersd::Atom { index: 1 })
@@ -2259,7 +2268,7 @@ mod tests {
             panic!("expected zeta_case let");
         };
 
-        assert_eq!(zeta_name, "3");
+        assert_eq!(zeta_name, "zeta_case#3");
         assert!(matches!(
             *zeta_body,
             ersd::Term::Atom(ersd::Atom { index: 2 })
@@ -2271,7 +2280,7 @@ mod tests {
 
         assert!(matches!(
             *head,
-            ersd::Term::Name(name) if name.as_str() == "0"
+            ersd::Term::Name(name) if name.as_str() == "outer#0"
         ));
 
         assert_eq!(cases.len(), 3);
@@ -2286,7 +2295,7 @@ mod tests {
 
         assert!(matches!(
             &**alpha_head,
-            ersd::Term::Name(name) if name.as_str() == "3"
+            ersd::Term::Name(name) if name.as_str() == "zeta_case#3"
         ));
 
         assert_eq!(alpha_cases.len(), 3);
@@ -2313,7 +2322,7 @@ mod tests {
 
         assert!(matches!(
             &**mu_head,
-            ersd::Term::Name(name) if name.as_str() == "2"
+            ersd::Term::Name(name) if name.as_str() == "mu_case#2"
         ));
 
         assert_eq!(mu_cases.len(), 3);
@@ -2343,7 +2352,7 @@ mod tests {
 
         assert!(matches!(
             &**zeta_head,
-            ersd::Term::Name(name) if name.as_str() == "1"
+            ersd::Term::Name(name) if name.as_str() == "alpha_case#1"
         ));
 
         assert_eq!(zeta_cases.len(), 3);

@@ -20,19 +20,22 @@ fn label_terms(labels: &[String]) -> Vec<Term> {
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
-    let label = label_at(depth);
-    let term = Var::free(&label).into();
-    let body = scope.open(&[&term]);
+    let label = scope
+        .names()
+        .and_then(|ns| ns.first())
+        .cloned()
+        .unwrap_or_else(|| label_at(depth));
+    let body = scope.open(&[&Var::free(&label).into()]);
 
     (label, body)
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
-    let fst = label_at(depth);
-    let snd = label_at(depth + 1);
-    let fst_term = Var::free(&fst).into();
-    let snd_term = Var::free(&snd).into();
-    let body = scope.open(&[&fst_term, &snd_term]);
+    let (fst, snd) = match scope.names() {
+        Some([f, s, ..]) => (f.clone(), s.clone()),
+        _ => (label_at(depth), label_at(depth + 1)),
+    };
+    let body = scope.open(&[&Var::free(&fst).into(), &Var::free(&snd).into()]);
 
     ((fst, snd), body)
 }
@@ -487,7 +490,15 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         ]),
         Term::TupleType(TupleType { fields }) => {
             let n = fields.len();
-            let labels = labels_from(depth, n);
+            let labels: Vec<String> = {
+                let mut base = fields
+                    .last()
+                    .and_then(|s| s.names())
+                    .map(|ns| ns.to_vec())
+                    .unwrap_or_default();
+                base.push(label_at(depth + base.len()));
+                base
+            };
             let label_terms_vec = label_terms(&labels);
             let label_refs = label_terms_vec.iter().collect::<Vec<_>>();
 
@@ -574,7 +585,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Term::Rec(Rec { items, tail }) => {
-            let labels = labels_from(depth, items.len());
+            let labels: Vec<String> = tail
+                .names()
+                .map(|ns| ns.to_vec())
+                .unwrap_or_else(|| labels_from(depth, items.len()));
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
             let inner_depth = depth + labels.len();

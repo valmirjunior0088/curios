@@ -54,6 +54,7 @@ pub type Subterm = Box<Term>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Scope<A: Arity> {
     arity: A,
+    names: Option<Vec<String>>,
     body: Subterm,
 }
 
@@ -74,6 +75,7 @@ where
 
         Self {
             arity,
+            names: Some(labels.as_ref().iter().map(|s| s.to_string()).collect()),
             body: body.into().capture(labels.as_ref()).into(),
         }
     }
@@ -96,8 +98,13 @@ where
     pub fn constant(arity: A, body: impl Into<Term>) -> Self {
         Self {
             arity,
+            names: None,
             body: body.into().into(),
         }
+    }
+
+    pub fn names(&self) -> Option<&[String]> {
+        self.names.as_deref()
     }
 
     pub fn free_vars(&self) -> BTreeSet<String> {
@@ -935,6 +942,7 @@ where
 
         Scope {
             arity: scope.arity,
+            names: scope.names.clone(),
             body,
         }
     }

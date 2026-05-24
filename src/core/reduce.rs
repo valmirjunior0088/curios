@@ -733,7 +733,7 @@ impl Reduce {
     }
 
     fn reduce_func_eta(&mut self, context: &mut Context, func: Func) -> Result<Step, Preempted> {
-        let fresh = context.fresh();
+        let fresh = context.fresh(None);
         let y: Term = Var::free(&fresh).into();
         match func.body.open(&[&y]) {
             Term::Apply(Apply { head, param })

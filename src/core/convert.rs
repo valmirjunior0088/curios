@@ -200,7 +200,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(Type.into(), *this.input, *that.input);
 
-        let label = Var::free(context.fresh()).into();
+        let label = Var::free(context.fresh(None)).into();
         self.enqueue(
             Type.into(),
             this.output.open(&[&label]),
@@ -217,7 +217,7 @@ impl Convert {
         that: Func,
         type_: Term,
     ) -> Result<bool, Preempted> {
-        let y: Term = Var::free(context.fresh()).into();
+        let y: Term = Var::free(context.fresh(None)).into();
         let output_type = match reduce(context, &type_)? {
             Term::FuncType(FuncType { output, .. }) => output.open(&[&y]),
             _ => Type.into(),
@@ -246,7 +246,7 @@ impl Convert {
 
         let n = this.fields.len();
         let labels = (0..n)
-            .map(|_| Term::from(Var::free(context.fresh())))
+            .map(|_| Term::from(Var::free(context.fresh(None))))
             .collect::<Vec<_>>();
         let label_refs = labels.iter().collect::<Vec<_>>();
 
@@ -289,7 +289,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(Type.into(), *this.head, *that.head);
 
-        let motive_label = Var::free(context.fresh()).into();
+        let motive_label = Var::free(context.fresh(None)).into();
         self.enqueue(
             Type.into(),
             this.motive.open(&[&motive_label]),
@@ -298,8 +298,8 @@ impl Convert {
 
         self.enqueue(Type.into(), *this.zero_case, *that.zero_case);
 
-        let pred_label: Term = Var::free(context.fresh()).into();
-        let ih_label: Term = Var::free(context.fresh()).into();
+        let pred_label: Term = Var::free(context.fresh(None)).into();
+        let ih_label: Term = Var::free(context.fresh(None)).into();
         self.enqueue(
             Type.into(),
             this.succ_case.open(&[&pred_label, &ih_label]),
@@ -325,7 +325,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(Type.into(), *this.head, *that.head);
 
-        let label = Var::free(context.fresh()).into();
+        let label = Var::free(context.fresh(None)).into();
         self.enqueue(
             Type.into(),
             this.motive.open(&[&label]),
@@ -345,7 +345,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(Type.into(), *this.head, *that.head);
 
-        let label = Var::free(context.fresh()).into();
+        let label = Var::free(context.fresh(None)).into();
         self.enqueue(
             Type.into(),
             this.motive.open(&[&label]),
@@ -375,7 +375,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         self.enqueue(Type.into(), *this.head, *that.head);
 
-        let label = Var::free(context.fresh()).into();
+        let label = Var::free(context.fresh(None)).into();
         self.enqueue(
             Type.into(),
             this.motive.open(&[&label]),
@@ -405,7 +405,7 @@ impl Convert {
         this: Sealed,
         that: Sealed,
     ) -> Result<bool, Preempted> {
-        let label = Var::free(context.fresh()).into();
+        let label = Var::free(context.fresh(None)).into();
         self.enqueue(Type.into(), *this.witness, *that.witness);
         self.enqueue(
             Type.into(),
@@ -438,7 +438,7 @@ impl Convert {
         }
 
         let labels = (0..this.items.len())
-            .map(|_| Var::free(context.fresh()).into())
+            .map(|_| Var::free(context.fresh(None)).into())
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
@@ -474,7 +474,7 @@ impl Convert {
         other: Term,
         type_: Term,
     ) -> Result<bool, Preempted> {
-        let y: Term = Var::free(context.fresh()).into();
+        let y: Term = Var::free(context.fresh(None)).into();
         let output_type = match reduce(context, &type_)? {
             Term::FuncType(FuncType { output, .. }) => output.open(&[&y]),
             _ => Type.into(),
@@ -503,7 +503,7 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         match reduce(context, &type_)? {
             Term::FuncType(FuncType { output, .. }) => {
-                let y: Term = Var::free(context.fresh()).into();
+                let y: Term = Var::free(context.fresh(None)).into();
                 let output_type = output.open(&[&y]);
                 self.enqueue(
                     output_type,
