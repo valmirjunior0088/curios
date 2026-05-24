@@ -9,8 +9,13 @@ fn main() {
     let timeout = Duration::from_secs(5);
 
     let source = r#"
+        pub mod std;
+        use /std/str;
+
         pub mod fmt;
-        fmt/printf "%s is %d" "Alice" 30
+
+        let name : Bin = str/trim Sys.read;
+        fmt/printf "%s is %d" name 30
         "#;
 
     let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");
@@ -21,7 +26,7 @@ fn main() {
         .unwrap_or_else(|e| panic!("failed to erase term: {e}"));
     let cont_module = ersd::to_cont(&ersd_term);
     let wasm_module = cont::to_wasm(&cont_module);
-    let (system, receiver) = curios::ChannelProvider::out();
+    let (system, receiver) = curios::ChannelProvider::io(vec![b"Alice\n".to_vec()]);
     curios::run_wasm(&wasm_module, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),

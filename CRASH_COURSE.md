@@ -194,3 +194,23 @@ let head : (T : Type) -> (n : Nat) -> (_ : Vec T (Nat.add n 1)) -> T = T => n =>
 ```
 
 `Vec T (Nat.add n 1)` expands to `{ T, Vec T n }`, so `v.0 : T` and `v.1 : Vec T n`. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+
+## Payoff: typed format strings
+
+Length-indexed vectors rule out bounds errors. The same mechanism rules out variadic argument mismatches. The standard library module `fmt` exports `printf`, a function whose argument list is determined by the format string at compile time — not by a macro, but by an ordinary dependent function type.
+
+```
+pub mod fmt;
+fmt/printf "%s is %d" "Alice" 30
+-- output: Alice is 30
+```
+
+`"%s is %d"` calls for a `Bin` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `fmt/printf "%s is %d"` is `Bin -> Nat -> Bin` — computed by reducing the format string during type checking. Swapping the types is a compile-time error:
+
+```
+pub mod fmt;
+fmt/printf "%d" "Alice"
+-- TypeMismatch: %d expects Nat, but "Alice" has type Bin
+```
+
+The `examples/crs_printf.rs` program runs both cases and asserts the output and the error. `examples/crs_json_codec.rs` shows a larger program combining file-backed modules, dependent sum types, and arrays to encode and decode a `json/Value` tree.
