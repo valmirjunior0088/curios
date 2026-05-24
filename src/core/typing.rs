@@ -306,7 +306,7 @@ fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> 
 
     erase(context, input, &Type.into())?;
 
-    let label = context.fresh(output.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let label = context.fresh(output.first_label());
 
     context.with_frame(|context| {
         context.assume(&label, input);
@@ -346,9 +346,8 @@ fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error
         .map(|i| {
             let hint = fields
                 .get(i + 1)
-                .and_then(|s| s.names())
-                .and_then(|ns| ns.get(i))
-                .map(|s| s.as_str());
+                .and_then(|s| s.label_iter().nth(i))
+                .flatten();
             context.fresh(hint)
         })
         .collect::<Vec<_>>();
@@ -385,7 +384,7 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -404,18 +403,8 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
         &motive.open(&[&Term::Prim(Prim::Nat(0))]),
     )?;
 
-    let pred_label = context.fresh(
-        succ_case
-            .names()
-            .and_then(|ns| ns.first())
-            .map(|s| s.as_str()),
-    );
-    let ih_label = context.fresh(
-        succ_case
-            .names()
-            .and_then(|ns| ns.get(1))
-            .map(|s| s.as_str()),
-    );
+    let pred_label = context.fresh(succ_case.first_label());
+    let ih_label = context.fresh(succ_case.second_label());
 
     context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
@@ -462,7 +451,7 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -501,7 +490,7 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
         return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::BlnType));
@@ -578,7 +567,7 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
@@ -623,7 +612,7 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     erase(context, type_, &Type.into())?;
     erase(context, body, type_)?;
 
-    let label = context.fresh(tail.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let label = context.fresh(tail.first_label());
 
     context.with_frame(|context| {
         context.define_assuming(&label, type_, body);
@@ -637,9 +626,7 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
 fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
     let Rec { items, tail } = rec;
 
-    let labels = (0..items.len())
-        .map(|i| context.fresh(tail.names().and_then(|ns| ns.get(i)).map(|s| s.as_str())))
-        .collect::<Vec<_>>();
+    let labels = tail.label_iter().map(|l| context.fresh(l)).collect::<Vec<_>>();
 
     let label_terms = labels
         .iter()
@@ -1422,7 +1409,7 @@ fn erase_func(
     };
 
     let captures = body.free_vars().into_iter().collect::<Vec<_>>();
-    let param = context.fresh(body.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let param = context.fresh(body.first_label());
     let param_term = Var::free(&param).into();
     let body = body.open(&[&param_term]);
 
@@ -1516,7 +1503,7 @@ fn erase_nat_fold(
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -1534,18 +1521,8 @@ fn erase_nat_fold(
         &motive.open(&[&Term::Prim(Prim::Nat(0))]),
     )?;
 
-    let pred_label = context.fresh(
-        succ_case
-            .names()
-            .and_then(|ns| ns.first())
-            .map(|s| s.as_str()),
-    );
-    let ih_label = context.fresh(
-        succ_case
-            .names()
-            .and_then(|ns| ns.get(1))
-            .map(|s| s.as_str()),
-    );
+    let pred_label = context.fresh(succ_case.first_label());
+    let ih_label = context.fresh(succ_case.second_label());
 
     let erased_succ_case = context.with_frame(|context| {
         context.assume(&pred_label, &Term::Prim(Prim::NatType));
@@ -1595,7 +1572,7 @@ fn erase_nat_match(
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::NatType));
@@ -1651,7 +1628,7 @@ fn erase_bln_match(
         return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &Term::Prim(Prim::BlnType));
@@ -1770,7 +1747,7 @@ fn erase_match(
         other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
-    let head_label = context.fresh(motive.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
@@ -1824,7 +1801,7 @@ fn erase_sealed(
 ) -> Result<ersd::Term, Error> {
     let Sealed { witness, tail } = sealed;
     erase(context, witness, &Type.into())?;
-    let label = context.fresh(tail.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let label = context.fresh(tail.first_label());
     let tail = tail.open(&[&Var::free(&label).into()]);
     context.with_frame(|context| {
         context.seal(&label, witness);
@@ -1879,7 +1856,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
 
     erase(context, body_type, &Type.into())?;
 
-    let name = context.fresh(tail.names().and_then(|ns| ns.first()).map(|s| s.as_str()));
+    let name = context.fresh(tail.first_label());
     let erased_body = erase(context, body, body_type)?;
     let var_term = Var::free(&name).into();
     let tail = tail.open(&[&var_term]);
@@ -1901,9 +1878,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
 fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::Term, Error> {
     let Rec { items, tail } = rec;
 
-    let names = (0..items.len())
-        .map(|i| context.fresh(tail.names().and_then(|ns| ns.get(i)).map(|s| s.as_str())))
-        .collect::<Vec<_>>();
+    let names = tail.label_iter().map(|l| context.fresh(l)).collect::<Vec<_>>();
 
     let label_terms = names
         .iter()

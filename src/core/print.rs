@@ -11,30 +11,21 @@ fn label_at(depth: usize) -> String {
     format!("#{depth}")
 }
 
-fn labels_from(depth: usize, arity: usize) -> Vec<String> {
-    (0..arity).map(|offset| label_at(depth + offset)).collect()
-}
 
 fn label_terms(labels: &[String]) -> Vec<Term> {
     labels.iter().map(Var::free).map(Into::into).collect()
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
-    let label = scope
-        .names()
-        .and_then(|ns| ns.first())
-        .cloned()
-        .unwrap_or_else(|| label_at(depth));
+    let label = scope.first_label().map(str::to_string).unwrap_or_else(|| label_at(depth));
     let body = scope.open(&[&Var::free(&label).into()]);
 
     (label, body)
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
-    let (fst, snd) = match scope.names() {
-        Some([f, s, ..]) => (f.clone(), s.clone()),
-        _ => (label_at(depth), label_at(depth + 1)),
-    };
+    let fst = scope.first_label().map(str::to_string).unwrap_or_else(|| label_at(depth));
+    let snd = scope.second_label().map(str::to_string).unwrap_or_else(|| label_at(depth + 1));
     let body = scope.open(&[&Var::free(&fst).into(), &Var::free(&snd).into()]);
 
     ((fst, snd), body)
@@ -493,8 +484,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let labels: Vec<String> = {
                 let mut base = fields
                     .last()
-                    .and_then(|s| s.names())
-                    .map(|ns| ns.to_vec())
+                    .map(|s| s.label_iter().flatten().map(str::to_string).collect::<Vec<_>>())
                     .unwrap_or_default();
                 base.push(label_at(depth + base.len()));
                 base
@@ -585,10 +575,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Term::Rec(Rec { items, tail }) => {
-            let labels: Vec<String> = tail
-                .names()
-                .map(|ns| ns.to_vec())
-                .unwrap_or_else(|| labels_from(depth, items.len()));
+            let labels = tail
+                .label_iter()
+                .enumerate()
+                .map(|(i, l)| l.map(str::to_string).unwrap_or_else(|| label_at(depth + i)))
+                .collect::<Vec<_>>();
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
             let inner_depth = depth + labels.len();

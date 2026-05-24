@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~28,400 lines in `src/`, ~1,500 in `examples/`.
+**Codebase size:** ~28,600 lines in `src/`, ~1,600 in `examples/`.
 
 ---
 
@@ -37,9 +37,9 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,406  |
+| Parsing                 | `text/parse.rs`                                | 1,412  |
 | Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,000 |
-| Type checking + erasure | `core/typing.rs`                               | 2,704  |
+| Type checking + erasure | `core/typing.rs`                               | 2,679  |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,200 |
 | CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,120  |
 | WASM codegen            | `cont/to_wasm/` (5 files)                      | ~3,300 |
@@ -198,7 +198,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is the most complex transformation in the pipeline (3,101 lines).
+This is the most complex transformation in the pipeline (3,120 lines).
 
 ### CPS IR structure
 
@@ -288,7 +288,7 @@ The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`,
 
 ### Binary serialization (`src/wasm/writer.rs`)
 
-The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. 2,018 lines.
+The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. 2,017 lines.
 
 ### WAT parser (`src/wasm/parse.rs`)
 
@@ -349,7 +349,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-181 tests across 13 files, covering every layer:
+184 tests across 12 files, covering every layer:
 
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |
