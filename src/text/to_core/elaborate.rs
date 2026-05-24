@@ -2,7 +2,7 @@ use {
     super::{DefStack, ModuleInfo},
     crate::{
         core,
-        text::{Bin, Name, Nat, Prim, Term},
+        text::{Bin, Match, Name, Nat, Prim, Term},
     },
     std::collections::HashMap,
 };
@@ -73,43 +73,44 @@ impl<'a> Elaborate<'a> {
             Term::Tuple(tuple) => {
                 core::Tuple::new(tuple.fields.iter().map(|field| self.term(field))).into()
             }
-            Term::BlnMatch(bm) => core::BlnMatch::new(
-                self.term(&bm.head),
-                bm.motive.label.as_deref(),
-                self.term(&bm.motive.body),
-                self.term(&bm.false_case),
-                self.term(&bm.true_case),
-            )
-            .into(),
-            Term::NatFold(nat_fold) => core::NatFold::new(
-                self.term(&nat_fold.head),
-                nat_fold.motive.label.as_deref(),
-                self.term(&nat_fold.motive.body),
-                self.term(&nat_fold.zero_case),
-                nat_fold.pred_label.clone(),
-                nat_fold.ih_label.clone(),
-                self.term(&nat_fold.succ_case),
-            )
-            .into(),
-            Term::NatMatch(nm) => core::NatMatch::new(
-                self.term(&nm.head),
-                nm.motive.label.as_deref(),
-                self.term(&nm.motive.body),
-                nm.cases.iter().map(|(&nat, body)| (nat, self.term(body))),
-                self.term(&nm.default),
-            )
-            .into(),
             Term::Proj(proj) => core::Proj::new(self.term(&proj.head), proj.index).into(),
-            Term::Match(match_) => core::Match::new(
-                self.term(&match_.head),
-                match_.motive.label.as_deref(),
-                self.term(&match_.motive.body),
-                match_
-                    .cases
-                    .iter()
-                    .map(|(atom, body)| (core::Atom::from(atom.as_str()), self.term(body))),
-            )
-            .into(),
+            Term::Match(match_) => match match_ {
+                Match::Bln(bm) => core::BlnMatch::new(
+                    self.term(&bm.head),
+                    bm.motive.label.as_deref(),
+                    self.term(&bm.motive.body),
+                    self.term(&bm.false_case),
+                    self.term(&bm.true_case),
+                )
+                .into(),
+                Match::NatFold(nf) => core::NatFold::new(
+                    self.term(&nf.head),
+                    nf.motive.label.as_deref(),
+                    self.term(&nf.motive.body),
+                    self.term(&nf.zero_case),
+                    nf.pred_label.clone(),
+                    nf.ih_label.clone(),
+                    self.term(&nf.succ_case),
+                )
+                .into(),
+                Match::Nat(nm) => core::NatMatch::new(
+                    self.term(&nm.head),
+                    nm.motive.label.as_deref(),
+                    self.term(&nm.motive.body),
+                    nm.cases.iter().map(|(&nat, body)| (nat, self.term(body))),
+                    self.term(&nm.default),
+                )
+                .into(),
+                Match::Atom(am) => core::Match::new(
+                    self.term(&am.head),
+                    am.motive.label.as_deref(),
+                    self.term(&am.motive.body),
+                    am.cases
+                        .iter()
+                        .map(|(atom, body)| (core::Atom::from(atom.as_str()), self.term(body))),
+                )
+                .into(),
+            },
             Term::DefFrom(from) => core::Seal::new(
                 core::Var::free(
                     self.def_stack

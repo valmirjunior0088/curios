@@ -1,5 +1,5 @@
 pub let fold : (T : Type) -> (A : Type) -> Arr T -> A -> (T -> A -> A) -> A =
     T => A => arr => init => f =>
-        Nat.fold (Arr.len arr) : A;
+        match (Arr.len arr) : A;
         | 0 => init;
         | pred ih => f (Arr.get arr pred) ih;;

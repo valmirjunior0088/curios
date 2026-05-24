@@ -4,7 +4,7 @@ use /std/str;
 use /json/value;
 
 let is_ws : Nat -> Bln = byte =>
-    Nat.match byte : Bln;
+    match byte : Bln;
     | ' ' => true;
     | '\t' => true;
     | '\n' => true;
@@ -12,33 +12,33 @@ let is_ws : Nat -> Bln = byte =>
     | _ => false;;
 
 let is_num_byte : Nat -> Bln = byte =>
-    Nat.match byte : Bln;
+    match byte : Bln;
     | '-' => true;
     | '+' => true;
     | '.' => true;
     | 'e' => true;
     | 'E' => true;
     | _ =>
-        Bln.match (Nat.lte 48 byte) : Bln;
+        match (Nat.lte 48 byte) : Bln;
         | true => Nat.lte byte 57;
         | false => false;;;
 
 let take_literal : Bin -> parser/Parser {} = literal => input => pos =>
     let max : Nat = Bin.len literal;
     let r : { Nat, Bln } =
-        Nat.fold max : { Nat, Bln };
+        match max : { Nat, Bln };
         | 0 => (pos, true);
         | step ih =>
-            Bln.match ih.1 : { Nat, Bln };
+            match ih.1 : { Nat, Bln };
             | false => ih;
             | true =>
-                Bln.match (Nat.lt ih.0 (Bin.len input)) : { Nat, Bln };
+                match (Nat.lt ih.0 (Bin.len input)) : { Nat, Bln };
                 | false => (ih.0, false);
                 | true =>
-                    Bln.match (Nat.eql (Bin.get literal step) (Bin.get input ih.0)) : { Nat, Bln };
+                    match (Nat.eql (Bin.get literal step) (Bin.get input ih.0)) : { Nat, Bln };
                     | true  => (Nat.add ih.0 1, true);
                     | false => (ih.0, false);;;;;
-    Bln.match r.1 : parser/Result { Nat, {} };
+    match r.1 : parser/Result { Nat, {} };
     | true  => ('ok, (r.0, ()));
     | false => ('err, "unexpected literal");;
 
@@ -54,12 +54,12 @@ let parse_false_val : parser/Parser value/Value =
 let parse_num : parser/Parser value/Value = input => pos =>
     let r : parser/Result { Nat, Bin } = parser/take_while is_num_byte input pos;
     let bytes : Bin = r.1.1;
-    Bln.match (Nat.eql (Bin.len bytes) 0) : parser/Result { Nat, value/Value };
+    match (Nat.eql (Bin.len bytes) 0) : parser/Result { Nat, value/Value };
     | true  => ('err, "expected number");
     | false => ('ok, (r.1.0, ('num, str/from_flt bytes)));;
 
 let is_not_string_special : Nat -> Bln = byte =>
-    Nat.match byte : Bln;
+    match byte : Bln;
     | '"'  => false;
     | '\\' => false;
     | _    => true;;
@@ -73,7 +73,7 @@ let parse_str_escape : parser/Parser Bin = input => pos =>
         match r2.0 : parser/Result { Nat, Bin };
         | 'err => ('err, r2.1);
         | 'ok  =>
-            Nat.match r2.1.1 : parser/Result { Nat, Bin };
+            match r2.1.1 : parser/Result { Nat, Bin };
             | '"'  => ('ok, (r2.1.0, "\""));
             | '\\' => ('ok, (r2.1.0, "\\"));
             | 'n'  => ('ok, (r2.1.0, "\n"));
@@ -108,10 +108,10 @@ let parse_str_value : parser/Parser value/Value =
     parser/map Bin value/Value (s => ('str, s)) parse_raw_str;
 
 pub rec decode : parser/Parser value/Value = input => pos =>
-    Bln.match (Nat.lt pos (Bin.len input)) : parser/Result { Nat, value/Value };
+    match (Nat.lt pos (Bin.len input)) : parser/Result { Nat, value/Value };
     | false => ('err, "unexpected end of input");
     | true  =>
-        Nat.match (Bin.get input pos) : parser/Result { Nat, value/Value };
+        match (Bin.get input pos) : parser/Result { Nat, value/Value };
         | ' '  => decode input (Nat.add pos 1);
         | '\t' => decode input (Nat.add pos 1);
         | '\n' => decode input (Nat.add pos 1);

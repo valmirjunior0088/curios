@@ -5,14 +5,14 @@ use /json/value;
 
 let encode_num : Flt -> Bin = n =>
     let str : Bin = Flt.to_str n;
-    Bln.match (Nat.eql (Bin.get str 0) '+') : Bin;
+    match (Nat.eql (Bin.get str 0) '+') : Bin;
     | true => Bin.slice str 1 (Bin.len str);
     | false => str;;
 
 let encode_str : Bin -> Bin = s =>
     Bin.concat "\"",
         (bin/fold Bin s "" (byte => acc =>
-            Nat.match byte : Bin;
+            match byte : Bin;
             | '"' => Bin.concat acc, "\\\"";
             | '\\' => Bin.concat acc, "\\\\";
             | '\n' => Bin.concat acc, "\\n";
@@ -30,7 +30,7 @@ pub rec encode : value/Value -> Bin = v =>
     | 'arr =>
         Bin.concat "[",
             (arr/fold value/Value Bin v.1 "" (elem => acc =>
-                Bln.match (Nat.eql (Bin.len acc) 0) : Bin;
+                match (Nat.eql (Bin.len acc) 0) : Bin;
                 | true => encode elem;
                 | false => Bin.concat acc, ",", (encode elem);)),
             "]";
@@ -38,7 +38,7 @@ pub rec encode : value/Value -> Bin = v =>
         Bin.concat "{",
             (arr/fold { Bin, value/Value } Bin v.1 "" (pair => acc =>
                 let entry : Bin = Bin.concat (encode_str pair.0), ":", (encode pair.1);
-                Bln.match (Nat.eql (Bin.len acc) 0) : Bin;
+                match (Nat.eql (Bin.len acc) 0) : Bin;
                 | true => entry;
                 | false => Bin.concat acc, ",", entry;)),
             "}";;

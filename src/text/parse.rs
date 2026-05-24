@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, BlnMatch, DefFrom, DefInto, Entrypoint, Func, FuncType, Let,
-        Match, Module, Motive, Name, Nat, NatFold, NatMatch, Prim, Proj, Rec, RecItem, Term,
-        TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, Bin, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
+        FuncType, Let, Match, Module, Motive, Name, Nat, NatFold, NatMatch, Prim, Proj, Rec,
+        RecItem, Term, TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -643,35 +643,12 @@ fn parse_motive<'a>() -> Parser<'a, Motive> {
         })
 }
 
-fn parse_nat_fold<'a>() -> Parser<'a, Term> {
-    catch(parse_literal("Nat.fold"))
+fn parse_match_prefix<'a>() -> Parser<'a, (Term, Motive)> {
+    catch(parse_keyword("match"))
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal(":"))
         .and(parse_motive())
         .and_drop(parse_literal(";"))
-        .and_drop(parse_literal("|"))
-        .and_drop(parse_keyword("0"))
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(";"))
-        .and_drop(parse_literal("|"))
-        .and(parse_identifier())
-        .and(parse_identifier())
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(";"))
-        .map(
-            |(((((head, motive), zero_case), pred_label), ih_label), succ_case)| {
-                Term::NatFold(NatFold {
-                    head: head.into(),
-                    motive,
-                    zero_case: zero_case.into(),
-                    pred_label: pred_label.to_string(),
-                    ih_label: ih_label.to_string(),
-                    succ_case: succ_case.into(),
-                })
-            },
-        )
 }
 
 fn parse_bln_false_branch<'a>() -> Parser<'a, Term> {
@@ -691,37 +668,67 @@ fn parse_bln_true_branch<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_bln_match<'a>() -> Parser<'a, Term> {
-    catch(parse_literal("Bln.match"))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(":"))
-        .and(parse_motive())
-        .and_drop(parse_literal(";"))
+    catch(parse_match_prefix())
         .and(
             catch(parse_bln_false_branch())
                 .and(parse_bln_true_branch())
-                .map(|(false_case, true_case)| (false_case, true_case))
                 .or(parse_bln_true_branch()
                     .and(parse_bln_false_branch())
-                    .map(|(true_case, false_case)| (false_case, true_case))),
+                    .map(|(tc, fc)| (fc, tc))),
         )
         .map(|((head, motive), (false_case, true_case))| {
-            Term::BlnMatch(BlnMatch {
+            Term::Match(Match::Bln(BlnMatch {
                 head: head.into(),
                 motive,
                 false_case: false_case.into(),
                 true_case: true_case.into(),
-            })
+            }))
         })
 }
 
-fn parse_nat_match_case<'a>() -> Parser<'a, (u32, Term)> {
+fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
+    catch(parse_match_prefix())
+        .and(
+            catch(
+                parse_literal("|")
+                    .and_keep(parse_nat_literal())
+                    .flat_map(|n| match n {
+                        0 => pure(()),
+                        _ => fail("expected 0 as NatFold zero case"),
+                    })
+                    .and_drop(parse_literal("=>"))
+                    .and_keep(lazy(parse_term))
+                    .and_drop(parse_literal(";")),
+            )
+            .and(
+                parse_literal("|")
+                    .and_keep(parse_identifier())
+                    .and(parse_identifier())
+                    .and_drop(parse_literal("=>"))
+                    .and(lazy(parse_term))
+                    .and_drop(parse_literal(";")),
+            ),
+        )
+        .map(|((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
+            Term::Match(Match::NatFold(NatFold {
+                head: head.into(),
+                motive,
+                zero_case: zero_case.into(),
+                pred_label: pred_label.to_string(),
+                ih_label: ih_label.to_string(),
+                succ_case: succ_case.into(),
+            }))
+        })
+}
+
+fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {
     catch(parse_literal("|").and_keep(parse_nat_literal()))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .and_drop(parse_literal(";"))
 }
 
-fn parse_nat_match_default<'a>() -> Parser<'a, Term> {
+fn parse_nat_default<'a>() -> Parser<'a, Term> {
     catch(parse_literal("|").and_keep(parse_literal("_")))
         .and_drop(parse_literal("=>"))
         .and_keep(lazy(parse_term))
@@ -729,15 +736,10 @@ fn parse_nat_match_default<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_nat_match<'a>() -> Parser<'a, Term> {
-    catch(parse_literal("Nat.match"))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(":"))
-        .and(parse_motive())
-        .and_drop(parse_literal(";"))
-        .and(many0(parse_nat_match_case))
-        .and(parse_nat_match_default())
-        .map(|(((head, motive), cases), default)| {
-            Term::NatMatch(NatMatch {
+    catch(parse_match_prefix())
+        .and(catch(many0(parse_nat_case).and(parse_nat_default())))
+        .map(|((head, motive), (cases, default))| {
+            Term::Match(Match::Nat(NatMatch {
                 head: head.into(),
                 motive,
                 cases: cases
@@ -745,34 +747,37 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
                     .map(|(nat, term)| (nat, term.into()))
                     .collect(),
                 default: default.into(),
-            })
+            }))
         })
 }
 
-fn parse_match_branch<'a>() -> Parser<'a, (Atom, Term)> {
+fn parse_atom_branch<'a>() -> Parser<'a, (Atom, Term)> {
     catch(parse_literal("|").and_keep(parse_atom_label()))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .and_drop(parse_literal(";"))
 }
 
-fn parse_match<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("match"))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(":"))
-        .and(parse_motive())
-        .and_drop(parse_literal(";"))
-        .and(many1(parse_match_branch))
+fn parse_atom_match<'a>() -> Parser<'a, Term> {
+    catch(parse_match_prefix())
+        .and(many1(parse_atom_branch))
         .map(|((head, motive), cases)| {
-            Term::Match(Match {
+            Term::Match(Match::Atom(AtomMatch {
                 head: head.into(),
                 motive,
                 cases: cases
                     .into_iter()
                     .map(|(atom, term)| (atom, term.into()))
                     .collect(),
-            })
+            }))
         })
+}
+
+fn parse_match<'a>() -> Parser<'a, Term> {
+    catch(parse_bln_match())
+        .or(catch(parse_nat_fold_match()))
+        .or(catch(parse_nat_match()))
+        .or(parse_atom_match())
 }
 
 fn parse_binding<'a>() -> Parser<'a, RecItem> {
@@ -883,9 +888,6 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
 fn parse_term<'a>() -> Parser<'a, Term> {
     parse_rec()
         .or(parse_let())
-        .or(parse_nat_fold())
-        .or(parse_bln_match())
-        .or(parse_nat_match())
         .or(parse_match())
         .or(parse_func_type())
         .or(parse_func())
@@ -1113,7 +1115,7 @@ mod tests {
             "match 'foo : k => '[foo]; | 'foo => 'foo;"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Match(Match {
+            Term::Match(Match::Atom(AtomMatch {
                 head: Term::Atom(Atom::from("foo")).into(),
                 motive: Motive {
                     label: Some("k".to_string()),
@@ -1125,7 +1127,7 @@ mod tests {
                 cases: [(Atom::from("foo"), Term::Atom(Atom::from("foo")).into())]
                     .into_iter()
                     .collect(),
-            })
+            }))
         );
     }
 

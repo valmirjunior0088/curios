@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, Bin, BlnMatch, DefFrom, DefInto, Entrypoint, Func, FuncType, Let,
-        Match, Module, Nat, NatFold, NatMatch, Prim, Proj, Rec, Term, TopDef, TopItem, TopLet,
-        TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, Bin, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
+        FuncType, Let, Match, Module, Nat, NatFold, NatMatch, Prim, Proj, Rec, Term, TopDef,
+        TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -421,92 +421,11 @@ fn print_term(term: Term) -> Printer<'static> {
             }),
             pure(")"),
         ]),
-        Term::NatFold(NatFold {
-            head,
-            motive,
-            zero_case,
-            pred_label,
-            ih_label,
-            succ_case,
-        }) => flat([
-            pure("Nat.fold "),
-            print_term(*head),
-            pure(" : "),
-            match motive.label {
-                Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                None => print_term(*motive.body),
-            },
-            pure(";\n| 0n =>\n"),
-            indent(flat([print_term(*zero_case), pure(";")])),
-            pure("\n| "),
-            pure(pred_label),
-            pure(" "),
-            pure(ih_label),
-            pure(" =>\n"),
-            indent(flat([print_term(*succ_case), pure(";")])),
-        ]),
-        Term::BlnMatch(BlnMatch {
-            head,
-            motive,
-            false_case,
-            true_case,
-        }) => flat([
-            pure("Bln.match "),
-            print_term(*head),
-            pure(" : "),
-            match motive.label {
-                Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                None => print_term(*motive.body),
-            },
-            pure(";"),
-            pure("\n| false =>\n"),
-            indent(flat([print_term(*false_case), pure(";")])),
-            pure("\n| true =>\n"),
-            indent(flat([print_term(*true_case), pure(";")])),
-        ]),
-        Term::NatMatch(NatMatch {
-            head,
-            motive,
-            cases,
-            default,
-        }) => {
-            let case_printers = cases.into_iter().map(|(nat, body)| {
-                flat([
-                    pure(format!("\n| {nat}n =>\n")),
-                    indent(flat([print_term(*body), pure(";")])),
-                ])
-            });
-            flat([
-                pure("Nat.match "),
-                print_term(*head),
-                pure(" : "),
-                match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                    None => print_term(*motive.body),
-                },
-                pure(";"),
-                flat(case_printers.collect::<Vec<_>>()),
-                pure("\n| _ =>\n"),
-                indent(flat([print_term(*default), pure(";")])),
-            ])
-        }
         Term::Proj(Proj { head, index }) => {
             flat([pure("("), print_term(*head), pure(format!(").{index}"))])
         }
-        Term::Match(Match {
-            head,
-            motive,
-            cases,
-        }) => {
-            let case_printers = cases.into_iter().map(|(atom, body)| {
-                flat([
-                    pure("\n| "),
-                    print_atom(atom),
-                    pure(" =>\n"),
-                    indent(flat([print_term(*body), pure(";")])),
-                ])
-            });
-            flat([
+        Term::Match(match_) => match match_ {
+            Match::Bln(BlnMatch { head, motive, false_case, true_case }) => flat([
                 pure("match "),
                 print_term(*head),
                 pure(" : "),
@@ -515,9 +434,68 @@ fn print_term(term: Term) -> Printer<'static> {
                     None => print_term(*motive.body),
                 },
                 pure(";"),
-                flat(case_printers.collect::<Vec<_>>()),
-            ])
-        }
+                pure("\n| false =>\n"),
+                indent(flat([print_term(*false_case), pure(";")])),
+                pure("\n| true =>\n"),
+                indent(flat([print_term(*true_case), pure(";")])),
+            ]),
+            Match::NatFold(NatFold { head, motive, zero_case, pred_label, ih_label, succ_case }) => flat([
+                pure("match "),
+                print_term(*head),
+                pure(" : "),
+                match motive.label {
+                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                    None => print_term(*motive.body),
+                },
+                pure(";"),
+                pure("\n| 0 =>\n"),
+                indent(flat([print_term(*zero_case), pure(";")])),
+                pure("\n| "),
+                pure(pred_label),
+                pure(" "),
+                pure(ih_label),
+                pure(" =>\n"),
+                indent(flat([print_term(*succ_case), pure(";")])),
+            ]),
+            Match::Nat(NatMatch { head, motive, cases, default }) => flat([
+                pure("match "),
+                print_term(*head),
+                pure(" : "),
+                match motive.label {
+                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                    None => print_term(*motive.body),
+                },
+                pure(";"),
+                flat(cases
+                    .into_iter()
+                    .map(|(nat, body)| flat([
+                        pure(format!("\n| {nat} =>\n")),
+                        indent(flat([print_term(*body), pure(";")])),
+                    ]))
+                    .collect::<Vec<_>>()),
+                pure("\n| _ =>\n"),
+                indent(flat([print_term(*default), pure(";")])),
+            ]),
+            Match::Atom(AtomMatch { head, motive, cases }) => flat([
+                pure("match "),
+                print_term(*head),
+                pure(" : "),
+                match motive.label {
+                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                    None => print_term(*motive.body),
+                },
+                pure(";"),
+                flat(cases
+                    .into_iter()
+                    .map(|(atom, body)| flat([
+                        pure("\n| "),
+                        print_atom(atom),
+                        pure(" =>\n"),
+                        indent(flat([print_term(*body), pure(";")])),
+                    ]))
+                    .collect::<Vec<_>>()),
+            ]),
+        },
         Term::DefFrom(DefFrom { label, body }) => {
             flat([pure(label), pure(".from "), print_term(*body)])
         }

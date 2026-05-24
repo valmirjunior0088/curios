@@ -1,4 +1,4 @@
 pub let abs : Int -> Nat = n =>
-    Bln.match (Int.gte n +0) : Nat;
+    match (Int.gte n +0) : Nat;
     | true  => Int.to_nat n;
     | false => Int.to_nat (Int.sub +0 n);;

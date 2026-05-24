@@ -89,10 +89,18 @@ pub struct AtomType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Match {
+pub struct AtomMatch {
     pub head: Subterm,
     pub motive: Motive,
     pub cases: BTreeMap<Atom, Subterm>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Match {
+    Bln(BlnMatch),
+    NatFold(NatFold),
+    Nat(NatMatch),
+    Atom(AtomMatch),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -132,9 +140,6 @@ pub struct Rec {
 pub enum Term {
     Type,
     Prim(Prim),
-    BlnMatch(BlnMatch),
-    NatFold(NatFold),
-    NatMatch(NatMatch),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
