@@ -1,12 +1,19 @@
 pub mod std;
+pub mod parser;
 pub mod json;
 
-let v : json/Value = ('obj, [
-    ("name",   ('str, "Alice")),
-    ("score",  ('num, +9.5)),
+let value : json/Value = ('obj, [
+    ("name", ('str, "Alice")),
+    ("score", ('num, +9.5)),
     ("active", ('bln, true)),
-    ("tags",   ('arr, [('str, "x"), ('str, "y")])),
-    ("extra",  ('null, ()))
+    ("tags", ('arr, [('str, "x"), ('str, "y")])),
+    ("extra", ('null, ()))
 ]);
 
-Sys.print (json/encode v)
+let encoded : Bin = json/encode value;
+
+let decoded : parser/Result { Nat, json/Value } = json/decode encoded 0;
+
+match decoded.0 : {};
+| 'ok  => Sys.print (json/encode decoded.1.1);
+| 'err => Sys.print decoded.1;

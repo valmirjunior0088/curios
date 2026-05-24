@@ -42,11 +42,14 @@ fn process_items(
     for top_item in top_items {
         match top_item {
             TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label)),
-            TopItem::Def(d) => context.insert_scope(d.label.clone(), context.prefixed(&d.label)),
-            TopItem::Let(l) => context.insert_scope(l.label.clone(), context.prefixed(&l.label)),
+            TopItem::Def(d) => {
+                context.insert_scope(d.label.clone(), context.prefixed(&d.label));
+                context.insert_binding(d.label.clone(), context.prefixed(&d.label));
+            }
+            TopItem::Let(l) => context.insert_binding(l.label.clone(), context.prefixed(&l.label)),
             TopItem::Rec(labels) => {
                 for l in labels {
-                    context.insert_scope(l.label.clone(), context.prefixed(&l.label));
+                    context.insert_binding(l.label.clone(), context.prefixed(&l.label));
                 }
             }
             _ => {}
@@ -89,7 +92,8 @@ fn process_items(
             }
             TopItem::Let(let_item) => {
                 let elab = Elaborate::new(
-                    context.scope(),
+                    context.qualifiers(),
+                    context.bindings(),
                     context.table(),
                     context.aliases(),
                     def_stack,
@@ -106,7 +110,8 @@ fn process_items(
                     ls.iter()
                         .map(|let_item| {
                             let elaborate = Elaborate::new(
-                                context.scope(),
+                                context.qualifiers(),
+                                context.bindings(),
                                 context.table(),
                                 context.aliases(),
                                 def_stack,
@@ -125,7 +130,8 @@ fn process_items(
                 let name = context.prefixed(&def_item.label);
 
                 let witness = Elaborate::new(
-                    context.scope(),
+                    context.qualifiers(),
+                    context.bindings(),
                     context.table(),
                     context.aliases(),
                     def_stack,
@@ -181,7 +187,8 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> core::Term {
 
     flat_items.into_iter().rev().fold(
         Elaborate::new(
-            context.scope(),
+            context.qualifiers(),
+            context.bindings(),
             context.table(),
             context.aliases(),
             &DefStack::empty(),

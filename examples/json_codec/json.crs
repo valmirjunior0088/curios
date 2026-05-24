@@ -1,53 +1,9 @@
-use /std/arr;
-use /std/bin;
-use /std/bln;
+pub mod value;
+pub mod encode;
+pub mod decode;
 
-pub rec Value : Type = {
-    tag : '[null, bln, num, str, arr, obj],
-    match tag : Type;
-    | 'null => {};
-    | 'bln  => Bln;
-    | 'num  => Flt;
-    | 'str  => Bin;
-    | 'arr  => Arr Value;
-    | 'obj  => Arr { Bin, Value }; };
+use /parser;
 
-let encode_num : Flt -> Bin = n =>
-    let s : Bin = Flt.to_str n;
-    Bln.match (Nat.eql (Bin.get s 0) '+') : Bin;
-    | true  => Bin.slice s 1 (Bin.len s);
-    | false => s;;
-
-let encode_str : Bin -> Bin = s =>
-    Bin.concat "\"",
-        (bin/fold Bin s "" (byte => acc =>
-            Nat.match byte : Bin;
-            | '"'  => Bin.concat acc, "\\\"";
-            | '\\' => Bin.concat acc, "\\\\";
-            | '\n' => Bin.concat acc, "\\n";
-            | '\r' => Bin.concat acc, "\\r";
-            | '\t' => Bin.concat acc, "\\t";
-            | _    => Bin.append acc byte;)),
-        "\"";
-
-pub rec encode : Value -> Bin = v =>
-    match v.0 : Bin;
-    | 'null => "null";
-    | 'bln  => bln/to_str v.1;
-    | 'num  => encode_num v.1;
-    | 'str  => encode_str v.1;
-    | 'arr  =>
-        Bin.concat "[",
-            (arr/fold Value Bin v.1 "" (elem => acc =>
-                Bln.match (Nat.eql (Bin.len acc) 0) : Bin;
-                | true  => encode elem;
-                | false => Bin.concat acc, ",", (encode elem);)),
-            "]";
-    | 'obj  =>
-        Bin.concat "{",
-            (arr/fold { Bin, Value } Bin v.1 "" (pair => acc =>
-                let entry : Bin = Bin.concat (encode_str pair.0), ":", (encode pair.1);
-                Bln.match (Nat.eql (Bin.len acc) 0) : Bin;
-                | true  => entry;
-                | false => Bin.concat acc, ",", entry;)),
-            "}";;
+pub let Value : Type = value/Value;
+pub let encode : Value -> Bin = encode/encode;
+pub let decode : parser/Parser Value = decode/decode;

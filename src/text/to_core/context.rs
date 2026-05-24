@@ -88,7 +88,8 @@ pub struct Context<'a> {
     prefix: Name,
     table: &'a mut HashMap<Name, ModuleInfo>,
     aliases: &'a mut HashMap<Name, Name>,
-    scope: HashMap<String, Name>,
+    qualifiers: HashMap<String, Name>,
+    bindings: HashMap<String, Name>,
 }
 
 impl<'a> Context<'a> {
@@ -100,7 +101,8 @@ impl<'a> Context<'a> {
             prefix: Name::empty(),
             table,
             aliases,
-            scope: HashMap::new(),
+            qualifiers: HashMap::new(),
+            bindings: HashMap::new(),
         }
     }
 
@@ -109,7 +111,8 @@ impl<'a> Context<'a> {
             prefix: self.prefix.with(label),
             table: &mut *self.table,
             aliases: &mut *self.aliases,
-            scope: HashMap::new(),
+            qualifiers: HashMap::new(),
+            bindings: HashMap::new(),
         }
     }
 
@@ -121,8 +124,12 @@ impl<'a> Context<'a> {
         self.prefix.with(label)
     }
 
-    pub fn scope(&self) -> &HashMap<String, Name> {
-        &self.scope
+    pub fn qualifiers(&self) -> &HashMap<String, Name> {
+        &self.qualifiers
+    }
+
+    pub fn bindings(&self) -> &HashMap<String, Name> {
+        &self.bindings
     }
 
     pub fn table(&self) -> &HashMap<Name, ModuleInfo> {
@@ -135,7 +142,7 @@ impl<'a> Context<'a> {
 
     pub fn register_alias(&mut self, qualifier: &str) {
         self.aliases
-            .insert(self.prefix.with(qualifier), self.scope[qualifier].clone());
+            .insert(self.prefix.with(qualifier), self.qualifiers[qualifier].clone());
     }
 
     pub fn finalize(&mut self, info: ModuleInfo) {
@@ -143,11 +150,19 @@ impl<'a> Context<'a> {
     }
 
     pub fn insert_scope(&mut self, qualifier: String, name: Name) {
-        if self.scope.contains_key(&qualifier) {
+        if self.qualifiers.contains_key(&qualifier) {
             panic!("qualifier conflicts with existing scope entry: {qualifier}");
         }
 
-        self.scope.insert(qualifier, name);
+        self.qualifiers.insert(qualifier, name);
+    }
+
+    pub fn insert_binding(&mut self, label: String, name: Name) {
+        if self.bindings.contains_key(&label) {
+            panic!("binding conflicts with existing scope entry: {label}");
+        }
+
+        self.bindings.insert(label, name);
     }
 
     pub fn resolve_use(&mut self, top_use: &TopUse) {
@@ -212,7 +227,7 @@ impl<'a> Context<'a> {
             let first = top_use.name.head();
 
             let mut current = self
-                .scope
+                .qualifiers
                 .get(first)
                 .unwrap_or_else(|| panic!("undeclared child in relative use: {first}"))
                 .clone();

@@ -8,7 +8,8 @@ use {
 };
 
 pub struct Elaborate<'a> {
-    scope: &'a HashMap<String, Name>,
+    qualifiers: &'a HashMap<String, Name>,
+    bindings: &'a HashMap<String, Name>,
     table: &'a HashMap<Name, ModuleInfo>,
     aliases: &'a HashMap<Name, Name>,
     def_stack: &'a DefStack,
@@ -16,13 +17,15 @@ pub struct Elaborate<'a> {
 
 impl<'a> Elaborate<'a> {
     pub fn new(
-        scope: &'a HashMap<String, Name>,
+        qualifiers: &'a HashMap<String, Name>,
+        bindings: &'a HashMap<String, Name>,
         table: &'a HashMap<Name, ModuleInfo>,
         aliases: &'a HashMap<Name, Name>,
         def_stack: &'a DefStack,
     ) -> Self {
         Self {
-            scope,
+            qualifiers,
+            bindings,
             table,
             aliases,
             def_stack,
@@ -37,7 +40,7 @@ impl<'a> Elaborate<'a> {
                 true => {
                     let label = name.head();
 
-                    if let Some(full) = self.scope.get(label) {
+                    if let Some(full) = self.bindings.get(label) {
                         full.join()
                     } else if let Some(full) = self.def_stack.get(label) {
                         full.join()
@@ -240,7 +243,7 @@ impl<'a> Elaborate<'a> {
         let qualifier = name.head();
 
         let mut current = self
-            .scope
+            .qualifiers
             .get(qualifier)
             .unwrap_or_else(|| panic!("unresolved qualifier: {qualifier}"))
             .clone();

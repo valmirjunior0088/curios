@@ -1,0 +1,136 @@
+pub let Result : (_ : Type) -> Type = A => {
+    tag : '[ok, err],
+    match tag : Type;
+    | 'ok  => A;
+    | 'err => Bin; };
+
+pub let Parser : Type -> Type = A => Bin -> Nat -> Result { Nat, A };
+
+pub let run : (A : Type) -> Parser A -> Bin -> Result A =
+    A => p => input =>
+        let r : Result { Nat, A } = p input 0;
+        match r.0 : Result A;
+        | 'ok  => ('ok, r.1.1);
+        | 'err => ('err, r.1);;
+
+pub let pure : (A : Type) -> A -> Parser A =
+    A => a => input => pos => ('ok, (pos, a));
+
+pub let fail : (A : Type) -> Bin -> Parser A =
+    A => msg => input => pos => ('err, msg);
+
+pub let map : (A : Type) -> (B : Type) -> (A -> B) -> Parser A -> Parser B =
+    A => B => f => p => input => pos =>
+        let r : Result { Nat, A } = p input pos;
+        match r.0 : Result { Nat, B };
+        | 'ok  => ('ok, (r.1.0, f r.1.1));
+        | 'err => ('err, r.1);;
+
+pub let bind : (A : Type) -> (B : Type) -> Parser A -> (A -> Parser B) -> Parser B =
+    A => B => p => f => input => pos =>
+        let r : Result { Nat, A } = p input pos;
+        match r.0 : Result { Nat, B };
+        | 'ok  => f r.1.1 input r.1.0;
+        | 'err => ('err, r.1);;
+
+pub let or : (A : Type) -> Parser A -> Parser A -> Parser A =
+    A => p => q => input => pos =>
+        let r : Result { Nat, A } = p input pos;
+        match r.0 : Result { Nat, A };
+        | 'ok  => r;
+        | 'err => q input pos;;
+
+pub let and : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser { A, B } =
+    A => B => p => q => input => pos =>
+        let r : Result { Nat, A } = p input pos;
+        match r.0 : Result { Nat, { A, B } };
+        | 'ok  =>
+            let s : Result { Nat, B } = q input r.1.0;
+            match s.0 : Result { Nat, { A, B } };
+            | 'ok  => ('ok, (s.1.0, (r.1.1, s.1.1)));
+            | 'err => ('err, s.1);;
+        | 'err => ('err, r.1);;
+
+pub let and_drop : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser A =
+    A => B => p => q => input => pos =>
+        let r : Result { Nat, A } = p input pos;
+        match r.0 : Result { Nat, A };
+        | 'ok  =>
+            let s : Result { Nat, B } = q input r.1.0;
+            match s.0 : Result { Nat, A };
+            | 'ok  => ('ok, (s.1.0, r.1.1));
+            | 'err => ('err, s.1);;
+        | 'err => r;;
+
+pub let and_keep : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser B =
+    A => B => p => q => input => pos =>
+        let r : Result { Nat, A } = p input pos;
+        match r.0 : Result { Nat, B };
+        | 'ok  => q input r.1.0;
+        | 'err => ('err, r.1);;
+
+pub let any_byte : Parser Nat = input => pos =>
+    Bln.match (Nat.lt pos (Bin.len input)) : Result { Nat, Nat };
+    | false => ('err, "unexpected end of input");
+    | true  => ('ok, (Nat.add pos 1, Bin.get input pos));;
+
+pub let peek_byte : Parser Nat = input => pos =>
+    Bln.match (Nat.lt pos (Bin.len input)) : Result { Nat, Nat };
+    | false => ('err, "unexpected end of input");
+    | true  => ('ok, (pos, Bin.get input pos));;
+
+pub let take_byte : Nat -> Parser Nat = expected => input => pos =>
+    Bln.match (Nat.lt pos (Bin.len input)) : Result { Nat, Nat };
+    | false => ('err, "unexpected end of input");
+    | true  =>
+        let byte : Nat = Bin.get input pos;
+        Bln.match (Nat.eql byte expected) : Result { Nat, Nat };
+        | true  => ('ok, (Nat.add pos 1, byte));
+        | false => ('err, "unexpected byte");;;
+
+pub let take_while : (Nat -> Bln) -> Parser Bin = pred => input => pos =>
+    let max : Nat = Nat.sub (Bin.len input) pos;
+    let r : { Nat, Bin, Bln } =
+        Nat.fold max : { Nat, Bin, Bln };
+        | 0 => (pos, "", false);
+        | step ih =>
+            Bln.match ih.2 : { Nat, Bin, Bln };
+            | true  => ih;
+            | false =>
+                let byte : Nat = Bin.get input ih.0;
+                Bln.match (pred byte) : { Nat, Bin, Bln };
+                | true  => (Nat.add ih.0 1, Bin.append ih.1 byte, false);
+                | false => (ih.0, ih.1, true);;;;
+    ('ok, (r.0, r.1));
+
+pub let many0 : (A : Type) -> Parser A -> Parser (Arr A) =
+    A => p => input => pos =>
+        let empty : Arr A = [];
+        rec go : Arr A -> Nat -> Result { Nat, Arr A } = acc => cur =>
+            let r : Result { Nat, A } = p input cur;
+            match r.0 : Result { Nat, Arr A };
+            | 'err => ('ok, (cur, acc));
+            | 'ok  =>
+                Bln.match (Nat.eql r.1.0 cur) : Result { Nat, Arr A };
+                | true  => ('ok, (cur, acc));
+                | false => go (Arr.append acc r.1.1) r.1.0;;;
+        go empty pos;
+
+pub let sep_by0 : (A : Type) -> (S : Type) -> Parser A -> Parser S -> Parser (Arr A) =
+    A => S => elem => sep => input => pos =>
+        let r : Result { Nat, A } = elem input pos;
+        match r.0 : Result { Nat, Arr A };
+        | 'err =>
+            ('ok, (pos, []));
+        | 'ok  =>
+            let init : Arr A = [r.1.1];
+            rec go : Arr A -> Nat -> Result { Nat, Arr A } = acc => cur =>
+                let s : Result { Nat, S } = sep input cur;
+                match s.0 : Result { Nat, Arr A };
+                | 'err => ('ok, (cur, acc));
+                | 'ok  =>
+                    let t : Result { Nat, A } = elem input s.1.0;
+                    match t.0 : Result { Nat, Arr A };
+                    | 'err => ('ok, (cur, acc));
+                    | 'ok  => go (Arr.append acc t.1.1) t.1.0;;;
+            go init r.1.0;;
