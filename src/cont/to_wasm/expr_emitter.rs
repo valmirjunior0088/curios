@@ -1295,6 +1295,14 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local,
                 });
             }
+            cont::Code::SysRead => {
+                self.emit_instr(wasm::Instr::Call {
+                    func_name: self.context.table().sys_read_func().clone(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local,
+                });
+            }
         }
     }
 

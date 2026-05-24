@@ -28,7 +28,7 @@ mod tests {
     use super::*;
 
     fn printed(module: &cont::Module) -> String {
-        let (system, receiver) = crate::ChannelProvider::new();
+        let (system, receiver) = crate::ChannelProvider::out();
         crate::run_wasm(&to_wasm(module), system).expect("run failed");
         String::from_utf8(receiver.try_iter().flatten().collect()).unwrap()
     }

@@ -194,6 +194,7 @@ pub struct Table<'a> {
     int_to_str: OnceCell<wasm::FuncName>,
     flt_to_str: OnceCell<wasm::FuncName>,
     sys_print: OnceCell<wasm::FuncName>,
+    sys_read: OnceCell<wasm::FuncName>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -215,6 +216,7 @@ impl<'a> Table<'a> {
             int_to_str: OnceCell::new(),
             flt_to_str: OnceCell::new(),
             sys_print: OnceCell::new(),
+            sys_read: OnceCell::new(),
             tpl_types: {
                 let max = module
                     .consts()
@@ -348,6 +350,15 @@ impl<'a> Table<'a> {
 
     pub fn sys_print_used(&self) -> bool {
         self.sys_print.get().is_some()
+    }
+
+    pub fn sys_read_func(&self) -> &wasm::FuncName {
+        self.sys_read
+            .get_or_init(|| wasm::FuncName::from("sys_read"))
+    }
+
+    pub fn sys_read_used(&self) -> bool {
+        self.sys_read.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

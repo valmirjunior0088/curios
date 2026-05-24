@@ -6,7 +6,7 @@ fn anonymous_module_loads_from_file() {
         .parent()
         .unwrap()
         .join("fixtures/main.crs");
-    let (system, receiver) = crate::ChannelProvider::new();
+    let (system, receiver) = crate::ChannelProvider::out();
     crate::run_file(Duration::from_secs(5), &path, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),

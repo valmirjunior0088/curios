@@ -3,7 +3,7 @@ pub use provider::*;
 
 use {
     crate::{cont, core, ersd, text, wasm},
-    std::{path::Path, time::Duration},
+    std::{path::Path, sync::Arc, time::Duration},
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Config, Engine, FieldType, FuncType,
         HeapType, Linker, Module, Mutability, RefType, Rooted, StorageType, Store, Val, ValType,
@@ -60,6 +60,7 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
     let i32_to_bin = FuncType::new(&engine, [ValType::I32], [bin_ref.clone()]);
     let f32_to_bin = FuncType::new(&engine, [ValType::F32], [bin_ref.clone()]);
 
+    let provider = Arc::new(provider);
     let mut linker: Linker<()> = Linker::new(&engine);
 
     {
@@ -130,6 +131,7 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
 
     {
         let bin_to_unit = FuncType::new(&engine, [bin_ref.clone()], []);
+        let provider = provider.clone();
 
         linker
             .func_new(
@@ -152,6 +154,29 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
                 },
             )
             .map_err(|e| format!("failed to define sys_print: {e}"))?;
+    }
+
+    {
+        let unit_to_bin = FuncType::new(&engine, [], [bin_ref.clone()]);
+        let bin_array_type = bin_array_type.clone();
+        let provider = provider.clone();
+
+        linker
+            .func_new(
+                "env",
+                "sys_read",
+                unit_to_bin,
+                move |mut caller: Caller<'_, ()>, _params, results| {
+                    let bytes = provider.read();
+                    let pre = ArrayRefPre::new(&mut caller, bin_array_type.clone());
+                    let elems: Vec<Val> = bytes.into_iter().map(|b| Val::I32(b as i32)).collect();
+                    results[0] = Val::AnyRef(Some(
+                        ArrayRef::new_fixed(&mut caller, &pre, &elems)?.to_anyref(),
+                    ));
+                    Ok(())
+                },
+            )
+            .map_err(|e| format!("failed to define sys_read: {e}"))?;
     }
 
     let mut store = Store::new(&engine, ());

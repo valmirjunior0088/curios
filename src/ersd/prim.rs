@@ -70,6 +70,7 @@ pub enum Prim {
     ArrConcat(Vec<Subterm>),
     Unit,
     SysPrint(Subterm),
+    SysRead,
 }
 
 impl From<u32> for Prim {

@@ -76,6 +76,7 @@ pub enum Prim {
     ArrAppend(Subterm, Subterm),
     ArrConcat(Vec<Subterm>),
     SysPrint(Subterm),
+    SysRead,
 }
 
 impl Prim {
@@ -563,6 +564,10 @@ impl Prim {
         T: Into<Term>,
     {
         Self::SysPrint(inner.into().into())
+    }
+
+    pub fn sys_read() -> Self {
+        Self::SysRead
     }
 }
 

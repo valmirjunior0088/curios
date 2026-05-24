@@ -88,6 +88,7 @@ pub enum Prim {
     ArrAppend(Subterm, Subterm),
     ArrConcat(Vec<Subterm>),
     SysPrint(Subterm),
+    SysRead,
 }
 
 impl Prim {

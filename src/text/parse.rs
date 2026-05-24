@@ -493,6 +493,7 @@ fn parse_io_prim<'a>() -> Parser<'a, Term> {
     catch(parse_literal("Sys.print"))
         .and_keep(lazy(parse_atomic_term))
         .map(|inner| Term::Prim(Prim::sys_print(inner)))
+        .or(catch(parse_literal("Sys.read")).map(|_| Term::Prim(Prim::SysRead)))
 }
 
 fn parse_bln_prim<'a>() -> Parser<'a, Term> {

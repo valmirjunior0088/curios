@@ -16,7 +16,7 @@ fn end_to_end() {
         Sys.print (Int.to_str (score pair))
         "#;
 
-    let (system, receiver) = crate::ChannelProvider::new();
+    let (system, receiver) = crate::ChannelProvider::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
@@ -26,11 +26,22 @@ fn end_to_end() {
 
 #[test]
 fn sys_print() {
-    let (system, receiver) = crate::ChannelProvider::new();
+    let (system, receiver) = crate::ChannelProvider::out();
     crate::run_text(Duration::from_secs(5), r#"Sys.print "hello""#, system)
         .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"hello".to_vec()]
+    );
+}
+
+#[test]
+fn sys_read() {
+    let (system, receiver) = crate::ChannelProvider::io(vec![b"hello\n".to_vec()]);
+    crate::run_text(Duration::from_secs(5), r#"Sys.print Sys.read"#, system)
+        .expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"hello\n".to_vec()]
     );
 }

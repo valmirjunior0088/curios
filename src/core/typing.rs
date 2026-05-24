@@ -261,6 +261,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, inner, &Term::Prim(Prim::BinType))?;
             Ok(Term::TupleType(TupleType::new([] as [(&str, Term); 0])))
         }
+        Prim::SysRead => Ok(Term::Prim(Prim::BinType)),
     }
 }
 
@@ -1293,6 +1294,10 @@ fn erase_prim(
                 ersd::Prim::SysPrint(erase(context, inner, &Term::Prim(Prim::BinType))?.into())
                     .into(),
             )
+        }
+        Prim::SysRead => {
+            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
+            Ok(ersd::Prim::SysRead.into())
         }
     }
 }

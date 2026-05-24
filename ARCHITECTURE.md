@@ -298,18 +298,27 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 
 ## Execution (`src/run.rs`)
 
-Four public entry points, all accepting an `on_print: impl Fn(&[u8])` callback invoked by `Sys.print`:
+Four public entry points, all accepting a `provider: P where P: Provider + Send + Sync + 'static`:
 
-- `run_text(timeout, source, on_print)` — inline source with `PanicLoader`
-- `run_file(timeout, path, on_print)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
-- `run(timeout, source, loader, on_print)` — shared core: full pipeline → `run_wasm`
-- `run_wasm(wasm_module, on_print)` — executes a `wasm::Module` directly via Wasmtime and returns the printed result
+- `run_text(timeout, source, provider)` — inline source with `PanicLoader`
+- `run_file(timeout, path, provider)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
+- `run(timeout, source, loader, provider)` — shared core: full pipeline → `run_wasm`
+- `run_wasm(wasm_module, provider)` — executes a `wasm::Module` directly via Wasmtime
 
-Two helpers produce `on_print` values: `pipe_to_stdout` writes bytes directly to standard output; `pipe_to_channel` returns a callback plus a `Receiver<Vec<u8>>` for capturing output in tests.
+The `Provider` trait (`src/run/provider.rs`) abstracts all program IO:
 
-Four operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `sys_print` reads the `Bin` argument and forwards its bytes to `on_print`.
+```rust
+pub trait Provider {
+    fn print(&self, bytes: &[u8]);
+    fn read(&self) -> Vec<u8>;
+}
+```
 
-Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all program output is produced via `Sys.print` calls through the `on_print` callback.
+Two implementations ship: `StdioProvider` writes to stdout and reads a line from stdin; `ChannelProvider` routes `print` output through an `mpsc` channel and serves `read` calls from a pre-loaded `VecDeque`. `ChannelProvider::out()` constructs an output-only instance; `ChannelProvider::io(lines)` pre-loads input lines for full IO simulation in tests.
+
+Five operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `sys_print` unpacks the `Bin` argument and calls `provider.print()`; `sys_read` calls `provider.read()` and returns the result as a `Bin`.
+
+Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `Sys.print` and `Sys.read` through the `Provider`.
 
 ---
 

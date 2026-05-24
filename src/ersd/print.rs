@@ -146,6 +146,7 @@ fn print_prim<'a>(prim: &'a Prim) -> Printer<'a> {
         ]),
         Prim::Unit => pure("()"),
         Prim::SysPrint(t) => flat([pure("Sys.print "), print_term(t)]),
+        Prim::SysRead => pure("Sys.read"),
     }
 }
 

@@ -10,7 +10,7 @@ fn triangular_sum() {
         Sys.print (Nat.to_str result)
         "#;
 
-    let (system, receiver) = crate::ChannelProvider::new();
+    let (system, receiver) = crate::ChannelProvider::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),

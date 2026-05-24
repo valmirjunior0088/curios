@@ -429,9 +429,10 @@ Arr.concat [1, 2], [3, 4], [5]
 
 ### Sys
 
-| Operation     | Arity | Description                | Returns    |
-|---------------|-------|----------------------------|------------|
-| `Sys.print a` | 1     | Print `a : Bin` to stdout  | `{}`       |
+| Operation     | Arity | Description                                                        | Returns    |
+|---------------|----|-----------------------------------------------------------------------|------------|
+| `Sys.print a` | 1  | Print `a : Bin` to stdout                                             | `{}`       |
+| `Sys.read`    | 0  | Read a line from stdin (`\n` included); empty `Bin` means EOF         | `Bin`      |
 
 ## Idioms
 
