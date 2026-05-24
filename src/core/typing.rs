@@ -626,7 +626,10 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
 fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
     let Rec { items, tail } = rec;
 
-    let labels = tail.label_iter().map(|l| context.fresh(l)).collect::<Vec<_>>();
+    let labels = tail
+        .label_iter()
+        .map(|l| context.fresh(l))
+        .collect::<Vec<_>>();
 
     let label_terms = labels
         .iter()
@@ -1878,7 +1881,10 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
 fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::Term, Error> {
     let Rec { items, tail } = rec;
 
-    let names = tail.label_iter().map(|l| context.fresh(l)).collect::<Vec<_>>();
+    let names = tail
+        .label_iter()
+        .map(|l| context.fresh(l))
+        .collect::<Vec<_>>();
 
     let label_terms = names
         .iter()

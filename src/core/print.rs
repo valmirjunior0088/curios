@@ -11,21 +11,29 @@ fn label_at(depth: usize) -> String {
     format!("#{depth}")
 }
 
-
 fn label_terms(labels: &[String]) -> Vec<Term> {
     labels.iter().map(Var::free).map(Into::into).collect()
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
-    let label = scope.first_label().map(str::to_string).unwrap_or_else(|| label_at(depth));
+    let label = scope
+        .first_label()
+        .map(str::to_string)
+        .unwrap_or_else(|| label_at(depth));
     let body = scope.open(&[&Var::free(&label).into()]);
 
     (label, body)
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
-    let fst = scope.first_label().map(str::to_string).unwrap_or_else(|| label_at(depth));
-    let snd = scope.second_label().map(str::to_string).unwrap_or_else(|| label_at(depth + 1));
+    let fst = scope
+        .first_label()
+        .map(str::to_string)
+        .unwrap_or_else(|| label_at(depth));
+    let snd = scope
+        .second_label()
+        .map(str::to_string)
+        .unwrap_or_else(|| label_at(depth + 1));
     let body = scope.open(&[&Var::free(&fst).into(), &Var::free(&snd).into()]);
 
     ((fst, snd), body)
@@ -484,7 +492,12 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let labels: Vec<String> = {
                 let mut base = fields
                     .last()
-                    .map(|s| s.label_iter().flatten().map(str::to_string).collect::<Vec<_>>())
+                    .map(|s| {
+                        s.label_iter()
+                            .flatten()
+                            .map(str::to_string)
+                            .collect::<Vec<_>>()
+                    })
                     .unwrap_or_default();
                 base.push(label_at(depth + base.len()));
                 base

@@ -112,7 +112,12 @@ where
     }
 
     pub fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
-        (0..self.arity()).map(move |i| self.names.as_deref().and_then(|ns| ns.get(i)).map(String::as_str))
+        (0..self.arity()).map(move |i| {
+            self.names
+                .as_deref()
+                .and_then(|ns| ns.get(i))
+                .map(String::as_str)
+        })
     }
 
     pub fn free_vars(&self) -> BTreeSet<String> {
