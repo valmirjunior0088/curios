@@ -23,7 +23,11 @@ fn expect(
 ) -> Result<(), Error> {
     match convert(context, inferred, expected)? {
         true => Ok(()),
-        false => Err(Error::type_mismatch(term.clone(), expected.clone())),
+        false => Err(Error::type_mismatch(
+            term.clone(),
+            inferred.clone(),
+            expected.clone(),
+        )),
     }
 }
 
@@ -159,7 +163,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             let bin_type = reduce(context, &bin_type)?;
             match bin_type {
                 Term::Prim(Prim::BinType) => Ok(Term::Prim(Prim::NatType)),
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other,
+                    Term::Prim(Prim::BinType),
+                )),
             }
         }
         Prim::BinEql(left, right) => {
@@ -176,19 +184,27 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                     erase(context, index, &Term::Prim(Prim::NatType))?;
                     Ok(Term::Prim(Prim::NatType))
                 }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other,
+                    Term::Prim(Prim::BinType),
+                )),
             }
         }
         Prim::BinSlice(bin, start, end) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce(context, &bin_type)?;
-            match &bin_type {
+            match bin_type {
                 Term::Prim(Prim::BinType) => {
                     erase(context, start, &Term::Prim(Prim::NatType))?;
                     erase(context, end, &Term::Prim(Prim::NatType))?;
-                    Ok(bin_type)
+                    Ok(Term::Prim(Prim::BinType))
                 }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other,
+                    Term::Prim(Prim::BinType),
+                )),
             }
         }
         Prim::BinAppend(bin, byte) => {
@@ -199,7 +215,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                     erase(context, byte, &Term::Prim(Prim::NatType))?;
                     Ok(Term::Prim(Prim::BinType))
                 }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other,
+                    Term::Prim(Prim::BinType),
+                )),
             }
         }
         Prim::BinConcat(operands) => {
@@ -212,13 +232,17 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, elem, &Type.into())?;
             Ok(Type.into())
         }
-        Prim::Arr(_) => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+        Prim::Arr(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
         Prim::ArrLen(list) => {
             let list_type = infer(context, list)?;
             let list_type = reduce(context, &list_type)?;
             match list_type {
                 Term::Prim(Prim::ArrType(_)) => Ok(Term::Prim(Prim::NatType)),
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other,
+                    Term::Prim(Prim::NatType),
+                )),
             }
         }
         Prim::ArrGet(list, index) => {
@@ -229,7 +253,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                     erase(context, index, &Term::Prim(Prim::NatType))?;
                     Ok(*elem)
                 }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other,
+                    Term::Prim(Prim::NatType),
+                )),
             }
         }
         Prim::ArrSlice(list, start, end) => {
@@ -241,7 +269,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                     erase(context, end, &Term::Prim(Prim::NatType))?;
                     Ok(list_type)
                 }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other.clone(),
+                    Term::Prim(Prim::NatType),
+                )),
             }
         }
         Prim::ArrAppend(list, elem) => {
@@ -253,10 +285,14 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
                     erase(context, elem, &elem_type)?;
                     Ok(list_type)
                 }
-                _ => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+                other => Err(Error::type_mismatch(
+                    Term::Prim(prim.clone()),
+                    other.clone(),
+                    Term::Prim(Prim::NatType),
+                )),
             }
         }
-        Prim::ArrConcat(_) => Err(Error::cannot_infer(Term::Prim(prim.clone()))),
+        Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
         Prim::SysPrint(inner) => {
             erase(context, inner, &Term::Prim(Prim::BinType))?;
             Ok(Term::TupleType(TupleType::new([] as [(&str, Term); 0])))
@@ -292,10 +328,9 @@ fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let (input, output) = if let Term::FuncType(FuncType { input, output }) = head_type {
-        (input, output)
-    } else {
-        return Err(Error::cannot_infer(term.clone()));
+    let (input, output) = match head_type {
+        Term::FuncType(FuncType { input, output }) => (input, output),
+        other => return Err(Error::not_a_function(term.clone(), other)),
     };
 
     erase(context, param, &input)?;
@@ -338,7 +373,7 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
     let head_type = reduce(context, &head_type)?;
 
     if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh();
@@ -405,7 +440,7 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
     let head_type = reduce(context, &head_type)?;
 
     if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh();
@@ -444,7 +479,7 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
     let head_type = reduce(context, &head_type)?;
 
     if !matches!(head_type, Term::Prim(Prim::BlnType)) {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh();
@@ -488,14 +523,17 @@ fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, E
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let TupleType { fields } = if let Term::TupleType(tt) = head_type {
-        tt
-    } else {
-        return Err(Error::cannot_infer(term.clone()));
+    let TupleType { fields } = match head_type {
+        Term::TupleType(tt) => tt,
+        other => return Err(Error::not_a_tuple(term.clone(), other)),
     };
 
     if *index >= fields.len() {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::tuple_index_out_of_bounds(
+            term.clone(),
+            *index,
+            fields.len(),
+        ));
     }
 
     let prefix: Vec<Term> = (0..*index)
@@ -516,10 +554,9 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let atoms = if let Term::AtomType(AtomType { atoms }) = head_type {
-        atoms
-    } else {
-        return Err(Error::cannot_infer(term.clone()));
+    let atoms = match head_type {
+        Term::AtomType(AtomType { atoms }) => atoms,
+        other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
     let head_label = context.fresh();
@@ -536,14 +573,18 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
     })?;
 
     if cases.len() != atoms.len() {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::match_arity_mismatch(
+            term.clone(),
+            atoms.len(),
+            cases.len(),
+        ));
     }
 
     for atom in &atoms {
         let body = if let Some(body) = cases.get(atom) {
             body
         } else {
-            return Err(Error::cannot_infer(term.clone()));
+            return Err(Error::match_case_missing(term.clone(), atom.clone()));
         };
 
         let expected = motive.open(&[&atom.clone().into()]);
@@ -632,7 +673,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Term::Rec(rec) => infer_rec(context, rec),
         Term::Var(var) => match context.assumption(var.unwrap()) {
             Some(type_) => Ok(type_.clone()),
-            None => Err(Error::cannot_infer(var.clone())),
+            None => Err(Error::unbound_variable(var.clone())),
         },
         _ => Err(Error::cannot_infer(term.clone())),
     }
@@ -1133,7 +1174,13 @@ fn erase_prim(
             let bin_type_reduced = reduce(context, &bin_type)?;
             match &bin_type_reduced {
                 Term::Prim(Prim::BinType) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        Term::Prim(Prim::BinType),
+                    ));
+                }
             }
             Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
         }
@@ -1152,7 +1199,13 @@ fn erase_prim(
             let bin_type_reduced = reduce(context, &bin_type)?;
             match &bin_type_reduced {
                 Term::Prim(Prim::BinType) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        Term::Prim(Prim::BinType),
+                    ));
+                }
             }
             Ok(ersd::Prim::BinGet(
                 erase(context, bin, &bin_type)?.into(),
@@ -1165,7 +1218,13 @@ fn erase_prim(
             let bin_type_reduced = reduce(context, &bin_type)?;
             match &bin_type_reduced {
                 Term::Prim(Prim::BinType) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        Term::Prim(Prim::BinType),
+                    ));
+                }
             }
             expect(context, term, &bin_type_reduced, expected)?;
             Ok(ersd::Prim::BinSlice(
@@ -1180,7 +1239,13 @@ fn erase_prim(
             let bin_type_reduced = reduce(context, &bin_type)?;
             match &bin_type_reduced {
                 Term::Prim(Prim::BinType) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        Term::Prim(Prim::BinType),
+                    ));
+                }
             }
             expect(context, term, &bin_type_reduced, expected)?;
             Ok(ersd::Prim::BinAppend(
@@ -1203,9 +1268,9 @@ fn erase_prim(
             Ok(ersd::Term::Erased)
         }
         Prim::Arr(elems) => {
-            let expected_reduced = reduce(context, expected)?;
-            let Term::Prim(Prim::ArrType(elem_type)) = expected_reduced else {
-                return Err(Error::type_mismatch(term.clone(), expected.clone()));
+            let elem_type = match reduce(context, expected)? {
+                Term::Prim(Prim::ArrType(elem_type)) => *elem_type,
+                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
             };
             let erased_elems = elems
                 .iter()
@@ -1219,7 +1284,13 @@ fn erase_prim(
             let list_type_reduced = reduce(context, &list_type)?;
             match &list_type_reduced {
                 Term::Prim(Prim::ArrType(_)) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        expected.clone(),
+                    ));
+                }
             }
             Ok(ersd::Prim::ArrLen(erase(context, list, &list_type)?.into()).into())
         }
@@ -1228,7 +1299,7 @@ fn erase_prim(
             let list_type_reduced = reduce(context, &list_type)?;
             let elem_type = match list_type_reduced {
                 Term::Prim(Prim::ArrType(elem)) => *elem,
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
             };
             expect(context, term, &elem_type, expected)?;
             Ok(ersd::Prim::ArrGet(
@@ -1242,7 +1313,13 @@ fn erase_prim(
             let list_type_reduced = reduce(context, &list_type)?;
             match &list_type_reduced {
                 Term::Prim(Prim::ArrType(_)) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        expected.clone(),
+                    ));
+                }
             }
             expect(context, term, &list_type_reduced, expected)?;
             Ok(ersd::Prim::ArrSlice(
@@ -1257,7 +1334,7 @@ fn erase_prim(
             let list_type_reduced = reduce(context, &list_type)?;
             let elem_type = match list_type_reduced {
                 Term::Prim(Prim::ArrType(e)) => *e,
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
             };
             expect(
                 context,
@@ -1275,7 +1352,13 @@ fn erase_prim(
             let expected_reduced = reduce(context, expected)?;
             match &expected_reduced {
                 Term::Prim(Prim::ArrType(_)) => {}
-                _ => return Err(Error::type_mismatch(term.clone(), expected.clone())),
+                other => {
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        expected.clone(),
+                    ));
+                }
             }
             let erased = operands
                 .iter()
@@ -1310,8 +1393,9 @@ fn erase_func(
 ) -> Result<ersd::Term, Error> {
     let Func { body } = func;
 
-    let Term::FuncType(FuncType { input, output }) = reduce(context, expected)? else {
-        return Err(Error::type_mismatch(term.clone(), expected.clone()));
+    let (input, output) = match reduce(context, expected)? {
+        Term::FuncType(FuncType { input, output }) => (input, output),
+        other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
     };
 
     let captures = body.free_vars().into_iter().collect::<Vec<_>>();
@@ -1345,7 +1429,7 @@ fn erase_apply(
     let head_type = reduce(context, &head_type)?;
 
     let Term::FuncType(FuncType { input, output }) = &head_type else {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_a_function(term.clone(), head_type));
     };
 
     let erased = ersd::Apply {
@@ -1361,15 +1445,17 @@ fn erase_apply(
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
     let Tuple { fields } = tuple;
 
-    let type_fields = if let Term::TupleType(TupleType { fields: tf }) = reduce(context, expected)?
-    {
-        tf
-    } else {
-        return Err(Error::type_mismatch(tuple.clone(), expected.clone()));
+    let type_fields = match reduce(context, expected)? {
+        Term::TupleType(TupleType { fields: tf }) => tf,
+        other => return Err(Error::type_mismatch(tuple.clone(), other, expected.clone())),
     };
 
     if fields.len() != type_fields.len() {
-        return Err(Error::type_mismatch(tuple.clone(), expected.clone()));
+        return Err(Error::type_mismatch(
+            tuple.clone(),
+            expected.clone(),
+            expected.clone(),
+        ));
     }
 
     let mut checked_terms = Vec::<&Term>::new();
@@ -1404,7 +1490,7 @@ fn erase_nat_fold(
     let head_type = reduce(context, &head_type)?;
 
     if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh();
@@ -1473,7 +1559,7 @@ fn erase_nat_match(
     let head_type = reduce(context, &head_type)?;
 
     if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh();
@@ -1529,7 +1615,7 @@ fn erase_bln_match(
     let head_type = reduce(context, &head_type)?;
 
     if !matches!(head_type, Term::Prim(Prim::BlnType)) {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh();
@@ -1584,14 +1670,17 @@ fn erase_proj(
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let TupleType { fields } = if let Term::TupleType(tt) = &head_type {
-        tt.clone()
-    } else {
-        return Err(Error::cannot_infer(term.clone()));
+    let TupleType { fields } = match head_type.clone() {
+        Term::TupleType(tt) => tt,
+        other => return Err(Error::not_a_tuple(term.clone(), other)),
     };
 
     if *index >= fields.len() {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::tuple_index_out_of_bounds(
+            term.clone(),
+            *index,
+            fields.len(),
+        ));
     }
 
     let prefix: Vec<Term> = (0..*index)
@@ -1615,14 +1704,15 @@ fn erase_atom(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Term::AtomType(AtomType { atoms }) = reduce(context, expected)? else {
-        return Err(Error::type_mismatch(term.clone(), expected.clone()));
+    let atoms = match reduce(context, expected)? {
+        Term::AtomType(AtomType { atoms }) => atoms,
+        other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
     };
 
     let index = atoms
         .iter()
         .position(|candidate| candidate == atom)
-        .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone()))?;
+        .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone(), expected.clone()))?;
 
     Ok(ersd::Atom { index }.into())
 }
@@ -1642,10 +1732,9 @@ fn erase_match(
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let atoms = if let Term::AtomType(AtomType { atoms }) = &head_type {
-        atoms.clone()
-    } else {
-        return Err(Error::cannot_infer(term.clone()));
+    let atoms = match head_type.clone() {
+        Term::AtomType(AtomType { atoms }) => atoms,
+        other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
     let head_label = context.fresh();
@@ -1661,7 +1750,11 @@ fn erase_match(
     })?;
 
     if cases.len() != atoms.len() {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::match_arity_mismatch(
+            term.clone(),
+            atoms.len(),
+            cases.len(),
+        ));
     }
 
     let cases = atoms
@@ -1670,7 +1763,7 @@ fn erase_match(
             let body = if let Some(body) = cases.get(atom) {
                 body
             } else {
-                return Err(Error::cannot_infer(term.clone()));
+                return Err(Error::match_case_missing(term.clone(), atom.clone()));
             };
 
             let expected = motive.open(&[&atom.clone().into()]);
@@ -2383,7 +2476,7 @@ mod tests {
 
         assert!(matches!(
             erase(&mut context, &nat_fold, &bool_type),
-            Err(Error::CannotInfer { .. })
+            Err(Error::NotNatType { .. })
         ));
     }
 
@@ -2420,7 +2513,7 @@ mod tests {
 
         assert!(matches!(
             erase(&mut context, &nat_match, &bool_type),
-            Err(Error::CannotInfer { .. })
+            Err(Error::NotNatType { .. })
         ));
     }
 

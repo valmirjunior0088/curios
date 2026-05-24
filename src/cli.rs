@@ -50,10 +50,10 @@ pub fn cli() -> Result<(), String> {
     }
 
     let type_ = crate::core::infer(&mut crate::core::Context::new(cli.timeout), &term)
-        .map_err(|error| format!("failed to infer type: {error:?}"))?;
+        .map_err(|error| format!("failed to infer type: {error}"))?;
 
     let term = crate::core::erase(&mut crate::core::Context::new(cli.timeout), &term, &type_)
-        .map_err(|error| format!("failed to erase term: {error:?}"))?;
+        .map_err(|error| format!("failed to erase term: {error}"))?;
 
     if cli.print {
         println!();

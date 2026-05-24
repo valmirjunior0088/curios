@@ -15,10 +15,10 @@ fn main() {
 
     let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");
     let core_term = text::to_core(&text_entrypoint, &loader);
-    let type_ =
-        core::infer(&mut core::Context::new(timeout), &core_term).expect("failed to infer type");
+    let type_ = core::infer(&mut core::Context::new(timeout), &core_term)
+        .unwrap_or_else(|e| panic!("failed to infer type: {e}"));
     let ersd_term = core::erase(&mut core::Context::new(timeout), &core_term, &type_)
-        .expect("failed to erase term");
+        .unwrap_or_else(|e| panic!("failed to erase term: {e}"));
     let cont_module = ersd::to_cont(&ersd_term);
     let wasm_module = cont::to_wasm(&cont_module);
     let (system, receiver) = curios::ChannelProvider::out();

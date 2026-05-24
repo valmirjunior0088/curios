@@ -42,9 +42,10 @@ fn main() {
     let ersd_term = core::erase(
         &mut core::Context::new(timeout),
         &core_term,
-        &core::infer(&mut core::Context::new(timeout), &core_term).expect("failed to infer type"),
+        &core::infer(&mut core::Context::new(timeout), &core_term)
+            .unwrap_or_else(|e| panic!("failed to infer type: {e}")),
     )
-    .expect("failed to erase term");
+    .unwrap_or_else(|e| panic!("failed to erase term: {e}"));
     println!();
     println!("=== ersd ===");
     println!("{ersd_term}");
