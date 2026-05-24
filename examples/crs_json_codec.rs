@@ -4,30 +4,47 @@ use {
 };
 
 fn main() {
-    let path = Path::new(file!())
-        .parent()
-        .unwrap()
-        .join("json_codec/main.crs");
+    let source = r#"
+        pub mod std;
+        pub mod parser;
+        pub mod json;
 
-    let source = std::fs::read_to_string(&path).expect("failed to read main.crs");
-    let base = path.parent().unwrap();
-    let loader = text::FileLoader::new(base);
+        let value : json/Value = ('obj, [
+            ("name", ('str, "Alice")),
+            ("score", ('num, +9.5)),
+            ("active", ('bln, true)),
+            ("tags", ('arr, [('str, "x"), ('str, "y")])),
+            ("extra", ('null, ()))
+        ]);
+
+        let encoded : Bin = json/encode value;
+
+        let decoded : parser/Result { Nat, json/Value } = json/decode encoded 0;
+
+        match decoded.0 : {};
+        | 'ok  => Sys.print (json/encode decoded.1.1);
+        | 'err => Sys.print decoded.1;
+        "#;
 
     let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");
     println!("=== text ===");
     println!("{text_entrypoint}");
 
-    let core_term = text::to_core(&text_entrypoint, &loader);
+    let core_term = text::to_core(
+        &text_entrypoint,
+        &text::FileLoader::new(&Path::new(file!()).parent().unwrap().join("crs")),
+    );
     println!();
     println!("=== core ===");
     println!("{core_term}");
 
     let timeout = Duration::from_secs(5);
-    let type_ =
-        core::infer(&mut core::Context::new(timeout), &core_term).expect("failed to infer type");
-
-    let ersd_term = core::erase(&mut core::Context::new(timeout), &core_term, &type_)
-        .expect("failed to erase term");
+    let ersd_term = core::erase(
+        &mut core::Context::new(timeout),
+        &core_term,
+        &core::infer(&mut core::Context::new(timeout), &core_term).expect("failed to infer type"),
+    )
+    .expect("failed to erase term");
     println!();
     println!("=== ersd ===");
     println!("{ersd_term}");

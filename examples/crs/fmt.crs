@@ -1,0 +1,64 @@
+pub rec Fmt : Type = {
+    tag : '[nil, lit, str, nat],
+    match tag : Type;
+    | 'nil => {};
+    | 'lit => { Bin, Fmt };
+    | 'str => Fmt;
+    | 'nat => Fmt; };
+
+pub rec format_type_with : Type -> Fmt -> Type = result => f =>
+    match f.0 : Type;
+    | 'nil => result;
+    | 'lit => format_type_with result f.1.1;
+    | 'str => Bin -> format_type_with result f.1;
+    | 'nat => Nat -> format_type_with result f.1;;
+
+pub let format_type : Fmt -> Type = format_type_with Bin;
+
+rec collect_literal : Bin -> Nat -> Bin -> { Bin, Nat } = input => pos => acc =>
+    match (Nat.lt pos (Bin.len input)) : { Bin, Nat };
+    | false => (acc, pos);
+    | true =>
+        let byte : Nat = Bin.get input pos;
+        match (Nat.eql byte '%') : { Bin, Nat };
+        | true  => (acc, pos);
+        | false => collect_literal input (Nat.add pos 1) (Bin.append acc byte);;;
+
+rec parse_go : Bin -> Nat -> Fmt = input => pos =>
+    match (Nat.lt pos (Bin.len input)) : Fmt;
+    | false => ('nil, ());
+    | true =>
+        let byte : Nat = Bin.get input pos;
+        match (Nat.eql byte '%') : Fmt;
+        | true =>
+            let next : Nat = Nat.add pos 1;
+            match (Nat.lt next (Bin.len input)) : Fmt;
+            | false => ('nil, ());
+            | true =>
+                let spec : Nat = Bin.get input next;
+                let rest : Fmt = parse_go input (Nat.add next 1);
+                match spec : Fmt;
+                | 's' => ('str, rest);
+                | 'd' => ('nat, rest);
+                | _   => rest;;;
+        | false =>
+            let r : { Bin, Nat } = collect_literal input pos "";
+            let rest : Fmt = parse_go input r.1;
+            ('lit, (r.0, rest));;;
+
+pub let parse : Bin -> Fmt = input => parse_go input 0;
+
+rec go_with : (result : Type) -> (Bin -> result) -> (f : Fmt) -> Bin -> format_type_with result f =
+    result => finish => f => acc =>
+        match f.0 : format_type_with result f;
+        | 'nil => finish acc;
+        | 'lit =>
+            go_with result finish f.1.1 (Bin.concat acc, f.1.0);
+        | 'str => s =>
+            go_with result finish f.1 (Bin.concat acc, s);
+        | 'nat => n =>
+            go_with result finish f.1 (Bin.concat acc, (Nat.to_str n));;
+
+pub let format : (s : Bin) -> format_type_with Bin (parse s) = s => go_with Bin (x => x) (parse s) "";
+
+pub let printf : (s : Bin) -> format_type_with {} (parse s) = s => go_with {} (x => Sys.print x) (parse s) "";
