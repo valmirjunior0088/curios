@@ -1,9 +1,9 @@
-use /std/bin;
-use /std/int;
-use /std/nat;
+use /std/Bin;
+use /std/Int;
+use /std/Nat;
 
 pub let from_nat : Bin -> Nat = str =>
-    bin/fold Nat str 0 (byte => acc => Nat.add (Nat.mul acc 10) (Nat.sub byte 48));
+    Bin/fold Nat str 0 (byte => acc => Nat.add (Nat.mul acc 10) (Nat.sub byte 48));
 
 pub let from_int : Bin -> Int = str =>
     match (Bin.get str 0) : Int;
@@ -52,7 +52,7 @@ pub let trim_stop : Bin -> Nat = str =>
 pub let trim : Bin -> Bin = str =>
     let start : Nat = trim_start str;
     let stop : Nat = trim_stop str;
-    Bin.slice str (nat/min start stop) stop;
+    Bin.slice str (Nat/min start stop) stop;
 
 pub let pow10 : Nat -> Flt = n =>
     match n : Flt;
@@ -70,8 +70,8 @@ pub let from_flt : Bin -> Flt = str =>
 
     let len : Nat = Bin.len str;
     let dot_pos : Nat = find_byte '.' str;
-    let e_pos : Nat = nat/min (find_byte 'e' str) (find_byte 'E' str);
-    let int_end : Nat = nat/min dot_pos e_pos;
+    let e_pos : Nat = Nat/min (find_byte 'e' str) (find_byte 'E' str);
+    let int_end : Nat = Nat/min dot_pos e_pos;
     let int_flt : Flt = Nat.to_flt (from_nat (Bin.slice str start int_end));
 
     let frac_flt : Flt =
@@ -87,7 +87,7 @@ pub let from_flt : Bin -> Flt = str =>
             let exp_int : Int = from_int (Bin.slice str (Nat.add e_pos 1) len);
             match (Int.gte exp_int +0) : Flt;
             | true => pow10 (Int.to_nat exp_int);
-            | false => Flt.div +1.0 (pow10 (int/abs exp_int));;
+            | false => Flt.div +1.0 (pow10 (Int/abs exp_int));;
         | false => +1.0;;
 
     let result : Flt = Flt.mul (Flt.add int_flt frac_flt) exp_flt;

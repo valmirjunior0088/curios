@@ -251,6 +251,25 @@ mod tests {
     }
 
     #[test]
+    fn module_named_after_type_resolves_by_qualified_path() {
+        assert_eq!(
+            run(r#"
+                mod Nat
+                    pub let double : Type = Type;
+                end
+                Nat/double
+            "#),
+            core::Let::new(
+                "Nat/double",
+                core::Type,
+                core::Type,
+                core::Var::free("Nat/double")
+            )
+            .into(),
+        );
+    }
+
+    #[test]
     fn use_shorthand_resolves_qualifier() {
         assert_eq!(
             run(r#"

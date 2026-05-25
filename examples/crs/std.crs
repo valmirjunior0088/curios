@@ -1,6 +1,6 @@
-pub mod arr;
-pub mod bin;
-pub mod bln;
-pub mod int;
-pub mod nat;
-pub mod str;
+pub mod Arr;
+pub mod Bin;
+pub mod Bln;
+pub mod Int;
+pub mod Nat;
+pub mod Str;

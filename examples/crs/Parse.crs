@@ -4,43 +4,44 @@ pub let Result : Type -> Type = A => {
     | 'ok  => A;
     | 'err => Bin; };
 
-pub let Parser : Type -> Type = A => Bin -> Nat -> Result { Nat, A };
+pub let Parse : Type -> Type =
+    A => Bin -> Nat -> Result { Nat, A };
 
-pub let run : (A : Type) -> Parser A -> Bin -> Result A =
+pub let run : (A : Type) -> Parse A -> Bin -> Result A =
     A => p => input =>
         let r : Result { Nat, A } = p input 0;
         match r.0 : Result A;
         | 'ok  => ('ok, r.1.1);
         | 'err => ('err, r.1);;
 
-pub let pure : (A : Type) -> A -> Parser A =
+pub let pure : (A : Type) -> A -> Parse A =
     A => a => input => pos => ('ok, (pos, a));
 
-pub let fail : (A : Type) -> Bin -> Parser A =
+pub let fail : (A : Type) -> Bin -> Parse A =
     A => msg => input => pos => ('err, msg);
 
-pub let map : (A : Type) -> (B : Type) -> (A -> B) -> Parser A -> Parser B =
+pub let map : (A : Type) -> (B : Type) -> (A -> B) -> Parse A -> Parse B =
     A => B => f => p => input => pos =>
         let r : Result { Nat, A } = p input pos;
         match r.0 : Result { Nat, B };
         | 'ok  => ('ok, (r.1.0, f r.1.1));
         | 'err => ('err, r.1);;
 
-pub let bind : (A : Type) -> (B : Type) -> Parser A -> (A -> Parser B) -> Parser B =
+pub let bind : (A : Type) -> (B : Type) -> Parse A -> (A -> Parse B) -> Parse B =
     A => B => p => f => input => pos =>
         let r : Result { Nat, A } = p input pos;
         match r.0 : Result { Nat, B };
         | 'ok  => f r.1.1 input r.1.0;
         | 'err => ('err, r.1);;
 
-pub let or : (A : Type) -> Parser A -> Parser A -> Parser A =
+pub let or : (A : Type) -> Parse A -> Parse A -> Parse A =
     A => p => q => input => pos =>
         let r : Result { Nat, A } = p input pos;
         match r.0 : Result { Nat, A };
         | 'ok  => r;
         | 'err => q input pos;;
 
-pub let and : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser { A, B } =
+pub let and : (A : Type) -> (B : Type) -> Parse A -> Parse B -> Parse { A, B } =
     A => B => p => q => input => pos =>
         let r : Result { Nat, A } = p input pos;
         match r.0 : Result { Nat, { A, B } };
@@ -51,7 +52,7 @@ pub let and : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser { A, B 
             | 'err => ('err, s.1);;
         | 'err => ('err, r.1);;
 
-pub let and_drop : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser A =
+pub let and_drop : (A : Type) -> (B : Type) -> Parse A -> Parse B -> Parse A =
     A => B => p => q => input => pos =>
         let r : Result { Nat, A } = p input pos;
         match r.0 : Result { Nat, A };
@@ -62,24 +63,24 @@ pub let and_drop : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser A 
             | 'err => ('err, s.1);;
         | 'err => r;;
 
-pub let and_keep : (A : Type) -> (B : Type) -> Parser A -> Parser B -> Parser B =
+pub let and_keep : (A : Type) -> (B : Type) -> Parse A -> Parse B -> Parse B =
     A => B => p => q => input => pos =>
         let r : Result { Nat, A } = p input pos;
         match r.0 : Result { Nat, B };
         | 'ok  => q input r.1.0;
         | 'err => ('err, r.1);;
 
-pub let any_byte : Parser Nat = input => pos =>
+pub let any_byte : Parse Nat = input => pos =>
     match (Nat.lt pos (Bin.len input)) : Result { Nat, Nat };
     | false => ('err, "unexpected end of input");
     | true  => ('ok, (Nat.add pos 1, Bin.get input pos));;
 
-pub let peek_byte : Parser Nat = input => pos =>
+pub let peek_byte : Parse Nat = input => pos =>
     match (Nat.lt pos (Bin.len input)) : Result { Nat, Nat };
     | false => ('err, "unexpected end of input");
     | true  => ('ok, (pos, Bin.get input pos));;
 
-pub let take_byte : Nat -> Parser Nat = expected => input => pos =>
+pub let take_byte : Nat -> Parse Nat = expected => input => pos =>
     match (Nat.lt pos (Bin.len input)) : Result { Nat, Nat };
     | false => ('err, "unexpected end of input");
     | true  =>
@@ -88,7 +89,7 @@ pub let take_byte : Nat -> Parser Nat = expected => input => pos =>
         | true  => ('ok, (Nat.add pos 1, byte));
         | false => ('err, "unexpected byte");;;
 
-pub let take_while : (Nat -> Bln) -> Parser Bin = pred => input => pos =>
+pub let take_while : (Nat -> Bln) -> Parse Bin = pred => input => pos =>
     let max : Nat = Nat.sub (Bin.len input) pos;
     let r : { Nat, Bin, Bln } =
         match max : { Nat, Bin, Bln };
@@ -103,7 +104,7 @@ pub let take_while : (Nat -> Bln) -> Parser Bin = pred => input => pos =>
                 | false => (ih.0, ih.1, true);;;;
     ('ok, (r.0, r.1));
 
-pub let many0 : (A : Type) -> Parser A -> Parser (Arr A) =
+pub let many0 : (A : Type) -> Parse A -> Parse (Arr A) =
     A => p => input => pos =>
         let empty : Arr A = [];
         rec go : Arr A -> Nat -> Result { Nat, Arr A } = acc => cur =>
@@ -116,7 +117,7 @@ pub let many0 : (A : Type) -> Parser A -> Parser (Arr A) =
                 | false => go (Arr.append acc r.1.1) r.1.0;;;
         go empty pos;
 
-pub let sep_by0 : (A : Type) -> (S : Type) -> Parser A -> Parser S -> Parser (Arr A) =
+pub let sep_by0 : (A : Type) -> (S : Type) -> Parse A -> Parse S -> Parse (Arr A) =
     A => S => elem => sep => input => pos =>
         let r : Result { Nat, A } = elem input pos;
         match r.0 : Result { Nat, Arr A };

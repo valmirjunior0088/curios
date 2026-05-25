@@ -10,11 +10,11 @@ fn main() {
 
     let source = r#"
         pub mod std;
-        use /std/str;
+        use /std/Str;
 
         pub mod fmt;
 
-        let name : Bin = str/trim Sys.read;
+        let name : Bin = Str/trim Sys.read;
         fmt/printf "%s is %d" name 30
         "#;
 

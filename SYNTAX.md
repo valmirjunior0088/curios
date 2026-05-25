@@ -4,9 +4,11 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `def` `Type` `Bln` `false` `true` `Nat` `Int` `Flt` `Bin` `Arr`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `def` `false` `true`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules.
+
+The primitive type names (`Nat` `Int` `Flt` `Bin` `Arr` `Bln`) and the universe `Type` are **not** reserved as path segments, so a module may share the name of the type it operates on — e.g. a module `Nat` whose members are reached as `Nat/double`. This is unambiguous because member access uses a slash (`Nat/double`) while primitive operations use a dot (`Nat.add`). A **bare** occurrence always denotes the primitive (the bare form wins), so such a module is reached only through its members (`Nat/…`) or `use`, never by a bare reference.
 
 **Whitespace** (spaces, tabs, newlines) is insignificant except as a separator between tokens.
 

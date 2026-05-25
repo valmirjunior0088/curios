@@ -14,8 +14,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "def", "Type", "Bln", "false",
-    "true", "Nat", "Int", "Flt", "Bin", "Arr",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "def", "false", "true",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -65,6 +64,13 @@ fn parse_name<'a>() -> Parser<'a, Name> {
                 false => pure(Name::from(path)),
             }
         })
+}
+
+fn parse_qualified_name<'a>() -> Parser<'a, Name> {
+    catch(parse_name().flat_map(|name| match name.is_single() {
+        true => fail("expected a qualified path"),
+        false => pure(name),
+    }))
 }
 
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
@@ -872,7 +878,9 @@ fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
 
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_type()
+        parse_qualified_name()
+            .map(Term::Name)
+            .or(parse_type())
             .or(parse_prim())
             .or(parse_atom_type())
             .or(parse_atom())
@@ -1362,6 +1370,51 @@ mod tests {
                 "bar".to_string(),
                 "baz".to_string()
             ]))
+        );
+    }
+
+    #[test]
+    fn parse_type_name_as_path_segment() {
+        assert_eq!(
+            "Nat/double".parse::<Term>().unwrap(),
+            Term::Name(Name::from(["Nat".to_string(), "double".to_string()]))
+        );
+        assert_eq!(
+            "Type/foo".parse::<Term>().unwrap(),
+            Term::Name(Name::from(["Type".to_string(), "foo".to_string()]))
+        );
+    }
+
+    #[test]
+    fn bare_type_names_still_parse_as_prims() {
+        assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
+        assert_eq!("Type".parse::<Term>().unwrap(), Term::Type);
+        assert_eq!(
+            "Nat.add 1 2".parse::<Term>().unwrap(),
+            Term::Prim(Prim::NatAdd(
+                Term::Prim(Prim::Nat(Nat::Number(1))).into(),
+                Term::Prim(Prim::Nat(Nat::Number(2))).into(),
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_use_of_type_named_module() {
+        assert_eq!(
+            "use Nat;".parse::<Module>().unwrap().items,
+            vec![TopItem::Use(TopUse {
+                is_pub: false,
+                is_abs: false,
+                name: Name::from(["Nat".to_string()]),
+            })]
+        );
+        assert_eq!(
+            "use Foo/Int;".parse::<Module>().unwrap().items,
+            vec![TopItem::Use(TopUse {
+                is_pub: false,
+                is_abs: false,
+                name: Name::from(["Foo".to_string(), "Int".to_string()]),
+            })]
         );
     }
 
