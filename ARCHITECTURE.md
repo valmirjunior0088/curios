@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~28,600 lines in `src/`, ~1,600 in `examples/`.
+**Codebase size:** ~29,100 lines in `src/`, ~1,650 in `examples/`.
 
 ---
 
@@ -37,11 +37,11 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,412  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,000 |
-| Type checking + erasure | `core/typing.rs`                               | 2,679  |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,200 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,120  |
+| Parsing                 | `text/parse.rs`                                | 1,430  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,150 |
+| Type checking + erasure | `core/typing.rs`                               | 2,767  |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,300 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,160  |
 | WASM codegen            | `cont/to_wasm/` (5 files)                      | ~3,300 |
 | Binary serialization    | `wasm/writer.rs`                               | 2,017  |
 
@@ -86,11 +86,12 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 `text::Term` has no de Bruijn indices — all variables are `String` labels. The grammar covers:
 
-- Π-types `(x: A) -> B`, lambdas `x => body`
+- Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
+- Application `f(a, b)` and partial application `f.(a, _, c)` (holes desugar to a lambda over the missing arguments)
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
-- Atoms `'[left, right]`, `'left`; pattern matching `match x : k => T; | 'tag => body;`
-- `e.0`, `e.1` (field access / Σ-elimination), `Nat.fold` (structural induction), `Nat.match` (sparse dispatch)
-- `Nat`, `Int`, `Flt`, `Bin`, `Arr` primitives with all built-in operations
+- Atoms `'[left, right]`, `'left`; the unified `match x : k => T; | … ;` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
+- `e.0`, `e.1` (field access / Σ-elimination)
+- `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)` primitives with all built-in operations
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/name;`, `pub use ...;`
 - Opaque types: `def Label(witness) ... end`
 - Char literals as nat codepoints: `'a'`
@@ -143,9 +144,9 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 | `A`       | Used by                                                                                                                           |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `One`     | `Func`, `FuncType`, `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail) |
+| `One`     | `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail)                      |
 | `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                                     |
-| `Many(n)` | `TupleType` (fields), `Rec` (items and tail)                                                                                      |
+| `Many(n)` | `Func` (parameters), `FuncType` (parameter telescope + output), `TupleType` (fields), `Rec` (items and tail)                       |
 
 A private `Visit<F>` struct drives all variable traversals (`shift`, `capture`, `release`, `free_vars`). The closure `F: FnMut(depth, &Var) -> Option<Term>` can return a replacement or `None` to leave the variable unchanged.
 
@@ -365,20 +366,20 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-184 tests across 12 files, covering every layer:
+190 tests across 12 files, covering every layer:
 
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |
 | Term operations | `Scope` open/close symmetry, shift, capture, release                                    |
 | Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access        |
 | Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement    |
-| Type checking   | Dependent tuples, `Nat.fold`, recursion, primitive operand validation, arrays, binaries |
+| Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries |
 | Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                           |
 | CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation                |
 | WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution |
-| Integration     | `src/tests/triangular_sum.rs` — `Nat.fold` computes `sum(5) = 10` end-to-end            |
-| Integration     | `src/tests/anonymous_module.rs` — file-backed `mod Foo;` resolved through `FileLoader`  |
-| End-to-end      | `src/tests/end_to_end.rs` — full pipeline from source text through Wasmtime assertion   |
+| Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, `def`/coercion, absolute paths |
+| Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
+| End-to-end      | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion |
 
 ---
 

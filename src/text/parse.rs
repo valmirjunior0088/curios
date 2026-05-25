@@ -679,11 +679,8 @@ fn parse_match<'a>() -> Parser<'a, Term> {
 
 fn parse_binding<'a>() -> Parser<'a, RecItem> {
     parse_identifier()
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal("="))
-        .and(lazy(parse_term))
-        .map(|((label, type_), value)| RecItem {
+        .and(parse_let_signature())
+        .map(|(label, (type_, value))| RecItem {
             label: label.to_string(),
             type_: type_.into(),
             value: value.into(),

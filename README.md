@@ -51,7 +51,7 @@ The `examples/` directory contains end-to-end Rust programs that drive the full 
 
 ```
 pub mod fmt;
-fmt/printf "%s is %d" "Alice" 30
+fmt/printf("%s is %d")("Alice")(30)
 -- output: "Alice is 30"
 ```
 
@@ -59,7 +59,7 @@ Passing the wrong type is a compile-time error, not a runtime failure:
 
 ```
 pub mod fmt;
-fmt/printf "%d" "Alice"
+fmt/printf("%d")("Alice")
 -- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Bin
 ```
 

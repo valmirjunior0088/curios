@@ -30,6 +30,14 @@ pub let name : Type = body;
 
 Binds `name` to `body` of type `Type`. The semicolon is required.
 
+A function may be defined with shorthand that names its parameters and result type:
+
+```
+pub let add(a : Nat, b : Nat) -> Nat = Nat.add(a, b);
+```
+
+This is sugar for binding `add`, of type `(a : Nat, b : Nat) -> Nat`, to the lambda `(a, b) => Nat.add(a, b)`.
+
 ### Recursive bindings
 
 ```
@@ -37,21 +45,21 @@ pub rec f : A = body_f
 pub and g : B = body_g;
 ```
 
-Declares a group of mutually recursive bindings. Each binding in the group independently accepts `pub`. The entire group is terminated by a single semicolon after the last binding.
-
-A single-binding group is valid:
+Declares a group of mutually recursive bindings. Each binding in the group independently accepts `pub`. The entire group is terminated by a single semicolon after the last binding. Each binding accepts the same forms as `let` — either `name : type = value` or the function-definition shorthand `name(params) -> R = body`:
 
 ```
-pub rec fact : Nat -> Nat = n =>
-    Nat.fold n : _ => Nat;
+pub rec fact(n : Nat) -> Nat =
+    match n : Nat;
     | 0 => 1;
-    | pred ih => Nat.mul (Nat.add pred 1) ih;
+    | pred ih => Nat.mul(Nat.add(pred, 1), ih);;
 ```
+
+The `;;` closes the last `match` branch and then the recursive-binding group.
 
 ### Type definition
 
 ```
-pub def Name (witness) items... end
+pub def Name(witness) items... end
 ```
 
 Defines a named type backed by `witness`. The body is a sequence of top-level declarations available within the definition. Used to introduce newtypes and associated operations.
@@ -91,22 +99,38 @@ When using an absolute path, the first segment must refer to a `pub mod` at the 
 ### Application
 
 ```
-f a b c
+f(a, b, c)
 ```
 
-Function application is left-associative juxtaposition. Each argument must be an **atomic term** — a literal, a name, a parenthesized term, or another atomic form listed below. To pass a compound expression as an argument, wrap it in parentheses:
+Function application is written with parentheses and comma-separated arguments. A call may supply several arguments at once; for a function whose result is itself a function, calls chain:
 
 ```
-Nat.add (Nat.mul 2 3) 1
+f(a, b)
+f(a)(b)
+```
+
+Arguments are arbitrary terms — there is no need to parenthesise compound arguments beyond the call's own parentheses:
+
+```
+Nat.add(Nat.mul(2, 3), 1)
+```
+
+### Partial application
+
+A call site may leave argument holes, written `_`, using the `.(…)` form. The result is a function over the holes, in left-to-right order:
+
+```
+f.(a, _, c)        -- equivalent to: h => f(a, h, c)
 ```
 
 ### Lambda
 
 ```
 label => body
+(a, b) => body
 ```
 
-Introduces a function with parameter `label` in scope in `body`.
+Introduces a function. A single parameter may be written without parentheses; multiple parameters are parenthesised and comma-separated. All parameters are in scope in `body`.
 
 ### Local let
 
@@ -115,7 +139,12 @@ let name : Type = body;
 tail
 ```
 
-Binds `name` to `body` for the rest of `tail`. The type annotation and semicolon are required.
+Binds `name` to `body` for the rest of `tail`. The type annotation and semicolon are required. The function-definition shorthand is also available locally:
+
+```
+let add(a : Nat, b : Nat) -> Nat = Nat.add(a, b);
+tail
+```
 
 ### Local rec
 
@@ -129,27 +158,47 @@ Mutually recursive local bindings. Unlike top-level `rec`, the `and` clauses do 
 
 ### Match
 
-Eliminates an atom type:
+`match` is the single elimination form. The branch shapes determine which kind of value is eliminated, and the head's type must agree.
 
 ```
-match head : label => Motive;
+match head : motive;
+| ... ;
+```
+
+The `motive` gives the result type. It may name the scrutinee — `label => Type` — or omit the name when the result type does not depend on the scrutinee — just `Type`.
+
+**Atoms** — one branch per atom in the head's atom type; no default branch:
+
+```
+match tag : Type;
 | 'foo => body_foo;
 | 'bar => body_bar;
 ```
 
-`label` names the scrutinee in the motive. Every atom in the type must have a branch. No default branch.
-
-### Bln.match
-
-Eliminates a boolean:
+**Booleans** — both branches required, either order:
 
 ```
-Bln.match head : label => Motive;
-| false => false_body;
+match cond : Bin;
 | true  => true_body;
+| false => false_body;
 ```
 
-`label` names the scrutinee in the motive. Both branches are required; either order is accepted.
+**Structural induction over `Nat`** — `| 0` is the base case; `| pred ih` binds the predecessor and the result already computed for it (`ih`, the induction hypothesis):
+
+```
+match n : Nat;
+| 0 => zero_case;
+| pred ih => succ_case;
+```
+
+**Sparse dispatch on `Nat`** — specific values plus a mandatory `| _` default that must appear last:
+
+```
+match n : Nat;
+| 0 => body;
+| 3 => body;
+| _ => default;
+```
 
 ### Field access
 
@@ -189,10 +238,11 @@ Non-dependent (output does not mention the input):
 A -> B
 ```
 
-Dependent (output may mention the input by `label`):
+Dependent, one or more named parameters (each parameter may be mentioned by later parameters and by the output):
 
 ```
-(label : A) -> B
+(a : A) -> B
+(a : A, b : B) -> C
 ```
 
 ### Atom type
@@ -210,15 +260,15 @@ A finite set of atoms. The order of labels does not matter.
 { label1 : A, label2 : B }
 ```
 
-Fields may optionally be named. Labels are used for documentation only; they do not affect the type's identity.
+Fields may optionally be named. Labels are used for documentation only; they do not affect the type's identity. The empty tuple type `{}` (whose only value is `()`) serves as a unit.
 
 ### Array type
 
 ```
-Arr T
+Arr(T)
 ```
 
-A homogeneous array of elements of type `T`. `T` must be atomic; write `Arr (Arr Nat)` for nested arrays.
+A homogeneous array of elements of type `T`. Write `Arr(Arr(Nat))` for nested arrays.
 
 ### Primitive types
 
@@ -313,128 +363,114 @@ Zero or more elements.
 
 ## Primitive operations
 
-All primitive operations are prefix and take **atomic** arguments. Parenthesise compound arguments.
+All primitive operations use call syntax: the operation name followed by parenthesised, comma-separated arguments. Arguments are arbitrary terms.
+
+```
+Nat.add(a, b)
+Bin.slice(s, start, end)
+```
 
 ### Nat
 
-| Operation      | Arity | Description           | Returns |
-| -------------- | ----- | --------------------- | ------- |
-| `Nat.add a b`  | 2     | Addition              | `Nat`   |
-| `Nat.sub a b`  | 2     | Subtraction           | `Nat`   |
-| `Nat.mul a b`  | 2     | Multiplication        | `Nat`   |
-| `Nat.div a b`  | 2     | Division              | `Nat`   |
-| `Nat.rem a b`  | 2     | Remainder             | `Nat`   |
-| `Nat.eql a b`  | 2     | Equality              | `Bln`   |
-| `Nat.neq a b`  | 2     | Inequality            | `Bln`   |
-| `Nat.lt a b`   | 2     | Less than             | `Bln`   |
-| `Nat.gt a b`   | 2     | Greater than          | `Bln`   |
-| `Nat.lte a b`  | 2     | Less than or equal    | `Bln`   |
-| `Nat.gte a b`  | 2     | Greater than or equal | `Bln`   |
-| `Nat.to_int a` | 1     | Convert to Int        | `Int`   |
-| `Nat.to_flt a` | 1     | Convert to Flt        | `Flt`   |
-| `Nat.to_str a` | 1     | Convert to Bin        | `Bin`   |
+| Operation          | Arity | Description           | Returns |
+| ------------------ | ----- | --------------------- | ------- |
+| `Nat.add(a, b)`    | 2     | Addition              | `Nat`   |
+| `Nat.sub(a, b)`    | 2     | Subtraction           | `Nat`   |
+| `Nat.mul(a, b)`    | 2     | Multiplication        | `Nat`   |
+| `Nat.div(a, b)`    | 2     | Division              | `Nat`   |
+| `Nat.rem(a, b)`    | 2     | Remainder             | `Nat`   |
+| `Nat.eql(a, b)`    | 2     | Equality              | `Bln`   |
+| `Nat.neq(a, b)`    | 2     | Inequality            | `Bln`   |
+| `Nat.lt(a, b)`     | 2     | Less than             | `Bln`   |
+| `Nat.gt(a, b)`     | 2     | Greater than          | `Bln`   |
+| `Nat.lte(a, b)`    | 2     | Less than or equal    | `Bln`   |
+| `Nat.gte(a, b)`    | 2     | Greater than or equal | `Bln`   |
+| `Nat.to_int(a)`    | 1     | Convert to Int        | `Int`   |
+| `Nat.to_flt(a)`    | 1     | Convert to Flt        | `Flt`   |
+| `Nat.to_str(a)`    | 1     | Convert to Bin        | `Bin`   |
 
-### Nat.fold
-
-```
-Nat.fold n : label => Motive;
-| 0 => zero_case;
-| pred ih => succ_case;
-```
-
-Structural recursion over a natural number. `pred` is the predecessor; `ih` is the induction hypothesis (result for `pred`).
-
-### Nat.match
-
-```
-Nat.match n : label => Motive;
-| 0 => body;
-| 3 => body;
-| _ => default;
-```
-
-Pattern match on specific natural number values. The default branch (`| _ =>`) is required and must appear last.
+Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively).
 
 ### Int
 
-| Operation      | Arity | Description           | Returns |
-| -------------- | ----- | --------------------- | ------- |
-| `Int.add a b`  | 2     | Addition              | `Int`   |
-| `Int.sub a b`  | 2     | Subtraction           | `Int`   |
-| `Int.mul a b`  | 2     | Multiplication        | `Int`   |
-| `Int.div a b`  | 2     | Division              | `Int`   |
-| `Int.rem a b`  | 2     | Remainder             | `Int`   |
-| `Int.eql a b`  | 2     | Equality              | `Bln`   |
-| `Int.neq a b`  | 2     | Inequality            | `Bln`   |
-| `Int.lt a b`   | 2     | Less than             | `Bln`   |
-| `Int.gt a b`   | 2     | Greater than          | `Bln`   |
-| `Int.lte a b`  | 2     | Less than or equal    | `Bln`   |
-| `Int.gte a b`  | 2     | Greater than or equal | `Bln`   |
-| `Int.to_nat a` | 1     | Convert to Nat        | `Nat`   |
-| `Int.to_flt a` | 1     | Convert to Flt        | `Flt`   |
-| `Int.to_str a` | 1     | Convert to Bin        | `Bin`   |
+| Operation          | Arity | Description           | Returns |
+| ------------------ | ----- | --------------------- | ------- |
+| `Int.add(a, b)`    | 2     | Addition              | `Int`   |
+| `Int.sub(a, b)`    | 2     | Subtraction           | `Int`   |
+| `Int.mul(a, b)`    | 2     | Multiplication        | `Int`   |
+| `Int.div(a, b)`    | 2     | Division              | `Int`   |
+| `Int.rem(a, b)`    | 2     | Remainder             | `Int`   |
+| `Int.eql(a, b)`    | 2     | Equality              | `Bln`   |
+| `Int.neq(a, b)`    | 2     | Inequality            | `Bln`   |
+| `Int.lt(a, b)`     | 2     | Less than             | `Bln`   |
+| `Int.gt(a, b)`     | 2     | Greater than          | `Bln`   |
+| `Int.lte(a, b)`    | 2     | Less than or equal    | `Bln`   |
+| `Int.gte(a, b)`    | 2     | Greater than or equal | `Bln`   |
+| `Int.to_nat(a)`    | 1     | Convert to Nat        | `Nat`   |
+| `Int.to_flt(a)`    | 1     | Convert to Flt        | `Flt`   |
+| `Int.to_str(a)`    | 1     | Convert to Bin        | `Bin`   |
 
 ### Flt
 
-| Operation       | Arity | Description           | Returns |
-| --------------- | ----- | --------------------- | ------- |
-| `Flt.add a b`   | 2     | Addition              | `Flt`   |
-| `Flt.sub a b`   | 2     | Subtraction           | `Flt`   |
-| `Flt.mul a b`   | 2     | Multiplication        | `Flt`   |
-| `Flt.div a b`   | 2     | Division              | `Flt`   |
-| `Flt.eql a b`   | 2     | Equality              | `Bln`   |
-| `Flt.neq a b`   | 2     | Inequality            | `Bln`   |
-| `Flt.lt a b`    | 2     | Less than             | `Bln`   |
-| `Flt.gt a b`    | 2     | Greater than          | `Bln`   |
-| `Flt.lte a b`   | 2     | Less than or equal    | `Bln`   |
-| `Flt.gte a b`   | 2     | Greater than or equal | `Bln`   |
-| `Flt.min a b`   | 2     | Minimum               | `Flt`   |
-| `Flt.max a b`   | 2     | Maximum               | `Flt`   |
-| `Flt.neg a`     | 1     | Negation              | `Flt`   |
-| `Flt.abs a`     | 1     | Absolute value        | `Flt`   |
-| `Flt.sqrt a`    | 1     | Square root           | `Flt`   |
-| `Flt.floor a`   | 1     | Floor                 | `Flt`   |
-| `Flt.ceil a`    | 1     | Ceiling               | `Flt`   |
-| `Flt.trunc a`   | 1     | Truncate toward zero  | `Flt`   |
-| `Flt.nearest a` | 1     | Round to nearest      | `Flt`   |
-| `Flt.to_nat a`  | 1     | Convert to Nat        | `Nat`   |
-| `Flt.to_int a`  | 1     | Convert to Int        | `Int`   |
-| `Flt.to_str a`  | 1     | Convert to Bin        | `Bin`   |
+| Operation           | Arity | Description           | Returns |
+| ------------------- | ----- | --------------------- | ------- |
+| `Flt.add(a, b)`     | 2     | Addition              | `Flt`   |
+| `Flt.sub(a, b)`     | 2     | Subtraction           | `Flt`   |
+| `Flt.mul(a, b)`     | 2     | Multiplication        | `Flt`   |
+| `Flt.div(a, b)`     | 2     | Division              | `Flt`   |
+| `Flt.eql(a, b)`     | 2     | Equality              | `Bln`   |
+| `Flt.neq(a, b)`     | 2     | Inequality            | `Bln`   |
+| `Flt.lt(a, b)`      | 2     | Less than             | `Bln`   |
+| `Flt.gt(a, b)`      | 2     | Greater than          | `Bln`   |
+| `Flt.lte(a, b)`     | 2     | Less than or equal    | `Bln`   |
+| `Flt.gte(a, b)`     | 2     | Greater than or equal | `Bln`   |
+| `Flt.min(a, b)`     | 2     | Minimum               | `Flt`   |
+| `Flt.max(a, b)`     | 2     | Maximum               | `Flt`   |
+| `Flt.neg(a)`        | 1     | Negation              | `Flt`   |
+| `Flt.abs(a)`        | 1     | Absolute value        | `Flt`   |
+| `Flt.sqrt(a)`       | 1     | Square root           | `Flt`   |
+| `Flt.floor(a)`      | 1     | Floor                 | `Flt`   |
+| `Flt.ceil(a)`       | 1     | Ceiling               | `Flt`   |
+| `Flt.trunc(a)`      | 1     | Truncate toward zero  | `Flt`   |
+| `Flt.nearest(a)`    | 1     | Round to nearest      | `Flt`   |
+| `Flt.to_nat(a)`     | 1     | Convert to Nat        | `Nat`   |
+| `Flt.to_int(a)`     | 1     | Convert to Int        | `Int`   |
+| `Flt.to_str(a)`     | 1     | Convert to Bin        | `Bin`   |
 
 ### Bin
 
-| Operation               | Arity    | Description                         | Returns |
-| ----------------------- | -------- | ----------------------------------- | ------- |
-| `Bin.len a`             | 1        | Byte length                         | `Nat`   |
-| `Bin.eql a b`           | 2        | Equality                            | `Bln`   |
-| `Bin.get a i`           | 2        | Byte at index `i`                   | `Nat`   |
-| `Bin.slice a start end` | 3        | Subsequence from `start` to `end`   | `Bin`   |
-| `Bin.append a byte`     | 2        | Append a single byte                | `Bin`   |
-| `Bin.concat a, b, ...`  | variadic | Concatenate any number of sequences | `Bin`   |
+| Operation                  | Arity    | Description                         | Returns |
+| -------------------------- | -------- | ----------------------------------- | ------- |
+| `Bin.len(a)`               | 1        | Byte length                         | `Nat`   |
+| `Bin.eql(a, b)`            | 2        | Equality                            | `Bln`   |
+| `Bin.get(a, i)`            | 2        | Byte at index `i`                   | `Nat`   |
+| `Bin.slice(a, start, end)` | 3        | Subsequence from `start` to `end`   | `Bin`   |
+| `Bin.append(a, byte)`      | 2        | Append a single byte                | `Bin`   |
+| `Bin.concat(a, b, ...)`    | variadic | Concatenate any number of sequences | `Bin`   |
 
 ### Arr
 
-| Operation               | Arity    | Description                      | Returns |
-| ----------------------- | -------- | -------------------------------- | ------- |
-| `Arr.len a`             | 1        | Element count                    | `Nat`   |
-| `Arr.get a i`           | 2        | Element at index `i`             | `T`     |
-| `Arr.slice a start end` | 3        | Subarray from `start` to `end`   | `Arr T` |
-| `Arr.append a elem`     | 2        | Append a single element          | `Arr T` |
-| `Arr.concat a, b, ...`  | variadic | Concatenate any number of arrays | `Arr T` |
+| Operation                  | Arity    | Description                      | Returns |
+| -------------------------- | -------- | -------------------------------- | ------- |
+| `Arr.len(a)`               | 1        | Element count                    | `Nat`   |
+| `Arr.get(a, i)`            | 2        | Element at index `i`             | `T`     |
+| `Arr.slice(a, start, end)` | 3        | Subarray from `start` to `end`   | `Arr(T)`|
+| `Arr.append(a, elem)`      | 2        | Append a single element          | `Arr(T)`|
+| `Arr.concat(a, b, ...)`    | variadic | Concatenate any number of arrays | `Arr(T)`|
 
-`Bin.concat` and `Arr.concat` take comma-separated atomic arguments (not juxtaposed):
+`Bin.concat` and `Arr.concat` take any number of comma-separated arguments:
 
 ```
-Bin.concat "hello", ", ", "world"
-Arr.concat [1, 2], [3, 4], [5]
+Bin.concat("hello", ", ", "world")
+Arr.concat([1, 2], [3, 4], [5])
 ```
 
 ### Sys
 
-| Operation     | Arity | Description                                                   | Returns |
-| ------------- | ----- | ------------------------------------------------------------- | ------- |
-| `Sys.print a` | 1     | Print `a : Bin` to stdout                                     | `{}`    |
-| `Sys.read`    | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
+| Operation       | Arity | Description                                                   | Returns |
+| --------------- | ----- | ------------------------------------------------------------- | ------- |
+| `Sys.print(a)`  | 1     | Print `a : Bin` to stdout                                     | `{}`    |
+| `Sys.read`      | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
 
 ## Idioms
 
@@ -445,9 +481,9 @@ Curios has no built-in sum type. The idiom is a dependent tuple whose second fie
 **Definition**
 
 ```
-let Result : (_ : Type) -> (_ : Type) -> Type = A => B => {
+let Result(A : Type, B : Type) -> Type = {
     tag : '[ok, err],
-    match tag : _ => Type;
+    match tag : Type;
     | 'ok  => A;
     | 'err => B; };
 ```
@@ -457,8 +493,8 @@ The first field `tag` is an atom type listing all variants. The second field is 
 **Construction**
 
 ```
-let good : Result Nat Bin = ('ok,  42);
-let bad  : Result Nat Bin = ('err, "something went wrong");
+let good : Result(Nat, Bin) = ('ok,  42);
+let bad  : Result(Nat, Bin) = ('err, "something went wrong");
 ```
 
 A value is a two-element tuple of the variant atom and its payload.
@@ -468,8 +504,8 @@ A value is a two-element tuple of the variant atom and its payload.
 Use `match` on the first field to dispatch on the tag, then access the second field for the payload:
 
 ```
-let unwrap_or : (A : Type) -> (_ : Result A Bin) -> (_ : A) -> A = A => r => default =>
-    match r.0 : _ => A;
+let unwrap_or(A : Type, r : Result(A, Bin), default : A) -> A =
+    match r.0 : A;
     | 'ok  => r.1;
     | 'err => default;
 ```
@@ -483,21 +519,21 @@ A recursive type uses a top-level `rec` binding that refers to itself in its own
 **Definition**
 
 ```
-rec List : (_ : Type) -> Type = A => {
+rec List : (A : Type) -> Type = A => {
     tag : '[nil, cons],
-    match tag : _ => Type;
+    match tag : Type;
     | 'nil  => '[unit];
-    | 'cons => { A, List A }; };
+    | 'cons => { A, List(A) }; };
 ```
 
-`'[unit]` serves as a single-atom placeholder for the empty payload — there is no built-in unit type. The `cons` branch holds the head element and a recursive `List A` tail.
+`'[unit]` serves as a single-atom placeholder for the empty payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
 
 **Construction**
 
 ```
-let empty : List Nat        = ('nil,  'unit);
-let one   : List Nat        = ('cons, (1, ('nil, 'unit)));
-let three : List Nat        = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, 'unit)))))));
+let empty : List(Nat) = ('nil,  'unit);
+let one   : List(Nat) = ('cons, (1, ('nil, 'unit)));
+let three : List(Nat) = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, 'unit)))))));
 ```
 
 **Elimination**
@@ -505,10 +541,10 @@ let three : List Nat        = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, 'unit))
 A recursive function over the list is itself written with `rec`:
 
 ```
-rec length : (A : Type) -> (_ : List A) -> Nat = A => list =>
-    match list.0 : _ => Nat;
+rec length(A : Type, list : List(A)) -> Nat =
+    match list.0 : Nat;
     | 'nil  => 0;
-    | 'cons => Nat.add 1 (length A list.1.1);
+    | 'cons => Nat.add(1, length(A, list.1.1));;
 ```
 
 The `;;` at the end closes the last `match` branch and then the top-level `rec` binding.
