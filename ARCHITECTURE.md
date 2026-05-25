@@ -62,12 +62,13 @@ src/<stage>/to_<next>.rs    transformation to next stage (may be a folder)
 
 Transformation entry points (`to_cont.rs`, `to_wasm.rs`) declare submodules privately — callers see only the public transformation function.
 
-Two top-level modules fall outside this pattern:
+Three top-level modules fall outside this pattern:
 
-| Module       | Role                                                                            |
-| ------------ | ------------------------------------------------------------------------------- |
-| `src/run.rs` | Wasmtime execution and result printing; gated behind the `run` Cargo feature    |
-| `src/cli.rs` | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature |
+| Module        | Role                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| `src/span.rs` | `Span` byte ranges and the shared `render_snippet` helper; the foundation of [error reporting](#error-reporting) |
+| `src/run.rs`  | Wasmtime execution and result printing; gated behind the `run` Cargo feature                        |
+| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                     |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
 
@@ -77,7 +78,7 @@ The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `ru
 
 **Key files:** `parse.rs`, `module.rs`, `term.rs`, `prim.rs`
 
-Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parser<'a, A>` supports `.or()`, `.and()`, `.flat_map()`, `.map()`, and `lazy` for recursive grammars. Position-aware error reporting via `ParserState`.
+Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parser<'a, A>` supports `.or()`, `.and()`, `.flat_map()`, `.map()`, and `lazy` for recursive grammars. `ParserState` tracks the current byte offset; on failure `ParserError::format` renders the offending line through the shared `render_snippet` helper (see [Error reporting](#error-reporting)).
 
 Line comments (`-- text`) are stripped inside `parse_whitespace`, which is called after every terminal token. Comments are discarded at parse time and do not appear in the AST.
 
@@ -109,6 +110,8 @@ Two concerns, handled separately:
 The `Loader` trait has two implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `PanicLoader` (used for inline programs and tests).
 
 **Term elaboration** (`to_core/elaborate.rs`): pure syntactic translation from `text::Term` to `core::Term`. The only binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices. No type-directed work — that happens in `core/typing.rs`.
+
+Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, `CoercionOutsideDefBlock` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
 ---
 
@@ -329,6 +332,19 @@ Wasmtime is configured with reference types, function references, GC, and tail c
 | `src/monads/parser.rs`  | Monadic parser combinators: `Parser<'a, A>`, `.or()`, `.and()`, `.flat_map()`, `lazy`, `many0/1`, `sep_by0/1`, `take_while`, etc. Used for both surface syntax and WAT parsing.                                       |
 | `src/monads/printer.rs` | Mirror of the parser: `Printer<'a>` combinators (`pure`, `flat`, `indent`, `sep_flat`) driven by `run_printer`. Used in all `print.rs` modules.                                                                       |
 | `src/macros.rs`         | `name!(Foo)` — generates a newtype `pub struct Foo { pub string: String }` with `From<A: Into<String>>`, `Debug`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`. Used for all name types across all stages. |
+
+---
+
+## Error reporting
+
+Every fallible stage reports through a uniform pattern built on two primitives in `src/span.rs`:
+
+- `Span { start, end }` — a byte range into the original source.
+- `render_snippet(source, start, end)` — formats the offending line with a line number and a `^` caret underline spanning the range.
+
+Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/error.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format(&source)` prints the message followed by the rendered snippet; an unlocated error prints the message alone. The parser's `ParserError::format` shares the same `render_snippet`. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
+
+`cli()` threads the source string through every stage, mapping each failure with `.map_err(|error| error.format(&source))`. `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
 
 ---
 
