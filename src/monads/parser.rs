@@ -100,29 +100,10 @@ impl ParserError {
     }
 
     pub fn format(&self, string: &str) -> String {
-        let start = string[..self.offset]
-            .rfind('\n')
-            .map(|index| 1 + index)
-            .unwrap_or(0);
-
-        let end = string[self.offset..]
-            .find('\n')
-            .map(|index| self.offset + index)
-            .unwrap_or(string.len());
-
-        let number = 1 + string[..start]
-            .bytes()
-            .filter(|&byte| byte == b'\n')
-            .count();
-
-        let caret = format!("{}^", " ".repeat(self.offset - start));
-
         format!(
-            "{message}\n\n{number:>5} | {line}\n{padding:>5} | {caret}",
+            "{message}\n\n{snippet}",
             message = self.message,
-            number = number,
-            line = &string[start..end],
-            padding = "",
+            snippet = crate::render_snippet(string, self.offset, self.offset),
         )
     }
 }
@@ -303,6 +284,18 @@ where
     T: 'a,
 {
     Parser::new(move |state| parser.parse(state).map_err(|error| error.catch()))
+}
+
+pub fn spanned<'a, T>(parser: Parser<'a, T>) -> Parser<'a, (crate::Span, T)>
+where
+    T: 'a,
+{
+    Parser::new(move |state| {
+        let start = state.offset;
+        let (item, state) = parser.parse(state)?;
+
+        Ok(((crate::Span::new(start, state.offset), item), state))
+    })
 }
 
 pub fn lazy<'a, T, F>(f: F) -> Parser<'a, T>

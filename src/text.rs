@@ -1,3 +1,6 @@
+mod error;
+pub use error::*;
+
 mod names;
 pub use names::*;
 

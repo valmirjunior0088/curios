@@ -1,6 +1,10 @@
 use {
     super::{Arity, Atom, Many, One, Prim, Two},
-    std::collections::{BTreeMap, BTreeSet},
+    crate::Span,
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        hash::{Hash, Hasher},
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -558,7 +562,7 @@ impl Unseal {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum Term {
     Type,
     Prim(Prim),
@@ -580,6 +584,76 @@ pub enum Term {
     Seal(Seal),
     Unseal(Unseal),
     Var(Var),
+    Spanned(Span, Subterm),
+}
+
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        let mut this = self;
+        let mut that = other;
+
+        loop {
+            match (this, that) {
+                (Term::Spanned(_, inner), _) => this = inner,
+                (_, Term::Spanned(_, inner)) => that = inner,
+                (Term::Type, Term::Type) => break true,
+                (Term::Prim(a), Term::Prim(b)) => break a == b,
+                (Term::BlnMatch(a), Term::BlnMatch(b)) => break a == b,
+                (Term::NatFold(a), Term::NatFold(b)) => break a == b,
+                (Term::NatMatch(a), Term::NatMatch(b)) => break a == b,
+                (Term::FuncType(a), Term::FuncType(b)) => break a == b,
+                (Term::Func(a), Term::Func(b)) => break a == b,
+                (Term::Apply(a), Term::Apply(b)) => break a == b,
+                (Term::TupleType(a), Term::TupleType(b)) => break a == b,
+                (Term::Tuple(a), Term::Tuple(b)) => break a == b,
+                (Term::Proj(a), Term::Proj(b)) => break a == b,
+                (Term::AtomType(a), Term::AtomType(b)) => break a == b,
+                (Term::Atom(a), Term::Atom(b)) => break a == b,
+                (Term::Match(a), Term::Match(b)) => break a == b,
+                (Term::Let(a), Term::Let(b)) => break a == b,
+                (Term::Rec(a), Term::Rec(b)) => break a == b,
+                (Term::Sealed(a), Term::Sealed(b)) => break a == b,
+                (Term::Seal(a), Term::Seal(b)) => break a == b,
+                (Term::Unseal(a), Term::Unseal(b)) => break a == b,
+                (Term::Var(a), Term::Var(b)) => break a == b,
+                _ => break false,
+            }
+        }
+    }
+}
+
+impl Eq for Term {}
+
+impl Hash for Term {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let mut term = self;
+
+        loop {
+            match term {
+                Term::Type => break,
+                Term::Prim(x) => break x.hash(state),
+                Term::BlnMatch(x) => break x.hash(state),
+                Term::NatFold(x) => break x.hash(state),
+                Term::NatMatch(x) => break x.hash(state),
+                Term::FuncType(x) => break x.hash(state),
+                Term::Func(x) => break x.hash(state),
+                Term::Apply(x) => break x.hash(state),
+                Term::TupleType(x) => break x.hash(state),
+                Term::Tuple(x) => break x.hash(state),
+                Term::Proj(x) => break x.hash(state),
+                Term::AtomType(x) => break x.hash(state),
+                Term::Atom(x) => break x.hash(state),
+                Term::Match(x) => break x.hash(state),
+                Term::Let(x) => break x.hash(state),
+                Term::Rec(x) => break x.hash(state),
+                Term::Sealed(x) => break x.hash(state),
+                Term::Seal(x) => break x.hash(state),
+                Term::Unseal(x) => break x.hash(state),
+                Term::Var(x) => break x.hash(state),
+                Term::Spanned(_, inner) => term = inner,
+            }
+        }
+    }
 }
 
 impl Term {
@@ -1112,6 +1186,7 @@ where
             Term::Seal(seal) => self.visit_seal(seal).into(),
             Term::Unseal(unseal) => self.visit_unseal(unseal).into(),
             Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),
+            Term::Spanned(span, inner) => Term::Spanned(*span, self.visit_subterm(inner)),
         }
     }
 }

@@ -6,7 +6,7 @@ use {
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
-        take_eof, take_exact, take_n, take_while,
+        spanned, take_eof, take_exact, take_n, take_while,
     },
     std::{iter, str::FromStr},
 };
@@ -866,37 +866,45 @@ fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
         .map(|_| Term::Tuple(Tuple { fields: vec![] }))
 }
 
+fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
+    spanned(parser).map(|(span, term)| Term::Spanned(span, term.into()))
+}
+
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
-    parse_type()
-        .or(parse_prim())
-        .or(parse_atom_type())
-        .or(parse_atom())
-        .or(parse_tuple_type())
-        .or(parse_empty_tuple())
-        .or(parse_tuple())
-        .or(parse_parens())
-        .or(parse_name().map(Term::Name))
-        .and(many0(parse_proj_suffix))
-        .map(|(head, indices)| {
-            indices.into_iter().fold(head, |acc, index| {
-                Term::Proj(Proj {
-                    head: acc.into(),
-                    index,
+    with_span(
+        parse_type()
+            .or(parse_prim())
+            .or(parse_atom_type())
+            .or(parse_atom())
+            .or(parse_tuple_type())
+            .or(parse_empty_tuple())
+            .or(parse_tuple())
+            .or(parse_parens())
+            .or(parse_name().map(Term::Name))
+            .and(many0(parse_proj_suffix))
+            .map(|(head, indices)| {
+                indices.into_iter().fold(head, |acc, index| {
+                    Term::Proj(Proj {
+                        head: acc.into(),
+                        index,
+                    })
                 })
-            })
-        })
+            }),
+    )
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
-    parse_rec()
-        .or(parse_let())
-        .or(parse_match())
-        .or(parse_func_type())
-        .or(parse_func())
-        .or(parse_coerce())
-        .or(parse_atomic_term()
-            .and(many0(parse_atomic_term))
-            .map(|(head, params)| Apply::many(head, params)))
+    with_span(
+        parse_rec()
+            .or(parse_let())
+            .or(parse_match())
+            .or(parse_func_type())
+            .or(parse_func())
+            .or(parse_coerce())
+            .or(parse_atomic_term()
+                .and(many0(parse_atomic_term))
+                .map(|(head, params)| Apply::many(head, params))),
+    )
 }
 
 impl FromStr for Term {

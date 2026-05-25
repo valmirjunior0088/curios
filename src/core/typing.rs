@@ -688,6 +688,7 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
             Some(type_) => Ok(type_.clone()),
             None => Err(Error::unbound_variable(var.clone())),
         },
+        Term::Spanned(span, inner) => infer(context, inner).map_err(|error| error.at(*span)),
         _ => Err(Error::cannot_infer(term.clone())),
     }
 }
@@ -1719,13 +1720,25 @@ fn erase_atom(
 ) -> Result<ersd::Term, Error> {
     let atoms = match reduce(context, expected)? {
         Term::AtomType(AtomType { atoms }) => atoms,
-        other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
+        _ => {
+            return Err(Error::type_mismatch(
+                term.clone(),
+                AtomType::new([atom.clone()]),
+                expected.clone(),
+            ));
+        }
     };
 
     let index = atoms
         .iter()
         .position(|candidate| candidate == atom)
-        .ok_or_else(|| Error::type_mismatch(term.clone(), expected.clone(), expected.clone()))?;
+        .ok_or_else(|| {
+            Error::type_mismatch(
+                term.clone(),
+                AtomType::new([atom.clone()]),
+                expected.clone(),
+            )
+        })?;
 
     Ok(ersd::Atom { index }.into())
 }
@@ -1970,6 +1983,9 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
             expect(context, term, &t, expected)?;
             Ok(ersd::Name::from(var.unwrap()).into())
         }
+        Term::Spanned(span, inner) => {
+            erase(context, inner, expected).map_err(|error| error.at(*span))
+        }
     }
 }
 
@@ -2052,7 +2068,7 @@ mod tests {
 
     #[test]
     fn erase_match_singleton_lowers_to_match() {
-        let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::PanicLoader);
+        let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::PanicLoader).unwrap();
 
         let term = text::to_core(
             &r#"
@@ -2063,7 +2079,8 @@ mod tests {
             .parse()
             .unwrap(),
             &text::PanicLoader,
-        );
+        )
+        .unwrap();
 
         let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 
@@ -2187,7 +2204,8 @@ mod tests {
 
     #[test]
     fn erase_match_and_atom_stress_test() {
-        let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::PanicLoader);
+        let type_ =
+            text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::PanicLoader).unwrap();
 
         let term = text::to_core(
             &r#"
@@ -2215,7 +2233,8 @@ mod tests {
             .parse()
             .unwrap(),
             &text::PanicLoader,
-        );
+        )
+        .unwrap();
 
         let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 

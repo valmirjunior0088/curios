@@ -563,6 +563,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 print_term(*tail),
             ])
         }
+        Term::Spanned(_, inner) => print_term(*inner),
     }
 }
 

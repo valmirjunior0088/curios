@@ -19,7 +19,7 @@ fn main() {
         "#;
 
     let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");
-    let core_term = text::to_core(&text_entrypoint, &loader);
+    let core_term = text::to_core(&text_entrypoint, &loader).expect("expected core term");
     let type_ = core::infer(&mut core::Context::new(timeout), &core_term)
         .unwrap_or_else(|e| panic!("failed to infer type: {e}"));
     let ersd_term = core::erase(&mut core::Context::new(timeout), &core_term, &type_)
@@ -41,7 +41,11 @@ fn main() {
     let text_entrypoint = ill_typed
         .parse::<text::Entrypoint>()
         .expect("failed to parse ill-typed source");
-    let core_term = text::to_core(&text_entrypoint, &loader);
+    let core_term = text::to_core(&text_entrypoint, &loader).expect("expected core term");
     let result = core::infer(&mut core::Context::new(timeout), &core_term);
-    assert!(matches!(result, Err(core::Error::TypeMismatch { .. })));
+    assert!(matches!(
+        &result,
+        Err(core::Error::Located { error, .. })
+            if matches!(error.as_ref(), core::Error::TypeMismatch { .. })
+    ));
 }

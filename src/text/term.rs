@@ -1,5 +1,6 @@
 use {
     super::{Atom, Name, Prim},
+    crate::Span,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -136,7 +137,7 @@ pub struct Rec {
     pub tail: Subterm,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Term {
     Type,
     Prim(Prim),
@@ -154,4 +155,36 @@ pub enum Term {
     Let(Let),
     Rec(Rec),
     Name(Name),
+    Spanned(Span, Subterm),
+}
+
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        let mut this = self;
+        let mut that = other;
+
+        loop {
+            match (this, that) {
+                (Term::Spanned(_, inner), _) => this = inner,
+                (_, Term::Spanned(_, inner)) => that = inner,
+                (Term::Type, Term::Type) => break true,
+                (Term::Prim(a), Term::Prim(b)) => break a == b,
+                (Term::FuncType(a), Term::FuncType(b)) => break a == b,
+                (Term::Func(a), Term::Func(b)) => break a == b,
+                (Term::Apply(a), Term::Apply(b)) => break a == b,
+                (Term::TupleType(a), Term::TupleType(b)) => break a == b,
+                (Term::Tuple(a), Term::Tuple(b)) => break a == b,
+                (Term::Proj(a), Term::Proj(b)) => break a == b,
+                (Term::AtomType(a), Term::AtomType(b)) => break a == b,
+                (Term::Atom(a), Term::Atom(b)) => break a == b,
+                (Term::Match(a), Term::Match(b)) => break a == b,
+                (Term::DefFrom(a), Term::DefFrom(b)) => break a == b,
+                (Term::DefInto(a), Term::DefInto(b)) => break a == b,
+                (Term::Let(a), Term::Let(b)) => break a == b,
+                (Term::Rec(a), Term::Rec(b)) => break a == b,
+                (Term::Name(a), Term::Name(b)) => break a == b,
+                _ => break false,
+            }
+        }
+    }
 }

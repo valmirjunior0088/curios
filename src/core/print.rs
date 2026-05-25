@@ -648,6 +648,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             print_term(*value, depth),
         ]),
         Term::Var(var) => print_var(var),
+        Term::Spanned(_, inner) => print_term(*inner, depth),
     }
 }
 

@@ -585,6 +585,14 @@ impl Convert {
                 }
                 (Term::Seal(this), Term::Seal(that)) => self.compare_seal(this, that)?,
                 (Term::Unseal(this), Term::Unseal(that)) => self.compare_unseal(this, that)?,
+                (Term::Spanned(_, this), that) => {
+                    self.enqueue(type_, *this, that);
+                    true
+                }
+                (this, Term::Spanned(_, that)) => {
+                    self.enqueue(type_, this, *that);
+                    true
+                }
                 (this_n, that_n) => self.eta_expand_neutral(context, this_n, that_n, type_)?,
             };
 

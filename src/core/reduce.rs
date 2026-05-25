@@ -930,6 +930,7 @@ impl Reduce {
                 Term::Unseal(unseal) => self.reduce_unseal(context, unseal)?,
                 Term::Var(var) => self.reduce_var(context, var),
                 Term::Tuple(t) => Step::Break(Self::eta_reduce_tuple(t)),
+                Term::Spanned(_, inner) => Step::Continue(*inner),
                 term => Step::Break(term),
             };
 

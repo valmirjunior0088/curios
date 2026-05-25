@@ -16,18 +16,17 @@ pub fn run<P: Provider + Send + Sync + 'static>(
     loader: &dyn text::Loader,
     provider: P,
 ) -> Result<(), String> {
-    let term = text::to_core(
-        &source
-            .parse()
-            .map_err(|error| format!("failed to parse source: {error:?}"))?,
-        loader,
-    );
+    let entrypoint = source
+        .parse::<text::Entrypoint>()
+        .map_err(|error| error.format(source))?;
+
+    let term = text::to_core(&entrypoint, loader).map_err(|error| error.format(source))?;
 
     let type_ = core::infer(&mut core::Context::new(timeout), &term)
-        .map_err(|error| format!("failed to infer type: {error:?}"))?;
+        .map_err(|error| error.format(source))?;
 
     let term = core::erase(&mut core::Context::new(timeout), &term, &type_)
-        .map_err(|error| format!("failed to erase term: {error:?}"))?;
+        .map_err(|error| error.format(source))?;
 
     run_wasm(&cont::to_wasm(&ersd::to_cont(&term)), provider)?;
 

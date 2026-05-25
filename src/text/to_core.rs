@@ -36,7 +36,7 @@ fn process_items(
     flat_items: &mut Vec<FlatItem>,
     def_stack: &DefStack,
     loader: &dyn Loader,
-) {
+) -> Result<(), Error> {
     context.finalize(scan_module_info(top_items));
 
     for top_item in top_items {
@@ -59,13 +59,15 @@ fn process_items(
     for top_item in top_items {
         match top_item {
             TopItem::Mod(mod_item) => match &mod_item.module {
-                Some(module) => process_items(
-                    &module.items,
-                    &mut context.nested(&mod_item.label),
-                    flat_items,
-                    def_stack,
-                    loader,
-                ),
+                Some(module) => {
+                    process_items(
+                        &module.items,
+                        &mut context.nested(&mod_item.label),
+                        flat_items,
+                        def_stack,
+                        loader,
+                    )?;
+                }
                 None => {
                     let module = loader
                         .load(context.prefix(), &mod_item.label)
@@ -77,7 +79,7 @@ fn process_items(
                         flat_items,
                         def_stack,
                         loader,
-                    );
+                    )?;
                 }
             },
             TopItem::Use(use_item) => {
@@ -99,30 +101,31 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
-                    type_: elab.term(&let_item.type_),
-                    body: elab.term(&let_item.body),
+                    type_: elab.term(&let_item.type_)?,
+                    body: elab.term(&let_item.body)?,
                 }));
             }
             TopItem::Rec(ls) => {
-                flat_items.push(FlatItem::Rec(
-                    ls.iter()
-                        .map(|let_item| {
-                            let elaborate = Elaborate::new(
-                                context.qualifiers(),
-                                context.bindings(),
-                                context.table(),
-                                context.aliases(),
-                                def_stack,
-                            );
+                let items = ls
+                    .iter()
+                    .map(|let_item| {
+                        let elaborate = Elaborate::new(
+                            context.qualifiers(),
+                            context.bindings(),
+                            context.table(),
+                            context.aliases(),
+                            def_stack,
+                        );
 
-                            FlatLet {
-                                name: context.prefixed(&let_item.label),
-                                type_: elaborate.term(&let_item.type_),
-                                body: elaborate.term(&let_item.body),
-                            }
+                        Ok(FlatLet {
+                            name: context.prefixed(&let_item.label),
+                            type_: elaborate.term(&let_item.type_)?,
+                            body: elaborate.term(&let_item.body)?,
                         })
-                        .collect(),
-                ));
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                flat_items.push(FlatItem::Rec(items));
             }
             TopItem::Def(def_item) => {
                 let name = context.prefixed(&def_item.label);
@@ -134,7 +137,7 @@ fn process_items(
                     context.aliases(),
                     def_stack,
                 )
-                .term(&def_item.witness);
+                .term(&def_item.witness)?;
 
                 flat_items.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
@@ -149,10 +152,12 @@ fn process_items(
                     flat_items,
                     &new_def_stack,
                     loader,
-                );
+                )?;
             }
         }
     }
+
+    Ok(())
 }
 
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
@@ -169,7 +174,7 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     }
 }
 
-pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> core::Term {
+pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Term, Error> {
     let mut table = HashMap::new();
     let mut aliases = HashMap::new();
     let mut context = Context::new(&mut table, &mut aliases);
@@ -181,19 +186,18 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> core::Term {
         &mut flat_items,
         &DefStack::empty(),
         loader,
-    );
+    )?;
 
-    flat_items.into_iter().rev().fold(
-        Elaborate::new(
-            context.qualifiers(),
-            context.bindings(),
-            context.table(),
-            context.aliases(),
-            &DefStack::empty(),
-        )
-        .term(&entrypoint.tail),
-        fold_flat_item,
+    let tail = Elaborate::new(
+        context.qualifiers(),
+        context.bindings(),
+        context.table(),
+        context.aliases(),
+        &DefStack::empty(),
     )
+    .term(&entrypoint.tail)?;
+
+    Ok(flat_items.into_iter().rev().fold(tail, fold_flat_item))
 }
 
 #[cfg(test)]
@@ -205,6 +209,16 @@ mod tests {
             &src.parse::<text::Entrypoint>().unwrap(),
             &text::PanicLoader,
         )
+        .unwrap()
+    }
+
+    fn run_err(src: &str) -> String {
+        super::to_core(
+            &src.parse::<text::Entrypoint>().unwrap(),
+            &text::PanicLoader,
+        )
+        .unwrap_err()
+        .to_string()
     }
 
     #[test]
@@ -284,33 +298,40 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "unresolved qualifier")]
     fn rejects_unresolved_qualifier_in_term() {
-        run("Foo/f");
+        assert!(run_err("Foo/f").contains("unresolved qualifier"));
     }
 
     #[test]
-    #[should_panic(expected = "private binding")]
     fn rejects_private_binding_access() {
-        run(r#"
+        assert!(
+            run_err(
+                r#"
             mod Foo
                 let f : Type = Type;
             end
             Foo/f
-        "#);
+        "#
+            )
+            .contains("private binding")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "private child module")]
     fn rejects_private_module_in_path() {
-        run(r#"
+        assert!(
+            run_err(
+                r#"
             mod Foo
                 mod Bar
                     pub let f : Type = Type;
                 end
             end
             Foo/Bar/f
-        "#);
+        "#
+            )
+            .contains("private child module")
+        );
     }
 
     #[test]
@@ -397,13 +418,17 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "coercion outside def block")]
     fn rejects_coercion_outside_def_block() {
-        run(r#"
+        assert!(
+            run_err(
+                r#"
             def Str(Bin)
             end
             Str.from 00
-        "#);
+        "#
+            )
+            .contains("coercion outside def block")
+        );
     }
 
     #[test]
@@ -491,15 +516,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "private binding")]
     fn rejects_private_def_type_by_qualified_name() {
-        run(r#"
+        assert!(
+            run_err(
+                r#"
             mod Foo
                 def Str(Bin)
                 end
             end
             Foo/Str
-        "#);
+        "#
+            )
+            .contains("private binding")
+        );
     }
 
     #[test]
@@ -582,14 +611,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "coercion outside def block: Foo")]
     fn rejects_coercion_with_wrong_def_label() {
-        run(r#"
+        assert!(
+            run_err(
+                r#"
             def Str(Bin)
                 pub let bad : Bin -> Str = x => Foo.from x;
             end
             Type
-        "#);
+        "#
+            )
+            .contains("coercion outside def block: Foo")
+        );
     }
 
     #[test]
@@ -722,9 +755,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "child module not found")]
     fn private_use_does_not_expose_qualifier() {
-        run(r#"
+        assert!(
+            run_err(
+                r#"
             pub mod Foo
                 pub mod Bar
                     pub let f : Type = Type;
@@ -734,6 +768,9 @@ mod tests {
                 use /Foo/Bar;
             end
             MyMod/Bar/f
-        "#);
+        "#
+            )
+            .contains("child module not found")
+        );
     }
 }

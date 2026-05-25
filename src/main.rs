@@ -1,6 +1,12 @@
-fn main() -> Result<(), String> {
-    #[cfg(feature = "cli")]
-    curios::cli()?;
+use std::process::ExitCode;
 
-    Ok(())
+fn main() -> ExitCode {
+    #[cfg(feature = "cli")]
+    if let Err(error) = curios::cli() {
+        eprintln!("{error}");
+
+        return ExitCode::FAILURE;
+    }
+
+    ExitCode::SUCCESS
 }

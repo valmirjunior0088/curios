@@ -1,5 +1,6 @@
 use {
     super::{Atom, Term},
+    crate::{Span, render_snippet},
     std::fmt,
 };
 
@@ -62,6 +63,10 @@ pub enum Error {
     },
     CannotInfer {
         term: Box<Term>,
+    },
+    Located {
+        span: Span,
+        error: Box<Error>,
     },
 }
 
@@ -166,6 +171,28 @@ impl Error {
             term: Box::new(term.into()),
         }
     }
+
+    pub fn at(self, span: Span) -> Self {
+        match self {
+            Self::Located { .. } => self,
+            error => Self::Located {
+                span,
+                error: Box::new(error),
+            },
+        }
+    }
+
+    pub fn format(&self, source: &str) -> String {
+        match self {
+            Self::Located { span, error } => {
+                format!(
+                    "{error}\n\n{}",
+                    render_snippet(source, span.start, span.end)
+                )
+            }
+            error => error.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -178,69 +205,54 @@ impl fmt::Display for Error {
                 write!(f, "conversion preempted between {this} and {that}")
             }
             Error::TypeMismatch {
-                term,
-                inferred,
-                expected,
+                inferred, expected, ..
             } => {
                 write!(
                     f,
-                    "type mismatch in {term}\n  inferred: {inferred}\n  expected: {expected}"
+                    "type mismatch\n  inferred: {inferred}\n  expected: {expected}"
                 )
             }
-            Error::NotAFunction { term, head_type } => {
+            Error::NotAFunction { head_type, .. } => {
+                write!(f, "applied a non-function\n  head has type: {head_type}")
+            }
+            Error::NotATuple { head_type, .. } => {
                 write!(
                     f,
-                    "applied a non-function: {term}\n  head has type: {head_type}"
+                    "projected from a non-tuple\n  head has type: {head_type}"
                 )
             }
-            Error::NotATuple { term, head_type } => {
+            Error::TupleIndexOutOfBounds { index, arity, .. } => {
+                write!(f, "tuple index {index} out of bounds (arity {arity})")
+            }
+            Error::NotAnAtomType { head_type, .. } => {
                 write!(
                     f,
-                    "projected from a non-tuple: {term}\n  head has type: {head_type}"
+                    "matched on a non-atom type\n  head has type: {head_type}"
                 )
             }
-            Error::TupleIndexOutOfBounds { term, index, arity } => {
-                write!(
-                    f,
-                    "tuple index {index} out of bounds (arity {arity}): {term}"
-                )
+            Error::NotNatType { head_type, .. } => {
+                write!(f, "expected Nat but got {head_type}")
             }
-            Error::NotAnAtomType { term, head_type } => {
-                write!(
-                    f,
-                    "matched on a non-atom type: {term}\n  head has type: {head_type}"
-                )
+            Error::NotBlnType { head_type, .. } => {
+                write!(f, "expected Bool but got {head_type}")
             }
-            Error::NotNatType { term, head_type } => {
-                write!(f, "expected Nat but got {head_type}\n  in: {term}")
-            }
-            Error::NotBlnType { term, head_type } => {
-                write!(f, "expected Bool but got {head_type}\n  in: {term}")
-            }
-            Error::MatchArityMismatch {
-                term,
-                expected,
-                got,
-            } => {
-                write!(
-                    f,
-                    "match has {got} case(s) but atom type has {expected}: {term}"
-                )
+            Error::MatchArityMismatch { expected, got, .. } => {
+                write!(f, "match has {got} case(s) but atom type has {expected}")
             }
             Error::MatchCaseMissing { term, atom } => {
                 write!(f, "missing match case for atom '{atom}': {term}")
             }
-            Error::CannotInferLiteral { term } => {
-                write!(
-                    f,
-                    "cannot infer type of literal (add an annotation): {term}"
-                )
+            Error::CannotInferLiteral { .. } => {
+                write!(f, "cannot infer type of literal (add an annotation)")
             }
             Error::UnboundVariable { term } => {
                 write!(f, "unbound variable: {term}")
             }
-            Error::CannotInfer { term } => {
-                write!(f, "cannot infer type of: {term}")
+            Error::CannotInfer { .. } => {
+                write!(f, "cannot infer type of expression")
+            }
+            Error::Located { error, .. } => {
+                write!(f, "{error}")
             }
         }
     }
@@ -262,7 +274,7 @@ mod tests {
         let err = Error::not_a_function(Term::Prim(Prim::Nat(0)), Term::Prim(Prim::NatType));
         assert_eq!(
             err.to_string(),
-            "applied a non-function: 0\n  head has type: Nat"
+            "applied a non-function\n  head has type: Nat"
         );
     }
 

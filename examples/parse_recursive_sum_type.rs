@@ -27,7 +27,8 @@ fn main() {
     println!("=== text ===");
     println!("{text_entrypoint}");
 
-    let core_term = text::to_core(&text_entrypoint, &curios::text::PanicLoader);
+    let core_term =
+        text::to_core(&text_entrypoint, &curios::text::PanicLoader).expect("expected core term");
 
     println!();
     println!("=== core ===");
@@ -39,7 +40,8 @@ fn main() {
         &text::to_core(
             &"Int".parse().expect("expected result type"),
             &curios::text::PanicLoader,
-        ),
+        )
+        .expect("expected result type"),
     )
     .expect("expected erased term");
 
