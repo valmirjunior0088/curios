@@ -66,7 +66,7 @@ Three top-level modules fall outside this pattern:
 
 | Module        | Role                                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------- |
-| `src/span.rs` | `Span` byte ranges and the shared `render_snippet` helper; the foundation of [error reporting](#error-reporting) |
+| `src/span.rs` | `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting) |
 | `src/run.rs`  | Wasmtime execution and result printing; gated behind the `run` Cargo feature                        |
 | `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                     |
 
@@ -78,7 +78,7 @@ The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `ru
 
 **Key files:** `parse.rs`, `module.rs`, `term.rs`, `prim.rs`
 
-Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parser<'a, A>` supports `.or()`, `.and()`, `.flat_map()`, `.map()`, and `lazy` for recursive grammars. `ParserState` tracks the current byte offset; on failure `ParserError::format` renders the offending line through the shared `render_snippet` helper (see [Error reporting](#error-reporting)).
+Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parser<'a, A>` supports `.or()`, `.and()`, `.flat_map()`, `.map()`, and `lazy` for recursive grammars. `ParserState` tracks the current byte offset; on failure `ParserError::format` renders the offending line via `Span::render_snippet` (see [Error reporting](#error-reporting)).
 
 Line comments (`-- text`) are stripped inside `parse_whitespace`, which is called after every terminal token. Comments are discarded at parse time and do not appear in the AST.
 
@@ -340,9 +340,9 @@ Wasmtime is configured with reference types, function references, GC, and tail c
 Every fallible stage reports through a uniform pattern built on two primitives in `src/span.rs`:
 
 - `Span { start, end }` — a byte range into the original source.
-- `render_snippet(source, start, end)` — formats the offending line with a line number and a `^` caret underline spanning the range.
+- `Span::render_snippet(&self, source)` — formats the offending line with a line number and a `^` caret underline spanning the range.
 
-Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/error.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format(&source)` prints the message followed by the rendered snippet; an unlocated error prints the message alone. The parser's `ParserError::format` shares the same `render_snippet`. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
+Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/error.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format(&source)` prints the message followed by the rendered snippet; an unlocated error prints the message alone. The parser's `ParserError::format` calls `Span::render_snippet` on a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
 
 `cli()` threads the source string through every stage, mapping each failure with `.map_err(|error| error.format(&source))`. `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
 

@@ -1,5 +1,5 @@
 use {
-    crate::{Span, render_snippet},
+    crate::Span,
     std::fmt,
 };
 
@@ -31,7 +31,7 @@ impl Error {
             Self::Located { span, error } => {
                 format!(
                     "{error}\n\n{}",
-                    render_snippet(source, span.start, span.end)
+                    span.render_snippet(source)
                 )
             }
             error => error.to_string(),

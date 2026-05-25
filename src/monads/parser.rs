@@ -103,7 +103,7 @@ impl ParserError {
         format!(
             "{message}\n\n{snippet}",
             message = self.message,
-            snippet = crate::render_snippet(string, self.offset, self.offset),
+            snippet = crate::Span::new(self.offset, self.offset).render_snippet(string),
         )
     }
 }
