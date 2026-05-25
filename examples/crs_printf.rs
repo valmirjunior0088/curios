@@ -14,8 +14,8 @@ fn main() {
 
         pub mod fmt;
 
-        let name : Bin = Str/trim Sys.read;
-        fmt/printf "%s is %d" name 30
+        let name : Bin = Str/trim(Sys.read);
+        fmt/printf("%s is %d")(name)(30)
         "#;
 
     let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");
@@ -35,7 +35,7 @@ fn main() {
 
     let ill_typed = r#"
         pub mod fmt;
-        fmt/printf "%d" "Alice"
+        fmt/printf("%d")("Alice")
         "#;
 
     let text_entrypoint = ill_typed

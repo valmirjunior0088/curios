@@ -8,32 +8,26 @@ pub type Subterm = Box<Term>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
-    pub label: Option<String>,
-    pub input: Subterm,
+    pub params: Vec<(Option<String>, Subterm)>,
     pub output: Subterm,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
-    pub label: String,
+    pub params: Vec<String>,
     pub body: Subterm,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Apply {
-    pub head: Subterm,
-    pub param: Subterm,
-}
-
-impl Apply {
-    pub fn many(head: Term, params: Vec<Term>) -> Term {
-        params.into_iter().fold(head, |head, param| {
-            Term::Apply(Apply {
-                head: head.into(),
-                param: param.into(),
-            })
-        })
-    }
+pub enum Apply {
+    Call {
+        head: Subterm,
+        params: Vec<Subterm>,
+    },
+    Closure {
+        head: Subterm,
+        args: Vec<Option<Subterm>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -93,10 +93,14 @@ fn main() {
     cont_module.add_func(
         cont::FuncName::from("main"),
         cont::Func {
-            params: vec![cont::ValueName::from("n")],
+            params: vec![],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 values: vec![
+                    (
+                        cont::ValueName::from("n"),
+                        cont::Value::Pure(cont::Data::Int(3)),
+                    ),
                     (
                         cont::ValueName::from("thk"),
                         cont::Value::Pure(cont::Data::Clsr(

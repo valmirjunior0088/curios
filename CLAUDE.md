@@ -13,3 +13,5 @@ When questions arise about the Curios language — its syntax, type system, prim
 This repository has a dedicated Github Projects board named Curios, available through the `gh project` command, which you must invoke any time an instruction involves the board.
 
 The agent must avoid changing code unless explicitly instructed to do so; this means that the agent must not implicitly infer whether to change code and that the agent must wait for a direct go-ahead instruction before changing code.
+
+The agent must never infer workarounds or silently adopt fallback strategies when facing ambiguity or obstacles; architectural and design decisions must always be surfaced to the user and approved before any action is taken. The agent must also never stall in a state of doubt — the user is fully capable of resolving any uncertainty, so the agent must ask directly and immediately rather than speculating, hedging, or deferring to assumptions.

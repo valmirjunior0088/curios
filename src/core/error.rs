@@ -46,6 +46,11 @@ pub enum Error {
         term: Box<Term>,
         head_type: Box<Term>,
     },
+    WrongNumberOfArguments {
+        term: Box<Term>,
+        expected: usize,
+        got: usize,
+    },
     MatchArityMismatch {
         term: Box<Term>,
         expected: usize,
@@ -136,6 +141,14 @@ impl Error {
         Self::NotBlnType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn wrong_number_of_arguments<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+        Self::WrongNumberOfArguments {
+            term: Box::new(term.into()),
+            expected,
+            got,
         }
     }
 
@@ -235,6 +248,12 @@ impl fmt::Display for Error {
             }
             Error::NotBlnType { head_type, .. } => {
                 write!(f, "expected Bool but got {head_type}")
+            }
+            Error::WrongNumberOfArguments { expected, got, .. } => {
+                write!(
+                    f,
+                    "wrong number of arguments: expected {expected}, got {got}"
+                )
             }
             Error::MatchArityMismatch { expected, got, .. } => {
                 write!(f, "match has {got} case(s) but atom type has {expected}")

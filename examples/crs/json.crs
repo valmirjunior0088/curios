@@ -5,4 +5,4 @@ use /Parse;
 
 pub let Value : Type = value/Value;
 pub let encode : Value -> Bin = encode/encode;
-pub let decode : Parse/Parse Value = decode/decode;
+pub let decode : Parse/Parse(Value) = decode/decode;

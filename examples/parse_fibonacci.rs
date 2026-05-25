@@ -9,10 +9,8 @@ fn main() {
             match n : _ => {Int, Int};
             | 0 => (+0, +1);
             | pred ih =>
-                split ih : _ => {Int, Int}; | (a, b) =>
-                (b, Int.add a b);;
-        split fib_pair 10 : _ => Int; | (a, b) =>
-        a
+                (ih.1, Int.add(ih.0, ih.1));;
+        fib_pair(10).0
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

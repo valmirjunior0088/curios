@@ -88,8 +88,15 @@ impl<'a> Lowerer<'a> {
             })
             .collect::<Vec<_>>();
 
-        let param = entry.fresh_value();
-        clsr_frame.push(func.param.clone(), param.clone());
+        let params = func
+            .params
+            .iter()
+            .map(|name| {
+                let val = entry.fresh_value();
+                clsr_frame.push(name.clone(), val.clone());
+                val
+            })
+            .collect::<Vec<_>>();
 
         let mut builder = RegionBuilder::new();
         let tail = self.lower_tail(&func.body, &clsr_frame, &resume, &mut entry, &mut builder);
@@ -98,7 +105,7 @@ impl<'a> Lowerer<'a> {
             clsr_name.clone(),
             cont::Clsr {
                 fields: fields.clone(),
-                params: vec![param],
+                params,
                 resume,
                 region: builder.finish(tail),
             },
@@ -2790,6 +2797,38 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    fn lower_names<'b>(
+        &mut self,
+        params: &'b [ersd::Subterm],
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        mut names: Vec<cont::ValueName>,
+        cont: Box<
+            dyn FnOnce(
+                    &mut Lowerer<'_>,
+                    &mut FrameEntropy,
+                    &mut RegionBuilder,
+                    Vec<cont::ValueName>,
+                ) -> cont::Tail
+                + 'b,
+        >,
+    ) -> cont::Tail {
+        match params {
+            [] => cont(self, state, builder, names),
+            [head, tail @ ..] => self.lower_to_name(
+                head,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, state, builder, name| {
+                    names.push(name);
+                    this.lower_names(tail, frame, state, builder, names, cont)
+                }),
+            ),
+        }
+    }
+
     fn lower_struct<'b>(
         &mut self,
         fields: &'b [ersd::Subterm],
@@ -2834,15 +2873,16 @@ impl<'a> Lowerer<'a> {
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
-                    this.lower_to_name(
-                        &apply.param,
+                    this.lower_names(
+                        &apply.params,
                         frame,
                         state,
                         builder,
-                        Box::new(move |_, _, _, param| {
+                        vec![],
+                        Box::new(move |_, _, _, params| {
                             cont::Tail::Call(cont::CallTarget::Indirect {
                                 target: head,
-                                params: vec![param],
+                                params,
                                 resume: resume.clone(),
                             })
                         }),

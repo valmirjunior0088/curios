@@ -7,8 +7,8 @@ fn main() {
     let core_term: core::Term = core::Rec::new(
         vec![(
             "id",
-            core::FuncType::new("_", core::Type, core::Type),
-            core::Func::new("x", core::Var::free("x")),
+            core::FuncType::new([("_", core::Type)], core::Type),
+            core::Func::new(["x"], core::Var::free("x")),
         )],
         core::Let::new(
             "tuple_ty",
@@ -50,10 +50,10 @@ fn main() {
                             [
                                 (
                                     "left",
-                                    core::Apply::many(
+                                    core::Term::from(core::Apply::new(
                                         core::Var::free("id"),
                                         [core::Var::free("value")],
-                                    ),
+                                    )),
                                 ),
                                 ("right", core::Type.into()),
                             ],

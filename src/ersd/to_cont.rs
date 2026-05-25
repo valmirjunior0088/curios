@@ -108,11 +108,11 @@ mod tests {
         let term = Term::Apply(Apply {
             head: Term::Func(Func {
                 captures: vec![],
-                param: "x".into(),
+                params: vec!["x".into()],
                 body: Term::Name(Name::from("x")).into(),
             })
             .into(),
-            param: Term::Prim(Prim::Int(7)).into(),
+            params: vec![Term::Prim(Prim::Int(7)).into()],
         });
 
         let module = to_cont(&term);
@@ -161,11 +161,11 @@ mod tests {
             Term::Apply(Apply {
                 head: Term::Func(Func {
                     captures: vec![],
-                    param: "x".into(),
+                    params: vec!["x".into()],
                     body: Term::Name(Name::from("x")).into(),
                 })
                 .into(),
-                param: Term::Prim(Prim::Nat(1)).into(),
+                params: vec![Term::Prim(Prim::Nat(1)).into()],
             })
             .into(),
             Term::Prim(Prim::Nat(2)).into(),
@@ -191,11 +191,11 @@ mod tests {
                 Term::Apply(Apply {
                     head: Term::Func(Func {
                         captures: vec![],
-                        param: "x".into(),
+                        params: vec!["x".into()],
                         body: Term::Name(Name::from("x")).into(),
                     })
                     .into(),
-                    param: Term::Prim(Prim::Int(7)).into(),
+                    params: vec![Term::Prim(Prim::Int(7)).into()],
                 })
                 .into(),
                 Term::Prim(Prim::Int(1)).into(),

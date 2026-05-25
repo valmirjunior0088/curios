@@ -134,41 +134,58 @@ pub struct Type;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FuncType {
-    pub input: Subterm,
-    pub output: Scope<One>,
+    pub params: Vec<Scope<Many>>,
+    pub output: Scope<Many>,
 }
 
 impl FuncType {
-    pub fn new<L, I, O>(label: L, input: I, output: O) -> Self
+    pub fn new<I, L, T, O>(params: I, output: O) -> Self
     where
+        I: IntoIterator<Item = (L, T)>,
         L: Into<String>,
-        I: Into<Term>,
+        T: Into<Term>,
         O: Into<Term>,
     {
-        let label = label.into();
+        let params = params
+            .into_iter()
+            .map(|(l, t)| (l.into(), t.into()))
+            .collect::<Vec<(String, Term)>>();
+
+        let labels = params.iter().map(|(l, _)| l.clone()).collect::<Vec<String>>();
+        let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+        let n = params.len();
 
         Self {
-            input: input.into().into(),
-            output: Scope::close(One, &[label.as_str()], output),
+            params: params
+                .into_iter()
+                .enumerate()
+                .map(|(i, (_, ty))| {
+                    let prefix = label_strs[..i].iter().copied().collect::<Vec<_>>();
+                    Scope::close(Many(i), &prefix, ty)
+                })
+                .collect(),
+            output: Scope::close(Many(n), &label_strs, output),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Func {
-    pub body: Scope<One>,
+    pub body: Scope<Many>,
 }
 
 impl Func {
-    pub fn new<L, B>(label: L, body: B) -> Self
+    pub fn new<I, L, B>(labels: I, body: B) -> Self
     where
+        I: IntoIterator<Item = L>,
         L: Into<String>,
         B: Into<Term>,
     {
-        let label = label.into();
+        let labels = labels.into_iter().map(|l| l.into()).collect::<Vec<String>>();
+        let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
 
         Self {
-            body: Scope::close(One, &[label.as_str()], body),
+            body: Scope::close(Many(labels.len()), &label_strs, body),
         }
     }
 }
@@ -176,30 +193,20 @@ impl Func {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Apply {
     pub head: Subterm,
-    pub param: Subterm,
+    pub params: Vec<Subterm>,
 }
 
 impl Apply {
-    pub fn new<H, P>(head: H, param: P) -> Self
-    where
-        H: Into<Term>,
-        P: Into<Term>,
-    {
-        Self {
-            head: head.into().into(),
-            param: param.into().into(),
-        }
-    }
-
-    pub fn many<H, I, P>(head: H, params: I) -> Term
+    pub fn new<H, I, P>(head: H, params: I) -> Self
     where
         H: Into<Term>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
     {
-        params
-            .into_iter()
-            .fold(head.into(), |head, param| Self::new(head, param).into())
+        Self {
+            head: head.into().into(),
+            params: params.into_iter().map(|p| p.into().into()).collect(),
+        }
     }
 }
 
@@ -1036,7 +1043,7 @@ where
 
     fn visit_func_type(&mut self, ft: &FuncType) -> FuncType {
         FuncType {
-            input: self.visit_subterm(&ft.input),
+            params: ft.params.iter().map(|s| self.visit_scope(s)).collect(),
             output: self.visit_scope(&ft.output),
         }
     }
@@ -1050,7 +1057,7 @@ where
     fn visit_apply(&mut self, apply: &Apply) -> Apply {
         Apply {
             head: self.visit_subterm(&apply.head),
-            param: self.visit_subterm(&apply.param),
+            params: apply.params.iter().map(|p| self.visit_subterm(p)).collect(),
         }
     }
 
@@ -1208,7 +1215,7 @@ mod tests {
 
     #[test]
     fn close_open_preserves_nested_bind() {
-        let term = Scope::close(One, &["x"], Func::new("y", Var::free("x")))
+        let term = Scope::close(One, &["x"], Func::new(["y"], Var::free("x")))
             .open(&[&Var::free("z").into()]);
 
         let Term::Func(body) = term else {
@@ -1225,7 +1232,7 @@ mod tests {
     #[test]
     fn collect_ignores_index_names() {
         let term = Term::from(Func::new(
-            "x",
+            ["x"],
             Tuple::new([
                 Term::from(Var::free("x")),
                 Rec::new(

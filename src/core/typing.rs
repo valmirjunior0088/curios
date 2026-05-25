@@ -302,40 +302,66 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 }
 
 fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> {
-    let FuncType { input, output } = ft;
+    let FuncType { params, output } = ft;
+    let n = params.len();
 
-    erase(context, input, &Type.into())?;
-
-    let label = context.fresh(output.first_label());
+    let labels = (0..n)
+        .map(|i| {
+            let hint = params
+                .get(i + 1)
+                .and_then(|s| s.label_iter().nth(i))
+                .flatten();
+            context.fresh(hint)
+        })
+        .collect::<Vec<_>>();
+    let label_terms = labels
+        .iter()
+        .map(|l| Term::from(Var::free(l)))
+        .collect::<Vec<Term>>();
+    let label_refs = label_terms.iter().collect::<Vec<_>>();
 
     context.with_frame(|context| {
-        context.assume(&label, input);
-
-        erase(
-            context,
-            &output.open(&[&Var::free(label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
+        for i in 0..n {
+            let ty = params[i].open(&label_refs[..i]);
+            erase(context, &ty, &Type.into())?;
+            context.assume(&labels[i], &ty);
+        }
+        erase(context, &output.open(&label_refs), &Type.into()).map(|_| ())
     })?;
 
     Ok(Type.into())
 }
 
 fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term, Error> {
-    let Apply { head, param } = apply;
+    let Apply { head, params } = apply;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let (input, output) = match head_type {
-        Term::FuncType(FuncType { input, output }) => (input, output),
+    let ft = match head_type {
+        Term::FuncType(ft) => ft,
         other => return Err(Error::not_a_function(term.clone(), other)),
     };
 
-    erase(context, param, &input)?;
+    if params.len() != ft.params.len() {
+        return Err(Error::wrong_number_of_arguments(
+            term.clone(),
+            ft.params.len(),
+            params.len(),
+        ));
+    }
 
-    Ok(output.open(&[param.as_ref()]))
+    let mut param_terms: Vec<Term> = Vec::with_capacity(params.len());
+
+    for (i, param) in params.iter().enumerate() {
+        let so_far = param_terms.iter().collect::<Vec<_>>();
+        let expected_ty = ft.params[i].open(&so_far);
+        erase(context, param, &expected_ty)?;
+        param_terms.push(*param.clone());
+    }
+
+    let param_refs = param_terms.iter().collect::<Vec<_>>();
+    Ok(ft.output.open(&param_refs))
 }
 
 fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error> {
@@ -1407,26 +1433,42 @@ fn erase_func(
 ) -> Result<ersd::Term, Error> {
     let Func { body } = func;
 
-    let (input, output) = match reduce(context, expected)? {
-        Term::FuncType(FuncType { input, output }) => (input, output),
+    let ft = match reduce(context, expected)? {
+        Term::FuncType(ft) => ft,
         other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
     };
 
+    let n = ft.params.len();
     let captures = body.free_vars().into_iter().collect::<Vec<_>>();
-    let param = context.fresh(body.first_label());
-    let param_term = Var::free(&param).into();
-    let body = body.open(&[&param_term]);
 
-    let body = context.with_frame(|context| {
-        context.assume(&param, &input);
+    let param_names = (0..n)
+        .map(|i| context.fresh(body.label_iter().nth(i).flatten()))
+        .collect::<Vec<_>>();
+    let param_terms = param_names
+        .iter()
+        .map(|p| Term::from(Var::free(p)))
+        .collect::<Vec<_>>();
+    let param_refs = param_terms.iter().collect::<Vec<_>>();
+    let body_opened = body.open(&param_refs);
 
-        erase(context, &body, &output.open(&[&param_term]))
+    let output_type = ft.output.open(&param_refs);
+
+    let erased_body = context.with_frame(|context| {
+        let mut param_tys: Vec<Term> = Vec::with_capacity(n);
+        let mut so_far: Vec<&Term> = Vec::with_capacity(n);
+        for i in 0..n {
+            let ty = ft.params[i].open(&so_far);
+            context.assume(&param_names[i], &ty);
+            param_tys.push(ty);
+            so_far.push(param_terms.get(i).unwrap());
+        }
+        erase(context, &body_opened, &output_type)
     })?;
 
     Ok(ersd::Func {
         captures,
-        param,
-        body: body.into(),
+        params: param_names,
+        body: erased_body.into(),
     }
     .into())
 }
@@ -1437,23 +1479,45 @@ fn erase_apply(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Apply { head, param } = apply;
+    let Apply { head, params } = apply;
 
     let head_type = infer(context, head)?;
     let head_type = reduce(context, &head_type)?;
 
-    let Term::FuncType(FuncType { input, output }) = &head_type else {
-        return Err(Error::not_a_function(term.clone(), head_type));
+    let ft = match &head_type {
+        Term::FuncType(ft) => ft,
+        _ => return Err(Error::not_a_function(term.clone(), head_type)),
     };
 
-    let erased = ersd::Apply {
-        head: erase(context, head, &head_type)?.into(),
-        param: erase(context, param, input)?.into(),
-    };
+    if params.len() != ft.params.len() {
+        return Err(Error::wrong_number_of_arguments(
+            term.clone(),
+            ft.params.len(),
+            params.len(),
+        ));
+    }
 
-    expect(context, term, &output.open(&[param.as_ref()]), expected)?;
+    let mut erased_params = Vec::with_capacity(params.len());
+    let mut param_terms: Vec<Term> = Vec::with_capacity(params.len());
 
-    Ok(erased.into())
+    for (i, param) in params.iter().enumerate() {
+        let so_far = param_terms.iter().collect::<Vec<_>>();
+        let expected_ty = ft.params[i].open(&so_far);
+        erased_params.push(erase(context, param, &expected_ty)?);
+        param_terms.push(*param.clone());
+    }
+
+    let param_refs = param_terms.iter().collect::<Vec<_>>();
+    let result_type = ft.output.open(&param_refs);
+    let erased_head = erase(context, head, &head_type)?;
+
+    expect(context, term, &result_type, expected)?;
+
+    Ok(ersd::Apply {
+        head: erased_head.into(),
+        params: erased_params.into_iter().map(|p| p.into()).collect(),
+    }
+    .into())
 }
 
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
@@ -2097,13 +2161,12 @@ mod tests {
         let mut context = context();
 
         let func_type = Term::from(FuncType::new(
-            "x",
-            AtomType::new(["a"]),
+            [("x", AtomType::new(["a"]))],
             AtomType::new(["a"]),
         ));
 
         let term = Term::from(Rec::new(
-            vec![("f", func_type.clone(), Func::new("x", Var::free("x")))],
+            vec![("f", func_type.clone(), Func::new(["x"], Var::free("x")))],
             Var::free("f"),
         ));
 
@@ -2168,9 +2231,9 @@ mod tests {
             ("z", atom_type.clone()),
             ("w", atom_type.clone()),
         ]));
-        let type_ = Term::from(FuncType::new("x", atom_type.clone(), tuple_type));
+        let type_ = Term::from(FuncType::new([("x", atom_type.clone())], tuple_type));
         let term = Term::from(Func::new(
-            "x",
+            ["x"],
             Tuple::new([Term::from(Var::free("x")), Term::from(Var::free("y"))]),
         ));
 

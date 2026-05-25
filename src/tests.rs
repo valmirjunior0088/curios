@@ -13,7 +13,7 @@ fn end_to_end() {
             match p.0 : _ => Int;
             | 'left => +42;
             | 'right => +7;;
-        Sys.print (Int.to_str (score pair))
+        Sys.print(Int.to_str(score(pair)))
         "#;
 
     let (system, receiver) = crate::ChannelProvider::out();
@@ -27,7 +27,7 @@ fn end_to_end() {
 #[test]
 fn sys_print() {
     let (system, receiver) = crate::ChannelProvider::out();
-    crate::run_text(Duration::from_secs(5), r#"Sys.print "hello""#, system)
+    crate::run_text(Duration::from_secs(5), r#"Sys.print("hello")"#, system)
         .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
@@ -38,7 +38,7 @@ fn sys_print() {
 #[test]
 fn sys_read() {
     let (system, receiver) = crate::ChannelProvider::io(vec![b"hello\n".to_vec()]);
-    crate::run_text(Duration::from_secs(5), r#"Sys.print Sys.read"#, system)
+    crate::run_text(Duration::from_secs(5), r#"Sys.print(Sys.read)"#, system)
         .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
@@ -52,8 +52,8 @@ fn triangular_sum() {
         let result : Nat =
             match 5 : _ => Nat;
             | 0 => 0;
-            | pred ih => Nat.add ih pred;;
-        Sys.print (Nat.to_str result)
+            | pred ih => Nat.add(ih, pred);;
+        Sys.print(Nat.to_str(result))
         "#;
 
     let (system, receiver) = crate::ChannelProvider::out();
@@ -61,5 +61,35 @@ fn triangular_sum() {
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"10".to_vec()]
+    );
+}
+
+#[test]
+fn multi_arg_function() {
+    let source = r#"
+        let add : (Int, Int) -> Int = (x, y) => Int.add(x, y);
+        Sys.print(Int.to_str(add(+3, +4)))
+        "#;
+
+    let (system, receiver) = crate::ChannelProvider::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"7".to_vec()]
+    );
+}
+
+#[test]
+fn curried_function() {
+    let source = r#"
+        let add : Int -> Int -> Int = x => y => Int.add(x, y);
+        Sys.print(Int.to_str(add(+3)(+4)))
+        "#;
+
+    let (system, receiver) = crate::ChannelProvider::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"7".to_vec()]
     );
 }

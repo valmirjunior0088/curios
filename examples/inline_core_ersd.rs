@@ -46,7 +46,7 @@ fn main() {
                         .into(),
                         ersd::Term::Func(ersd::Func {
                             captures: vec!["bias".into(), "self_pair".into()],
-                            param: "input".into(),
+                            params: vec!["input".into()],
                             body: ersd::Term::Let(ersd::Let {
                                 name: "sum".into(),
                                 body: ersd::Term::Prim(ersd::Prim::IntAdd(
@@ -79,7 +79,7 @@ fn main() {
                         name: "applied".into(),
                         body: ersd::Term::Apply(ersd::Apply {
                             head: ersd::Term::Name(ersd::Name::from("make")).into(),
-                            param: ersd::Term::Prim(ersd::Prim::Int(2)).into(),
+                            params: vec![ersd::Term::Prim(ersd::Prim::Int(2)).into()],
                         })
                         .into(),
                         tail: ersd::Term::Let(ersd::Let {

@@ -6,21 +6,20 @@ use {
 fn main() {
     let text_entrypoint = r#"
         rec id : Type -> Type = x => x;
-        let witness : Type = id Int;
+        let witness : Type = id(Int);
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type;
             | 'left => Int;
             | 'right => Flt; };
-        let value : pair_ty = ('left, Int.mul +20 +2);
+        let value : pair_ty = ('left, Int.mul(+20, +2));
         let decoded : Int =
-            split value : _ => Int; | (label, value) =>
-            match label : _ => Int;
-            | 'left => Int.add +40 +2;
+            match value.0 : _ => Int;
+            | 'left => Int.add(+40, +2);
             | 'right => +7;;
         let make : Int -> {witness, Flt} = x =>
-            (x, Flt.add +0.25 +0.5);
-        make decoded
+            (x, Flt.add(+0.25, +0.5));
+        make(decoded)
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

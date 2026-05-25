@@ -21,14 +21,14 @@ pub struct NatMatch {
 #[derive(Debug)]
 pub struct Func {
     pub captures: Vec<String>,
-    pub param: String,
+    pub params: Vec<String>,
     pub body: Subterm,
 }
 
 #[derive(Debug)]
 pub struct Apply {
     pub head: Subterm,
-    pub param: Subterm,
+    pub params: Vec<Subterm>,
 }
 
 #[derive(Debug)]

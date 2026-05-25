@@ -694,16 +694,11 @@ impl Reduce {
     }
 
     fn reduce_apply(&mut self, context: &mut Context, apply: Apply) -> Result<Step, Preempted> {
-        let Apply { head, param } = apply;
+        let Apply { head, params } = apply;
+        let param_refs = params.iter().map(|p| p.as_ref()).collect::<Vec<_>>();
         match self.reduce(context, *head)? {
-            Term::Func(Func { body }) => Ok(Step::Continue(body.open(&[param.as_ref()]))),
-            head => Ok(Step::Break(
-                Apply {
-                    head: head.into(),
-                    param,
-                }
-                .into(),
-            )),
+            Term::Func(Func { body }) => Ok(Step::Continue(body.open(&param_refs))),
+            head => Ok(Step::Break(Apply { head: head.into(), params }.into())),
         }
     }
 
@@ -733,12 +728,22 @@ impl Reduce {
     }
 
     fn reduce_func_eta(&mut self, context: &mut Context, func: Func) -> Result<Step, Preempted> {
-        let fresh = context.fresh(None);
-        let y: Term = Var::free(&fresh).into();
-        match func.body.open(&[&y]) {
-            Term::Apply(Apply { head, param })
-                if matches!(param.as_ref(), Term::Var(v) if v.unwrap() == fresh.as_str())
-                    && !head.free_vars().contains(&fresh) =>
+        let n = func.body.arity();
+        let freshs = (0..n)
+            .map(|_| context.fresh(None))
+            .collect::<Vec<_>>();
+        let ys = freshs
+            .iter()
+            .map(|f| Term::from(Var::free(f)))
+            .collect::<Vec<_>>();
+        let y_refs = ys.iter().collect::<Vec<_>>();
+        match func.body.open(&y_refs) {
+            Term::Apply(Apply { head, params })
+                if params.len() == n
+                    && params.iter().enumerate().all(|(i, p)| {
+                        matches!(p.as_ref(), Term::Var(v) if v.unwrap() == freshs[i].as_str())
+                    })
+                    && freshs.iter().all(|f| !head.free_vars().contains(f)) =>
             {
                 Ok(Step::Continue(*head))
             }
@@ -960,7 +965,7 @@ mod tests {
     fn reduce_apply_beta_reduces() {
         let mut context = context();
 
-        let term = Apply::many(Func::new("x", Var::free("x")), [Atom::from("ok")]);
+        let term = Apply::new(Func::new(["x"], Var::free("x")), [Atom::from("ok")]).into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Atom::from("ok").into()));
     }
@@ -1215,7 +1220,7 @@ mod tests {
     fn eta_reduce_func_fires() {
         let mut context = context();
 
-        let term: Term = Func::new("y", Apply::new(Var::free("f"), Var::free("y"))).into();
+        let term: Term = Func::new(["y"], Apply::new(Var::free("f"), [Var::free("y")])).into();
 
         assert_eq!(reduce(&mut context, &term), Ok(Var::free("f").into()));
     }

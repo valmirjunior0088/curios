@@ -409,23 +409,21 @@ mod tests {
                 core::Let::new(
                     "Str/from",
                     core::FuncType::new(
-                        "",
-                        core::Term::Prim(core::Prim::BinType),
+                        [("", core::Term::Prim(core::Prim::BinType))],
                         core::Var::free("Str")
                     ),
                     core::Func::new(
-                        "bin",
+                        ["bin"],
                         core::Seal::new(core::Var::free("Str"), core::Var::free("bin"))
                     ),
                     core::Let::new(
                         "Str/into",
                         core::FuncType::new(
-                            "",
-                            core::Var::free("Str"),
+                            [("", core::Var::free("Str"))],
                             core::Term::Prim(core::Prim::BinType)
                         ),
                         core::Func::new(
-                            "str",
+                            ["str"],
                             core::Unseal::new(core::Var::free("Str"), core::Var::free("str"))
                         ),
                         core::Term::Type,
@@ -486,12 +484,11 @@ mod tests {
                 core::Let::new(
                     "Foo/Str/from",
                     core::FuncType::new(
-                        "",
-                        core::Term::Prim(core::Prim::BinType),
+                        [("", core::Term::Prim(core::Prim::BinType))],
                         core::Var::free("Foo/Str")
                     ),
                     core::Func::new(
-                        "x",
+                        ["x"],
                         core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))
                     ),
                     core::Var::free("Foo/Str"),
@@ -519,12 +516,11 @@ mod tests {
                 core::Let::new(
                     "Foo/Str/from",
                     core::FuncType::new(
-                        "",
-                        core::Term::Prim(core::Prim::BinType),
+                        [("", core::Term::Prim(core::Prim::BinType))],
                         core::Var::free("Foo/Str")
                     ),
                     core::Func::new(
-                        "x",
+                        ["x"],
                         core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))
                     ),
                     core::Var::free("Foo/Str/from"),
@@ -565,12 +561,11 @@ mod tests {
                 core::Let::new(
                     "Str/foo",
                     core::FuncType::new(
-                        "",
-                        core::Var::free("Str"),
+                        [("", core::Var::free("Str"))],
                         core::Term::Prim(core::Prim::BinType)
                     ),
                     core::Func::new(
-                        "Str",
+                        ["Str"],
                         core::Seal::new(core::Var::free("Str"), core::Var::free("Str"))
                     ),
                     core::Term::Type,
@@ -595,18 +590,16 @@ mod tests {
                 core::Let::new(
                     "Str/foo",
                     core::FuncType::new(
-                        "",
-                        core::Var::free("Str"),
+                        [("", core::Var::free("Str"))],
                         core::FuncType::new(
-                            "",
-                            core::Var::free("Str"),
+                            [("", core::Var::free("Str"))],
                             core::Term::Prim(core::Prim::BinType)
                         ),
                     ),
                     core::Func::new(
-                        "Str",
+                        ["Str"],
                         core::Func::new(
-                            "str",
+                            ["str"],
                             core::Seal::new(core::Var::free("Str"), core::Var::free("str"))
                         ),
                     ),

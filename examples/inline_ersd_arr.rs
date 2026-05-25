@@ -5,7 +5,7 @@ fn main() {
         name: "double".into(),
         body: ersd::Term::Func(ersd::Func {
             captures: vec![],
-            param: "x".into(),
+            params: vec!["x".into()],
             body: ersd::Term::Prim(ersd::Prim::NatAdd(
                 ersd::Term::Name(ersd::Name::from("x")).into(),
                 ersd::Term::Name(ersd::Name::from("x")).into(),
@@ -21,7 +21,7 @@ fn main() {
                 body: ersd::Term::Prim(ersd::Prim::Arr(vec![
                     ersd::Term::Apply(ersd::Apply {
                         head: ersd::Term::Name(ersd::Name::from("double")).into(),
-                        param: ersd::Term::Name(ersd::Name::from("a")).into(),
+                        params: vec![ersd::Term::Name(ersd::Name::from("a")).into()],
                     })
                     .into(),
                     ersd::Term::Name(ersd::Name::from("a")).into(),

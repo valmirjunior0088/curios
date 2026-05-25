@@ -1,5 +1,4 @@
-pub let fold : (A : Type) -> Bin -> A -> (Nat -> A -> A) -> A =
-    A => str => init => f =>
-        match (Bin.len str) : A;
-        | 0 => init;
-        | pred ih => f (Bin.get str pred) ih;;
+pub let fold(A : Type, str : Bin, init : A, f : (Nat, A) -> A) -> A =
+    match Bin.len(str) : A;
+    | 0 => init;
+    | pred ih => f(Bin.get(str, pred), ih);;

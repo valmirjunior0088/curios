@@ -194,12 +194,13 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
         }
         Term::Func(Func {
             captures,
-            param,
+            params,
             body,
         }) => {
+            let params_str = params.iter().map(|p| format!("#{}", p.as_str())).collect::<Vec<_>>().join(", ");
             if captures.is_empty() {
                 flat([
-                    pure(format!("#{}", param.as_str())),
+                    pure(format!("({params_str})")),
                     pure(" =>\n"),
                     indent(print_term(body)),
                 ])
@@ -211,15 +212,18 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                         || pure(", "),
                     ),
                     pure("} "),
-                    pure(format!("#{}", param.as_str())),
+                    pure(format!("({params_str})")),
                     pure(" =>\n"),
                     indent(print_term(body)),
                 ])
             }
         }
-        Term::Apply(super::Apply { head, param }) => {
-            flat([print_term(head), pure(" "), print_term(param)])
-        }
+        Term::Apply(super::Apply { head, params }) => flat([
+            print_term(head),
+            pure("("),
+            sep_flat(params.iter().map(|p| print_term(p)), || pure(", ")),
+            pure(")"),
+        ]),
         Term::Tuple(Tuple { fields }) => flat([
             pure("("),
             sep_flat(fields.iter().map(|f| print_term(f)), || pure(", ")),

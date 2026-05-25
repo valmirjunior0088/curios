@@ -57,13 +57,47 @@ impl<'a> Elaborate<'a> {
                     .into()
             }
             Term::FuncType(ft) => core::FuncType::new(
-                ft.label.clone().unwrap_or_default(),
-                self.term(&ft.input)?,
+                ft.params
+                    .iter()
+                    .map(|(label, ty)| {
+                        Ok((label.clone().unwrap_or_default(), self.term(ty)?))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&ft.output)?,
             )
             .into(),
-            Term::Func(func) => core::Func::new(func.label.clone(), self.term(&func.body)?).into(),
-            Term::Apply(ap) => core::Apply::new(self.term(&ap.head)?, self.term(&ap.param)?).into(),
+            Term::Func(func) => {
+                core::Func::new(func.params.clone(), self.term(&func.body)?).into()
+            }
+            Term::Apply(crate::text::Apply::Call { head, params }) => core::Apply::new(
+                self.term(head)?,
+                params
+                    .iter()
+                    .map(|p| self.term(p))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            )
+            .into(),
+            Term::Apply(crate::text::Apply::Closure { head, args }) => {
+                let mut hole_count = 0_usize;
+                let mut fresh_params = Vec::new();
+                let elaborated_args = args
+                    .iter()
+                    .map(|arg| match arg {
+                        None => {
+                            let label = format!("_{}", hole_count);
+                            hole_count += 1;
+                            fresh_params.push(label.clone());
+                            Ok(core::Var::free(label).into())
+                        }
+                        Some(t) => self.term(t),
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+                core::Func::new(
+                    fresh_params,
+                    core::Apply::new(self.term(head)?, elaborated_args),
+                )
+                .into()
+            }
             Term::TupleType(tt) => core::TupleType::new(
                 tt.fields
                     .iter()

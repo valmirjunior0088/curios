@@ -5,12 +5,12 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
-        let xs : Arr Nat = [10, 20, 30];
-        let len : Nat = Arr.len xs;
-        let first : Nat = Arr.get xs 0;
-        let rest : Arr Nat = Arr.slice xs 1 3;
-        let doubled : Arr Nat = Arr.concat xs, xs;
-        Arr.len doubled
+        let xs : Arr(Nat) = [10, 20, 30];
+        let len : Nat = Arr.len(xs);
+        let first : Nat = Arr.get(xs, 0);
+        let rest : Arr(Nat) = Arr.slice(xs, 1, 3);
+        let doubled : Arr(Nat) = Arr.concat(xs, xs);
+        Arr.len(doubled)
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

@@ -11,15 +11,13 @@ fn main() {
             | 'nil => Int;
             | 'cons => {Int, IntList}; };
         rec sum : IntList -> Int = list =>
-            split list : _ => Int; | (label, value) =>
-            match label : _ => Int;
+            match list.0 : _ => Int;
             | 'nil => +0;
             | 'cons =>
-                split value : _ => Int; | (head, tail) =>
-                Int.add head (sum tail);;
+                Int.add(list.1.0, sum(list.1.1));;
         let xs : IntList =
             ('cons, (+1, ('cons, (+2, ('cons, (+3, ('nil, +0)))))));
-        sum xs
+        sum(xs)
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

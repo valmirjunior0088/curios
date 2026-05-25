@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Match, NatFold, NatMatch, One,
-        Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
+        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, NatFold, NatMatch,
+        One, Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -23,6 +23,24 @@ fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
     let body = scope.open(&[&Var::free(&label).into()]);
 
     (label, body)
+}
+
+fn open_scope_many(scope: Scope<Many>, depth: usize) -> (Vec<String>, Term) {
+    let n = scope.arity();
+    let labels = (0..n)
+        .map(|i| {
+            scope
+                .label_iter()
+                .nth(i)
+                .flatten()
+                .map(str::to_string)
+                .unwrap_or_else(|| label_at(depth + i))
+        })
+        .collect::<Vec<_>>();
+    let label_terms = labels.iter().map(Var::free).map(Term::from).collect::<Vec<_>>();
+    let label_refs = label_terms.iter().collect::<Vec<_>>();
+    let body = scope.open(&label_refs);
+    (labels, body)
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
@@ -461,31 +479,52 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 indent(flat([print_term(*default, depth), pure(";")])),
             ])
         }
-        Term::FuncType(FuncType { input, output }) => {
-            let (label, output) = open_scope_one(output, depth);
-
+        Term::FuncType(FuncType { params, output }) => {
+            let n = params.len();
+            let mut labels = Vec::with_capacity(n);
+            let mut param_terms: Vec<Term> = Vec::with_capacity(n);
+            let mut param_printers = Vec::with_capacity(n);
+            for (i, scope) in params.into_iter().enumerate() {
+                let label = scope
+                    .first_label()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| label_at(depth + i));
+                let param_refs: Vec<&Term> = param_terms.iter().collect();
+                let ty = scope.open(&param_refs);
+                let printer = match scope.first_label() {
+                    Some(_) => flat([pure(label.clone()), pure(" : "), print_term(ty, depth + n)]),
+                    None => print_term(ty, depth + n),
+                };
+                param_printers.push(printer);
+                param_terms.push(Term::from(Var::free(&label)));
+                labels.push(label);
+            }
+            let param_refs: Vec<&Term> = param_terms.iter().collect();
+            let output = output.open(&param_refs);
             flat([
                 pure("("),
-                pure(label),
-                pure(" : "),
-                print_term(*input, depth),
+                sep_flat(param_printers, || pure(", ")),
                 pure(") -> "),
-                print_term(output, depth + 1),
+                print_term(output, depth + n),
             ])
         }
         Term::Func(Func { body }) => {
-            let (label, body) = open_scope_one(body, depth);
-
-            flat([
-                pure(label),
-                pure(" =>\n"),
-                indent(print_term(body, depth + 1)),
-            ])
+            let (labels, body) = open_scope_many(body, depth);
+            let param_str = if labels.len() == 1 {
+                labels.into_iter().next().unwrap()
+            } else {
+                format!("({})", labels.join(", "))
+            };
+            flat([pure(param_str), pure(" =>\n"), indent(print_term(body, depth + 1))])
         }
-        Term::Apply(Apply { head, param }) => flat([
+        Term::Apply(Apply { head, params }) => flat([
             print_term(*head, depth),
-            pure(" "),
-            print_term(*param, depth),
+            pure("("),
+            sep_flat(
+                params.into_iter().map(|p| print_term(*p, depth)).collect::<Vec<_>>(),
+                || pure(", "),
+            ),
+            pure(")"),
         ]),
         Term::TupleType(TupleType { fields }) => {
             let n = fields.len();

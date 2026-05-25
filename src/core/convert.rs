@@ -198,13 +198,28 @@ impl Convert {
         this: FuncType,
         that: FuncType,
     ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.input, *that.input);
+        if this.params.len() != that.params.len() {
+            return Ok(false);
+        }
 
-        let label = Var::free(context.fresh(None)).into();
+        let n = this.params.len();
+        let labels = (0..n)
+            .map(|_| Term::from(Var::free(context.fresh(None))))
+            .collect::<Vec<_>>();
+        let label_refs = labels.iter().collect::<Vec<_>>();
+
+        for i in 0..n {
+            self.enqueue(
+                Type.into(),
+                this.params[i].open(&label_refs[..i]),
+                that.params[i].open(&label_refs[..i]),
+            );
+        }
+
         self.enqueue(
             Type.into(),
-            this.output.open(&[&label]),
-            that.output.open(&[&label]),
+            this.output.open(&label_refs),
+            that.output.open(&label_refs),
         );
 
         Ok(true)
@@ -217,20 +232,29 @@ impl Convert {
         that: Func,
         type_: Term,
     ) -> Result<bool, Preempted> {
-        let y: Term = Var::free(context.fresh(None)).into();
+        let n = this.body.arity();
+        let ys: Vec<Term> = (0..n)
+            .map(|_| Var::free(context.fresh(None)).into())
+            .collect();
+        let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match reduce(context, &type_)? {
-            Term::FuncType(FuncType { output, .. }) => output.open(&[&y]),
+            Term::FuncType(FuncType { output, .. }) => output.open(&y_refs),
             _ => Type.into(),
         };
-        self.enqueue(output_type, this.body.open(&[&y]), that.body.open(&[&y]));
+        self.enqueue(
+            output_type,
+            this.body.open(&y_refs),
+            that.body.open(&y_refs),
+        );
 
         Ok(true)
     }
 
     fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, Preempted> {
         self.enqueue(Type.into(), *this.head, *that.head);
-        self.enqueue(Type.into(), *this.param, *that.param);
-
+        for (a, b) in this.params.into_iter().zip(that.params) {
+            self.enqueue(Type.into(), *a, *b);
+        }
         Ok(true)
     }
 
@@ -474,15 +498,19 @@ impl Convert {
         other: Term,
         type_: Term,
     ) -> Result<bool, Preempted> {
-        let y: Term = Var::free(context.fresh(None)).into();
+        let n = func.body.arity();
+        let ys: Vec<Term> = (0..n)
+            .map(|_| Var::free(context.fresh(None)).into())
+            .collect();
+        let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match reduce(context, &type_)? {
-            Term::FuncType(FuncType { output, .. }) => output.open(&[&y]),
+            Term::FuncType(FuncType { output, .. }) => output.open(&y_refs),
             _ => Type.into(),
         };
         self.enqueue(
             output_type,
-            func.body.open(&[&y]),
-            Apply::new(other, y).into(),
+            func.body.open(&y_refs),
+            Apply::new(other, ys).into(),
         );
         Ok(true)
     }
@@ -502,13 +530,17 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, Preempted> {
         match reduce(context, &type_)? {
-            Term::FuncType(FuncType { output, .. }) => {
-                let y: Term = Var::free(context.fresh(None)).into();
-                let output_type = output.open(&[&y]);
+            Term::FuncType(FuncType { params, output }) => {
+                let n = params.len();
+                let ys: Vec<Term> = (0..n)
+                    .map(|_| Var::free(context.fresh(None)).into())
+                    .collect();
+                let y_refs: Vec<&Term> = ys.iter().collect();
+                let output_type = output.open(&y_refs);
                 self.enqueue(
                     output_type,
-                    Apply::new(this, y.clone()).into(),
-                    Apply::new(that, y).into(),
+                    Apply::new(this, ys.clone()).into(),
+                    Apply::new(that, ys).into(),
                 );
                 Ok(true)
             }
@@ -628,9 +660,9 @@ mod tests {
     fn convert_func_type_is_alpha_equivalent() {
         let mut context = context();
 
-        let this = Term::from(FuncType::new("x", Type, Var::free("x")));
+        let this = Term::from(FuncType::new([("x", Type)], Var::free("x")));
 
-        let that = Term::from(FuncType::new("y", Type, Var::free("y")));
+        let that = Term::from(FuncType::new([("y", Type)], Var::free("y")));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -639,9 +671,9 @@ mod tests {
     fn convert_func_is_alpha_equivalent() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Var::free("x")));
+        let this = Term::from(Func::new(["x"], Var::free("x")));
 
-        let that = Term::from(Func::new("y", Var::free("y")));
+        let that = Term::from(Func::new(["y"], Var::free("y")));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -672,12 +704,12 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(Func::new(
-            "x",
+            ["x"],
             Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
         let that = Term::from(Func::new(
-            "y",
+            ["y"],
             Term::Prim(Prim::int_add(Var::free("y"), Term::Prim(Prim::Int(1)))),
         ));
 
@@ -689,12 +721,12 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(Func::new(
-            "x",
+            ["x"],
             Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
         let that = Term::from(Func::new(
-            "x",
+            ["x"],
             Term::Prim(Prim::int_sub(Var::free("x"), Term::Prim(Prim::Int(1)))),
         ));
 
@@ -717,12 +749,12 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(Func::new(
-            "x",
+            ["x"],
             Term::Prim(Prim::nat_add(Var::free("x"), Term::Prim(Prim::Nat(1)))),
         ));
 
         let that = Term::from(Func::new(
-            "y",
+            ["y"],
             Term::Prim(Prim::nat_add(Var::free("y"), Term::Prim(Prim::Nat(1)))),
         ));
 
@@ -733,9 +765,9 @@ mod tests {
     fn convert_prim_flt_neg_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Term::Prim(Prim::flt_neg(Var::free("x")))));
+        let this = Term::from(Func::new(["x"], Term::Prim(Prim::flt_neg(Var::free("x")))));
 
-        let that = Term::from(Func::new("y", Term::Prim(Prim::flt_neg(Var::free("y")))));
+        let that = Term::from(Func::new(["y"], Term::Prim(Prim::flt_neg(Var::free("y")))));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -744,9 +776,9 @@ mod tests {
     fn convert_prim_nat_to_int_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Term::Prim(Prim::nat_to_int(Var::free("x")))));
+        let this = Term::from(Func::new(["x"], Term::Prim(Prim::nat_to_int(Var::free("x")))));
 
-        let that = Term::from(Func::new("y", Term::Prim(Prim::nat_to_int(Var::free("y")))));
+        let that = Term::from(Func::new(["y"], Term::Prim(Prim::nat_to_int(Var::free("y")))));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -819,8 +851,8 @@ mod tests {
     fn convert_prim_bin_len_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::from(Func::new("x", Term::Prim(Prim::bin_len(Var::free("x")))));
-        let that = Term::from(Func::new("y", Term::Prim(Prim::bin_len(Var::free("y")))));
+        let this = Term::from(Func::new(["x"], Term::Prim(Prim::bin_len(Var::free("x")))));
+        let that = Term::from(Func::new(["y"], Term::Prim(Prim::bin_len(Var::free("y")))));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -830,17 +862,17 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(Func::new(
-            "x",
+            ["x"],
             Func::new(
-                "a",
+                ["a"],
                 Term::Prim(Prim::bin_get(Var::free("x"), Var::free("a"))),
             ),
         ));
 
         let that = Term::from(Func::new(
-            "y",
+            ["y"],
             Func::new(
-                "b",
+                ["b"],
                 Term::Prim(Prim::bin_get(Var::free("y"), Var::free("b"))),
             ),
         ));
@@ -853,17 +885,17 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(Func::new(
-            "x",
+            ["x"],
             Func::new(
-                "a",
+                ["a"],
                 Term::Prim(Prim::bin_concat([Var::free("x"), Var::free("a")])),
             ),
         ));
 
         let that = Term::from(Func::new(
-            "y",
+            ["y"],
             Func::new(
-                "b",
+                ["b"],
                 Term::Prim(Prim::bin_concat([Var::free("y"), Var::free("b")])),
             ),
         ));
@@ -876,11 +908,11 @@ mod tests {
         let mut context = context();
 
         let this = Term::from(Func::new(
-            "x",
+            ["x"],
             Func::new(
-                "a",
+                ["a"],
                 Func::new(
-                    "p",
+                    ["p"],
                     Term::Prim(Prim::bin_slice(
                         Var::free("x"),
                         Var::free("a"),
@@ -891,11 +923,11 @@ mod tests {
         ));
 
         let that = Term::from(Func::new(
-            "y",
+            ["y"],
             Func::new(
-                "b",
+                ["b"],
                 Func::new(
-                    "q",
+                    ["q"],
                     Term::Prim(Prim::bin_slice(
                         Var::free("y"),
                         Var::free("b"),
@@ -987,7 +1019,7 @@ mod tests {
         let this = Term::from(TupleType::new([
             (
                 "x",
-                Apply::many(Func::new("z", Var::free("z")), [Var::free("loop")]),
+                Term::from(Apply::new(Func::new(["z"], Var::free("z")), [Var::free("loop")])),
             ),
             ("y", Term::from(Var::free("x"))),
         ]));

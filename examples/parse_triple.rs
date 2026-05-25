@@ -6,8 +6,7 @@ use {
 fn main() {
     let text_entrypoint = r#"
         let triple : {Int, Int, Int} = (+1, +2, +3);
-        split triple : _ => Int; | (a, b, c) =>
-        Int.add a (Int.add b c)
+        Int.add(triple.0, Int.add(triple.1, triple.2))
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

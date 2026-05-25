@@ -5,5 +5,5 @@ pub rec Value : Type = {
     | 'bln  => Bln;
     | 'num  => Flt;
     | 'str  => Bin;
-    | 'arr  => Arr Value;
-    | 'obj  => Arr { Bin, Value }; };
+    | 'arr  => Arr(Value);
+    | 'obj  => Arr({ Bin, Value }); };

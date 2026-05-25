@@ -1,5 +1,4 @@
-pub let fold : (T : Type) -> (A : Type) -> Arr T -> A -> (T -> A -> A) -> A =
-    T => A => arr => init => f =>
-        match (Arr.len arr) : A;
-        | 0 => init;
-        | pred ih => f (Arr.get arr pred) ih;;
+pub let fold(T : Type, A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
+    match Arr.len(arr) : A;
+    | 0 => init;
+    | pred ih => f(Arr.get(arr, pred), ih);;

@@ -17,13 +17,13 @@ fn main() {
             ("extra", ('null, ()))
         ]);
 
-        let encoded : Bin = json/encode value;
+        let encoded : Bin = json/encode(value);
 
-        let decoded : Parse/Result { Nat, json/Value } = json/decode encoded 0;
+        let decoded : Parse/Result({ Nat, json/Value }) = json/decode(encoded, 0);
 
         match decoded.0 : {};
-        | 'ok  => Sys.print (json/encode decoded.1.1);
-        | 'err => Sys.print decoded.1;
+        | 'ok  => Sys.print(json/encode(decoded.1.1));
+        | 'err => Sys.print(decoded.1);
         "#;
 
     let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");

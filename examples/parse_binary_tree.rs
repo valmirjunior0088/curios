@@ -11,17 +11,15 @@ fn main() {
             | 'leaf => Int;
             | 'node => {Int, Tree, Tree}; };
         rec sum : Tree -> Int = t =>
-            split t : _ => Int; | (label, value) =>
-            match label : _ => Int;
-            | 'leaf => value;
+            match t.0 : _ => Int;
+            | 'leaf => t.1;
             | 'node =>
-                split value : _ => Int; | (v, left, right) =>
-                Int.add v (Int.add (sum left) (sum right));;
+                Int.add(t.1.0, Int.add(sum(t.1.1), sum(t.1.2)));;
         let tree : Tree =
             ('node, (+1,
                 ('node, (+2, ('leaf, +3), ('leaf, +4))),
                 ('node, (+5, ('leaf, +6), ('leaf, +7)))));
-        sum tree
+        sum(tree)
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

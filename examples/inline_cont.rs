@@ -33,16 +33,22 @@ fn main() {
     cont_module.add_func(
         cont::FuncName::from("main"),
         cont::Func {
-            params: vec![cont::ValueName::from("n")],
+            params: vec![],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
-                values: vec![(
-                    cont::ValueName::from("k"),
-                    cont::Value::Pure(cont::Data::Clsr(
-                        cont::ClsrName::from("AddBias"),
-                        vec![cont::ValueName::from("BIAS")],
-                    )),
-                )],
+                values: vec![
+                    (
+                        cont::ValueName::from("n"),
+                        cont::Value::Pure(cont::Data::Int(5)),
+                    ),
+                    (
+                        cont::ValueName::from("k"),
+                        cont::Value::Pure(cont::Data::Clsr(
+                            cont::ClsrName::from("AddBias"),
+                            vec![cont::ValueName::from("BIAS")],
+                        )),
+                    ),
+                ],
                 blocks: vec![
                     (
                         cont::BlockName::from("Zero"),
