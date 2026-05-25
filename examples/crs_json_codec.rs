@@ -32,7 +32,7 @@ fn main() {
 
     let core_term = text::to_core(
         &text_entrypoint,
-        &text::FileLoader::new(&Path::new(file!()).parent().unwrap().join("crs")),
+        &text::FileLoader::new(Path::new(file!()).parent().unwrap().join("crs")),
     );
     println!();
     println!("=== core ===");
