@@ -14,6 +14,7 @@ fn main() {
             params: vec![cont::ValueName::from("x")],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
+                preallocs: vec![],
                 values: vec![(
                     cont::ValueName::from("y"),
                     cont::Value::Eval(cont::Code::IntAdd(
@@ -36,6 +37,7 @@ fn main() {
             params: vec![],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
+                preallocs: vec![],
                 values: vec![
                     (
                         cont::ValueName::from("n"),
@@ -55,6 +57,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("flag")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -69,6 +72,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("flag")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -83,6 +87,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("out")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![
                                     (
                                         cont::ValueName::from("pair"),

@@ -1,16 +1,69 @@
 use {
     super::{Entropy, Frame, FrameEntropy},
     crate::{cont, ersd},
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, HashMap},
 };
 
-fn unsupported_rec_item(term: &ersd::Term) -> ! {
+fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
     panic!(
-        "`to_cont` does not support this `rec` item in the MVP: \
-         recursive RHSs must lower directly to a `cont::Value`, but the following term \
-         requires value-level knot tying in `cont` (for example alias/cell/fixpoint support): \
-         {term:?}",
+        "`to_cont` does not support a call-valued `rec` item in value position: \
+         the following term reaches `Apply`/`Match`/`NatMatch` on its construction path \
+         but is bound where a synchronous value is required: {term:?}",
     )
+}
+
+/// Post-order (dependencies first) of the call/match-valued `rec` bindings, panicking
+/// with the offending cycle if two such bindings depend on each other's value — that
+/// case needs runtime fixpoint cells, which are out of scope.
+fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
+    fn visit(
+        node: usize,
+        names: &[&str],
+        deps: &[Vec<usize>],
+        marks: &mut [u8],
+        stack: &mut Vec<usize>,
+        order: &mut Vec<usize>,
+    ) {
+        marks[node] = 1;
+        stack.push(node);
+
+        for &next in &deps[node] {
+            match marks[next] {
+                1 => {
+                    let start = stack.iter().position(|&n| n == next).unwrap();
+                    let cycle = stack[start..]
+                        .iter()
+                        .chain([&next])
+                        .map(|&n| names[n])
+                        .collect::<Vec<_>>()
+                        .join(" -> ");
+
+                    panic!(
+                        "`to_cont` does not support value-level mutual recursion through calls: \
+                         {cycle} would require runtime fixpoint cells",
+                    );
+                }
+                0 => visit(next, names, deps, marks, stack, order),
+                _ => {}
+            }
+        }
+
+        stack.pop();
+        marks[node] = 2;
+        order.push(node);
+    }
+
+    let mut marks = vec![0u8; names.len()];
+    let mut stack = vec![];
+    let mut order = vec![];
+
+    for node in 0..names.len() {
+        if marks[node] == 0 {
+            visit(node, names, deps, &mut marks, &mut stack, &mut order);
+        }
+    }
+
+    order
 }
 
 fn emit_fresh_value(
@@ -25,6 +78,7 @@ fn emit_fresh_value(
 }
 
 struct RegionBuilder {
+    preallocs: Vec<(cont::ValueName, cont::Prealloc)>,
     values: Vec<(cont::ValueName, cont::Value)>,
     blocks: Vec<(cont::BlockName, cont::Block)>,
 }
@@ -32,9 +86,14 @@ struct RegionBuilder {
 impl RegionBuilder {
     fn new() -> Self {
         Self {
+            preallocs: vec![],
             values: vec![],
             blocks: vec![],
         }
+    }
+
+    fn add_prealloc(&mut self, name: cont::ValueName, prealloc: cont::Prealloc) {
+        self.preallocs.push((name, prealloc));
     }
 
     fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
@@ -47,6 +106,7 @@ impl RegionBuilder {
 
     fn finish(self, tail: cont::Tail) -> cont::Region {
         cont::Region {
+            preallocs: self.preallocs,
             values: self.values,
             blocks: self.blocks,
             tail,
@@ -153,13 +213,20 @@ impl<'a> Lowerer<'a> {
             })
             .collect::<Vec<_>>();
 
-        letrec
-            .items
-            .iter()
-            .zip(reserved)
-            .for_each(|(item, target)| {
-                self.lower_letrec_item(item, target, &frame, state, builder)
-            });
+        for (item, target) in letrec.items.iter().zip(reserved) {
+            match self.plan_aggregate(item, &frame) {
+                Some(fill) => {
+                    builder.add_prealloc(target.clone(), fill.prealloc());
+                    self.emit_agg_fill(target, &fill, &frame, state, builder);
+                }
+                None => match item.as_ref() {
+                    ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
+                        unsupported_sync_rec_item(item)
+                    }
+                    _ => self.lower_letrec_item(item, target, &frame, state, builder),
+                },
+            }
+        }
 
         frame
     }
@@ -849,7 +916,7 @@ impl<'a> Lowerer<'a> {
                 )
             }
             ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
-                unsupported_rec_item(term)
+                unsupported_sync_rec_item(term)
             }
         }
     }
@@ -1298,7 +1365,7 @@ impl<'a> Lowerer<'a> {
                 );
             }
             ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
-                unsupported_rec_item(term)
+                unsupported_sync_rec_item(term)
             }
         }
     }
@@ -1324,7 +1391,184 @@ type ContMany<'a> = Box<
         + 'a,
 >;
 
+type RecBody<'a> = Box<
+    dyn FnOnce(&mut Lowerer<'_>, &Frame, &mut FrameEntropy, &mut RegionBuilder) -> cont::Tail + 'a,
+>;
+
+/// How a `rec`-bound aggregate's prealloc'd shell is filled. A `Func` is lowered eagerly so
+/// its `ClsrName` is shared by both the prealloc declaration and the fill; tuples and arrays
+/// only need their length up front and lower their elements at fill time.
+enum AggFill<'b> {
+    Clsr(cont::ClsrName, Vec<cont::ValueName>),
+    Tpl(&'b [ersd::Subterm]),
+    Arr(&'b [ersd::Subterm]),
+}
+
+impl AggFill<'_> {
+    fn prealloc(&self) -> cont::Prealloc {
+        match self {
+            AggFill::Clsr(clsr, _) => cont::Prealloc::Clsr(clsr.clone()),
+            AggFill::Tpl(fields) => cont::Prealloc::Tpl(fields.len()),
+            AggFill::Arr(elems) => cont::Prealloc::Arr(elems.len()),
+        }
+    }
+}
+
 impl<'a> Lowerer<'a> {
+    /// Classify a `rec` item: aggregates (`Func`/`Tuple`/`Arr`) get a prealloc'd shell so
+    /// their identity is available before their fields; a `Func` is lowered here so its
+    /// `ClsrName` is fixed. Everything else is "computed" (lowered via `lower_to_name`).
+    fn plan_aggregate<'b>(&mut self, item: &'b ersd::Term, frame: &Frame) -> Option<AggFill<'b>> {
+        match item {
+            ersd::Term::Func(func) => {
+                let (clsr_name, captures) = self.lower_closure(func, frame);
+
+                Some(AggFill::Clsr(clsr_name, captures))
+            }
+            ersd::Term::Tuple(tuple) => Some(AggFill::Tpl(&tuple.fields)),
+            ersd::Term::Prim(ersd::Prim::Arr(elems)) => Some(AggFill::Arr(elems)),
+            _ => None,
+        }
+    }
+
+    fn emit_agg_fill(
+        &mut self,
+        target: cont::ValueName,
+        fill: &AggFill,
+        frame: &Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+    ) {
+        match fill {
+            AggFill::Clsr(clsr_name, captures) => builder.add_value(
+                target,
+                cont::Value::Pure(cont::Data::Clsr(clsr_name.clone(), captures.clone())),
+            ),
+            AggFill::Tpl(fields) => {
+                let names = fields
+                    .iter()
+                    .map(|field| self.lower_letrec_name(field, frame, state, builder))
+                    .collect();
+
+                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(names)));
+            }
+            AggFill::Arr(elems) => {
+                let names = elems
+                    .iter()
+                    .map(|elem| self.lower_letrec_name(elem, frame, state, builder))
+                    .collect();
+
+                builder.add_value(target, cont::Value::Pure(cont::Data::Arr(names)));
+            }
+        }
+    }
+
+    /// Lower a `rec` group, then `body`. Aggregates are prealloc'd at region entry; call/match
+    /// -valued bindings are lowered in dependency order through resume blocks; aggregate fills
+    /// (which may reference those results) run last, just before `body`.
+    fn lower_rec<'b>(
+        &mut self,
+        letrec: &'b ersd::Rec,
+        frame: &Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        body: RecBody<'b>,
+    ) -> cont::Tail {
+        let mut frame = frame.clone();
+        let targets = letrec
+            .names
+            .iter()
+            .map(|name| {
+                let target = state.fresh_value();
+                frame.push(name.clone(), target.clone());
+
+                target
+            })
+            .collect::<Vec<_>>();
+
+        let mut aggregates: Vec<(cont::ValueName, AggFill<'b>)> = vec![];
+        let mut computed: Vec<(usize, cont::ValueName, &'b ersd::Term)> = vec![];
+
+        for (index, (item, target)) in letrec.items.iter().zip(&targets).enumerate() {
+            match self.plan_aggregate(item, &frame) {
+                Some(fill) => aggregates.push((target.clone(), fill)),
+                None => computed.push((index, target.clone(), item)),
+            }
+        }
+
+        let computed_names = computed
+            .iter()
+            .map(|(index, _, _)| letrec.names[*index].as_str())
+            .collect::<Vec<_>>();
+
+        let name_to_pos = computed_names
+            .iter()
+            .enumerate()
+            .map(|(pos, name)| (*name, pos))
+            .collect::<HashMap<_, _>>();
+
+        let deps = computed
+            .iter()
+            .map(|(_, _, rhs)| {
+                rhs.free_names()
+                    .iter()
+                    .filter_map(|name| name_to_pos.get(name.as_str()).copied())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let order = rec_computed_order(&computed_names, &deps);
+
+        for (target, fill) in &aggregates {
+            builder.add_prealloc(target.clone(), fill.prealloc());
+        }
+
+        let sorted = order
+            .into_iter()
+            .map(|pos| {
+                let (_, target, rhs) = &computed[pos];
+                (target.clone(), *rhs)
+            })
+            .collect::<Vec<_>>();
+
+        let fill_body: RecBody<'b> = Box::new(move |this, frame, state, builder| {
+            for (target, fill) in &aggregates {
+                this.emit_agg_fill(target.clone(), fill, frame, state, builder);
+            }
+
+            body(this, frame, state, builder)
+        });
+
+        self.lower_rec_computed(&sorted, &frame, state, builder, fill_body)
+    }
+
+    fn lower_rec_computed<'b>(
+        &mut self,
+        computed: &'b [(cont::ValueName, &'b ersd::Term)],
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        body: RecBody<'b>,
+    ) -> cont::Tail {
+        match computed {
+            [] => body(self, frame, state, builder),
+            [(target, rhs), rest @ ..] => {
+                let target = target.clone();
+
+                self.lower_to_name(
+                    rhs,
+                    frame,
+                    state,
+                    builder,
+                    Box::new(move |this, state, builder, result| {
+                        builder.add_value(target, cont::Value::Alias(result));
+                        this.lower_rec_computed(rest, frame, state, builder, body)
+                    }),
+                )
+            }
+        }
+    }
+
     fn lower_to_name(
         &mut self,
         term: &ersd::Term,
@@ -2667,10 +2911,15 @@ impl<'a> Lowerer<'a> {
                     }),
                 )
             }
-            ersd::Term::Rec(letrec) => {
-                let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
-                self.lower_to_name(&letrec.tail, &frame, state, builder, cont)
-            }
+            ersd::Term::Rec(letrec) => self.lower_rec(
+                letrec,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, frame, state, builder| {
+                    this.lower_to_name(&letrec.tail, frame, state, builder, cont)
+                }),
+            ),
             ersd::Term::Proj(proj) => {
                 let index = proj.index;
 
@@ -3138,10 +3387,15 @@ impl<'a> Lowerer<'a> {
                     }),
                 )
             }
-            ersd::Term::Rec(letrec) => {
-                let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
-                self.lower_tail(&letrec.tail, &frame, resume, state, builder)
-            }
+            ersd::Term::Rec(letrec) => self.lower_rec(
+                letrec,
+                frame,
+                state,
+                builder,
+                Box::new(move |this, frame, state, builder| {
+                    this.lower_tail(&letrec.tail, frame, resume, state, builder)
+                }),
+            ),
             _ => self.lower_to_name(
                 term,
                 frame,

@@ -21,6 +21,7 @@ fn main() {
             params: vec![cont::ValueName::from("x")],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
+                preallocs: vec![],
                 values: vec![(
                     cont::ValueName::from("is_zero"),
                     cont::Value::Eval(cont::Code::IntEql(
@@ -34,6 +35,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("tag")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -48,6 +50,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("tag")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -62,6 +65,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("selected")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -96,6 +100,7 @@ fn main() {
             params: vec![],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
+                preallocs: vec![],
                 values: vec![
                     (
                         cont::ValueName::from("n"),
@@ -122,6 +127,7 @@ fn main() {
                         cont::Block {
                             params: vec![cont::ValueName::from("result")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![
                                     (
                                         cont::ValueName::from("pair"),
@@ -158,6 +164,7 @@ fn main() {
                                         cont::Block {
                                             params: vec![cont::ValueName::from("tag")],
                                             region: cont::Region {
+                                                preallocs: vec![],
                                                 values: vec![],
                                                 blocks: vec![],
                                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -172,6 +179,7 @@ fn main() {
                                         cont::Block {
                                             params: vec![cont::ValueName::from("tag")],
                                             region: cont::Region {
+                                                preallocs: vec![],
                                                 values: vec![],
                                                 blocks: vec![],
                                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -188,6 +196,7 @@ fn main() {
                                         cont::Block {
                                             params: vec![cont::ValueName::from("out")],
                                             region: cont::Region {
+                                                preallocs: vec![],
                                                 values: vec![],
                                                 blocks: vec![],
                                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -220,6 +229,7 @@ fn main() {
                         cont::Block {
                             params: vec![],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {

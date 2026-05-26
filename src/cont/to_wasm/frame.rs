@@ -1,6 +1,6 @@
 use {
     crate::{cont, wasm},
-    std::collections::HashMap,
+    std::collections::{HashMap, HashSet},
 };
 
 #[derive(Debug, Clone)]
@@ -52,6 +52,7 @@ impl<'a> BlockData<'a> {
 pub struct Frame<'a> {
     pub params: HashMap<&'a cont::ValueName, LocalData>,
     pub values: HashMap<&'a cont::ValueName, wasm::LocalName>,
+    pub preallocs: HashSet<&'a cont::ValueName>,
     pub blocks: Vec<(&'a cont::BlockName, BlockData<'a>)>,
     pub instrs: Vec<wasm::Instr>,
 }
@@ -59,12 +60,13 @@ pub struct Frame<'a> {
 impl<'a> Frame<'a> {
     pub fn new(
         params: HashMap<&'a cont::ValueName, LocalData>,
-        values: HashMap<&'a cont::ValueName, wasm::LocalName>,
+        preallocs: HashSet<&'a cont::ValueName>,
         blocks: Vec<(&'a cont::BlockName, BlockData<'a>)>,
     ) -> Self {
         Self {
             params,
-            values,
+            values: HashMap::new(),
+            preallocs,
             blocks,
             instrs: Default::default(),
         }

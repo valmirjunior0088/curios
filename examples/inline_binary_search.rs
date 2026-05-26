@@ -23,6 +23,7 @@ fn main() {
             params: vec![],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
+                preallocs: vec![],
                 values: vec![],
                 blocks: vec![
                     (
@@ -30,6 +31,7 @@ fn main() {
                         cont::Block {
                             params: vec![],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -44,6 +46,7 @@ fn main() {
                         cont::Block {
                             params: vec![],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -58,6 +61,7 @@ fn main() {
                         cont::Block {
                             params: vec![],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {
@@ -72,6 +76,7 @@ fn main() {
                         cont::Block {
                             params: vec![],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
                                 tail: cont::Tail::Jump(cont::JumpTarget {

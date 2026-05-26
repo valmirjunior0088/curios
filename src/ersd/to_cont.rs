@@ -258,4 +258,114 @@ mod tests {
 
         assert!(has_bin);
     }
+
+    #[test]
+    fn recursive_pairs_declare_preallocs() {
+        let term = Term::Rec(Rec {
+            names: vec!["x".into(), "y".into()],
+            items: vec![
+                Term::from(Tuple {
+                    fields: vec![
+                        Term::Name(Name::from("y")).into(),
+                        Term::Prim(Prim::Int(1)).into(),
+                    ],
+                })
+                .into(),
+                Term::from(Tuple {
+                    fields: vec![
+                        Term::Prim(Prim::Int(2)).into(),
+                        Term::Name(Name::from("x")).into(),
+                    ],
+                })
+                .into(),
+            ],
+            tail: Term::Name(Name::from("x")).into(),
+        });
+
+        let module = to_cont(&term);
+        let func = &module.funcs()[0].1;
+
+        // Both mutually-referential tuples are prealloc'd so their shells exist before fill.
+        assert_eq!(func.region.preallocs.len(), 2);
+        assert!(
+            func.region
+                .preallocs
+                .iter()
+                .all(|(_, prealloc)| matches!(prealloc, cont::Prealloc::Tpl(2)))
+        );
+    }
+
+    #[test]
+    fn lowers_cross_region_rec_through_resume_block() {
+        // `rec f = (x) => g and g = id(f)`: the aggregate `f` captures the call-valued `g`,
+        // while `g`'s call references `f`. `f` must be prealloc'd (shell before the call) and
+        // filled in the resume region after `g` returns.
+        let id = || Func {
+            captures: vec![],
+            params: vec!["arg".into()],
+            body: Term::Name(Name::from("arg")).into(),
+        };
+
+        let term = Term::Rec(Rec {
+            names: vec!["f".into(), "g".into()],
+            items: vec![
+                Term::from(Func {
+                    captures: vec!["g".into()],
+                    params: vec!["x".into()],
+                    body: Term::Name(Name::from("g")).into(),
+                })
+                .into(),
+                Term::from(Apply {
+                    head: Term::from(id()).into(),
+                    params: vec![Term::Name(Name::from("f")).into()],
+                })
+                .into(),
+            ],
+            tail: Term::Name(Name::from("f")).into(),
+        });
+
+        let module = to_cont(&term);
+        let func = &module.funcs()[0].1;
+
+        // `f`'s closure shell is declared at region entry.
+        assert!(
+            func.region
+                .preallocs
+                .iter()
+                .any(|(_, prealloc)| matches!(prealloc, cont::Prealloc::Clsr(_)))
+        );
+
+        // `g`'s call leaves the region, so its fill lands in a resume block, not the entry region.
+        assert!(matches!(func.region.tail, cont::Tail::Call(_)));
+        assert!(!func.region.blocks.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "value-level mutual recursion through calls")]
+    fn rejects_apply_apply_cycle() {
+        let id = || Func {
+            captures: vec![],
+            params: vec!["arg".into()],
+            body: Term::Name(Name::from("arg")).into(),
+        };
+
+        let term = Term::Rec(Rec {
+            names: vec!["a".into(), "b".into()],
+            items: vec![
+                Term::from(Apply {
+                    head: Term::from(id()).into(),
+                    params: vec![Term::Name(Name::from("b")).into()],
+                })
+                .into(),
+                Term::from(Apply {
+                    head: Term::from(id()).into(),
+                    params: vec![Term::Name(Name::from("a")).into()],
+                })
+                .into(),
+            ],
+            tail: Term::Name(Name::from("a")).into(),
+        });
+
+        to_cont(&term);
+    }
 }

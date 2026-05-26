@@ -54,6 +54,10 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![
+                        (cont::ValueName::from("x"), cont::Prealloc::Tpl(2)),
+                        (cont::ValueName::from("y"), cont::Prealloc::Tpl(2)),
+                    ],
                     values: vec![
                         (
                             cont::ValueName::from("x"),
@@ -114,6 +118,7 @@ mod tests {
                 params: vec![cont::ValueName::from("n")],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(cont::Code::IntEql(
@@ -127,6 +132,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![],
                                     blocks: vec![],
                                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -141,6 +147,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(cont::Code::IntSub(
@@ -183,6 +190,7 @@ mod tests {
                 params: vec![cont::ValueName::from("n")],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![(
                         cont::ValueName::from("is_zero"),
                         cont::Value::Eval(cont::Code::IntEql(
@@ -196,6 +204,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![],
                                     blocks: vec![],
                                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -210,6 +219,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![(
                                         cont::ValueName::from("prev"),
                                         cont::Value::Eval(cont::Code::IntSub(
@@ -251,6 +261,16 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![
+                        (
+                            cont::ValueName::from("even"),
+                            cont::Prealloc::Clsr(cont::ClsrName::from("even")),
+                        ),
+                        (
+                            cont::ValueName::from("odd"),
+                            cont::Prealloc::Clsr(cont::ClsrName::from("odd")),
+                        ),
+                    ],
                     values: vec![
                         (
                             cont::ValueName::from("even"),
@@ -272,6 +292,7 @@ mod tests {
                         cont::Block {
                             params: vec![cont::ValueName::from("out")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![
                                     (
                                         cont::ValueName::from("str"),
@@ -319,6 +340,7 @@ mod tests {
                 params: vec![cont::ValueName::from("x")],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![(
                         cont::ValueName::from("sum"),
                         cont::Value::Eval(cont::Code::IntAdd(
@@ -341,12 +363,14 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![],
                     blocks: vec![(
                         cont::BlockName::from("after_call"),
                         cont::Block {
                             params: vec![cont::ValueName::from("out")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![
                                     (
                                         cont::ValueName::from("str"),
@@ -391,6 +415,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![(
                         cont::ValueName::from("unit"),
                         cont::Value::Pure(cont::Data::Tpl(vec![])),
@@ -421,6 +446,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("sum"),
@@ -470,6 +496,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("out"),
@@ -510,6 +537,7 @@ mod tests {
                 params: vec![cont::ValueName::from("x")],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![(
                         cont::ValueName::from("result"),
                         cont::Value::Eval(cont::Code::IntAdd(
@@ -540,12 +568,14 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![],
                     blocks: vec![(
                         cont::BlockName::from("after"),
                         cont::Block {
                             params: vec![cont::ValueName::from("out")],
                             region: cont::Region {
+                                preallocs: vec![],
                                 values: vec![
                                     (
                                         cont::ValueName::from("str"),
@@ -593,6 +623,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -644,6 +675,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -693,6 +725,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -748,6 +781,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("slice"),
@@ -809,6 +843,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("concat"),
@@ -856,6 +891,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -896,6 +932,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -936,6 +973,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -976,6 +1014,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1017,6 +1056,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1061,6 +1101,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1105,6 +1146,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1148,6 +1190,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("zero"),
@@ -1196,6 +1239,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1240,6 +1284,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1284,6 +1329,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1328,6 +1374,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1371,6 +1418,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1411,6 +1459,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1451,6 +1500,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1491,6 +1541,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1533,6 +1584,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1574,6 +1626,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1618,6 +1671,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1662,6 +1716,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1706,6 +1761,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1750,6 +1806,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1796,6 +1853,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1840,6 +1898,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1888,6 +1947,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("appended"),
@@ -1945,6 +2005,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -1995,6 +2056,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("result"),
@@ -2048,6 +2110,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![
                         (
                             cont::ValueName::from("appended"),
@@ -2102,6 +2165,7 @@ mod tests {
                 params: vec![],
                 resume: cont::BlockName::from("r"),
                 region: cont::Region {
+                    preallocs: vec![],
                     values: vec![],
                     blocks: vec![
                         (
@@ -2109,6 +2173,7 @@ mod tests {
                             cont::Block {
                                 params: vec![cont::ValueName::from("out")],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![
                                         (
                                             cont::ValueName::from("str"),
@@ -2136,6 +2201,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![],
                                     blocks: vec![],
                                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -2150,6 +2216,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![],
                                     blocks: vec![],
                                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -2164,6 +2231,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![],
                                     blocks: vec![],
                                     tail: cont::Tail::Jump(cont::JumpTarget {
@@ -2178,6 +2246,7 @@ mod tests {
                             cont::Block {
                                 params: vec![],
                                 region: cont::Region {
+                                    preallocs: vec![],
                                     values: vec![],
                                     blocks: vec![],
                                     tail: cont::Tail::Jump(cont::JumpTarget {

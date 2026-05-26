@@ -1477,36 +1477,72 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
-        for (value_name, value) in values {
-            match value {
-                cont::Value::Pure(cont::Data::Arr(elems)) => {
-                    self.emit_preallocate_arr(value_name, elems.len())
-                }
-                cont::Value::Pure(cont::Data::Tpl(elems)) => {
-                    self.emit_preallocate_tpl(value_name, elems.len())
-                }
-                cont::Value::Pure(cont::Data::Clsr(target, _)) => {
-                    self.emit_preallocate_clsr(value_name, target)
-                }
-                _ => {}
+    /// Allocate a fresh wasm local for `value_name` and record it in the current frame, so
+    /// subsequent `find_local` lookups resolve to it. Called at the point a name is introduced
+    /// — a shell or a fresh value — never for a fill, whose local its prealloc already owns.
+    fn declare_local(&mut self, value_name: &'a cont::ValueName) {
+        let local_name = self
+            .context
+            .push_local(value_name.as_str(), self.context.table().top_type(true));
+
+        self.context
+            .this_frame()
+            .expect("`ExprEmitter` lacks a current frame")
+            .values
+            .insert(value_name, local_name);
+    }
+
+    fn emit_preallocs(&mut self, preallocs: &'a [(cont::ValueName, cont::Prealloc)]) {
+        for (value_name, prealloc) in preallocs {
+            self.declare_local(value_name);
+
+            match prealloc {
+                cont::Prealloc::Tpl(arity) => self.emit_preallocate_tpl(value_name, *arity),
+                cont::Prealloc::Arr(len) => self.emit_preallocate_arr(value_name, *len),
+                cont::Prealloc::Clsr(target) => self.emit_preallocate_clsr(value_name, target),
             }
         }
+    }
 
+    fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
+            // A name already backed by a shell (this region's or an ancestor's) is a fill: it
+            // reuses that local and only backpatches. Any other name is introduced here, so it
+            // gets its local allocated now — the same `is_prealloc` test decides both.
             match value {
                 cont::Value::Pure(cont::Data::Arr(elems)) => {
-                    self.emit_backpatch_arr(value_name, elems)
+                    if !self.context.is_prealloc(value_name) {
+                        self.declare_local(value_name);
+                        self.emit_preallocate_arr(value_name, elems.len());
+                    }
+                    self.emit_backpatch_arr(value_name, elems);
                 }
                 cont::Value::Pure(cont::Data::Tpl(elems)) => {
-                    self.emit_backpatch_tpl(value_name, elems)
+                    if !self.context.is_prealloc(value_name) {
+                        self.declare_local(value_name);
+                        self.emit_preallocate_tpl(value_name, elems.len());
+                    }
+                    self.emit_backpatch_tpl(value_name, elems);
                 }
                 cont::Value::Pure(cont::Data::Clsr(target, fields)) => {
-                    self.emit_backpatch_clsr(value_name, target, fields)
+                    if !self.context.is_prealloc(value_name) {
+                        self.declare_local(value_name);
+                        self.emit_preallocate_clsr(value_name, target);
+                    }
+                    self.emit_backpatch_clsr(value_name, target, fields);
                 }
-                cont::Value::Pure(value) => self.emit_let_pure(value_name, value),
-                cont::Value::Eval(op) => self.emit_code(value_name, op),
-                cont::Value::Alias(source) => self.emit_let_alias(value_name, source),
+                cont::Value::Pure(value) => {
+                    self.declare_local(value_name);
+                    self.emit_let_pure(value_name, value);
+                }
+                cont::Value::Eval(op) => {
+                    self.declare_local(value_name);
+                    self.emit_code(value_name, op);
+                }
+                cont::Value::Alias(source) => {
+                    self.declare_local(value_name);
+                    self.emit_let_alias(value_name, source);
+                }
             }
         }
     }
@@ -1543,20 +1579,16 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         params: HashMap<&'a cont::ValueName, LocalData>,
         region: &'a cont::Region,
     ) {
-        let values = region
-            .values
-            .iter()
-            .map(|(value_name, _)| {
-                let local_name = self
-                    .context
-                    .push_local(value_name.as_str(), self.context.table().top_type(true));
-
-                (value_name, local_name)
-            })
-            .collect();
+        // Locals are allocated lazily, at the point each name is introduced (see `emit_preallocs`
+        // / `emit_let_values`), so the frame starts with no values and is filled as emission
+        // proceeds. Allocating after `enter_frame` is what lets a single `is_prealloc` check
+        // distinguish a fresh value from a fill — the current region's shells are now in scope.
+        let preallocs = region.preallocs.iter().map(|(name, _)| name).collect();
 
         if region.blocks.is_empty() {
-            self.context.enter_frame(Frame::new(params, values, vec![]));
+            self.context
+                .enter_frame(Frame::new(params, preallocs, vec![]));
+            self.emit_preallocs(&region.preallocs);
             self.emit_let_values(&region.values);
             self.emit_instrs(self.context.tail_instrs(&region.tail));
         } else {
@@ -1564,7 +1596,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .context
                 .push_local("", wasm::ValType::Num(wasm::NumType::I32));
 
-            let dispatcher_label = wasm::LabelName::from(dispatcher_local.as_str());
+            let dispatcher_label =
+                wasm::LabelName::from(format!("region${}", dispatcher_local.as_str()));
 
             let blocks = region
                 .blocks
@@ -1598,8 +1631,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 .collect::<Vec<_>>();
 
             self.context
-                .enter_frame(Frame::new(params, values, blocks.clone()));
+                .enter_frame(Frame::new(params, preallocs, blocks.clone()));
 
+            self.emit_preallocs(&region.preallocs);
             self.emit_let_values(&region.values);
             self.emit_let_blocks(dispatcher_local, dispatcher_label, blocks, &region.tail);
         }

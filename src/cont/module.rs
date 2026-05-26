@@ -113,6 +113,13 @@ pub enum Value {
 }
 
 #[derive(Debug)]
+pub enum Prealloc {
+    Tpl(usize),
+    Arr(usize),
+    Clsr(ClsrName),
+}
+
+#[derive(Debug)]
 pub struct Block {
     pub params: Vec<ValueName>,
     pub region: Region,
@@ -154,6 +161,7 @@ pub enum Tail {
 
 #[derive(Debug)]
 pub struct Region {
+    pub preallocs: Vec<(ValueName, Prealloc)>,
     pub values: Vec<(ValueName, Value)>,
     pub blocks: Vec<(BlockName, Block)>,
     pub tail: Tail,

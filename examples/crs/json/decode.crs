@@ -109,20 +109,20 @@ pub rec decode : Parse(Value) = (input, pos) =>
         | '['  => parse_arr(input, pos);
         | '{'  => parse_obj(input, pos);
         | _    => parse_num(input, pos);;
-and parse_arr : Parse(Value) = (input, pos) =>
+and parse_arr : Parse(Value) =
     Parse/bind(Nat, Value, Parse/take_byte('['), _ =>
     Parse/bind(Arr(Value), Value,
         Parse/sep_by0(Value, Nat, decode, Parse/take_byte(',')), elems =>
     Parse/bind(Nat, Value, Parse/take_byte(']'), _ =>
-        Parse/pure(Value, ('arr, elems)))))(input, pos)
-and parse_obj : Parse(Value) = (input, pos) =>
+        Parse/pure(Value, ('arr, elems)))))
+and parse_obj : Parse(Value) =
     Parse/bind(Nat, Value, Parse/take_byte('{'), _ =>
     Parse/bind(Arr({ Bin, Value }), Value,
         Parse/sep_by0({ Bin, Value }, Nat, parse_pair, Parse/take_byte(',')), pairs =>
     Parse/bind(Nat, Value, Parse/take_byte('}'), _ =>
-        Parse/pure(Value, ('obj, pairs)))))(input, pos)
-and parse_pair : Parse({ Bin, Value }) = (input, pos) =>
+        Parse/pure(Value, ('obj, pairs)))))
+and parse_pair : Parse({ Bin, Value }) =
     Parse/bind(Bin, { Bin, Value }, parse_raw_str, key =>
     Parse/bind(Nat, { Bin, Value }, Parse/take_byte(':'), _ =>
     Parse/bind(Value, { Bin, Value }, decode, val =>
-        Parse/pure({ Bin, Value }, (key, val)))))(input, pos);
+        Parse/pure({ Bin, Value }, (key, val)))));

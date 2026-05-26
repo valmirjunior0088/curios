@@ -1,7 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatMatch, Preempted,
-        Prim, Proj, Rec, Seal, Sealed, Telescope, Term, Tuple, TupleType, Type, Unseal, Var, reduce,
+        Prim, Proj, Rec, Seal, Sealed, Telescope, Term, Tuple, TupleType, Type, Unseal, Var,
+        reduce,
     },
     std::{
         collections::{HashSet, VecDeque},

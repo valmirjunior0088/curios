@@ -41,7 +41,7 @@ result                    printed by src/run.rs
 | Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,177 |
 | Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~3,162 |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,418 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 3,159  |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 3,413  |
 | WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,300 |
 | Binary serialization    | `wasm/writer.rs`                                   | 2,017  |
 
@@ -215,7 +215,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is the most complex transformation in the pipeline (3,162 lines).
+This is the most complex transformation in the pipeline (3,413 lines).
 
 ### CPS IR structure
 
@@ -225,9 +225,10 @@ Module
   ├── clsrs:  Vec<(ClsrName, Clsr)>
   └── funcs:  Vec<(FuncName, Func)>
                 └── Region
-                      ├── values: Vec<(ValueName, Value)>
-                      ├── blocks: Vec<(BlockName, Block)>
-                      └── tail:   Tail
+                      ├── preallocs: Vec<(ValueName, Prealloc)>
+                      ├── values:    Vec<(ValueName, Value)>
+                      ├── blocks:    Vec<(BlockName, Block)>
+                      └── tail:      Tail
 ```
 
 **Values** (`cont/module.rs`) use a three-tier hierarchy:
@@ -253,11 +254,11 @@ The defining property of this IR: continuations are **block labels** scoped to t
 ### Lowering strategy
 
 `lower_tail(term, frame, resume, ...)` — lowers `term` in tail position (the result goes to `resume`).
-`lower_value(term, frame, ...)` — lowers `term` in value position (returns a `ValueName`).
+`lower_to_name(term, frame, ..., cont)` — lowers `term` in value position, passing the resulting `ValueName` to a continuation.
 
 When a call appears in value position, the lowerer creates a **join block** that receives the result as a block parameter, normalizing the CFG into SSA-like form.
 
-`Rec` groups pre-reserve value names before any bodies are lowered (via `lower_letrec_bindings`), enabling mutual references within the group.
+`Rec` groups support value-level mutual recursion, including through arbitrary calls (e.g. point-free parser combinators that reference one another). The lowerer reserves every binding name up front, then declares a **prealloc** — an empty shell with a stable heap identity, recorded in `Region::preallocs` — for each aggregate binding (`Func`/`Tuple`/`Arr`), so its identity exists before its fields are known. Call- and match-valued bindings are lowered in dependency order through resume blocks, and the shells are filled once the values they capture exist — possibly in a descendant region (the *cross-region* case), so a closure produced by a runtime call can still join the recursive knot. Two call-valued bindings that each need the other's *value* form a cycle that would require a runtime fixpoint cell, and are rejected. The fill is an emission-time detail (`struct.set`/`array.set` over the prealloc'd shell); no first-class mutation op enters the IR.
 
 ### Frame and entropy
 
@@ -379,7 +380,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-191 tests across 12 files, covering every layer:
+194 tests across 12 files, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -388,7 +389,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 | Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                        |
 | Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
 | Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                                                                                               |
-| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation                                                                                    |
+| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection             |
 | WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
 | Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, `def`/coercion, absolute paths                                                   |
 | Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
@@ -406,6 +407,6 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 6. **`src/core/infer.rs`** + **`src/core/erase.rs`** — bidirectional type checking, split into the synthesis (`infer`) and checking (`erase`) passes; note where reduction is invoked and how erasure is interleaved in `erase`. Shared helpers live in `src/core/typing.rs`.
 7. **`src/ersd/term.rs`** — what disappears at erasure and what survives into runtime.
 8. **`src/cont/module.rs`** — the CPS IR types; pay attention to how `Call` specifies a `resume` block.
-9. **`src/ersd/to_cont/lowerer.rs`** — how `ersd::Term` becomes CPS; the `lower_tail` vs `lower_value` distinction is the key insight.
+9. **`src/ersd/to_cont/lowerer.rs`** — how `ersd::Term` becomes CPS; the `lower_tail` vs `lower_to_name` distinction is the key insight.
 10. **`src/cont/to_wasm/expr_emitter.rs`** + **`src/cont/to_wasm/module_emitter.rs`** — how CPS maps to WASM instructions.
 11. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_wasm` tie the whole pipeline together.

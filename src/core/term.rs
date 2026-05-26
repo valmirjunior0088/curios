@@ -162,10 +162,7 @@ impl<B: Bound> Telescope<B> {
         T: Into<Term>,
     {
         let label = label.into();
-        Telescope::Cons(
-            ty.into().into(),
-            Scope::close(One, &[label.as_str()], rest),
-        )
+        Telescope::Cons(ty.into().into(), Scope::close(One, &[label.as_str()], rest))
     }
 
     pub fn build<I, L, T>(entries: I, body: B) -> Self
@@ -979,9 +976,7 @@ impl Bound for Term {
             Term::Sealed(sealed) => visit.visit_sealed(sealed).into(),
             Term::Seal(seal) => visit.visit_seal(seal).into(),
             Term::Unseal(unseal) => visit.visit_unseal(unseal).into(),
-            Term::Var(var) => {
-                (visit.visit)(visit.depth, var).unwrap_or_else(|| var.clone().into())
-            }
+            Term::Var(var) => (visit.visit)(visit.depth, var).unwrap_or_else(|| var.clone().into()),
             Term::Spanned(span, inner) => Term::Spanned(*span, visit.visit_subterm(inner)),
         }
     }
@@ -1322,7 +1317,6 @@ where
             tail: self.visit_scope(&rec.tail),
         }
     }
-
 }
 
 #[cfg(test)]

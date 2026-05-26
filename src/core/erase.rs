@@ -719,12 +719,7 @@ fn erase_prim(
             Ok(ersd::Prim::ArrConcat(erased).into())
         }
         Prim::SysPrint(inner) => {
-            expect(
-                context,
-                term,
-                &Term::TupleType(TupleType::unit()),
-                expected,
-            )?;
+            expect(context, term, &Term::TupleType(TupleType::unit()), expected)?;
             Ok(
                 ersd::Prim::SysPrint(erase(context, inner, &Term::Prim(Prim::BinType))?.into())
                     .into(),

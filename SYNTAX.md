@@ -56,6 +56,16 @@ pub rec fact(n : Nat) -> Nat =
 
 The `;;` closes the last `match` branch and then the recursive-binding group.
 
+A binding's value may be any term, not only a lambda. In particular it can be a call that references other members of the group, so combinator-style definitions can be written point-free rather than eta-expanded:
+
+```
+pub rec decode : Parse(Value) = (input, pos) => -- … uses parse_arr, parse_obj …
+pub and parse_arr : Parse(Value) =
+    Parse/bind(Nat, Value, Parse/take_byte('['), _ => -- … uses decode … );
+```
+
+Members may refer to one another freely through such calls. The sole exception: two bindings whose values are *calls that each require the other's result* form a cycle with no way to tie the knot, and the group is rejected.
+
 ### Type definition
 
 ```

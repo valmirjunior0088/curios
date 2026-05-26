@@ -174,6 +174,15 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    pub fn is_prealloc(&self, value_name: &cont::ValueName) -> bool {
+        match self {
+            Self::Const { .. } => false,
+            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
+                .iter()
+                .any(|frame| frame.preallocs.contains(value_name)),
+        }
+    }
+
     pub fn find_block(&self, block_name: &cont::BlockName) -> &BlockData<'a> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
@@ -361,7 +370,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     .chain([
                         wasm::Instr::I32Eqz,
                         wasm::Instr::If {
-                            label_name: wasm::LabelName::from("0"),
+                            label_name: self.table().special_label(),
                             block_type: wasm::BlockType::Empty,
                             then_instructions: self.jump_instrs(jump_target),
                             else_instructions: default_instructions,
