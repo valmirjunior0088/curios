@@ -30,16 +30,27 @@ let add(a : Nat, b : Nat) -> Nat =
 
 When a function's result is itself a function, calls chain: `f(a)(b)`.
 
-Recursive functions use `rec` instead of `let`; the same `(params) -> R` shorthand works:
+A `match` over `Nat` uses the `| 0` / `| pred ih` pattern to recurse through its cases:
 
 ```
-rec fact(n : Nat) -> Nat =
+let fact(n : Nat) -> Nat =
     match n : Nat;
     | 0 => 1;
     | pred ih => Nat.mul(Nat.add(pred, 1), ih);
 ```
 
-`match` over a `Nat` is one of the two ways to recurse in Curios. With the `| 0` / `| pred ih` branch shape it is structural recursion: `| 0 =>` handles the base case; `| pred ih =>` receives the predecessor and the result already computed for it (`ih`, short for induction hypothesis). The other way is `rec`, which introduces a named binding that can call itself freely — used when the recursion is not over a natural number, or when the function is mutually recursive.
+`| 0 =>` is the base case; `| pred ih =>` receives the predecessor and the result already computed for it (`ih`, short for induction hypothesis).
+
+`rec` introduces a self-referential binding — the function can call itself by name:
+
+```
+rec gcd(a : Nat, b : Nat) -> Nat =
+    match b : Nat;
+    | 0 => a;
+    | pred _ => gcd(b, Nat.rem(a, b));;
+```
+
+The `;;` ends two things: the first `;` closes the match, the second closes the `rec` binding.
 
 The primitive types map to Rust as follows:
 
@@ -96,7 +107,7 @@ let opposite(d : '[north, south]) -> '[north, south] =
     | 'south => 'north;;
 ```
 
-Each branch ends with `;`. The motive (here just `'[north, south]`) gives the return type; it can optionally name the scrutinee with `label =>` when the return type depends on the scrutinee's value.
+Each branch ends with `;`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `label => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
 
 ## Sum types
 
@@ -149,14 +160,16 @@ let id(T : Type, x : T) -> T = x;
 
 In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id(Nat, 42)` or `id(Bin, "hello")`. There are no angle brackets.
 
-The motive in `match` is the same mechanism: `match head : label => T;` computes the return type from the scrutinee's value. When the return type actually varies per branch, that computation is non-trivial:
+The motive in `match` is the same mechanism: `match head : label => T;` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
 ```
-let default_for : (tag : '[nat, bin]) ->
+let ReturnType(tag : '[nat, bin]) -> Type =
     match tag : _ => Type;
     | 'nat => Nat;
-    | 'bin => Bin; = tag =>
-    match tag : _ => match tag : _ => Type; | 'nat => Nat; | 'bin => Bin;;
+    | 'bin => Bin;;
+
+let default_for(tag : '[nat, bin]) -> ReturnType(tag) =
+    match tag : t => ReturnType(t);
     | 'nat => 0;
     | 'bin => "";;
 ```

@@ -15,12 +15,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         Prim::Nat(_) => Ok(Term::Prim(Prim::NatType)),
         Prim::NatEql(left, right)
         | Prim::NatNeq(left, right)
-        | Prim::NatAdd(left, right)
-        | Prim::NatSub(left, right)
-        | Prim::NatMul(left, right)
         | Prim::NatLt(left, right)
-        | Prim::NatDiv(left, right)
-        | Prim::NatRem(left, right)
         | Prim::NatGt(left, right)
         | Prim::NatLte(left, right)
         | Prim::NatGte(left, right) => {
@@ -28,6 +23,16 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             erase(context, right, &Term::Prim(Prim::NatType))?;
 
             Ok(Term::Prim(Prim::BlnType))
+        }
+        Prim::NatAdd(left, right)
+        | Prim::NatSub(left, right)
+        | Prim::NatMul(left, right)
+        | Prim::NatDiv(left, right)
+        | Prim::NatRem(left, right) => {
+            erase(context, left, &Term::Prim(Prim::NatType))?;
+            erase(context, right, &Term::Prim(Prim::NatType))?;
+
+            Ok(Term::Prim(Prim::NatType))
         }
         Prim::IntType => Ok(Type.into()),
         Prim::Int(_) => Ok(Term::Prim(Prim::IntType)),

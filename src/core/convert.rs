@@ -257,6 +257,9 @@ impl Convert {
     }
 
     fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, Preempted> {
+        if this.params.len() != that.params.len() {
+            return Ok(false);
+        }
         self.enqueue(Type.into(), *this.head, *that.head);
         for (a, b) in this.params.into_iter().zip(that.params) {
             self.enqueue(Type.into(), *a, *b);
@@ -291,13 +294,33 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_tuple(&mut self, this: Tuple, that: Tuple) -> Result<bool, Preempted> {
-        if this.fields.len() != that.fields.len() {
+    fn compare_tuple(
+        &mut self,
+        context: &mut Context,
+        this: Tuple,
+        that: Tuple,
+        type_: Term,
+    ) -> Result<bool, Preempted> {
+        let n = this.fields.len();
+        if n != that.fields.len() {
             return Ok(false);
         }
 
-        for (a, b) in this.fields.into_iter().zip(that.fields) {
-            self.enqueue(Type.into(), *a, *b);
+        let field_types = match reduce(context, &type_)? {
+            Term::TupleType(TupleType { fields }) if fields.len() == n => Some(fields),
+            _ => None,
+        };
+
+        for (i, (a, b)) in this.fields.iter().zip(that.fields.iter()).enumerate() {
+            let ft = match &field_types {
+                Some(fts) => {
+                    let prefix: Vec<&Term> =
+                        this.fields[..i].iter().map(|f| f.as_ref()).collect();
+                    fts[i].open(&prefix)
+                }
+                None => Type.into(),
+            };
+            self.enqueue(ft, a.as_ref().clone(), b.as_ref().clone());
         }
 
         Ok(true)
@@ -547,10 +570,32 @@ impl Convert {
         Ok(true)
     }
 
-    fn eta_expand_tuple(&mut self, tuple: Tuple, other: Term) -> Result<bool, Preempted> {
-        for (i, field) in tuple.fields.into_iter().enumerate() {
-            self.enqueue(Type.into(), *field, Proj::new(other.clone(), i).into());
+    fn eta_expand_tuple(
+        &mut self,
+        context: &mut Context,
+        tuple: Tuple,
+        other: Term,
+        type_: Term,
+    ) -> Result<bool, Preempted> {
+        let n = tuple.fields.len();
+
+        let field_types = match reduce(context, &type_)? {
+            Term::TupleType(TupleType { fields }) if fields.len() == n => Some(fields),
+            _ => None,
+        };
+
+        for (i, field) in tuple.fields.iter().enumerate() {
+            let ft = match &field_types {
+                Some(fts) => {
+                    let prefix: Vec<&Term> =
+                        tuple.fields[..i].iter().map(|f| f.as_ref()).collect();
+                    fts[i].open(&prefix)
+                }
+                None => Type.into(),
+            };
+            self.enqueue(ft, field.as_ref().clone(), Proj::new(other.clone(), i).into());
         }
+
         Ok(true)
     }
 
@@ -594,6 +639,7 @@ impl Convert {
         while let Some(Goal { type_, this, that }) = self.dequeue()? {
             let this = reduce(context, &this)?;
             let that = reduce(context, &that)?;
+            let type_ = reduce(context, &type_)?;
 
             let goal = Goal {
                 type_: type_.clone(),
@@ -629,9 +675,15 @@ impl Convert {
                 (Term::TupleType(this), Term::TupleType(that)) => {
                     self.compare_tuple_type(context, this, that)?
                 }
-                (Term::Tuple(this), Term::Tuple(that)) => self.compare_tuple(this, that)?,
-                (Term::Tuple(tuple), other) => self.eta_expand_tuple(tuple, other)?,
-                (other, Term::Tuple(tuple)) => self.eta_expand_tuple(tuple, other)?,
+                (Term::Tuple(this), Term::Tuple(that)) => {
+                    self.compare_tuple(context, this, that, type_.clone())?
+                }
+                (Term::Tuple(tuple), other) => {
+                    self.eta_expand_tuple(context, tuple, other, type_.clone())?
+                }
+                (other, Term::Tuple(tuple)) => {
+                    self.eta_expand_tuple(context, tuple, other, type_.clone())?
+                }
                 (Term::Proj(this), Term::Proj(that)) => self.compare_proj(this, that)?,
                 (Term::AtomType(this), Term::AtomType(that)) => {
                     self.compare_atom_type(this, that)?

@@ -522,7 +522,7 @@ fn erase_prim(
                     ));
                 }
             }
-            Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
+            Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type_reduced)?.into()).into())
         }
         Prim::BinEql(left, right) => {
             expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
@@ -548,7 +548,7 @@ fn erase_prim(
                 }
             }
             Ok(ersd::Prim::BinGet(
-                erase(context, bin, &bin_type)?.into(),
+                erase(context, bin, &bin_type_reduced)?.into(),
                 erase(context, index, &Term::Prim(Prim::NatType))?.into(),
             )
             .into())
@@ -568,7 +568,7 @@ fn erase_prim(
             }
             expect(context, term, &bin_type_reduced, expected)?;
             Ok(ersd::Prim::BinSlice(
-                erase(context, bin, &bin_type)?.into(),
+                erase(context, bin, &bin_type_reduced)?.into(),
                 erase(context, start, &Term::Prim(Prim::NatType))?.into(),
                 erase(context, end, &Term::Prim(Prim::NatType))?.into(),
             )
@@ -589,7 +589,7 @@ fn erase_prim(
             }
             expect(context, term, &bin_type_reduced, expected)?;
             Ok(ersd::Prim::BinAppend(
-                erase(context, bin, &bin_type)?.into(),
+                erase(context, bin, &bin_type_reduced)?.into(),
                 erase(context, byte, &Term::Prim(Prim::NatType))?.into(),
             )
             .into())
@@ -632,18 +632,20 @@ fn erase_prim(
                     ));
                 }
             }
-            Ok(ersd::Prim::ArrLen(erase(context, list, &list_type)?.into()).into())
+            Ok(ersd::Prim::ArrLen(erase(context, list, &list_type_reduced)?.into()).into())
         }
         Prim::ArrGet(list, index) => {
             let list_type = infer(context, list)?;
             let list_type_reduced = reduce_with(context, &list_type)?;
-            let elem_type = match list_type_reduced {
-                Term::Prim(Prim::ArrType(elem)) => *elem,
-                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
+            let elem_type = match &list_type_reduced {
+                Term::Prim(Prim::ArrType(elem)) => *elem.clone(),
+                other => {
+                    return Err(Error::type_mismatch(term.clone(), other.clone(), expected.clone()))
+                }
             };
             expect(context, term, &elem_type, expected)?;
             Ok(ersd::Prim::ArrGet(
-                erase(context, list, &list_type)?.into(),
+                erase(context, list, &list_type_reduced)?.into(),
                 erase(context, index, &Term::Prim(Prim::NatType))?.into(),
             )
             .into())
@@ -663,7 +665,7 @@ fn erase_prim(
             }
             expect(context, term, &list_type_reduced, expected)?;
             Ok(ersd::Prim::ArrSlice(
-                erase(context, list, &list_type)?.into(),
+                erase(context, list, &list_type_reduced)?.into(),
                 erase(context, start, &Term::Prim(Prim::NatType))?.into(),
                 erase(context, end, &Term::Prim(Prim::NatType))?.into(),
             )
@@ -672,9 +674,11 @@ fn erase_prim(
         Prim::ArrAppend(list, elem) => {
             let list_type = infer(context, list)?;
             let list_type_reduced = reduce_with(context, &list_type)?;
-            let elem_type = match list_type_reduced {
-                Term::Prim(Prim::ArrType(e)) => *e,
-                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
+            let elem_type = match &list_type_reduced {
+                Term::Prim(Prim::ArrType(e)) => *e.clone(),
+                other => {
+                    return Err(Error::type_mismatch(term.clone(), other.clone(), expected.clone()))
+                }
             };
             expect(
                 context,
@@ -683,7 +687,7 @@ fn erase_prim(
                 expected,
             )?;
             Ok(ersd::Prim::ArrAppend(
-                erase(context, list, &list_type)?.into(),
+                erase(context, list, &list_type_reduced)?.into(),
                 erase(context, elem, &elem_type)?.into(),
             )
             .into())

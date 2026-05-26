@@ -561,7 +561,10 @@ impl Reduce {
                 let i = index.as_nat();
                 Ok(match (bin, i) {
                     (Term::Prim(Prim::Bin(bytes)), Some(i)) => {
-                        Term::Prim(Prim::Nat(Nat::new(bytes[i as usize] as u32)))
+                        Term::Prim(Prim::Nat(Nat::new(
+                            bytes.get(i as usize).copied().expect("Bin.get: index out of bounds")
+                                as u32,
+                        )))
                     }
                     (bin, _) => Term::Prim(Prim::bin_get(bin, index)),
                 })
@@ -574,7 +577,12 @@ impl Reduce {
                 let e = end.as_nat();
                 Ok(match (bin, s, e) {
                     (Term::Prim(Prim::Bin(bytes)), Some(s), Some(e)) => {
-                        Term::Prim(Prim::Bin(bytes[s as usize..e as usize].to_vec()))
+                        Term::Prim(Prim::Bin(
+                            bytes
+                                .get(s as usize..e as usize)
+                                .expect("Bin.slice: range out of bounds")
+                                .to_vec(),
+                        ))
                     }
                     (bin, _, _) => Term::Prim(Prim::bin_slice(bin, start, end)),
                 })
@@ -651,7 +659,12 @@ impl Reduce {
                 let e = end.as_nat();
                 Ok(match (list, s, e) {
                     (Term::Prim(Prim::Arr(elems)), Some(s), Some(e)) => {
-                        Term::Prim(Prim::Arr(elems[s as usize..e as usize].to_vec()))
+                        Term::Prim(Prim::Arr(
+                            elems
+                                .get(s as usize..e as usize)
+                                .expect("Arr.slice: range out of bounds")
+                                .to_vec(),
+                        ))
                     }
                     (list, _, _) => Term::Prim(Prim::arr_slice(list, start, end)),
                 })

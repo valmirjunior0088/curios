@@ -36,7 +36,7 @@ A minimal example:
 ```
 -- hello.crs
 let msg : Bin = "hello, world";
-msg
+Sys.print(msg)
 ```
 
 ```
