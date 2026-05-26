@@ -1,8 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatMatch,
-        One, Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal,
-        Var,
+        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatMatch, One,
+        Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},

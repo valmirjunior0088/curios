@@ -314,8 +314,7 @@ impl Convert {
         for (i, (a, b)) in this.fields.iter().zip(that.fields.iter()).enumerate() {
             let ft = match &field_types {
                 Some(fts) => {
-                    let prefix: Vec<&Term> =
-                        this.fields[..i].iter().map(|f| f.as_ref()).collect();
+                    let prefix: Vec<&Term> = this.fields[..i].iter().map(|f| f.as_ref()).collect();
                     fts[i].open(&prefix)
                 }
                 None => Type.into(),
@@ -333,7 +332,6 @@ impl Convert {
         self.enqueue(Type.into(), *this.head, *that.head);
         Ok(true)
     }
-
 
     fn compare_atom_type(&mut self, this: AtomType, that: AtomType) -> Result<bool, Preempted> {
         Ok(this == that)
@@ -587,13 +585,16 @@ impl Convert {
         for (i, field) in tuple.fields.iter().enumerate() {
             let ft = match &field_types {
                 Some(fts) => {
-                    let prefix: Vec<&Term> =
-                        tuple.fields[..i].iter().map(|f| f.as_ref()).collect();
+                    let prefix: Vec<&Term> = tuple.fields[..i].iter().map(|f| f.as_ref()).collect();
                     fts[i].open(&prefix)
                 }
                 None => Type.into(),
             };
-            self.enqueue(ft, field.as_ref().clone(), Proj::new(other.clone(), i).into());
+            self.enqueue(
+                ft,
+                field.as_ref().clone(),
+                Proj::new(other.clone(), i).into(),
+            );
         }
 
         Ok(true)

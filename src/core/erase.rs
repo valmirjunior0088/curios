@@ -640,7 +640,11 @@ fn erase_prim(
             let elem_type = match &list_type_reduced {
                 Term::Prim(Prim::ArrType(elem)) => *elem.clone(),
                 other => {
-                    return Err(Error::type_mismatch(term.clone(), other.clone(), expected.clone()))
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        expected.clone(),
+                    ));
                 }
             };
             expect(context, term, &elem_type, expected)?;
@@ -677,7 +681,11 @@ fn erase_prim(
             let elem_type = match &list_type_reduced {
                 Term::Prim(Prim::ArrType(e)) => *e.clone(),
                 other => {
-                    return Err(Error::type_mismatch(term.clone(), other.clone(), expected.clone()))
+                    return Err(Error::type_mismatch(
+                        term.clone(),
+                        other.clone(),
+                        expected.clone(),
+                    ));
                 }
             };
             expect(
@@ -1376,8 +1384,8 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Flt, Func, FuncType, Match, Nat, NatMatch, Prim, Rec, Seal,
-                Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
+                Atom, AtomType, Flt, Func, FuncType, Match, Nat, NatMatch, Prim, Rec, Seal, Sealed,
+                Term, Tuple, TupleType, Type, Unseal, Var,
             },
             ersd, text,
         },
