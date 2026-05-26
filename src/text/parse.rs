@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
-        FuncType, Let, Match, Module, Motive, Name, Nat, NatFold, NatLiteral, NatMatch, Prim, Proj,
-        Rec, RecItem, Term, TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        FuncType, Let, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Prim, Proj, Rec,
+        RecItem, Term, TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -648,7 +648,7 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
         )
         .map(
             |((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
-                Term::Match(Match::NatFold(NatFold {
+                Term::Match(Match::Nat(NatMatch::Induction {
                     head: head.into(),
                     motive,
                     zero_case: zero_case.into(),
@@ -678,7 +678,7 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(catch(many0(parse_nat_case).and(parse_nat_default())))
         .map(|((head, motive), (cases, default))| {
-            Term::Match(Match::Nat(NatMatch {
+            Term::Match(Match::Nat(NatMatch::Dispatch {
                 head: head.into(),
                 motive,
                 cases: cases

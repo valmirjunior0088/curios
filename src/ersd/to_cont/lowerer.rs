@@ -848,10 +848,9 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::TplGet(head, proj.index)),
                 )
             }
-            ersd::Term::Apply(_)
-            | ersd::Term::Match(_)
-            | ersd::Term::NatFold(_)
-            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
+            ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
+                unsupported_rec_item(term)
+            }
         }
     }
 
@@ -1298,10 +1297,9 @@ impl<'a> Lowerer<'a> {
                     cont::Value::Eval(cont::Code::TplGet(head, proj.index)),
                 );
             }
-            ersd::Term::Apply(_)
-            | ersd::Term::Match(_)
-            | ersd::Term::NatFold(_)
-            | ersd::Term::NatMatch(_) => unsupported_rec_item(term),
+            ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
+                unsupported_rec_item(term)
+            }
         }
     }
 }
@@ -2692,10 +2690,7 @@ impl<'a> Lowerer<'a> {
                     }),
                 )
             }
-            ersd::Term::Apply(_)
-            | ersd::Term::Match(_)
-            | ersd::Term::NatFold(_)
-            | ersd::Term::NatMatch(_) => {
+            ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
                 let block = state.fresh_block();
                 let param = state.fresh_value();
                 let mut join_builder = RegionBuilder::new();
@@ -2929,8 +2924,14 @@ impl<'a> Lowerer<'a> {
                     })
                 }),
             ),
-            ersd::Term::NatFold(nat_fold) => self.lower_to_name(
-                &nat_fold.head,
+            ersd::Term::NatMatch(ersd::NatMatch::Induction {
+                head: nat_head,
+                zero_case,
+                pred,
+                ih,
+                succ_case,
+            }) => self.lower_to_name(
+                nat_head,
                 frame,
                 state,
                 builder,
@@ -3033,12 +3034,10 @@ impl<'a> Lowerer<'a> {
                         },
                     );
 
-                    let succ_frame = frame.extended([
-                        (nat_fold.pred.clone(), i2.clone()),
-                        (nat_fold.ih.clone(), acc2.clone()),
-                    ]);
+                    let succ_frame =
+                        frame.extended([(pred.clone(), i2.clone()), (ih.clone(), acc2.clone())]);
                     let body_tail = this.lower_tail(
-                        &nat_fold.succ_case,
+                        succ_case,
                         &succ_frame,
                         &body_resume_name,
                         state,
@@ -3068,24 +3067,22 @@ impl<'a> Lowerer<'a> {
                     );
 
                     // Outer tail: lower zero_case; its result flows into zero_resume → loop.
-                    this.lower_tail(
-                        &nat_fold.zero_case,
-                        frame,
-                        &zero_resume_name,
-                        state,
-                        builder,
-                    )
+                    this.lower_tail(zero_case, frame, &zero_resume_name, state, builder)
                 }),
             ),
-            ersd::Term::NatMatch(nm) => self.lower_to_name(
-                &nm.head,
+            ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
+                head: nm_head,
+                cases: nm_cases,
+                default: nm_default,
+            }) => self.lower_to_name(
+                nm_head,
                 frame,
                 state,
                 builder,
                 Box::new(move |this, state, builder, head| {
                     let mut cases = BTreeMap::new();
 
-                    for (val, branch) in nm.cases.iter() {
+                    for (val, branch) in nm_cases.iter() {
                         let block = state.fresh_block();
                         let mut branch_builder = RegionBuilder::new();
                         let tail =
@@ -3109,7 +3106,7 @@ impl<'a> Lowerer<'a> {
                     let default_block = state.fresh_block();
                     let mut default_builder = RegionBuilder::new();
                     let default_tail =
-                        this.lower_tail(&nm.default, frame, resume, state, &mut default_builder);
+                        this.lower_tail(nm_default, frame, resume, state, &mut default_builder);
                     builder.add_block(
                         default_block.clone(),
                         cont::Block {

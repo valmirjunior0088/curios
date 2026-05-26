@@ -2,7 +2,7 @@ use {
     super::{DefStack, ModuleInfo},
     crate::{
         core,
-        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, Prim, Term},
+        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Prim, Term},
     },
     std::collections::HashMap,
 };
@@ -121,25 +121,37 @@ impl<'a> Elaborate<'a> {
                     self.term(&bm.true_case)?,
                 )
                 .into(),
-                Match::NatFold(nf) => core::NatFold::new(
-                    self.term(&nf.head)?,
-                    nf.motive.label.as_deref(),
-                    self.term(&nf.motive.body)?,
-                    self.term(&nf.zero_case)?,
-                    nf.pred_label.clone(),
-                    nf.ih_label.clone(),
-                    self.term(&nf.succ_case)?,
+                Match::Nat(NatMatch::Induction {
+                    head,
+                    motive,
+                    zero_case,
+                    pred_label,
+                    ih_label,
+                    succ_case,
+                }) => core::NatMatch::induction(
+                    self.term(head)?,
+                    motive.label.as_deref(),
+                    self.term(&motive.body)?,
+                    self.term(zero_case)?,
+                    pred_label.clone(),
+                    ih_label.clone(),
+                    self.term(succ_case)?,
                 )
                 .into(),
-                Match::Nat(nm) => core::NatMatch::new(
-                    self.term(&nm.head)?,
-                    nm.motive.label.as_deref(),
-                    self.term(&nm.motive.body)?,
-                    nm.cases
+                Match::Nat(NatMatch::Dispatch {
+                    head,
+                    motive,
+                    cases,
+                    default,
+                }) => core::NatMatch::dispatch(
+                    self.term(head)?,
+                    motive.label.as_deref(),
+                    self.term(&motive.body)?,
+                    cases
                         .iter()
                         .map(|(&nat, body)| Ok((nat, self.term(body)?)))
                         .collect::<Result<Vec<_>, Error>>()?,
-                    self.term(&nm.default)?,
+                    self.term(default)?,
                 )
                 .into(),
                 Match::Atom(am) => core::Match::new(

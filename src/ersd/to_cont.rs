@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn lowers_nat_match_as_sparse_match() {
-        let term = Term::NatMatch(NatMatch {
+        let term = Term::NatMatch(NatMatch::Dispatch {
             head: Term::Prim(Prim::Nat(7)).into(),
             cases: vec![
                 (2, Term::Prim(Prim::Nat(10)).into()),

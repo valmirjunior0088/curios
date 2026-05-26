@@ -24,8 +24,11 @@ pub use context::*;
 mod convert;
 pub use convert::*;
 
-mod error;
-pub use error::*;
-
 mod typing;
 pub use typing::*;
+
+mod infer;
+pub use infer::*;
+
+mod erase;
+pub use erase::*;

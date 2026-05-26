@@ -3,19 +3,19 @@ use super::{Name, Prim};
 pub type Subterm = Box<Term>;
 
 #[derive(Debug)]
-pub struct NatFold {
-    pub head: Subterm,
-    pub zero_case: Subterm,
-    pub pred: String,
-    pub ih: String,
-    pub succ_case: Subterm,
-}
-
-#[derive(Debug)]
-pub struct NatMatch {
-    pub head: Subterm,
-    pub cases: Vec<(u32, Subterm)>,
-    pub default: Subterm,
+pub enum NatMatch {
+    Induction {
+        head: Subterm,
+        zero_case: Subterm,
+        pred: String,
+        ih: String,
+        succ_case: Subterm,
+    },
+    Dispatch {
+        head: Subterm,
+        cases: Vec<(u32, Subterm)>,
+        default: Subterm,
+    },
 }
 
 #[derive(Debug)]
@@ -71,7 +71,6 @@ pub struct Rec {
 pub enum Term {
     Erased,
     Prim(Prim),
-    NatFold(NatFold),
     NatMatch(NatMatch),
     Func(Func),
     Apply(Apply),
@@ -87,12 +86,6 @@ pub enum Term {
 impl From<Prim> for Term {
     fn from(value: Prim) -> Self {
         Self::Prim(value)
-    }
-}
-
-impl From<NatFold> for Term {
-    fn from(value: NatFold) -> Self {
-        Self::NatFold(value)
     }
 }
 

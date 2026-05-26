@@ -1,28 +1,295 @@
 use {
-    super::{
-        Apply, AtomType, BlnMatch, Context, Error, Func, FuncType, Let, Match, Nat, NatFold,
-        NatMatch, Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal,
-        Var,
-    },
-    crate::ersd,
+    super::{Atom, Context, Proj, Term, Type},
+    crate::Span,
+    std::fmt,
 };
 
-fn reduce(context: &mut Context, term: &Term) -> Result<Term, Error> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Preempted;
+
+#[derive(Debug)]
+pub enum Error {
+    ReducePreempted {
+        term: Box<Term>,
+    },
+    ConvertPreempted {
+        this: Box<Term>,
+        that: Box<Term>,
+    },
+    TypeMismatch {
+        term: Box<Term>,
+        inferred: Box<Term>,
+        expected: Box<Term>,
+    },
+    NotAFunction {
+        term: Box<Term>,
+        head_type: Box<Term>,
+    },
+    NotATuple {
+        term: Box<Term>,
+        head_type: Box<Term>,
+    },
+    TupleIndexOutOfBounds {
+        term: Box<Term>,
+        index: usize,
+        arity: usize,
+    },
+    NotAnAtomType {
+        term: Box<Term>,
+        head_type: Box<Term>,
+    },
+    NotNatType {
+        term: Box<Term>,
+        head_type: Box<Term>,
+    },
+    NotBlnType {
+        term: Box<Term>,
+        head_type: Box<Term>,
+    },
+    WrongNumberOfArguments {
+        term: Box<Term>,
+        expected: usize,
+        got: usize,
+    },
+    MatchArityMismatch {
+        term: Box<Term>,
+        expected: usize,
+        got: usize,
+    },
+    MatchCaseMissing {
+        term: Box<Term>,
+        atom: Atom,
+    },
+    CannotInferLiteral {
+        term: Box<Term>,
+    },
+    UnboundVariable {
+        term: Box<Term>,
+    },
+    CannotInfer {
+        term: Box<Term>,
+    },
+    Located {
+        span: Span,
+        error: Box<Error>,
+    },
+}
+
+impl Error {
+    pub fn reduce_preempted<T: Into<Term>>(term: T) -> Self {
+        Self::ReducePreempted {
+            term: Box::new(term.into()),
+        }
+    }
+
+    pub fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
+        Self::ConvertPreempted {
+            this: Box::new(this.into()),
+            that: Box::new(that.into()),
+        }
+    }
+
+    pub fn type_mismatch<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
+        term: T,
+        inferred: U,
+        expected: V,
+    ) -> Self {
+        Self::TypeMismatch {
+            term: Box::new(term.into()),
+            inferred: Box::new(inferred.into()),
+            expected: Box::new(expected.into()),
+        }
+    }
+
+    pub fn not_a_function<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotAFunction {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn not_a_tuple<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotATuple {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn tuple_index_out_of_bounds<T: Into<Term>>(term: T, index: usize, arity: usize) -> Self {
+        Self::TupleIndexOutOfBounds {
+            term: Box::new(term.into()),
+            index,
+            arity,
+        }
+    }
+
+    pub fn not_an_atom_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotAnAtomType {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn not_nat_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotNatType {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn not_bln_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotBlnType {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn wrong_number_of_arguments<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+        Self::WrongNumberOfArguments {
+            term: Box::new(term.into()),
+            expected,
+            got,
+        }
+    }
+
+    pub fn match_arity_mismatch<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+        Self::MatchArityMismatch {
+            term: Box::new(term.into()),
+            expected,
+            got,
+        }
+    }
+
+    pub fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
+        Self::MatchCaseMissing {
+            term: Box::new(term.into()),
+            atom: atom.into(),
+        }
+    }
+
+    pub fn cannot_infer_literal<T: Into<Term>>(term: T) -> Self {
+        Self::CannotInferLiteral {
+            term: Box::new(term.into()),
+        }
+    }
+
+    pub fn unbound_variable<T: Into<Term>>(var: T) -> Self {
+        Self::UnboundVariable {
+            term: Box::new(var.into()),
+        }
+    }
+
+    pub fn cannot_infer<T: Into<Term>>(term: T) -> Self {
+        Self::CannotInfer {
+            term: Box::new(term.into()),
+        }
+    }
+
+    pub fn at(self, span: Span) -> Self {
+        match self {
+            Self::Located { .. } => self,
+            error => Self::Located {
+                span,
+                error: Box::new(error),
+            },
+        }
+    }
+
+    pub fn format(&self, source: &str) -> String {
+        match self {
+            Self::Located { span, error } => {
+                format!("{error}\n\n{}", span.render_snippet(source))
+            }
+            error => error.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::ReducePreempted { term } => {
+                write!(f, "reduction preempted on: {term}")
+            }
+            Error::ConvertPreempted { this, that } => {
+                write!(f, "conversion preempted between {this} and {that}")
+            }
+            Error::TypeMismatch {
+                inferred, expected, ..
+            } => {
+                write!(
+                    f,
+                    "type mismatch\n  inferred: {inferred}\n  expected: {expected}"
+                )
+            }
+            Error::NotAFunction { head_type, .. } => {
+                write!(f, "applied a non-function\n  head has type: {head_type}")
+            }
+            Error::NotATuple { head_type, .. } => {
+                write!(
+                    f,
+                    "projected from a non-tuple\n  head has type: {head_type}"
+                )
+            }
+            Error::TupleIndexOutOfBounds { index, arity, .. } => {
+                write!(f, "tuple index {index} out of bounds (arity {arity})")
+            }
+            Error::NotAnAtomType { head_type, .. } => {
+                write!(
+                    f,
+                    "matched on a non-atom type\n  head has type: {head_type}"
+                )
+            }
+            Error::NotNatType { head_type, .. } => {
+                write!(f, "expected Nat but got {head_type}")
+            }
+            Error::NotBlnType { head_type, .. } => {
+                write!(f, "expected Bool but got {head_type}")
+            }
+            Error::WrongNumberOfArguments { expected, got, .. } => {
+                write!(
+                    f,
+                    "wrong number of arguments: expected {expected}, got {got}"
+                )
+            }
+            Error::MatchArityMismatch { expected, got, .. } => {
+                write!(f, "match has {got} case(s) but atom type has {expected}")
+            }
+            Error::MatchCaseMissing { term, atom } => {
+                write!(f, "missing match case for atom '{atom}': {term}")
+            }
+            Error::CannotInferLiteral { .. } => {
+                write!(f, "cannot infer type of literal (add an annotation)")
+            }
+            Error::UnboundVariable { term } => {
+                write!(f, "unbound variable: {term}")
+            }
+            Error::CannotInfer { .. } => {
+                write!(f, "cannot infer type of expression")
+            }
+            Error::Located { error, .. } => {
+                write!(f, "{error}")
+            }
+        }
+    }
+}
+
+pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     super::reduce(context, term).map_err(|Preempted| Error::reduce_preempted(term.clone()))
 }
 
-fn convert(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
+pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
     super::convert(context, &Type.into(), this, that)
         .map_err(|Preempted| Error::convert_preempted(this.clone(), that.clone()))
 }
 
-fn expect(
+pub fn expect(
     context: &mut Context,
     term: &Term,
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
-    match convert(context, inferred, expected)? {
+    match convert_with(context, inferred, expected)? {
         true => Ok(()),
         false => Err(Error::type_mismatch(
             term.clone(),
@@ -32,427 +299,8 @@ fn expect(
     }
 }
 
-fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
-    match prim {
-        Prim::BlnType => Ok(Type.into()),
-        Prim::Bln(_) => Ok(Term::Prim(Prim::BlnType)),
-        Prim::NatType => Ok(Type.into()),
-        Prim::Nat(_) => Ok(Term::Prim(Prim::NatType)),
-        Prim::NatEql(left, right)
-        | Prim::NatNeq(left, right)
-        | Prim::NatAdd(left, right)
-        | Prim::NatSub(left, right)
-        | Prim::NatMul(left, right)
-        | Prim::NatLt(left, right)
-        | Prim::NatDiv(left, right)
-        | Prim::NatRem(left, right)
-        | Prim::NatGt(left, right)
-        | Prim::NatLte(left, right)
-        | Prim::NatGte(left, right) => {
-            erase(context, left, &Term::Prim(Prim::NatType))?;
-            erase(context, right, &Term::Prim(Prim::NatType))?;
-
-            Ok(Term::Prim(Prim::BlnType))
-        }
-        Prim::IntType => Ok(Type.into()),
-        Prim::Int(_) => Ok(Term::Prim(Prim::IntType)),
-        Prim::IntEql(left, right)
-        | Prim::IntNeq(left, right)
-        | Prim::IntLt(left, right)
-        | Prim::IntGt(left, right)
-        | Prim::IntLte(left, right)
-        | Prim::IntGte(left, right) => {
-            erase(context, left, &Term::Prim(Prim::IntType))?;
-            erase(context, right, &Term::Prim(Prim::IntType))?;
-
-            Ok(Term::Prim(Prim::BlnType))
-        }
-        Prim::IntAdd(left, right)
-        | Prim::IntSub(left, right)
-        | Prim::IntMul(left, right)
-        | Prim::IntDiv(left, right)
-        | Prim::IntRem(left, right) => {
-            erase(context, left, &Term::Prim(Prim::IntType))?;
-            erase(context, right, &Term::Prim(Prim::IntType))?;
-
-            Ok(Term::Prim(Prim::IntType))
-        }
-        Prim::FltType => Ok(Type.into()),
-        Prim::Flt(_) => Ok(Term::Prim(Prim::FltType)),
-        Prim::FltAdd(left, right)
-        | Prim::FltSub(left, right)
-        | Prim::FltMul(left, right)
-        | Prim::FltDiv(left, right)
-        | Prim::FltMin(left, right)
-        | Prim::FltMax(left, right) => {
-            erase(context, left, &Term::Prim(Prim::FltType))?;
-            erase(context, right, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::FltType))
-        }
-        Prim::FltNeg(inner)
-        | Prim::FltAbs(inner)
-        | Prim::FltSqrt(inner)
-        | Prim::FltFloor(inner)
-        | Prim::FltCeil(inner)
-        | Prim::FltTrunc(inner)
-        | Prim::FltNearest(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::FltType))
-        }
-        Prim::FltEql(left, right)
-        | Prim::FltNeq(left, right)
-        | Prim::FltLt(left, right)
-        | Prim::FltGt(left, right)
-        | Prim::FltLte(left, right)
-        | Prim::FltGte(left, right) => {
-            erase(context, left, &Term::Prim(Prim::FltType))?;
-            erase(context, right, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::BlnType))
-        }
-        Prim::NatToStr(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
-
-            Ok(Term::Prim(Prim::BinType))
-        }
-        Prim::IntToStr(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
-
-            Ok(Term::Prim(Prim::BinType))
-        }
-        Prim::FltToStr(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::BinType))
-        }
-        Prim::NatToInt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
-
-            Ok(Term::Prim(Prim::IntType))
-        }
-        Prim::NatToFlt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
-
-            Ok(Term::Prim(Prim::FltType))
-        }
-        Prim::IntToNat(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
-
-            Ok(Term::Prim(Prim::NatType))
-        }
-        Prim::IntToFlt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
-
-            Ok(Term::Prim(Prim::FltType))
-        }
-        Prim::FltToNat(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::NatType))
-        }
-        Prim::FltToInt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
-
-            Ok(Term::Prim(Prim::IntType))
-        }
-        Prim::BinType => Ok(Type.into()),
-        Prim::Bin(_) => Ok(Term::Prim(Prim::BinType)),
-        Prim::BinLen(bin) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => Ok(Term::Prim(Prim::NatType)),
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
-                )),
-            }
-        }
-        Prim::BinEql(left, right) => {
-            erase(context, left, &Term::Prim(Prim::BinType))?;
-            erase(context, right, &Term::Prim(Prim::BinType))?;
-
-            Ok(Term::Prim(Prim::BlnType))
-        }
-        Prim::BinGet(bin, index) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, index, &Term::Prim(Prim::NatType))?;
-                    Ok(Term::Prim(Prim::NatType))
-                }
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
-                )),
-            }
-        }
-        Prim::BinSlice(bin, start, end) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, start, &Term::Prim(Prim::NatType))?;
-                    erase(context, end, &Term::Prim(Prim::NatType))?;
-                    Ok(Term::Prim(Prim::BinType))
-                }
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
-                )),
-            }
-        }
-        Prim::BinAppend(bin, byte) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, byte, &Term::Prim(Prim::NatType))?;
-                    Ok(Term::Prim(Prim::BinType))
-                }
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
-                )),
-            }
-        }
-        Prim::BinConcat(operands) => {
-            for operand in operands {
-                erase(context, operand, &Term::Prim(Prim::BinType))?;
-            }
-            Ok(Term::Prim(Prim::BinType))
-        }
-        Prim::ArrType(elem) => {
-            erase(context, elem, &Type.into())?;
-            Ok(Type.into())
-        }
-        Prim::Arr(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
-        Prim::ArrLen(list) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce(context, &list_type)?;
-            match list_type {
-                Term::Prim(Prim::ArrType(_)) => Ok(Term::Prim(Prim::NatType)),
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::NatType),
-                )),
-            }
-        }
-        Prim::ArrGet(list, index) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce(context, &list_type)?;
-            match list_type {
-                Term::Prim(Prim::ArrType(elem)) => {
-                    erase(context, index, &Term::Prim(Prim::NatType))?;
-                    Ok(*elem)
-                }
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::NatType),
-                )),
-            }
-        }
-        Prim::ArrSlice(list, start, end) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce(context, &list_type)?;
-            match &list_type {
-                Term::Prim(Prim::ArrType(_)) => {
-                    erase(context, start, &Term::Prim(Prim::NatType))?;
-                    erase(context, end, &Term::Prim(Prim::NatType))?;
-                    Ok(list_type)
-                }
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other.clone(),
-                    Term::Prim(Prim::NatType),
-                )),
-            }
-        }
-        Prim::ArrAppend(list, elem) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce(context, &list_type)?;
-            match &list_type {
-                Term::Prim(Prim::ArrType(elem_type)) => {
-                    let elem_type = *elem_type.clone();
-                    erase(context, elem, &elem_type)?;
-                    Ok(list_type)
-                }
-                other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other.clone(),
-                    Term::Prim(Prim::NatType),
-                )),
-            }
-        }
-        Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
-        Prim::SysPrint(inner) => {
-            erase(context, inner, &Term::Prim(Prim::BinType))?;
-            Ok(Term::TupleType(TupleType::new([] as [(&str, Term); 0])))
-        }
-        Prim::SysRead => Ok(Term::Prim(Prim::BinType)),
-    }
-}
-
-fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> {
-    let FuncType { params, output } = ft;
-    let n = params.len();
-
-    let labels = (0..n)
-        .map(|i| {
-            let hint = params
-                .get(i + 1)
-                .and_then(|s| s.label_iter().nth(i))
-                .flatten();
-            context.fresh(hint)
-        })
-        .collect::<Vec<_>>();
-    let label_terms = labels
-        .iter()
-        .map(|l| Term::from(Var::free(l)))
-        .collect::<Vec<Term>>();
-    let label_refs = label_terms.iter().collect::<Vec<_>>();
-
-    context.with_frame(|context| {
-        for i in 0..n {
-            let ty = params[i].open(&label_refs[..i]);
-            erase(context, &ty, &Type.into())?;
-            context.assume(&labels[i], &ty);
-        }
-        erase(context, &output.open(&label_refs), &Type.into()).map(|_| ())
-    })?;
-
-    Ok(Type.into())
-}
-
-fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term, Error> {
-    let Apply { head, params } = apply;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    let ft = match head_type {
-        Term::FuncType(ft) => ft,
-        other => return Err(Error::not_a_function(term.clone(), other)),
-    };
-
-    if params.len() != ft.params.len() {
-        return Err(Error::wrong_number_of_arguments(
-            term.clone(),
-            ft.params.len(),
-            params.len(),
-        ));
-    }
-
-    let mut param_terms: Vec<Term> = Vec::with_capacity(params.len());
-
-    for (i, param) in params.iter().enumerate() {
-        let so_far = param_terms.iter().collect::<Vec<_>>();
-        let expected_ty = ft.params[i].open(&so_far);
-        erase(context, param, &expected_ty)?;
-        param_terms.push(*param.clone());
-    }
-
-    let param_refs = param_terms.iter().collect::<Vec<_>>();
-    Ok(ft.output.open(&param_refs))
-}
-
-fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error> {
-    let TupleType { fields } = tt;
-    let n = fields.len();
-
-    let labels = (0..n)
-        .map(|i| {
-            let hint = fields
-                .get(i + 1)
-                .and_then(|s| s.label_iter().nth(i))
-                .flatten();
-            context.fresh(hint)
-        })
-        .collect::<Vec<_>>();
-    let label_terms = labels
-        .iter()
-        .map(|l| Term::from(Var::free(l)))
-        .collect::<Vec<Term>>();
-    let label_refs = label_terms.iter().collect::<Vec<_>>();
-
-    context.with_frame(|context| {
-        for i in 0..n {
-            let ty = fields[i].open(&label_refs[..i]);
-            erase(context, &ty, &Type.into())?;
-            context.assume(&labels[i], &ty);
-        }
-        Ok(())
-    })?;
-
-    Ok(Type.into())
-}
-
-fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Result<Term, Error> {
-    let NatFold {
-        head,
-        motive,
-        zero_case,
-        succ_case,
-    } = nat_fold;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::not_nat_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::NatType));
-
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
-    })?;
-
-    erase(
-        context,
-        zero_case,
-        &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(0)))]),
-    )?;
-
-    let pred_label = context.fresh(succ_case.first_label());
-    let ih_label = context.fresh(succ_case.second_label());
-
-    context.with_frame(|context| {
-        context.assume(&pred_label, &Term::Prim(Prim::NatType));
-        context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
-
-        erase(
-            context,
-            &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
-            &motive.open(&[&Term::Prim(Prim::nat_add(
-                Var::free(&pred_label),
-                Term::Prim(Prim::Nat(Nat::new(1))),
-            ))]),
-        )
-        .map(|_| ())
-    })?;
-
-    Ok(motive.open(&[head.as_ref()]))
-}
-
-fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
-    let canonical = reduce(context, head)?;
+pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+    let canonical = reduce_with(context, head)?;
 
     match canonical {
         Term::Var(var) => context.define(var.unwrap(), value),
@@ -463,2334 +311,38 @@ fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), E
     Ok(())
 }
 
-fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<Term, Error> {
-    let NatMatch {
-        head,
-        motive,
-        cases,
-        default,
-    } = nm;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::not_nat_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::NatType));
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
-    })?;
-
-    for (n, body) in cases {
-        context.with_frame(|context| {
-            refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(Nat::new(*n))))?;
-            erase(
-                context,
-                body,
-                &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(*n)))]),
-            )
-            .map(|_| ())
-        })?;
-    }
-
-    erase(context, default, &motive.open(&[head.as_ref()]))?;
-
-    Ok(motive.open(&[head.as_ref()]))
-}
-
-fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<Term, Error> {
-    let BlnMatch {
-        head,
-        motive,
-        false_case,
-        true_case,
-    } = bm;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    if !matches!(head_type, Term::Prim(Prim::BlnType)) {
-        return Err(Error::not_bln_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::BlnType));
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
-    })?;
-
-    context.with_frame(|context| {
-        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(false)))?;
-        erase(
-            context,
-            false_case,
-            &motive.open(&[&Term::Prim(Prim::Bln(false))]),
-        )
-        .map(|_| ())
-    })?;
-
-    context.with_frame(|context| {
-        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(true)))?;
-        erase(
-            context,
-            true_case,
-            &motive.open(&[&Term::Prim(Prim::Bln(true))]),
-        )
-        .map(|_| ())
-    })?;
-
-    Ok(motive.open(&[head.as_ref()]))
-}
-
-fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, Error> {
-    let Proj { head, index } = proj;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    let TupleType { fields } = match head_type {
-        Term::TupleType(tt) => tt,
-        other => return Err(Error::not_a_tuple(term.clone(), other)),
-    };
-
-    if *index >= fields.len() {
-        return Err(Error::tuple_index_out_of_bounds(
-            term.clone(),
-            *index,
-            fields.len(),
-        ));
-    }
-
-    let prefix: Vec<Term> = (0..*index)
-        .map(|j| Proj::new(*head.clone(), j).into())
-        .collect();
-    let prefix_refs: Vec<&Term> = prefix.iter().collect();
-
-    Ok(fields[*index].open(&prefix_refs))
-}
-
-fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Error> {
-    let Match {
-        head,
-        motive,
-        cases,
-    } = m;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    let atoms = match head_type {
-        Term::AtomType(AtomType { atoms }) => atoms,
-        other => return Err(Error::not_an_atom_type(term.clone(), other)),
-    };
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
-
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-        .map(|_| ())
-    })?;
-
-    if cases.len() != atoms.len() {
-        return Err(Error::match_arity_mismatch(
-            term.clone(),
-            atoms.len(),
-            cases.len(),
-        ));
-    }
-
-    for atom in &atoms {
-        let body = if let Some(body) = cases.get(atom) {
-            body
-        } else {
-            return Err(Error::match_case_missing(term.clone(), atom.clone()));
-        };
-
-        let expected = motive.open(&[&atom.clone().into()]);
-
-        context.with_frame(|context| {
-            refine_head(context, head.as_ref(), &atom.clone().into())?;
-            erase(context, body, &expected)
-        })?;
-    }
-
-    Ok(motive.open(&[head.as_ref()]))
-}
-
-fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
-    let Let { type_, body, tail } = let_;
-
-    erase(context, type_, &Type.into())?;
-    erase(context, body, type_)?;
-
-    let label = context.fresh(tail.first_label());
-
-    context.with_frame(|context| {
-        context.define_assuming(&label, type_, body);
-
-        let tail_type = infer(context, &tail.open(&[&Var::free(label).into()]))?;
-
-        reduce(context, &tail_type)
-    })
-}
-
-fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
-    let Rec { items, tail } = rec;
-
-    let labels = tail
-        .label_iter()
-        .map(|l| context.fresh(l))
-        .collect::<Vec<_>>();
-
-    let label_terms = labels
-        .iter()
-        .map(Var::free)
-        .map(Into::into)
-        .collect::<Vec<_>>();
-
-    let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-    let items = items
-        .iter()
-        .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
-        .collect::<Vec<_>>();
-
-    let tail = tail.open(&label_terms);
-
-    context.with_frame(|context| {
-        for (label, (type_, _)) in labels.iter().zip(items.iter()) {
-            context.assume(label, type_);
-        }
-
-        for (type_, _) in &items {
-            erase(context, type_, &Type.into())?;
-        }
-
-        for (label, (_, body)) in labels.iter().zip(items.iter()) {
-            context.define(label, body);
-        }
-
-        for (_, (type_, body)) in labels.iter().zip(items.iter()) {
-            erase(context, body, type_)?;
-        }
-
-        let tail_type = infer(context, &tail)?;
-
-        reduce(context, &tail_type)
-    })
-}
-
-pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    match term {
-        Term::Type => Ok(Type.into()),
-        Term::Prim(prim) => infer_prim(context, prim),
-        Term::BlnMatch(bm) => infer_bln_match(context, bm, term),
-        Term::NatFold(nat_fold) => infer_nat_fold(context, nat_fold, term),
-        Term::NatMatch(nm) => infer_nat_match(context, nm, term),
-        Term::FuncType(ft) => infer_func_type(context, ft),
-        Term::Apply(apply) => infer_apply(context, apply, term),
-        Term::TupleType(tt) => infer_tuple_type(context, tt),
-        Term::Proj(proj) => infer_proj(context, proj, term),
-        Term::AtomType(_) => Ok(Type.into()),
-        Term::Match(m) => infer_match(context, m, term),
-        Term::Let(let_) => infer_let(context, let_),
-        Term::Rec(rec) => infer_rec(context, rec),
-        Term::Var(var) => match context.assumption(var.unwrap()) {
-            Some(type_) => Ok(type_.clone()),
-            None => Err(Error::unbound_variable(var.clone())),
-        },
-        Term::Spanned(span, inner) => infer(context, inner).map_err(|error| error.at(*span)),
-        _ => Err(Error::cannot_infer(term.clone())),
-    }
-}
-
-fn erase_prim(
-    context: &mut Context,
-    term: &Term,
-    prim: &Prim,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    match prim {
-        Prim::BlnType => {
-            expect(context, term, &Type.into(), expected)?;
-
-            Ok(ersd::Term::Erased)
-        }
-        &Prim::Bln(value) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::Nat(if value { 1 } else { 0 }).into())
-        }
-        Prim::NatType => {
-            expect(context, term, &Type.into(), expected)?;
-
-            Ok(ersd::Term::Erased)
-        }
-        Prim::Nat(Nat::Zero) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(ersd::Prim::Nat(0).into())
-        }
-        Prim::Nat(Nat::Succ(spine, inner)) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            if matches!(inner.as_ref(), Term::Prim(Prim::Nat(Nat::Zero))) {
-                Ok(ersd::Prim::Nat(*spine).into())
-            } else {
-                let inner_ersd = erase(context, inner, &Term::Prim(Prim::NatType))?;
-                let spine_term: ersd::Term = ersd::Prim::Nat(*spine).into();
-                Ok(ersd::Prim::NatAdd(spine_term.into(), inner_ersd.into()).into())
-            }
-        }
-        Prim::NatEql(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::NatEql(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatAdd(left, right) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(ersd::Prim::NatAdd(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatSub(left, right) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(ersd::Prim::NatSub(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatMul(left, right) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(ersd::Prim::NatMul(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatNeq(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::NatNeq(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatDiv(left, right) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(ersd::Prim::NatDiv(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatRem(left, right) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(ersd::Prim::NatRem(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatLt(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::NatLt(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatGt(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::NatGt(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatLte(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::NatLte(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatGte(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::NatGte(
-                erase(context, left, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, right, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntType => {
-            expect(context, term, &Type.into(), expected)?;
-
-            Ok(ersd::Term::Erased)
-        }
-        &Prim::Int(value) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(ersd::Prim::Int(value).into())
-        }
-        Prim::IntEql(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::IntEql(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntNeq(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::IntNeq(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntAdd(left, right) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(ersd::Prim::IntAdd(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntSub(left, right) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(ersd::Prim::IntSub(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntMul(left, right) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(ersd::Prim::IntMul(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntDiv(left, right) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(ersd::Prim::IntDiv(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntRem(left, right) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(ersd::Prim::IntRem(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntLt(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::IntLt(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntGt(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::IntGt(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntLte(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::IntLte(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::IntGte(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::IntGte(
-                erase(context, left, &Term::Prim(Prim::IntType))?.into(),
-                erase(context, right, &Term::Prim(Prim::IntType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltType => {
-            expect(context, term, &Type.into(), expected)?;
-
-            Ok(ersd::Term::Erased)
-        }
-        &Prim::Flt(flt) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::Flt(flt.to_f32()).into())
-        }
-        Prim::FltAdd(left, right) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::FltAdd(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltSub(left, right) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::FltSub(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltMul(left, right) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::FltMul(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltNeg(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltNeg(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltAbs(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltAbs(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltSqrt(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltSqrt(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltFloor(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltFloor(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltCeil(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltCeil(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltTrunc(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltTrunc(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltNearest(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::FltNearest(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltDiv(left, right) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::FltDiv(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltMin(left, right) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::FltMin(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltMax(left, right) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(ersd::Prim::FltMax(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltEql(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::FltEql(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltNeq(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::FltNeq(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltLt(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::FltLt(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltGt(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::FltGt(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltLte(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::FltLte(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::FltGte(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::FltGte(
-                erase(context, left, &Term::Prim(Prim::FltType))?.into(),
-                erase(context, right, &Term::Prim(Prim::FltType))?.into(),
-            )
-            .into())
-        }
-        Prim::NatToStr(inner) => {
-            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
-
-            Ok(
-                ersd::Prim::NatToStr(erase(context, inner, &Term::Prim(Prim::NatType))?.into())
-                    .into(),
-            )
-        }
-        Prim::IntToStr(inner) => {
-            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
-
-            Ok(
-                ersd::Prim::IntToStr(erase(context, inner, &Term::Prim(Prim::IntType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltToStr(inner) => {
-            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
-
-            Ok(
-                ersd::Prim::FltToStr(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::NatToInt(inner) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(
-                ersd::Prim::NatToInt(erase(context, inner, &Term::Prim(Prim::NatType))?.into())
-                    .into(),
-            )
-        }
-        Prim::IntToNat(inner) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(
-                ersd::Prim::IntToNat(erase(context, inner, &Term::Prim(Prim::IntType))?.into())
-                    .into(),
-            )
-        }
-        Prim::IntToFlt(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::IntToFlt(erase(context, inner, &Term::Prim(Prim::IntType))?.into())
-                    .into(),
-            )
-        }
-        Prim::NatToFlt(inner) => {
-            expect(context, term, &Term::Prim(Prim::FltType), expected)?;
-
-            Ok(
-                ersd::Prim::NatToFlt(erase(context, inner, &Term::Prim(Prim::NatType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltToInt(inner) => {
-            expect(context, term, &Term::Prim(Prim::IntType), expected)?;
-
-            Ok(
-                ersd::Prim::FltToInt(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::FltToNat(inner) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-
-            Ok(
-                ersd::Prim::FltToNat(erase(context, inner, &Term::Prim(Prim::FltType))?.into())
-                    .into(),
-            )
-        }
-        Prim::BinType => {
-            expect(context, term, &Type.into(), expected)?;
-            Ok(ersd::Term::Erased)
-        }
-        Prim::Bin(bytes) => {
-            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
-            Ok(ersd::Prim::Bin(bytes.clone()).into())
-        }
-        Prim::BinLen(bin) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-            let bin_type = infer(context, bin)?;
-            let bin_type_reduced = reduce(context, &bin_type)?;
-            match &bin_type_reduced {
-                Term::Prim(Prim::BinType) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        Term::Prim(Prim::BinType),
-                    ));
-                }
-            }
-            Ok(ersd::Prim::BinLen(erase(context, bin, &bin_type)?.into()).into())
-        }
-        Prim::BinEql(left, right) => {
-            expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
-
-            Ok(ersd::Prim::BinEql(
-                erase(context, left, &Term::Prim(Prim::BinType))?.into(),
-                erase(context, right, &Term::Prim(Prim::BinType))?.into(),
-            )
-            .into())
-        }
-        Prim::BinGet(bin, index) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-            let bin_type = infer(context, bin)?;
-            let bin_type_reduced = reduce(context, &bin_type)?;
-            match &bin_type_reduced {
-                Term::Prim(Prim::BinType) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        Term::Prim(Prim::BinType),
-                    ));
-                }
-            }
-            Ok(ersd::Prim::BinGet(
-                erase(context, bin, &bin_type)?.into(),
-                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::BinSlice(bin, start, end) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type_reduced = reduce(context, &bin_type)?;
-            match &bin_type_reduced {
-                Term::Prim(Prim::BinType) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        Term::Prim(Prim::BinType),
-                    ));
-                }
-            }
-            expect(context, term, &bin_type_reduced, expected)?;
-            Ok(ersd::Prim::BinSlice(
-                erase(context, bin, &bin_type)?.into(),
-                erase(context, start, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, end, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::BinAppend(bin, byte) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type_reduced = reduce(context, &bin_type)?;
-            match &bin_type_reduced {
-                Term::Prim(Prim::BinType) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        Term::Prim(Prim::BinType),
-                    ));
-                }
-            }
-            expect(context, term, &bin_type_reduced, expected)?;
-            Ok(ersd::Prim::BinAppend(
-                erase(context, bin, &bin_type)?.into(),
-                erase(context, byte, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::BinConcat(operands) => {
-            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
-            let erased = operands
-                .iter()
-                .map(|e| erase(context, e, &Term::Prim(Prim::BinType)).map(|t| t.into()))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ersd::Prim::BinConcat(erased).into())
-        }
-        Prim::ArrType(elem) => {
-            expect(context, term, &Type.into(), expected)?;
-            erase(context, elem, &Type.into())?;
-            Ok(ersd::Term::Erased)
-        }
-        Prim::Arr(elems) => {
-            let elem_type = match reduce(context, expected)? {
-                Term::Prim(Prim::ArrType(elem_type)) => *elem_type,
-                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
-            };
-            let erased_elems = elems
-                .iter()
-                .map(|e| erase(context, e, &elem_type).map(|t| t.into()))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ersd::Prim::Arr(erased_elems).into())
-        }
-        Prim::ArrLen(list) => {
-            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
-            let list_type = infer(context, list)?;
-            let list_type_reduced = reduce(context, &list_type)?;
-            match &list_type_reduced {
-                Term::Prim(Prim::ArrType(_)) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
-            }
-            Ok(ersd::Prim::ArrLen(erase(context, list, &list_type)?.into()).into())
-        }
-        Prim::ArrGet(list, index) => {
-            let list_type = infer(context, list)?;
-            let list_type_reduced = reduce(context, &list_type)?;
-            let elem_type = match list_type_reduced {
-                Term::Prim(Prim::ArrType(elem)) => *elem,
-                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
-            };
-            expect(context, term, &elem_type, expected)?;
-            Ok(ersd::Prim::ArrGet(
-                erase(context, list, &list_type)?.into(),
-                erase(context, index, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::ArrSlice(list, start, end) => {
-            let list_type = infer(context, list)?;
-            let list_type_reduced = reduce(context, &list_type)?;
-            match &list_type_reduced {
-                Term::Prim(Prim::ArrType(_)) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
-            }
-            expect(context, term, &list_type_reduced, expected)?;
-            Ok(ersd::Prim::ArrSlice(
-                erase(context, list, &list_type)?.into(),
-                erase(context, start, &Term::Prim(Prim::NatType))?.into(),
-                erase(context, end, &Term::Prim(Prim::NatType))?.into(),
-            )
-            .into())
-        }
-        Prim::ArrAppend(list, elem) => {
-            let list_type = infer(context, list)?;
-            let list_type_reduced = reduce(context, &list_type)?;
-            let elem_type = match list_type_reduced {
-                Term::Prim(Prim::ArrType(e)) => *e,
-                other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
-            };
-            expect(
-                context,
-                term,
-                &Term::Prim(Prim::arr_type(elem_type.clone())),
-                expected,
-            )?;
-            Ok(ersd::Prim::ArrAppend(
-                erase(context, list, &list_type)?.into(),
-                erase(context, elem, &elem_type)?.into(),
-            )
-            .into())
-        }
-        Prim::ArrConcat(operands) => {
-            let expected_reduced = reduce(context, expected)?;
-            match &expected_reduced {
-                Term::Prim(Prim::ArrType(_)) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
-            }
-            let erased = operands
-                .iter()
-                .map(|e| erase(context, e, &expected_reduced).map(|t| t.into()))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ersd::Prim::ArrConcat(erased).into())
-        }
-        Prim::SysPrint(inner) => {
-            expect(
-                context,
-                term,
-                &Term::TupleType(TupleType::new([] as [(&str, Term); 0])),
-                expected,
-            )?;
-            Ok(
-                ersd::Prim::SysPrint(erase(context, inner, &Term::Prim(Prim::BinType))?.into())
-                    .into(),
-            )
-        }
-        Prim::SysRead => {
-            expect(context, term, &Term::Prim(Prim::BinType), expected)?;
-            Ok(ersd::Prim::SysRead.into())
-        }
-    }
-}
-
-fn erase_func(
-    context: &mut Context,
-    func: &Func,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Func { body } = func;
-
-    let ft = match reduce(context, expected)? {
-        Term::FuncType(ft) => ft,
-        other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
-    };
-
-    let n = ft.params.len();
-    let captures = body.free_vars().into_iter().collect::<Vec<_>>();
-
-    let param_names = (0..n)
-        .map(|i| context.fresh(body.label_iter().nth(i).flatten()))
-        .collect::<Vec<_>>();
-    let param_terms = param_names
-        .iter()
-        .map(|p| Term::from(Var::free(p)))
-        .collect::<Vec<_>>();
-    let param_refs = param_terms.iter().collect::<Vec<_>>();
-    let body_opened = body.open(&param_refs);
-
-    let output_type = ft.output.open(&param_refs);
-
-    let erased_body = context.with_frame(|context| {
-        let mut param_tys: Vec<Term> = Vec::with_capacity(n);
-        let mut so_far: Vec<&Term> = Vec::with_capacity(n);
-        for (i, name) in param_names.iter().enumerate().take(n) {
-            let ty = ft.params[i].open(&so_far);
-            context.assume(name, &ty);
-            param_tys.push(ty);
-            so_far.push(param_terms.get(i).unwrap());
-        }
-        erase(context, &body_opened, &output_type)
-    })?;
-
-    Ok(ersd::Func {
-        captures,
-        params: param_names,
-        body: erased_body.into(),
-    }
-    .into())
-}
-
-fn erase_apply(
-    context: &mut Context,
-    apply: &Apply,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Apply { head, params } = apply;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    let ft = match &head_type {
-        Term::FuncType(ft) => ft,
-        _ => return Err(Error::not_a_function(term.clone(), head_type)),
-    };
-
-    if params.len() != ft.params.len() {
-        return Err(Error::wrong_number_of_arguments(
-            term.clone(),
-            ft.params.len(),
-            params.len(),
-        ));
-    }
-
-    let mut erased_params = Vec::with_capacity(params.len());
-    let mut param_terms: Vec<Term> = Vec::with_capacity(params.len());
-
-    for (i, param) in params.iter().enumerate() {
-        let so_far = param_terms.iter().collect::<Vec<_>>();
-        let expected_ty = ft.params[i].open(&so_far);
-        erased_params.push(erase(context, param, &expected_ty)?);
-        param_terms.push(*param.clone());
-    }
-
-    let param_refs = param_terms.iter().collect::<Vec<_>>();
-    let result_type = ft.output.open(&param_refs);
-    let erased_head = erase(context, head, &head_type)?;
-
-    expect(context, term, &result_type, expected)?;
-
-    Ok(ersd::Apply {
-        head: erased_head.into(),
-        params: erased_params.into_iter().map(|p| p.into()).collect(),
-    }
-    .into())
-}
-
-fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
-    let Tuple { fields } = tuple;
-
-    let type_fields = match reduce(context, expected)? {
-        Term::TupleType(TupleType { fields: tf }) => tf,
-        other => return Err(Error::type_mismatch(tuple.clone(), other, expected.clone())),
-    };
-
-    if fields.len() != type_fields.len() {
-        return Err(Error::type_mismatch(
-            tuple.clone(),
-            expected.clone(),
-            expected.clone(),
-        ));
-    }
-
-    let mut checked_terms = Vec::<&Term>::new();
-    let mut erased_fields = Vec::<ersd::Subterm>::new();
-
-    for (i, field) in fields.iter().enumerate() {
-        let field_type = type_fields[i].open(&checked_terms);
-        erased_fields.push(erase(context, field, &field_type)?.into());
-        checked_terms.push(field.as_ref());
-    }
-
-    Ok(ersd::Tuple {
-        fields: erased_fields,
-    }
-    .into())
-}
-
-fn erase_nat_fold(
-    context: &mut Context,
-    nat_fold: &NatFold,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let NatFold {
-        head,
-        motive,
-        zero_case,
-        succ_case,
-    } = nat_fold;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::not_nat_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::NatType));
-
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-    })?;
-
-    let erased_zero_case = erase(
-        context,
-        zero_case,
-        &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(0)))]),
-    )?;
-
-    let pred_label = context.fresh(succ_case.first_label());
-    let ih_label = context.fresh(succ_case.second_label());
-
-    let erased_succ_case = context.with_frame(|context| {
-        context.assume(&pred_label, &Term::Prim(Prim::NatType));
-        context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
-
-        erase(
-            context,
-            &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
-            &motive.open(&[&Term::Prim(Prim::nat_add(
-                Var::free(&pred_label),
-                Term::Prim(Prim::Nat(Nat::new(1))),
-            ))]),
-        )
-    })?;
-
-    let erased_head = erase(context, head, &head_type)?;
-
-    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-    Ok(ersd::NatFold {
-        head: erased_head.into(),
-        zero_case: erased_zero_case.into(),
-        pred: pred_label,
-        ih: ih_label,
-        succ_case: erased_succ_case.into(),
-    }
-    .into())
-}
-
-fn erase_nat_match(
-    context: &mut Context,
-    nm: &NatMatch,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let NatMatch {
-        head,
-        motive,
-        cases,
-        default,
-    } = nm;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    if !matches!(head_type, Term::Prim(Prim::NatType)) {
-        return Err(Error::not_nat_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::NatType));
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-    })?;
-
-    let erased_cases = cases
-        .iter()
-        .map(|(n, body)| {
-            let case_expected = motive.open(&[&Term::Prim(Prim::Nat(Nat::new(*n)))]);
-            context.with_frame(|context| {
-                refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(Nat::new(*n))))?;
-                erase(context, body, &case_expected).map(|e| (*n, e.into()))
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    let erased_default = erase(context, default, &motive.open(&[head.as_ref()]))?;
-
-    let erased_head = erase(context, head, &head_type)?;
-
-    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-    Ok(ersd::NatMatch {
-        head: erased_head.into(),
-        cases: erased_cases,
-        default: erased_default.into(),
-    }
-    .into())
-}
-
-fn erase_bln_match(
-    context: &mut Context,
-    bm: &BlnMatch,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let BlnMatch {
-        head,
-        motive,
-        false_case,
-        true_case,
-    } = bm;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    if !matches!(head_type, Term::Prim(Prim::BlnType)) {
-        return Err(Error::not_bln_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::BlnType));
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-    })?;
-
-    let erased_false = context.with_frame(|context| {
-        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(false)))?;
-        erase(
-            context,
-            false_case,
-            &motive.open(&[&Term::Prim(Prim::Bln(false))]),
-        )
-    })?;
-
-    let erased_true = context.with_frame(|context| {
-        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(true)))?;
-        erase(
-            context,
-            true_case,
-            &motive.open(&[&Term::Prim(Prim::Bln(true))]),
-        )
-    })?;
-
-    let erased_head = erase(context, head, &head_type)?;
-
-    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-    Ok(ersd::NatMatch {
-        head: erased_head.into(),
-        cases: vec![(0, erased_false.into())],
-        default: erased_true.into(),
-    }
-    .into())
-}
-
-fn erase_proj(
-    context: &mut Context,
-    proj: &Proj,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Proj { head, index } = proj;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    let TupleType { fields } = match head_type.clone() {
-        Term::TupleType(tt) => tt,
-        other => return Err(Error::not_a_tuple(term.clone(), other)),
-    };
-
-    if *index >= fields.len() {
-        return Err(Error::tuple_index_out_of_bounds(
-            term.clone(),
-            *index,
-            fields.len(),
-        ));
-    }
-
-    let prefix: Vec<Term> = (0..*index)
-        .map(|j| Proj::new(*head.clone(), j).into())
-        .collect();
-    let prefix_refs: Vec<&Term> = prefix.iter().collect();
-    let field_type = fields[*index].open(&prefix_refs);
-
-    expect(context, term, &field_type, expected)?;
-
-    Ok(ersd::Proj {
-        head: erase(context, head, &head_type)?.into(),
-        index: *index,
-    }
-    .into())
-}
-
-fn erase_atom(
-    context: &mut Context,
-    atom: &super::Atom,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let atoms = match reduce(context, expected)? {
-        Term::AtomType(AtomType { atoms }) => atoms,
-        _ => {
-            return Err(Error::type_mismatch(
-                term.clone(),
-                AtomType::new([atom.clone()]),
-                expected.clone(),
-            ));
-        }
-    };
-
-    let index = atoms
-        .iter()
-        .position(|candidate| candidate == atom)
-        .ok_or_else(|| {
-            Error::type_mismatch(
-                term.clone(),
-                AtomType::new([atom.clone()]),
-                expected.clone(),
-            )
-        })?;
-
-    Ok(ersd::Atom { index }.into())
-}
-
-fn erase_match(
-    context: &mut Context,
-    m: &Match,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Match {
-        head,
-        motive,
-        cases,
-    } = m;
-
-    let head_type = infer(context, head)?;
-    let head_type = reduce(context, &head_type)?;
-
-    let atoms = match head_type.clone() {
-        Term::AtomType(AtomType { atoms }) => atoms,
-        other => return Err(Error::not_an_atom_type(term.clone(), other)),
-    };
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
-
-        erase(
-            context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
-        )
-    })?;
-
-    if cases.len() != atoms.len() {
-        return Err(Error::match_arity_mismatch(
-            term.clone(),
-            atoms.len(),
-            cases.len(),
-        ));
-    }
-
-    let cases = atoms
-        .iter()
-        .map(|atom| {
-            let body = if let Some(body) = cases.get(atom) {
-                body
-            } else {
-                return Err(Error::match_case_missing(term.clone(), atom.clone()));
-            };
-
-            let expected = motive.open(&[&atom.clone().into()]);
-
-            context.with_frame(|context| {
-                refine_head(context, head.as_ref(), &atom.clone().into())?;
-                erase(context, body, &expected).map(Into::into)
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    expect(context, term, &motive.open(&[head.as_ref()]), expected)?;
-
-    Ok(ersd::Match {
-        head: erase(context, head, &head_type)?.into(),
-        cases,
-    }
-    .into())
-}
-
-fn erase_sealed(
-    context: &mut Context,
-    sealed: &Sealed,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Sealed { witness, tail } = sealed;
-    erase(context, witness, &Type.into())?;
-    let label = context.fresh(tail.first_label());
-    let tail = tail.open(&[&Var::free(&label).into()]);
-    context.with_frame(|context| {
-        context.seal(&label, witness);
-        erase(context, &tail, expected)
-    })
-}
-
-fn erase_seal(
-    context: &mut Context,
-    seal: &Seal,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Seal { witness, value } = seal;
-    let witness_reduced = reduce(context, witness)?;
-    let Term::Var(var) = &witness_reduced else {
-        return Err(Error::cannot_infer(term.clone()));
-    };
-    let repr = context
-        .witness(var.unwrap())
-        .ok_or_else(|| Error::cannot_infer(term.clone()))?
-        .clone();
-    expect(context, term, &witness_reduced, expected)?;
-    erase(context, value, &repr)
-}
-
-fn erase_unseal(
-    context: &mut Context,
-    unseal: &Unseal,
-    term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    let Unseal { witness, value } = unseal;
-    let witness_reduced = reduce(context, witness)?;
-    let Term::Var(var) = &witness_reduced else {
-        return Err(Error::cannot_infer(term.clone()));
-    };
-    let repr = context
-        .witness(var.unwrap())
-        .ok_or_else(|| Error::cannot_infer(term.clone()))?
-        .clone();
-    expect(context, term, &repr, expected)?;
-    erase(context, value, &witness_reduced)
-}
-
-fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd::Term, Error> {
-    let Let {
-        type_: body_type,
-        body,
-        tail,
-    } = let_;
-
-    erase(context, body_type, &Type.into())?;
-
-    let name = context.fresh(tail.first_label());
-    let erased_body = erase(context, body, body_type)?;
-    let var_term = Var::free(&name).into();
-    let tail = tail.open(&[&var_term]);
-
-    let tail = context.with_frame(|context| {
-        context.define_assuming(&name, body_type, body);
-
-        erase(context, &tail, expected)
-    })?;
-
-    Ok(ersd::Let {
-        name,
-        body: erased_body.into(),
-        tail: tail.into(),
-    }
-    .into())
-}
-
-fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::Term, Error> {
-    let Rec { items, tail } = rec;
-
-    let names = tail
-        .label_iter()
-        .map(|l| context.fresh(l))
-        .collect::<Vec<_>>();
-
-    let label_terms = names
-        .iter()
-        .map(Var::free)
-        .map(Into::into)
-        .collect::<Vec<_>>();
-
-    let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-    let items = items
-        .iter()
-        .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
-        .collect::<Vec<_>>();
-
-    let tail = tail.open(&label_terms);
-
-    let erased = context.with_frame(|context| {
-        for (name, (type_, _)) in names.iter().zip(items.iter()) {
-            context.assume(name, type_);
-        }
-
-        for (type_, _) in &items {
-            erase(context, type_, &Type.into())?;
-        }
-
-        for (name, (_, body)) in names.iter().zip(items.iter()) {
-            context.define(name, body);
-        }
-
-        let erased_items = items
-            .iter()
-            .map(|(type_, body)| erase(context, body, type_).map(Into::into))
-            .collect::<Result<Vec<_>, Error>>()?;
-
-        Ok(ersd::Rec {
-            names,
-            items: erased_items,
-            tail: erase(context, &tail, expected)?.into(),
-        })
-    })?;
-
-    Ok(erased.into())
-}
-
-pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
-    match term {
-        Term::Prim(prim) => erase_prim(context, term, prim, expected),
-        Term::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
-        Term::NatFold(nat_fold) => erase_nat_fold(context, nat_fold, term, expected),
-        Term::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
-        Term::Type => {
-            expect(context, term, &Type.into(), expected)?;
-            Ok(ersd::Term::Erased)
-        }
-        Term::FuncType(_) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Term::Erased)
-        }
-        Term::Func(func) => erase_func(context, func, term, expected),
-        Term::Apply(apply) => erase_apply(context, apply, term, expected),
-        Term::TupleType(_) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Term::Erased)
-        }
-        Term::Tuple(tuple) => erase_tuple(context, tuple, expected),
-        Term::Proj(proj) => erase_proj(context, proj, term, expected),
-        Term::AtomType(_) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Term::Erased)
-        }
-        Term::Atom(atom) => erase_atom(context, atom, term, expected),
-        Term::Match(m) => erase_match(context, m, term, expected),
-        Term::Let(let_) => erase_let(context, let_, expected),
-        Term::Rec(lr) => erase_rec(context, lr, expected),
-        Term::Sealed(sealed) => erase_sealed(context, sealed, expected),
-        Term::Seal(seal) => erase_seal(context, seal, term, expected),
-        Term::Unseal(unseal) => erase_unseal(context, unseal, term, expected),
-        Term::Var(var) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Name::from(var.unwrap()).into())
-        }
-        Term::Spanned(span, inner) => {
-            erase(context, inner, expected).map_err(|error| error.at(*span))
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        crate::{
-            core::{
-                Atom, AtomType, Flt, Func, FuncType, Match, Nat, NatFold, NatMatch, Prim, Rec,
-                Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
-            },
-            ersd, text,
-        },
-        std::time::Duration,
-    };
+    use super::*;
+    use crate::core::{Nat, Prim, Term};
 
-    fn context() -> Context {
-        Context::new(Duration::from_secs(1))
+    #[test]
+    fn display_unbound_variable() {
+        let err = Error::unbound_variable(Term::Prim(Prim::NatType));
+        assert_eq!(err.to_string(), "unbound variable: Nat");
     }
 
     #[test]
-    fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
-        let mut context = context();
-
-        let tuple_type = Term::from(TupleType::new([
-            ("x", Term::from(AtomType::new(["left", "right"]))),
-            (
-                "y",
-                Term::from(Match::new(
-                    Var::free("x"),
-                    Some("m"),
-                    Type,
-                    vec![
-                        ("left", AtomType::new(["hot"])),
-                        ("right", AtomType::new(["cold"])),
-                    ],
-                )),
-            ),
-        ]));
-
-        erase(&mut context, &tuple_type, &Type.into()).unwrap();
-
-        let tuple = Term::from(Tuple::new([Atom::from("left"), Atom::from("hot")]));
-
-        erase(&mut context, &tuple, &tuple_type).unwrap();
-
-        let tuple = Term::from(Tuple::new([Atom::from("right"), Atom::from("cold")]));
-
-        erase(&mut context, &tuple, &tuple_type).unwrap();
-    }
-
-    #[test]
-    fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
-        let mut context = context();
-
-        let tuple_type = Term::from(TupleType::new([
-            ("x", Term::from(AtomType::new(["left", "right"]))),
-            (
-                "y",
-                Term::from(Match::new(
-                    Var::free("x"),
-                    Some("m"),
-                    Type,
-                    vec![
-                        ("left", AtomType::new(["hot"])),
-                        ("right", AtomType::new(["cold"])),
-                    ],
-                )),
-            ),
-        ]));
-
-        let tuple = Term::from(Tuple::new([Atom::from("left"), Atom::from("cold")]));
-
-        assert!(matches!(
-            erase(&mut context, &tuple, &tuple_type),
-            Err(Error::TypeMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn erase_match_singleton_lowers_to_match() {
-        let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::PanicLoader).unwrap();
-
-        let term = text::to_core(
-            &r#"
-                let x : '[unit] = 'unit;
-                match x : _ => '[yes, no];
-                | 'unit => 'yes;
-            "#
-            .parse()
-            .unwrap(),
-            &text::PanicLoader,
-        )
-        .unwrap();
-
-        let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
-
-        let ersd::Term::Let(ersd::Let { body, tail, .. }) = erased else {
-            panic!("expected let");
-        };
-
-        assert!(matches!(*body, ersd::Term::Atom(ersd::Atom { index: 0 })));
-        assert!(matches!(*tail, ersd::Term::Match(_)));
-    }
-
-    #[test]
-    fn erase_rec_single_identity_function() {
-        let mut context = context();
-
-        let func_type = Term::from(FuncType::new(
-            [("x", AtomType::new(["a"]))],
-            AtomType::new(["a"]),
-        ));
-
-        let term = Term::from(Rec::new(
-            vec![("f", func_type.clone(), Func::new(["x"], Var::free("x")))],
-            Var::free("f"),
-        ));
-
-        erase(&mut context, &term, &func_type).unwrap();
-    }
-
-    #[test]
-    fn erase_preempts_on_cyclic_expected_type() {
-        let mut context = context();
-
-        context.define("loop", &Var::free("loop").into());
-
-        assert!(matches!(
-            erase(&mut context, &Type.into(), &Var::free("loop").into()),
-            Err(Error::ConvertPreempted { .. })
-        ));
-    }
-
-    #[test]
-    fn erase_accepts_term_level_loop_with_stable_type() {
-        let mut context = context();
-
-        let type_ = Term::from(AtomType::new(["a"]));
-
-        let term = Term::from(Rec::new(
-            vec![("loop", type_.clone(), Var::free("loop"))],
-            Var::free("loop"),
-        ));
-
-        erase(&mut context, &term, &type_).unwrap();
-    }
-
-    #[test]
-    fn erase_prim_ops_typecheck() {
-        let mut context = context();
-
-        erase(
-            &mut context,
-            &Term::Prim(Prim::int_eql(
-                Term::Prim(Prim::Int(1)),
-                Term::Prim(Prim::Int(1)),
-            )),
-            &Term::Prim(Prim::BlnType),
-        )
-        .unwrap();
-
-        erase(
-            &mut context,
-            &Term::Prim(Prim::flt_add(
-                Term::Prim(Prim::Flt(Flt::from_f32(1.5))),
-                Term::Prim(Prim::Flt(Flt::from_f32(2.0))),
-            )),
-            &Term::Prim(Prim::FltType),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn erase_func_captures_free_variables_before_opening_body() {
-        let atom_type = Term::from(AtomType::new(["a"]));
-        let tuple_type = Term::from(TupleType::new([
-            ("z", atom_type.clone()),
-            ("w", atom_type.clone()),
-        ]));
-        let type_ = Term::from(FuncType::new([("x", atom_type.clone())], tuple_type));
-        let term = Term::from(Func::new(
-            ["x"],
-            Tuple::new([Term::from(Var::free("x")), Term::from(Var::free("y"))]),
-        ));
-
-        let mut context = Context::new(Duration::from_secs(1));
-        context.assume("y", &atom_type);
-
-        let erased = erase(&mut context, &term, &type_).unwrap();
-
-        let ersd::Term::Func(ersd::Func { captures, .. }) = erased else {
-            panic!("expected erased func");
-        };
-
-        assert_eq!(captures.len(), 1);
-        assert!(captures.contains(&"y".to_string()));
-    }
-
-    #[test]
-    fn erase_rejects_wrong_prim_operand_types() {
-        assert!(matches!(
-            erase(
-                &mut Context::new(Duration::from_secs(1)),
-                &Term::Prim(Prim::int_add(
-                    Term::Prim(Prim::Int(1)),
-                    Term::Prim(Prim::Flt(Flt::from_f32(2.0)))
-                )),
-                &Term::Prim(Prim::IntType),
-            ),
-            Err(Error::TypeMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn erase_match_and_atom_stress_test() {
-        let type_ =
-            text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::PanicLoader).unwrap();
-
-        let term = text::to_core(
-            &r#"
-                let outer : '[zeta, alpha, mu] = 'mu;
-                let alpha_case : '[zeta, alpha, mu] = 'alpha;
-                let mu_case : '[zeta, alpha, mu] = 'mu;
-                let zeta_case : '[zeta, alpha, mu] = 'zeta;
-                match outer : subject => '[zeta, alpha, mu];
-                | 'zeta =>
-                    match alpha_case : nested => '[zeta, alpha, mu];
-                    | 'zeta => 'alpha;
-                    | 'alpha => 'mu;
-                    | 'mu => 'zeta;;
-                | 'alpha =>
-                    match zeta_case : nested => '[zeta, alpha, mu];
-                    | 'zeta => 'mu;
-                    | 'alpha => 'zeta;
-                    | 'mu => 'alpha;;
-                | 'mu =>
-                    match mu_case : nested => '[zeta, alpha, mu];
-                    | 'zeta => 'zeta;
-                    | 'alpha => 'alpha;
-                    | 'mu => 'mu;;
-            "#
-            .parse()
-            .unwrap(),
-            &text::PanicLoader,
-        )
-        .unwrap();
-
-        let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
-
-        let ersd::Term::Let(ersd::Let {
-            name: outer_name,
-            body: outer_body,
-            tail,
-        }) = erased
-        else {
-            panic!("expected outer let");
-        };
-
-        assert_eq!(outer_name, "outer#0");
-        assert!(matches!(
-            *outer_body,
-            ersd::Term::Atom(ersd::Atom { index: 1 })
-        ));
-
-        let ersd::Term::Let(ersd::Let {
-            name: alpha_name,
-            body: alpha_body,
-            tail,
-        }) = *tail
-        else {
-            panic!("expected alpha_case let");
-        };
-
-        assert_eq!(alpha_name, "alpha_case#1");
-        assert!(matches!(
-            *alpha_body,
-            ersd::Term::Atom(ersd::Atom { index: 0 })
-        ));
-
-        let ersd::Term::Let(ersd::Let {
-            name: mu_name,
-            body: mu_body,
-            tail,
-        }) = *tail
-        else {
-            panic!("expected mu_case let");
-        };
-
-        assert_eq!(mu_name, "mu_case#2");
-        assert!(matches!(
-            *mu_body,
-            ersd::Term::Atom(ersd::Atom { index: 1 })
-        ));
-
-        let ersd::Term::Let(ersd::Let {
-            name: zeta_name,
-            body: zeta_body,
-            tail,
-        }) = *tail
-        else {
-            panic!("expected zeta_case let");
-        };
-
-        assert_eq!(zeta_name, "zeta_case#3");
-        assert!(matches!(
-            *zeta_body,
-            ersd::Term::Atom(ersd::Atom { index: 2 })
-        ));
-
-        let ersd::Term::Match(ersd::Match { head, cases }) = *tail else {
-            panic!("expected outer erased case");
-        };
-
-        assert!(matches!(
-            *head,
-            ersd::Term::Name(name) if name.as_str() == "outer#0"
-        ));
-
-        assert_eq!(cases.len(), 3);
-
-        let ersd::Term::Match(ersd::Match {
-            head: alpha_head,
-            cases: alpha_cases,
-        }) = &*cases[0]
-        else {
-            panic!("expected nested case for 'alpha case");
-        };
-
-        assert!(matches!(
-            &**alpha_head,
-            ersd::Term::Name(name) if name.as_str() == "zeta_case#3"
-        ));
-
-        assert_eq!(alpha_cases.len(), 3);
-        assert!(matches!(
-            *alpha_cases[0],
-            ersd::Term::Atom(ersd::Atom { index: 2 })
-        ));
-        assert!(matches!(
-            *alpha_cases[1],
-            ersd::Term::Atom(ersd::Atom { index: 0 })
-        ));
-        assert!(matches!(
-            *alpha_cases[2],
-            ersd::Term::Atom(ersd::Atom { index: 1 })
-        ));
-
-        let ersd::Term::Match(ersd::Match {
-            head: mu_head,
-            cases: mu_cases,
-        }) = &*cases[1]
-        else {
-            panic!("expected nested case for 'mu case");
-        };
-
-        assert!(matches!(
-            &**mu_head,
-            ersd::Term::Name(name) if name.as_str() == "mu_case#2"
-        ));
-
-        assert_eq!(mu_cases.len(), 3);
-
-        assert!(matches!(
-            *mu_cases[0],
-            ersd::Term::Atom(ersd::Atom { index: 0 })
-        ));
-
-        assert!(matches!(
-            *mu_cases[1],
-            ersd::Term::Atom(ersd::Atom { index: 1 })
-        ));
-
-        assert!(matches!(
-            *mu_cases[2],
-            ersd::Term::Atom(ersd::Atom { index: 2 })
-        ));
-
-        let ersd::Term::Match(ersd::Match {
-            head: zeta_head,
-            cases: zeta_cases,
-        }) = &*cases[2]
-        else {
-            panic!("expected nested case for 'zeta case");
-        };
-
-        assert!(matches!(
-            &**zeta_head,
-            ersd::Term::Name(name) if name.as_str() == "alpha_case#1"
-        ));
-
-        assert_eq!(zeta_cases.len(), 3);
-
-        assert!(matches!(
-            *zeta_cases[0],
-            ersd::Term::Atom(ersd::Atom { index: 1 })
-        ));
-
-        assert!(matches!(
-            *zeta_cases[1],
-            ersd::Term::Atom(ersd::Atom { index: 2 })
-        ));
-
-        assert!(matches!(
-            *zeta_cases[2],
-            ersd::Term::Atom(ersd::Atom { index: 0 })
-        ));
-    }
-
-    #[test]
-    fn erase_arr_nat_type_literal_len_and_get() {
-        let mut context = context();
-
-        let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
-        erase(&mut context, &arr_nat, &Type.into()).unwrap();
-
-        let literal = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(Nat::new(1))),
-            Term::Prim(Prim::Nat(Nat::new(2))),
-        ]));
-        erase(&mut context, &literal, &arr_nat).unwrap();
-
-        context.assume("xs", &arr_nat);
-        let len = Term::Prim(Prim::arr_len(Var::free("xs")));
-        assert_eq!(
-            infer(&mut context, &len).unwrap(),
-            Term::Prim(Prim::NatType)
-        );
-
-        let get = Term::Prim(Prim::arr_get(
-            Var::free("xs"),
+    fn display_not_a_function() {
+        let err = Error::not_a_function(
             Term::Prim(Prim::Nat(Nat::new(0))),
-        ));
-        assert_eq!(
-            infer(&mut context, &get).unwrap(),
-            Term::Prim(Prim::NatType)
-        );
-    }
-
-    #[test]
-    fn erase_bin_type_literal_len_and_get() {
-        let mut context = context();
-
-        let bin_type = Term::Prim(Prim::BinType);
-        erase(&mut context, &bin_type, &Type.into()).unwrap();
-
-        let literal = Term::Prim(Prim::Bin(vec![1, 2, 3]));
-        assert_eq!(infer(&mut context, &literal).unwrap(), bin_type);
-        erase(&mut context, &literal, &bin_type).unwrap();
-
-        context.assume("b", &bin_type);
-        let len = Term::Prim(Prim::bin_len(Var::free("b")));
-        assert_eq!(
-            infer(&mut context, &len).unwrap(),
-            Term::Prim(Prim::NatType)
-        );
-
-        let get = Term::Prim(Prim::bin_get(
-            Var::free("b"),
-            Term::Prim(Prim::Nat(Nat::new(0))),
-        ));
-        assert_eq!(
-            infer(&mut context, &get).unwrap(),
-            Term::Prim(Prim::NatType)
-        );
-    }
-
-    #[test]
-    fn erase_bin_append() {
-        let mut context = context();
-
-        let bin_type = Term::Prim(Prim::BinType);
-        context.assume("b", &bin_type);
-        context.assume("n", &Term::Prim(Prim::NatType));
-
-        let append = Term::Prim(Prim::bin_append(Var::free("b"), Var::free("n")));
-        assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
-        erase(&mut context, &append, &bin_type).unwrap();
-    }
-
-    #[test]
-    fn erase_bin_eql() {
-        let mut context = context();
-
-        let bin_type = Term::Prim(Prim::BinType);
-        let bool_type = Term::Prim(Prim::BlnType);
-        context.assume("a", &bin_type);
-        context.assume("b", &bin_type);
-
-        let eql = Term::Prim(Prim::bin_eql(Var::free("a"), Var::free("b")));
-        assert_eq!(infer(&mut context, &eql).unwrap(), bool_type);
-        erase(&mut context, &eql, &bool_type).unwrap();
-    }
-
-    #[test]
-    fn erase_nat_eql_returns_bool_atom() {
-        let mut context = context();
-
-        let bool_type = Term::Prim(Prim::BlnType);
-
-        let eql = Term::Prim(Prim::nat_eql(
-            Term::Prim(Prim::Nat(Nat::new(0))),
-            Term::Prim(Prim::Nat(Nat::new(0))),
-        ));
-
-        assert_eq!(infer(&mut context, &eql).unwrap(), bool_type);
-        erase(&mut context, &eql, &bool_type).unwrap();
-    }
-
-    #[test]
-    fn erase_nat_fold_rejects_non_nat_head() {
-        let mut context = context();
-
-        let bool_type = Term::from(AtomType::new(["false", "true"]));
-
-        let nat_fold = Term::from(NatFold::new(
-            Prim::Int(1),
-            Some("m"),
-            AtomType::new(["false", "true"]),
-            Atom::from("false"),
-            "pred",
-            "ih",
-            Atom::from("true"),
-        ));
-
-        assert!(matches!(
-            erase(&mut context, &nat_fold, &bool_type),
-            Err(Error::NotNatType { .. })
-        ));
-    }
-
-    #[test]
-    fn erase_nat_match_dispatches_to_named_case() {
-        let mut context = context();
-
-        let bool_type = Term::from(AtomType::new(["false", "true"]));
-
-        let nat_match = Term::from(NatMatch::new(
-            Prim::Nat(Nat::new(5)),
-            Some("m"),
-            AtomType::new(["false", "true"]),
-            [(5u32, Term::from(Atom::from("true")))],
-            Atom::from("false"),
-        ));
-
-        erase(&mut context, &nat_match, &bool_type).unwrap();
-    }
-
-    #[test]
-    fn erase_nat_match_rejects_non_nat_head() {
-        let mut context = context();
-
-        let bool_type = Term::from(AtomType::new(["false", "true"]));
-
-        let nat_match = Term::from(NatMatch::new(
-            Prim::Int(0),
-            Some("m"),
-            AtomType::new(["false", "true"]),
-            [(0u32, Term::from(Atom::from("true")))],
-            Atom::from("false"),
-        ));
-
-        assert!(matches!(
-            erase(&mut context, &nat_match, &bool_type),
-            Err(Error::NotNatType { .. })
-        ));
-    }
-
-    #[test]
-    fn erase_lst_append() {
-        let mut context = context();
-
-        let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
-        context.assume("xs", &arr_nat);
-        context.assume("n", &Term::Prim(Prim::NatType));
-
-        let append = Term::Prim(Prim::arr_append(Var::free("xs"), Var::free("n")));
-        assert_eq!(infer(&mut context, &append).unwrap(), arr_nat);
-        erase(&mut context, &append, &arr_nat).unwrap();
-    }
-
-    #[test]
-    fn erase_three_field_tuple_type_and_value() {
-        let mut context = context();
-
-        let tuple_type = Term::from(TupleType::new([
-            ("x", Term::from(AtomType::new(["a"]))),
-            ("y", Term::from(AtomType::new(["b"]))),
-            ("z", Term::from(AtomType::new(["c"]))),
-        ]));
-
-        erase(&mut context, &tuple_type, &Type.into()).unwrap();
-
-        let tuple = Term::from(Tuple::new([
-            Term::from(Atom::from("a")),
-            Term::from(Atom::from("b")),
-            Term::from(Atom::from("c")),
-        ]));
-
-        erase(&mut context, &tuple, &tuple_type).unwrap();
-    }
-
-    #[test]
-    fn erase_bin_concat() {
-        let mut context = context();
-
-        let bin_type = Term::Prim(Prim::BinType);
-        let concat = Term::Prim(Prim::bin_concat([
-            Term::Prim(Prim::Bin(vec![1, 2])),
-            Term::Prim(Prim::Bin(vec![3, 4])),
-        ]));
-
-        erase(&mut context, &concat, &bin_type).unwrap();
-    }
-
-    #[test]
-    fn erase_bin_concat_rejects_wrong_expected_type() {
-        let mut context = context();
-
-        let concat = Term::Prim(Prim::bin_concat([
-            Term::Prim(Prim::Bin(vec![1])),
-            Term::Prim(Prim::Bin(vec![2])),
-        ]));
-
-        assert!(matches!(
-            erase(&mut context, &concat, &Term::Prim(Prim::NatType)),
-            Err(Error::TypeMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn erase_arr_concat() {
-        let mut context = context();
-
-        let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
-        context.assume("xs", &arr_nat);
-        context.assume("ys", &arr_nat);
-
-        let concat = Term::Prim(Prim::arr_concat([Var::free("xs"), Var::free("ys")]));
-
-        erase(&mut context, &concat, &arr_nat).unwrap();
-    }
-
-    #[test]
-    fn erase_arr_concat_rejects_wrong_expected_type() {
-        let mut context = context();
-
-        let arr_nat = Term::Prim(Prim::arr_type(Term::Prim(Prim::NatType)));
-        context.assume("xs", &arr_nat);
-        context.assume("ys", &arr_nat);
-
-        let concat = Term::Prim(Prim::arr_concat([Var::free("xs"), Var::free("ys")]));
-
-        assert!(matches!(
-            erase(&mut context, &concat, &Term::Prim(Prim::NatType)),
-            Err(Error::TypeMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn seal_and_unseal_non_recursive() {
-        let mut context = context();
-
-        let term = Term::from(Sealed::new(
-            "x",
             Term::Prim(Prim::NatType),
-            Unseal::new(
-                Var::free("x"),
-                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(Nat::new(42)))),
-            ),
-        ));
-
-        erase(&mut context, &term, &Term::Prim(Prim::NatType)).unwrap();
+        );
+        assert_eq!(
+            err.to_string(),
+            "applied a non-function\n  head has type: Nat"
+        );
     }
 
     #[test]
-    fn unseal_recovers_repr() {
-        let mut context = context();
-
-        let term = Term::from(Sealed::new(
-            "x",
+    fn display_type_mismatch_shows_both_types() {
+        let err = Error::type_mismatch(
+            Term::Prim(Prim::Nat(Nat::new(5))),
             Term::Prim(Prim::NatType),
-            Unseal::new(
-                Var::free("x"),
-                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(Nat::new(42)))),
-            ),
-        ));
-
-        let result = erase(&mut context, &term, &Term::Prim(Prim::NatType)).unwrap();
-
-        assert!(matches!(result, ersd::Term::Prim(ersd::Prim::Nat(42))));
-    }
-
-    #[test]
-    fn seal_rejected_for_wrong_opaque_type() {
-        let mut context = context();
-
-        context.seal("x", &Term::from(AtomType::new(["a"])));
-
-        let seal = Term::from(Seal::new(
-            Var::free("x"),
-            Term::Prim(Prim::Nat(Nat::new(42))),
-        ));
-
-        assert!(matches!(
-            erase(&mut context, &seal, &Var::free("x").into()),
-            Err(Error::TypeMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn seal_erases_to_inner_value() {
-        let mut context = context();
-
-        context.seal("x", &Term::Prim(Prim::NatType));
-
-        let seal = Term::from(Seal::new(
-            Var::free("x"),
-            Term::Prim(Prim::Nat(Nat::new(7))),
-        ));
-
-        let result = erase(&mut context, &seal, &Var::free("x").into()).unwrap();
-
-        assert!(matches!(result, ersd::Term::Prim(ersd::Prim::Nat(7))));
+            Term::Prim(Prim::BlnType),
+        );
+        let s = err.to_string();
+        assert!(s.contains("Nat"), "should contain inferred Nat: {s}");
+        assert!(s.contains("Bln"), "should contain expected Bln: {s}");
     }
 }

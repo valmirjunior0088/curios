@@ -1,9 +1,12 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Flt, Func, Let, Match, Nat, NatFold, NatMatch, Preempted, Prim,
-        Proj, Seal, Term, Tuple, Unseal, Var,
+        Apply, BlnMatch, Context, Flt, Func, Let, Match, Nat, NatMatch, One, Preempted, Prim, Proj,
+        Scope, Seal, Subterm, Term, Tuple, Two, Unseal, Var,
     },
-    std::time::{Duration, Instant},
+    std::{
+        collections::BTreeMap,
+        time::{Duration, Instant},
+    },
 };
 
 pub fn reduce(context: &mut Context, term: &Term) -> Result<Term, Preempted> {
@@ -773,19 +776,15 @@ impl Reduce {
         base.unwrap()
     }
 
-    fn reduce_nat_fold(
+    fn reduce_nat_induction(
         &mut self,
         context: &mut Context,
-        nat_fold: NatFold,
+        head: Term,
+        motive: Scope<One>,
+        zero_case: Subterm,
+        succ_case: Scope<Two>,
     ) -> Result<Step, Preempted> {
-        let NatFold {
-            head,
-            motive,
-            zero_case,
-            succ_case,
-        } = nat_fold;
-
-        match self.reduce(context, *head)? {
+        match self.reduce(context, head)? {
             Term::Prim(Prim::Nat(Nat::Zero)) => Ok(Step::Continue(*zero_case)),
             Term::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
                 let pred = if spine == 1 {
@@ -793,7 +792,7 @@ impl Reduce {
                 } else {
                     Prim::Nat(Nat::Succ(spine - 1, inner)).into()
                 };
-                let ih = Term::NatFold(NatFold {
+                let ih = Term::NatMatch(NatMatch::Induction {
                     head: pred.clone().into(),
                     motive: motive.clone(),
                     zero_case: zero_case.clone(),
@@ -802,7 +801,7 @@ impl Reduce {
                 Ok(Step::Continue(succ_case.open(&[&pred, &ih])))
             }
             head => Ok(Step::Break(
-                NatFold {
+                NatMatch::Induction {
                     head: head.into(),
                     motive,
                     zero_case,
@@ -835,14 +834,15 @@ impl Reduce {
         }
     }
 
-    fn reduce_nat_match(&mut self, context: &mut Context, nm: NatMatch) -> Result<Step, Preempted> {
-        let NatMatch {
-            head,
-            motive,
-            cases,
-            default,
-        } = nm;
-        match self.reduce(context, *head)? {
+    fn reduce_nat_dispatch(
+        &mut self,
+        context: &mut Context,
+        head: Term,
+        motive: Scope<One>,
+        cases: BTreeMap<u32, Subterm>,
+        default: Subterm,
+    ) -> Result<Step, Preempted> {
+        match self.reduce(context, head)? {
             Term::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
                 Some(body) => Ok(Step::Continue(body.as_ref().clone())),
                 None => Ok(Step::Continue(*default)),
@@ -856,7 +856,7 @@ impl Reduce {
                 }
             }
             head => Ok(Step::Break(
-                NatMatch {
+                NatMatch::Dispatch {
                     head: head.into(),
                     motive,
                     cases,
@@ -864,6 +864,23 @@ impl Reduce {
                 }
                 .into(),
             )),
+        }
+    }
+
+    fn reduce_nat_match(&mut self, context: &mut Context, nm: NatMatch) -> Result<Step, Preempted> {
+        match nm {
+            NatMatch::Induction {
+                head,
+                motive,
+                zero_case,
+                succ_case,
+            } => self.reduce_nat_induction(context, *head, motive, zero_case, succ_case),
+            NatMatch::Dispatch {
+                head,
+                motive,
+                cases,
+                default,
+            } => self.reduce_nat_dispatch(context, *head, motive, cases, default),
         }
     }
 
@@ -937,7 +954,6 @@ impl Reduce {
             let step = match term {
                 Term::Prim(prim) => Step::Break(self.reduce_prim(context, &prim)?),
                 Term::BlnMatch(bm) => self.reduce_bln_match(context, bm)?,
-                Term::NatFold(nat_fold) => self.reduce_nat_fold(context, nat_fold)?,
                 Term::NatMatch(nm) => self.reduce_nat_match(context, nm)?,
                 Term::Apply(apply) => self.reduce_apply(context, apply)?,
                 Term::Proj(proj) => self.reduce_proj(context, proj)?,
@@ -964,7 +980,8 @@ mod tests {
     use {
         super::*,
         crate::core::{
-            Atom, AtomType, Let, Match, Nat, NatFold, Prim, Seal, Sealed, Tuple, Type, Unseal, Var,
+            Atom, AtomType, Let, Match, Nat, NatMatch, Prim, Seal, Sealed, Tuple, Type, Unseal,
+            Var,
         },
         std::time::Duration,
     };
@@ -1001,7 +1018,7 @@ mod tests {
     fn reduce_nat_fold_zero_is_not_true() {
         let mut context = context();
 
-        let term = NatFold::new(
+        let term = NatMatch::induction(
             Term::Prim(Prim::Nat(Nat::new(0))),
             Some("m"),
             AtomType::new(["false", "true"]),

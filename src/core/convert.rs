@@ -1,8 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatFold, NatMatch,
-        Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
-        reduce,
+        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatMatch, Preempted,
+        Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -312,33 +311,6 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_nat_fold(
-        &mut self,
-        context: &mut Context,
-        this: NatFold,
-        that: NatFold,
-    ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.head, *that.head);
-
-        let motive_label = Var::free(context.fresh(None)).into();
-        self.enqueue(
-            Type.into(),
-            this.motive.open(&[&motive_label]),
-            that.motive.open(&[&motive_label]),
-        );
-
-        self.enqueue(Type.into(), *this.zero_case, *that.zero_case);
-
-        let pred_label: Term = Var::free(context.fresh(None)).into();
-        let ih_label: Term = Var::free(context.fresh(None)).into();
-        self.enqueue(
-            Type.into(),
-            this.succ_case.open(&[&pred_label, &ih_label]),
-            that.succ_case.open(&[&pred_label, &ih_label]),
-        );
-
-        Ok(true)
-    }
 
     fn compare_atom_type(&mut self, this: AtomType, that: AtomType) -> Result<bool, Preempted> {
         Ok(this == that)
@@ -374,28 +346,81 @@ impl Convert {
         this: NatMatch,
         that: NatMatch,
     ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.head, *that.head);
+        match (this, that) {
+            (
+                NatMatch::Induction {
+                    head: this_head,
+                    motive: this_motive,
+                    zero_case: this_zero,
+                    succ_case: this_succ,
+                },
+                NatMatch::Induction {
+                    head: that_head,
+                    motive: that_motive,
+                    zero_case: that_zero,
+                    succ_case: that_succ,
+                },
+            ) => {
+                self.enqueue(Type.into(), *this_head, *that_head);
 
-        let label = Var::free(context.fresh(None)).into();
-        self.enqueue(
-            Type.into(),
-            this.motive.open(&[&label]),
-            that.motive.open(&[&label]),
-        );
+                let motive_label = Var::free(context.fresh(None)).into();
+                self.enqueue(
+                    Type.into(),
+                    this_motive.open(&[&motive_label]),
+                    that_motive.open(&[&motive_label]),
+                );
 
-        if this.cases.len() != that.cases.len() {
-            return Ok(false);
-        }
+                self.enqueue(Type.into(), *this_zero, *that_zero);
 
-        for ((kl, vl), (kr, vr)) in this.cases.into_iter().zip(that.cases) {
-            if kl != kr {
-                return Ok(false);
+                let pred_label: Term = Var::free(context.fresh(None)).into();
+                let ih_label: Term = Var::free(context.fresh(None)).into();
+                self.enqueue(
+                    Type.into(),
+                    this_succ.open(&[&pred_label, &ih_label]),
+                    that_succ.open(&[&pred_label, &ih_label]),
+                );
+
+                Ok(true)
             }
-            self.enqueue(Type.into(), *vl, *vr);
-        }
+            (
+                NatMatch::Dispatch {
+                    head: this_head,
+                    motive: this_motive,
+                    cases: this_cases,
+                    default: this_default,
+                },
+                NatMatch::Dispatch {
+                    head: that_head,
+                    motive: that_motive,
+                    cases: that_cases,
+                    default: that_default,
+                },
+            ) => {
+                self.enqueue(Type.into(), *this_head, *that_head);
 
-        self.enqueue(Type.into(), *this.default, *that.default);
-        Ok(true)
+                let label = Var::free(context.fresh(None)).into();
+                self.enqueue(
+                    Type.into(),
+                    this_motive.open(&[&label]),
+                    that_motive.open(&[&label]),
+                );
+
+                if this_cases.len() != that_cases.len() {
+                    return Ok(false);
+                }
+
+                for ((kl, vl), (kr, vr)) in this_cases.into_iter().zip(that_cases) {
+                    if kl != kr {
+                        return Ok(false);
+                    }
+                    self.enqueue(Type.into(), *vl, *vr);
+                }
+
+                self.enqueue(Type.into(), *this_default, *that_default);
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
     }
 
     fn compare_match(
@@ -584,9 +609,6 @@ impl Convert {
                 (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
                 (Term::BlnMatch(this), Term::BlnMatch(that)) => {
                     self.compare_bln_match(context, this, that)?
-                }
-                (Term::NatFold(this), Term::NatFold(that)) => {
-                    self.compare_nat_fold(context, this, that)?
                 }
                 (Term::NatMatch(this), Term::NatMatch(that)) => {
                     self.compare_nat_match(context, this, that)?

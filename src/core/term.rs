@@ -286,15 +286,23 @@ impl Proj {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NatFold {
-    pub head: Subterm,
-    pub motive: Scope<One>,
-    pub zero_case: Subterm,
-    pub succ_case: Scope<Two>,
+pub enum NatMatch {
+    Induction {
+        head: Subterm,
+        motive: Scope<One>,
+        zero_case: Subterm,
+        succ_case: Scope<Two>,
+    },
+    Dispatch {
+        head: Subterm,
+        motive: Scope<One>,
+        cases: BTreeMap<u32, Subterm>,
+        default: Subterm,
+    },
 }
 
-impl NatFold {
-    pub fn new<H, M, ZC, PL, IL, SC>(
+impl NatMatch {
+    pub fn induction<H, M, ZC, PL, IL, SC>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -314,7 +322,7 @@ impl NatFold {
         let pred_label = pred_label.into();
         let ih_label = ih_label.into();
 
-        Self {
+        Self::Induction {
             head: head.into().into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive),
@@ -324,18 +332,8 @@ impl NatFold {
             succ_case: Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_case),
         }
     }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NatMatch {
-    pub head: Subterm,
-    pub motive: Scope<One>,
-    pub cases: BTreeMap<u32, Subterm>,
-    pub default: Subterm,
-}
-
-impl NatMatch {
-    pub fn new<H, M, I, B, D>(
+    pub fn dispatch<H, M, I, B, D>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -349,7 +347,7 @@ impl NatMatch {
         B: Into<Term>,
         D: Into<Term>,
     {
-        Self {
+        Self::Dispatch {
             head: head.into().into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive),
@@ -579,7 +577,6 @@ pub enum Term {
     Type,
     Prim(Prim),
     BlnMatch(BlnMatch),
-    NatFold(NatFold),
     NatMatch(NatMatch),
     FuncType(FuncType),
     Func(Func),
@@ -611,7 +608,6 @@ impl PartialEq for Term {
                 (Term::Type, Term::Type) => break true,
                 (Term::Prim(a), Term::Prim(b)) => break a == b,
                 (Term::BlnMatch(a), Term::BlnMatch(b)) => break a == b,
-                (Term::NatFold(a), Term::NatFold(b)) => break a == b,
                 (Term::NatMatch(a), Term::NatMatch(b)) => break a == b,
                 (Term::FuncType(a), Term::FuncType(b)) => break a == b,
                 (Term::Func(a), Term::Func(b)) => break a == b,
@@ -645,7 +641,6 @@ impl Hash for Term {
                 Term::Type => break,
                 Term::Prim(x) => break x.hash(state),
                 Term::BlnMatch(x) => break x.hash(state),
-                Term::NatFold(x) => break x.hash(state),
                 Term::NatMatch(x) => break x.hash(state),
                 Term::FuncType(x) => break x.hash(state),
                 Term::Func(x) => break x.hash(state),
@@ -782,12 +777,6 @@ impl From<Tuple> for Term {
 impl From<BlnMatch> for Term {
     fn from(value: BlnMatch) -> Self {
         Self::BlnMatch(value)
-    }
-}
-
-impl From<NatFold> for Term {
-    fn from(value: NatFold) -> Self {
-        Self::NatFold(value)
     }
 }
 
@@ -1100,15 +1089,6 @@ where
         }
     }
 
-    fn visit_nat_fold(&mut self, nat_fold: &NatFold) -> NatFold {
-        NatFold {
-            head: self.visit_subterm(&nat_fold.head),
-            motive: self.visit_scope(&nat_fold.motive),
-            zero_case: self.visit_subterm(&nat_fold.zero_case),
-            succ_case: self.visit_scope(&nat_fold.succ_case),
-        }
-    }
-
     fn visit_bln_match(&mut self, bm: &BlnMatch) -> BlnMatch {
         BlnMatch {
             head: self.visit_subterm(&bm.head),
@@ -1119,15 +1099,32 @@ where
     }
 
     fn visit_nat_match(&mut self, nm: &NatMatch) -> NatMatch {
-        NatMatch {
-            head: self.visit_subterm(&nm.head),
-            motive: self.visit_scope(&nm.motive),
-            cases: nm
-                .cases
-                .iter()
-                .map(|(&n, body)| (n, self.visit_subterm(body)))
-                .collect(),
-            default: self.visit_subterm(&nm.default),
+        match nm {
+            NatMatch::Induction {
+                head,
+                motive,
+                zero_case,
+                succ_case,
+            } => NatMatch::Induction {
+                head: self.visit_subterm(head),
+                motive: self.visit_scope(motive),
+                zero_case: self.visit_subterm(zero_case),
+                succ_case: self.visit_scope(succ_case),
+            },
+            NatMatch::Dispatch {
+                head,
+                motive,
+                cases,
+                default,
+            } => NatMatch::Dispatch {
+                head: self.visit_subterm(head),
+                motive: self.visit_scope(motive),
+                cases: cases
+                    .iter()
+                    .map(|(&n, body)| (n, self.visit_subterm(body)))
+                    .collect(),
+                default: self.visit_subterm(default),
+            },
         }
     }
 
@@ -1195,7 +1192,6 @@ where
             Term::Type => Type.into(),
             Term::Prim(prim) => self.visit_prim(prim).into(),
             Term::BlnMatch(bm) => self.visit_bln_match(bm).into(),
-            Term::NatFold(nat_fold) => self.visit_nat_fold(nat_fold).into(),
             Term::NatMatch(nm) => self.visit_nat_match(nm).into(),
             Term::FuncType(ft) => self.visit_func_type(ft).into(),
             Term::Func(func) => self.visit_func(func).into(),

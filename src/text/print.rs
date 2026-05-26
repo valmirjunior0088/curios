@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
-        FuncType, Let, Match, Module, Nat, NatFold, NatLiteral, NatMatch, Prim, Proj, Rec, Term,
-        TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        FuncType, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopDef,
+        TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -278,7 +278,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("\n| true =>\n"),
                 indent(flat([print_term(*true_case), pure(";")])),
             ]),
-            Match::NatFold(NatFold {
+            Match::Nat(NatMatch::Induction {
                 head,
                 motive,
                 zero_case,
@@ -303,7 +303,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure(" =>\n"),
                 indent(flat([print_term(*succ_case), pure(";")])),
             ]),
-            Match::Nat(NatMatch {
+            Match::Nat(NatMatch::Dispatch {
                 head,
                 motive,
                 cases,

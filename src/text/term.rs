@@ -47,21 +47,21 @@ pub struct Motive {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct NatFold {
-    pub head: Subterm,
-    pub motive: Motive,
-    pub zero_case: Subterm,
-    pub pred_label: String,
-    pub ih_label: String,
-    pub succ_case: Subterm,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct NatMatch {
-    pub head: Subterm,
-    pub motive: Motive,
-    pub cases: BTreeMap<u32, Subterm>,
-    pub default: Subterm,
+pub enum NatMatch {
+    Induction {
+        head: Subterm,
+        motive: Motive,
+        zero_case: Subterm,
+        pred_label: String,
+        ih_label: String,
+        succ_case: Subterm,
+    },
+    Dispatch {
+        head: Subterm,
+        motive: Motive,
+        cases: BTreeMap<u32, Subterm>,
+        default: Subterm,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,7 +93,6 @@ pub struct AtomMatch {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Match {
     Bln(BlnMatch),
-    NatFold(NatFold),
     Nat(NatMatch),
     Atom(AtomMatch),
 }
