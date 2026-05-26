@@ -37,11 +37,11 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,484  |
+| Parsing                 | `text/parse.rs`                                | 1,502  |
 | Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,150 |
-| Type checking + erasure | `core/typing.rs`                               | 2,767  |
+| Type checking + erasure | `core/typing.rs`                               | 2,796  |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,300 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,160  |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,162  |
 | WASM codegen            | `cont/to_wasm/` (5 files)                      | ~3,300 |
 | Binary serialization    | `wasm/writer.rs`                               | 2,017  |
 
@@ -202,7 +202,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is the most complex transformation in the pipeline (3,120 lines).
+This is the most complex transformation in the pipeline (3,162 lines).
 
 ### CPS IR structure
 
