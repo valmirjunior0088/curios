@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatMatch, Preempted,
-        Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var, reduce,
+        Prim, Proj, Rec, Seal, Sealed, Telescope, Term, Tuple, TupleType, Type, Unseal, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -204,31 +204,28 @@ impl Convert {
         this: FuncType,
         that: FuncType,
     ) -> Result<bool, Preempted> {
-        if this.params.len() != that.params.len() {
-            return Ok(false);
+        fn walk(
+            cmp: &mut Convert,
+            context: &mut Context,
+            this: &Telescope<Term>,
+            that: &Telescope<Term>,
+        ) -> Result<bool, Preempted> {
+            match (this, that) {
+                (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
+                    cmp.enqueue(Type.into(), *ty_a.clone(), *ty_b.clone());
+                    let v = Term::from(Var::free(context.fresh(rest_a.first_label())));
+                    let inner_a = rest_a.open(&[&v]);
+                    let inner_b = rest_b.open(&[&v]);
+                    walk(cmp, context, &inner_a, &inner_b)
+                }
+                (Telescope::Done(out_a), Telescope::Done(out_b)) => {
+                    cmp.enqueue(Type.into(), *out_a.clone(), *out_b.clone());
+                    Ok(true)
+                }
+                _ => Ok(false),
+            }
         }
-
-        let n = this.params.len();
-        let labels = (0..n)
-            .map(|_| Term::from(Var::free(context.fresh(None))))
-            .collect::<Vec<_>>();
-        let label_refs = labels.iter().collect::<Vec<_>>();
-
-        for i in 0..n {
-            self.enqueue(
-                Type.into(),
-                this.params[i].open(&label_refs[..i]),
-                that.params[i].open(&label_refs[..i]),
-            );
-        }
-
-        self.enqueue(
-            Type.into(),
-            this.output.open(&label_refs),
-            that.output.open(&label_refs),
-        );
-
-        Ok(true)
+        walk(self, context, &this.telescope, &that.telescope)
     }
 
     fn compare_func(
@@ -244,7 +241,7 @@ impl Convert {
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match reduce(context, &type_)? {
-            Term::FuncType(FuncType { output, .. }) => output.open(&y_refs),
+            Term::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Type.into(),
         };
         self.enqueue(
@@ -273,25 +270,25 @@ impl Convert {
         this: TupleType,
         that: TupleType,
     ) -> Result<bool, Preempted> {
-        if this.fields.len() != that.fields.len() {
-            return Ok(false);
+        fn walk(
+            cmp: &mut Convert,
+            context: &mut Context,
+            this: &Telescope<()>,
+            that: &Telescope<()>,
+        ) -> Result<bool, Preempted> {
+            match (this, that) {
+                (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
+                    cmp.enqueue(Type.into(), *ty_a.clone(), *ty_b.clone());
+                    let v = Term::from(Var::free(context.fresh(rest_a.first_label())));
+                    let inner_a = rest_a.open(&[&v]);
+                    let inner_b = rest_b.open(&[&v]);
+                    walk(cmp, context, &inner_a, &inner_b)
+                }
+                (Telescope::Done(_), Telescope::Done(_)) => Ok(true),
+                _ => Ok(false),
+            }
         }
-
-        let n = this.fields.len();
-        let labels = (0..n)
-            .map(|_| Term::from(Var::free(context.fresh(None))))
-            .collect::<Vec<_>>();
-        let label_refs = labels.iter().collect::<Vec<_>>();
-
-        for i in 0..n {
-            self.enqueue(
-                Type.into(),
-                this.fields[i].open(&label_refs[..i]),
-                that.fields[i].open(&label_refs[..i]),
-            );
-        }
-
-        Ok(true)
+        walk(self, context, &this.telescope, &that.telescope)
     }
 
     fn compare_tuple(
@@ -306,18 +303,18 @@ impl Convert {
             return Ok(false);
         }
 
-        let field_types = match reduce(context, &type_)? {
-            Term::TupleType(TupleType { fields }) if fields.len() == n => Some(fields),
+        let mut cur = match reduce(context, &type_)? {
+            Term::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
             _ => None,
         };
 
-        for (i, (a, b)) in this.fields.iter().zip(that.fields.iter()).enumerate() {
-            let ft = match &field_types {
-                Some(fts) => {
-                    let prefix: Vec<&Term> = this.fields[..i].iter().map(|f| f.as_ref()).collect();
-                    fts[i].open(&prefix)
+        for (a, b) in this.fields.iter().zip(that.fields.iter()) {
+            let ft = match cur.take() {
+                Some(Telescope::Cons(ty, rest)) => {
+                    cur = Some(rest.open(&[a.as_ref()]));
+                    *ty
                 }
-                None => Type.into(),
+                _ => Type.into(),
             };
             self.enqueue(ft, a.as_ref().clone(), b.as_ref().clone());
         }
@@ -557,7 +554,7 @@ impl Convert {
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match reduce(context, &type_)? {
-            Term::FuncType(FuncType { output, .. }) => output.open(&y_refs),
+            Term::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Type.into(),
         };
         self.enqueue(
@@ -577,18 +574,18 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         let n = tuple.fields.len();
 
-        let field_types = match reduce(context, &type_)? {
-            Term::TupleType(TupleType { fields }) if fields.len() == n => Some(fields),
+        let mut cur = match reduce(context, &type_)? {
+            Term::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
             _ => None,
         };
 
         for (i, field) in tuple.fields.iter().enumerate() {
-            let ft = match &field_types {
-                Some(fts) => {
-                    let prefix: Vec<&Term> = tuple.fields[..i].iter().map(|f| f.as_ref()).collect();
-                    fts[i].open(&prefix)
+            let ft = match cur.take() {
+                Some(Telescope::Cons(ty, rest)) => {
+                    cur = Some(rest.open(&[field.as_ref()]));
+                    *ty
                 }
-                None => Type.into(),
+                _ => Type.into(),
             };
             self.enqueue(
                 ft,
@@ -608,13 +605,13 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, Preempted> {
         match reduce(context, &type_)? {
-            Term::FuncType(FuncType { params, output }) => {
-                let n = params.len();
+            Term::FuncType(FuncType { telescope }) => {
+                let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
                     .map(|_| Var::free(context.fresh(None)).into())
                     .collect();
                 let y_refs: Vec<&Term> = ys.iter().collect();
-                let output_type = output.open(&y_refs);
+                let output_type = telescope.open(&y_refs);
                 self.enqueue(
                     output_type,
                     Apply::new(this, ys.clone()).into(),
@@ -622,8 +619,8 @@ impl Convert {
                 );
                 Ok(true)
             }
-            Term::TupleType(TupleType { fields }) => {
-                for i in 0..fields.len() {
+            Term::TupleType(TupleType { telescope }) => {
+                for i in 0..telescope.len() {
                     self.enqueue(
                         Type.into(),
                         Proj::new(this.clone(), i).into(),

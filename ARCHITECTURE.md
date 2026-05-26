@@ -17,7 +17,7 @@ Source Text
 text::Entrypoint          surface AST; all variables are plain String labels
     │
     ▼  src/text/to_core/
-core::Term                de Bruijn AST; Scope<A: Arity> binders
+core::Term                de Bruijn AST; Scope<A: Arity, B: Bound> binders
     │
     ▼  src/core/infer.rs + src/core/erase.rs
 ersd::Term                type-erased; closures carry explicit capture lists
@@ -35,15 +35,15 @@ Vec<u8>                   raw WASM binary
 result                    printed by src/run.rs
 ```
 
-| Stage                   | Key file(s)                                    | Lines  |
-| ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                       | 1,502  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`        | ~1,177 |
-| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs`    | ~3,162 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`                   | ~2,418 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                             | 3,159  |
-| WASM codegen            | `cont/to_wasm/` (5 files)                             | ~3,300 |
-| Binary serialization    | `wasm/writer.rs`                                      | 2,017  |
+| Stage                   | Key file(s)                                        | Lines  |
+| ----------------------- | -------------------------------------------------- | ------ |
+| Parsing                 | `text/parse.rs`                                    | 1,502  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,177 |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~3,162 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,418 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 3,159  |
+| WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,300 |
+| Binary serialization    | `wasm/writer.rs`                                   | 2,017  |
 
 ---
 
@@ -64,11 +64,11 @@ Transformation entry points (`to_cont.rs`, `to_wasm.rs`) declare submodules priv
 
 Three top-level modules fall outside this pattern:
 
-| Module        | Role                                                                                                |
-| ------------- | --------------------------------------------------------------------------------------------------- |
+| Module        | Role                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
 | `src/span.rs` | `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting) |
-| `src/run.rs`  | Wasmtime execution and result printing; gated behind the `run` Cargo feature                        |
-| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                     |
+| `src/run.rs`  | Wasmtime execution and result printing; gated behind the `run` Cargo feature                               |
+| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                            |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
 
@@ -122,33 +122,46 @@ Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`.
 
 The central `core::Term` enum:
 
-| Variant                        | Role                                                 |
-| ------------------------------ | ---------------------------------------------------- |
-| `Type`                         | The sort (no universe hierarchy)                     |
-| `FuncType` / `Func` / `Apply`  | Π-types, λ-abstraction, application                  |
-| `TupleType` / `Tuple` / `Proj` | Σ-types (n-ary), construction, field access          |
-| `BlnMatch`                     | Dependent elimination of `Bln` (false + true cases)  |
-| `NatFold`                      | Structural induction on `Nat` (zero + pred/IH cases) |
-| `NatMatch`                     | Sparse dispatch on specific `Nat` values             |
-| `AtomType` / `Atom` / `Match`  | Labeled unions, tags, pattern matching               |
-| `Let` / `Rec`                  | Bindings and mutual recursion                        |
-| `Sealed` / `Seal` / `Unseal`   | Opaque type abstraction from `def`                   |
-| `Prim`                         | Built-in values and operations                       |
-| `Var`                          | Variables (free or bound)                            |
+| Variant                        | Role                                                         |
+| ------------------------------ | ------------------------------------------------------------ |
+| `Type`                         | The sort (no universe hierarchy)                             |
+| `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application |
+| `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access   |
+| `BlnMatch`                     | Dependent elimination of `Bln` (false + true cases)          |
+| `NatFold`                      | Structural induction on `Nat` (zero + pred/IH cases)         |
+| `NatMatch`                     | Sparse dispatch on specific `Nat` values                     |
+| `AtomType` / `Atom` / `Match`  | Labeled unions, tags, pattern matching                       |
+| `Let` / `Rec`                  | Bindings and mutual recursion                                |
+| `Sealed` / `Seal` / `Unseal`   | Opaque type abstraction from `def`                           |
+| `Prim`                         | Built-in values and operations                               |
+| `Var`                          | Variables (free or bound)                                    |
 
-### De Bruijn indices and `Scope<A: Arity>`
+### De Bruijn indices and `Scope<A: Arity, B: Bound>`
 
 Variables arrive from elaboration as free labels (`Var::free("x")`). Each binding construct calls `Scope::close(arity, labels, body)` to capture them as de Bruijn indices; `scope.open(terms)` substitutes indices back during reduction.
 
-`Scope<A: Arity>` handles all binder arities via a single generic type:
+`Scope<A: Arity, B: Bound = Term>` handles all binder arities and is generic over its body type. The body parameter `B` is what makes the cons-style telescope possible — see below.
 
-| `A`       | Used by                                                                                                                           |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `One`     | `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail)                      |
-| `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                                     |
-| `Many(n)` | `Func` (parameters), `FuncType` (parameter telescope + output), `TupleType` (fields), `Rec` (items and tail)                       |
+| `A`       | Used by                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------- |
+| `One`     | `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail) |
+| `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                 |
+| `Many(n)` | `Func` (parameters), `Rec` (items and tail)                                                                   |
 
-A private `Visit<F>` struct drives all variable traversals (`shift`, `capture`, `release`, `free_vars`). The closure `F: FnMut(depth, &Var) -> Option<Term>` can return a replacement or `None` to leave the variable unchanged.
+The `Bound` trait describes types that can sit under a `Scope` — its required method is `traverse(&self, visit: &mut Visit<F>) -> Self`, and it provides `shift`, `capture`, `release`, `free_vars` as default methods on top. `Term`, `()`, and `Telescope<B>` all implement `Bound`. A `Visit<F>` struct threads de Bruijn depth and a per-variable rewrite closure (`F: FnMut(depth, &Var) -> Option<Term>`, returning a replacement or `None`) through the whole tree.
+
+### Telescopes (`Telescope<B: Bound>`)
+
+`FuncType` and `TupleType` are encoded as structural cons-style telescopes rather than a flat `Vec<Scope<Many>>`:
+
+```rust
+pub enum Telescope<B: Bound> {
+    Done(Box<B>),
+    Cons(Subterm, Scope<One, Telescope<B>>),
+}
+```
+
+Each `Cons` carries one parameter type and a `Scope<One, …>` that binds exactly one variable into the rest. The "i-th entry binds over the previous i" invariant is structural, not conventional — the type system enforces it. `FuncType` wraps `Telescope<Term>` where `Done` carries the output type; `TupleType` wraps `Telescope<()>` since Σ-telescopes have no body.
 
 ### Bidirectional type checking (`infer.rs`, `erase.rs`)
 
@@ -368,18 +381,18 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 191 tests across 12 files, covering every layer:
 
-| Layer           | What is tested                                                                          |
-| --------------- | --------------------------------------------------------------------------------------- |
-| Term operations | `Scope` open/close symmetry, shift, capture, release                                    |
-| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access        |
-| Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement    |
-| Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries |
-| Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                           |
-| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation                |
-| WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution |
-| Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, `def`/coercion, absolute paths |
+| Layer           | What is tested                                                                                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Term operations | `Scope` open/close symmetry, shift, capture, release                                                                                                        |
+| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access                                                                            |
+| Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                        |
+| Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
+| Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                                                                                               |
+| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation                                                                                    |
+| WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
+| Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, `def`/coercion, absolute paths                                                   |
 | Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
-| End-to-end      | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion |
+| End-to-end      | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion                                                   |
 
 ---
 
@@ -389,7 +402,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 2. **`src/text/term.rs`** — the surface AST; variants mirror the language syntax with all variables as plain strings.
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
 4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes `core::Term`; how `Scope::close` turns string labels into de Bruijn indices.
-5. **`src/core/term.rs`** — the typed AST; understanding `Scope<A: Arity>` is prerequisite for everything downstream.
+5. **`src/core/term.rs`** — the typed AST; understanding `Scope<A: Arity, B: Bound>`, the `Bound` trait, and `Telescope<B>` is prerequisite for everything downstream.
 6. **`src/core/infer.rs`** + **`src/core/erase.rs`** — bidirectional type checking, split into the synthesis (`infer`) and checking (`erase`) passes; note where reduction is invoked and how erasure is interleaved in `erase`. Shared helpers live in `src/core/typing.rs`.
 7. **`src/ersd/term.rs`** — what disappears at erasure and what survives into runtime.
 8. **`src/cont/module.rs`** — the CPS IR types; pay attention to how `Call` specifies a `resume` block.

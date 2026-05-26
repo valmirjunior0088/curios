@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, AtomType, BlnMatch, Context, Error, FuncType, Let, Match, Nat, NatMatch, One, Prim,
-        Proj, Rec, Scope, Subterm, Term, TupleType, Two, Type, Var, erase, reduce_with,
+        Proj, Rec, Scope, Subterm, Telescope, Term, TupleType, Two, Type, Var, erase, reduce_with,
         refine_head,
     },
     std::collections::BTreeMap,
@@ -283,32 +283,20 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 }
 
 fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> {
-    let FuncType { params, output } = ft;
-    let n = params.len();
-
-    let labels = (0..n)
-        .map(|i| {
-            let hint = params
-                .get(i + 1)
-                .and_then(|s| s.label_iter().nth(i))
-                .flatten();
-            context.fresh(hint)
-        })
-        .collect::<Vec<_>>();
-    let label_terms = labels
-        .iter()
-        .map(|l| Term::from(Var::free(l)))
-        .collect::<Vec<Term>>();
-    let label_refs = label_terms.iter().collect::<Vec<_>>();
-
-    context.with_frame(|context| {
-        for i in 0..n {
-            let ty = params[i].open(&label_refs[..i]);
-            erase(context, &ty, &Type.into())?;
-            context.assume(&labels[i], &ty);
+    fn walk(context: &mut Context, tele: Telescope<Term>) -> Result<(), Error> {
+        match tele {
+            Telescope::Done(body) => erase(context, &body, &Type.into()).map(|_| ()),
+            Telescope::Cons(ty, rest) => {
+                erase(context, &ty, &Type.into())?;
+                let name = context.fresh(rest.first_label());
+                let x = Term::from(Var::free(&name));
+                context.assume(&name, &ty);
+                walk(context, rest.open(&[&x]))
+            }
         }
-        erase(context, &output.open(&label_refs), &Type.into()).map(|_| ())
-    })?;
+    }
+
+    context.with_frame(|context| walk(context, ft.telescope.clone()))?;
 
     Ok(Type.into())
 }
@@ -324,54 +312,47 @@ fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term
         other => return Err(Error::not_a_function(term.clone(), other)),
     };
 
-    if params.len() != ft.params.len() {
+    if params.len() != ft.telescope.len() {
         return Err(Error::wrong_number_of_arguments(
             term.clone(),
-            ft.params.len(),
+            ft.telescope.len(),
             params.len(),
         ));
     }
 
-    let mut param_terms: Vec<Term> = Vec::with_capacity(params.len());
-
-    for (i, param) in params.iter().enumerate() {
-        let so_far = param_terms.iter().collect::<Vec<_>>();
-        let expected_ty = ft.params[i].open(&so_far);
-        erase(context, param, &expected_ty)?;
-        param_terms.push(*param.clone());
+    fn walk(
+        context: &mut Context,
+        tele: Telescope<Term>,
+        params: &[Subterm],
+    ) -> Result<Term, Error> {
+        match tele {
+            Telescope::Done(body) => Ok(*body),
+            Telescope::Cons(ty, rest) => {
+                let head = &params[0];
+                erase(context, head, &ty)?;
+                walk(context, rest.open(&[head.as_ref()]), &params[1..])
+            }
+        }
     }
 
-    let param_refs = param_terms.iter().collect::<Vec<_>>();
-    Ok(ft.output.open(&param_refs))
+    walk(context, ft.telescope, params)
 }
 
 fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error> {
-    let TupleType { fields } = tt;
-    let n = fields.len();
-
-    let labels = (0..n)
-        .map(|i| {
-            let hint = fields
-                .get(i + 1)
-                .and_then(|s| s.label_iter().nth(i))
-                .flatten();
-            context.fresh(hint)
-        })
-        .collect::<Vec<_>>();
-    let label_terms = labels
-        .iter()
-        .map(|l| Term::from(Var::free(l)))
-        .collect::<Vec<Term>>();
-    let label_refs = label_terms.iter().collect::<Vec<_>>();
-
-    context.with_frame(|context| {
-        for i in 0..n {
-            let ty = fields[i].open(&label_refs[..i]);
-            erase(context, &ty, &Type.into())?;
-            context.assume(&labels[i], &ty);
+    fn walk(context: &mut Context, tele: Telescope<()>) -> Result<(), Error> {
+        match tele {
+            Telescope::Done(_) => Ok(()),
+            Telescope::Cons(ty, rest) => {
+                erase(context, &ty, &Type.into())?;
+                let name = context.fresh(rest.first_label());
+                let x = Term::from(Var::free(&name));
+                context.assume(&name, &ty);
+                walk(context, rest.open(&[&x]))
+            }
         }
-        Ok(())
-    })?;
+    }
+
+    context.with_frame(|context| walk(context, tt.telescope.clone()))?;
 
     Ok(Type.into())
 }
@@ -548,25 +529,22 @@ fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, E
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let TupleType { fields } = match head_type {
+    let TupleType { telescope } = match head_type {
         Term::TupleType(tt) => tt,
         other => return Err(Error::not_a_tuple(term.clone(), other)),
     };
 
-    if *index >= fields.len() {
+    if *index >= telescope.len() {
         return Err(Error::tuple_index_out_of_bounds(
             term.clone(),
             *index,
-            fields.len(),
+            telescope.len(),
         ));
     }
 
-    let prefix: Vec<Term> = (0..*index)
-        .map(|j| Proj::new(*head.clone(), j).into())
-        .collect();
-    let prefix_refs: Vec<&Term> = prefix.iter().collect();
-
-    Ok(fields[*index].open(&prefix_refs))
+    Ok(telescope
+        .nth(*index, |j| Proj::new(*head.clone(), j).into())
+        .expect("index in range"))
 }
 
 fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Error> {

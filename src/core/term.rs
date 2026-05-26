@@ -3,6 +3,7 @@ use {
     crate::Span,
     std::{
         collections::{BTreeMap, BTreeSet},
+        fmt::Debug,
         hash::{Hash, Hasher},
     },
 };
@@ -56,20 +57,18 @@ impl Var {
 pub type Subterm = Box<Term>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Scope<A: Arity> {
+pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
     names: Option<Vec<String>>,
-    body: Subterm,
+    body: Box<B>,
 }
 
-impl<A> Scope<A>
+impl<A, B> Scope<A, B>
 where
     A: Arity,
+    B: Bound,
 {
-    pub fn close<'a, B>(arity: A, labels: A::Params<'a, str>, body: B) -> Self
-    where
-        B: Into<Term>,
-    {
+    pub fn close<'a>(arity: A, labels: A::Params<'a, str>, body: B) -> Self {
         assert!(
             arity.arity() == labels.as_ref().len(),
             "scope arity mismatch in `close`: expected {}, got {}",
@@ -80,7 +79,7 @@ where
         Self {
             arity,
             names: Some(labels.as_ref().iter().map(|s| s.to_string()).collect()),
-            body: body.into().capture(labels.as_ref()).into(),
+            body: body.capture(labels.as_ref()).into(),
         }
     }
 
@@ -88,7 +87,7 @@ where
         self.arity.arity()
     }
 
-    pub fn open<'a>(&self, terms: A::Params<'a, Term>) -> Term {
+    pub fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
         assert!(
             self.arity() == terms.as_ref().len(),
             "scope arity mismatch in `open`: expected {}, got {}",
@@ -99,11 +98,11 @@ where
         self.body.release(terms.as_ref())
     }
 
-    pub fn constant(arity: A, body: impl Into<Term>) -> Self {
+    pub fn constant(arity: A, body: B) -> Self {
         Self {
             arity,
             names: None,
-            body: body.into().into(),
+            body: body.into(),
         }
     }
 
@@ -133,9 +132,129 @@ where
 pub struct Type;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Telescope<B: Bound> {
+    Done(Box<B>),
+    Cons(Subterm, Scope<One, Telescope<B>>),
+}
+
+impl<B: Bound> Bound for Telescope<B> {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Term>,
+    {
+        match self {
+            Telescope::Cons(ty, rest) => {
+                Telescope::Cons(visit.visit_subterm(ty), visit.visit_scope(rest))
+            }
+            Telescope::Done(body) => Telescope::Done(body.traverse(visit).into()),
+        }
+    }
+}
+
+impl<B: Bound> Telescope<B> {
+    pub fn done(body: B) -> Self {
+        Telescope::Done(body.into())
+    }
+
+    pub fn cons<L, T>(label: L, ty: T, rest: Telescope<B>) -> Self
+    where
+        L: Into<String>,
+        T: Into<Term>,
+    {
+        let label = label.into();
+        Telescope::Cons(
+            ty.into().into(),
+            Scope::close(One, &[label.as_str()], rest),
+        )
+    }
+
+    pub fn build<I, L, T>(entries: I, body: B) -> Self
+    where
+        I: IntoIterator<Item = (L, T)>,
+        L: Into<String>,
+        T: Into<Term>,
+    {
+        entries
+            .into_iter()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .fold(Telescope::done(body), |rest, (l, t)| {
+                Telescope::cons(l, t, rest)
+            })
+    }
+
+    pub fn len(&self) -> usize {
+        let mut n = 0;
+        let mut cur = self;
+        while let Telescope::Cons(_, rest) = cur {
+            n += 1;
+            cur = &rest.body;
+        }
+        n
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Telescope::Done(_))
+    }
+
+    pub fn first_label(&self) -> Option<&str> {
+        match self {
+            Telescope::Cons(_, rest) => rest.first_label(),
+            Telescope::Done(_) => None,
+        }
+    }
+
+    pub fn open(&self, args: &[&Term]) -> B {
+        assert!(
+            self.len() == args.len(),
+            "telescope arity mismatch in `open`: expected {}, got {}",
+            self.len(),
+            args.len()
+        );
+
+        let mut cur = self.clone();
+        for arg in args {
+            cur = match cur {
+                Telescope::Cons(_, rest) => rest.open(&[arg]),
+                Telescope::Done(_) => unreachable!(),
+            };
+        }
+        match cur {
+            Telescope::Done(body) => *body,
+            Telescope::Cons(_, _) => unreachable!(),
+        }
+    }
+
+    pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
+    where
+        F: FnMut(usize) -> Term,
+    {
+        fn go<B: Bound, F: FnMut(usize) -> Term>(
+            tele: Telescope<B>,
+            index: usize,
+            j: usize,
+            sub: &mut F,
+        ) -> Option<Term> {
+            match tele {
+                Telescope::Done(_) => None,
+                Telescope::Cons(ty, rest) => {
+                    if j == index {
+                        Some(*ty)
+                    } else {
+                        go(rest.open(&[&sub(j)]), index, j + 1, sub)
+                    }
+                }
+            }
+        }
+
+        go(self, index, 0, &mut sub)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FuncType {
-    pub params: Vec<Scope<Many>>,
-    pub output: Scope<Many>,
+    pub telescope: Telescope<Term>,
 }
 
 impl FuncType {
@@ -146,26 +265,8 @@ impl FuncType {
         T: Into<Term>,
         O: Into<Term>,
     {
-        let params = params
-            .into_iter()
-            .map(|(l, t)| (l.into(), t.into()))
-            .collect::<Vec<(String, Term)>>();
-
-        let labels = params
-            .iter()
-            .map(|(l, _)| l.clone())
-            .collect::<Vec<String>>();
-
-        let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-        let n = params.len();
-
         Self {
-            params: params
-                .into_iter()
-                .enumerate()
-                .map(|(i, (_, ty))| Scope::close(Many(i), &label_strs[..i], ty))
-                .collect(),
-            output: Scope::close(Many(n), &label_strs, output),
+            telescope: Telescope::build(params, output.into()),
         }
     }
 }
@@ -190,7 +291,7 @@ impl Func {
         let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
 
         Self {
-            body: Scope::close(Many(labels.len()), &label_strs, body),
+            body: Scope::close(Many(labels.len()), &label_strs, body.into()),
         }
     }
 }
@@ -217,12 +318,14 @@ impl Apply {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TupleType {
-    pub fields: Vec<Scope<Many>>,
+    pub telescope: Telescope<()>,
 }
 
 impl TupleType {
     pub fn unit() -> Self {
-        Self { fields: vec![] }
+        Self {
+            telescope: Telescope::done(()),
+        }
     }
 
     pub fn new<I, L, T>(fields: I) -> Self
@@ -231,25 +334,8 @@ impl TupleType {
         L: Into<String>,
         T: Into<Term>,
     {
-        let fields = fields
-            .into_iter()
-            .map(|(l, t)| (l.into(), t.into()))
-            .collect::<Vec<(String, Term)>>();
-
-        let labels = fields
-            .iter()
-            .map(|(l, _)| l.clone())
-            .collect::<Vec<String>>();
-
         Self {
-            fields: fields
-                .into_iter()
-                .enumerate()
-                .map(|(i, (_, ty))| {
-                    let label_strs = labels[..i].iter().map(|s| s.as_str()).collect::<Vec<_>>();
-                    Scope::close(Many(i), &label_strs, ty)
-                })
-                .collect::<Vec<_>>(),
+            telescope: Telescope::build(fields, ()),
         }
     }
 }
@@ -333,11 +419,15 @@ impl NatMatch {
         Self::Induction {
             head: head.into().into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive),
-                None => Scope::constant(One, motive),
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
             },
             zero_case: zero_case.into().into(),
-            succ_case: Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_case),
+            succ_case: Scope::close(
+                Two,
+                &[pred_label.as_str(), ih_label.as_str()],
+                succ_case.into(),
+            ),
         }
     }
 
@@ -358,8 +448,8 @@ impl NatMatch {
         Self::Dispatch {
             head: head.into().into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive),
-                None => Scope::constant(One, motive),
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
             },
             cases: cases
                 .into_iter()
@@ -395,8 +485,8 @@ impl BlnMatch {
         Self {
             head: head.into().into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive),
-                None => Scope::constant(One, motive),
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
             },
             false_case: false_case.into().into(),
             true_case: true_case.into().into(),
@@ -440,8 +530,8 @@ impl Match {
         Self {
             head: head.into().into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive),
-                None => Scope::constant(One, motive),
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
             },
             cases: cases
                 .into_iter()
@@ -471,7 +561,7 @@ impl Let {
         Self {
             type_: type_.into().into(),
             body: body.into().into(),
-            tail: Scope::close(One, &[label.as_str()], tail),
+            tail: Scope::close(One, &[label.as_str()], tail.into()),
         }
     }
 }
@@ -516,7 +606,7 @@ impl Rec {
                     )
                 })
                 .collect(),
-            tail: Scope::close(Many(labels.len()), &labels, tail),
+            tail: Scope::close(Many(labels.len()), &labels, tail.into()),
         }
     }
 }
@@ -537,7 +627,7 @@ impl Sealed {
         let label = label.into();
         Self {
             witness: witness.into().into(),
-            tail: Scope::close(One, &[label.as_str()], tail),
+            tail: Scope::close(One, &[label.as_str()], tail.into()),
         }
     }
 }
@@ -684,59 +774,7 @@ impl Term {
     }
 
     pub fn free_vars(&self) -> BTreeSet<String> {
-        let mut vars = BTreeSet::new();
-
-        Visit::new(|_, var| {
-            if let Some(label) = var.as_free() {
-                vars.insert(label.to_string());
-            }
-
-            None
-        })
-        .visit_term(self);
-
-        vars
-    }
-
-    fn shift(&self, amount: usize) -> Self {
-        Visit::new(|depth, var| {
-            var.as_bound()
-                .filter(|&index| index >= depth)
-                .map(|index| Var::bound(index + amount).into())
-        })
-        .visit_term(self)
-    }
-
-    fn capture(&self, labels: &[&str]) -> Self {
-        Visit::new(|depth, var| {
-            var.as_free()
-                .and_then(|label| {
-                    labels
-                        .iter()
-                        .position(|&candidate| label == candidate)
-                        .map(|index| Var::bound(depth + index).into())
-                })
-                .or_else(|| {
-                    var.as_bound()
-                        .filter(|&index| index >= depth)
-                        .map(|index| Var::bound(index + labels.len()).into())
-                })
-        })
-        .visit_term(self)
-    }
-
-    fn release(&self, terms: &[&Term]) -> Self {
-        Visit::new(|depth, var| {
-            var.as_bound().and_then(|index| {
-                index
-                    .checked_sub(depth)
-                    .map(|delta| match delta < terms.len() {
-                        true => terms[delta].shift(depth),
-                        false => Var::bound(index - terms.len()).into(),
-                    })
-            })
-        })
-        .visit_term(self)
+        Bound::free_vars(self)
     }
 }
 
@@ -854,8 +892,103 @@ impl From<Var> for Term {
     }
 }
 
+pub trait Bound: Sized + Clone + Eq + Hash + Debug {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Term>;
+
+    fn shift(&self, amount: usize) -> Self {
+        self.traverse(&mut Visit::new(|depth, var| {
+            var.as_bound()
+                .filter(|&index| index >= depth)
+                .map(|index| Var::bound(index + amount).into())
+        }))
+    }
+
+    fn capture(&self, labels: &[&str]) -> Self {
+        self.traverse(&mut Visit::new(|depth, var| {
+            var.as_free()
+                .and_then(|label| {
+                    labels
+                        .iter()
+                        .position(|&candidate| label == candidate)
+                        .map(|index| Var::bound(depth + index).into())
+                })
+                .or_else(|| {
+                    var.as_bound()
+                        .filter(|&index| index >= depth)
+                        .map(|index| Var::bound(index + labels.len()).into())
+                })
+        }))
+    }
+
+    fn release(&self, terms: &[&Term]) -> Self {
+        self.traverse(&mut Visit::new(|depth, var| {
+            var.as_bound().and_then(|index| {
+                index
+                    .checked_sub(depth)
+                    .map(|delta| match delta < terms.len() {
+                        true => terms[delta].shift(depth),
+                        false => Var::bound(index - terms.len()).into(),
+                    })
+            })
+        }))
+    }
+
+    fn free_vars(&self) -> BTreeSet<String> {
+        let mut vars = BTreeSet::new();
+        self.traverse(&mut Visit::new(|_, var| {
+            if let Some(label) = var.as_free() {
+                vars.insert(label.to_string());
+            }
+            None
+        }));
+        vars
+    }
+}
+
+impl Bound for () {
+    fn traverse<F>(&self, _: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Term>,
+    {
+    }
+}
+
+impl Bound for Term {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Term>,
+    {
+        match self {
+            Term::Type => Type.into(),
+            Term::Prim(prim) => visit.visit_prim(prim).into(),
+            Term::BlnMatch(bm) => visit.visit_bln_match(bm).into(),
+            Term::NatMatch(nm) => visit.visit_nat_match(nm).into(),
+            Term::FuncType(ft) => visit.visit_func_type(ft).into(),
+            Term::Func(func) => visit.visit_func(func).into(),
+            Term::Apply(apply) => visit.visit_apply(apply).into(),
+            Term::TupleType(tt) => visit.visit_tuple_type(tt).into(),
+            Term::Tuple(t) => visit.visit_tuple(t).into(),
+            Term::Proj(proj) => visit.visit_proj(proj).into(),
+            Term::AtomType(at) => at.clone().into(),
+            Term::Atom(atom) => atom.clone().into(),
+            Term::Match(m) => visit.visit_match(m).into(),
+            Term::Let(let_) => visit.visit_let(let_).into(),
+            Term::Rec(rec) => visit.visit_rec(rec).into(),
+            Term::Sealed(sealed) => visit.visit_sealed(sealed).into(),
+            Term::Seal(seal) => visit.visit_seal(seal).into(),
+            Term::Unseal(unseal) => visit.visit_unseal(unseal).into(),
+            Term::Var(var) => {
+                (visit.visit)(visit.depth, var).unwrap_or_else(|| var.clone().into())
+            }
+            Term::Spanned(span, inner) => Term::Spanned(*span, visit.visit_subterm(inner)),
+        }
+    }
+}
+
 #[derive(Debug)]
-struct Visit<F> {
+pub struct Visit<F> {
     depth: usize,
     visit: F,
 }
@@ -869,7 +1002,7 @@ where
     }
 
     fn visit_subterm(&mut self, subterm: &Subterm) -> Subterm {
-        self.visit_term(subterm).into()
+        subterm.traverse(self).into()
     }
 
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
@@ -1045,9 +1178,9 @@ where
         }
     }
 
-    fn visit_scope<A: Arity>(&mut self, scope: &Scope<A>) -> Scope<A> {
+    fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
         self.depth += scope.arity.arity();
-        let body = self.visit_subterm(&scope.body);
+        let body = scope.body.traverse(self).into();
         self.depth -= scope.arity.arity();
 
         Scope {
@@ -1059,8 +1192,7 @@ where
 
     fn visit_func_type(&mut self, ft: &FuncType) -> FuncType {
         FuncType {
-            params: ft.params.iter().map(|s| self.visit_scope(s)).collect(),
-            output: self.visit_scope(&ft.output),
+            telescope: ft.telescope.traverse(self),
         }
     }
 
@@ -1079,11 +1211,7 @@ where
 
     fn visit_tuple_type(&mut self, tt: &TupleType) -> TupleType {
         TupleType {
-            fields: tt
-                .fields
-                .iter()
-                .map(|s| self.visit_scope(s))
-                .collect::<Vec<_>>(),
+            telescope: tt.telescope.traverse(self),
         }
     }
 
@@ -1157,7 +1285,7 @@ where
 
     fn visit_sealed(&mut self, sealed: &Sealed) -> Sealed {
         Sealed {
-            witness: self.visit_term(&sealed.witness).into(),
+            witness: self.visit_subterm(&sealed.witness),
             tail: self.visit_scope(&sealed.tail),
         }
     }
@@ -1195,30 +1323,6 @@ where
         }
     }
 
-    fn visit_term(&mut self, term: &Term) -> Term {
-        match term {
-            Term::Type => Type.into(),
-            Term::Prim(prim) => self.visit_prim(prim).into(),
-            Term::BlnMatch(bm) => self.visit_bln_match(bm).into(),
-            Term::NatMatch(nm) => self.visit_nat_match(nm).into(),
-            Term::FuncType(ft) => self.visit_func_type(ft).into(),
-            Term::Func(func) => self.visit_func(func).into(),
-            Term::Apply(apply) => self.visit_apply(apply).into(),
-            Term::TupleType(tt) => self.visit_tuple_type(tt).into(),
-            Term::Tuple(t) => self.visit_tuple(t).into(),
-            Term::Proj(proj) => self.visit_proj(proj).into(),
-            Term::AtomType(at) => at.clone().into(),
-            Term::Atom(atom) => atom.clone().into(),
-            Term::Match(m) => self.visit_match(m).into(),
-            Term::Let(let_) => self.visit_let(let_).into(),
-            Term::Rec(rec) => self.visit_rec(rec).into(),
-            Term::Sealed(sealed) => self.visit_sealed(sealed).into(),
-            Term::Seal(seal) => self.visit_seal(seal).into(),
-            Term::Unseal(unseal) => self.visit_unseal(unseal).into(),
-            Term::Var(var) => (self.visit)(self.depth, var).unwrap_or_else(|| var.clone().into()),
-            Term::Spanned(span, inner) => Term::Spanned(*span, self.visit_subterm(inner)),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1227,7 +1331,8 @@ mod tests {
 
     #[test]
     fn close_open_substitutes_label_name() {
-        let term = Scope::close(One, &["x"], Var::free("x")).open(&[&Var::free("y").into()]);
+        let term =
+            Scope::close(One, &["x"], Term::from(Var::free("x"))).open(&[&Var::free("y").into()]);
 
         let Term::Var(var) = term else {
             panic!("unexpected `{term:?}`")
@@ -1238,7 +1343,7 @@ mod tests {
 
     #[test]
     fn close_open_preserves_nested_bind() {
-        let term = Scope::close(One, &["x"], Func::new(["y"], Var::free("x")))
+        let term = Scope::close(One, &["x"], Term::from(Func::new(["y"], Var::free("x"))))
             .open(&[&Var::free("z").into()]);
 
         let Term::Func(body) = term else {

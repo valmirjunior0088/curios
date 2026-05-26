@@ -372,72 +372,72 @@ Bin.slice(s, start, end)
 
 ### Nat
 
-| Operation          | Arity | Description           | Returns |
-| ------------------ | ----- | --------------------- | ------- |
-| `Nat.add(a, b)`    | 2     | Addition              | `Nat`   |
-| `Nat.sub(a, b)`    | 2     | Subtraction           | `Nat`   |
-| `Nat.mul(a, b)`    | 2     | Multiplication        | `Nat`   |
-| `Nat.div(a, b)`    | 2     | Division              | `Nat`   |
-| `Nat.rem(a, b)`    | 2     | Remainder             | `Nat`   |
-| `Nat.eql(a, b)`    | 2     | Equality              | `Bln`   |
-| `Nat.neq(a, b)`    | 2     | Inequality            | `Bln`   |
-| `Nat.lt(a, b)`     | 2     | Less than             | `Bln`   |
-| `Nat.gt(a, b)`     | 2     | Greater than          | `Bln`   |
-| `Nat.lte(a, b)`    | 2     | Less than or equal    | `Bln`   |
-| `Nat.gte(a, b)`    | 2     | Greater than or equal | `Bln`   |
-| `Nat.to_int(a)`    | 1     | Convert to Int        | `Int`   |
-| `Nat.to_flt(a)`    | 1     | Convert to Flt        | `Flt`   |
-| `Nat.to_str(a)`    | 1     | Convert to Bin        | `Bin`   |
-| `Nat.succ(a)`      | 1     | Successor (add 1)     | `Nat`   |
-| `Nat.succ(n, a)`   | 2     | Add `n` successors    | `Nat`   |
+| Operation        | Arity | Description           | Returns |
+| ---------------- | ----- | --------------------- | ------- |
+| `Nat.add(a, b)`  | 2     | Addition              | `Nat`   |
+| `Nat.sub(a, b)`  | 2     | Subtraction           | `Nat`   |
+| `Nat.mul(a, b)`  | 2     | Multiplication        | `Nat`   |
+| `Nat.div(a, b)`  | 2     | Division              | `Nat`   |
+| `Nat.rem(a, b)`  | 2     | Remainder             | `Nat`   |
+| `Nat.eql(a, b)`  | 2     | Equality              | `Bln`   |
+| `Nat.neq(a, b)`  | 2     | Inequality            | `Bln`   |
+| `Nat.lt(a, b)`   | 2     | Less than             | `Bln`   |
+| `Nat.gt(a, b)`   | 2     | Greater than          | `Bln`   |
+| `Nat.lte(a, b)`  | 2     | Less than or equal    | `Bln`   |
+| `Nat.gte(a, b)`  | 2     | Greater than or equal | `Bln`   |
+| `Nat.to_int(a)`  | 1     | Convert to Int        | `Int`   |
+| `Nat.to_flt(a)`  | 1     | Convert to Flt        | `Flt`   |
+| `Nat.to_str(a)`  | 1     | Convert to Bin        | `Bin`   |
+| `Nat.succ(a)`    | 1     | Successor (add 1)     | `Nat`   |
+| `Nat.succ(n, a)` | 2     | Add `n` successors    | `Nat`   |
 
 Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively).
 
 ### Int
 
-| Operation          | Arity | Description           | Returns |
-| ------------------ | ----- | --------------------- | ------- |
-| `Int.add(a, b)`    | 2     | Addition              | `Int`   |
-| `Int.sub(a, b)`    | 2     | Subtraction           | `Int`   |
-| `Int.mul(a, b)`    | 2     | Multiplication        | `Int`   |
-| `Int.div(a, b)`    | 2     | Division              | `Int`   |
-| `Int.rem(a, b)`    | 2     | Remainder             | `Int`   |
-| `Int.eql(a, b)`    | 2     | Equality              | `Bln`   |
-| `Int.neq(a, b)`    | 2     | Inequality            | `Bln`   |
-| `Int.lt(a, b)`     | 2     | Less than             | `Bln`   |
-| `Int.gt(a, b)`     | 2     | Greater than          | `Bln`   |
-| `Int.lte(a, b)`    | 2     | Less than or equal    | `Bln`   |
-| `Int.gte(a, b)`    | 2     | Greater than or equal | `Bln`   |
-| `Int.to_nat(a)`    | 1     | Convert to Nat        | `Nat`   |
-| `Int.to_flt(a)`    | 1     | Convert to Flt        | `Flt`   |
-| `Int.to_str(a)`    | 1     | Convert to Bin        | `Bin`   |
+| Operation       | Arity | Description           | Returns |
+| --------------- | ----- | --------------------- | ------- |
+| `Int.add(a, b)` | 2     | Addition              | `Int`   |
+| `Int.sub(a, b)` | 2     | Subtraction           | `Int`   |
+| `Int.mul(a, b)` | 2     | Multiplication        | `Int`   |
+| `Int.div(a, b)` | 2     | Division              | `Int`   |
+| `Int.rem(a, b)` | 2     | Remainder             | `Int`   |
+| `Int.eql(a, b)` | 2     | Equality              | `Bln`   |
+| `Int.neq(a, b)` | 2     | Inequality            | `Bln`   |
+| `Int.lt(a, b)`  | 2     | Less than             | `Bln`   |
+| `Int.gt(a, b)`  | 2     | Greater than          | `Bln`   |
+| `Int.lte(a, b)` | 2     | Less than or equal    | `Bln`   |
+| `Int.gte(a, b)` | 2     | Greater than or equal | `Bln`   |
+| `Int.to_nat(a)` | 1     | Convert to Nat        | `Nat`   |
+| `Int.to_flt(a)` | 1     | Convert to Flt        | `Flt`   |
+| `Int.to_str(a)` | 1     | Convert to Bin        | `Bin`   |
 
 ### Flt
 
-| Operation           | Arity | Description           | Returns |
-| ------------------- | ----- | --------------------- | ------- |
-| `Flt.add(a, b)`     | 2     | Addition              | `Flt`   |
-| `Flt.sub(a, b)`     | 2     | Subtraction           | `Flt`   |
-| `Flt.mul(a, b)`     | 2     | Multiplication        | `Flt`   |
-| `Flt.div(a, b)`     | 2     | Division              | `Flt`   |
-| `Flt.eql(a, b)`     | 2     | Equality              | `Bln`   |
-| `Flt.neq(a, b)`     | 2     | Inequality            | `Bln`   |
-| `Flt.lt(a, b)`      | 2     | Less than             | `Bln`   |
-| `Flt.gt(a, b)`      | 2     | Greater than          | `Bln`   |
-| `Flt.lte(a, b)`     | 2     | Less than or equal    | `Bln`   |
-| `Flt.gte(a, b)`     | 2     | Greater than or equal | `Bln`   |
-| `Flt.min(a, b)`     | 2     | Minimum               | `Flt`   |
-| `Flt.max(a, b)`     | 2     | Maximum               | `Flt`   |
-| `Flt.neg(a)`        | 1     | Negation              | `Flt`   |
-| `Flt.abs(a)`        | 1     | Absolute value        | `Flt`   |
-| `Flt.sqrt(a)`       | 1     | Square root           | `Flt`   |
-| `Flt.floor(a)`      | 1     | Floor                 | `Flt`   |
-| `Flt.ceil(a)`       | 1     | Ceiling               | `Flt`   |
-| `Flt.trunc(a)`      | 1     | Truncate toward zero  | `Flt`   |
-| `Flt.nearest(a)`    | 1     | Round to nearest      | `Flt`   |
-| `Flt.to_nat(a)`     | 1     | Convert to Nat        | `Nat`   |
-| `Flt.to_int(a)`     | 1     | Convert to Int        | `Int`   |
-| `Flt.to_str(a)`     | 1     | Convert to Bin        | `Bin`   |
+| Operation        | Arity | Description           | Returns |
+| ---------------- | ----- | --------------------- | ------- |
+| `Flt.add(a, b)`  | 2     | Addition              | `Flt`   |
+| `Flt.sub(a, b)`  | 2     | Subtraction           | `Flt`   |
+| `Flt.mul(a, b)`  | 2     | Multiplication        | `Flt`   |
+| `Flt.div(a, b)`  | 2     | Division              | `Flt`   |
+| `Flt.eql(a, b)`  | 2     | Equality              | `Bln`   |
+| `Flt.neq(a, b)`  | 2     | Inequality            | `Bln`   |
+| `Flt.lt(a, b)`   | 2     | Less than             | `Bln`   |
+| `Flt.gt(a, b)`   | 2     | Greater than          | `Bln`   |
+| `Flt.lte(a, b)`  | 2     | Less than or equal    | `Bln`   |
+| `Flt.gte(a, b)`  | 2     | Greater than or equal | `Bln`   |
+| `Flt.min(a, b)`  | 2     | Minimum               | `Flt`   |
+| `Flt.max(a, b)`  | 2     | Maximum               | `Flt`   |
+| `Flt.neg(a)`     | 1     | Negation              | `Flt`   |
+| `Flt.abs(a)`     | 1     | Absolute value        | `Flt`   |
+| `Flt.sqrt(a)`    | 1     | Square root           | `Flt`   |
+| `Flt.floor(a)`   | 1     | Floor                 | `Flt`   |
+| `Flt.ceil(a)`    | 1     | Ceiling               | `Flt`   |
+| `Flt.trunc(a)`   | 1     | Truncate toward zero  | `Flt`   |
+| `Flt.nearest(a)` | 1     | Round to nearest      | `Flt`   |
+| `Flt.to_nat(a)`  | 1     | Convert to Nat        | `Nat`   |
+| `Flt.to_int(a)`  | 1     | Convert to Int        | `Int`   |
+| `Flt.to_str(a)`  | 1     | Convert to Bin        | `Bin`   |
 
 ### Bin
 
@@ -452,13 +452,13 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Arr
 
-| Operation                  | Arity    | Description                      | Returns |
-| -------------------------- | -------- | -------------------------------- | ------- |
-| `Arr.len(a)`               | 1        | Element count                    | `Nat`   |
-| `Arr.get(a, i)`            | 2        | Element at index `i`             | `T`     |
-| `Arr.slice(a, start, end)` | 3        | Subarray from `start` to `end`   | `Arr(T)`|
-| `Arr.append(a, elem)`      | 2        | Append a single element          | `Arr(T)`|
-| `Arr.concat(a, b, ...)`    | variadic | Concatenate any number of arrays | `Arr(T)`|
+| Operation                  | Arity    | Description                      | Returns  |
+| -------------------------- | -------- | -------------------------------- | -------- |
+| `Arr.len(a)`               | 1        | Element count                    | `Nat`    |
+| `Arr.get(a, i)`            | 2        | Element at index `i`             | `T`      |
+| `Arr.slice(a, start, end)` | 3        | Subarray from `start` to `end`   | `Arr(T)` |
+| `Arr.append(a, elem)`      | 2        | Append a single element          | `Arr(T)` |
+| `Arr.concat(a, b, ...)`    | variadic | Concatenate any number of arrays | `Arr(T)` |
 
 `Bin.concat` and `Arr.concat` take any number of comma-separated arguments:
 
@@ -469,10 +469,10 @@ Arr.concat([1, 2], [3, 4], [5])
 
 ### Sys
 
-| Operation       | Arity | Description                                                   | Returns |
-| --------------- | ----- | ------------------------------------------------------------- | ------- |
-| `Sys.print(a)`  | 1     | Print `a : Bin` to stdout                                     | `{}`    |
-| `Sys.read`      | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
+| Operation      | Arity | Description                                                   | Returns |
+| -------------- | ----- | ------------------------------------------------------------- | ------- |
+| `Sys.print(a)` | 1     | Print `a : Bin` to stdout                                     | `{}`    |
+| `Sys.read`     | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
 
 ## Idioms
 

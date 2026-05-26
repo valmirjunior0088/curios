@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
+        Prim, Proj, Rec, Scope, Seal, Sealed, Telescope, Term, Tuple, TupleType, Two, Unseal, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -501,31 +501,42 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 indent(flat([print_term(*default, depth), pure(";")])),
             ])
         }
-        Term::FuncType(FuncType { params, output }) => {
-            let n = params.len();
-            let mut labels = Vec::with_capacity(n);
-            let mut param_terms: Vec<Term> = Vec::with_capacity(n);
-            let mut param_printers = Vec::with_capacity(n);
-            for (i, scope) in params.into_iter().enumerate() {
-                let label = scope
-                    .first_label()
-                    .map(str::to_string)
-                    .unwrap_or_else(|| label_at(depth + i));
-                let param_refs: Vec<&Term> = param_terms.iter().collect();
-                let ty = scope.open(&param_refs);
-                let printer = match scope.first_label() {
-                    Some(_) => flat([pure(label.clone()), pure(" : "), print_term(ty, depth + n)]),
-                    None => print_term(ty, depth + n),
-                };
-                param_printers.push(printer);
-                param_terms.push(Term::from(Var::free(&label)));
-                labels.push(label);
+        Term::FuncType(FuncType { telescope }) => {
+            fn walk(
+                cur: Telescope<Term>,
+                depth: usize,
+                total: usize,
+                idx: usize,
+                printers: &mut Vec<Printer<'static>>,
+            ) -> Term {
+                match cur {
+                    Telescope::Done(body) => *body,
+                    Telescope::Cons(ty, rest) => {
+                        let raw = rest.first_label();
+                        let label = raw
+                            .map(str::to_string)
+                            .unwrap_or_else(|| label_at(depth + idx));
+                        let printer = match raw {
+                            Some(_) => flat([
+                                pure(label.clone()),
+                                pure(" : "),
+                                print_term(*ty, depth + total),
+                            ]),
+                            None => print_term(*ty, depth + total),
+                        };
+                        printers.push(printer);
+                        let next = rest.open(&[&Term::from(Var::free(&label))]);
+                        walk(next, depth, total, idx + 1, printers)
+                    }
+                }
             }
-            let param_refs: Vec<&Term> = param_terms.iter().collect();
-            let output = output.open(&param_refs);
+
+            let n = telescope.len();
+            let mut printers = Vec::with_capacity(n);
+            let output = walk(telescope, depth, n, 0, &mut printers);
             flat([
                 pure("("),
-                sep_flat(param_printers, || pure(", ")),
+                sep_flat(printers, || pure(", ")),
                 pure(") -> "),
                 print_term(output, depth + n),
             ])
@@ -555,36 +566,35 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ),
             pure(")"),
         ]),
-        Term::TupleType(TupleType { fields }) => {
-            let n = fields.len();
-            let labels: Vec<String> = {
-                let mut base = fields
-                    .last()
-                    .map(|s| {
-                        s.label_iter()
-                            .flatten()
+        Term::TupleType(TupleType { telescope }) => {
+            fn walk(
+                cur: Telescope<()>,
+                depth: usize,
+                total: usize,
+                idx: usize,
+                items: &mut Vec<Printer<'static>>,
+            ) {
+                match cur {
+                    Telescope::Done(_) => {}
+                    Telescope::Cons(ty, rest) => {
+                        let label = rest
+                            .first_label()
                             .map(str::to_string)
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                base.push(label_at(depth + base.len()));
-                base
-            };
-            let label_terms_vec = label_terms(&labels);
-            let label_refs = label_terms_vec.iter().collect::<Vec<_>>();
+                            .unwrap_or_else(|| label_at(depth + idx));
+                        items.push(indent(flat([
+                            pure(label.clone()),
+                            pure(" : "),
+                            print_term(*ty, depth + total),
+                        ])));
+                        let next = rest.open(&[&Term::from(Var::free(&label))]);
+                        walk(next, depth, total, idx + 1, items);
+                    }
+                }
+            }
 
-            let items = fields
-                .into_iter()
-                .enumerate()
-                .map(|(i, scope)| {
-                    let ty = scope.open(&label_refs[..i]);
-                    indent(flat([
-                        pure(labels[i].clone()),
-                        pure(" : "),
-                        print_term(ty, depth + n),
-                    ]))
-                })
-                .collect::<Vec<_>>();
+            let n = telescope.len();
+            let mut items = Vec::with_capacity(n);
+            walk(telescope, depth, n, 0, &mut items);
 
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }

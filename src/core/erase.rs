@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Seal, Sealed, Subterm, Term, Tuple, TupleType, Two, Type, Unseal,
-        Var, expect, infer, reduce_with, refine_head,
+        Prim, Proj, Rec, Scope, Seal, Sealed, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        Type, Unseal, Var, expect, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -750,7 +750,7 @@ fn erase_func(
         other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
     };
 
-    let n = ft.params.len();
+    let n = ft.telescope.len();
     let captures = body.free_vars().into_iter().collect::<Vec<_>>();
 
     let param_names = (0..n)
@@ -763,17 +763,23 @@ fn erase_func(
     let param_refs = param_terms.iter().collect::<Vec<_>>();
     let body_opened = body.open(&param_refs);
 
-    let output_type = ft.output.open(&param_refs);
+    fn output_type(
+        context: &mut Context,
+        tele: Telescope<Term>,
+        names: &[String],
+        terms: &[Term],
+    ) -> Term {
+        match tele {
+            Telescope::Done(body) => *body,
+            Telescope::Cons(ty, rest) => {
+                context.assume(&names[0], &ty);
+                output_type(context, rest.open(&[&terms[0]]), &names[1..], &terms[1..])
+            }
+        }
+    }
 
     let erased_body = context.with_frame(|context| {
-        let mut param_tys: Vec<Term> = Vec::with_capacity(n);
-        let mut so_far: Vec<&Term> = Vec::with_capacity(n);
-        for (i, name) in param_names.iter().enumerate().take(n) {
-            let ty = ft.params[i].open(&so_far);
-            context.assume(name, &ty);
-            param_tys.push(ty);
-            so_far.push(param_terms.get(i).unwrap());
-        }
+        let output_type = output_type(context, ft.telescope, &param_names, &param_terms);
         erase(context, &body_opened, &output_type)
     })?;
 
@@ -801,26 +807,32 @@ fn erase_apply(
         _ => return Err(Error::not_a_function(term.clone(), head_type)),
     };
 
-    if params.len() != ft.params.len() {
+    if params.len() != ft.telescope.len() {
         return Err(Error::wrong_number_of_arguments(
             term.clone(),
-            ft.params.len(),
+            ft.telescope.len(),
             params.len(),
         ));
     }
 
-    let mut erased_params = Vec::with_capacity(params.len());
-    let mut param_terms: Vec<Term> = Vec::with_capacity(params.len());
-
-    for (i, param) in params.iter().enumerate() {
-        let so_far = param_terms.iter().collect::<Vec<_>>();
-        let expected_ty = ft.params[i].open(&so_far);
-        erased_params.push(erase(context, param, &expected_ty)?);
-        param_terms.push(*param.clone());
+    fn walk(
+        context: &mut Context,
+        tele: Telescope<Term>,
+        params: &[Subterm],
+        erased: &mut Vec<ersd::Term>,
+    ) -> Result<Term, Error> {
+        match tele {
+            Telescope::Done(body) => Ok(*body),
+            Telescope::Cons(ty, rest) => {
+                let head = &params[0];
+                erased.push(erase(context, head, &ty)?);
+                walk(context, rest.open(&[head.as_ref()]), &params[1..], erased)
+            }
+        }
     }
 
-    let param_refs = param_terms.iter().collect::<Vec<_>>();
-    let result_type = ft.output.open(&param_refs);
+    let mut erased_params = Vec::with_capacity(params.len());
+    let result_type = walk(context, ft.telescope.clone(), params, &mut erased_params)?;
     let erased_head = erase(context, head, &head_type)?;
 
     expect(context, term, &result_type, expected)?;
@@ -835,12 +847,12 @@ fn erase_apply(
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
     let Tuple { fields } = tuple;
 
-    let type_fields = match reduce_with(context, expected)? {
-        Term::TupleType(TupleType { fields: tf }) => tf,
+    let type_telescope = match reduce_with(context, expected)? {
+        Term::TupleType(TupleType { telescope }) => telescope,
         other => return Err(Error::type_mismatch(tuple.clone(), other, expected.clone())),
     };
 
-    if fields.len() != type_fields.len() {
+    if fields.len() != type_telescope.len() {
         return Err(Error::type_mismatch(
             tuple.clone(),
             expected.clone(),
@@ -848,14 +860,24 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
         ));
     }
 
-    let mut checked_terms = Vec::<&Term>::new();
-    let mut erased_fields = Vec::<ersd::Subterm>::new();
-
-    for (i, field) in fields.iter().enumerate() {
-        let field_type = type_fields[i].open(&checked_terms);
-        erased_fields.push(erase(context, field, &field_type)?.into());
-        checked_terms.push(field.as_ref());
+    fn walk(
+        context: &mut Context,
+        tele: Telescope<()>,
+        fields: &[Subterm],
+        erased: &mut Vec<ersd::Subterm>,
+    ) -> Result<(), Error> {
+        match tele {
+            Telescope::Done(_) => Ok(()),
+            Telescope::Cons(ty, rest) => {
+                let head = &fields[0];
+                erased.push(erase(context, head, &ty)?.into());
+                walk(context, rest.open(&[head.as_ref()]), &fields[1..], erased)
+            }
+        }
     }
+
+    let mut erased_fields = Vec::<ersd::Subterm>::new();
+    walk(context, type_telescope, fields, &mut erased_fields)?;
 
     Ok(ersd::Tuple {
         fields: erased_fields,
@@ -1074,24 +1096,22 @@ fn erase_proj(
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let TupleType { fields } = match head_type.clone() {
+    let TupleType { telescope } = match head_type.clone() {
         Term::TupleType(tt) => tt,
         other => return Err(Error::not_a_tuple(term.clone(), other)),
     };
 
-    if *index >= fields.len() {
+    if *index >= telescope.len() {
         return Err(Error::tuple_index_out_of_bounds(
             term.clone(),
             *index,
-            fields.len(),
+            telescope.len(),
         ));
     }
 
-    let prefix: Vec<Term> = (0..*index)
-        .map(|j| Proj::new(*head.clone(), j).into())
-        .collect();
-    let prefix_refs: Vec<&Term> = prefix.iter().collect();
-    let field_type = fields[*index].open(&prefix_refs);
+    let field_type = telescope
+        .nth(*index, |j| Proj::new(*head.clone(), j).into())
+        .expect("index in range");
 
     expect(context, term, &field_type, expected)?;
 
