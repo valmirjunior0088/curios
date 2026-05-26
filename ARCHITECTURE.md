@@ -19,7 +19,7 @@ text::Entrypoint          surface AST; all variables are plain String labels
     ▼  src/text/to_core/
 core::Term                de Bruijn AST; Scope<A: Arity> binders
     │
-    ▼  src/core/typing.rs (infer + erase)
+    ▼  src/core/infer.rs + src/core/erase.rs
 ersd::Term                type-erased; closures carry explicit capture lists
     │
     ▼  src/ersd/to_cont/
@@ -37,13 +37,13 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,502  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,150 |
-| Type checking + erasure | `core/typing.rs`                               | 2,796  |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,300 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                      | 3,162  |
-| WASM codegen            | `cont/to_wasm/` (5 files)                      | ~3,300 |
-| Binary serialization    | `wasm/writer.rs`                               | 2,017  |
+| Parsing                 | `text/parse.rs`                                       | 1,502  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`        | ~1,177 |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs`    | ~3,162 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                   | ~2,418 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                             | 3,159  |
+| WASM codegen            | `cont/to_wasm/` (5 files)                             | ~3,300 |
+| Binary serialization    | `wasm/writer.rs`                                      | 2,017  |
 
 ---
 
@@ -118,7 +118,7 @@ Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`.
 
 ## Stage 3 — Core type system (`src/core/`)
 
-**Key files:** `term.rs`, `typing.rs`, `reduce.rs`, `convert.rs`, `context.rs`, `arity.rs`
+**Key files:** `term.rs`, `infer.rs`, `erase.rs`, `typing.rs`, `reduce.rs`, `convert.rs`, `context.rs`, `arity.rs`
 
 The central `core::Term` enum:
 
@@ -150,11 +150,11 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 A private `Visit<F>` struct drives all variable traversals (`shift`, `capture`, `release`, `free_vars`). The closure `F: FnMut(depth, &Var) -> Option<Term>` can return a replacement or `None` to leave the variable unchanged.
 
-### Bidirectional type checking (`typing.rs`)
+### Bidirectional type checking (`infer.rs`, `erase.rs`)
 
-`infer(context, term)` synthesizes a type upward. `erase(context, term, expected_type)` checks downward and simultaneously produces the `ersd::Term`. For dependent function types, after checking the argument the codomain is reduced with the argument substituted before checking the body.
+`infer(context, term)` (in `infer.rs`) synthesizes a type upward. `erase(context, term, expected_type)` (in `erase.rs`) checks downward and simultaneously produces the `ersd::Term`. For dependent function types, after checking the argument the codomain is reduced with the argument substituted before checking the body.
 
-`typing.rs` also produces the `ersd::Term` output directly as a side effect of type checking — erasure is not a separate pass.
+`typing.rs` holds the shared infrastructure for both passes — the `Error` enum, the `expect`/`refine_head` helpers, and the timeout-aware `reduce_with`/`convert_with` wrappers. The `ersd::Term` output falls out of `erase` directly — erasure is not a separate pass.
 
 ### Normalization (`reduce.rs`, `convert.rs`)
 
@@ -176,7 +176,7 @@ Maintains separate stacks for **assumptions** (name → type) and **definitions*
 
 **Key files:** `term.rs`, `prim.rs`
 
-Erasure is performed inside `core::typing.rs` (the `erase` function), not as a standalone pass. The output is `ersd::Term`.
+Erasure is performed inside `core::erase` (the `erase` function), interleaved with bidirectional type checking rather than as a standalone pass. The output is `ersd::Term`.
 
 | Removed                                                | Preserved                                                        |
 | ------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -390,7 +390,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
 4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes `core::Term`; how `Scope::close` turns string labels into de Bruijn indices.
 5. **`src/core/term.rs`** — the typed AST; understanding `Scope<A: Arity>` is prerequisite for everything downstream.
-6. **`src/core/typing.rs`** — bidirectional type checking; note where reduction is invoked and how erasure is interleaved.
+6. **`src/core/infer.rs`** + **`src/core/erase.rs`** — bidirectional type checking, split into the synthesis (`infer`) and checking (`erase`) passes; note where reduction is invoked and how erasure is interleaved in `erase`. Shared helpers live in `src/core/typing.rs`.
 7. **`src/ersd/term.rs`** — what disappears at erasure and what survives into runtime.
 8. **`src/cont/module.rs`** — the CPS IR types; pay attention to how `Call` specifies a `resume` block.
 9. **`src/ersd/to_cont/lowerer.rs`** — how `ersd::Term` becomes CPS; the `lower_tail` vs `lower_value` distinction is the key insight.
