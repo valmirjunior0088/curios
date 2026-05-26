@@ -2,7 +2,7 @@ use {
     super::{DefStack, ModuleInfo},
     crate::{
         core,
-        text::{Bin, Error, Match, Name, Nat, Prim, Term},
+        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, Prim, Term},
     },
     std::collections::HashMap,
 };
@@ -59,16 +59,12 @@ impl<'a> Elaborate<'a> {
             Term::FuncType(ft) => core::FuncType::new(
                 ft.params
                     .iter()
-                    .map(|(label, ty)| {
-                        Ok((label.clone().unwrap_or_default(), self.term(ty)?))
-                    })
+                    .map(|(label, ty)| Ok((label.clone().unwrap_or_default(), self.term(ty)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&ft.output)?,
             )
             .into(),
-            Term::Func(func) => {
-                core::Func::new(func.params.clone(), self.term(&func.body)?).into()
-            }
+            Term::Func(func) => core::Func::new(func.params.clone(), self.term(&func.body)?).into(),
             Term::Apply(crate::text::Apply::Call { head, params }) => core::Apply::new(
                 self.term(head)?,
                 params
@@ -214,8 +210,13 @@ impl<'a> Elaborate<'a> {
             Prim::BlnType => core::Prim::BlnType,
             Prim::Bln(b) => core::Prim::Bln(*b),
             Prim::NatType => core::Prim::NatType,
-            Prim::Nat(Nat::Number(number)) => core::Prim::Nat(*number),
-            Prim::Nat(Nat::Char(character)) => core::Prim::Nat(*character as u32),
+            Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
+            Prim::Nat(Nat::Succ(NatLiteral::Number(spine), inner)) => {
+                core::Prim::Nat(core::Nat::Succ(*spine, Box::new(self.term(inner)?)))
+            }
+            Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => {
+                core::Prim::Nat(core::Nat::Succ(*c as u32, Box::new(self.term(inner)?)))
+            }
             Prim::NatEql(left, right) => core::Prim::nat_eql(self.term(left)?, self.term(right)?),
             Prim::NatNeq(left, right) => core::Prim::nat_neq(self.term(left)?, self.term(right)?),
             Prim::NatAdd(left, right) => core::Prim::nat_add(self.term(left)?, self.term(right)?),
@@ -273,8 +274,8 @@ impl<'a> Elaborate<'a> {
             Prim::FltToNat(inner) => core::Prim::flt_to_nat(self.term(inner)?),
             Prim::FltToInt(inner) => core::Prim::flt_to_int(self.term(inner)?),
             Prim::BinType => core::Prim::BinType,
-            Prim::Bin(Bin::Bytes(bytes)) => core::Prim::Bin(bytes.clone()),
-            Prim::Bin(Bin::String(string)) => core::Prim::Bin(string.as_bytes().to_vec()),
+            Prim::Bin(BinLiteral::Bytes(bytes)) => core::Prim::Bin(bytes.clone()),
+            Prim::Bin(BinLiteral::String(string)) => core::Prim::Bin(string.as_bytes().to_vec()),
             Prim::BinLen(inner) => core::Prim::bin_len(self.term(inner)?),
             Prim::BinEql(left, right) => core::Prim::bin_eql(self.term(left)?, self.term(right)?),
             Prim::BinGet(bin, index) => core::Prim::bin_get(self.term(bin)?, self.term(index)?),

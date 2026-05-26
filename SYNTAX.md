@@ -388,6 +388,8 @@ Bin.slice(s, start, end)
 | `Nat.to_int(a)`    | 1     | Convert to Int        | `Int`   |
 | `Nat.to_flt(a)`    | 1     | Convert to Flt        | `Flt`   |
 | `Nat.to_str(a)`    | 1     | Convert to Bin        | `Bin`   |
+| `Nat.succ(a)`      | 1     | Successor (add 1)     | `Nat`   |
+| `Nat.succ(n, a)`   | 2     | Add `n` successors    | `Nat`   |
 
 Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively).
 

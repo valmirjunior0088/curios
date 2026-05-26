@@ -1,11 +1,27 @@
 use super::{Flt, Subterm, Term};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Nat {
+    Zero,
+    Succ(u32, Subterm),
+}
+
+impl Nat {
+    pub fn new(n: u32) -> Self {
+        if n == 0 {
+            Nat::Zero
+        } else {
+            Nat::Succ(n, Term::Prim(Prim::Nat(Nat::Zero)).into())
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
     BlnType,
     Bln(bool),
     NatType,
-    Nat(u32),
+    Nat(Nat),
     NatEql(Subterm, Subterm),
     NatNeq(Subterm, Subterm),
     NatAdd(Subterm, Subterm),

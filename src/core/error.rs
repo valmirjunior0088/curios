@@ -198,10 +198,7 @@ impl Error {
     pub fn format(&self, source: &str) -> String {
         match self {
             Self::Located { span, error } => {
-                format!(
-                    "{error}\n\n{}",
-                    span.render_snippet(source)
-                )
+                format!("{error}\n\n{}", span.render_snippet(source))
             }
             error => error.to_string(),
         }
@@ -280,7 +277,7 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{Prim, Term};
+    use crate::core::{Nat, Prim, Term};
 
     #[test]
     fn display_unbound_variable() {
@@ -290,7 +287,10 @@ mod tests {
 
     #[test]
     fn display_not_a_function() {
-        let err = Error::not_a_function(Term::Prim(Prim::Nat(0)), Term::Prim(Prim::NatType));
+        let err = Error::not_a_function(
+            Term::Prim(Prim::Nat(Nat::new(0))),
+            Term::Prim(Prim::NatType),
+        );
         assert_eq!(
             err.to_string(),
             "applied a non-function\n  head has type: Nat"
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn display_type_mismatch_shows_both_types() {
         let err = Error::type_mismatch(
-            Term::Prim(Prim::Nat(5)),
+            Term::Prim(Prim::Nat(Nat::new(5))),
             Term::Prim(Prim::NatType),
             Term::Prim(Prim::BlnType),
         );

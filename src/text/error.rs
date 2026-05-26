@@ -1,7 +1,4 @@
-use {
-    crate::Span,
-    std::fmt,
-};
+use {crate::Span, std::fmt};
 
 #[derive(Debug)]
 pub enum Error {
@@ -29,10 +26,7 @@ impl Error {
     pub fn format(&self, source: &str) -> String {
         match self {
             Self::Located { span, error } => {
-                format!(
-                    "{error}\n\n{}",
-                    span.render_snippet(source)
-                )
+                format!("{error}\n\n{}", span.render_snippet(source))
             }
             error => error.to_string(),
         }

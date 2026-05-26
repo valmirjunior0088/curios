@@ -1316,6 +1316,16 @@ type Cont<'a> = Box<
         + 'a,
 >;
 
+type ContMany<'a> = Box<
+    dyn FnOnce(
+            &mut Lowerer<'_>,
+            &mut FrameEntropy,
+            &mut RegionBuilder,
+            Vec<cont::ValueName>,
+        ) -> cont::Tail
+        + 'a,
+>;
+
 impl<'a> Lowerer<'a> {
     fn lower_to_name(
         &mut self,
@@ -2804,15 +2814,7 @@ impl<'a> Lowerer<'a> {
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
         mut names: Vec<cont::ValueName>,
-        cont: Box<
-            dyn FnOnce(
-                    &mut Lowerer<'_>,
-                    &mut FrameEntropy,
-                    &mut RegionBuilder,
-                    Vec<cont::ValueName>,
-                ) -> cont::Tail
-                + 'b,
-        >,
+        cont: ContMany<'b>,
     ) -> cont::Tail {
         match params {
             [] => cont(self, state, builder, names),

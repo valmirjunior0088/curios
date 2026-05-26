@@ -1,15 +1,45 @@
 use super::{Subterm, Term};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Nat {
+pub enum NatLiteral {
     Number(u32),
     Char(char),
 }
 
+impl From<u32> for NatLiteral {
+    fn from(n: u32) -> Self {
+        NatLiteral::Number(n)
+    }
+}
+
+impl From<char> for NatLiteral {
+    fn from(c: char) -> Self {
+        NatLiteral::Char(c)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Nat {
+    Zero,
+    Succ(NatLiteral, Subterm),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Bin {
+pub enum BinLiteral {
     Bytes(Vec<u8>),
     String(String),
+}
+
+impl<'a> From<&'a str> for BinLiteral {
+    fn from(s: &'a str) -> Self {
+        BinLiteral::String(s.to_string())
+    }
+}
+
+impl<'a> From<&'a [u8]> for BinLiteral {
+    fn from(bytes: &'a [u8]) -> Self {
+        BinLiteral::Bytes(bytes.to_vec())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,7 +103,7 @@ pub enum Prim {
     FltToNat(Subterm),
     FltToInt(Subterm),
     BinType,
-    Bin(Bin),
+    Bin(BinLiteral),
     BinLen(Subterm),
     BinEql(Subterm, Subterm),
     BinGet(Subterm, Subterm),

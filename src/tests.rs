@@ -73,10 +73,7 @@ fn multi_arg_function() {
 
     let (system, receiver) = crate::ChannelProvider::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"7".to_vec()]
-    );
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
 }
 
 #[test]
@@ -88,8 +85,31 @@ fn curried_function() {
 
     let (system, receiver) = crate::ChannelProvider::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+}
+
+#[test]
+fn vec_cons_with_nat_succ() {
+    let source = r#"
+        rec Vec(T : Type, n : Nat) -> Type =
+            match n : Type;
+            | 0 => '[nil];
+            | pred ih => { T, ih };;
+
+        let cons(T : Type, n : Nat, x : T, xs : Vec(T, n)) -> Vec(T, Nat.succ(n)) =
+            (x, xs);
+
+        let head(T : Type, n : Nat, xs : Vec(T, Nat.succ(n))) -> T =
+            xs.0;
+
+        let v : Vec(Nat, 1) = cons(Nat, 0, 42, 'nil);
+        Sys.print(Nat.to_str(head(Nat, 0, v)))
+    "#;
+
+    let (system, receiver) = crate::ChannelProvider::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"7".to_vec()]
+        vec![b"42".to_vec()]
     );
 }

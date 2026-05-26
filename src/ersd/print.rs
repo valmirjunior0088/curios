@@ -197,7 +197,11 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             params,
             body,
         }) => {
-            let params_str = params.iter().map(|p| format!("#{}", p.as_str())).collect::<Vec<_>>().join(", ");
+            let params_str = params
+                .iter()
+                .map(|p| format!("#{}", p.as_str()))
+                .collect::<Vec<_>>()
+                .join(", ");
             if captures.is_empty() {
                 flat([
                     pure(format!("({params_str})")),

@@ -1,5 +1,5 @@
 use {
-    super::{Arity, Atom, Many, One, Prim, Two},
+    super::{Arity, Atom, Many, Nat, One, Prim, Two},
     crate::Span,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -151,7 +151,11 @@ impl FuncType {
             .map(|(l, t)| (l.into(), t.into()))
             .collect::<Vec<(String, Term)>>();
 
-        let labels = params.iter().map(|(l, _)| l.clone()).collect::<Vec<String>>();
+        let labels = params
+            .iter()
+            .map(|(l, _)| l.clone())
+            .collect::<Vec<String>>();
+
         let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
         let n = params.len();
 
@@ -159,10 +163,7 @@ impl FuncType {
             params: params
                 .into_iter()
                 .enumerate()
-                .map(|(i, (_, ty))| {
-                    let prefix = label_strs[..i].iter().copied().collect::<Vec<_>>();
-                    Scope::close(Many(i), &prefix, ty)
-                })
+                .map(|(i, (_, ty))| Scope::close(Many(i), &label_strs[..i], ty))
                 .collect(),
             output: Scope::close(Many(n), &label_strs, output),
         }
@@ -181,7 +182,11 @@ impl Func {
         L: Into<String>,
         B: Into<Term>,
     {
-        let labels = labels.into_iter().map(|l| l.into()).collect::<Vec<String>>();
+        let labels = labels
+            .into_iter()
+            .map(|l| l.into())
+            .collect::<Vec<String>>();
+
         let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
 
         Self {
@@ -664,6 +669,17 @@ impl Hash for Term {
 }
 
 impl Term {
+    pub fn as_nat(&self) -> Option<u32> {
+        match self {
+            Term::Prim(Prim::Nat(Nat::Zero)) => Some(0),
+            Term::Prim(Prim::Nat(Nat::Succ(spine, inner))) => match inner.as_ref() {
+                Term::Prim(Prim::Nat(Nat::Zero)) => Some(*spine),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     pub fn free_vars(&self) -> BTreeSet<String> {
         let mut vars = BTreeSet::new();
 
@@ -864,7 +880,10 @@ where
             Prim::BlnType => Prim::BlnType,
             Prim::Bln(value) => Prim::Bln(*value),
             Prim::NatType => Prim::NatType,
-            Prim::Nat(value) => Prim::Nat(*value),
+            Prim::Nat(Nat::Zero) => Prim::Nat(Nat::Zero),
+            Prim::Nat(Nat::Succ(spine, inner)) => {
+                Prim::Nat(Nat::Succ(*spine, self.visit_subterm(inner)))
+            }
             Prim::NatEql(left, right) => {
                 Prim::NatEql(self.visit_subterm(left), self.visit_subterm(right))
             }

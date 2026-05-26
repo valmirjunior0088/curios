@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, AtomType, BlnMatch, Context, Error, Func, FuncType, Let, Match, NatFold, NatMatch,
-        Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
+        Apply, AtomType, BlnMatch, Context, Error, Func, FuncType, Let, Match, Nat, NatFold,
+        NatMatch, Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal,
+        Var,
     },
     crate::ersd,
 };
@@ -426,7 +427,7 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
     erase(
         context,
         zero_case,
-        &motive.open(&[&Term::Prim(Prim::Nat(0))]),
+        &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(0)))]),
     )?;
 
     let pred_label = context.fresh(succ_case.first_label());
@@ -441,7 +442,7 @@ fn infer_nat_fold(context: &mut Context, nat_fold: &NatFold, term: &Term) -> Res
             &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
             &motive.open(&[&Term::Prim(Prim::nat_add(
                 Var::free(&pred_label),
-                Prim::Nat(1),
+                Term::Prim(Prim::Nat(Nat::new(1))),
             ))]),
         )
         .map(|_| ())
@@ -491,8 +492,13 @@ fn infer_nat_match(context: &mut Context, nm: &NatMatch, term: &Term) -> Result<
 
     for (n, body) in cases {
         context.with_frame(|context| {
-            refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(*n)))?;
-            erase(context, body, &motive.open(&[&Term::Prim(Prim::Nat(*n))])).map(|_| ())
+            refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(Nat::new(*n))))?;
+            erase(
+                context,
+                body,
+                &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(*n)))]),
+            )
+            .map(|_| ())
         })?;
     }
 
@@ -741,10 +747,21 @@ fn erase_prim(
 
             Ok(ersd::Term::Erased)
         }
-        &Prim::Nat(value) => {
+        Prim::Nat(Nat::Zero) => {
             expect(context, term, &Term::Prim(Prim::NatType), expected)?;
 
-            Ok(ersd::Prim::Nat(value).into())
+            Ok(ersd::Prim::Nat(0).into())
+        }
+        Prim::Nat(Nat::Succ(spine, inner)) => {
+            expect(context, term, &Term::Prim(Prim::NatType), expected)?;
+
+            if matches!(inner.as_ref(), Term::Prim(Prim::Nat(Nat::Zero))) {
+                Ok(ersd::Prim::Nat(*spine).into())
+            } else {
+                let inner_ersd = erase(context, inner, &Term::Prim(Prim::NatType))?;
+                let spine_term: ersd::Term = ersd::Prim::Nat(*spine).into();
+                Ok(ersd::Prim::NatAdd(spine_term.into(), inner_ersd.into()).into())
+            }
         }
         Prim::NatEql(left, right) => {
             expect(context, term, &Term::Prim(Prim::BlnType), expected)?;
@@ -1456,9 +1473,9 @@ fn erase_func(
     let erased_body = context.with_frame(|context| {
         let mut param_tys: Vec<Term> = Vec::with_capacity(n);
         let mut so_far: Vec<&Term> = Vec::with_capacity(n);
-        for i in 0..n {
+        for (i, name) in param_names.iter().enumerate().take(n) {
             let ty = ft.params[i].open(&so_far);
-            context.assume(&param_names[i], &ty);
+            context.assume(name, &ty);
             param_tys.push(ty);
             so_far.push(param_terms.get(i).unwrap());
         }
@@ -1586,7 +1603,7 @@ fn erase_nat_fold(
     let erased_zero_case = erase(
         context,
         zero_case,
-        &motive.open(&[&Term::Prim(Prim::Nat(0))]),
+        &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(0)))]),
     )?;
 
     let pred_label = context.fresh(succ_case.first_label());
@@ -1601,7 +1618,7 @@ fn erase_nat_fold(
             &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
             &motive.open(&[&Term::Prim(Prim::nat_add(
                 Var::free(&pred_label),
-                Prim::Nat(1),
+                Term::Prim(Prim::Nat(Nat::new(1))),
             ))]),
         )
     })?;
@@ -1654,9 +1671,9 @@ fn erase_nat_match(
     let erased_cases = cases
         .iter()
         .map(|(n, body)| {
-            let case_expected = motive.open(&[&Term::Prim(Prim::Nat(*n))]);
+            let case_expected = motive.open(&[&Term::Prim(Prim::Nat(Nat::new(*n)))]);
             context.with_frame(|context| {
-                refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(*n)))?;
+                refine_head(context, head.as_ref(), &Term::Prim(Prim::Nat(Nat::new(*n))))?;
                 erase(context, body, &case_expected).map(|e| (*n, e.into()))
             })
         })
@@ -2059,8 +2076,8 @@ mod tests {
         super::*,
         crate::{
             core::{
-                Atom, AtomType, Flt, Func, FuncType, Match, NatFold, NatMatch, Prim, Rec, Seal,
-                Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
+                Atom, AtomType, Flt, Func, FuncType, Match, Nat, NatFold, NatMatch, Prim, Rec,
+                Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
             },
             ersd, text,
         },
@@ -2468,8 +2485,8 @@ mod tests {
         erase(&mut context, &arr_nat, &Type.into()).unwrap();
 
         let literal = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(1)),
-            Term::Prim(Prim::Nat(2)),
+            Term::Prim(Prim::Nat(Nat::new(1))),
+            Term::Prim(Prim::Nat(Nat::new(2))),
         ]));
         erase(&mut context, &literal, &arr_nat).unwrap();
 
@@ -2480,7 +2497,10 @@ mod tests {
             Term::Prim(Prim::NatType)
         );
 
-        let get = Term::Prim(Prim::arr_get(Var::free("xs"), Term::Prim(Prim::Nat(0))));
+        let get = Term::Prim(Prim::arr_get(
+            Var::free("xs"),
+            Term::Prim(Prim::Nat(Nat::new(0))),
+        ));
         assert_eq!(
             infer(&mut context, &get).unwrap(),
             Term::Prim(Prim::NatType)
@@ -2505,7 +2525,10 @@ mod tests {
             Term::Prim(Prim::NatType)
         );
 
-        let get = Term::Prim(Prim::bin_get(Var::free("b"), Term::Prim(Prim::Nat(0))));
+        let get = Term::Prim(Prim::bin_get(
+            Var::free("b"),
+            Term::Prim(Prim::Nat(Nat::new(0))),
+        ));
         assert_eq!(
             infer(&mut context, &get).unwrap(),
             Term::Prim(Prim::NatType)
@@ -2546,8 +2569,8 @@ mod tests {
         let bool_type = Term::Prim(Prim::BlnType);
 
         let eql = Term::Prim(Prim::nat_eql(
-            Term::Prim(Prim::Nat(0)),
-            Term::Prim(Prim::Nat(0)),
+            Term::Prim(Prim::Nat(Nat::new(0))),
+            Term::Prim(Prim::Nat(Nat::new(0))),
         ));
 
         assert_eq!(infer(&mut context, &eql).unwrap(), bool_type);
@@ -2583,7 +2606,7 @@ mod tests {
         let bool_type = Term::from(AtomType::new(["false", "true"]));
 
         let nat_match = Term::from(NatMatch::new(
-            Prim::Nat(5),
+            Prim::Nat(Nat::new(5)),
             Some("m"),
             AtomType::new(["false", "true"]),
             [(5u32, Term::from(Atom::from("true")))],
@@ -2713,7 +2736,7 @@ mod tests {
             Term::Prim(Prim::NatType),
             Unseal::new(
                 Var::free("x"),
-                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42))),
+                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(Nat::new(42)))),
             ),
         ));
 
@@ -2729,7 +2752,7 @@ mod tests {
             Term::Prim(Prim::NatType),
             Unseal::new(
                 Var::free("x"),
-                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42))),
+                Seal::new(Var::free("x"), Term::Prim(Prim::Nat(Nat::new(42)))),
             ),
         ));
 
@@ -2744,7 +2767,10 @@ mod tests {
 
         context.seal("x", &Term::from(AtomType::new(["a"])));
 
-        let seal = Term::from(Seal::new(Var::free("x"), Term::Prim(Prim::Nat(42))));
+        let seal = Term::from(Seal::new(
+            Var::free("x"),
+            Term::Prim(Prim::Nat(Nat::new(42))),
+        ));
 
         assert!(matches!(
             erase(&mut context, &seal, &Var::free("x").into()),
@@ -2758,7 +2784,10 @@ mod tests {
 
         context.seal("x", &Term::Prim(Prim::NatType));
 
-        let seal = Term::from(Seal::new(Var::free("x"), Term::Prim(Prim::Nat(7))));
+        let seal = Term::from(Seal::new(
+            Var::free("x"),
+            Term::Prim(Prim::Nat(Nat::new(7))),
+        ));
 
         let result = erase(&mut context, &seal, &Var::free("x").into()).unwrap();
 

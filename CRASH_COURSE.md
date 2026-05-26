@@ -190,14 +190,14 @@ let one  : Vec(Nat, 1) = (42, 'nil);
 let two  : Vec(Nat, 2) = (1, (2, 'nil));
 ```
 
-`head` is only defined for non-empty vectors. A non-empty vector is exactly a head element paired with a shorter tail — the tuple `{ T, Vec(T, n) }`, which is `Vec(T, n+1)` unfolded one step — so `head` takes that tuple directly:
+`head` is only defined for non-empty vectors. `Nat.succ(n)` is `n + 1`, so `Vec(T, Nat.succ(n))` is the type of a vector with at least one element:
 
 ```
-let head(T : Type, n : Nat, v : { T, Vec(T, n) }) -> T =
+let head(T : Type, n : Nat, v : Vec(T, Nat.succ(n))) -> T =
     v.0;
 ```
 
-Since `Vec(T, 2)` reduces to `{ T, Vec(T, 1) }`, a length-2 vector is accepted where `{ T, Vec(T, n) }` is expected (with `n = 1`); inside, `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `'[nil]`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+`Vec(T, Nat.succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `'[nil]`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
 ## Payoff: typed format strings
 

@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, Bin, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
-        FuncType, Let, Match, Module, Motive, Name, Nat, NatFold, NatMatch, Prim, Proj, Rec,
-        RecItem, Term, TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
+        FuncType, Let, Match, Module, Motive, Name, Nat, NatFold, NatLiteral, NatMatch, Prim, Proj,
+        Rec, RecItem, Term, TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -112,26 +112,56 @@ fn parse_u32<'a>() -> Parser<'a, u32> {
         .and_drop(parse_whitespace())
 }
 
-fn parse_nat<'a>() -> Parser<'a, Nat> {
+fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
     catch(
         take_exact("'")
             .and_keep(parse_char_value())
             .and_drop(take_exact("'"))
             .and_drop(parse_whitespace()),
     )
-    .map(Nat::Char)
-    .or(catch(parse_u32()).map(Nat::Number))
+    .map(NatLiteral::from)
+    .or(catch(parse_u32()).map(NatLiteral::from))
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
-    parse_nat().map(|nat| Term::Prim(Prim::Nat(nat)))
+    parse_nat().map(|nat| match nat {
+        NatLiteral::Number(0) => Term::Prim(Prim::Nat(Nat::Zero)),
+        nat => Term::Prim(Prim::Nat(Nat::Succ(
+            nat,
+            Box::new(Term::Prim(Prim::Nat(Nat::Zero))),
+        ))),
+    })
+}
+
+fn parse_nat_succ<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_literal("Nat.succ")
+            .and_drop(parse_literal("("))
+            .and_keep(parse_nat_literal())
+            .and_drop(parse_literal(",")),
+    )
+    .and(lazy(parse_term))
+    .and_drop(parse_literal(")"))
+    .map(|(spine, inner)| {
+        Term::Prim(Prim::Nat(Nat::Succ(
+            NatLiteral::Number(spine),
+            Box::new(inner),
+        )))
+    })
+    .or(parse_prim1("Nat.succ", |a| {
+        Prim::Nat(Nat::Succ(NatLiteral::Number(1), Box::new(a)))
+    }))
 }
 
 fn parse_nat_literal<'a>() -> Parser<'a, u32> {
-    parse_nat().map(|nat| match nat {
-        Nat::Number(number) => number,
-        Nat::Char(char) => char as u32,
-    })
+    catch(
+        take_exact("'")
+            .and_keep(parse_char_value())
+            .and_drop(take_exact("'"))
+            .and_drop(parse_whitespace()),
+    )
+    .map(|c| c as u32)
+    .or(catch(parse_u32()))
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -218,66 +248,67 @@ where
 }
 
 fn parse_nat_prim<'a>() -> Parser<'a, Term> {
-    parse_prim2("Nat.eql", |a, b| Prim::nat_eql(a, b))
-        .or(parse_prim2("Nat.neq", |a, b| Prim::nat_neq(a, b)))
-        .or(parse_prim2("Nat.add", |a, b| Prim::nat_add(a, b)))
-        .or(parse_prim2("Nat.sub", |a, b| Prim::nat_sub(a, b)))
-        .or(parse_prim2("Nat.mul", |a, b| Prim::nat_mul(a, b)))
-        .or(parse_prim2("Nat.lte", |a, b| Prim::nat_lte(a, b)))
-        .or(parse_prim2("Nat.gte", |a, b| Prim::nat_gte(a, b)))
-        .or(parse_prim2("Nat.lt", |a, b| Prim::nat_lt(a, b)))
-        .or(parse_prim2("Nat.div", |a, b| Prim::nat_div(a, b)))
-        .or(parse_prim2("Nat.rem", |a, b| Prim::nat_rem(a, b)))
-        .or(parse_prim2("Nat.gt", |a, b| Prim::nat_gt(a, b)))
-        .or(parse_prim1("Nat.to_int", |a| Prim::nat_to_int(a)))
-        .or(parse_prim1("Nat.to_flt", |a| Prim::nat_to_flt(a)))
-        .or(parse_prim1("Nat.to_str", |a| Prim::nat_to_str(a)))
+    parse_prim2("Nat.eql", Prim::nat_eql)
+        .or(parse_prim2("Nat.neq", Prim::nat_neq))
+        .or(parse_prim2("Nat.add", Prim::nat_add))
+        .or(parse_prim2("Nat.sub", Prim::nat_sub))
+        .or(parse_prim2("Nat.mul", Prim::nat_mul))
+        .or(parse_prim2("Nat.lte", Prim::nat_lte))
+        .or(parse_prim2("Nat.gte", Prim::nat_gte))
+        .or(parse_prim2("Nat.lt", Prim::nat_lt))
+        .or(parse_prim2("Nat.div", Prim::nat_div))
+        .or(parse_prim2("Nat.rem", Prim::nat_rem))
+        .or(parse_prim2("Nat.gt", Prim::nat_gt))
+        .or(parse_prim1("Nat.to_int", Prim::nat_to_int))
+        .or(parse_prim1("Nat.to_flt", Prim::nat_to_flt))
+        .or(parse_prim1("Nat.to_str", Prim::nat_to_str))
+        .or(parse_nat_succ())
         .or(parse_nat_value())
         .or(catch(parse_keyword("Nat")).map(|()| Term::Prim(Prim::NatType)))
 }
 
 fn parse_int_prim<'a>() -> Parser<'a, Term> {
-    parse_prim2("Int.eql", |a, b| Prim::int_eql(a, b))
-        .or(parse_prim2("Int.neq", |a, b| Prim::int_neq(a, b)))
-        .or(parse_prim2("Int.add", |a, b| Prim::int_add(a, b)))
-        .or(parse_prim2("Int.sub", |a, b| Prim::int_sub(a, b)))
-        .or(parse_prim2("Int.mul", |a, b| Prim::int_mul(a, b)))
-        .or(parse_prim2("Int.div", |a, b| Prim::int_div(a, b)))
-        .or(parse_prim2("Int.rem", |a, b| Prim::int_rem(a, b)))
-        .or(parse_prim2("Int.lte", |a, b| Prim::int_lte(a, b)))
-        .or(parse_prim2("Int.gte", |a, b| Prim::int_gte(a, b)))
-        .or(parse_prim2("Int.lt", |a, b| Prim::int_lt(a, b)))
-        .or(parse_prim2("Int.gt", |a, b| Prim::int_gt(a, b)))
-        .or(parse_prim1("Int.to_nat", |a| Prim::int_to_nat(a)))
-        .or(parse_prim1("Int.to_flt", |a| Prim::int_to_flt(a)))
-        .or(parse_prim1("Int.to_str", |a| Prim::int_to_str(a)))
+    parse_prim2("Int.eql", Prim::int_eql)
+        .or(parse_prim2("Int.neq", Prim::int_neq))
+        .or(parse_prim2("Int.add", Prim::int_add))
+        .or(parse_prim2("Int.sub", Prim::int_sub))
+        .or(parse_prim2("Int.mul", Prim::int_mul))
+        .or(parse_prim2("Int.div", Prim::int_div))
+        .or(parse_prim2("Int.rem", Prim::int_rem))
+        .or(parse_prim2("Int.lte", Prim::int_lte))
+        .or(parse_prim2("Int.gte", Prim::int_gte))
+        .or(parse_prim2("Int.lt", Prim::int_lt))
+        .or(parse_prim2("Int.gt", Prim::int_gt))
+        .or(parse_prim1("Int.to_nat", Prim::int_to_nat))
+        .or(parse_prim1("Int.to_flt", Prim::int_to_flt))
+        .or(parse_prim1("Int.to_str", Prim::int_to_str))
         .or(parse_int_value())
         .or(catch(parse_keyword("Int")).map(|()| Term::Prim(Prim::IntType)))
 }
 
 fn parse_flt_prim<'a>() -> Parser<'a, Term> {
-    parse_prim2("Flt.add", |a, b| Prim::flt_add(a, b))
-        .or(parse_prim2("Flt.sub", |a, b| Prim::flt_sub(a, b)))
-        .or(parse_prim2("Flt.mul", |a, b| Prim::flt_mul(a, b)))
-        .or(parse_prim2("Flt.div", |a, b| Prim::flt_div(a, b)))
-        .or(parse_prim2("Flt.eql", |a, b| Prim::flt_eql(a, b)))
-        .or(parse_prim2("Flt.neq", |a, b| Prim::flt_neq(a, b)))
-        .or(parse_prim2("Flt.lte", |a, b| Prim::flt_lte(a, b)))
-        .or(parse_prim2("Flt.gte", |a, b| Prim::flt_gte(a, b)))
-        .or(parse_prim2("Flt.lt", |a, b| Prim::flt_lt(a, b)))
-        .or(parse_prim2("Flt.gt", |a, b| Prim::flt_gt(a, b)))
-        .or(parse_prim2("Flt.min", |a, b| Prim::flt_min(a, b)))
-        .or(parse_prim2("Flt.max", |a, b| Prim::flt_max(a, b)))
-        .or(parse_prim1("Flt.neg", |a| Prim::flt_neg(a)))
-        .or(parse_prim1("Flt.abs", |a| Prim::flt_abs(a)))
-        .or(parse_prim1("Flt.sqrt", |a| Prim::flt_sqrt(a)))
-        .or(parse_prim1("Flt.floor", |a| Prim::flt_floor(a)))
-        .or(parse_prim1("Flt.ceil", |a| Prim::flt_ceil(a)))
-        .or(parse_prim1("Flt.trunc", |a| Prim::flt_trunc(a)))
-        .or(parse_prim1("Flt.nearest", |a| Prim::flt_nearest(a)))
-        .or(parse_prim1("Flt.to_nat", |a| Prim::flt_to_nat(a)))
-        .or(parse_prim1("Flt.to_int", |a| Prim::flt_to_int(a)))
-        .or(parse_prim1("Flt.to_str", |a| Prim::flt_to_str(a)))
+    parse_prim2("Flt.add", Prim::flt_add)
+        .or(parse_prim2("Flt.sub", Prim::flt_sub))
+        .or(parse_prim2("Flt.mul", Prim::flt_mul))
+        .or(parse_prim2("Flt.div", Prim::flt_div))
+        .or(parse_prim2("Flt.eql", Prim::flt_eql))
+        .or(parse_prim2("Flt.neq", Prim::flt_neq))
+        .or(parse_prim2("Flt.lte", Prim::flt_lte))
+        .or(parse_prim2("Flt.gte", Prim::flt_gte))
+        .or(parse_prim2("Flt.lt", Prim::flt_lt))
+        .or(parse_prim2("Flt.gt", Prim::flt_gt))
+        .or(parse_prim2("Flt.min", Prim::flt_min))
+        .or(parse_prim2("Flt.max", Prim::flt_max))
+        .or(parse_prim1("Flt.neg", Prim::flt_neg))
+        .or(parse_prim1("Flt.abs", Prim::flt_abs))
+        .or(parse_prim1("Flt.sqrt", Prim::flt_sqrt))
+        .or(parse_prim1("Flt.floor", Prim::flt_floor))
+        .or(parse_prim1("Flt.ceil", Prim::flt_ceil))
+        .or(parse_prim1("Flt.trunc", Prim::flt_trunc))
+        .or(parse_prim1("Flt.nearest", Prim::flt_nearest))
+        .or(parse_prim1("Flt.to_nat", Prim::flt_to_nat))
+        .or(parse_prim1("Flt.to_int", Prim::flt_to_int))
+        .or(parse_prim1("Flt.to_str", Prim::flt_to_str))
         .or(parse_flt_value())
         .or(catch(parse_keyword("Flt")).map(|()| Term::Prim(Prim::FltType)))
 }
@@ -333,21 +364,23 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace())
-        .map(|chunks| Term::Prim(Prim::Bin(Bin::String(chunks.concat()))))
+        .map(|chunks| Term::Prim(Prim::Bin(BinLiteral::String(chunks.concat()))))
 }
 
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     catch(many1(parse_hex_byte).and_drop(parse_whitespace()))
-        .map(|bytes| Term::Prim(Prim::Bin(Bin::Bytes(bytes))))
+        .map(|bytes| Term::Prim(Prim::Bin(BinLiteral::Bytes(bytes))))
 }
 
 fn parse_bin_prim<'a>() -> Parser<'a, Term> {
-    parse_prim1("Bin.len", |a| Prim::bin_len(a))
-        .or(parse_prim2("Bin.eql", |a, b| Prim::bin_eql(a, b)))
-        .or(parse_prim2("Bin.get", |a, b| Prim::bin_get(a, b)))
-        .or(parse_prim3("Bin.slice", |a, b, c| Prim::bin_slice(a, b, c)))
-        .or(parse_prim2("Bin.append", |a, b| Prim::bin_append(a, b)))
-        .or(parse_prim_variadic("Bin.concat", |ops| Prim::bin_concat(ops)))
+    parse_prim1("Bin.len", Prim::bin_len)
+        .or(parse_prim2("Bin.eql", Prim::bin_eql))
+        .or(parse_prim2("Bin.get", Prim::bin_get))
+        .or(parse_prim3("Bin.slice", Prim::bin_slice))
+        .or(parse_prim2("Bin.append", Prim::bin_append))
+        .or(parse_prim_variadic("Bin.concat", |ops| {
+            Prim::bin_concat(ops)
+        }))
         .or(catch(parse_keyword("Bin")).map(|()| Term::Prim(Prim::BinType)))
         .or(parse_string_literal())
         .or(parse_bin_literal())
@@ -365,11 +398,13 @@ fn parse_arr_literal<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_arr_prim<'a>() -> Parser<'a, Term> {
-    parse_prim1("Arr.len", |a| Prim::arr_len(a))
-        .or(parse_prim2("Arr.get", |a, b| Prim::arr_get(a, b)))
-        .or(parse_prim3("Arr.slice", |a, b, c| Prim::arr_slice(a, b, c)))
-        .or(parse_prim2("Arr.append", |a, b| Prim::arr_append(a, b)))
-        .or(parse_prim_variadic("Arr.concat", |ops| Prim::arr_concat(ops)))
+    parse_prim1("Arr.len", Prim::arr_len)
+        .or(parse_prim2("Arr.get", Prim::arr_get))
+        .or(parse_prim3("Arr.slice", Prim::arr_slice))
+        .or(parse_prim2("Arr.append", Prim::arr_append))
+        .or(parse_prim_variadic("Arr.concat", |ops| {
+            Prim::arr_concat(ops)
+        }))
         .or(catch(parse_keyword("Arr").and_drop(parse_literal("(")))
             .and_keep(lazy(parse_term))
             .and_drop(parse_literal(")"))
@@ -377,8 +412,8 @@ fn parse_arr_prim<'a>() -> Parser<'a, Term> {
         .or(parse_arr_literal())
 }
 
-fn parse_io_prim<'a>() -> Parser<'a, Term> {
-    parse_prim1("Sys.print", |a| Prim::sys_print(a))
+fn parse_sys_prim<'a>() -> Parser<'a, Term> {
+    parse_prim1("Sys.print", Prim::sys_print)
         .or(catch(parse_literal("Sys.read")).map(|_| Term::Prim(Prim::SysRead)))
 }
 
@@ -396,7 +431,7 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_nat_prim())
         .or(parse_bin_prim())
         .or(parse_arr_prim())
-        .or(parse_io_prim())
+        .or(parse_sys_prim())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
@@ -515,14 +550,21 @@ fn parse_func<'a>() -> Parser<'a, Term> {
             .and_drop(parse_literal("=>")),
     )
     .and(lazy(parse_term))
-    .map(|(params, body)| Term::Func(Func { params, body: body.into() }));
+    .map(|(params, body)| {
+        Term::Func(Func {
+            params,
+            body: body.into(),
+        })
+    });
 
     let single = catch(parse_identifier().and_drop(parse_literal("=>")))
         .and(lazy(parse_term))
-        .map(|(label, body): (&str, Term)| Term::Func(Func {
-            params: vec![label.to_string()],
-            body: body.into(),
-        }));
+        .map(|(label, body): (&str, Term)| {
+            Term::Func(Func {
+                params: vec![label.to_string()],
+                body: body.into(),
+            })
+        });
 
     multi.or(single)
 }
@@ -847,20 +889,22 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
             .or(parse_name().map(Term::Name))
             .and(many0(parse_suffix))
             .map(|(head, suffixes)| {
-                suffixes.into_iter().fold(head, |head, suffix| match suffix {
-                    Suffix::Proj(index) => Term::Proj(Proj {
-                        head: head.into(),
-                        index,
-                    }),
-                    Suffix::Apply(params) => Term::Apply(Apply::Call {
-                        head: head.into(),
-                        params: params.into_iter().map(Into::into).collect(),
-                    }),
-                    Suffix::Closure(args) => Term::Apply(Apply::Closure {
-                        head: head.into(),
-                        args: args.into_iter().map(|a| a.map(Into::into)).collect(),
-                    }),
-                })
+                suffixes
+                    .into_iter()
+                    .fold(head, |head, suffix| match suffix {
+                        Suffix::Proj(index) => Term::Proj(Proj {
+                            head: head.into(),
+                            index,
+                        }),
+                        Suffix::Apply(params) => Term::Apply(Apply::Call {
+                            head: head.into(),
+                            params: params.into_iter().map(Into::into).collect(),
+                        }),
+                        Suffix::Closure(args) => Term::Apply(Apply::Closure {
+                            head: head.into(),
+                            args: args.into_iter().map(|a| a.map(Into::into)).collect(),
+                        }),
+                    })
             }),
     )
 }
@@ -1112,7 +1156,10 @@ mod tests {
         assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
         assert_eq!(
             "42".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Number(42)))
+            Term::Prim(Prim::Nat(Nat::Succ(
+                NatLiteral::Number(42),
+                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+            )))
         );
         assert_eq!(
             "+42.0".parse::<Term>().unwrap(),
@@ -1128,7 +1175,10 @@ mod tests {
         assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
         assert_eq!(
             "42".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Number(42)))
+            Term::Prim(Prim::Nat(Nat::Succ(
+                NatLiteral::Number(42),
+                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+            )))
         );
         assert_eq!(
             "+1.5".parse::<Term>().unwrap(),
@@ -1144,8 +1194,16 @@ mod tests {
         assert_eq!(
             "Nat.add(1, 2)".parse::<Term>().unwrap(),
             Term::Prim(Prim::NatAdd(
-                Term::Prim(Prim::Nat(Nat::Number(1))).into(),
-                Term::Prim(Prim::Nat(Nat::Number(2))).into(),
+                Term::Prim(Prim::Nat(Nat::Succ(
+                    NatLiteral::Number(1),
+                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+                )))
+                .into(),
+                Term::Prim(Prim::Nat(Nat::Succ(
+                    NatLiteral::Number(2),
+                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+                )))
+                .into(),
             ))
         );
         assert_eq!(
@@ -1161,7 +1219,10 @@ mod tests {
     fn parse_char_literal_ascii() {
         assert_eq!(
             "'a'".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Char('a')))
+            Term::Prim(Prim::Nat(Nat::Succ(
+                NatLiteral::Char('a'),
+                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+            )))
         );
     }
 
@@ -1169,7 +1230,10 @@ mod tests {
     fn parse_char_literal_escape() {
         assert_eq!(
             "'\\n'".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Char('\n')))
+            Term::Prim(Prim::Nat(Nat::Succ(
+                NatLiteral::Char('\n'),
+                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+            )))
         );
     }
 
@@ -1177,7 +1241,7 @@ mod tests {
     fn parse_char_literal_no_suffix_is_bin() {
         assert_eq!(
             "\"a\"".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Bin(Bin::String("a".to_string())))
+            Term::Prim(Prim::Bin(BinLiteral::String("a".to_string())))
         );
     }
 
@@ -1349,8 +1413,16 @@ mod tests {
         assert_eq!(
             "Nat.add(1, 2)".parse::<Term>().unwrap(),
             Term::Prim(Prim::NatAdd(
-                Term::Prim(Prim::Nat(Nat::Number(1))).into(),
-                Term::Prim(Prim::Nat(Nat::Number(2))).into(),
+                Term::Prim(Prim::Nat(Nat::Succ(
+                    NatLiteral::Number(1),
+                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+                )))
+                .into(),
+                Term::Prim(Prim::Nat(Nat::Succ(
+                    NatLiteral::Number(2),
+                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
+                )))
+                .into(),
             ))
         );
     }

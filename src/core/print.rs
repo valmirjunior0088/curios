@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, NatFold, NatMatch,
-        One, Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal, Var,
+        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatFold,
+        NatMatch, One, Prim, Proj, Rec, Scope, Seal, Sealed, Term, Tuple, TupleType, Two, Unseal,
+        Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -37,7 +38,11 @@ fn open_scope_many(scope: Scope<Many>, depth: usize) -> (Vec<String>, Term) {
                 .unwrap_or_else(|| label_at(depth + i))
         })
         .collect::<Vec<_>>();
-    let label_terms = labels.iter().map(Var::free).map(Term::from).collect::<Vec<_>>();
+    let label_terms = labels
+        .iter()
+        .map(Var::free)
+        .map(Term::from)
+        .collect::<Vec<_>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
     let body = scope.open(&label_refs);
     (labels, body)
@@ -88,7 +93,25 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::Bln(false) => pure("false"),
         Prim::Bln(true) => pure("true"),
         Prim::NatType => pure("Nat"),
-        Prim::Nat(value) => pure(format!("{value}")),
+        Prim::Nat(Nat::Zero) => pure("0"),
+        Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
+            Term::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
+            inner => {
+                if spine == 1 {
+                    flat([
+                        pure("Nat.succ("),
+                        print_term(inner.clone(), depth),
+                        pure(")"),
+                    ])
+                } else {
+                    flat([
+                        pure(format!("Nat.succ({spine}, ")),
+                        print_term(inner.clone(), depth),
+                        pure(")"),
+                    ])
+                }
+            }
+        },
         Prim::NatEql(left, right) => flat([
             pure("Nat.eql "),
             print_term(*left, depth),
@@ -515,13 +538,20 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             } else {
                 format!("({})", labels.join(", "))
             };
-            flat([pure(param_str), pure(" =>\n"), indent(print_term(body, depth + 1))])
+            flat([
+                pure(param_str),
+                pure(" =>\n"),
+                indent(print_term(body, depth + 1)),
+            ])
         }
         Term::Apply(Apply { head, params }) => flat([
             print_term(*head, depth),
             pure("("),
             sep_flat(
-                params.into_iter().map(|p| print_term(*p, depth)).collect::<Vec<_>>(),
+                params
+                    .into_iter()
+                    .map(|p| print_term(*p, depth))
+                    .collect::<Vec<_>>(),
                 || pure(", "),
             ),
             pure(")"),

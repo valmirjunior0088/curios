@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~29,100 lines in `src/`, ~1,650 in `examples/`.
+**Codebase size:** ~30,000 lines in `src/`, ~1,650 in `examples/`.
 
 ---
 
@@ -37,7 +37,7 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                    | Lines  |
 | ----------------------- | ---------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                | 1,430  |
+| Parsing                 | `text/parse.rs`                                | 1,484  |
 | Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs` | ~1,150 |
 | Type checking + erasure | `core/typing.rs`                               | 2,767  |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`            | ~2,300 |
@@ -96,7 +96,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Opaque types: `def Label(witness) ... end`
 - Char literals as nat codepoints: `'a'`
 
-`text::Prim` has richer surface forms than later stages: `Nat(Number(u32) | Char(char))`, `Bin(Bytes(Vec<u8>) | String(String))`.
+`text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(u32) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.
 
 ---
 
@@ -366,7 +366,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-190 tests across 12 files, covering every layer:
+191 tests across 12 files, covering every layer:
 
 | Layer           | What is tested                                                                          |
 | --------------- | --------------------------------------------------------------------------------------- |

@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatFold, NatMatch,
+        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatFold, NatMatch,
         Preempted, Prim, Proj, Rec, Seal, Sealed, Term, Tuple, TupleType, Type, Unseal, Var,
         reduce,
     },
@@ -64,7 +64,14 @@ impl Convert {
             | (Prim::IntType, Prim::IntType)
             | (Prim::FltType, Prim::FltType)
             | (Prim::BinType, Prim::BinType) => Ok(true),
-            (Prim::Nat(this), Prim::Nat(that)) => Ok(this == that),
+            (Prim::Nat(Nat::Zero), Prim::Nat(Nat::Zero)) => Ok(true),
+            (Prim::Nat(Nat::Succ(spine_l, il)), Prim::Nat(Nat::Succ(spine_r, ir))) => {
+                if spine_l != spine_r {
+                    return Ok(false);
+                }
+                self.enqueue(Type.into(), *il, *ir);
+                Ok(true)
+            }
             (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
             (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
             (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
@@ -642,7 +649,7 @@ mod tests {
     use {
         super::*,
         crate::core::{
-            Apply, Atom, AtomType, Func, FuncType, Match, Proj, Rec, Sealed, Tuple, TupleType,
+            Apply, Atom, AtomType, Func, FuncType, Match, Nat, Proj, Rec, Sealed, Tuple, TupleType,
             Type, Var,
         },
         std::time::Duration,
@@ -750,12 +757,18 @@ mod tests {
 
         let this = Term::from(Func::new(
             ["x"],
-            Term::Prim(Prim::nat_add(Var::free("x"), Term::Prim(Prim::Nat(1)))),
+            Term::Prim(Prim::nat_add(
+                Var::free("x"),
+                Term::Prim(Prim::Nat(Nat::new(1))),
+            )),
         ));
 
         let that = Term::from(Func::new(
             ["y"],
-            Term::Prim(Prim::nat_add(Var::free("y"), Term::Prim(Prim::Nat(1)))),
+            Term::Prim(Prim::nat_add(
+                Var::free("y"),
+                Term::Prim(Prim::Nat(Nat::new(1))),
+            )),
         ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -776,9 +789,15 @@ mod tests {
     fn convert_prim_nat_to_int_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::from(Func::new(["x"], Term::Prim(Prim::nat_to_int(Var::free("x")))));
+        let this = Term::from(Func::new(
+            ["x"],
+            Term::Prim(Prim::nat_to_int(Var::free("x"))),
+        ));
 
-        let that = Term::from(Func::new(["y"], Term::Prim(Prim::nat_to_int(Var::free("y")))));
+        let that = Term::from(Func::new(
+            ["y"],
+            Term::Prim(Prim::nat_to_int(Var::free("y"))),
+        ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -788,13 +807,13 @@ mod tests {
         let mut context = context();
 
         let this = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(1)),
-            Term::Prim(Prim::Nat(2)),
+            Term::Prim(Prim::Nat(Nat::new(1))),
+            Term::Prim(Prim::Nat(Nat::new(2))),
         ]));
 
         let that = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(1)),
-            Term::Prim(Prim::Nat(2)),
+            Term::Prim(Prim::Nat(Nat::new(1))),
+            Term::Prim(Prim::Nat(Nat::new(2))),
         ]));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -804,11 +823,11 @@ mod tests {
     fn convert_prim_arr_rejects_different_lengths() {
         let mut context = context();
 
-        let this = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(1))]));
+        let this = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(Nat::new(1)))]));
 
         let that = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(1)),
-            Term::Prim(Prim::Nat(2)),
+            Term::Prim(Prim::Nat(Nat::new(1))),
+            Term::Prim(Prim::Nat(Nat::new(2))),
         ]));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(false));
@@ -1019,7 +1038,10 @@ mod tests {
         let this = Term::from(TupleType::new([
             (
                 "x",
-                Term::from(Apply::new(Func::new(["z"], Var::free("z")), [Var::free("loop")])),
+                Term::from(Apply::new(
+                    Func::new(["z"], Var::free("z")),
+                    [Var::free("loop")],
+                )),
             ),
             ("y", Term::from(Var::free("x"))),
         ]));
