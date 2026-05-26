@@ -1,7 +1,9 @@
 use /Parse;
+let Parse(A : Type) -> Type = Parse/Parse(A);
 use /std/Arr;
 use /std/Str;
-use /json/value;
+use /json/Value;
+let Value : Type = Value/Value;
 
 let is_ws(byte : Nat) -> Bln =
     match byte : Bln;
@@ -23,7 +25,7 @@ let is_num_byte(byte : Nat) -> Bln =
         | true => Nat.lte(byte, 57);
         | false => false;;;
 
-let take_literal(literal : Bin) -> Parse/Parse({}) =
+let take_literal(literal : Bin) -> Parse({}) =
     (input, pos) =>
         let max : Nat = Bin.len(literal);
         let r : { Nat, Bln } =
@@ -43,19 +45,19 @@ let take_literal(literal : Bin) -> Parse/Parse({}) =
         | true  => ('ok, (r.0, ()));
         | false => ('err, "unexpected literal");;
 
-let parse_null : Parse/Parse(value/Value) =
-    Parse/map({}, value/Value, _ => ('null, ()), take_literal("null"));
+let parse_null : Parse(Value) =
+    Parse/map({}, Value, _ => ('null, ()), take_literal("null"));
 
-let parse_true_val : Parse/Parse(value/Value) =
-    Parse/map({}, value/Value, _ => ('bln, true), take_literal("true"));
+let parse_true_val : Parse(Value) =
+    Parse/map({}, Value, _ => ('bln, true), take_literal("true"));
 
-let parse_false_val : Parse/Parse(value/Value) =
-    Parse/map({}, value/Value, _ => ('bln, false), take_literal("false"));
+let parse_false_val : Parse(Value) =
+    Parse/map({}, Value, _ => ('bln, false), take_literal("false"));
 
-let parse_num : Parse/Parse(value/Value) = (input, pos) =>
+let parse_num : Parse(Value) = (input, pos) =>
     let r : Parse/Result({ Nat, Bin }) = Parse/take_while(is_num_byte)(input, pos);
     let bytes : Bin = r.1.1;
-    match Nat.eql(Bin.len(bytes), 0) : Parse/Result({ Nat, value/Value });
+    match Nat.eql(Bin.len(bytes), 0) : Parse/Result({ Nat, Value });
     | true  => ('err, "expected number");
     | false => ('ok, (r.1.0, ('num, Str/from_flt(bytes))));;
 
@@ -65,54 +67,37 @@ let is_not_string_special(byte : Nat) -> Bln =
     | '\\' => false;
     | _    => true;;
 
-let parse_str_escape : Parse/Parse(Bin) = (input, pos) =>
-    let r1 : Parse/Result({ Nat, Nat }) = Parse/take_byte('\\')(input, pos);
-    match r1.0 : Parse/Result({ Nat, Bin });
-    | 'err => ('err, r1.1);
-    | 'ok  =>
-        let r2 : Parse/Result({ Nat, Nat }) = Parse/any_byte(input, r1.1.0);
-        match r2.0 : Parse/Result({ Nat, Bin });
-        | 'err => ('err, r2.1);
-        | 'ok  =>
-            match r2.1.1 : Parse/Result({ Nat, Bin });
-            | '"'  => ('ok, (r2.1.0, "\""));
-            | '\\' => ('ok, (r2.1.0, "\\"));
-            | 'n'  => ('ok, (r2.1.0, "\n"));
-            | 'r'  => ('ok, (r2.1.0, "\r"));
-            | 't'  => ('ok, (r2.1.0, "\t"));
-            | _    => ('err, "unknown escape");;;;
+let parse_str_escape : Parse(Bin) =
+    Parse/bind(Nat, Bin, Parse/take_byte('\\'), _ =>
+    Parse/bind(Nat, Bin, Parse/any_byte, byte =>
+        match byte : Parse(Bin);
+        | '"'  => Parse/pure(Bin, "\"");
+        | '\\' => Parse/pure(Bin, "\\");
+        | 'n'  => Parse/pure(Bin, "\n");
+        | 'r'  => Parse/pure(Bin, "\r");
+        | 't'  => Parse/pure(Bin, "\t");
+        | _    => Parse/fail(Bin, "unknown escape");));
 
-let parse_str_segment : Parse/Parse(Bin) =
+let parse_str_segment : Parse(Bin) =
     Parse/take_while(is_not_string_special);
 
-let parse_str_body : Parse/Parse(Arr(Bin)) =
+let parse_str_body : Parse(Arr(Bin)) =
     Parse/many0(Bin, Parse/or(Bin, parse_str_escape, parse_str_segment));
 
-let parse_raw_str : Parse/Parse(Bin) = (input, pos) =>
-    let r1 : Parse/Result({ Nat, Nat }) = Parse/take_byte('"')(input, pos);
-    match r1.0 : Parse/Result({ Nat, Bin });
-    | 'err => ('err, r1.1);
-    | 'ok  =>
-        let r2 : Parse/Result({ Nat, Arr(Bin) }) = parse_str_body(input, r1.1.0);
-        match r2.0 : Parse/Result({ Nat, Bin });
-        | 'err => ('err, r2.1);
-        | 'ok  =>
-            let r3 : Parse/Result({ Nat, Nat }) = Parse/take_byte('"')(input, r2.1.0);
-            match r3.0 : Parse/Result({ Nat, Bin });
-            | 'err => ('err, r3.1);
-            | 'ok  =>
-                let str : Bin =
-                    Arr/fold(Bin, Bin, r2.1.1, "", (chunk, acc) => Bin.concat(acc, chunk));
-                ('ok, (r3.1.0, str));;;;
+let parse_raw_str : Parse(Bin) =
+    Parse/bind(Nat, Bin, Parse/take_byte('"'), _ =>
+    Parse/bind(Arr(Bin), Bin, parse_str_body, chunks =>
+    Parse/bind(Nat, Bin, Parse/take_byte('"'), _ =>
+        Parse/pure(Bin, Arr/fold(Bin, Bin, chunks, "", (chunk, acc) => Bin.concat(acc, chunk))))));
 
-let parse_str_value : Parse/Parse(value/Value) =
-    Parse/map(Bin, value/Value, s => ('str, s), parse_raw_str);
+let parse_str_value : Parse(Value) =
+    Parse/map(Bin, Value, s => ('str, s), parse_raw_str);
 
-pub rec decode : Parse/Parse(value/Value) = (input, pos) =>
-    match Nat.lt(pos, Bin.len(input)) : Parse/Result({ Nat, value/Value });
+pub rec decode : Parse(Value) = (input, pos) =>
+    match Nat.lt(pos, Bin.len(input)) : Parse/Result({ Nat, Value });
     | false => ('err, "unexpected end of input");
     | true  =>
-        match Bin.get(input, pos) : Parse/Result({ Nat, value/Value });
+        match Bin.get(input, pos) : Parse/Result({ Nat, Value });
         | ' '  => decode(input, Nat.add(pos, 1));
         | '\t' => decode(input, Nat.add(pos, 1));
         | '\n' => decode(input, Nat.add(pos, 1));
@@ -124,44 +109,20 @@ pub rec decode : Parse/Parse(value/Value) = (input, pos) =>
         | '['  => parse_arr(input, pos);
         | '{'  => parse_obj(input, pos);
         | _    => parse_num(input, pos);;
-and parse_arr : Parse/Parse(value/Value) = (input, pos) =>
-    let r1 : Parse/Result({ Nat, Nat }) = Parse/take_byte('[')(input, pos);
-    match r1.0 : Parse/Result({ Nat, value/Value });
-    | 'err => ('err, r1.1);
-    | 'ok  =>
-        let r2 : Parse/Result({ Nat, Arr(value/Value) }) =
-            Parse/sep_by0(value/Value, Nat, decode, Parse/take_byte(','))(input, r1.1.0);
-        match r2.0 : Parse/Result({ Nat, value/Value });
-        | 'err => ('err, r2.1);
-        | 'ok  =>
-            let r3 : Parse/Result({ Nat, Nat }) = Parse/take_byte(']')(input, r2.1.0);
-            match r3.0 : Parse/Result({ Nat, value/Value });
-            | 'err => ('err, r3.1);
-            | 'ok  => ('ok, (r3.1.0, ('arr, r2.1.1)));;;
-and parse_obj : Parse/Parse(value/Value) = (input, pos) =>
-    let r1 : Parse/Result({ Nat, Nat }) = Parse/take_byte('{')(input, pos);
-    match r1.0 : Parse/Result({ Nat, value/Value });
-    | 'err => ('err, r1.1);
-    | 'ok  =>
-        let r2 : Parse/Result({ Nat, Arr({ Bin, value/Value }) }) =
-            Parse/sep_by0({ Bin, value/Value }, Nat, parse_pair, Parse/take_byte(','))(input, r1.1.0);
-        match r2.0 : Parse/Result({ Nat, value/Value });
-        | 'err => ('err, r2.1);
-        | 'ok  =>
-            let r3 : Parse/Result({ Nat, Nat }) = Parse/take_byte('}')(input, r2.1.0);
-            match r3.0 : Parse/Result({ Nat, value/Value });
-            | 'err => ('err, r3.1);
-            | 'ok  => ('ok, (r3.1.0, ('obj, r2.1.1)));;;
-and parse_pair : Parse/Parse({ Bin, value/Value }) = (input, pos) =>
-    let r1 : Parse/Result({ Nat, Bin }) = parse_raw_str(input, pos);
-    match r1.0 : Parse/Result({ Nat, { Bin, value/Value } });
-    | 'err => ('err, r1.1);
-    | 'ok  =>
-        let r2 : Parse/Result({ Nat, Nat }) = Parse/take_byte(':')(input, r1.1.0);
-        match r2.0 : Parse/Result({ Nat, { Bin, value/Value } });
-        | 'err => ('err, r2.1);
-        | 'ok  =>
-            let r3 : Parse/Result({ Nat, value/Value }) = decode(input, r2.1.0);
-            match r3.0 : Parse/Result({ Nat, { Bin, value/Value } });
-            | 'err => ('err, r3.1);
-            | 'ok  => ('ok, (r3.1.0, (r1.1.1, r3.1.1)));;;;
+and parse_arr : Parse(Value) = (input, pos) =>
+    Parse/bind(Nat, Value, Parse/take_byte('['), _ =>
+    Parse/bind(Arr(Value), Value,
+        Parse/sep_by0(Value, Nat, decode, Parse/take_byte(',')), elems =>
+    Parse/bind(Nat, Value, Parse/take_byte(']'), _ =>
+        Parse/pure(Value, ('arr, elems)))))(input, pos)
+and parse_obj : Parse(Value) = (input, pos) =>
+    Parse/bind(Nat, Value, Parse/take_byte('{'), _ =>
+    Parse/bind(Arr({ Bin, Value }), Value,
+        Parse/sep_by0({ Bin, Value }, Nat, parse_pair, Parse/take_byte(',')), pairs =>
+    Parse/bind(Nat, Value, Parse/take_byte('}'), _ =>
+        Parse/pure(Value, ('obj, pairs)))))(input, pos)
+and parse_pair : Parse({ Bin, Value }) = (input, pos) =>
+    Parse/bind(Bin, { Bin, Value }, parse_raw_str, key =>
+    Parse/bind(Nat, { Bin, Value }, Parse/take_byte(':'), _ =>
+    Parse/bind(Value, { Bin, Value }, decode, val =>
+        Parse/pure({ Bin, Value }, (key, val)))))(input, pos);

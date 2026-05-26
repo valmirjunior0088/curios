@@ -722,7 +722,7 @@ fn erase_prim(
             expect(
                 context,
                 term,
-                &Term::TupleType(TupleType::new([] as [(&str, Term); 0])),
+                &Term::TupleType(TupleType::unit()),
                 expected,
             )?;
             Ok(

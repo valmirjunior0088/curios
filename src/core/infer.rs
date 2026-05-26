@@ -276,7 +276,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
         Prim::SysPrint(inner) => {
             erase(context, inner, &Term::Prim(Prim::BinType))?;
-            Ok(Term::TupleType(TupleType::new([] as [(&str, Term); 0])))
+            Ok(Term::TupleType(TupleType::unit()))
         }
         Prim::SysRead => Ok(Term::Prim(Prim::BinType)),
     }

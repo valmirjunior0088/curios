@@ -221,6 +221,10 @@ pub struct TupleType {
 }
 
 impl TupleType {
+    pub fn unit() -> Self {
+        Self { fields: vec![] }
+    }
+
     pub fn new<I, L, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = (L, T)>,
@@ -256,6 +260,10 @@ pub struct Tuple {
 }
 
 impl Tuple {
+    pub fn unit() -> Self {
+        Self { fields: vec![] }
+    }
+
     pub fn new<I, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = T>,

@@ -1,8 +1,8 @@
-pub mod value;
+pub mod Value;
 pub mod encode;
 pub mod decode;
 use /Parse;
 
-pub let Value : Type = value/Value;
+pub let Value : Type = Value/Value;
 pub let encode : Value -> Bin = encode/encode;
 pub let decode : Parse/Parse(Value) = decode/decode;
