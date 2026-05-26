@@ -524,18 +524,18 @@ A recursive type uses a top-level `rec` binding that refers to itself in its own
 rec List : (A : Type) -> Type = A => {
     tag : '[nil, cons],
     match tag : Type;
-    | 'nil  => '[unit];
+    | 'nil  => {};
     | 'cons => { A, List(A) }; };
 ```
 
-`'[unit]` serves as a single-atom placeholder for the empty payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
+The empty tuple type `{}` serves as the placeholder for the empty payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
 
 **Construction**
 
 ```
-let empty : List(Nat) = ('nil,  'unit);
-let one   : List(Nat) = ('cons, (1, ('nil, 'unit)));
-let three : List(Nat) = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, 'unit)))))));
+let empty : List(Nat) = ('nil,  ());
+let one   : List(Nat) = ('cons, (1, ('nil, ())));
+let three : List(Nat) = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, ())))))));
 ```
 
 **Elimination**

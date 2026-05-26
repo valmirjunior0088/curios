@@ -183,24 +183,24 @@ Rust's `Vec<T>` does not track length in the type. `[T; N]` does, but `N` must b
 ```
 rec Vec(T : Type, n : Nat) -> Type =
     match n : Type;
-    | 0 => '[nil];
+    | 0 => {};
     | pred ih => { T, ih };
 ```
 
-The `match` here builds a type: for length 0 the type is the single-atom sentinel `'[nil]`; for length `n+1` the type is a pair of an element and the type for `n` (bound to `ih`). The concrete expansions:
+The `match` here builds a type: for length 0 the type is the empty tuple `{}`; for length `n+1` the type is a pair of an element and the type for `n` (bound to `ih`). The concrete expansions:
 
 ```
--- Vec(Nat, 0)  =  '[nil]
--- Vec(Nat, 1)  =  { Nat, '[nil] }
--- Vec(Nat, 2)  =  { Nat, { Nat, '[nil] } }
+-- Vec(Nat, 0)  =  {}
+-- Vec(Nat, 1)  =  { Nat, {} }
+-- Vec(Nat, 2)  =  { Nat, { Nat, {} } }
 ```
 
 Values follow the same structure:
 
 ```
-let nil  : Vec(Nat, 0) = 'nil;
-let one  : Vec(Nat, 1) = (42, 'nil);
-let two  : Vec(Nat, 2) = (1, (2, 'nil));
+let nil  : Vec(Nat, 0) = ();
+let one  : Vec(Nat, 1) = (42, ());
+let two  : Vec(Nat, 2) = (1, (2, ()));
 ```
 
 `head` is only defined for non-empty vectors. `Nat.succ(n)` is `n + 1`, so `Vec(T, Nat.succ(n))` is the type of a vector with at least one element:
@@ -210,7 +210,7 @@ let head(T : Type, n : Nat, v : Vec(T, Nat.succ(n))) -> T =
     v.0;
 ```
 
-`Vec(T, Nat.succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `'[nil]`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+`Vec(T, Nat.succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
 ## Payoff: typed format strings
 
