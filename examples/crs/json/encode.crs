@@ -2,7 +2,6 @@ use /std/Arr;
 use /std/Bin;
 use /std/Bln;
 use /json/Value;
-let Value : Type = Value/Value;
 
 let encode_num(n : Flt) -> Bin =
     let str : Bin = Flt.to_str(n);

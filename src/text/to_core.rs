@@ -12,7 +12,6 @@ fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
     for item in items {
         match item {
             TopItem::Mod(m) => info.insert_child(m.label.clone(), m.is_pub),
-            TopItem::Use(u) if u.is_pub => info.insert_child(u.name.last().to_string(), true),
             TopItem::Let(l) => info.insert_binding(l.label.clone(), l.is_pub),
             TopItem::Def(d) => {
                 info.insert_child(d.label.clone(), d.is_pub);
@@ -83,21 +82,24 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
-                context.resolve_use(use_item);
+                let resolved = context.resolve_use(use_item);
 
                 if use_item.is_pub {
-                    let qualifier = use_item.name.last().to_string();
-                    context.register_alias(&qualifier);
+                    let label = use_item.name.last().to_string();
+
+                    if resolved.module.is_some() {
+                        context.register_alias(&label);
+                        context.export_child(label.clone());
+                    }
+
+                    if resolved.binding.is_some() {
+                        context.register_binding_alias(&label);
+                        context.export_binding(label);
+                    }
                 }
             }
             TopItem::Let(let_item) => {
-                let elab = Elaborate::new(
-                    context.qualifiers(),
-                    context.bindings(),
-                    context.table(),
-                    context.aliases(),
-                    def_stack,
-                );
+                let elab = Elaborate::new(context, def_stack);
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
@@ -109,13 +111,7 @@ fn process_items(
                 let items = ls
                     .iter()
                     .map(|let_item| {
-                        let elaborate = Elaborate::new(
-                            context.qualifiers(),
-                            context.bindings(),
-                            context.table(),
-                            context.aliases(),
-                            def_stack,
-                        );
+                        let elaborate = Elaborate::new(context, def_stack);
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
@@ -130,14 +126,7 @@ fn process_items(
             TopItem::Def(def_item) => {
                 let name = context.prefixed(&def_item.label);
 
-                let witness = Elaborate::new(
-                    context.qualifiers(),
-                    context.bindings(),
-                    context.table(),
-                    context.aliases(),
-                    def_stack,
-                )
-                .term(&def_item.witness)?;
+                let witness = Elaborate::new(context, def_stack).term(&def_item.witness)?;
 
                 flat_items.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
@@ -176,8 +165,9 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
 
 pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Term, Error> {
     let mut table = HashMap::new();
-    let mut aliases = HashMap::new();
-    let mut context = Context::new(&mut table, &mut aliases);
+    let mut module_aliases = HashMap::new();
+    let mut binding_aliases = HashMap::new();
+    let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
     let mut flat_items = Vec::new();
 
     process_items(
@@ -188,14 +178,7 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Ter
         loader,
     )?;
 
-    let tail = Elaborate::new(
-        context.qualifiers(),
-        context.bindings(),
-        context.table(),
-        context.aliases(),
-        &DefStack::empty(),
-    )
-    .term(&entrypoint.tail)?;
+    let tail = Elaborate::new(&context, &DefStack::empty()).term(&entrypoint.tail)?;
 
     Ok(flat_items.into_iter().rev().fold(tail, fold_flat_item))
 }
@@ -374,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "child module not found")]
+    #[should_panic(expected = "unknown item or submodule: Nonexistent")]
     fn rejects_use_of_nonexistent_child() {
         run(r#"
             mod Foo
@@ -385,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "module not found")]
+    #[should_panic(expected = "unknown item or submodule: Nonexistent")]
     fn rejects_absolute_use_of_nonexistent_module() {
         run(r#"
             use /Nonexistent;
@@ -784,5 +767,232 @@ mod tests {
             )
             .contains("child module not found")
         );
+    }
+
+    #[test]
+    fn use_imports_binding_by_path() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            use /Foo/x;
+            x
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "private binding: x")]
+    fn rejects_use_of_private_binding() {
+        run(r#"
+            pub mod Foo
+                let x : Type = Type;
+            end
+            use /Foo/x;
+            x
+        "#);
+    }
+
+    #[test]
+    fn pub_use_re_exports_binding() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            pub mod Bar
+                pub use /Foo/x;
+            end
+            use /Bar/x;
+            x
+        "#);
+    }
+
+    #[test]
+    fn pub_use_binding_aliases_to_canonical_path() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            pub mod Bar
+                pub use /Foo/x;
+            end
+            Bar/x
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "binding conflicts with existing scope entry: x")]
+    fn rejects_use_followed_by_local_let_of_same_name() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            use /Foo/x;
+            let x : Type = Type;
+            x
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "binding conflicts with existing scope entry: x")]
+    fn rejects_two_imports_of_same_name() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            pub mod Bar
+                pub let x : Type = Type;
+            end
+            use /Foo/x;
+            use /Bar/x;
+            x
+        "#);
+    }
+
+    #[test]
+    fn relative_use_imports_binding() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            pub mod Bar
+                use /Foo;
+                use Foo/x;
+                pub let y : Type = x;
+            end
+            Bar/y
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown item or submodule: nope")]
+    fn rejects_use_of_unknown_item() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            use /Foo/nope;
+            Type
+        "#);
+    }
+
+    #[test]
+    fn use_of_dual_existence_registers_both() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let y : Type = Type;
+                end
+                pub use X/y;
+            end
+            pub mod Bar
+                use /Foo/y;
+                pub let direct : Type = y;
+                pub let via_path : Type = y;
+            end
+            Type
+        "#);
+    }
+
+    #[test]
+    fn dual_use_lets_bare_name_resolve_to_binding() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let y : Type = Type;
+                end
+                pub use X/y;
+            end
+            use /Foo/y;
+            y
+        "#);
+    }
+
+    #[test]
+    fn dual_use_lets_path_resolve_through_module() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let y : Type = Type;
+                    pub let q : Type = Type;
+                end
+                pub use X/y;
+            end
+            Foo/y
+        "#);
+    }
+
+    #[test]
+    fn public_child_with_private_binding_imports_only_module() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let z : Type = Type;
+                end
+                use X/z;
+                let X : Type = z;
+            end
+            use /Foo/X;
+            X/z
+        "#);
+    }
+
+    #[test]
+    fn private_child_with_public_binding_imports_only_binding() {
+        run(r#"
+            pub mod Foo
+                mod X
+                    pub let z : Type = Type;
+                end
+                use X/z;
+                pub let X : Type = z;
+            end
+            use /Foo/X;
+            X
+        "#);
+    }
+
+    #[test]
+    fn use_of_dual_existence_from_outside_module() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let X : Type = Type;
+                end
+                pub use X/X;
+            end
+            use /Foo/X;
+            X
+        "#);
+    }
+
+    #[test]
+    fn use_of_dual_existence_from_outside_qualifier_path() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let X : Type = Type;
+                    pub let q : Type = Type;
+                end
+                pub use X/X;
+            end
+            use /Foo/X;
+            X/q
+        "#);
+    }
+
+    #[test]
+    #[should_panic(expected = "private child module and binding: X")]
+    fn rejects_use_when_both_sides_private() {
+        run(r#"
+            pub mod Foo
+                mod X
+                    pub let z : Type = Type;
+                end
+                use X/z;
+                let X : Type = z;
+            end
+            use /Foo/X;
+            Type
+        "#);
     }
 }

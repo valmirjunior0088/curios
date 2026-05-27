@@ -1,9 +1,8 @@
 use /Parse;
-let Parse(A : Type) -> Type = Parse/Parse(A);
+use /Parse/Parse;
 use /std/Arr;
 use /std/Str;
 use /json/Value;
-let Value : Type = Value/Value;
 
 let is_ws(byte : Nat) -> Bln =
     match byte : Bln

@@ -1,9 +1,8 @@
 pub mod Value;
-pub mod encode;
-pub mod decode;
-use /Parse;
-let Parse(T: Type) -> Type = Parse/Parse(T);
+pub use Value/Value;
 
-pub let Value : Type = Value/Value;
-pub let encode : Value -> Bin = encode/encode;
-pub let decode : Parse(Value) = decode/decode;
+pub mod encode;
+pub use encode/encode;
+
+pub mod decode;
+pub use decode/decode;

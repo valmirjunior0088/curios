@@ -1,35 +1,19 @@
 use {
-    super::{DefStack, ModuleInfo},
+    super::{Context, DefStack},
     crate::{
         core,
         text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Prim, Term},
     },
-    std::collections::HashMap,
 };
 
-pub struct Elaborate<'a> {
-    qualifiers: &'a HashMap<String, Name>,
-    bindings: &'a HashMap<String, Name>,
-    table: &'a HashMap<Name, ModuleInfo>,
-    aliases: &'a HashMap<Name, Name>,
+pub struct Elaborate<'a, 'b> {
+    context: &'a Context<'b>,
     def_stack: &'a DefStack,
 }
 
-impl<'a> Elaborate<'a> {
-    pub fn new(
-        qualifiers: &'a HashMap<String, Name>,
-        bindings: &'a HashMap<String, Name>,
-        table: &'a HashMap<Name, ModuleInfo>,
-        aliases: &'a HashMap<Name, Name>,
-        def_stack: &'a DefStack,
-    ) -> Self {
-        Self {
-            qualifiers,
-            bindings,
-            table,
-            aliases,
-            def_stack,
-        }
+impl<'a, 'b> Elaborate<'a, 'b> {
+    pub fn new(context: &'a Context<'b>, def_stack: &'a DefStack) -> Self {
+        Self { context, def_stack }
     }
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
@@ -40,7 +24,7 @@ impl<'a> Elaborate<'a> {
                 true => {
                     let label = name.head();
 
-                    if let Some(full) = self.bindings.get(label) {
+                    if let Some(full) = self.context.bindings().get(label) {
                         full.join()
                     } else if let Some(full) = self.def_stack.get(label) {
                         full.join()
@@ -329,7 +313,8 @@ impl<'a> Elaborate<'a> {
         let qualifier = name.head();
 
         let mut current = self
-            .qualifiers
+            .context
+            .qualifiers()
             .get(qualifier)
             .ok_or_else(|| Error::UnresolvedQualifier {
                 qualifier: qualifier.to_string(),
@@ -338,7 +323,8 @@ impl<'a> Elaborate<'a> {
 
         for segment in name.interior() {
             let info = self
-                .table
+                .context
+                .table()
                 .get(&current)
                 .ok_or_else(|| Error::ModuleNotFound {
                     path: current.join(),
@@ -358,7 +344,7 @@ impl<'a> Elaborate<'a> {
 
             current = current.with(segment);
 
-            if let Some(canonical) = self.aliases.get(&current) {
+            if let Some(canonical) = self.context.module_aliases().get(&current) {
                 current = canonical.clone();
             }
         }
@@ -366,7 +352,8 @@ impl<'a> Elaborate<'a> {
         let last = name.last();
 
         let info = self
-            .table
+            .context
+            .table()
             .get(&current)
             .ok_or_else(|| Error::ModuleNotFound {
                 path: current.join(),
@@ -384,6 +371,12 @@ impl<'a> Elaborate<'a> {
             });
         }
 
-        Ok(current.with(last))
+        let mut resolved = current.with(last);
+
+        if let Some(canonical) = self.context.binding_aliases().get(&resolved) {
+            resolved = canonical.clone();
+        }
+
+        Ok(resolved)
     }
 }

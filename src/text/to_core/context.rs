@@ -87,7 +87,8 @@ impl ModuleInfo {
 pub struct Context<'a> {
     prefix: Name,
     table: &'a mut HashMap<Name, ModuleInfo>,
-    aliases: &'a mut HashMap<Name, Name>,
+    module_aliases: &'a mut HashMap<Name, Name>,
+    binding_aliases: &'a mut HashMap<Name, Name>,
     qualifiers: HashMap<String, Name>,
     bindings: HashMap<String, Name>,
 }
@@ -95,12 +96,14 @@ pub struct Context<'a> {
 impl<'a> Context<'a> {
     pub fn new(
         table: &'a mut HashMap<Name, ModuleInfo>,
-        aliases: &'a mut HashMap<Name, Name>,
+        module_aliases: &'a mut HashMap<Name, Name>,
+        binding_aliases: &'a mut HashMap<Name, Name>,
     ) -> Context<'a> {
         Context {
             prefix: Name::empty(),
             table,
-            aliases,
+            module_aliases,
+            binding_aliases,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
         }
@@ -110,7 +113,8 @@ impl<'a> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
             table: &mut *self.table,
-            aliases: &mut *self.aliases,
+            module_aliases: &mut *self.module_aliases,
+            binding_aliases: &mut *self.binding_aliases,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
         }
@@ -136,14 +140,25 @@ impl<'a> Context<'a> {
         &*self.table
     }
 
-    pub fn aliases(&self) -> &HashMap<Name, Name> {
-        &*self.aliases
+    pub fn module_aliases(&self) -> &HashMap<Name, Name> {
+        &*self.module_aliases
+    }
+
+    pub fn binding_aliases(&self) -> &HashMap<Name, Name> {
+        &*self.binding_aliases
     }
 
     pub fn register_alias(&mut self, qualifier: &str) {
-        self.aliases.insert(
+        self.module_aliases.insert(
             self.prefix.with(qualifier),
             self.qualifiers[qualifier].clone(),
+        );
+    }
+
+    pub fn register_binding_alias(&mut self, label: &str) {
+        self.binding_aliases.insert(
+            self.prefix.with(label),
+            self.bindings[label].clone(),
         );
     }
 
@@ -167,7 +182,7 @@ impl<'a> Context<'a> {
         self.bindings.insert(label, name);
     }
 
-    pub fn resolve_use(&mut self, top_use: &TopUse) {
+    pub fn resolve_use(&mut self, top_use: &TopUse) -> UseResolved {
         if !top_use.is_abs && top_use.name.is_single() {
             panic!(
                 "single-segment relative use is forbidden: {}",
@@ -175,56 +190,62 @@ impl<'a> Context<'a> {
             );
         }
 
-        let qualifier = top_use.name.last().to_string();
+        let label = top_use.name.last().to_string();
 
-        let resolved_path = if top_use.is_abs {
-            let head = top_use.name.head();
+        let parent_path = if top_use.is_abs {
+            let mut current = Name::empty();
 
-            let root_info = self
-                .table
-                .get(&Name::empty())
-                .expect("root module info not present");
+            if top_use.name.is_single() {
+                current
+            } else {
+                let head = top_use.name.head();
 
-            let is_pub = root_info
-                .get_child(head)
-                .unwrap_or_else(|| panic!("child module not found: {head}"));
-
-            if !is_pub {
-                panic!("private child module: {head}");
-            }
-
-            let mut current = Name::from([head]);
-
-            if !self.table.contains_key(&current) {
-                panic!("module not found: {head}");
-            }
-
-            for seg in top_use.name.tail() {
-                let info = self
+                let root_info = self
                     .table
-                    .get(&current)
-                    .unwrap_or_else(|| panic!("module not found: {}", current.join()));
+                    .get(&Name::empty())
+                    .expect("root module info not present");
 
-                let is_pub = info
-                    .get_child(seg)
-                    .unwrap_or_else(|| panic!("child module not found: {seg}"));
+                let is_pub = root_info
+                    .get_child(head)
+                    .unwrap_or_else(|| panic!("child module not found: {head}"));
 
                 if !is_pub {
-                    panic!("private child module: {seg}");
+                    panic!("private child module: {head}");
                 }
 
-                current = current.with(seg);
-
-                if let Some(canonical) = self.aliases.get(&current) {
-                    current = canonical.clone();
-                }
+                current = Name::from([head]);
 
                 if !self.table.contains_key(&current) {
-                    panic!("module not found: {}", current.join());
+                    panic!("module not found: {head}");
                 }
-            }
 
-            current
+                for seg in top_use.name.interior() {
+                    let info = self
+                        .table
+                        .get(&current)
+                        .unwrap_or_else(|| panic!("module not found: {}", current.join()));
+
+                    let is_pub = info
+                        .get_child(seg)
+                        .unwrap_or_else(|| panic!("child module not found: {seg}"));
+
+                    if !is_pub {
+                        panic!("private child module: {seg}");
+                    }
+
+                    current = current.with(seg);
+
+                    if let Some(canonical) = self.module_aliases.get(&current) {
+                        current = canonical.clone();
+                    }
+
+                    if !self.table.contains_key(&current) {
+                        panic!("module not found: {}", current.join());
+                    }
+                }
+
+                current
+            }
         } else {
             let first = top_use.name.head();
 
@@ -234,7 +255,7 @@ impl<'a> Context<'a> {
                 .unwrap_or_else(|| panic!("undeclared child in relative use: {first}"))
                 .clone();
 
-            for seg in top_use.name.tail() {
+            for seg in top_use.name.interior() {
                 let info = self
                     .table
                     .get(&current)
@@ -250,7 +271,7 @@ impl<'a> Context<'a> {
 
                 current = current.with(seg);
 
-                if let Some(canonical) = self.aliases.get(&current) {
+                if let Some(canonical) = self.module_aliases.get(&current) {
                     current = canonical.clone();
                 }
             }
@@ -262,6 +283,80 @@ impl<'a> Context<'a> {
             current
         };
 
-        self.insert_scope(qualifier, resolved_path);
+        let parent_info = self
+            .table
+            .get(&parent_path)
+            .unwrap_or_else(|| panic!("module not found: {}", parent_path.join()));
+
+        let child = parent_info.get_child(&label);
+        let binding = parent_info.get_binding(&label);
+
+        let mut result = UseResolved {
+            module: None,
+            binding: None,
+        };
+
+        if let Some(true) = child {
+            let mut resolved = parent_path.with(&label);
+
+            if let Some(canonical) = self.module_aliases.get(&resolved) {
+                resolved = canonical.clone();
+            }
+
+            if !self.table.contains_key(&resolved) {
+                panic!("module not found: {}", resolved.join());
+            }
+
+            self.insert_scope(label.clone(), resolved.clone());
+            result.module = Some(resolved);
+        }
+
+        if let Some(true) = binding {
+            let mut resolved = parent_path.with(&label);
+
+            if let Some(canonical) = self.binding_aliases.get(&resolved) {
+                resolved = canonical.clone();
+            }
+
+            self.insert_binding(label.clone(), resolved.clone());
+            result.binding = Some(resolved);
+        }
+
+        if result.module.is_none() && result.binding.is_none() {
+            match (child, binding) {
+                (None, None) => panic!(
+                    "unknown item or submodule: {label} in {}",
+                    parent_path.join()
+                ),
+                (Some(false), None) => panic!("private child module: {label}"),
+                (None, Some(false)) => panic!("private binding: {label}"),
+                (Some(false), Some(false)) => {
+                    panic!("private child module and binding: {label}")
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        result
     }
+
+    pub fn export_child(&mut self, label: String) {
+        self.table
+            .get_mut(&self.prefix)
+            .expect("module info not present for current prefix")
+            .insert_child(label, true);
+    }
+
+    pub fn export_binding(&mut self, label: String) {
+        self.table
+            .get_mut(&self.prefix)
+            .expect("module info not present for current prefix")
+            .insert_binding(label, true);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UseResolved {
+    pub module: Option<Name>,
+    pub binding: Option<Name>,
 }
