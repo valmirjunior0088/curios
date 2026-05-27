@@ -97,6 +97,14 @@ use /Std/Prelude;
 
 When using an absolute path, the first segment must refer to a `pub mod` at the root. A private root module cannot be accessed via an absolute path.
 
+Multiple names from the same module can be imported in one declaration using a brace group:
+
+```
+use /std/{Bin, Arr};
+```
+
+This is equivalent to writing a separate `use` for each name. The brace group is only available with an absolute path.
+
 ## Terms
 
 ### Application

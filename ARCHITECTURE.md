@@ -87,7 +87,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 `text::Term` has no de Bruijn indices — all variables are `String` labels. The grammar covers:
 
 - Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
-- Application `f(a, b)` and partial application `f.(a, _, c)` (holes desugar to a lambda over the missing arguments)
+- Application `f(a, b)`
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
 - Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
@@ -176,8 +176,6 @@ Each `Cons` carries one parameter type and a `Scope<One, …>` that binds exactl
 ### Two-level context (`context.rs`)
 
 Maintains separate stacks for **assumptions** (name → type) and **definitions** (name → value). `with_frame(f)` handles nested scopes. A monotonically increasing entropy counter generates fresh names during type checking.
-
-### Opaque types
 
 ---
 
