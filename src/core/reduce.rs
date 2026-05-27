@@ -669,9 +669,7 @@ impl Reduce {
                 });
                 Ok(match merged {
                     Some(bytes) => Subterm::Prim(Prim::Bin(bytes)),
-                    None => Subterm::Prim(Prim::BinConcat(
-                        reduced.into_iter().map(|t| t.into()).collect(),
-                    )),
+                    None => Subterm::Prim(Prim::BinConcat(reduced)),
                 })
             }
             Prim::ArrType(elem) => {
@@ -681,7 +679,7 @@ impl Reduce {
             Prim::Arr(elems) => {
                 let elems = elems
                     .iter()
-                    .map(|e| self.reduce(context, e.clone()).map(|t| t.into()))
+                    .map(|e| self.reduce(context, e.clone()))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(Subterm::Prim(Prim::Arr(elems)))
             }
@@ -730,7 +728,7 @@ impl Reduce {
                 let elem = self.reduce(context, elem.clone())?;
                 Ok(match Term::unwrap_or_clone(list) {
                     Subterm::Prim(Prim::Arr(mut elems)) => {
-                        elems.push(elem.into());
+                        elems.push(elem);
                         Subterm::Prim(Prim::Arr(elems))
                     }
                     list => Subterm::Prim(Prim::arr_append(list, elem)),
@@ -751,9 +749,7 @@ impl Reduce {
                 });
                 Ok(match merged {
                     Some(elems) => Subterm::Prim(Prim::Arr(elems)),
-                    None => Subterm::Prim(Prim::ArrConcat(
-                        reduced.into_iter().map(|t| t.into()).collect(),
-                    )),
+                    None => Subterm::Prim(Prim::ArrConcat(reduced)),
                 })
             }
             Prim::SysPrint(_) => panic!("SysPrint cannot appear at the type level"),

@@ -10,64 +10,64 @@ pub struct Preempted;
 #[derive(Debug)]
 pub enum Error {
     ReducePreempted {
-        term: Box<Subterm>,
+        term: Box<Term>,
     },
     ConvertPreempted {
-        this: Box<Subterm>,
-        that: Box<Subterm>,
+        this: Box<Term>,
+        that: Box<Term>,
     },
     TypeMismatch {
-        term: Box<Subterm>,
-        inferred: Box<Subterm>,
-        expected: Box<Subterm>,
+        term: Box<Term>,
+        inferred: Box<Term>,
+        expected: Box<Term>,
     },
     NotAFunction {
-        term: Box<Subterm>,
-        head_type: Box<Subterm>,
+        term: Box<Term>,
+        head_type: Box<Term>,
     },
     NotATuple {
-        term: Box<Subterm>,
-        head_type: Box<Subterm>,
+        term: Box<Term>,
+        head_type: Box<Term>,
     },
     TupleIndexOutOfBounds {
-        term: Box<Subterm>,
+        term: Box<Term>,
         index: usize,
         arity: usize,
     },
     NotAnAtomType {
-        term: Box<Subterm>,
-        head_type: Box<Subterm>,
+        term: Box<Term>,
+        head_type: Box<Term>,
     },
     NotNatType {
-        term: Box<Subterm>,
-        head_type: Box<Subterm>,
+        term: Box<Term>,
+        head_type: Box<Term>,
     },
     NotBlnType {
-        term: Box<Subterm>,
-        head_type: Box<Subterm>,
+        term: Box<Term>,
+        head_type: Box<Term>,
     },
     WrongNumberOfArguments {
-        term: Box<Subterm>,
+        term: Box<Term>,
         expected: usize,
         got: usize,
     },
     MatchArityMismatch {
-        term: Box<Subterm>,
+        term: Box<Term>,
         expected: usize,
         got: usize,
     },
     MatchCaseMissing {
-        term: Box<Subterm>,
+        term: Box<Term>,
         atom: Atom,
     },
     CannotInferLiteral {
-        term: Box<Subterm>,
+        term: Box<Term>,
     },
     UnboundVariable {
-        term: Box<Subterm>,
+        term: Box<Term>,
     },
     CannotInfer {
-        term: Box<Subterm>,
+        term: Box<Term>,
     },
     Located {
         span: Span,
@@ -76,20 +76,20 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn reduce_preempted<T: Into<Subterm>>(term: T) -> Self {
+    pub fn reduce_preempted<T: Into<Term>>(term: T) -> Self {
         Self::ReducePreempted {
             term: Box::new(term.into()),
         }
     }
 
-    pub fn convert_preempted<T: Into<Subterm>, U: Into<Subterm>>(this: T, that: U) -> Self {
+    pub fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
         Self::ConvertPreempted {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
         }
     }
 
-    pub fn type_mismatch<T: Into<Subterm>, U: Into<Subterm>, V: Into<Subterm>>(
+    pub fn type_mismatch<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
         term: T,
         inferred: U,
         expected: V,
@@ -101,25 +101,21 @@ impl Error {
         }
     }
 
-    pub fn not_a_function<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
+    pub fn not_a_function<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotAFunction {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_a_tuple<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
+    pub fn not_a_tuple<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotATuple {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn tuple_index_out_of_bounds<T: Into<Subterm>>(
-        term: T,
-        index: usize,
-        arity: usize,
-    ) -> Self {
+    pub fn tuple_index_out_of_bounds<T: Into<Term>>(term: T, index: usize, arity: usize) -> Self {
         Self::TupleIndexOutOfBounds {
             term: Box::new(term.into()),
             index,
@@ -127,32 +123,28 @@ impl Error {
         }
     }
 
-    pub fn not_an_atom_type<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
+    pub fn not_an_atom_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotAnAtomType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_nat_type<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
+    pub fn not_nat_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotNatType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_bln_type<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
+    pub fn not_bln_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotBlnType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn wrong_number_of_arguments<T: Into<Subterm>>(
-        term: T,
-        expected: usize,
-        got: usize,
-    ) -> Self {
+    pub fn wrong_number_of_arguments<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
         Self::WrongNumberOfArguments {
             term: Box::new(term.into()),
             expected,
@@ -160,7 +152,7 @@ impl Error {
         }
     }
 
-    pub fn match_arity_mismatch<T: Into<Subterm>>(term: T, expected: usize, got: usize) -> Self {
+    pub fn match_arity_mismatch<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
         Self::MatchArityMismatch {
             term: Box::new(term.into()),
             expected,
@@ -168,26 +160,26 @@ impl Error {
         }
     }
 
-    pub fn match_case_missing<T: Into<Subterm>, A: Into<Atom>>(term: T, atom: A) -> Self {
+    pub fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
         Self::MatchCaseMissing {
             term: Box::new(term.into()),
             atom: atom.into(),
         }
     }
 
-    pub fn cannot_infer_literal<T: Into<Subterm>>(term: T) -> Self {
+    pub fn cannot_infer_literal<T: Into<Term>>(term: T) -> Self {
         Self::CannotInferLiteral {
             term: Box::new(term.into()),
         }
     }
 
-    pub fn unbound_variable<T: Into<Subterm>>(var: T) -> Self {
+    pub fn unbound_variable<T: Into<Term>>(var: T) -> Self {
         Self::UnboundVariable {
             term: Box::new(var.into()),
         }
     }
 
-    pub fn cannot_infer<T: Into<Subterm>>(term: T) -> Self {
+    pub fn cannot_infer<T: Into<Term>>(term: T) -> Self {
         Self::CannotInfer {
             term: Box::new(term.into()),
         }

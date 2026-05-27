@@ -60,6 +60,7 @@ impl Var {
 #[derive(Debug, Clone)]
 pub struct Term {
     hash: OnceCell<u64>,
+    reach: OnceCell<usize>,
     inner: Rc<Subterm>,
 }
 
@@ -67,14 +68,16 @@ impl Term {
     pub fn new(term: Subterm) -> Self {
         Self {
             hash: OnceCell::new(),
+            reach: OnceCell::new(),
             inner: Rc::new(term),
         }
     }
 
-    fn cached_hash(&self) -> u64 {
+    fn get_or_init_hash(&self) -> u64 {
         *self.hash.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
             self.inner.hash(&mut hasher);
+
             hasher.finish()
         })
     }
@@ -86,7 +89,7 @@ impl Term {
 
 impl Hash for Term {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u64(self.cached_hash());
+        state.write_u64(self.get_or_init_hash());
     }
 }
 
@@ -95,11 +98,13 @@ impl PartialEq for Term {
         if Rc::ptr_eq(&self.inner, &other.inner) {
             return true;
         }
-        if let (Some(a), Some(b)) = (self.hash.get(), other.hash.get()) {
-            if a != b {
-                return false;
-            }
+
+        if let (Some(a), Some(b)) = (self.hash.get(), other.hash.get())
+            && a != b
+        {
+            return false;
         }
+
         *self.inner == *other.inner
     }
 }
@@ -122,12 +127,6 @@ impl From<Subterm> for Term {
 impl AsRef<Subterm> for Term {
     fn as_ref(&self) -> &Subterm {
         &self.inner
-    }
-}
-
-impl From<Term> for Subterm {
-    fn from(s: Term) -> Self {
-        Term::unwrap_or_clone(s)
     }
 }
 
@@ -160,6 +159,10 @@ where
 
     pub fn arity(&self) -> usize {
         self.arity.arity()
+    }
+
+    fn reach(&self) -> usize {
+        self.body.reach().saturating_sub(self.arity())
     }
 
     pub fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
@@ -222,6 +225,13 @@ impl<B: Bound> Bound for Telescope<B> {
                 Telescope::Cons(visit.visit_subterm(ty), visit.visit_scope(rest))
             }
             Telescope::Done(body) => Telescope::Done(body.traverse(visit).into()),
+        }
+    }
+
+    fn reach(&self) -> usize {
+        match self {
+            Telescope::Cons(ty, rest) => ty.reach().max(rest.reach()),
+            Telescope::Done(body) => body.reach(),
         }
     }
 }
@@ -1077,8 +1087,13 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>;
 
+    /// Number of outer de Bruijn binders this term depends on: `1 + max escaping bound
+    /// index`, or `0` if none. A term with `reach <= depth` contains no bound index
+    /// `>= depth`, so `shift`/`release` at that depth are the identity on it.
+    fn reach(&self) -> usize;
+
     fn shift(&self, amount: usize) -> Self {
-        self.traverse(&mut Visit::new(|depth, var| {
+        self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound()
                 .filter(|&index| index >= depth)
                 .map(|index| Var::bound(index + amount).into())
@@ -1103,7 +1118,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
     }
 
     fn release(&self, terms: &[&Term]) -> Self {
-        self.traverse(&mut Visit::new(|depth, var| {
+        self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound().and_then(|index| {
                 index
                     .checked_sub(depth)
@@ -1133,6 +1148,10 @@ impl Bound for () {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
     }
+
+    fn reach(&self) -> usize {
+        0
+    }
 }
 
 impl Bound for Term {
@@ -1140,7 +1159,15 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
+        if visit.prune && self.reach() <= visit.depth {
+            return self.clone();
+        }
+
         Term::new((**self).traverse(visit))
+    }
+
+    fn reach(&self) -> usize {
+        *self.reach.get_or_init(|| self.inner.reach())
     }
 }
 
@@ -1174,11 +1201,173 @@ impl Bound for Subterm {
             Subterm::Spanned(span, inner) => Subterm::Spanned(*span, visit.visit_subterm(inner)),
         }
     }
+
+    fn reach(&self) -> usize {
+        match self {
+            Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) => 0,
+            Subterm::Var(var) => match var.as_bound() {
+                Some(index) => index + 1,
+                None => 0,
+            },
+            Subterm::Prim(prim) => prim_reach(prim),
+            Subterm::Spanned(_, inner) => inner.reach(),
+            Subterm::Func(Func { body }) => body.reach(),
+            Subterm::FuncType(FuncType { telescope }) => telescope.reach(),
+            Subterm::Apply(Apply { head, params }) => head.reach().max(max_reach(params)),
+            Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
+            Subterm::Tuple(Tuple { fields }) => max_reach(fields),
+            Subterm::Proj(Proj { head, .. }) => head.reach(),
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => head
+                .reach()
+                .max(motive.reach())
+                .max(max_reach(cases.values())),
+            Subterm::BlnMatch(BlnMatch {
+                head,
+                motive,
+                false_case,
+                true_case,
+            }) => head
+                .reach()
+                .max(motive.reach())
+                .max(false_case.reach())
+                .max(true_case.reach()),
+            Subterm::NatMatch(NatMatch::Induction {
+                head,
+                motive,
+                zero_case,
+                succ_case,
+            }) => head
+                .reach()
+                .max(motive.reach())
+                .max(zero_case.reach())
+                .max(succ_case.reach()),
+            Subterm::NatMatch(NatMatch::Dispatch {
+                head,
+                motive,
+                cases,
+                default,
+            }) => head
+                .reach()
+                .max(motive.reach())
+                .max(max_reach(cases.values()))
+                .max(default.reach()),
+            Subterm::Let(Let { type_, body, tail }) => {
+                type_.reach().max(body.reach()).max(tail.reach())
+            }
+            Subterm::Rec(Rec { items, tail }) => items
+                .iter()
+                .map(|(type_, value)| type_.reach().max(value.reach()))
+                .max()
+                .unwrap_or(0)
+                .max(tail.reach()),
+            Subterm::Sealed(Sealed { witness, tail }) => witness.reach().max(tail.reach()),
+            Subterm::Seal(Seal { witness, value }) => witness.reach().max(value.reach()),
+            Subterm::Unseal(Unseal { witness, value }) => witness.reach().max(value.reach()),
+        }
+    }
+}
+
+fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
+    terms
+        .into_iter()
+        .map(|term| term.reach())
+        .max()
+        .unwrap_or(0)
+}
+
+fn prim_reach(prim: &Prim) -> usize {
+    match prim {
+        Prim::BlnType
+        | Prim::Bln(_)
+        | Prim::NatType
+        | Prim::Nat(Nat::Zero)
+        | Prim::IntType
+        | Prim::Int(_)
+        | Prim::FltType
+        | Prim::Flt(_)
+        | Prim::BinType
+        | Prim::Bin(_)
+        | Prim::SysRead => 0,
+
+        Prim::Nat(Nat::Succ(_, inner)) => inner.reach(),
+
+        Prim::NatToStr(t)
+        | Prim::IntToStr(t)
+        | Prim::FltToStr(t)
+        | Prim::NatToInt(t)
+        | Prim::NatToFlt(t)
+        | Prim::IntToNat(t)
+        | Prim::IntToFlt(t)
+        | Prim::FltToNat(t)
+        | Prim::FltToInt(t)
+        | Prim::FltNeg(t)
+        | Prim::FltAbs(t)
+        | Prim::FltSqrt(t)
+        | Prim::FltFloor(t)
+        | Prim::FltCeil(t)
+        | Prim::FltTrunc(t)
+        | Prim::FltNearest(t)
+        | Prim::BinLen(t)
+        | Prim::ArrType(t)
+        | Prim::ArrLen(t)
+        | Prim::SysPrint(t) => t.reach(),
+
+        Prim::NatEql(a, b)
+        | Prim::NatNeq(a, b)
+        | Prim::NatAdd(a, b)
+        | Prim::NatSub(a, b)
+        | Prim::NatMul(a, b)
+        | Prim::NatLt(a, b)
+        | Prim::NatDiv(a, b)
+        | Prim::NatRem(a, b)
+        | Prim::NatGt(a, b)
+        | Prim::NatLte(a, b)
+        | Prim::NatGte(a, b)
+        | Prim::IntEql(a, b)
+        | Prim::IntNeq(a, b)
+        | Prim::IntAdd(a, b)
+        | Prim::IntSub(a, b)
+        | Prim::IntMul(a, b)
+        | Prim::IntDiv(a, b)
+        | Prim::IntRem(a, b)
+        | Prim::IntLt(a, b)
+        | Prim::IntGt(a, b)
+        | Prim::IntLte(a, b)
+        | Prim::IntGte(a, b)
+        | Prim::FltAdd(a, b)
+        | Prim::FltSub(a, b)
+        | Prim::FltMul(a, b)
+        | Prim::FltDiv(a, b)
+        | Prim::FltEql(a, b)
+        | Prim::FltNeq(a, b)
+        | Prim::FltLt(a, b)
+        | Prim::FltGt(a, b)
+        | Prim::FltLte(a, b)
+        | Prim::FltGte(a, b)
+        | Prim::FltMin(a, b)
+        | Prim::FltMax(a, b)
+        | Prim::BinEql(a, b)
+        | Prim::BinGet(a, b)
+        | Prim::BinAppend(a, b)
+        | Prim::ArrGet(a, b)
+        | Prim::ArrAppend(a, b) => a.reach().max(b.reach()),
+
+        Prim::BinSlice(a, b, c) | Prim::ArrSlice(a, b, c) => {
+            a.reach().max(b.reach()).max(c.reach())
+        }
+
+        Prim::BinConcat(terms) | Prim::ArrConcat(terms) | Prim::Arr(terms) => max_reach(terms),
+    }
 }
 
 #[derive(Debug)]
 pub struct Visit<F> {
     depth: usize,
+    prune: bool,
     visit: F,
 }
 
@@ -1187,11 +1376,28 @@ where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
     fn new(visit: F) -> Self {
-        Self { depth: 0, visit }
+        Self {
+            depth: 0,
+            prune: false,
+            visit,
+        }
+    }
+
+    /// Like `new`, but lets `Term::traverse` skip (and structurally share) subtrees that
+    /// the visit provably leaves unchanged. Only sound for index-monotonic visits whose
+    /// effect on a subterm depends solely on bound indices `>= depth` — i.e. `shift` and
+    /// `release`. Must NOT be used for `capture` (rewrites free names) or `free_vars`
+    /// (must observe every node).
+    fn pruning(visit: F) -> Self {
+        Self {
+            depth: 0,
+            prune: true,
+            visit,
+        }
     }
 
     fn visit_subterm(&mut self, subterm: &Term) -> Term {
-        subterm.traverse(self).into()
+        subterm.traverse(self)
     }
 
     fn visit_prim(&mut self, prim: &Prim) -> Prim {
@@ -1564,5 +1770,63 @@ mod tests {
             term.free_vars(),
             BTreeSet::from([String::from("w"), String::from("z")])
         );
+    }
+
+    #[test]
+    fn reach_basic_values() {
+        assert_eq!(Term::from(Type).reach(), 0);
+        assert_eq!(Term::from(Var::free("x")).reach(), 0);
+        assert_eq!(Term::new(Subterm::Var(Var::bound(0))).reach(), 1);
+        assert_eq!(Term::new(Subterm::Var(Var::bound(3))).reach(), 4);
+        // closed identity function λx.x
+        assert_eq!(Term::from(Func::new(["x"], Var::free("x"))).reach(), 0);
+    }
+
+    #[test]
+    fn reach_scope_absorbs_arity() {
+        // body references bound index 2 (reach 3); a scope absorbs its arity
+        let f1 = Term::from(Func {
+            body: Scope::constant(Many(1), Term::new(Subterm::Var(Var::bound(2)))),
+        });
+        assert_eq!(f1.reach(), 2); // (2 + 1) - 1
+
+        let f2 = Term::from(Func {
+            body: Scope::constant(Many(2), Term::new(Subterm::Var(Var::bound(2)))),
+        });
+        assert_eq!(f2.reach(), 1); // (2 + 1) - 2
+    }
+
+    #[test]
+    fn open_shares_closed_body_without_rebuild() {
+        // body does not mention the bound variable -> open returns the stored Rc unchanged
+        let scope = Scope::close(One, &["x"], Term::from(Atom::from("k")));
+        let opened = scope.open(&[&Var::free("y").into()]);
+        assert!(Rc::ptr_eq(&opened.inner, &scope.body.inner));
+    }
+
+    #[test]
+    fn open_shares_closed_subterm_inside_substituted_body() {
+        let closed: Term = Func::new(["a"], Var::free("a")).into(); // λa.a, closed
+        let scope = Scope::close(
+            One,
+            &["x"],
+            Term::from(Tuple::new([Term::from(Var::free("x")), closed])),
+        );
+
+        let stored_field = match &**scope.body {
+            Subterm::Tuple(Tuple { fields }) => fields[1].clone(),
+            _ => panic!("expected tuple body"),
+        };
+
+        let opened = scope.open(&[&Var::free("y").into()]);
+
+        let opened_field = match &*opened {
+            Subterm::Tuple(Tuple { fields }) => fields[1].clone(),
+            _ => panic!("expected tuple result"),
+        };
+
+        // the substituted field changed; the closed field is shared, not rebuilt
+        assert_eq!(opened_field, stored_field);
+        assert!(Rc::ptr_eq(&opened_field.inner, &stored_field.inner));
     }
 }

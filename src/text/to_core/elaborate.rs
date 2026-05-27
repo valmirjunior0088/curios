@@ -305,7 +305,7 @@ impl<'a> Elaborate<'a> {
             Prim::Arr(elems) => core::Prim::Arr(
                 elems
                     .iter()
-                    .map(|elem| self.term(elem).map(Into::into))
+                    .map(|elem| self.term(elem))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Prim::ArrLen(inner) => core::Prim::arr_len(self.term(inner)?),
