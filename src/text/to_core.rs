@@ -33,7 +33,6 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    def_stack: &DefStack,
     loader: &dyn Loader,
 ) -> Result<(), Error> {
     context.finalize(scan_module_info(top_items));
@@ -63,7 +62,6 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        def_stack,
                         loader,
                     )?;
                 }
@@ -76,7 +74,6 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        def_stack,
                         loader,
                     )?;
                 }
@@ -99,7 +96,7 @@ fn process_items(
                 }
             }
             TopItem::Let(let_item) => {
-                let elab = Elaborate::new(context, def_stack);
+                let elab = Elaborate::new(context);
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
@@ -111,7 +108,7 @@ fn process_items(
                 let items = ls
                     .iter()
                     .map(|let_item| {
-                        let elaborate = Elaborate::new(context, def_stack);
+                        let elaborate = Elaborate::new(context);
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
@@ -126,20 +123,17 @@ fn process_items(
             TopItem::Def(def_item) => {
                 let name = context.prefixed(&def_item.label);
 
-                let witness = Elaborate::new(context, def_stack).term(&def_item.witness)?;
+                let witness = Elaborate::new(context).term(&def_item.witness)?;
 
                 flat_items.push(FlatItem::Def(FlatDef {
                     name: name.clone(),
                     witness,
                 }));
 
-                let new_def_stack = def_stack.push(def_item.label.clone(), name);
-
                 process_items(
                     &def_item.module.items,
-                    &mut context.nested(&def_item.label),
+                    &mut context.nested_def(&def_item.label, name),
                     flat_items,
-                    &new_def_stack,
                     loader,
                 )?;
             }
@@ -170,15 +164,9 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Ter
     let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
     let mut flat_items = Vec::new();
 
-    process_items(
-        &entrypoint.items,
-        &mut context,
-        &mut flat_items,
-        &DefStack::empty(),
-        loader,
-    )?;
+    process_items(&entrypoint.items, &mut context, &mut flat_items, loader)?;
 
-    let tail = Elaborate::new(&context, &DefStack::empty()).term(&entrypoint.tail)?;
+    let tail = Elaborate::new(&context).term(&entrypoint.tail)?;
 
     Ok(flat_items.into_iter().rev().fold(tail, fold_flat_item))
 }
@@ -591,18 +579,6 @@ mod tests {
             )
             .into()
         );
-    }
-
-    #[test]
-    fn nested_def_outer_label_accessible_in_inner() {
-        run(r#"
-            def A(Bin)
-                def B(Nat)
-                    pub let f : Bin -> A = x => A.from x;
-                end
-            end
-            Type
-        "#);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use {
-    super::{Context, DefStack},
+    super::Context,
     crate::{
         core,
         text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Prim, Term},
@@ -8,12 +8,11 @@ use {
 
 pub struct Elaborate<'a, 'b> {
     context: &'a Context<'b>,
-    def_stack: &'a DefStack,
 }
 
 impl<'a, 'b> Elaborate<'a, 'b> {
-    pub fn new(context: &'a Context<'b>, def_stack: &'a DefStack) -> Self {
-        Self { context, def_stack }
+    pub fn new(context: &'a Context<'b>) -> Self {
+        Self { context }
     }
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
@@ -26,7 +25,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
 
                     if let Some(full) = self.context.bindings().get(label) {
                         full.join()
-                    } else if let Some(full) = self.def_stack.get(label) {
+                    } else if let Some(full) = self.context.definitions().get(label) {
                         full.join()
                     } else {
                         label.to_string()
@@ -151,7 +150,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             },
             Term::DefFrom(from) => core::Seal::new(
                 core::Var::free(
-                    self.def_stack
+                    self.context
+                        .definitions()
                         .get(&from.label)
                         .ok_or_else(|| Error::CoercionOutsideDefBlock {
                             label: from.label.clone(),
@@ -163,7 +163,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             .into(),
             Term::DefInto(into) => core::Unseal::new(
                 core::Var::free(
-                    self.def_stack
+                    self.context
+                        .definitions()
                         .get(&into.label)
                         .ok_or_else(|| Error::CoercionOutsideDefBlock {
                             label: into.label.clone(),

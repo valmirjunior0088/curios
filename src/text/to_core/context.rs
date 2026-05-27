@@ -6,37 +6,6 @@ use {
     std::collections::HashMap,
 };
 
-pub struct DefStack {
-    entries: Vec<(String, Name)>,
-}
-
-impl DefStack {
-    pub fn empty() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-
-    pub fn push(&self, label: String, name: Name) -> Self {
-        Self {
-            entries: self
-                .entries
-                .iter()
-                .cloned()
-                .chain([(label, name)])
-                .collect(),
-        }
-    }
-
-    pub fn get(&self, label: &str) -> Option<&Name> {
-        self.entries
-            .iter()
-            .rev()
-            .find(|(entry_label, _)| entry_label == label)
-            .map(|(_, name)| name)
-    }
-}
-
 pub struct FlatLet {
     pub name: Name,
     pub type_: core::Term,
@@ -84,6 +53,12 @@ impl ModuleInfo {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UseResolved {
+    pub module: Option<Name>,
+    pub binding: Option<Name>,
+}
+
 pub struct Context<'a> {
     prefix: Name,
     table: &'a mut HashMap<Name, ModuleInfo>,
@@ -91,6 +66,7 @@ pub struct Context<'a> {
     binding_aliases: &'a mut HashMap<Name, Name>,
     qualifiers: HashMap<String, Name>,
     bindings: HashMap<String, Name>,
+    definitions: HashMap<String, Name>,
 }
 
 impl<'a> Context<'a> {
@@ -106,6 +82,7 @@ impl<'a> Context<'a> {
             binding_aliases,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
+            definitions: HashMap::new(),
         }
     }
 
@@ -117,7 +94,15 @@ impl<'a> Context<'a> {
             binding_aliases: &mut *self.binding_aliases,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
+            definitions: HashMap::new(),
         }
+    }
+
+    pub fn nested_def(&mut self, label: &str, name: Name) -> Context<'_> {
+        let mut child = self.nested(label);
+        child.definitions.insert(label.to_string(), name);
+
+        child
     }
 
     pub fn prefix(&self) -> &Name {
@@ -148,6 +133,10 @@ impl<'a> Context<'a> {
         &*self.binding_aliases
     }
 
+    pub fn definitions(&self) -> &HashMap<String, Name> {
+        &self.definitions
+    }
+
     pub fn register_alias(&mut self, qualifier: &str) {
         self.module_aliases.insert(
             self.prefix.with(qualifier),
@@ -156,10 +145,8 @@ impl<'a> Context<'a> {
     }
 
     pub fn register_binding_alias(&mut self, label: &str) {
-        self.binding_aliases.insert(
-            self.prefix.with(label),
-            self.bindings[label].clone(),
-        );
+        self.binding_aliases
+            .insert(self.prefix.with(label), self.bindings[label].clone());
     }
 
     pub fn finalize(&mut self, info: ModuleInfo) {
@@ -353,10 +340,4 @@ impl<'a> Context<'a> {
             .expect("module info not present for current prefix")
             .insert_binding(label, true);
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UseResolved {
-    pub module: Option<Name>,
-    pub binding: Option<Name>,
 }
