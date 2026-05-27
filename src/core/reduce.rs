@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, BlnMatch, Context, Flt, Func, Let, Match, Nat, NatMatch, One, Preempted, Prim, Proj,
-        Scope, Seal, Subterm, Term, Tuple, Two, Unseal, Var,
+        Scope, Subterm, Term, Tuple, Two, Var,
     },
     std::{
         collections::BTreeMap,
@@ -992,23 +992,6 @@ impl Reduce {
         }
     }
 
-    fn reduce_unseal(&mut self, context: &mut Context, unseal: Unseal) -> Result<Step, Preempted> {
-        let Unseal { witness, value } = unseal;
-        match Term::unwrap_or_clone(self.reduce(context, value)?) {
-            Subterm::Seal(Seal {
-                value: sealed_value,
-                ..
-            }) => Ok(Step::Continue(sealed_value)),
-            value => Ok(Step::Break(
-                Unseal {
-                    witness,
-                    value: value.into(),
-                }
-                .into(),
-            )),
-        }
-    }
-
     fn reduce_let(&self, let_: Let) -> Step {
         Step::Continue(let_.tail.open(&[&let_.body]))
     }
@@ -1035,7 +1018,6 @@ impl Reduce {
                 Subterm::Func(func) => self.reduce_func_eta(context, func)?,
                 Subterm::Match(m) => self.reduce_match(context, m)?,
                 Subterm::Let(let_) => self.reduce_let(let_),
-                Subterm::Unseal(unseal) => self.reduce_unseal(context, unseal)?,
                 Subterm::Var(var) => self.reduce_var(context, var),
                 Subterm::Tuple(t) => Step::Break(Self::eta_reduce_tuple(t).into()),
                 Subterm::Spanned(_, inner) => Step::Continue(inner),
@@ -1054,9 +1036,7 @@ impl Reduce {
 mod tests {
     use {
         super::*,
-        crate::core::{
-            Atom, AtomType, Let, Match, Nat, NatMatch, Prim, Seal, Sealed, Tuple, Type, Unseal, Var,
-        },
+        crate::core::{Atom, AtomType, Let, Match, Nat, NatMatch, Prim, Tuple, Type, Var},
         std::time::Duration,
     };
 
@@ -1234,37 +1214,6 @@ mod tests {
     }
 
     #[test]
-    fn reduce_unseal_fires_on_sealed_value() {
-        let mut context = context();
-
-        let term: Term =
-            Unseal::new(Var::free("x"), Seal::new(Var::free("x"), Atom::from("ok"))).into();
-
-        assert_eq!(
-            reduce(&mut context, term.clone()),
-            Ok(Atom::from("ok").into())
-        );
-    }
-
-    #[test]
-    fn reduce_unseal_stuck_on_free_var() {
-        let mut context = context();
-
-        let term: Term = Unseal::new(Var::free("x"), Var::free("v")).into();
-
-        assert_eq!(reduce(&mut context, term.clone()), Ok(term));
-    }
-
-    #[test]
-    fn reduce_sealed_is_stuck() {
-        let mut context = context();
-
-        let term: Term = Sealed::new("x", Type, Var::free("x")).into();
-
-        assert_eq!(reduce(&mut context, term.clone()), Ok(term));
-    }
-
-    #[test]
     #[should_panic(expected = "Arr.get: index out of bounds")]
     fn reduce_lst_get_panics_on_out_of_bounds() {
         let mut context = context();
@@ -1337,7 +1286,7 @@ mod tests {
     fn reduce_proj_table_lookup() {
         let mut context = context();
 
-        context.define_proj(Var::free("r").into(), 0, Atom::from("ok").into());
+        context.define_projection(Var::free("r").into(), 0, Atom::from("ok").into());
 
         let term: Term = Proj::new(Var::free("r"), 0).into();
 

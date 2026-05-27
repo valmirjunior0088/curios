@@ -25,8 +25,6 @@ impl<'a, 'b> Elaborate<'a, 'b> {
 
                     if let Some(full) = self.context.bindings().get(label) {
                         full.join()
-                    } else if let Some(full) = self.context.definitions().get(label) {
-                        full.join()
                     } else {
                         label.to_string()
                     }
@@ -128,32 +126,6 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 )
                 .into(),
             },
-            Term::DefFrom(from) => core::Seal::new(
-                core::Var::free(
-                    self.context
-                        .definitions()
-                        .get(&from.label)
-                        .ok_or_else(|| Error::CoercionOutsideDefBlock {
-                            label: from.label.clone(),
-                        })?
-                        .join(),
-                ),
-                self.term(&from.body)?,
-            )
-            .into(),
-            Term::DefInto(into) => core::Unseal::new(
-                core::Var::free(
-                    self.context
-                        .definitions()
-                        .get(&into.label)
-                        .ok_or_else(|| Error::CoercionOutsideDefBlock {
-                            label: into.label.clone(),
-                        })?
-                        .join(),
-                ),
-                self.term(&into.body)?,
-            )
-            .into(),
             Term::Let(let_) => core::Let::new(
                 let_.label.clone(),
                 self.term(&let_.type_)?,

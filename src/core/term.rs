@@ -687,65 +687,6 @@ impl Rec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Sealed {
-    pub witness: Term,
-    pub tail: Scope<One>,
-}
-
-impl Sealed {
-    pub fn new<L, C, B>(label: L, witness: C, tail: B) -> Self
-    where
-        L: Into<String>,
-        C: Into<Term>,
-        B: Into<Term>,
-    {
-        let label = label.into();
-        Self {
-            witness: witness.into(),
-            tail: Scope::close(One, &[label.as_str()], tail.into()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Seal {
-    pub witness: Term,
-    pub value: Term,
-}
-
-impl Seal {
-    pub fn new<C, V>(witness: C, value: V) -> Self
-    where
-        C: Into<Term>,
-        V: Into<Term>,
-    {
-        Self {
-            witness: witness.into(),
-            value: value.into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Unseal {
-    pub witness: Term,
-    pub value: Term,
-}
-
-impl Unseal {
-    pub fn new<C, V>(witness: C, value: V) -> Self
-    where
-        C: Into<Term>,
-        V: Into<Term>,
-    {
-        Self {
-            witness: witness.into(),
-            value: value.into(),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum Subterm {
     Type,
@@ -763,9 +704,6 @@ pub enum Subterm {
     Match(Match),
     Let(Let),
     Rec(Rec),
-    Sealed(Sealed),
-    Seal(Seal),
-    Unseal(Unseal),
     Var(Var),
     Spanned(Span, Term),
 }
@@ -794,9 +732,6 @@ impl PartialEq for Subterm {
                 (Subterm::Match(a), Subterm::Match(b)) => break a == b,
                 (Subterm::Let(a), Subterm::Let(b)) => break a == b,
                 (Subterm::Rec(a), Subterm::Rec(b)) => break a == b,
-                (Subterm::Sealed(a), Subterm::Sealed(b)) => break a == b,
-                (Subterm::Seal(a), Subterm::Seal(b)) => break a == b,
-                (Subterm::Unseal(a), Subterm::Unseal(b)) => break a == b,
                 (Subterm::Var(a), Subterm::Var(b)) => break a == b,
                 _ => break false,
             }
@@ -827,9 +762,6 @@ impl Hash for Subterm {
                 Subterm::Match(x) => break x.hash(state),
                 Subterm::Let(x) => break x.hash(state),
                 Subterm::Rec(x) => break x.hash(state),
-                Subterm::Sealed(x) => break x.hash(state),
-                Subterm::Seal(x) => break x.hash(state),
-                Subterm::Unseal(x) => break x.hash(state),
                 Subterm::Var(x) => break x.hash(state),
                 Subterm::Spanned(_, inner) => term = inner,
             }
@@ -944,24 +876,6 @@ impl From<Rec> for Subterm {
     }
 }
 
-impl From<Sealed> for Subterm {
-    fn from(value: Sealed) -> Self {
-        Self::Sealed(value)
-    }
-}
-
-impl From<Seal> for Subterm {
-    fn from(value: Seal) -> Self {
-        Self::Seal(value)
-    }
-}
-
-impl From<Unseal> for Subterm {
-    fn from(value: Unseal) -> Self {
-        Self::Unseal(value)
-    }
-}
-
 impl From<Var> for Subterm {
     fn from(value: Var) -> Self {
         Self::Var(value)
@@ -1055,24 +969,6 @@ impl From<Let> for Term {
 impl From<Rec> for Term {
     fn from(value: Rec) -> Self {
         Self::new(Subterm::Rec(value))
-    }
-}
-
-impl From<Sealed> for Term {
-    fn from(value: Sealed) -> Self {
-        Self::new(Subterm::Sealed(value))
-    }
-}
-
-impl From<Seal> for Term {
-    fn from(value: Seal) -> Self {
-        Self::new(Subterm::Seal(value))
-    }
-}
-
-impl From<Unseal> for Term {
-    fn from(value: Unseal) -> Self {
-        Self::new(Subterm::Unseal(value))
     }
 }
 
@@ -1192,9 +1088,6 @@ impl Bound for Subterm {
             Subterm::Match(m) => visit.visit_match(m).into(),
             Subterm::Let(let_) => visit.visit_let(let_).into(),
             Subterm::Rec(rec) => visit.visit_rec(rec).into(),
-            Subterm::Sealed(sealed) => visit.visit_sealed(sealed).into(),
-            Subterm::Seal(seal) => visit.visit_seal(seal).into(),
-            Subterm::Unseal(unseal) => visit.visit_unseal(unseal).into(),
             Subterm::Var(var) => {
                 (visit.visit)(visit.depth, var).unwrap_or_else(|| var.clone().into())
             }
@@ -1264,9 +1157,6 @@ impl Bound for Subterm {
                 .max()
                 .unwrap_or(0)
                 .max(tail.reach()),
-            Subterm::Sealed(Sealed { witness, tail }) => witness.reach().max(tail.reach()),
-            Subterm::Seal(Seal { witness, value }) => witness.reach().max(value.reach()),
-            Subterm::Unseal(Unseal { witness, value }) => witness.reach().max(value.reach()),
         }
     }
 }
@@ -1675,27 +1565,6 @@ where
                 .iter()
                 .map(|(atom, body)| (atom.clone(), self.visit_subterm(body)))
                 .collect(),
-        }
-    }
-
-    fn visit_sealed(&mut self, sealed: &Sealed) -> Sealed {
-        Sealed {
-            witness: self.visit_subterm(&sealed.witness),
-            tail: self.visit_scope(&sealed.tail),
-        }
-    }
-
-    fn visit_seal(&mut self, seal: &Seal) -> Seal {
-        Seal {
-            witness: self.visit_subterm(&seal.witness),
-            value: self.visit_subterm(&seal.value),
-        }
-    }
-
-    fn visit_unseal(&mut self, unseal: &Unseal) -> Unseal {
-        Unseal {
-            witness: self.visit_subterm(&unseal.witness),
-            value: self.visit_subterm(&unseal.value),
         }
     }
 

@@ -92,18 +92,6 @@ pub enum Match {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct DefFrom {
-    pub label: String,
-    pub body: Subterm,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct DefInto {
-    pub label: String,
-    pub body: Subterm,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     pub label: String,
     pub type_: Subterm,
@@ -137,8 +125,6 @@ pub enum Term {
     AtomType(AtomType),
     Atom(Atom),
     Match(Match),
-    DefFrom(DefFrom),
-    DefInto(DefInto),
     Let(Let),
     Rec(Rec),
     Name(Name),
@@ -165,8 +151,6 @@ impl PartialEq for Term {
                 (Term::AtomType(a), Term::AtomType(b)) => break a == b,
                 (Term::Atom(a), Term::Atom(b)) => break a == b,
                 (Term::Match(a), Term::Match(b)) => break a == b,
-                (Term::DefFrom(a), Term::DefFrom(b)) => break a == b,
-                (Term::DefInto(a), Term::DefInto(b)) => break a == b,
                 (Term::Let(a), Term::Let(b)) => break a == b,
                 (Term::Rec(a), Term::Rec(b)) => break a == b,
                 (Term::Name(a), Term::Name(b)) => break a == b,

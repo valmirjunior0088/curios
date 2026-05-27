@@ -1,8 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Seal, Sealed, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        Unseal, Var,
+        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -701,30 +700,6 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Subterm::Sealed(Sealed { witness, tail }) => {
-            let (label, tail) = open_scope_one(tail, depth);
-
-            flat([
-                pure("sealed "),
-                pure(label),
-                pure(" = "),
-                print_term(witness, depth),
-                pure(";\n"),
-                print_term(tail, depth + 1),
-            ])
-        }
-        Subterm::Seal(Seal { witness, value }) => flat([
-            pure("seal "),
-            print_term(witness, depth),
-            pure(" "),
-            print_term(value, depth),
-        ]),
-        Subterm::Unseal(Unseal { witness, value }) => flat([
-            pure("unseal "),
-            print_term(witness, depth),
-            pure(" "),
-            print_term(value, depth),
-        ]),
         Subterm::Var(var) => print_var(var),
         Subterm::Spanned(_, inner) => print_term(inner, depth),
     }

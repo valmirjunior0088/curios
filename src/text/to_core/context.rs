@@ -1,8 +1,5 @@
 use {
-    crate::{
-        core,
-        text::Name,
-    },
+    crate::{core, text::Name},
     std::collections::HashMap,
 };
 
@@ -12,13 +9,7 @@ pub struct FlatLet {
     pub body: core::Term,
 }
 
-pub struct FlatDef {
-    pub name: Name,
-    pub witness: core::Term,
-}
-
 pub enum FlatItem {
-    Def(FlatDef),
     Let(FlatLet),
     Rec(Vec<FlatLet>),
 }
@@ -66,7 +57,6 @@ pub struct Context<'a> {
     binding_aliases: &'a mut HashMap<Name, Name>,
     qualifiers: HashMap<String, Name>,
     bindings: HashMap<String, Name>,
-    definitions: HashMap<String, Name>,
 }
 
 impl<'a> Context<'a> {
@@ -82,7 +72,6 @@ impl<'a> Context<'a> {
             binding_aliases,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
-            definitions: HashMap::new(),
         }
     }
 
@@ -94,15 +83,7 @@ impl<'a> Context<'a> {
             binding_aliases: &mut *self.binding_aliases,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
-            definitions: HashMap::new(),
         }
-    }
-
-    pub fn nested_def(&mut self, label: &str, name: Name) -> Context<'_> {
-        let mut child = self.nested(label);
-        child.definitions.insert(label.to_string(), name);
-
-        child
     }
 
     pub fn prefix(&self) -> &Name {
@@ -131,10 +112,6 @@ impl<'a> Context<'a> {
 
     pub fn binding_aliases(&self) -> &HashMap<Name, Name> {
         &*self.binding_aliases
-    }
-
-    pub fn definitions(&self) -> &HashMap<String, Name> {
-        &self.definitions
     }
 
     pub fn register_alias(&mut self, qualifier: &str) {
@@ -171,10 +148,7 @@ impl<'a> Context<'a> {
 
     pub fn resolve_use(&mut self, is_abs: bool, name: &Name) -> UseResolved {
         if !is_abs && name.is_single() {
-            panic!(
-                "single-segment relative use is forbidden: {}",
-                name.head()
-            );
+            panic!("single-segment relative use is forbidden: {}", name.head());
         }
 
         let label = name.last().to_string();

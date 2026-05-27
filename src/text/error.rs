@@ -8,7 +8,6 @@ pub enum Error {
     PrivateChildModule { segment: String },
     BindingNotFound { binding: String },
     PrivateBinding { binding: String },
-    CoercionOutsideDefBlock { label: String },
     Located { span: Span, error: Box<Error> },
 }
 
@@ -46,9 +45,6 @@ impl fmt::Display for Error {
             Error::PrivateChildModule { segment } => write!(f, "private child module: {segment}"),
             Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
             Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),
-            Error::CoercionOutsideDefBlock { label } => {
-                write!(f, "coercion outside def block: {label}")
-            }
             Error::Located { error, .. } => write!(f, "{error}"),
         }
     }

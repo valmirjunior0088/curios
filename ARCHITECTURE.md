@@ -82,7 +82,7 @@ Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parse
 
 Line comments (`-- text`) are stripped inside `parse_whitespace`, which is called after every terminal token. Comments are discarded at parse time and do not appear in the AST.
 
-Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail: Term`. Top-level items are `Let`, `Rec` (mutual recursion), `Mod` (inline or file-backed module), `Use` (import), and `Def` (opaque type block).
+Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail: Term`. Top-level items are `Let`, `Rec` (mutual recursion), `Mod` (inline or file-backed module), and `Use` (import).
 
 `text::Term` has no de Bruijn indices — all variables are `String` labels. The grammar covers:
 
@@ -93,7 +93,6 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - `e.0`, `e.1` (field access / Σ-elimination)
 - `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)` primitives with all built-in operations
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/name;`, `pub use ...;`
-- Opaque types: `def Label(witness) ... end`
 - Char literals as nat codepoints: `'a'`
 
 `text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(u32) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.
@@ -106,13 +105,13 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 Two concerns, handled separately:
 
-**Module processing** (`to_core.rs`): walks `TopItem` list, resolves `use` declarations (enforcing visibility), qualifies names under `mod` blocks (e.g. `Foo/bar`), resolves file-backed `mod Label;` via the `Loader` trait, translates `def` blocks into `core::Sealed` nodes, and folds `let`/`rec` items right-to-left into the tail.
+**Module processing** (`to_core.rs`): walks `TopItem` list, resolves `use` declarations (enforcing visibility), qualifies names under `mod` blocks (e.g. `Foo/bar`), resolves file-backed `mod Label;` via the `Loader` trait, and folds `let`/`rec` items right-to-left into the tail.
 
 The `Loader` trait has two implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `PanicLoader` (used for inline programs and tests).
 
 **Term elaboration** (`to_core/elaborate.rs`): pure syntactic translation from `text::Term` to `core::Term`. The only binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices. No type-directed work — that happens in `core/typing.rs`.
 
-Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, `CoercionOutsideDefBlock` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
 ---
 
@@ -132,7 +131,6 @@ The central `core::Term` enum:
 | `NatMatch`                     | Sparse dispatch on specific `Nat` values                     |
 | `AtomType` / `Atom` / `Match`  | Labeled unions, tags, pattern matching                       |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                |
-| `Sealed` / `Seal` / `Unseal`   | Opaque type abstraction from `def`                           |
 | `Prim`                         | Built-in values and operations                               |
 | `Var`                          | Variables (free or bound)                                    |
 
@@ -144,7 +142,7 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 | `A`       | Used by                                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------------------------- |
-| `One`     | `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail), `Sealed` (tail) |
+| `One`     | `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail) |
 | `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                 |
 | `Many(n)` | `Func` (parameters), `Rec` (items and tail)                                                                   |
 
@@ -181,8 +179,6 @@ Maintains separate stacks for **assumptions** (name → type) and **definitions*
 
 ### Opaque types
 
-`Sealed` binds a label to a witness type and scopes it over a continuation. Inside the `def` block, `Seal` (`Label.from`) and `Unseal` (`Label.into`) coerce between the opaque type and the witness. All three are transparent at runtime — erasure drops `Sealed` and replaces `Seal`/`Unseal` with a pass-through of the wrapped value.
-
 ---
 
 ## Stage 4 — Type erasure (`src/ersd/`)
@@ -194,8 +190,7 @@ Erasure is performed inside `core::erase` (the `erase` function), interleaved wi
 | Removed                                                | Preserved                                                        |
 | ------------------------------------------------------ | ---------------------------------------------------------------- |
 | `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match` |
-| `Sealed`, `Seal`, `Unseal`                             | `Let`, `Rec`, all control flow                                   |
-| Type annotations on binders                            | `Prim`, `Bin`, `Arr`, `Name`                                     |
+| Type annotations on binders                            | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`                       |
 
 `Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `BlnMatch` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
 
@@ -388,10 +383,10 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 | Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access                                                                            |
 | Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                        |
 | Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
-| Erasure         | Sealed/Unseal non-recursive, opaque type boundary enforcement                                                                                               |
+| Erasure         | Primitive, tuple, array, binary type erasure                                                                                                                |
 | CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection             |
 | WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
-| Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, `def`/coercion, absolute paths                                                   |
+| Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths                                                                   |
 | Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
 | End-to-end      | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion                                                   |
 

@@ -13,10 +13,6 @@ fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
         match item {
             TopItem::Mod(m) => info.insert_child(m.label.clone(), m.is_pub),
             TopItem::Let(l) => info.insert_binding(l.label.clone(), l.is_pub),
-            TopItem::Def(d) => {
-                info.insert_child(d.label.clone(), d.is_pub);
-                info.insert_binding(d.label.clone(), d.is_pub);
-            }
             TopItem::Rec(ls) => {
                 for l in ls {
                     info.insert_binding(l.label.clone(), l.is_pub);
@@ -40,10 +36,6 @@ fn process_items(
     for top_item in top_items {
         match top_item {
             TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label)),
-            TopItem::Def(d) => {
-                context.insert_scope(d.label.clone(), context.prefixed(&d.label));
-                context.insert_binding(d.label.clone(), context.prefixed(&d.label));
-            }
             TopItem::Let(l) => context.insert_binding(l.label.clone(), context.prefixed(&l.label)),
             TopItem::Rec(labels) => {
                 for l in labels {
@@ -130,23 +122,6 @@ fn process_items(
 
                 flat_items.push(FlatItem::Rec(items));
             }
-            TopItem::Def(def_item) => {
-                let name = context.prefixed(&def_item.label);
-
-                let witness = Elaborate::new(context).term(&def_item.witness)?;
-
-                flat_items.push(FlatItem::Def(FlatDef {
-                    name: name.clone(),
-                    witness,
-                }));
-
-                process_items(
-                    &def_item.module.items,
-                    &mut context.nested_def(&def_item.label, name),
-                    flat_items,
-                    loader,
-                )?;
-            }
         }
     }
 
@@ -155,7 +130,6 @@ fn process_items(
 
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     match item {
-        FlatItem::Def(def) => core::Sealed::new(def.name.join(), def.witness, acc).into(),
         FlatItem::Let(let_) => core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into(),
         FlatItem::Rec(items) => core::Rec::new(
             items
@@ -279,8 +253,6 @@ mod tests {
                 pub let f : Type = Type;
             end
             pub let g : Type = Type;
-            pub def D(Bin)
-            end
             Type
         "#);
     }
@@ -375,238 +347,6 @@ mod tests {
     }
 
     #[test]
-    fn def_elaborates_to_sealed() {
-        assert_eq!(
-            run(r#"
-                def Str(Bin)
-                    pub let from : Bin -> Str = bin => Str.from bin;
-                    pub let into : Str -> Bin = str => Str.into str;
-                end
-                Type
-            "#),
-            core::Sealed::new(
-                "Str",
-                core::Subterm::Prim(core::Prim::BinType),
-                core::Let::new(
-                    "Str/from",
-                    core::FuncType::new(
-                        [("", core::Subterm::Prim(core::Prim::BinType))],
-                        core::Var::free("Str")
-                    ),
-                    core::Func::new(
-                        ["bin"],
-                        core::Seal::new(core::Var::free("Str"), core::Var::free("bin"))
-                    ),
-                    core::Let::new(
-                        "Str/into",
-                        core::FuncType::new(
-                            [("", core::Var::free("Str"))],
-                            core::Subterm::Prim(core::Prim::BinType)
-                        ),
-                        core::Func::new(
-                            ["str"],
-                            core::Unseal::new(core::Var::free("Str"), core::Var::free("str"))
-                        ),
-                        core::Subterm::Type,
-                    ),
-                ),
-            )
-            .into()
-        );
-    }
-
-    #[test]
-    fn rejects_coercion_outside_def_block() {
-        assert!(
-            run_err(
-                r#"
-            def Str(Bin)
-            end
-            Str.from 00
-        "#
-            )
-            .contains("coercion outside def block")
-        );
-    }
-
-    #[test]
-    fn def_inside_module_uses_qualified_name() {
-        assert_eq!(
-            run(r#"
-                mod Foo
-                    def Str(Bin)
-                    end
-                end
-                Type
-            "#),
-            core::Sealed::new(
-                "Foo/Str",
-                core::Subterm::Prim(core::Prim::BinType),
-                core::Subterm::Type
-            )
-            .into()
-        );
-    }
-
-    #[test]
-    fn pub_def_type_referenceable_by_qualified_name() {
-        assert_eq!(
-            run(r#"
-                mod Foo
-                    pub def Str(Bin)
-                        pub let from : Bin -> Str = x => Str.from x;
-                    end
-                end
-                Foo/Str
-            "#),
-            core::Sealed::new(
-                "Foo/Str",
-                core::Subterm::Prim(core::Prim::BinType),
-                core::Let::new(
-                    "Foo/Str/from",
-                    core::FuncType::new(
-                        [("", core::Subterm::Prim(core::Prim::BinType))],
-                        core::Var::free("Foo/Str")
-                    ),
-                    core::Func::new(
-                        ["x"],
-                        core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))
-                    ),
-                    core::Var::free("Foo/Str"),
-                ),
-            )
-            .into()
-        );
-    }
-
-    #[test]
-    fn use_def_namespace_then_access_item() {
-        assert_eq!(
-            run(r#"
-                mod Foo
-                    pub def Str(Bin)
-                        pub let from : Bin -> Str = x => Str.from x;
-                    end
-                end
-                use Foo/Str;
-                Str/from
-            "#),
-            core::Sealed::new(
-                "Foo/Str",
-                core::Subterm::Prim(core::Prim::BinType),
-                core::Let::new(
-                    "Foo/Str/from",
-                    core::FuncType::new(
-                        [("", core::Subterm::Prim(core::Prim::BinType))],
-                        core::Var::free("Foo/Str")
-                    ),
-                    core::Func::new(
-                        ["x"],
-                        core::Seal::new(core::Var::free("Foo/Str"), core::Var::free("x"))
-                    ),
-                    core::Var::free("Foo/Str/from"),
-                ),
-            )
-            .into()
-        );
-    }
-
-    #[test]
-    fn rejects_private_def_type_by_qualified_name() {
-        assert!(
-            run_err(
-                r#"
-            mod Foo
-                def Str(Bin)
-                end
-            end
-            Foo/Str
-        "#
-            )
-            .contains("private binding")
-        );
-    }
-
-    #[test]
-    fn lambda_param_shadowing_def_name_captures_param_not_type() {
-        assert_eq!(
-            run(r#"
-                def Str(Bin)
-                    pub let foo : Str -> Bin = Str => Str.from Str;
-                end
-                Type
-            "#),
-            core::Sealed::new(
-                "Str",
-                core::Subterm::Prim(core::Prim::BinType),
-                core::Let::new(
-                    "Str/foo",
-                    core::FuncType::new(
-                        [("", core::Var::free("Str"))],
-                        core::Subterm::Prim(core::Prim::BinType)
-                    ),
-                    core::Func::new(
-                        ["Str"],
-                        core::Seal::new(core::Var::free("Str"), core::Var::free("Str"))
-                    ),
-                    core::Subterm::Type,
-                ),
-            )
-            .into()
-        );
-    }
-
-    #[test]
-    fn lambda_param_shadows_def_in_nested_func() {
-        assert_eq!(
-            run(r#"
-                def Str(Bin)
-                    pub let foo : Str -> Str -> Bin = Str => str => Str.from str;
-                end
-                Type
-            "#),
-            core::Sealed::new(
-                "Str",
-                core::Subterm::Prim(core::Prim::BinType),
-                core::Let::new(
-                    "Str/foo",
-                    core::FuncType::new(
-                        [("", core::Var::free("Str"))],
-                        core::FuncType::new(
-                            [("", core::Var::free("Str"))],
-                            core::Subterm::Prim(core::Prim::BinType)
-                        ),
-                    ),
-                    core::Func::new(
-                        ["Str"],
-                        core::Func::new(
-                            ["str"],
-                            core::Seal::new(core::Var::free("Str"), core::Var::free("str"))
-                        ),
-                    ),
-                    core::Subterm::Type,
-                ),
-            )
-            .into()
-        );
-    }
-
-    #[test]
-    fn rejects_coercion_with_wrong_def_label() {
-        assert!(
-            run_err(
-                r#"
-            def Str(Bin)
-                pub let bad : Bin -> Str = x => Foo.from x;
-            end
-            Type
-        "#
-            )
-            .contains("coercion outside def block: Foo")
-        );
-    }
-
-    #[test]
     fn pub_use_exposes_qualifier() {
         assert_eq!(
             run(r#"
@@ -641,22 +381,6 @@ mod tests {
             end
             use Foo/Bar;
             mod Bar
-            end
-            Type
-        "#);
-    }
-
-    #[test]
-    #[should_panic(expected = "qualifier conflicts with existing scope entry: Bar")]
-    fn rejects_def_that_overwrites_prior_use() {
-        run(r#"
-            mod Foo
-                pub mod Bar
-                    pub let f : Type = Type;
-                end
-            end
-            use Foo/Bar;
-            def Bar(Bin)
             end
             Type
         "#);

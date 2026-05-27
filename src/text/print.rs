@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
-        FuncType, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopDef,
-        TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, Let,
+        Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopItem, TopLet, TopMod,
+        TopUse, Tuple, TupleType,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -308,10 +308,7 @@ fn print_term(term: Term) -> Printer<'static> {
                     cases
                         .into_iter()
                         .map(|(nat, body)| {
-                            flat([
-                                pure(format!("\n| {nat} =>\n")),
-                                indent(print_term(*body)),
-                            ])
+                            flat([pure(format!("\n| {nat} =>\n")), indent(print_term(*body))])
                         })
                         .collect::<Vec<_>>(),
                 ),
@@ -347,12 +344,6 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("\nend"),
             ]),
         },
-        Term::DefFrom(DefFrom { label, body }) => {
-            flat([pure(label), pure(".from "), print_term(*body)])
-        }
-        Term::DefInto(DefInto { label, body }) => {
-            flat([pure(label), pure(".into "), print_term(*body)])
-        }
         Term::Let(Let {
             label,
             type_,
@@ -476,19 +467,6 @@ fn print_top_mod(item: TopMod) -> Printer<'static> {
     }
 }
 
-fn print_top_def(item: TopDef) -> Printer<'static> {
-    flat([
-        print_pub(item.is_pub),
-        pure("def "),
-        pure(item.label),
-        pure("("),
-        print_term(*item.witness),
-        pure(")\n"),
-        indent(print_module_items(item.module.items)),
-        pure("\nend"),
-    ])
-}
-
 fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
     sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
 }
@@ -499,7 +477,6 @@ fn print_top_item(item: TopItem) -> Printer<'static> {
         TopItem::Use(u) => print_top_use(u),
         TopItem::Let(l) => print_top_let(l),
         TopItem::Rec(items) => print_top_rec(items),
-        TopItem::Def(d) => print_top_def(d),
     }
 }
 

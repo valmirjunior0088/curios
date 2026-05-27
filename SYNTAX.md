@@ -4,7 +4,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `def` `false` `true`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules.
 
@@ -66,14 +66,6 @@ pub and parse_arr : Parse(Value) =
 ```
 
 Members may refer to one another freely through such calls. The sole exception: two bindings whose values are *calls that each require the other's result* form a cycle with no way to tie the knot, and the group is rejected.
-
-### Type definition
-
-```
-pub def Name(witness) items... end
-```
-
-Defines a named type backed by `witness`. The body is a sequence of top-level declarations available within the definition. Used to introduce newtypes and associated operations.
 
 ### Submodule
 
@@ -218,15 +210,6 @@ e.1
 ```
 
 Indices are zero-based. Chains are supported: `e.0.1` reads field 1 of field 0 of `e`.
-
-### Coercion
-
-```
-Name.into value
-Name.from value
-```
-
-Converts between a defined type and its witness type.
 
 ## Types
 

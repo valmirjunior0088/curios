@@ -387,9 +387,11 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
     let canonical = reduce_with(context, head)?;
 
     match &*canonical {
-        Subterm::Var(var) => context.define(var.unwrap(), value),
+        Subterm::Var(var) => {
+            context.define(var.unwrap(), value);
+        }
         Subterm::Proj(Proj { head: base, index }) => {
-            context.define_proj(base.clone(), *index, value.clone())
+            context.define_projection(base.clone(), *index, value.clone());
         }
         _ => {}
     }

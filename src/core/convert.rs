@@ -1,8 +1,7 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatMatch, Preempted,
-        Prim, Proj, Rec, Seal, Sealed, Subterm, Telescope, Term, Tuple, TupleType, Type, Unseal,
-        Var, reduce,
+        Prim, Proj, Rec, Subterm, Telescope, Term, Tuple, TupleType, Type, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -474,34 +473,6 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_sealed(
-        &mut self,
-        context: &mut Context,
-        this: Sealed,
-        that: Sealed,
-    ) -> Result<bool, Preempted> {
-        let label = Var::free(context.fresh(None)).into();
-        self.enqueue(Type.into(), this.witness, that.witness);
-        self.enqueue(
-            Type.into(),
-            this.tail.open(&[&label]),
-            that.tail.open(&[&label]),
-        );
-        Ok(true)
-    }
-
-    fn compare_seal(&mut self, this: Seal, that: Seal) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), this.witness, that.witness);
-        self.enqueue(Type.into(), this.value, that.value);
-        Ok(true)
-    }
-
-    fn compare_unseal(&mut self, this: Unseal, that: Unseal) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), this.witness, that.witness);
-        self.enqueue(Type.into(), this.value, that.value);
-        Ok(true)
-    }
-
     fn compare_rec(
         &mut self,
         context: &mut Context,
@@ -690,13 +661,6 @@ impl Convert {
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?
                 }
-                (Subterm::Sealed(this), Subterm::Sealed(that)) => {
-                    self.compare_sealed(context, this, that)?
-                }
-                (Subterm::Seal(this), Subterm::Seal(that)) => self.compare_seal(this, that)?,
-                (Subterm::Unseal(this), Subterm::Unseal(that)) => {
-                    self.compare_unseal(this, that)?
-                }
                 (Subterm::Spanned(_, this), that) => {
                     self.enqueue(type_, this, that.into());
                     true
@@ -724,8 +688,8 @@ mod tests {
     use {
         super::*,
         crate::core::{
-            Apply, Atom, AtomType, Func, FuncType, Match, Nat, Proj, Rec, Sealed, Tuple, TupleType,
-            Type, Var,
+            Apply, Atom, AtomType, Func, FuncType, Match, Nat, Proj, Rec, Tuple, TupleType, Type,
+            Var,
         },
         std::time::Duration,
     };
@@ -1142,25 +1106,5 @@ mod tests {
         ]));
 
         assert_eq!(conv(&mut context, &this, &that), Err(Preempted));
-    }
-
-    #[test]
-    fn convert_sealed_is_alpha_equivalent() {
-        let mut context = context();
-
-        let this = Term::from(Sealed::new("x", Type, Var::free("x")));
-        let that = Term::from(Sealed::new("y", Type, Var::free("y")));
-
-        assert_eq!(conv(&mut context, &this, &that), Ok(true));
-    }
-
-    #[test]
-    fn convert_sealed_different_witnesses_not_convertible() {
-        let mut context = context();
-
-        let this = Term::from(Sealed::new("x", Type, Var::free("x")));
-        let that = Term::from(Sealed::new("x", AtomType::new(["a"]), Var::free("x")));
-
-        assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
 }

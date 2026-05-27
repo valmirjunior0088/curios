@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, DefFrom, DefInto, Entrypoint, Func,
-        FuncType, Let, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Prim, Proj, Rec,
-        RecItem, Term, TopDef, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, Let,
+        Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, RecItem, Term,
+        TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -14,7 +14,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "def", "false", "true",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -45,7 +45,9 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 
 fn parse_name<'a>() -> Parser<'a, Name> {
     parse_identifier()
-        .and(many0(|| catch(take_exact("/").and_keep(parse_identifier()))))
+        .and(many0(|| {
+            catch(take_exact("/").and_keep(parse_identifier()))
+        }))
         .map(|(first, rest)| {
             iter::once(first)
                 .chain(rest)
@@ -796,30 +798,6 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         })
 }
 
-fn parse_coerce<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_identifier().and(
-            parse_literal(".from")
-                .map(|()| false)
-                .or(parse_literal(".into").map(|()| true)),
-        ),
-    )
-    .and(lazy(parse_atomic_term))
-    .map(|((label, is_into), body)| {
-        if is_into {
-            Term::DefInto(DefInto {
-                label: label.to_string(),
-                body: body.into(),
-            })
-        } else {
-            Term::DefFrom(DefFrom {
-                label: label.to_string(),
-                body: body.into(),
-            })
-        }
-    })
-}
-
 fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
     catch(
         take_exact(".").and_keep(
@@ -891,7 +869,6 @@ fn parse_term<'a>() -> Parser<'a, Term> {
             .or(parse_match())
             .or(parse_func_type())
             .or(parse_func())
-            .or(parse_coerce())
             .or(parse_atomic_term()),
     )
 }
@@ -954,25 +931,6 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
         .map(TopItem::Rec)
 }
 
-fn parse_top_def<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("def"))).flat_map(|(is_pub, ())| {
-        parse_identifier()
-            .and_drop(parse_literal("("))
-            .and(lazy(parse_term))
-            .and_drop(parse_literal(")"))
-            .and(many0(parse_top_item))
-            .and_drop(parse_keyword("end"))
-            .map(move |((label, witness), items)| {
-                TopItem::Def(TopDef {
-                    is_pub,
-                    label: label.to_string(),
-                    witness: witness.into(),
-                    module: Module { items },
-                })
-            })
-    })
-}
-
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
         parse_identifier().flat_map(move |name| {
@@ -1026,8 +984,7 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {
-    parse_top_def()
-        .or(parse_top_mod())
+    parse_top_mod()
         .or(parse_top_use())
         .or(parse_top_let())
         .or(parse_top_rec())
