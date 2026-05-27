@@ -223,22 +223,10 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(" =>\n"),
             indent(print_term(*body)),
         ]),
-        Term::Apply(Apply::Call { head, params }) => flat([
+        Term::Apply(Apply { head, params }) => flat([
             print_term(*head),
             pure("("),
             sep_flat(params.into_iter().map(|p| print_term(*p)), || pure(", ")),
-            pure(")"),
-        ]),
-        Term::Apply(Apply::Closure { head, args }) => flat([
-            print_term(*head),
-            pure(".("),
-            sep_flat(
-                args.into_iter().map(|a| match a {
-                    None => pure("_"),
-                    Some(t) => print_term(*t),
-                }),
-                || pure(", "),
-            ),
             pure(")"),
         ]),
         Term::TupleType(TupleType { fields }) => {

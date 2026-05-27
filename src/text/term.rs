@@ -19,15 +19,9 @@ pub struct Func {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Apply {
-    Call {
-        head: Subterm,
-        params: Vec<Subterm>,
-    },
-    Closure {
-        head: Subterm,
-        args: Vec<Option<Subterm>>,
-    },
+pub struct Apply {
+    pub head: Subterm,
+    pub params: Vec<Subterm>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

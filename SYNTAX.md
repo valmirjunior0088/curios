@@ -126,14 +126,6 @@ Arguments are arbitrary terms — there is no need to parenthesise compound argu
 Nat.add(Nat.mul(2, 3), 1)
 ```
 
-### Partial application
-
-A call site may leave argument holes, written `_`, using the `.(…)` form. The result is a function over the holes, in left-to-right order:
-
-```
-f.(a, _, c)        -- equivalent to: h => f(a, h, c)
-```
-
 ### Lambda
 
 ```

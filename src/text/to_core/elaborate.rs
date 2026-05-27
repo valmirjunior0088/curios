@@ -48,35 +48,15 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             )
             .into(),
             Term::Func(func) => core::Func::new(func.params.clone(), self.term(&func.body)?).into(),
-            Term::Apply(crate::text::Apply::Call { head, params }) => core::Apply::new(
-                self.term(head)?,
-                params
+            Term::Apply(apply) => core::Apply::new(
+                self.term(&apply.head)?,
+                apply
+                    .params
                     .iter()
                     .map(|p| self.term(p))
                     .collect::<Result<Vec<_>, Error>>()?,
             )
             .into(),
-            Term::Apply(crate::text::Apply::Closure { head, args }) => {
-                let mut hole_count = 0_usize;
-                let mut fresh_params = Vec::new();
-                let elaborated_args = args
-                    .iter()
-                    .map(|arg| match arg {
-                        None => {
-                            let label = format!("_{}", hole_count);
-                            hole_count += 1;
-                            fresh_params.push(label.clone());
-                            Ok(core::Var::free(label).into())
-                        }
-                        Some(t) => self.term(t),
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-                core::Func::new(
-                    fresh_params,
-                    core::Apply::new(self.term(head)?, elaborated_args),
-                )
-                .into()
-            }
             Term::TupleType(tt) => core::TupleType::new(
                 tt.fields
                     .iter()

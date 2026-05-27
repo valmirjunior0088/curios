@@ -830,31 +830,14 @@ fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
     )
 }
 
-fn parse_closure_arg<'a>() -> Parser<'a, Option<Term>> {
-    catch(parse_identifier().flat_map(|id: &str| {
-        if id == "_" {
-            pure(())
-        } else {
-            fail("not a hole")
-        }
-    }))
-    .map(|_| None)
-    .or(lazy(parse_term).map(Some))
-}
-
 enum Suffix {
     Proj(usize),
     Apply(Vec<Term>),
-    Closure(Vec<Option<Term>>),
 }
 
 fn parse_suffix<'a>() -> Parser<'a, Suffix> {
     parse_proj_suffix()
         .map(Suffix::Proj)
-        .or(catch(take_exact(".(").and_drop(parse_whitespace()))
-            .and_keep(sep_by0(parse_closure_arg, || parse_literal(",")))
-            .and_drop(parse_literal(")"))
-            .map(Suffix::Closure))
         .or(catch(parse_literal("("))
             .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
             .and_drop(parse_literal(")"))
@@ -892,13 +875,9 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
                             head: head.into(),
                             index,
                         }),
-                        Suffix::Apply(params) => Term::Apply(Apply::Call {
+                        Suffix::Apply(params) => Term::Apply(Apply {
                             head: head.into(),
                             params: params.into_iter().map(Into::into).collect(),
-                        }),
-                        Suffix::Closure(args) => Term::Apply(Apply::Closure {
-                            head: head.into(),
-                            args: args.into_iter().map(|a| a.map(Into::into)).collect(),
                         }),
                     })
             }),
@@ -1107,7 +1086,7 @@ mod tests {
                     })
                     .into(),
                 }],
-                tail: Term::Apply(Apply::Call {
+                tail: Term::Apply(Apply {
                     head: Term::Name(Name::from(["id".to_string()])).into(),
                     params: vec![Term::Name(Name::from(["a".to_string()])).into()],
                 })
