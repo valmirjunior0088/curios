@@ -89,7 +89,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
 - Application `f(a, b)` and partial application `f.(a, _, c)` (holes desugar to a lambda over the missing arguments)
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
-- Atoms `'[left, right]`, `'left`; the unified `match x : k => T; | … ;` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
+- Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
 - `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)` primitives with all built-in operations
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/name;`, `pub use ...;`

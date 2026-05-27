@@ -7,14 +7,16 @@ fn main() {
     let text_entrypoint = r#"
         rec Tree : Type = {
             label : '[leaf, node],
-            match label : _ => Type;
-            | 'leaf => Int;
-            | 'node => {Int, Tree, Tree}; };
+            match label : _ => Type
+            | 'leaf => Int
+            | 'node => {Int, Tree, Tree}
+            end };
         rec sum : Tree -> Int = t =>
-            match t.0 : _ => Int;
-            | 'leaf => t.1;
+            match t.0 : _ => Int
+            | 'leaf => t.1
             | 'node =>
-                Int.add(t.1.0, Int.add(sum(t.1.1), sum(t.1.2)));;
+                Int.add(t.1.0, Int.add(sum(t.1.1), sum(t.1.2)))
+            end;
         let tree : Tree =
             ('node, (+1,
                 ('node, (+2, ('leaf, +3), ('leaf, +4))),

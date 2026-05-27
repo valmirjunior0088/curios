@@ -6,48 +6,59 @@ pub let from_nat(str : Bin) -> Nat =
     Bin/fold(Nat, str, 0, (byte, acc) => Nat.add(Nat.mul(acc, 10), Nat.sub(byte, 48)));
 
 pub let from_int(str : Bin) -> Int =
-    match Bin.get(str, 0) : Int;
-    | '+' => Nat.to_int(from_nat(Bin.slice(str, 1, Bin.len(str))));
-    | '-' => Int.sub(+0, Nat.to_int(from_nat(Bin.slice(str, 1, Bin.len(str)))));
-    | _ => Nat.to_int(from_nat(str));;
+    match Bin.get(str, 0) : Int
+    | '+' => Nat.to_int(from_nat(Bin.slice(str, 1, Bin.len(str))))
+    | '-' => Int.sub(+0, Nat.to_int(from_nat(Bin.slice(str, 1, Bin.len(str)))))
+    | _ => Nat.to_int(from_nat(str))
+    end;
 
 pub let find_byte(target : Nat, str : Bin) -> Nat =
-    match Bin.len(str) : Nat;
-    | 0 => Bin.len(str);
+    match Bin.len(str) : Nat
+    | 0 => Bin.len(str)
     | pred ih =>
-        match Nat.lt(pred, ih) : Nat;
+        match Nat.lt(pred, ih) : Nat
         | true =>
-            match Nat.eql(Bin.get(str, pred), target) : Nat;
-            | true  => pred;
-            | false => ih;;
-        | false => ih;;;
+            match Nat.eql(Bin.get(str, pred), target) : Nat
+            | true  => pred
+            | false => ih
+            end
+        | false => ih
+        end
+    end;
 
 pub let is_space(byte : Nat) -> Bln =
-    match Nat.eql(byte, 32) : Bln;
-    | true => true;
+    match Nat.eql(byte, 32) : Bln
+    | true => true
     | false =>
-        match Nat.gte(byte, 9) : Bln;
-        | true => Nat.lte(byte, 13);
-        | false => false;;;
+        match Nat.gte(byte, 9) : Bln
+        | true => Nat.lte(byte, 13)
+        | false => false
+        end
+    end;
 
 pub let trim_start(str : Bin) -> Nat =
-    match Bin.len(str) : Nat;
-    | 0 => Bin.len(str);
+    match Bin.len(str) : Nat
+    | 0 => Bin.len(str)
     | pred ih =>
-        match Nat.lt(pred, ih) : Nat;
+        match Nat.lt(pred, ih) : Nat
         | true =>
-            match is_space(Bin.get(str, pred)) : Nat;
-            | true  => ih;
-            | false => pred;;
-        | false => ih;;;
+            match is_space(Bin.get(str, pred)) : Nat
+            | true  => ih
+            | false => pred
+            end
+        | false => ih
+        end
+    end;
 
 pub let trim_stop(str : Bin) -> Nat =
-    match Bin.len(str) : Nat;
-    | 0 => 0;
+    match Bin.len(str) : Nat
+    | 0 => 0
     | pred ih =>
-        match is_space(Bin.get(str, pred)) : Nat;
-        | true  => ih;
-        | false => Nat.add(pred, 1);;;
+        match is_space(Bin.get(str, pred)) : Nat
+        | true  => ih
+        | false => Nat.add(pred, 1)
+        end
+    end;
 
 pub let trim(str : Bin) -> Bin =
     let start : Nat = trim_start(str);
@@ -55,18 +66,20 @@ pub let trim(str : Bin) -> Bin =
     Bin.slice(str, Nat/min(start, stop), stop);
 
 pub let pow10(n : Nat) -> Flt =
-    match n : Flt;
-    | 0 => +1.0;
-    | pred ih => Flt.mul(ih, +10.0);;
+    match n : Flt
+    | 0 => +1.0
+    | pred ih => Flt.mul(ih, +10.0)
+    end;
 
 pub let from_flt(str : Bin) -> Flt =
     let neg : Bln = Nat.eql(Bin.get(str, 0), '-');
 
     let start : Nat =
-        match Bin.get(str, 0) : Nat;
-        | '+' => 1;
-        | '-' => 1;
-        | _ => 0;;
+        match Bin.get(str, 0) : Nat
+        | '+' => 1
+        | '-' => 1
+        | _ => 0
+        end;
 
     let len : Nat = Bin.len(str);
     let dot_pos : Nat = find_byte('.', str);
@@ -75,23 +88,27 @@ pub let from_flt(str : Bin) -> Flt =
     let int_flt : Flt = Nat.to_flt(from_nat(Bin.slice(str, start, int_end)));
 
     let frac_flt : Flt =
-        match Nat.lt(dot_pos, e_pos) : Flt;
+        match Nat.lt(dot_pos, e_pos) : Flt
         | true =>
             let frac_slice : Bin = Bin.slice(str, Nat.add(dot_pos, 1), e_pos);
-            Flt.div(Nat.to_flt(from_nat(frac_slice)), pow10(Bin.len(frac_slice)));
-        | false => +0.0;;
+            Flt.div(Nat.to_flt(from_nat(frac_slice)), pow10(Bin.len(frac_slice)))
+        | false => +0.0
+        end;
 
     let exp_flt : Flt =
-        match Nat.lt(e_pos, len) : Flt;
+        match Nat.lt(e_pos, len) : Flt
         | true =>
             let exp_int : Int = from_int(Bin.slice(str, Nat.add(e_pos, 1), len));
-            match Int.gte(exp_int, +0) : Flt;
-            | true => pow10(Int.to_nat(exp_int));
-            | false => Flt.div(+1.0, pow10(Int/abs(exp_int)));;
-        | false => +1.0;;
+            match Int.gte(exp_int, +0) : Flt
+            | true => pow10(Int.to_nat(exp_int))
+            | false => Flt.div(+1.0, pow10(Int/abs(exp_int)))
+            end
+        | false => +1.0
+        end;
 
     let result : Flt = Flt.mul(Flt.add(int_flt, frac_flt), exp_flt);
 
-    match neg : Flt;
-    | true => Flt.neg(result);
-    | false => result;;
+    match neg : Flt
+    | true => Flt.neg(result)
+    | false => result
+    end;

@@ -5,14 +5,16 @@ fn end_to_end() {
     let source = r#"
         let pair_ty : Type = {
             label : '[left, right],
-            match label : _ => Type;
-            | 'left => Int;
-            | 'right => Flt; };
+            match label : _ => Type
+            | 'left => Int
+            | 'right => Flt
+            end };
         let pair : pair_ty = ('left, +42);
         let score : (_ : pair_ty) -> Int = p =>
-            match p.0 : _ => Int;
-            | 'left => +42;
-            | 'right => +7;;
+            match p.0 : _ => Int
+            | 'left => +42
+            | 'right => +7
+            end;
         Sys.print(Int.to_str(score(pair)))
         "#;
 
@@ -50,9 +52,10 @@ fn sys_read() {
 fn triangular_sum() {
     let source = r#"
         let result : Nat =
-            match 5 : _ => Nat;
-            | 0 => 0;
-            | pred ih => Nat.add(ih, pred);;
+            match 5 : _ => Nat
+            | 0 => 0
+            | pred ih => Nat.add(ih, pred)
+            end;
         Sys.print(Nat.to_str(result))
         "#;
 
@@ -92,9 +95,10 @@ fn curried_function() {
 fn vec_cons_with_nat_succ() {
     let source = r#"
         rec Vec(T : Type, n : Nat) -> Type =
-            match n : Type;
-            | 0 => '[nil];
-            | pred ih => { T, ih };;
+            match n : Type
+            | 0 => '[nil]
+            | pred ih => { T, ih }
+            end;
 
         let cons(T : Type, n : Nat, x : T, xs : Vec(T, n)) -> Vec(T, Nat.succ(n)) =
             (x, xs);

@@ -7,14 +7,16 @@ fn main() {
     let text_entrypoint = r#"
         rec IntList : Type = {
             label : '[nil, cons],
-            match label : _ => Type;
-            | 'nil => Int;
-            | 'cons => {Int, IntList}; };
+            match label : _ => Type
+            | 'nil => Int
+            | 'cons => {Int, IntList}
+            end };
         rec sum : IntList -> Int = list =>
-            match list.0 : _ => Int;
-            | 'nil => +0;
+            match list.0 : _ => Int
+            | 'nil => +0
             | 'cons =>
-                Int.add(list.1.0, sum(list.1.1));;
+                Int.add(list.1.0, sum(list.1.1))
+            end;
         let xs : IntList =
             ('cons, (+1, ('cons, (+2, ('cons, (+3, ('nil, +0)))))));
         sum(xs)

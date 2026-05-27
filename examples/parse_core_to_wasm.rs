@@ -7,14 +7,16 @@ fn main() {
     let text_entrypoint = r#"
         let pair_ty : Type = {
             label : '[left, right],
-            match label : _ => Type;
-            | 'left => Int;
-            | 'right => Flt; };
+            match label : _ => Type
+            | 'left => Int
+            | 'right => Flt
+            end };
         let pair : pair_ty = ('left, +42);
         let score : pair_ty -> Int = p =>
-            match p.0 : _ => Int;
-            | 'left => +42;
-            | 'right => +7;;
+            match p.0 : _ => Int
+            | 'left => +42
+            | 'right => +7
+            end;
         let my_list : Arr(Nat) = [1, 2, 3];
         let my_bin : Bin = \01\02\03;
         let my_str : Bin = "hello";

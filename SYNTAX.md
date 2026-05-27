@@ -49,12 +49,13 @@ Declares a group of mutually recursive bindings. Each binding in the group indep
 
 ```
 pub rec fact(n : Nat) -> Nat =
-    match n : Nat;
-    | 0 => 1;
-    | pred ih => Nat.mul(Nat.add(pred, 1), ih);;
+    match n : Nat
+    | 0 => 1
+    | pred ih => Nat.mul(Nat.add(pred, 1), ih)
+    end;
 ```
 
-The `;;` closes the last `match` branch and then the recursive-binding group.
+Every `match` is closed by `end`; the trailing `;` then closes the recursive-binding group.
 
 A binding's value may be any term, not only a lambda. In particular it can be a call that references other members of the group, so combinator-style definitions can be written point-free rather than eta-expanded:
 
@@ -171,43 +172,48 @@ Mutually recursive local bindings. Unlike top-level `rec`, the `and` clauses do 
 `match` is the single elimination form. The branch shapes determine which kind of value is eliminated, and the head's type must agree.
 
 ```
-match head : motive;
-| ... ;
+match head : motive
+| ...
+end
 ```
 
-The `motive` gives the result type. It may name the scrutinee — `label => Type` — or omit the name when the result type does not depend on the scrutinee — just `Type`.
+The `motive` gives the result type. It may name the scrutinee — `label => Type` — or omit the name when the result type does not depend on the scrutinee — just `Type`. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
 
 **Atoms** — one branch per atom in the head's atom type; no default branch:
 
 ```
-match tag : Type;
-| 'foo => body_foo;
-| 'bar => body_bar;
+match tag : Type
+| 'foo => body_foo
+| 'bar => body_bar
+end
 ```
 
 **Booleans** — both branches required, either order:
 
 ```
-match cond : Bin;
-| true  => true_body;
-| false => false_body;
+match cond : Bin
+| true  => true_body
+| false => false_body
+end
 ```
 
 **Structural induction over `Nat`** — `| 0` is the base case; `| pred ih` binds the predecessor and the result already computed for it (`ih`, the induction hypothesis):
 
 ```
-match n : Nat;
-| 0 => zero_case;
-| pred ih => succ_case;
+match n : Nat
+| 0 => zero_case
+| pred ih => succ_case
+end
 ```
 
 **Sparse dispatch on `Nat`** — specific values plus a mandatory `| _` default that must appear last:
 
 ```
-match n : Nat;
-| 0 => body;
-| 3 => body;
-| _ => default;
+match n : Nat
+| 0 => body
+| 3 => body
+| _ => default
+end
 ```
 
 ### Field access
@@ -495,9 +501,10 @@ Curios has no built-in sum type. The idiom is a dependent tuple whose second fie
 ```
 let Result(A : Type, B : Type) -> Type = {
     tag : '[ok, err],
-    match tag : Type;
-    | 'ok  => A;
-    | 'err => B; };
+    match tag : Type
+    | 'ok  => A
+    | 'err => B
+    end };
 ```
 
 The first field `tag` is an atom type listing all variants. The second field is a `match` on `tag` that selects the payload type for each variant.
@@ -517,12 +524,13 @@ Use `match` on the first field to dispatch on the tag, then access the second fi
 
 ```
 let unwrap_or(A : Type, r : Result(A, Bin), default : A) -> A =
-    match r.0 : A;
-    | 'ok  => r.1;
-    | 'err => default;
+    match r.0 : A
+    | 'ok  => r.1
+    | 'err => default
+    end;
 ```
 
-The trailing `;` closes the last `match` branch.
+`end` closes the `match`; the trailing `;` closes the enclosing `let`.
 
 ### Recursive types
 
@@ -533,9 +541,10 @@ A recursive type uses a top-level `rec` binding that refers to itself in its own
 ```
 rec List : (A : Type) -> Type = A => {
     tag : '[nil, cons],
-    match tag : Type;
-    | 'nil  => {};
-    | 'cons => { A, List(A) }; };
+    match tag : Type
+    | 'nil  => {}
+    | 'cons => { A, List(A) }
+    end };
 ```
 
 The empty tuple type `{}` serves as the placeholder for the empty payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
@@ -554,9 +563,10 @@ A recursive function over the list is itself written with `rec`:
 
 ```
 rec length(A : Type, list : List(A)) -> Nat =
-    match list.0 : Nat;
-    | 'nil  => 0;
-    | 'cons => Nat.add(1, length(A, list.1.1));;
+    match list.0 : Nat
+    | 'nil  => 0
+    | 'cons => Nat.add(1, length(A, list.1.1))
+    end;
 ```
 
-The `;;` at the end closes the last `match` branch and then the top-level `rec` binding.
+`end` closes the `match`; the trailing `;` closes the top-level `rec` binding.

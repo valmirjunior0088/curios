@@ -1,4 +1,5 @@
 pub let min(a : Nat, b : Nat) -> Nat =
-    match Nat.lt(a, b) : Nat;
-    | true => a;
-    | false => b;;
+    match Nat.lt(a, b) : Nat
+    | true => a
+    | false => b
+    end;

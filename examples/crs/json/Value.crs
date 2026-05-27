@@ -1,9 +1,10 @@
 pub rec Value : Type = {
     tag : '[null, bln, num, str, arr, obj],
-    match tag : Type;
-    | 'null => {};
-    | 'bln  => Bln;
-    | 'num  => Flt;
-    | 'str  => Bin;
-    | 'arr  => Arr(Value);
-    | 'obj  => Arr({ Bin, Value }); };
+    match tag : Type
+    | 'null => {}
+    | 'bln  => Bln
+    | 'num  => Flt
+    | 'str  => Bin
+    | 'arr  => Arr(Value)
+    | 'obj  => Arr({ Bin, Value })
+    end };

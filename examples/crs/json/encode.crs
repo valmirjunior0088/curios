@@ -6,40 +6,45 @@ let Value : Type = Value/Value;
 
 let encode_num(n : Flt) -> Bin =
     let str : Bin = Flt.to_str(n);
-    match Nat.eql(Bin.get(str, 0), '+') : Bin;
-    | true => Bin.slice(str, 1, Bin.len(str));
-    | false => str;;
+    match Nat.eql(Bin.get(str, 0), '+') : Bin
+    | true => Bin.slice(str, 1, Bin.len(str))
+    | false => str
+    end;
 
 let encode_str(s : Bin) -> Bin =
     Bin.concat("\"",
         Bin/fold(Bin, s, "", (byte, acc) =>
-            match byte : Bin;
-            | '"' => Bin.concat(acc, "\\\"");
-            | '\\' => Bin.concat(acc, "\\\\");
-            | '\n' => Bin.concat(acc, "\\n");
-            | '\r' => Bin.concat(acc, "\\r");
-            | '\t' => Bin.concat(acc, "\\t");
-            | _ => Bin.append(acc, byte);),
+            match byte : Bin
+            | '"' => Bin.concat(acc, "\\\"")
+            | '\\' => Bin.concat(acc, "\\\\")
+            | '\n' => Bin.concat(acc, "\\n")
+            | '\r' => Bin.concat(acc, "\\r")
+            | '\t' => Bin.concat(acc, "\\t")
+            | _ => Bin.append(acc, byte)
+            end),
         "\"");
 
 pub rec encode : Value -> Bin = v =>
-    match v.0 : Bin;
-    | 'null => "null";
-    | 'bln => Bln/to_str(v.1);
-    | 'num => encode_num(v.1);
-    | 'str => encode_str(v.1);
+    match v.0 : Bin
+    | 'null => "null"
+    | 'bln => Bln/to_str(v.1)
+    | 'num => encode_num(v.1)
+    | 'str => encode_str(v.1)
     | 'arr =>
         Bin.concat("[",
             Arr/fold(Value, Bin, v.1, "", (elem, acc) =>
-                match Nat.eql(Bin.len(acc), 0) : Bin;
-                | true => encode(elem);
-                | false => Bin.concat(acc, ",", encode(elem));),
-            "]");
+                match Nat.eql(Bin.len(acc), 0) : Bin
+                | true => encode(elem)
+                | false => Bin.concat(acc, ",", encode(elem))
+                end),
+            "]")
     | 'obj =>
         Bin.concat("{",
             Arr/fold({ Bin, Value }, Bin, v.1, "", (pair, acc) =>
                 let entry : Bin = Bin.concat(encode_str(pair.0), ":", encode(pair.1));
-                match Nat.eql(Bin.len(acc), 0) : Bin;
-                | true => entry;
-                | false => Bin.concat(acc, ",", entry);),
-            "}");;
+                match Nat.eql(Bin.len(acc), 0) : Bin
+                | true => entry
+                | false => Bin.concat(acc, ",", entry)
+                end),
+            "}")
+    end;

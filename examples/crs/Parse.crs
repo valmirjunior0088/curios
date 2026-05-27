@@ -1,17 +1,19 @@
 pub let Result(A : Type) -> Type = {
     tag : '[ok, err],
-    match tag : Type;
-    | 'ok  => A;
-    | 'err => Bin; };
+    match tag : Type
+    | 'ok  => A
+    | 'err => Bin
+    end };
 
 pub let Parse(A : Type) -> Type =
     (Bin, Nat) -> Result({ Nat, A });
 
 pub let run(A : Type, p : Parse(A), input : Bin) -> Result(A) =
     let r : Result({ Nat, A }) = p(input, 0);
-    match r.0 : Result(A);
-    | 'ok  => ('ok, r.1.1);
-    | 'err => ('err, r.1);;
+    match r.0 : Result(A)
+    | 'ok  => ('ok, r.1.1)
+    | 'err => ('err, r.1)
+    end;
 
 pub let pure(A : Type, a : A) -> Parse(A) =
     (input, pos) => ('ok, (pos, a));
@@ -22,87 +24,102 @@ pub let fail(A : Type, msg : Bin) -> Parse(A) =
 pub let map(A : Type, B : Type, f : A -> B, p : Parse(A)) -> Parse(B) =
     (input, pos) =>
         let r : Result({ Nat, A }) = p(input, pos);
-        match r.0 : Result({ Nat, B });
-        | 'ok  => ('ok, (r.1.0, f(r.1.1)));
-        | 'err => ('err, r.1);;
+        match r.0 : Result({ Nat, B })
+        | 'ok  => ('ok, (r.1.0, f(r.1.1)))
+        | 'err => ('err, r.1)
+        end;
 
 pub let bind(A : Type, B : Type, p : Parse(A), f : A -> Parse(B)) -> Parse(B) =
     (input, pos) =>
         let r : Result({ Nat, A }) = p(input, pos);
-        match r.0 : Result({ Nat, B });
-        | 'ok  => f(r.1.1)(input, r.1.0);
-        | 'err => ('err, r.1);;
+        match r.0 : Result({ Nat, B })
+        | 'ok  => f(r.1.1)(input, r.1.0)
+        | 'err => ('err, r.1)
+        end;
 
 pub let or(A : Type, p : Parse(A), q : Parse(A)) -> Parse(A) =
     (input, pos) =>
         let r : Result({ Nat, A }) = p(input, pos);
-        match r.0 : Result({ Nat, A });
-        | 'ok  => r;
-        | 'err => q(input, pos);;
+        match r.0 : Result({ Nat, A })
+        | 'ok  => r
+        | 'err => q(input, pos)
+        end;
 
 pub let and(A : Type, B : Type, p : Parse(A), q : Parse(B)) -> Parse({ A, B }) =
     (input, pos) =>
         let r : Result({ Nat, A }) = p(input, pos);
-        match r.0 : Result({ Nat, { A, B } });
+        match r.0 : Result({ Nat, { A, B } })
         | 'ok  =>
             let s : Result({ Nat, B }) = q(input, r.1.0);
-            match s.0 : Result({ Nat, { A, B } });
-            | 'ok  => ('ok, (s.1.0, (r.1.1, s.1.1)));
-            | 'err => ('err, s.1);;
-        | 'err => ('err, r.1);;
+            match s.0 : Result({ Nat, { A, B } })
+            | 'ok  => ('ok, (s.1.0, (r.1.1, s.1.1)))
+            | 'err => ('err, s.1)
+            end
+        | 'err => ('err, r.1)
+        end;
 
 pub let and_drop(A : Type, B : Type, p : Parse(A), q : Parse(B)) -> Parse(A) =
     (input, pos) =>
         let r : Result({ Nat, A }) = p(input, pos);
-        match r.0 : Result({ Nat, A });
+        match r.0 : Result({ Nat, A })
         | 'ok  =>
             let s : Result({ Nat, B }) = q(input, r.1.0);
-            match s.0 : Result({ Nat, A });
-            | 'ok  => ('ok, (s.1.0, r.1.1));
-            | 'err => ('err, s.1);;
-        | 'err => r;;
+            match s.0 : Result({ Nat, A })
+            | 'ok  => ('ok, (s.1.0, r.1.1))
+            | 'err => ('err, s.1)
+            end
+        | 'err => r
+        end;
 
 pub let and_keep(A : Type, B : Type, p : Parse(A), q : Parse(B)) -> Parse(B) =
     (input, pos) =>
         let r : Result({ Nat, A }) = p(input, pos);
-        match r.0 : Result({ Nat, B });
-        | 'ok  => q(input, r.1.0);
-        | 'err => ('err, r.1);;
+        match r.0 : Result({ Nat, B })
+        | 'ok  => q(input, r.1.0)
+        | 'err => ('err, r.1)
+        end;
 
 pub let any_byte : Parse(Nat) = (input, pos) =>
-    match Nat.lt(pos, Bin.len(input)) : Result({ Nat, Nat });
-    | false => ('err, "unexpected end of input");
-    | true  => ('ok, (Nat.add(pos, 1), Bin.get(input, pos)));;
+    match Nat.lt(pos, Bin.len(input)) : Result({ Nat, Nat })
+    | false => ('err, "unexpected end of input")
+    | true  => ('ok, (Nat.add(pos, 1), Bin.get(input, pos)))
+    end;
 
 pub let peek_byte : Parse(Nat) = (input, pos) =>
-    match Nat.lt(pos, Bin.len(input)) : Result({ Nat, Nat });
-    | false => ('err, "unexpected end of input");
-    | true  => ('ok, (pos, Bin.get(input, pos)));;
+    match Nat.lt(pos, Bin.len(input)) : Result({ Nat, Nat })
+    | false => ('err, "unexpected end of input")
+    | true  => ('ok, (pos, Bin.get(input, pos)))
+    end;
 
 pub let take_byte(expected : Nat) -> Parse(Nat) =
     (input, pos) =>
-        match Nat.lt(pos, Bin.len(input)) : Result({ Nat, Nat });
-        | false => ('err, "unexpected end of input");
+        match Nat.lt(pos, Bin.len(input)) : Result({ Nat, Nat })
+        | false => ('err, "unexpected end of input")
         | true  =>
             let byte : Nat = Bin.get(input, pos);
-            match Nat.eql(byte, expected) : Result({ Nat, Nat });
-            | true  => ('ok, (Nat.add(pos, 1), byte));
-            | false => ('err, "unexpected byte");;;
+            match Nat.eql(byte, expected) : Result({ Nat, Nat })
+            | true  => ('ok, (Nat.add(pos, 1), byte))
+            | false => ('err, "unexpected byte")
+            end
+        end;
 
 pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
     (input, pos) =>
         let max : Nat = Nat.sub(Bin.len(input), pos);
         let r : { Nat, Bin, Bln } =
-            match max : { Nat, Bin, Bln };
-            | 0 => (pos, "", false);
+            match max : { Nat, Bin, Bln }
+            | 0 => (pos, "", false)
             | step ih =>
-                match ih.2 : { Nat, Bin, Bln };
-                | true  => ih;
+                match ih.2 : { Nat, Bin, Bln }
+                | true  => ih
                 | false =>
                     let byte : Nat = Bin.get(input, ih.0);
-                    match pred(byte) : { Nat, Bin, Bln };
-                    | true  => (Nat.add(ih.0, 1), Bin.append(ih.1, byte), false);
-                    | false => (ih.0, ih.1, true);;;;
+                    match pred(byte) : { Nat, Bin, Bln }
+                    | true  => (Nat.add(ih.0, 1), Bin.append(ih.1, byte), false)
+                    | false => (ih.0, ih.1, true)
+                    end
+                end
+            end;
         ('ok, (r.0, r.1));
 
 pub let many0(A : Type, p : Parse(A)) -> Parse(Arr(A)) =
@@ -110,29 +127,34 @@ pub let many0(A : Type, p : Parse(A)) -> Parse(Arr(A)) =
         let empty : Arr(A) = [];
         rec go : (Arr(A), Nat) -> Result({ Nat, Arr(A) }) = (acc, cur) =>
             let r : Result({ Nat, A }) = p(input, cur);
-            match r.0 : Result({ Nat, Arr(A) });
-            | 'err => ('ok, (cur, acc));
+            match r.0 : Result({ Nat, Arr(A) })
+            | 'err => ('ok, (cur, acc))
             | 'ok  =>
-                match Nat.eql(r.1.0, cur) : Result({ Nat, Arr(A) });
-                | true  => ('ok, (cur, acc));
-                | false => go(Arr.append(acc, r.1.1), r.1.0);;;
+                match Nat.eql(r.1.0, cur) : Result({ Nat, Arr(A) })
+                | true  => ('ok, (cur, acc))
+                | false => go(Arr.append(acc, r.1.1), r.1.0)
+                end
+            end;
         go(empty, pos);
 
 pub let sep_by0(A : Type, S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Arr(A)) =
     (input, pos) =>
         let r : Result({ Nat, A }) = elem(input, pos);
-        match r.0 : Result({ Nat, Arr(A) });
+        match r.0 : Result({ Nat, Arr(A) })
         | 'err =>
-            ('ok, (pos, []));
+            ('ok, (pos, []))
         | 'ok  =>
             let init : Arr(A) = [r.1.1];
             rec go : (Arr(A), Nat) -> Result({ Nat, Arr(A) }) = (acc, cur) =>
                 let s : Result({ Nat, S }) = sep(input, cur);
-                match s.0 : Result({ Nat, Arr(A) });
-                | 'err => ('ok, (cur, acc));
+                match s.0 : Result({ Nat, Arr(A) })
+                | 'err => ('ok, (cur, acc))
                 | 'ok  =>
                     let t : Result({ Nat, A }) = elem(input, s.1.0);
-                    match t.0 : Result({ Nat, Arr(A) });
-                    | 'err => ('ok, (cur, acc));
-                    | 'ok  => go(Arr.append(acc, t.1.1), t.1.0);;;
-            go(init, r.1.0);;
+                    match t.0 : Result({ Nat, Arr(A) })
+                    | 'err => ('ok, (cur, acc))
+                    | 'ok  => go(Arr.append(acc, t.1.1), t.1.0)
+                    end
+                end;
+            go(init, r.1.0)
+        end;

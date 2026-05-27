@@ -1,4 +1,5 @@
 pub let to_str(b : Bln) -> Bin =
-    match b : Bin;
-    | true  => "true";
-    | false => "false";;
+    match b : Bin
+    | true  => "true"
+    | false => "false"
+    end;

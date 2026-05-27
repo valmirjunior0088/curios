@@ -1797,8 +1797,9 @@ mod tests {
         let term = text::to_core(
             &r#"
                 let x : '[unit] = 'unit;
-                match x : _ => '[yes, no];
-                | 'unit => 'yes;
+                match x : _ => '[yes, no]
+                | 'unit => 'yes
+                end
             "#
             .parse()
             .unwrap(),
@@ -1939,22 +1940,26 @@ mod tests {
                 let alpha_case : '[zeta, alpha, mu] = 'alpha;
                 let mu_case : '[zeta, alpha, mu] = 'mu;
                 let zeta_case : '[zeta, alpha, mu] = 'zeta;
-                match outer : subject => '[zeta, alpha, mu];
+                match outer : subject => '[zeta, alpha, mu]
                 | 'zeta =>
-                    match alpha_case : nested => '[zeta, alpha, mu];
-                    | 'zeta => 'alpha;
-                    | 'alpha => 'mu;
-                    | 'mu => 'zeta;;
+                    match alpha_case : nested => '[zeta, alpha, mu]
+                    | 'zeta => 'alpha
+                    | 'alpha => 'mu
+                    | 'mu => 'zeta
+                    end
                 | 'alpha =>
-                    match zeta_case : nested => '[zeta, alpha, mu];
-                    | 'zeta => 'mu;
-                    | 'alpha => 'zeta;
-                    | 'mu => 'alpha;;
+                    match zeta_case : nested => '[zeta, alpha, mu]
+                    | 'zeta => 'mu
+                    | 'alpha => 'zeta
+                    | 'mu => 'alpha
+                    end
                 | 'mu =>
-                    match mu_case : nested => '[zeta, alpha, mu];
-                    | 'zeta => 'zeta;
-                    | 'alpha => 'alpha;
-                    | 'mu => 'mu;;
+                    match mu_case : nested => '[zeta, alpha, mu]
+                    | 'zeta => 'zeta
+                    | 'alpha => 'alpha
+                    | 'mu => 'mu
+                    end
+                end
             "#
             .parse()
             .unwrap(),

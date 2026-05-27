@@ -9,11 +9,12 @@ use {
 // WASM codegen path end-to-end from surface syntax.
 fn main() {
     let text_entrypoint = r#"
-        match 91 : _ => '[quote, lbracket, lbrace, other];
-        | '"' => 'quote;
-        | '[' => 'lbracket;
-        | '{' => 'lbrace;
-        | _ => 'other;
+        match 91 : _ => '[quote, lbracket, lbrace, other]
+        | '"' => 'quote
+        | '[' => 'lbracket
+        | '{' => 'lbrace
+        | _ => 'other
+        end
         "#
     .parse::<text::Entrypoint>()
     .expect("expected text term");

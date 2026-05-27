@@ -21,9 +21,10 @@ fn main() {
 
         let decoded : Parse/Result({ Nat, json/Value }) = json/decode(encoded, 0);
 
-        match decoded.0 : {};
-        | 'ok  => Sys.print(json/encode(decoded.1.1));
-        | 'err => Sys.print(decoded.1);
+        match decoded.0 : {}
+        | 'ok  => Sys.print(json/encode(decoded.1.1))
+        | 'err => Sys.print(decoded.1)
+        end
         "#;
 
     let t = Instant::now();

@@ -585,7 +585,6 @@ fn parse_match_prefix<'a>() -> Parser<'a, (Term, Motive)> {
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal(":"))
         .and(parse_motive())
-        .and_drop(parse_literal(";"))
 }
 
 fn parse_bln_false_branch<'a>() -> Parser<'a, Term> {
@@ -593,7 +592,6 @@ fn parse_bln_false_branch<'a>() -> Parser<'a, Term> {
         .and_keep(parse_keyword("false"))
         .and_drop(parse_literal("=>"))
         .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(";"))
 }
 
 fn parse_bln_true_branch<'a>() -> Parser<'a, Term> {
@@ -601,7 +599,6 @@ fn parse_bln_true_branch<'a>() -> Parser<'a, Term> {
         .and_keep(parse_keyword("true"))
         .and_drop(parse_literal("=>"))
         .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(";"))
 }
 
 fn parse_bln_match<'a>() -> Parser<'a, Term> {
@@ -613,6 +610,7 @@ fn parse_bln_match<'a>() -> Parser<'a, Term> {
                     .and(parse_bln_false_branch())
                     .map(|(tc, fc)| (fc, tc))),
         )
+        .and_drop(parse_keyword("end"))
         .map(|((head, motive), (false_case, true_case))| {
             Term::Match(Match::Bln(BlnMatch {
                 head: head.into(),
@@ -634,18 +632,17 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
                         _ => fail("expected 0 as NatFold zero case"),
                     })
                     .and_drop(parse_literal("=>"))
-                    .and_keep(lazy(parse_term))
-                    .and_drop(parse_literal(";")),
+                    .and_keep(lazy(parse_term)),
             )
             .and(
                 parse_literal("|")
                     .and_keep(parse_identifier())
                     .and(parse_identifier())
                     .and_drop(parse_literal("=>"))
-                    .and(lazy(parse_term))
-                    .and_drop(parse_literal(";")),
+                    .and(lazy(parse_term)),
             ),
         )
+        .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
                 Term::Match(Match::Nat(NatMatch::Induction {
@@ -664,19 +661,18 @@ fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {
     catch(parse_literal("|").and_keep(parse_nat_literal()))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
-        .and_drop(parse_literal(";"))
 }
 
 fn parse_nat_default<'a>() -> Parser<'a, Term> {
     catch(parse_literal("|").and_keep(parse_literal("_")))
         .and_drop(parse_literal("=>"))
         .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(";"))
 }
 
 fn parse_nat_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(catch(many0(parse_nat_case).and(parse_nat_default())))
+        .and_drop(parse_keyword("end"))
         .map(|((head, motive), (cases, default))| {
             Term::Match(Match::Nat(NatMatch::Dispatch {
                 head: head.into(),
@@ -694,12 +690,12 @@ fn parse_atom_branch<'a>() -> Parser<'a, (Atom, Term)> {
     catch(parse_literal("|").and_keep(parse_atom_label()))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
-        .and_drop(parse_literal(";"))
 }
 
 fn parse_atom_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(many1(parse_atom_branch))
+        .and_drop(parse_keyword("end"))
         .map(|((head, motive), cases)| {
             Term::Match(Match::Atom(AtomMatch {
                 head: head.into(),
@@ -1132,7 +1128,7 @@ mod tests {
     #[test]
     fn parse_match_single_branch() {
         assert_eq!(
-            "match 'foo : k => '[foo]; | 'foo => 'foo;"
+            "match 'foo : k => '[foo] | 'foo => 'foo end"
                 .parse::<Term>()
                 .unwrap(),
             Term::Match(Match::Atom(AtomMatch {

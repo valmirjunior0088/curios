@@ -6,10 +6,11 @@ use {
 fn main() {
     let text_entrypoint = r#"
         rec fib_pair : Nat -> {Int, Int} = n =>
-            match n : _ => {Int, Int};
-            | 0 => (+0, +1);
+            match n : _ => {Int, Int}
+            | 0 => (+0, +1)
             | pred ih =>
-                (ih.1, Int.add(ih.0, ih.1));;
+                (ih.1, Int.add(ih.0, ih.1))
+            end;
         fib_pair(10).0
         "#
     .parse::<text::Entrypoint>()

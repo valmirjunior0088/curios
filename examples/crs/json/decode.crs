@@ -6,44 +6,52 @@ use /json/Value;
 let Value : Type = Value/Value;
 
 let is_ws(byte : Nat) -> Bln =
-    match byte : Bln;
-    | ' ' => true;
-    | '\t' => true;
-    | '\n' => true;
-    | '\r' => true;
-    | _ => false;;
+    match byte : Bln
+    | ' ' => true
+    | '\t' => true
+    | '\n' => true
+    | '\r' => true
+    | _ => false
+    end;
 
 let is_num_byte(byte : Nat) -> Bln =
-    match byte : Bln;
-    | '-' => true;
-    | '+' => true;
-    | '.' => true;
-    | 'e' => true;
-    | 'E' => true;
+    match byte : Bln
+    | '-' => true
+    | '+' => true
+    | '.' => true
+    | 'e' => true
+    | 'E' => true
     | _ =>
-        match Nat.lte(48, byte) : Bln;
-        | true => Nat.lte(byte, 57);
-        | false => false;;;
+        match Nat.lte(48, byte) : Bln
+        | true => Nat.lte(byte, 57)
+        | false => false
+        end
+    end;
 
 let take_literal(literal : Bin) -> Parse({}) =
     (input, pos) =>
         let max : Nat = Bin.len(literal);
         let r : { Nat, Bln } =
-            match max : { Nat, Bln };
-            | 0 => (pos, true);
+            match max : { Nat, Bln }
+            | 0 => (pos, true)
             | step ih =>
-                match ih.1 : { Nat, Bln };
-                | false => ih;
+                match ih.1 : { Nat, Bln }
+                | false => ih
                 | true =>
-                    match Nat.lt(ih.0, Bin.len(input)) : { Nat, Bln };
-                    | false => (ih.0, false);
+                    match Nat.lt(ih.0, Bin.len(input)) : { Nat, Bln }
+                    | false => (ih.0, false)
                     | true =>
-                        match Nat.eql(Bin.get(literal, step), Bin.get(input, ih.0)) : { Nat, Bln };
-                        | true  => (Nat.add(ih.0, 1), true);
-                        | false => (ih.0, false);;;;;
-        match r.1 : Parse/Result({ Nat, {} });
-        | true  => ('ok, (r.0, ()));
-        | false => ('err, "unexpected literal");;
+                        match Nat.eql(Bin.get(literal, step), Bin.get(input, ih.0)) : { Nat, Bln }
+                        | true  => (Nat.add(ih.0, 1), true)
+                        | false => (ih.0, false)
+                        end
+                    end
+                end
+            end;
+        match r.1 : Parse/Result({ Nat, {} })
+        | true  => ('ok, (r.0, ()))
+        | false => ('err, "unexpected literal")
+        end;
 
 let parse_null : Parse(Value) =
     Parse/map({}, Value, _ => ('null, ()), take_literal("null"));
@@ -57,26 +65,29 @@ let parse_false_val : Parse(Value) =
 let parse_num : Parse(Value) = (input, pos) =>
     let r : Parse/Result({ Nat, Bin }) = Parse/take_while(is_num_byte)(input, pos);
     let bytes : Bin = r.1.1;
-    match Nat.eql(Bin.len(bytes), 0) : Parse/Result({ Nat, Value });
-    | true  => ('err, "expected number");
-    | false => ('ok, (r.1.0, ('num, Str/from_flt(bytes))));;
+    match Nat.eql(Bin.len(bytes), 0) : Parse/Result({ Nat, Value })
+    | true  => ('err, "expected number")
+    | false => ('ok, (r.1.0, ('num, Str/from_flt(bytes))))
+    end;
 
 let is_not_string_special(byte : Nat) -> Bln =
-    match byte : Bln;
-    | '"'  => false;
-    | '\\' => false;
-    | _    => true;;
+    match byte : Bln
+    | '"'  => false
+    | '\\' => false
+    | _    => true
+    end;
 
 let parse_str_escape : Parse(Bin) =
     Parse/bind(Nat, Bin, Parse/take_byte('\\'), _ =>
     Parse/bind(Nat, Bin, Parse/any_byte, byte =>
-        match byte : Parse(Bin);
-        | '"'  => Parse/pure(Bin, "\"");
-        | '\\' => Parse/pure(Bin, "\\");
-        | 'n'  => Parse/pure(Bin, "\n");
-        | 'r'  => Parse/pure(Bin, "\r");
-        | 't'  => Parse/pure(Bin, "\t");
-        | _    => Parse/fail(Bin, "unknown escape");));
+        match byte : Parse(Bin)
+        | '"'  => Parse/pure(Bin, "\"")
+        | '\\' => Parse/pure(Bin, "\\")
+        | 'n'  => Parse/pure(Bin, "\n")
+        | 'r'  => Parse/pure(Bin, "\r")
+        | 't'  => Parse/pure(Bin, "\t")
+        | _    => Parse/fail(Bin, "unknown escape")
+        end));
 
 let parse_str_segment : Parse(Bin) =
     Parse/take_while(is_not_string_special);
@@ -94,21 +105,23 @@ let parse_str_value : Parse(Value) =
     Parse/map(Bin, Value, s => ('str, s), parse_raw_str);
 
 pub rec decode : Parse(Value) = (input, pos) =>
-    match Nat.lt(pos, Bin.len(input)) : Parse/Result({ Nat, Value });
-    | false => ('err, "unexpected end of input");
+    match Nat.lt(pos, Bin.len(input)) : Parse/Result({ Nat, Value })
+    | false => ('err, "unexpected end of input")
     | true  =>
-        match Bin.get(input, pos) : Parse/Result({ Nat, Value });
-        | ' '  => decode(input, Nat.add(pos, 1));
-        | '\t' => decode(input, Nat.add(pos, 1));
-        | '\n' => decode(input, Nat.add(pos, 1));
-        | '\r' => decode(input, Nat.add(pos, 1));
-        | 'n'  => parse_null(input, pos);
-        | 't'  => parse_true_val(input, pos);
-        | 'f'  => parse_false_val(input, pos);
-        | '"'  => parse_str_value(input, pos);
-        | '['  => parse_arr(input, pos);
-        | '{'  => parse_obj(input, pos);
-        | _    => parse_num(input, pos);;
+        match Bin.get(input, pos) : Parse/Result({ Nat, Value })
+        | ' '  => decode(input, Nat.add(pos, 1))
+        | '\t' => decode(input, Nat.add(pos, 1))
+        | '\n' => decode(input, Nat.add(pos, 1))
+        | '\r' => decode(input, Nat.add(pos, 1))
+        | 'n'  => parse_null(input, pos)
+        | 't'  => parse_true_val(input, pos)
+        | 'f'  => parse_false_val(input, pos)
+        | '"'  => parse_str_value(input, pos)
+        | '['  => parse_arr(input, pos)
+        | '{'  => parse_obj(input, pos)
+        | _    => parse_num(input, pos)
+        end
+    end
 and parse_arr : Parse(Value) =
     Parse/bind(Nat, Value, Parse/take_byte('['), _ =>
     Parse/bind(Arr(Value), Value,

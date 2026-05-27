@@ -34,9 +34,10 @@ A `match` over `Nat` uses the `| 0` / `| pred ih` pattern to recurse through its
 
 ```
 let fact(n : Nat) -> Nat =
-    match n : Nat;
-    | 0 => 1;
-    | pred ih => Nat.mul(Nat.add(pred, 1), ih);
+    match n : Nat
+    | 0 => 1
+    | pred ih => Nat.mul(Nat.add(pred, 1), ih)
+    end;
 ```
 
 `| 0 =>` is the base case; `| pred ih =>` receives the predecessor and the result already computed for it (`ih`, short for induction hypothesis).
@@ -45,12 +46,13 @@ let fact(n : Nat) -> Nat =
 
 ```
 rec gcd(a : Nat, b : Nat) -> Nat =
-    match b : Nat;
-    | 0 => a;
-    | pred _ => gcd(b, Nat.rem(a, b));;
+    match b : Nat
+    | 0 => a
+    | pred _ => gcd(b, Nat.rem(a, b))
+    end;
 ```
 
-The `;;` ends two things: the first `;` closes the match, the second closes the `rec` binding.
+Every `match` is closed by `end`; the trailing `;` then closes the `rec` binding.
 
 The primitive types map to Rust as follows:
 
@@ -102,12 +104,13 @@ No declaration needed. Matching uses `match`:
 
 ```
 let opposite(d : '[north, south]) -> '[north, south] =
-    match d : '[north, south];
-    | 'north => 'south;
-    | 'south => 'north;;
+    match d : '[north, south]
+    | 'north => 'south
+    | 'south => 'north
+    end;
 ```
 
-Each branch ends with `;`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `label => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
+Branches are introduced by `|` and the whole `match` is closed by `end`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `label => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
 
 ## Sum types
 
@@ -125,9 +128,10 @@ enum Shape {
 -- Curios
 let Shape : Type = {
     tag : '[circle, rectangle],
-    match tag : _ => Type;
-    | 'circle    => Flt;
-    | 'rectangle => { Flt, Flt }; };
+    match tag : _ => Type
+    | 'circle    => Flt
+    | 'rectangle => { Flt, Flt }
+    end };
 ```
 
 The first field selects the variant; the second field's type is determined by it. Construction is a plain tuple:
@@ -141,9 +145,10 @@ Elimination matches on `s.0` to dispatch on the tag, then accesses `s.1` for the
 
 ```
 let area(s : Shape) -> Flt =
-    match s.0 : Flt;
-    | 'circle    => Flt.mul(s.1, s.1);
-    | 'rectangle => Flt.mul(s.1.0, s.1.1);
+    match s.0 : Flt
+    | 'circle    => Flt.mul(s.1, s.1)
+    | 'rectangle => Flt.mul(s.1.0, s.1.1)
+    end;
 ```
 
 In the `'circle` branch `s.1 : Flt`; in the `'rectangle` branch `s.1 : { Flt, Flt }`. No downcasting, no `unwrap`.
@@ -160,18 +165,20 @@ let id(T : Type, x : T) -> T = x;
 
 In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id(Nat, 42)` or `id(Bin, "hello")`. There are no angle brackets.
 
-The motive in `match` is the same mechanism: `match head : label => T;` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
+The motive in `match` is the same mechanism: `match head : label => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
 ```
 let ReturnType(tag : '[nat, bin]) -> Type =
-    match tag : _ => Type;
-    | 'nat => Nat;
-    | 'bin => Bin;;
+    match tag : _ => Type
+    | 'nat => Nat
+    | 'bin => Bin
+    end;
 
 let default_for(tag : '[nat, bin]) -> ReturnType(tag) =
-    match tag : t => ReturnType(t);
-    | 'nat => 0;
-    | 'bin => "";;
+    match tag : t => ReturnType(t)
+    | 'nat => 0
+    | 'bin => ""
+    end;
 ```
 
 The caller that passes `'nat` gets back a `Nat`; the caller that passes `'bin` gets back a `Bin`. The type checker tracks this without any enum wrapping on the return side.
@@ -182,9 +189,10 @@ Rust's `Vec<T>` does not track length in the type. `[T; N]` does, but `N` must b
 
 ```
 rec Vec(T : Type, n : Nat) -> Type =
-    match n : Type;
-    | 0 => {};
-    | pred ih => { T, ih };
+    match n : Type
+    | 0 => {}
+    | pred ih => { T, ih }
+    end;
 ```
 
 The `match` here builds a type: for length 0 the type is the empty tuple `{}`; for length `n+1` the type is a pair of an element and the type for `n` (bound to `ih`). The concrete expansions:

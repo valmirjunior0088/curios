@@ -272,11 +272,11 @@ fn print_term(term: Term) -> Printer<'static> {
                     Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
                     None => print_term(*motive.body),
                 },
-                pure(";"),
                 pure("\n| false =>\n"),
-                indent(flat([print_term(*false_case), pure(";")])),
+                indent(print_term(*false_case)),
                 pure("\n| true =>\n"),
-                indent(flat([print_term(*true_case), pure(";")])),
+                indent(print_term(*true_case)),
+                pure("\nend"),
             ]),
             Match::Nat(NatMatch::Induction {
                 head,
@@ -293,15 +293,15 @@ fn print_term(term: Term) -> Printer<'static> {
                     Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
                     None => print_term(*motive.body),
                 },
-                pure(";"),
                 pure("\n| 0 =>\n"),
-                indent(flat([print_term(*zero_case), pure(";")])),
+                indent(print_term(*zero_case)),
                 pure("\n| "),
                 pure(pred_label),
                 pure(" "),
                 pure(ih_label),
                 pure(" =>\n"),
-                indent(flat([print_term(*succ_case), pure(";")])),
+                indent(print_term(*succ_case)),
+                pure("\nend"),
             ]),
             Match::Nat(NatMatch::Dispatch {
                 head,
@@ -316,20 +316,20 @@ fn print_term(term: Term) -> Printer<'static> {
                     Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
                     None => print_term(*motive.body),
                 },
-                pure(";"),
                 flat(
                     cases
                         .into_iter()
                         .map(|(nat, body)| {
                             flat([
                                 pure(format!("\n| {nat} =>\n")),
-                                indent(flat([print_term(*body), pure(";")])),
+                                indent(print_term(*body)),
                             ])
                         })
                         .collect::<Vec<_>>(),
                 ),
                 pure("\n| _ =>\n"),
-                indent(flat([print_term(*default), pure(";")])),
+                indent(print_term(*default)),
+                pure("\nend"),
             ]),
             Match::Atom(AtomMatch {
                 head,
@@ -343,7 +343,6 @@ fn print_term(term: Term) -> Printer<'static> {
                     Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
                     None => print_term(*motive.body),
                 },
-                pure(";"),
                 flat(
                     cases
                         .into_iter()
@@ -352,11 +351,12 @@ fn print_term(term: Term) -> Printer<'static> {
                                 pure("\n| "),
                                 print_atom(atom),
                                 pure(" =>\n"),
-                                indent(flat([print_term(*body), pure(";")])),
+                                indent(print_term(*body)),
                             ])
                         })
                         .collect::<Vec<_>>(),
                 ),
+                pure("\nend"),
             ]),
         },
         Term::DefFrom(DefFrom { label, body }) => {
