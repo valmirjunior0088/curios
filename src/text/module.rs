@@ -12,6 +12,7 @@ pub struct TopUse {
     pub is_pub: bool,
     pub is_abs: bool,
     pub name: Name,
+    pub group: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,7 +1,7 @@
 use {
     crate::{
         core,
-        text::{Name, TopUse},
+        text::Name,
     },
     std::collections::HashMap,
 };
@@ -169,23 +169,23 @@ impl<'a> Context<'a> {
         self.bindings.insert(label, name);
     }
 
-    pub fn resolve_use(&mut self, top_use: &TopUse) -> UseResolved {
-        if !top_use.is_abs && top_use.name.is_single() {
+    pub fn resolve_use(&mut self, is_abs: bool, name: &Name) -> UseResolved {
+        if !is_abs && name.is_single() {
             panic!(
                 "single-segment relative use is forbidden: {}",
-                top_use.name.head()
+                name.head()
             );
         }
 
-        let label = top_use.name.last().to_string();
+        let label = name.last().to_string();
 
-        let parent_path = if top_use.is_abs {
+        let parent_path = if is_abs {
             let mut current = Name::empty();
 
-            if top_use.name.is_single() {
+            if name.is_single() {
                 current
             } else {
-                let head = top_use.name.head();
+                let head = name.head();
 
                 let root_info = self
                     .table
@@ -206,7 +206,7 @@ impl<'a> Context<'a> {
                     panic!("module not found: {head}");
                 }
 
-                for seg in top_use.name.interior() {
+                for seg in name.interior() {
                     let info = self
                         .table
                         .get(&current)
@@ -234,7 +234,7 @@ impl<'a> Context<'a> {
                 current
             }
         } else {
-            let first = top_use.name.head();
+            let first = name.head();
 
             let mut current = self
                 .qualifiers
@@ -242,7 +242,7 @@ impl<'a> Context<'a> {
                 .unwrap_or_else(|| panic!("undeclared child in relative use: {first}"))
                 .clone();
 
-            for seg in top_use.name.interior() {
+            for seg in name.interior() {
                 let info = self
                     .table
                     .get(&current)

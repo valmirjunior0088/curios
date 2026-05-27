@@ -79,19 +79,29 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
-                let resolved = context.resolve_use(use_item);
+                let names = match &use_item.group {
+                    None => vec![use_item.name.clone()],
+                    Some(labels) => labels
+                        .iter()
+                        .map(|l| use_item.name.with(l))
+                        .collect::<Vec<Name>>(),
+                };
 
-                if use_item.is_pub {
-                    let label = use_item.name.last().to_string();
+                for name in &names {
+                    let resolved = context.resolve_use(use_item.is_abs, name);
 
-                    if resolved.module.is_some() {
-                        context.register_alias(&label);
-                        context.export_child(label.clone());
-                    }
+                    if use_item.is_pub {
+                        let label = name.last().to_string();
 
-                    if resolved.binding.is_some() {
-                        context.register_binding_alias(&label);
-                        context.export_binding(label);
+                        if resolved.module.is_some() {
+                            context.register_alias(&label);
+                            context.export_child(label.clone());
+                        }
+
+                        if resolved.binding.is_some() {
+                            context.register_binding_alias(&label);
+                            context.export_binding(label);
+                        }
                     }
                 }
             }
@@ -953,6 +963,26 @@ mod tests {
             end
             use /Foo/X;
             X/q
+        "#);
+    }
+
+    #[test]
+    fn use_brace_group_imports_all_labels() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+                pub let y : Type = Type;
+            end
+            use /Foo/{x, y};
+            x
+        "#);
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+                pub let y : Type = Type;
+            end
+            use /Foo/{x, y};
+            y
         "#);
     }
 

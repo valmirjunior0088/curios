@@ -45,7 +45,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 
 fn parse_name<'a>() -> Parser<'a, Name> {
     parse_identifier()
-        .and(many0(|| take_exact("/").and_keep(parse_identifier())))
+        .and(many0(|| catch(take_exact("/").and_keep(parse_identifier()))))
         .map(|(first, rest)| {
             iter::once(first)
                 .chain(rest)
@@ -1014,18 +1014,33 @@ fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+fn parse_brace_group<'a>() -> Parser<'a, Vec<String>> {
+    catch(parse_literal("{"))
+        .and_keep(sep_by1(
+            || parse_identifier().map(|s| s.to_string()),
+            || parse_literal(","),
+        ))
+        .and_drop(parse_literal("}"))
+}
+
 fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("use"))).flat_map(|(is_pub, ())| {
         catch(take_exact("/"))
             .map(|()| true)
             .or(pure(false))
             .and(parse_name())
+            .and(
+                catch(take_exact("/").and_keep(parse_brace_group()))
+                    .map(Some)
+                    .or(pure(None)),
+            )
             .and_drop(parse_literal(";"))
-            .map(move |(is_abs, name)| {
+            .map(move |((is_abs, name), group)| {
                 TopItem::Use(TopUse {
                     is_pub,
                     is_abs,
                     name,
+                    group,
                 })
             })
     })
@@ -1431,6 +1446,7 @@ mod tests {
                 is_pub: false,
                 is_abs: false,
                 name: Name::from(["Nat".to_string()]),
+                group: None,
             })]
         );
         assert_eq!(
@@ -1439,6 +1455,20 @@ mod tests {
                 is_pub: false,
                 is_abs: false,
                 name: Name::from(["Foo".to_string(), "Int".to_string()]),
+                group: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn parse_use_brace_group() {
+        assert_eq!(
+            "use /std/{Bin, Arr};".parse::<Module>().unwrap().items,
+            vec![TopItem::Use(TopUse {
+                is_pub: false,
+                is_abs: true,
+                name: Name::from(["std".to_string()]),
+                group: Some(vec!["Bin".to_string(), "Arr".to_string()]),
             })]
         );
     }

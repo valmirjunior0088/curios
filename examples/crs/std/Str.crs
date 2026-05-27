@@ -1,6 +1,4 @@
-use /std/Bin;
-use /std/Int;
-use /std/Nat;
+use /std/{Bin, Int, Nat};
 
 pub let from_nat(str : Bin) -> Nat =
     Bin/fold(Nat, str, 0, (byte, acc) => Nat.add(Nat.mul(acc, 10), Nat.sub(byte, 48)));

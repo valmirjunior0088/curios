@@ -417,6 +417,10 @@ fn print_top_use(item: TopUse) -> Printer<'static> {
         pure("use "),
         if item.is_abs { pure("/") } else { pure("") },
         pure(item.name.join()),
+        match item.group {
+            None => pure(""),
+            Some(labels) => pure(format!("/{{{}}}", labels.join(", "))),
+        },
         pure(";"),
     ])
 }

@@ -1,6 +1,4 @@
-use /std/Arr;
-use /std/Bin;
-use /std/Bln;
+use /std/{Arr, Bin, Bln};
 use /json/Value;
 
 let encode_num(n : Flt) -> Bin =
