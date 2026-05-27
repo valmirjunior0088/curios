@@ -6,7 +6,7 @@ use {
 fn main() {
     let base = Path::new(file!()).parent().unwrap().join("crs");
     let loader = text::FileLoader::new(&base);
-    let timeout = Duration::from_secs(5);
+    let timeout = Duration::from_secs(10);
 
     let source = r#"
         pub mod std;
@@ -53,7 +53,10 @@ fn main() {
     );
 
     let ill_typed = r#"
+        pub mod std;
+
         pub mod fmt;
+
         fmt/printf("%d")("Alice")
         "#;
 

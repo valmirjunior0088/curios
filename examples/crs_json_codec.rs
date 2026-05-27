@@ -6,7 +6,8 @@ use {
 fn main() {
     let source = r#"
         pub mod std;
-        pub mod Parse;
+        use /std/Parse;
+
         pub mod json;
 
         let value : json/Value = ('obj, [
@@ -39,7 +40,7 @@ fn main() {
     .expect("expected core term");
     println!("core: {:?}", t.elapsed());
 
-    let timeout = Duration::from_secs(5);
+    let timeout = Duration::from_secs(10);
     let t = Instant::now();
     let ersd_term = core::erase(
         &mut core::Context::new(timeout),

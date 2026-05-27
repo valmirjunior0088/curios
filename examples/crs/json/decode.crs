@@ -1,7 +1,4 @@
-use /Parse;
-use /Parse/Parse;
-use /std/Arr;
-use /std/Str;
+use /std/{Arr, Str, Parse};
 use /json/Value;
 
 let is_ws(byte : Nat) -> Bln =

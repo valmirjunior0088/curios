@@ -9,3 +9,6 @@ pub mod Int;
 pub mod Nat;
 
 pub mod Str;
+
+pub mod Parse;
+pub use Parse/Parse;

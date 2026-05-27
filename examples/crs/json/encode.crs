@@ -21,7 +21,7 @@ let encode_str(s : Bin) -> Bin =
             end),
         "\"");
 
-pub rec encode : Value -> Bin = v =>
+pub rec encode(v: Value) -> Bin =
     match v.0 : Bin
     | 'null => "null"
     | 'bln => Bln/to_str(v.1)

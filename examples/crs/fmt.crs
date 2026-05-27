@@ -1,3 +1,5 @@
+use /std/Parse;
+
 pub rec Fmt : Type = {
     tag : '[nil, lit, str, nat],
     match tag : Type
@@ -7,7 +9,7 @@ pub rec Fmt : Type = {
     | 'nat => Fmt
     end };
 
-pub rec format_type_with : (Type, Fmt) -> Type = (result, f) =>
+pub rec format_type_with(result: Type, f: Fmt) -> Type =
     match f.0 : Type
     | 'nil => result
     | 'lit => format_type_with(result, f.1.1)
@@ -15,56 +17,51 @@ pub rec format_type_with : (Type, Fmt) -> Type = (result, f) =>
     | 'nat => Nat -> format_type_with(result, f.1)
     end;
 
-rec collect_literal : (Bin, Nat, Bin) -> { Bin, Nat } = (input, pos, acc) =>
-    match Nat.lt(pos, Bin.len(input)) : { Bin, Nat }
-    | false => (acc, pos)
-    | true =>
-        let byte : Nat = Bin.get(input, pos);
-        match Nat.eql(byte, '%') : { Bin, Nat }
-        | true  => (acc, pos)
-        | false => collect_literal(input, Nat.add(pos, 1), Bin.append(acc, byte))
-        end
+let is_not_pct(byte : Nat) -> Bln =
+    match byte : Bln
+    | '%' => false
+    | _   => true
     end;
 
-rec parse_go : (Bin, Nat) -> Fmt = (input, pos) =>
-    match Nat.lt(pos, Bin.len(input)) : Fmt
-    | false => ('nil, ())
-    | true =>
-        let byte : Nat = Bin.get(input, pos);
-        match Nat.eql(byte, '%') : Fmt
-        | true =>
-            let next : Nat = Nat.add(pos, 1);
-            match Nat.lt(next, Bin.len(input)) : Fmt
-            | false => ('nil, ())
-            | true =>
-                let spec : Nat = Bin.get(input, next);
-                let rest : Fmt = parse_go(input, Nat.add(next, 1));
-                match spec : Fmt
-                | 's' => ('str, rest)
-                | 'd' => ('nat, rest)
-                | _   => rest
-                end
-            end
-        | false =>
-            let r : { Bin, Nat } = collect_literal(input, pos, "");
-            let rest : Fmt = parse_go(input, r.1);
-            ('lit, (r.0, rest))
+rec parse_fmt : Parse(Fmt) = (input, pos) =>
+    match Nat.lt(pos, Bin.len(input)) : Parse/Result({ Nat, Fmt })
+    | false => ('ok, (pos, ('nil, ())))
+    | true  =>
+        match Nat.eql(Bin.get(input, pos), '%') : Parse/Result({ Nat, Fmt })
+        | false => parse_lit(input, pos)
+        | true  => parse_spec(input, pos)
         end
+    end
+and parse_spec : Parse(Fmt) =
+    Parse/or(Fmt,
+        Parse/bind(Nat, Fmt, Parse/take_byte('%'), _ =>
+        Parse/bind(Nat, Fmt, Parse/any_byte, byte =>
+        Parse/bind(Fmt, Fmt, parse_fmt, rest =>
+            match byte : Parse(Fmt)
+            | 's' => Parse/pure(Fmt, ('str, rest))
+            | 'd' => Parse/pure(Fmt, ('nat, rest))
+            | _   => Parse/pure(Fmt, rest)
+            end))),
+        Parse/map(Nat, Fmt, _ => ('lit, ("%", ('nil, ()))), Parse/take_byte('%')))
+and parse_lit : Parse(Fmt) =
+    Parse/bind(Bin, Fmt, Parse/take_while(is_not_pct), bytes =>
+    Parse/bind(Fmt, Fmt, parse_fmt, rest =>
+        Parse/pure(Fmt, ('lit, (bytes, rest)))));
+
+pub let parse(input : Bin) -> Fmt =
+    let r : Parse/Result(Fmt) = Parse/run(Fmt, parse_fmt, input);
+    match r.0 : Fmt
+    | 'ok  => r.1
+    | 'err => ('nil, ())
     end;
 
-pub let parse(input : Bin) -> Fmt = parse_go(input, 0);
-
-rec go_with : (result : Type, finish : Bin -> result, f : Fmt, acc : Bin) -> format_type_with(result, f) =
-    (result, finish, f, acc) =>
-        match f.0 : format_type_with(result, f)
-        | 'nil => finish(acc)
-        | 'lit =>
-            go_with(result, finish, f.1.1, Bin.concat(acc, f.1.0))
-        | 'str => s =>
-            go_with(result, finish, f.1, Bin.concat(acc, s))
-        | 'nat => n =>
-            go_with(result, finish, f.1, Bin.concat(acc, Nat.to_str(n)))
-        end;
+rec go_with(result : Type, finish : Bin -> result, f : Fmt, acc : Bin) -> format_type_with(result, f) =
+    match f.0 : format_type_with(result, f)
+    | 'nil => finish(acc)
+    | 'lit => go_with(result, finish, f.1.1, Bin.concat(acc, f.1.0))
+    | 'str => s => go_with(result, finish, f.1, Bin.concat(acc, s))
+    | 'nat => n => go_with(result, finish, f.1, Bin.concat(acc, Nat.to_str(n)))
+    end;
 
 pub let format(s : Bin) -> format_type_with(Bin, parse(s)) =
     go_with(Bin, x => x, parse(s), "");
