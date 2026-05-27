@@ -25,9 +25,30 @@ pub enum Error {
         term: Box<Term>,
         head_type: Box<Term>,
     },
+    NotAFunctionType {
+        term: Box<Term>,
+        expected: Box<Term>,
+    },
     NotATuple {
         term: Box<Term>,
         head_type: Box<Term>,
+    },
+    NotATupleType {
+        term: Box<Term>,
+        expected: Box<Term>,
+    },
+    NotAnArrayType {
+        term: Box<Term>,
+        expected: Box<Term>,
+    },
+    NotArrType {
+        term: Box<Term>,
+        head_type: Box<Term>,
+    },
+    TupleArityMismatch {
+        term: Box<Term>,
+        expected: usize,
+        got: usize,
     },
     TupleIndexOutOfBounds {
         term: Box<Term>,
@@ -108,10 +129,46 @@ impl Error {
         }
     }
 
+    pub fn not_a_function_type<T: Into<Term>, U: Into<Term>>(term: T, expected: U) -> Self {
+        Self::NotAFunctionType {
+            term: Box::new(term.into()),
+            expected: Box::new(expected.into()),
+        }
+    }
+
     pub fn not_a_tuple<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotATuple {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn not_a_tuple_type<T: Into<Term>, U: Into<Term>>(term: T, expected: U) -> Self {
+        Self::NotATupleType {
+            term: Box::new(term.into()),
+            expected: Box::new(expected.into()),
+        }
+    }
+
+    pub fn not_an_array_type<T: Into<Term>, U: Into<Term>>(term: T, expected: U) -> Self {
+        Self::NotAnArrayType {
+            term: Box::new(term.into()),
+            expected: Box::new(expected.into()),
+        }
+    }
+
+    pub fn not_arr_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotArrType {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn tuple_arity_mismatch<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+        Self::TupleArityMismatch {
+            term: Box::new(term.into()),
+            expected,
+            got,
         }
     }
 
@@ -225,10 +282,37 @@ impl fmt::Display for Error {
             Error::NotAFunction { head_type, .. } => {
                 write!(f, "applied a non-function\n  head has type: {head_type}")
             }
+            Error::NotAFunctionType { expected, .. } => {
+                write!(
+                    f,
+                    "introduced a lambda where the expected type is not a function type\n  expected: {expected}"
+                )
+            }
             Error::NotATuple { head_type, .. } => {
                 write!(
                     f,
                     "projected from a non-tuple\n  head has type: {head_type}"
+                )
+            }
+            Error::NotATupleType { expected, .. } => {
+                write!(
+                    f,
+                    "introduced a tuple where the expected type is not a tuple type\n  expected: {expected}"
+                )
+            }
+            Error::NotAnArrayType { expected, .. } => {
+                write!(
+                    f,
+                    "introduced an array where the expected type is not an array type\n  expected: {expected}"
+                )
+            }
+            Error::NotArrType { head_type, .. } => {
+                write!(f, "expected Arr but got {head_type}")
+            }
+            Error::TupleArityMismatch { expected, got, .. } => {
+                write!(
+                    f,
+                    "tuple has {got} field(s) but expected type has {expected}"
                 )
             }
             Error::TupleIndexOutOfBounds { index, arity, .. } => {

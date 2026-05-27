@@ -927,15 +927,8 @@ fn erase_prim(
             )?;
             let list_type = infer(context, list)?;
             let list_type_reduced = reduce_with(context, &list_type)?;
-            match &*list_type_reduced {
-                Subterm::Prim(Prim::ArrType(_)) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
+            if !matches!(&*list_type_reduced, Subterm::Prim(Prim::ArrType(_))) {
+                return Err(Error::not_arr_type(term.clone(), list_type_reduced));
             }
             Ok(ersd::Prim::ArrLen(erase(context, list, &list_type_reduced)?.into()).into())
         }
@@ -944,13 +937,7 @@ fn erase_prim(
             let list_type_reduced = reduce_with(context, &list_type)?;
             let elem_type = match &*list_type_reduced {
                 Subterm::Prim(Prim::ArrType(elem)) => elem.clone(),
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
+                _ => return Err(Error::not_arr_type(term.clone(), list_type_reduced)),
             };
             expect(context, term, &elem_type, expected)?;
             Ok(ersd::Prim::ArrGet(
@@ -962,15 +949,8 @@ fn erase_prim(
         Prim::ArrSlice(list, start, end) => {
             let list_type = infer(context, list)?;
             let list_type_reduced = reduce_with(context, &list_type)?;
-            match &*list_type_reduced {
-                Subterm::Prim(Prim::ArrType(_)) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
+            if !matches!(&*list_type_reduced, Subterm::Prim(Prim::ArrType(_))) {
+                return Err(Error::not_arr_type(term.clone(), list_type_reduced));
             }
             expect(context, term, &list_type_reduced, expected)?;
             Ok(ersd::Prim::ArrSlice(
@@ -985,13 +965,7 @@ fn erase_prim(
             let list_type_reduced = reduce_with(context, &list_type)?;
             let elem_type = match &*list_type_reduced {
                 Subterm::Prim(Prim::ArrType(e)) => e.clone(),
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
+                _ => return Err(Error::not_arr_type(term.clone(), list_type_reduced)),
             };
             expect(
                 context,
@@ -1007,15 +981,8 @@ fn erase_prim(
         }
         Prim::ArrConcat(operands) => {
             let expected_reduced = reduce_with(context, expected)?;
-            match &*expected_reduced {
-                Subterm::Prim(Prim::ArrType(_)) => {}
-                other => {
-                    return Err(Error::type_mismatch(
-                        term.clone(),
-                        other.clone(),
-                        expected.clone(),
-                    ));
-                }
+            if !matches!(&*expected_reduced, Subterm::Prim(Prim::ArrType(_))) {
+                return Err(Error::not_an_array_type(term.clone(), expected.clone()));
             }
             let erased = operands
                 .iter()
@@ -1057,7 +1024,7 @@ fn erase_func(
 
     let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::FuncType(ft) => ft,
-        other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
+        _ => return Err(Error::not_a_function_type(term.clone(), expected.clone())),
     };
 
     let n = ft.telescope.len();
@@ -1159,14 +1126,14 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
 
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::TupleType(TupleType { telescope }) => telescope,
-        other => return Err(Error::type_mismatch(tuple.clone(), other, expected.clone())),
+        _ => return Err(Error::not_a_tuple_type(tuple.clone(), expected.clone())),
     };
 
     if fields.len() != type_telescope.len() {
-        return Err(Error::type_mismatch(
+        return Err(Error::tuple_arity_mismatch(
             tuple.clone(),
-            expected.clone(),
-            expected.clone(),
+            type_telescope.len(),
+            fields.len(),
         ));
     }
 
@@ -2380,7 +2347,7 @@ mod tests {
 
         assert!(matches!(
             erase(&mut context, &concat, &Subterm::Prim(Prim::NatType).into()),
-            Err(Error::TypeMismatch { .. })
+            Err(Error::NotAnArrayType { .. })
         ));
     }
 
