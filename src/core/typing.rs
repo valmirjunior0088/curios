@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Context, Proj, Term, Type},
+    super::{Atom, Context, Proj, Subterm, Term, Type},
     crate::Span,
     std::fmt,
 };
@@ -10,64 +10,64 @@ pub struct Preempted;
 #[derive(Debug)]
 pub enum Error {
     ReducePreempted {
-        term: Box<Term>,
+        term: Box<Subterm>,
     },
     ConvertPreempted {
-        this: Box<Term>,
-        that: Box<Term>,
+        this: Box<Subterm>,
+        that: Box<Subterm>,
     },
     TypeMismatch {
-        term: Box<Term>,
-        inferred: Box<Term>,
-        expected: Box<Term>,
+        term: Box<Subterm>,
+        inferred: Box<Subterm>,
+        expected: Box<Subterm>,
     },
     NotAFunction {
-        term: Box<Term>,
-        head_type: Box<Term>,
+        term: Box<Subterm>,
+        head_type: Box<Subterm>,
     },
     NotATuple {
-        term: Box<Term>,
-        head_type: Box<Term>,
+        term: Box<Subterm>,
+        head_type: Box<Subterm>,
     },
     TupleIndexOutOfBounds {
-        term: Box<Term>,
+        term: Box<Subterm>,
         index: usize,
         arity: usize,
     },
     NotAnAtomType {
-        term: Box<Term>,
-        head_type: Box<Term>,
+        term: Box<Subterm>,
+        head_type: Box<Subterm>,
     },
     NotNatType {
-        term: Box<Term>,
-        head_type: Box<Term>,
+        term: Box<Subterm>,
+        head_type: Box<Subterm>,
     },
     NotBlnType {
-        term: Box<Term>,
-        head_type: Box<Term>,
+        term: Box<Subterm>,
+        head_type: Box<Subterm>,
     },
     WrongNumberOfArguments {
-        term: Box<Term>,
+        term: Box<Subterm>,
         expected: usize,
         got: usize,
     },
     MatchArityMismatch {
-        term: Box<Term>,
+        term: Box<Subterm>,
         expected: usize,
         got: usize,
     },
     MatchCaseMissing {
-        term: Box<Term>,
+        term: Box<Subterm>,
         atom: Atom,
     },
     CannotInferLiteral {
-        term: Box<Term>,
+        term: Box<Subterm>,
     },
     UnboundVariable {
-        term: Box<Term>,
+        term: Box<Subterm>,
     },
     CannotInfer {
-        term: Box<Term>,
+        term: Box<Subterm>,
     },
     Located {
         span: Span,
@@ -76,20 +76,20 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn reduce_preempted<T: Into<Term>>(term: T) -> Self {
+    pub fn reduce_preempted<T: Into<Subterm>>(term: T) -> Self {
         Self::ReducePreempted {
             term: Box::new(term.into()),
         }
     }
 
-    pub fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
+    pub fn convert_preempted<T: Into<Subterm>, U: Into<Subterm>>(this: T, that: U) -> Self {
         Self::ConvertPreempted {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
         }
     }
 
-    pub fn type_mismatch<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
+    pub fn type_mismatch<T: Into<Subterm>, U: Into<Subterm>, V: Into<Subterm>>(
         term: T,
         inferred: U,
         expected: V,
@@ -101,21 +101,25 @@ impl Error {
         }
     }
 
-    pub fn not_a_function<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+    pub fn not_a_function<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
         Self::NotAFunction {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_a_tuple<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+    pub fn not_a_tuple<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
         Self::NotATuple {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn tuple_index_out_of_bounds<T: Into<Term>>(term: T, index: usize, arity: usize) -> Self {
+    pub fn tuple_index_out_of_bounds<T: Into<Subterm>>(
+        term: T,
+        index: usize,
+        arity: usize,
+    ) -> Self {
         Self::TupleIndexOutOfBounds {
             term: Box::new(term.into()),
             index,
@@ -123,28 +127,32 @@ impl Error {
         }
     }
 
-    pub fn not_an_atom_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+    pub fn not_an_atom_type<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
         Self::NotAnAtomType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_nat_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+    pub fn not_nat_type<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
         Self::NotNatType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_bln_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+    pub fn not_bln_type<T: Into<Subterm>, U: Into<Subterm>>(term: T, head_type: U) -> Self {
         Self::NotBlnType {
             term: Box::new(term.into()),
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn wrong_number_of_arguments<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+    pub fn wrong_number_of_arguments<T: Into<Subterm>>(
+        term: T,
+        expected: usize,
+        got: usize,
+    ) -> Self {
         Self::WrongNumberOfArguments {
             term: Box::new(term.into()),
             expected,
@@ -152,7 +160,7 @@ impl Error {
         }
     }
 
-    pub fn match_arity_mismatch<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+    pub fn match_arity_mismatch<T: Into<Subterm>>(term: T, expected: usize, got: usize) -> Self {
         Self::MatchArityMismatch {
             term: Box::new(term.into()),
             expected,
@@ -160,26 +168,26 @@ impl Error {
         }
     }
 
-    pub fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
+    pub fn match_case_missing<T: Into<Subterm>, A: Into<Atom>>(term: T, atom: A) -> Self {
         Self::MatchCaseMissing {
             term: Box::new(term.into()),
             atom: atom.into(),
         }
     }
 
-    pub fn cannot_infer_literal<T: Into<Term>>(term: T) -> Self {
+    pub fn cannot_infer_literal<T: Into<Subterm>>(term: T) -> Self {
         Self::CannotInferLiteral {
             term: Box::new(term.into()),
         }
     }
 
-    pub fn unbound_variable<T: Into<Term>>(var: T) -> Self {
+    pub fn unbound_variable<T: Into<Subterm>>(var: T) -> Self {
         Self::UnboundVariable {
             term: Box::new(var.into()),
         }
     }
 
-    pub fn cannot_infer<T: Into<Term>>(term: T) -> Self {
+    pub fn cannot_infer<T: Into<Subterm>>(term: T) -> Self {
         Self::CannotInfer {
             term: Box::new(term.into()),
         }
@@ -275,7 +283,7 @@ impl fmt::Display for Error {
 }
 
 pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    super::reduce(context, term).map_err(|Preempted| Error::reduce_preempted(term.clone()))
+    super::reduce(context, term.clone()).map_err(|Preempted| Error::reduce_preempted(term.clone()))
 }
 
 pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
@@ -302,9 +310,11 @@ pub fn expect(
 pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
     let canonical = reduce_with(context, head)?;
 
-    match canonical {
-        Term::Var(var) => context.define(var.unwrap(), value),
-        Term::Proj(Proj { head: base, index }) => context.define_proj(*base, index, value),
+    match &*canonical {
+        Subterm::Var(var) => context.define(var.unwrap(), value),
+        Subterm::Proj(Proj { head: base, index }) => {
+            context.define_proj(base.clone(), *index, value.clone())
+        }
         _ => {}
     }
 
@@ -314,19 +324,19 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{Nat, Prim, Term};
+    use crate::core::{Nat, Prim, Subterm};
 
     #[test]
     fn display_unbound_variable() {
-        let err = Error::unbound_variable(Term::Prim(Prim::NatType));
+        let err = Error::unbound_variable(Subterm::Prim(Prim::NatType));
         assert_eq!(err.to_string(), "unbound variable: Nat");
     }
 
     #[test]
     fn display_not_a_function() {
         let err = Error::not_a_function(
-            Term::Prim(Prim::Nat(Nat::new(0))),
-            Term::Prim(Prim::NatType),
+            Subterm::Prim(Prim::Nat(Nat::new(0))),
+            Subterm::Prim(Prim::NatType),
         );
         assert_eq!(
             err.to_string(),
@@ -337,9 +347,9 @@ mod tests {
     #[test]
     fn display_type_mismatch_shows_both_types() {
         let err = Error::type_mismatch(
-            Term::Prim(Prim::Nat(Nat::new(5))),
-            Term::Prim(Prim::NatType),
-            Term::Prim(Prim::BlnType),
+            Subterm::Prim(Prim::Nat(Nat::new(5))),
+            Subterm::Prim(Prim::NatType),
+            Subterm::Prim(Prim::BlnType),
         );
         let s = err.to_string();
         assert!(s.contains("Nat"), "should contain inferred Nat: {s}");

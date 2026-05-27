@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn no_items_simple_tail() {
-        assert_eq!(run("Type"), core::Term::Type);
+        assert_eq!(run("Type"), core::Term::new(core::Subterm::Type));
     }
 
     #[test]
@@ -405,11 +405,11 @@ mod tests {
             "#),
             core::Sealed::new(
                 "Str",
-                core::Term::Prim(core::Prim::BinType),
+                core::Subterm::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Str/from",
                     core::FuncType::new(
-                        [("", core::Term::Prim(core::Prim::BinType))],
+                        [("", core::Subterm::Prim(core::Prim::BinType))],
                         core::Var::free("Str")
                     ),
                     core::Func::new(
@@ -420,13 +420,13 @@ mod tests {
                         "Str/into",
                         core::FuncType::new(
                             [("", core::Var::free("Str"))],
-                            core::Term::Prim(core::Prim::BinType)
+                            core::Subterm::Prim(core::Prim::BinType)
                         ),
                         core::Func::new(
                             ["str"],
                             core::Unseal::new(core::Var::free("Str"), core::Var::free("str"))
                         ),
-                        core::Term::Type,
+                        core::Subterm::Type,
                     ),
                 ),
             )
@@ -460,8 +460,8 @@ mod tests {
             "#),
             core::Sealed::new(
                 "Foo/Str",
-                core::Term::Prim(core::Prim::BinType),
-                core::Term::Type
+                core::Subterm::Prim(core::Prim::BinType),
+                core::Subterm::Type
             )
             .into()
         );
@@ -480,11 +480,11 @@ mod tests {
             "#),
             core::Sealed::new(
                 "Foo/Str",
-                core::Term::Prim(core::Prim::BinType),
+                core::Subterm::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Foo/Str/from",
                     core::FuncType::new(
-                        [("", core::Term::Prim(core::Prim::BinType))],
+                        [("", core::Subterm::Prim(core::Prim::BinType))],
                         core::Var::free("Foo/Str")
                     ),
                     core::Func::new(
@@ -512,11 +512,11 @@ mod tests {
             "#),
             core::Sealed::new(
                 "Foo/Str",
-                core::Term::Prim(core::Prim::BinType),
+                core::Subterm::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Foo/Str/from",
                     core::FuncType::new(
-                        [("", core::Term::Prim(core::Prim::BinType))],
+                        [("", core::Subterm::Prim(core::Prim::BinType))],
                         core::Var::free("Foo/Str")
                     ),
                     core::Func::new(
@@ -557,18 +557,18 @@ mod tests {
             "#),
             core::Sealed::new(
                 "Str",
-                core::Term::Prim(core::Prim::BinType),
+                core::Subterm::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Str/foo",
                     core::FuncType::new(
                         [("", core::Var::free("Str"))],
-                        core::Term::Prim(core::Prim::BinType)
+                        core::Subterm::Prim(core::Prim::BinType)
                     ),
                     core::Func::new(
                         ["Str"],
                         core::Seal::new(core::Var::free("Str"), core::Var::free("Str"))
                     ),
-                    core::Term::Type,
+                    core::Subterm::Type,
                 ),
             )
             .into()
@@ -586,14 +586,14 @@ mod tests {
             "#),
             core::Sealed::new(
                 "Str",
-                core::Term::Prim(core::Prim::BinType),
+                core::Subterm::Prim(core::Prim::BinType),
                 core::Let::new(
                     "Str/foo",
                     core::FuncType::new(
                         [("", core::Var::free("Str"))],
                         core::FuncType::new(
                             [("", core::Var::free("Str"))],
-                            core::Term::Prim(core::Prim::BinType)
+                            core::Subterm::Prim(core::Prim::BinType)
                         ),
                     ),
                     core::Func::new(
@@ -603,7 +603,7 @@ mod tests {
                             core::Seal::new(core::Var::free("Str"), core::Var::free("str"))
                         ),
                     ),
-                    core::Term::Type,
+                    core::Subterm::Type,
                 ),
             )
             .into()

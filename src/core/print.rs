@@ -1,7 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Seal, Sealed, Telescope, Term, Tuple, TupleType, Two, Unseal, Var,
+        Prim, Proj, Rec, Scope, Seal, Sealed, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        Unseal, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -94,18 +95,18 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
-            Term::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
+            Subterm::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
             inner => {
                 if spine == 1 {
                     flat([
                         pure("Nat.succ("),
-                        print_term(inner.clone(), depth),
+                        print_term(inner.clone().into(), depth),
                         pure(")"),
                     ])
                 } else {
                     flat([
                         pure(format!("Nat.succ({spine}, ")),
-                        print_term(inner.clone(), depth),
+                        print_term(inner.clone().into(), depth),
                         pure(")"),
                     ])
                 }
@@ -113,228 +114,228 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         },
         Prim::NatEql(left, right) => flat([
             pure("Nat.eql "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatNeq(left, right) => flat([
             pure("Nat.neq "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatAdd(left, right) => flat([
             pure("Nat.add "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatSub(left, right) => flat([
             pure("Nat.sub "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatMul(left, right) => flat([
             pure("Nat.mul "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatLt(left, right) => flat([
             pure("Nat.lt "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatDiv(left, right) => flat([
             pure("Nat.div "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatRem(left, right) => flat([
             pure("Nat.rem "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatGt(left, right) => flat([
             pure("Nat.gt "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatLte(left, right) => flat([
             pure("Nat.lte "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::NatGte(left, right) => flat([
             pure("Nat.gte "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
-        Prim::NatToStr(inner) => flat([pure("Nat.to_str "), print_term(*inner, depth)]),
+        Prim::NatToStr(inner) => flat([pure("Nat.to_str "), print_term(inner, depth)]),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{:+}", value)),
         Prim::IntEql(left, right) => flat([
             pure("Int.eql "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntNeq(left, right) => flat([
             pure("Int.neq "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntAdd(left, right) => flat([
             pure("Int.add "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntSub(left, right) => flat([
             pure("Int.sub "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntMul(left, right) => flat([
             pure("Int.mul "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntDiv(left, right) => flat([
             pure("Int.div "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntRem(left, right) => flat([
             pure("Int.rem "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntLt(left, right) => flat([
             pure("Int.lt "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntGt(left, right) => flat([
             pure("Int.gt "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntLte(left, right) => flat([
             pure("Int.lte "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::IntGte(left, right) => flat([
             pure("Int.gte "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
-        Prim::IntToStr(inner) => flat([pure("Int.to_str "), print_term(*inner, depth)]),
+        Prim::IntToStr(inner) => flat([pure("Int.to_str "), print_term(inner, depth)]),
         Prim::FltType => pure("Flt"),
         Prim::Flt(flt) => print_flt(flt),
         Prim::FltAdd(left, right) => flat([
             pure("Flt.add "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltSub(left, right) => flat([
             pure("Flt.sub "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltMul(left, right) => flat([
             pure("Flt.mul "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltDiv(left, right) => flat([
             pure("Flt.div "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltEql(left, right) => flat([
             pure("Flt.eql "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltNeq(left, right) => flat([
             pure("Flt.neq "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltLt(left, right) => flat([
             pure("Flt.lt "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltGt(left, right) => flat([
             pure("Flt.gt "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltLte(left, right) => flat([
             pure("Flt.lte "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltGte(left, right) => flat([
             pure("Flt.gte "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltMin(left, right) => flat([
             pure("Flt.min "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::FltMax(left, right) => flat([
             pure("Flt.max "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
-        Prim::FltNeg(inner) => flat([pure("Flt.neg "), print_term(*inner, depth)]),
-        Prim::FltAbs(inner) => flat([pure("Flt.abs "), print_term(*inner, depth)]),
-        Prim::FltSqrt(inner) => flat([pure("Flt.sqrt "), print_term(*inner, depth)]),
-        Prim::FltFloor(inner) => flat([pure("Flt.floor "), print_term(*inner, depth)]),
-        Prim::FltCeil(inner) => flat([pure("Flt.ceil "), print_term(*inner, depth)]),
-        Prim::FltTrunc(inner) => flat([pure("Flt.trunc "), print_term(*inner, depth)]),
-        Prim::FltNearest(inner) => flat([pure("Flt.nearest "), print_term(*inner, depth)]),
-        Prim::FltToStr(inner) => flat([pure("Flt.to_str "), print_term(*inner, depth)]),
-        Prim::NatToInt(inner) => flat([pure("Nat.to_int "), print_term(*inner, depth)]),
-        Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(*inner, depth)]),
-        Prim::IntToNat(inner) => flat([pure("Int.to_nat "), print_term(*inner, depth)]),
-        Prim::IntToFlt(inner) => flat([pure("Int.to_flt "), print_term(*inner, depth)]),
-        Prim::FltToNat(inner) => flat([pure("Flt.to_nat "), print_term(*inner, depth)]),
-        Prim::FltToInt(inner) => flat([pure("Flt.to_int "), print_term(*inner, depth)]),
+        Prim::FltNeg(inner) => flat([pure("Flt.neg "), print_term(inner, depth)]),
+        Prim::FltAbs(inner) => flat([pure("Flt.abs "), print_term(inner, depth)]),
+        Prim::FltSqrt(inner) => flat([pure("Flt.sqrt "), print_term(inner, depth)]),
+        Prim::FltFloor(inner) => flat([pure("Flt.floor "), print_term(inner, depth)]),
+        Prim::FltCeil(inner) => flat([pure("Flt.ceil "), print_term(inner, depth)]),
+        Prim::FltTrunc(inner) => flat([pure("Flt.trunc "), print_term(inner, depth)]),
+        Prim::FltNearest(inner) => flat([pure("Flt.nearest "), print_term(inner, depth)]),
+        Prim::FltToStr(inner) => flat([pure("Flt.to_str "), print_term(inner, depth)]),
+        Prim::NatToInt(inner) => flat([pure("Nat.to_int "), print_term(inner, depth)]),
+        Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(inner, depth)]),
+        Prim::IntToNat(inner) => flat([pure("Int.to_nat "), print_term(inner, depth)]),
+        Prim::IntToFlt(inner) => flat([pure("Int.to_flt "), print_term(inner, depth)]),
+        Prim::FltToNat(inner) => flat([pure("Flt.to_nat "), print_term(inner, depth)]),
+        Prim::FltToInt(inner) => flat([pure("Flt.to_int "), print_term(inner, depth)]),
         Prim::BinType => pure("Bin"),
         Prim::Bin(bytes) => pure(
             bytes
@@ -342,87 +343,86 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 .map(|b| format!("\\{:02x}", b))
                 .collect::<String>(),
         ),
-        Prim::BinLen(bin) => flat([pure("Bin.len "), print_term(*bin, depth)]),
+        Prim::BinLen(bin) => flat([pure("Bin.len "), print_term(bin, depth)]),
         Prim::BinEql(left, right) => flat([
             pure("Bin.eql "),
-            print_term(*left, depth),
+            print_term(left, depth),
             pure(" "),
-            print_term(*right, depth),
+            print_term(right, depth),
         ]),
         Prim::BinGet(bin, index) => flat([
             pure("Bin.get "),
-            print_term(*bin, depth),
+            print_term(bin, depth),
             pure(" "),
-            print_term(*index, depth),
+            print_term(index, depth),
         ]),
         Prim::BinSlice(bin, start, end) => flat([
             pure("Bin.slice "),
-            print_term(*bin, depth),
+            print_term(bin, depth),
             pure(" "),
-            print_term(*start, depth),
+            print_term(start, depth),
             pure(" "),
-            print_term(*end, depth),
+            print_term(end, depth),
         ]),
         Prim::BinAppend(bin, byte) => flat([
             pure("Bin.append "),
-            print_term(*bin, depth),
+            print_term(bin, depth),
             pure(" "),
-            print_term(*byte, depth),
+            print_term(byte, depth),
         ]),
         Prim::BinConcat(operands) => flat([
             pure("Bin.concat "),
             sep_flat(
-                operands.into_iter().map(move |e| print_term(*e, depth)),
+                operands.into_iter().map(move |e| print_term(e, depth)),
                 || pure(", "),
             ),
         ]),
-        Prim::ArrType(elem) => flat([pure("Arr "), print_term(*elem, depth)]),
+        Prim::ArrType(elem) => flat([pure("Arr "), print_term(elem, depth)]),
         Prim::Arr(elems) => flat([
             pure("["),
-            sep_flat(
-                elems.into_iter().map(move |e| print_term(*e, depth)),
-                || pure(", "),
-            ),
+            sep_flat(elems.into_iter().map(move |e| print_term(e, depth)), || {
+                pure(", ")
+            }),
             pure("]"),
         ]),
-        Prim::ArrLen(list) => flat([pure("Arr.len "), print_term(*list, depth)]),
+        Prim::ArrLen(list) => flat([pure("Arr.len "), print_term(list, depth)]),
         Prim::ArrGet(list, index) => flat([
             pure("Arr.get "),
-            print_term(*list, depth),
+            print_term(list, depth),
             pure(" "),
-            print_term(*index, depth),
+            print_term(index, depth),
         ]),
         Prim::ArrSlice(list, start, end) => flat([
             pure("Arr.slice "),
-            print_term(*list, depth),
+            print_term(list, depth),
             pure(" "),
-            print_term(*start, depth),
+            print_term(start, depth),
             pure(" "),
-            print_term(*end, depth),
+            print_term(end, depth),
         ]),
         Prim::ArrAppend(list, elem) => flat([
             pure("Arr.append "),
-            print_term(*list, depth),
+            print_term(list, depth),
             pure(" "),
-            print_term(*elem, depth),
+            print_term(elem, depth),
         ]),
         Prim::ArrConcat(operands) => flat([
             pure("Arr.concat "),
             sep_flat(
-                operands.into_iter().map(move |e| print_term(*e, depth)),
+                operands.into_iter().map(move |e| print_term(e, depth)),
                 || pure(", "),
             ),
         ]),
-        Prim::SysPrint(inner) => flat([pure("Sys.print "), print_term(*inner, depth)]),
+        Prim::SysPrint(inner) => flat([pure("Sys.print "), print_term(inner, depth)]),
         Prim::SysRead => pure("Sys.read"),
     }
 }
 
 fn print_term(term: Term, depth: usize) -> Printer<'static> {
-    match term {
-        Term::Type => pure("Type"),
-        Term::Prim(prim) => print_prim(prim, depth),
-        Term::NatMatch(NatMatch::Induction {
+    match Term::unwrap_or_clone(term) {
+        Subterm::Type => pure("Type"),
+        Subterm::Prim(prim) => print_prim(prim, depth),
+        Subterm::NatMatch(NatMatch::Induction {
             head,
             motive,
             zero_case,
@@ -433,14 +433,14 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([
                 pure("Nat.fold "),
-                print_term(*head, depth),
+                print_term(head, depth),
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
                 print_term(motive, depth + 1),
                 pure(";"),
                 pure("\n| 0n =>\n"),
-                indent(flat([print_term(*zero_case, depth), pure(";")])),
+                indent(flat([print_term(zero_case, depth), pure(";")])),
                 pure("\n| "),
                 pure(pred_label),
                 pure(" "),
@@ -449,7 +449,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 indent(flat([print_term(succ_case, depth), pure(";")])),
             ])
         }
-        Term::BlnMatch(BlnMatch {
+        Subterm::BlnMatch(BlnMatch {
             head,
             motive,
             false_case,
@@ -458,19 +458,19 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let (motive_label, motive) = open_scope_one(motive, depth);
             flat([
                 pure("Bln.match "),
-                print_term(*head, depth),
+                print_term(head, depth),
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
                 print_term(motive, depth + 1),
                 pure(";"),
                 pure("\n| false =>\n"),
-                indent(flat([print_term(*false_case, depth), pure(";")])),
+                indent(flat([print_term(false_case, depth), pure(";")])),
                 pure("\n| true =>\n"),
-                indent(flat([print_term(*true_case, depth), pure(";")])),
+                indent(flat([print_term(true_case, depth), pure(";")])),
             ])
         }
-        Term::NatMatch(NatMatch::Dispatch {
+        Subterm::NatMatch(NatMatch::Dispatch {
             head,
             motive,
             cases,
@@ -483,14 +483,14 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     .map(|(n, body)| {
                         flat([
                             pure(format!("\n| {n}n =>\n")),
-                            indent(flat([print_term(*body, depth), pure(";")])),
+                            indent(flat([print_term(body, depth), pure(";")])),
                         ])
                     })
                     .collect::<Vec<_>>(),
             );
             flat([
                 pure("Nat.match "),
-                print_term(*head, depth),
+                print_term(head, depth),
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
@@ -498,10 +498,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(";"),
                 case_printers,
                 pure("\n| _ =>\n"),
-                indent(flat([print_term(*default, depth), pure(";")])),
+                indent(flat([print_term(default, depth), pure(";")])),
             ])
         }
-        Term::FuncType(FuncType { telescope }) => {
+        Subterm::FuncType(FuncType { telescope }) => {
             fn walk(
                 cur: Telescope<Term>,
                 depth: usize,
@@ -520,9 +520,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             Some(_) => flat([
                                 pure(label.clone()),
                                 pure(" : "),
-                                print_term(*ty, depth + total),
+                                print_term(ty, depth + total),
                             ]),
-                            None => print_term(*ty, depth + total),
+                            None => print_term(ty, depth + total),
                         };
                         printers.push(printer);
                         let next = rest.open(&[&Term::from(Var::free(&label))]);
@@ -541,7 +541,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(output, depth + n),
             ])
         }
-        Term::Func(Func { body }) => {
+        Subterm::Func(Func { body }) => {
             let (labels, body) = open_scope_many(body, depth);
             let param_str = if labels.len() == 1 {
                 labels.into_iter().next().unwrap()
@@ -554,19 +554,19 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 indent(print_term(body, depth + 1)),
             ])
         }
-        Term::Apply(Apply { head, params }) => flat([
-            print_term(*head, depth),
+        Subterm::Apply(Apply { head, params }) => flat([
+            print_term(head, depth),
             pure("("),
             sep_flat(
                 params
                     .into_iter()
-                    .map(|p| print_term(*p, depth))
+                    .map(|p| print_term(p, depth))
                     .collect::<Vec<_>>(),
                 || pure(", "),
             ),
             pure(")"),
         ]),
-        Term::TupleType(TupleType { telescope }) => {
+        Subterm::TupleType(TupleType { telescope }) => {
             fn walk(
                 cur: Telescope<()>,
                 depth: usize,
@@ -584,7 +584,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         items.push(indent(flat([
                             pure(label.clone()),
                             pure(" : "),
-                            print_term(*ty, depth + total),
+                            print_term(ty, depth + total),
                         ])));
                         let next = rest.open(&[&Term::from(Var::free(&label))]);
                         walk(next, depth, total, idx + 1, items);
@@ -598,28 +598,28 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
-        Term::Tuple(Tuple { fields }) => flat([
+        Subterm::Tuple(Tuple { fields }) => flat([
             pure("("),
             sep_flat(
-                fields.into_iter().map(move |f| print_term(*f, depth)),
+                fields.into_iter().map(move |f| print_term(f, depth)),
                 || pure(", "),
             ),
             pure(")"),
         ]),
-        Term::Proj(Proj { head, index }) => flat([
+        Subterm::Proj(Proj { head, index }) => flat([
             pure("("),
-            print_term(*head, depth),
+            print_term(head, depth),
             pure(format!(").{index}")),
         ]),
-        Term::AtomType(AtomType { atoms }) => flat([
+        Subterm::AtomType(AtomType { atoms }) => flat([
             pure("'["),
             sep_flat(atoms.into_iter().map(|atom| pure(atom.as_string())), || {
                 pure(", ")
             }),
             pure("]"),
         ]),
-        Term::Atom(atom) => print_atom(atom),
-        Term::Match(Match {
+        Subterm::Atom(atom) => print_atom(atom),
+        Subterm::Match(Match {
             head,
             motive,
             cases,
@@ -634,7 +634,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             pure("\n| "),
                             print_atom(atom),
                             pure(" =>\n"),
-                            indent(flat([print_term(*body, depth), pure(";")])),
+                            indent(flat([print_term(body, depth), pure(";")])),
                         ])
                     })
                     .collect::<Vec<_>>(),
@@ -642,7 +642,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([
                 pure("match "),
-                print_term(*head, depth),
+                print_term(head, depth),
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
@@ -651,21 +651,21 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 cases,
             ])
         }
-        Term::Let(Let { type_, body, tail }) => {
+        Subterm::Let(Let { type_, body, tail }) => {
             let (label, tail) = open_scope_one(tail, depth);
 
             flat([
                 pure("let "),
                 pure(label),
                 pure(" : "),
-                print_term(*type_, depth),
+                print_term(type_, depth),
                 pure(" =\n"),
-                indent(flat([print_term(*body, depth), pure(";")])),
+                indent(flat([print_term(body, depth), pure(";")])),
                 pure("\n"),
                 print_term(tail, depth + 1),
             ])
         }
-        Term::Rec(Rec { items, tail }) => {
+        Subterm::Rec(Rec { items, tail }) => {
             let labels = tail
                 .label_iter()
                 .enumerate()
@@ -701,37 +701,43 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail, inner_depth),
             ])
         }
-        Term::Sealed(Sealed { witness, tail }) => {
+        Subterm::Sealed(Sealed { witness, tail }) => {
             let (label, tail) = open_scope_one(tail, depth);
 
             flat([
                 pure("sealed "),
                 pure(label),
                 pure(" = "),
-                print_term(*witness, depth),
+                print_term(witness, depth),
                 pure(";\n"),
                 print_term(tail, depth + 1),
             ])
         }
-        Term::Seal(Seal { witness, value }) => flat([
+        Subterm::Seal(Seal { witness, value }) => flat([
             pure("seal "),
-            print_term(*witness, depth),
+            print_term(witness, depth),
             pure(" "),
-            print_term(*value, depth),
+            print_term(value, depth),
         ]),
-        Term::Unseal(Unseal { witness, value }) => flat([
+        Subterm::Unseal(Unseal { witness, value }) => flat([
             pure("unseal "),
-            print_term(*witness, depth),
+            print_term(witness, depth),
             pure(" "),
-            print_term(*value, depth),
+            print_term(value, depth),
         ]),
-        Term::Var(var) => print_var(var),
-        Term::Spanned(_, inner) => print_term(*inner, depth),
+        Subterm::Var(var) => print_var(var),
+        Subterm::Spanned(_, inner) => print_term(inner, depth),
     }
 }
 
 impl Display for Term {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         run_printer(print_term(self.clone(), 0), formatter, 2)
+    }
+}
+
+impl Display for Subterm {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
+        run_printer(print_term(self.clone().into(), 0), formatter, 2)
     }
 }

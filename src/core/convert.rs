@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, Nat, NatMatch, Preempted,
-        Prim, Proj, Rec, Seal, Sealed, Telescope, Term, Tuple, TupleType, Type, Unseal, Var,
-        reduce,
+        Prim, Proj, Rec, Seal, Sealed, Subterm, Telescope, Term, Tuple, TupleType, Type, Unseal,
+        Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -69,14 +69,14 @@ impl Convert {
                 if spine_l != spine_r {
                     return Ok(false);
                 }
-                self.enqueue(Type.into(), *il, *ir);
+                self.enqueue(Type.into(), il, ir);
                 Ok(true)
             }
             (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
             (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
             (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
             (Prim::ArrType(this), Prim::ArrType(that)) => {
-                self.enqueue(Type.into(), *this, *that);
+                self.enqueue(Type.into(), this, that);
 
                 Ok(true)
             }
@@ -119,8 +119,8 @@ impl Convert {
             | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
             | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
-                self.enqueue(Type.into(), *this_left, *that_left);
-                self.enqueue(Type.into(), *this_right, *that_right);
+                self.enqueue(Type.into(), this_left, that_left);
+                self.enqueue(Type.into(), this_right, that_right);
 
                 Ok(true)
             }
@@ -142,7 +142,7 @@ impl Convert {
             | (Prim::FltToInt(this), Prim::FltToInt(that))
             | (Prim::ArrLen(this), Prim::ArrLen(that))
             | (Prim::BinLen(this), Prim::BinLen(that)) => {
-                self.enqueue(Type.into(), *this, *that);
+                self.enqueue(Type.into(), this, that);
 
                 Ok(true)
             }
@@ -150,9 +150,9 @@ impl Convert {
                 Prim::BinSlice(this_bin, this_start, this_end),
                 Prim::BinSlice(that_bin, that_start, that_end),
             ) => {
-                self.enqueue(Type.into(), *this_bin, *that_bin);
-                self.enqueue(Type.into(), *this_start, *that_start);
-                self.enqueue(Type.into(), *this_end, *that_end);
+                self.enqueue(Type.into(), this_bin, that_bin);
+                self.enqueue(Type.into(), this_start, that_start);
+                self.enqueue(Type.into(), this_end, that_end);
 
                 Ok(true)
             }
@@ -160,9 +160,9 @@ impl Convert {
                 Prim::ArrSlice(this_list, this_start, this_end),
                 Prim::ArrSlice(that_list, that_start, that_end),
             ) => {
-                self.enqueue(Type.into(), *this_list, *that_list);
-                self.enqueue(Type.into(), *this_start, *that_start);
-                self.enqueue(Type.into(), *this_end, *that_end);
+                self.enqueue(Type.into(), this_list, that_list);
+                self.enqueue(Type.into(), this_start, that_start);
+                self.enqueue(Type.into(), this_end, that_end);
 
                 Ok(true)
             }
@@ -172,7 +172,7 @@ impl Convert {
                 }
 
                 for (this, that) in this_elems.into_iter().zip(that_elems) {
-                    self.enqueue(Type.into(), *this, *that);
+                    self.enqueue(Type.into(), this, that);
                 }
 
                 Ok(true)
@@ -182,7 +182,7 @@ impl Convert {
                     return Ok(false);
                 }
                 for (this, that) in this_ops.into_iter().zip(that_ops) {
-                    self.enqueue(Type.into(), *this, *that);
+                    self.enqueue(Type.into(), this, that);
                 }
                 Ok(true)
             }
@@ -191,7 +191,7 @@ impl Convert {
                     return Ok(false);
                 }
                 for (this, that) in this_ops.into_iter().zip(that_ops) {
-                    self.enqueue(Type.into(), *this, *that);
+                    self.enqueue(Type.into(), this, that);
                 }
                 Ok(true)
             }
@@ -213,14 +213,14 @@ impl Convert {
         ) -> Result<bool, Preempted> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    cmp.enqueue(Type.into(), *ty_a.clone(), *ty_b.clone());
+                    cmp.enqueue(Type.into(), ty_a.clone(), ty_b.clone());
                     let v = Term::from(Var::free(context.fresh(rest_a.first_label())));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
                 }
                 (Telescope::Done(out_a), Telescope::Done(out_b)) => {
-                    cmp.enqueue(Type.into(), *out_a.clone(), *out_b.clone());
+                    cmp.enqueue(Type.into(), (**out_a).clone(), (**out_b).clone());
                     Ok(true)
                 }
                 _ => Ok(false),
@@ -241,8 +241,8 @@ impl Convert {
             .map(|_| Var::free(context.fresh(None)).into())
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
-        let output_type = match reduce(context, &type_)? {
-            Term::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
+        let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Type.into(),
         };
         self.enqueue(
@@ -258,9 +258,9 @@ impl Convert {
         if this.params.len() != that.params.len() {
             return Ok(false);
         }
-        self.enqueue(Type.into(), *this.head, *that.head);
+        self.enqueue(Type.into(), this.head, that.head);
         for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Type.into(), *a, *b);
+            self.enqueue(Type.into(), a, b);
         }
         Ok(true)
     }
@@ -279,7 +279,7 @@ impl Convert {
         ) -> Result<bool, Preempted> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    cmp.enqueue(Type.into(), *ty_a.clone(), *ty_b.clone());
+                    cmp.enqueue(Type.into(), ty_a.clone(), ty_b.clone());
                     let v = Term::from(Var::free(context.fresh(rest_a.first_label())));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
@@ -304,20 +304,20 @@ impl Convert {
             return Ok(false);
         }
 
-        let mut cur = match reduce(context, &type_)? {
-            Term::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
+        let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
             _ => None,
         };
 
         for (a, b) in this.fields.iter().zip(that.fields.iter()) {
             let ft = match cur.take() {
                 Some(Telescope::Cons(ty, rest)) => {
-                    cur = Some(rest.open(&[a.as_ref()]));
-                    *ty
+                    cur = Some(rest.open(&[a]));
+                    ty
                 }
                 _ => Type.into(),
             };
-            self.enqueue(ft, a.as_ref().clone(), b.as_ref().clone());
+            self.enqueue(ft, a.clone(), b.clone());
         }
 
         Ok(true)
@@ -327,7 +327,7 @@ impl Convert {
         if this.index != that.index {
             return Ok(false);
         }
-        self.enqueue(Type.into(), *this.head, *that.head);
+        self.enqueue(Type.into(), this.head, that.head);
         Ok(true)
     }
 
@@ -345,7 +345,7 @@ impl Convert {
         this: BlnMatch,
         that: BlnMatch,
     ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.head, *that.head);
+        self.enqueue(Type.into(), this.head, that.head);
 
         let label = Var::free(context.fresh(None)).into();
         self.enqueue(
@@ -354,8 +354,8 @@ impl Convert {
             that.motive.open(&[&label]),
         );
 
-        self.enqueue(Type.into(), *this.false_case, *that.false_case);
-        self.enqueue(Type.into(), *this.true_case, *that.true_case);
+        self.enqueue(Type.into(), this.false_case, that.false_case);
+        self.enqueue(Type.into(), this.true_case, that.true_case);
         Ok(true)
     }
 
@@ -380,7 +380,7 @@ impl Convert {
                     succ_case: that_succ,
                 },
             ) => {
-                self.enqueue(Type.into(), *this_head, *that_head);
+                self.enqueue(Type.into(), this_head, that_head);
 
                 let motive_label = Var::free(context.fresh(None)).into();
                 self.enqueue(
@@ -389,7 +389,7 @@ impl Convert {
                     that_motive.open(&[&motive_label]),
                 );
 
-                self.enqueue(Type.into(), *this_zero, *that_zero);
+                self.enqueue(Type.into(), this_zero, that_zero);
 
                 let pred_label: Term = Var::free(context.fresh(None)).into();
                 let ih_label: Term = Var::free(context.fresh(None)).into();
@@ -415,7 +415,7 @@ impl Convert {
                     default: that_default,
                 },
             ) => {
-                self.enqueue(Type.into(), *this_head, *that_head);
+                self.enqueue(Type.into(), this_head, that_head);
 
                 let label = Var::free(context.fresh(None)).into();
                 self.enqueue(
@@ -432,10 +432,10 @@ impl Convert {
                     if kl != kr {
                         return Ok(false);
                     }
-                    self.enqueue(Type.into(), *vl, *vr);
+                    self.enqueue(Type.into(), vl, vr);
                 }
 
-                self.enqueue(Type.into(), *this_default, *that_default);
+                self.enqueue(Type.into(), this_default, that_default);
                 Ok(true)
             }
             _ => Ok(false),
@@ -448,7 +448,7 @@ impl Convert {
         this: Match,
         that: Match,
     ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.head, *that.head);
+        self.enqueue(Type.into(), this.head, that.head);
 
         let label = Var::free(context.fresh(None)).into();
         self.enqueue(
@@ -468,7 +468,7 @@ impl Convert {
                 return Ok(false);
             }
 
-            self.enqueue(Type.into(), *this_body, *that_body);
+            self.enqueue(Type.into(), this_body, that_body);
         }
 
         Ok(true)
@@ -481,7 +481,7 @@ impl Convert {
         that: Sealed,
     ) -> Result<bool, Preempted> {
         let label = Var::free(context.fresh(None)).into();
-        self.enqueue(Type.into(), *this.witness, *that.witness);
+        self.enqueue(Type.into(), this.witness, that.witness);
         self.enqueue(
             Type.into(),
             this.tail.open(&[&label]),
@@ -491,14 +491,14 @@ impl Convert {
     }
 
     fn compare_seal(&mut self, this: Seal, that: Seal) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.witness, *that.witness);
-        self.enqueue(Type.into(), *this.value, *that.value);
+        self.enqueue(Type.into(), this.witness, that.witness);
+        self.enqueue(Type.into(), this.value, that.value);
         Ok(true)
     }
 
     fn compare_unseal(&mut self, this: Unseal, that: Unseal) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), *this.witness, *that.witness);
-        self.enqueue(Type.into(), *this.value, *that.value);
+        self.enqueue(Type.into(), this.witness, that.witness);
+        self.enqueue(Type.into(), this.value, that.value);
         Ok(true)
     }
 
@@ -554,8 +554,8 @@ impl Convert {
             .map(|_| Var::free(context.fresh(None)).into())
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
-        let output_type = match reduce(context, &type_)? {
-            Term::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
+        let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Type.into(),
         };
         self.enqueue(
@@ -575,24 +575,20 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         let n = tuple.fields.len();
 
-        let mut cur = match reduce(context, &type_)? {
-            Term::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
+        let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
             _ => None,
         };
 
         for (i, field) in tuple.fields.iter().enumerate() {
             let ft = match cur.take() {
                 Some(Telescope::Cons(ty, rest)) => {
-                    cur = Some(rest.open(&[field.as_ref()]));
-                    *ty
+                    cur = Some(rest.open(&[field]));
+                    ty
                 }
                 _ => Type.into(),
             };
-            self.enqueue(
-                ft,
-                field.as_ref().clone(),
-                Proj::new(other.clone(), i).into(),
-            );
+            self.enqueue(ft, field.clone(), Proj::new(other.clone(), i).into());
         }
 
         Ok(true)
@@ -605,8 +601,8 @@ impl Convert {
         that: Term,
         type_: Term,
     ) -> Result<bool, Preempted> {
-        match reduce(context, &type_)? {
-            Term::FuncType(FuncType { telescope }) => {
+        match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::FuncType(FuncType { telescope }) => {
                 let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
                     .map(|_| Var::free(context.fresh(None)).into())
@@ -620,7 +616,7 @@ impl Convert {
                 );
                 Ok(true)
             }
-            Term::TupleType(TupleType { telescope }) => {
+            Subterm::TupleType(TupleType { telescope }) => {
                 for i in 0..telescope.len() {
                     self.enqueue(
                         Type.into(),
@@ -636,9 +632,9 @@ impl Convert {
 
     fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
         while let Some(Goal { type_, this, that }) = self.dequeue()? {
-            let this = reduce(context, &this)?;
-            let that = reduce(context, &that)?;
-            let type_ = reduce(context, &type_)?;
+            let this = reduce(context, this)?;
+            let that = reduce(context, that)?;
+            let type_ = reduce(context, type_)?;
 
             let goal = Goal {
                 type_: type_.clone(),
@@ -650,62 +646,68 @@ impl Convert {
                 continue;
             }
 
-            let ok = match (this, that) {
-                (Term::Prim(this), Term::Prim(that)) => self.compare_prim(this, that)?,
-                (Term::BlnMatch(this), Term::BlnMatch(that)) => {
+            let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
+                (Subterm::Prim(this), Subterm::Prim(that)) => self.compare_prim(this, that)?,
+                (Subterm::BlnMatch(this), Subterm::BlnMatch(that)) => {
                     self.compare_bln_match(context, this, that)?
                 }
-                (Term::NatMatch(this), Term::NatMatch(that)) => {
+                (Subterm::NatMatch(this), Subterm::NatMatch(that)) => {
                     self.compare_nat_match(context, this, that)?
                 }
-                (Term::FuncType(this), Term::FuncType(that)) => {
+                (Subterm::FuncType(this), Subterm::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?
                 }
-                (Term::Func(this), Term::Func(that)) => {
+                (Subterm::Func(this), Subterm::Func(that)) => {
                     self.compare_func(context, this, that, type_.clone())?
                 }
-                (Term::Func(func), other) => {
-                    self.eta_expand_func(context, func, other, type_.clone())?
+                (Subterm::Func(func), other) => {
+                    self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                (other, Term::Func(func)) => {
-                    self.eta_expand_func(context, func, other, type_.clone())?
+                (other, Subterm::Func(func)) => {
+                    self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                (Term::Apply(this), Term::Apply(that)) => self.compare_apply(this, that)?,
-                (Term::TupleType(this), Term::TupleType(that)) => {
+                (Subterm::Apply(this), Subterm::Apply(that)) => self.compare_apply(this, that)?,
+                (Subterm::TupleType(this), Subterm::TupleType(that)) => {
                     self.compare_tuple_type(context, this, that)?
                 }
-                (Term::Tuple(this), Term::Tuple(that)) => {
+                (Subterm::Tuple(this), Subterm::Tuple(that)) => {
                     self.compare_tuple(context, this, that, type_.clone())?
                 }
-                (Term::Tuple(tuple), other) => {
-                    self.eta_expand_tuple(context, tuple, other, type_.clone())?
+                (Subterm::Tuple(tuple), other) => {
+                    self.eta_expand_tuple(context, tuple, other.into(), type_.clone())?
                 }
-                (other, Term::Tuple(tuple)) => {
-                    self.eta_expand_tuple(context, tuple, other, type_.clone())?
+                (other, Subterm::Tuple(tuple)) => {
+                    self.eta_expand_tuple(context, tuple, other.into(), type_.clone())?
                 }
-                (Term::Proj(this), Term::Proj(that)) => self.compare_proj(this, that)?,
-                (Term::AtomType(this), Term::AtomType(that)) => {
+                (Subterm::Proj(this), Subterm::Proj(that)) => self.compare_proj(this, that)?,
+                (Subterm::AtomType(this), Subterm::AtomType(that)) => {
                     self.compare_atom_type(this, that)?
                 }
-                (Term::Atom(this), Term::Atom(that)) => self.compare_atom(this, that)?,
-                (Term::Match(this), Term::Match(that)) => {
+                (Subterm::Atom(this), Subterm::Atom(that)) => self.compare_atom(this, that)?,
+                (Subterm::Match(this), Subterm::Match(that)) => {
                     self.compare_match(context, this, that)?
                 }
-                (Term::Rec(this), Term::Rec(that)) => self.compare_rec(context, this, that)?,
-                (Term::Sealed(this), Term::Sealed(that)) => {
+                (Subterm::Rec(this), Subterm::Rec(that)) => {
+                    self.compare_rec(context, this, that)?
+                }
+                (Subterm::Sealed(this), Subterm::Sealed(that)) => {
                     self.compare_sealed(context, this, that)?
                 }
-                (Term::Seal(this), Term::Seal(that)) => self.compare_seal(this, that)?,
-                (Term::Unseal(this), Term::Unseal(that)) => self.compare_unseal(this, that)?,
-                (Term::Spanned(_, this), that) => {
-                    self.enqueue(type_, *this, that);
+                (Subterm::Seal(this), Subterm::Seal(that)) => self.compare_seal(this, that)?,
+                (Subterm::Unseal(this), Subterm::Unseal(that)) => {
+                    self.compare_unseal(this, that)?
+                }
+                (Subterm::Spanned(_, this), that) => {
+                    self.enqueue(type_, this, that.into());
                     true
                 }
-                (this, Term::Spanned(_, that)) => {
-                    self.enqueue(type_, this, *that);
+                (this, Subterm::Spanned(_, that)) => {
+                    self.enqueue(type_, this.into(), that);
                     true
                 }
-                (this_n, that_n) => self.eta_expand_neutral(context, this_n, that_n, type_)?,
+                (this_n, that_n) => {
+                    self.eta_expand_neutral(context, this_n.into(), that_n.into(), type_)?
+                }
             };
 
             if !ok {
@@ -785,12 +787,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             ["x"],
-            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::Int(1)))),
+            Subterm::Prim(Prim::int_add(Var::free("x"), Subterm::Prim(Prim::Int(1)))),
         ));
 
         let that = Term::from(Func::new(
             ["y"],
-            Term::Prim(Prim::int_add(Var::free("y"), Term::Prim(Prim::Int(1)))),
+            Subterm::Prim(Prim::int_add(Var::free("y"), Subterm::Prim(Prim::Int(1)))),
         ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -802,12 +804,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             ["x"],
-            Term::Prim(Prim::int_add(Var::free("x"), Term::Prim(Prim::Int(1)))),
+            Subterm::Prim(Prim::int_add(Var::free("x"), Subterm::Prim(Prim::Int(1)))),
         ));
 
         let that = Term::from(Func::new(
             ["x"],
-            Term::Prim(Prim::int_sub(Var::free("x"), Term::Prim(Prim::Int(1)))),
+            Subterm::Prim(Prim::int_sub(Var::free("x"), Subterm::Prim(Prim::Int(1)))),
         ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(false));
@@ -830,17 +832,17 @@ mod tests {
 
         let this = Term::from(Func::new(
             ["x"],
-            Term::Prim(Prim::nat_add(
+            Subterm::Prim(Prim::nat_add(
                 Var::free("x"),
-                Term::Prim(Prim::Nat(Nat::new(1))),
+                Subterm::Prim(Prim::Nat(Nat::new(1))),
             )),
         ));
 
         let that = Term::from(Func::new(
             ["y"],
-            Term::Prim(Prim::nat_add(
+            Subterm::Prim(Prim::nat_add(
                 Var::free("y"),
-                Term::Prim(Prim::Nat(Nat::new(1))),
+                Subterm::Prim(Prim::Nat(Nat::new(1))),
             )),
         ));
 
@@ -851,9 +853,15 @@ mod tests {
     fn convert_prim_flt_neg_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::from(Func::new(["x"], Term::Prim(Prim::flt_neg(Var::free("x")))));
+        let this = Term::from(Func::new(
+            ["x"],
+            Subterm::Prim(Prim::flt_neg(Var::free("x"))),
+        ));
 
-        let that = Term::from(Func::new(["y"], Term::Prim(Prim::flt_neg(Var::free("y")))));
+        let that = Term::from(Func::new(
+            ["y"],
+            Subterm::Prim(Prim::flt_neg(Var::free("y"))),
+        ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -864,12 +872,12 @@ mod tests {
 
         let this = Term::from(Func::new(
             ["x"],
-            Term::Prim(Prim::nat_to_int(Var::free("x"))),
+            Subterm::Prim(Prim::nat_to_int(Var::free("x"))),
         ));
 
         let that = Term::from(Func::new(
             ["y"],
-            Term::Prim(Prim::nat_to_int(Var::free("y"))),
+            Subterm::Prim(Prim::nat_to_int(Var::free("y"))),
         ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -879,15 +887,17 @@ mod tests {
     fn convert_prim_arr_compares_element_wise() {
         let mut context = context();
 
-        let this = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(Nat::new(1))),
-            Term::Prim(Prim::Nat(Nat::new(2))),
-        ]));
+        let this = Subterm::Prim(Prim::from(vec![
+            Subterm::Prim(Prim::Nat(Nat::new(1))),
+            Subterm::Prim(Prim::Nat(Nat::new(2))),
+        ]))
+        .into();
 
-        let that = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(Nat::new(1))),
-            Term::Prim(Prim::Nat(Nat::new(2))),
-        ]));
+        let that = Subterm::Prim(Prim::from(vec![
+            Subterm::Prim(Prim::Nat(Nat::new(1))),
+            Subterm::Prim(Prim::Nat(Nat::new(2))),
+        ]))
+        .into();
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -896,12 +906,13 @@ mod tests {
     fn convert_prim_arr_rejects_different_lengths() {
         let mut context = context();
 
-        let this = Term::Prim(Prim::from(vec![Term::Prim(Prim::Nat(Nat::new(1)))]));
+        let this = Subterm::Prim(Prim::from(vec![Subterm::Prim(Prim::Nat(Nat::new(1)))])).into();
 
-        let that = Term::Prim(Prim::from(vec![
-            Term::Prim(Prim::Nat(Nat::new(1))),
-            Term::Prim(Prim::Nat(Nat::new(2))),
-        ]));
+        let that = Subterm::Prim(Prim::from(vec![
+            Subterm::Prim(Prim::Nat(Nat::new(1))),
+            Subterm::Prim(Prim::Nat(Nat::new(2))),
+        ]))
+        .into();
 
         assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
@@ -910,8 +921,8 @@ mod tests {
     fn convert_prim_bin_type_is_equal_to_itself() {
         let mut context = context();
 
-        let this = Term::Prim(Prim::BinType);
-        let that = Term::Prim(Prim::BinType);
+        let this = Subterm::Prim(Prim::BinType).into();
+        let that = Subterm::Prim(Prim::BinType).into();
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -923,8 +934,8 @@ mod tests {
         assert_eq!(
             conv(
                 &mut context,
-                &Term::Prim(Prim::Bin(vec![1, 2])),
-                &Term::Prim(Prim::Bin(vec![1, 2])),
+                &Subterm::Prim(Prim::Bin(vec![1, 2])).into(),
+                &Subterm::Prim(Prim::Bin(vec![1, 2])).into(),
             ),
             Ok(true)
         );
@@ -932,8 +943,8 @@ mod tests {
         assert_eq!(
             conv(
                 &mut context,
-                &Term::Prim(Prim::Bin(vec![1, 2])),
-                &Term::Prim(Prim::Bin(vec![1, 3])),
+                &Subterm::Prim(Prim::Bin(vec![1, 2])).into(),
+                &Subterm::Prim(Prim::Bin(vec![1, 3])).into(),
             ),
             Ok(false)
         );
@@ -943,8 +954,14 @@ mod tests {
     fn convert_prim_bin_len_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::from(Func::new(["x"], Term::Prim(Prim::bin_len(Var::free("x")))));
-        let that = Term::from(Func::new(["y"], Term::Prim(Prim::bin_len(Var::free("y")))));
+        let this = Term::from(Func::new(
+            ["x"],
+            Subterm::Prim(Prim::bin_len(Var::free("x"))),
+        ));
+        let that = Term::from(Func::new(
+            ["y"],
+            Subterm::Prim(Prim::bin_len(Var::free("y"))),
+        ));
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -957,7 +974,7 @@ mod tests {
             ["x"],
             Func::new(
                 ["a"],
-                Term::Prim(Prim::bin_get(Var::free("x"), Var::free("a"))),
+                Subterm::Prim(Prim::bin_get(Var::free("x"), Var::free("a"))),
             ),
         ));
 
@@ -965,7 +982,7 @@ mod tests {
             ["y"],
             Func::new(
                 ["b"],
-                Term::Prim(Prim::bin_get(Var::free("y"), Var::free("b"))),
+                Subterm::Prim(Prim::bin_get(Var::free("y"), Var::free("b"))),
             ),
         ));
 
@@ -980,7 +997,7 @@ mod tests {
             ["x"],
             Func::new(
                 ["a"],
-                Term::Prim(Prim::bin_concat([Var::free("x"), Var::free("a")])),
+                Subterm::Prim(Prim::bin_concat([Var::free("x"), Var::free("a")])),
             ),
         ));
 
@@ -988,7 +1005,7 @@ mod tests {
             ["y"],
             Func::new(
                 ["b"],
-                Term::Prim(Prim::bin_concat([Var::free("y"), Var::free("b")])),
+                Subterm::Prim(Prim::bin_concat([Var::free("y"), Var::free("b")])),
             ),
         ));
 
@@ -1005,7 +1022,7 @@ mod tests {
                 ["a"],
                 Func::new(
                     ["p"],
-                    Term::Prim(Prim::bin_slice(
+                    Subterm::Prim(Prim::bin_slice(
                         Var::free("x"),
                         Var::free("a"),
                         Var::free("p"),
@@ -1020,7 +1037,7 @@ mod tests {
                 ["b"],
                 Func::new(
                     ["q"],
-                    Term::Prim(Prim::bin_slice(
+                    Subterm::Prim(Prim::bin_slice(
                         Var::free("y"),
                         Var::free("b"),
                         Var::free("q"),

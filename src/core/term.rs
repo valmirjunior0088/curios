@@ -2,9 +2,12 @@ use {
     super::{Arity, Atom, Many, Nat, One, Prim, Two},
     crate::Span,
     std::{
-        collections::{BTreeMap, BTreeSet},
+        cell::OnceCell,
+        collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
         fmt::Debug,
         hash::{Hash, Hasher},
+        ops::Deref,
+        rc::Rc,
     },
 };
 
@@ -54,7 +57,79 @@ impl Var {
     }
 }
 
-pub type Subterm = Box<Term>;
+#[derive(Debug, Clone)]
+pub struct Term {
+    hash: OnceCell<u64>,
+    inner: Rc<Subterm>,
+}
+
+impl Term {
+    pub fn new(term: Subterm) -> Self {
+        Self {
+            hash: OnceCell::new(),
+            inner: Rc::new(term),
+        }
+    }
+
+    fn cached_hash(&self) -> u64 {
+        *self.hash.get_or_init(|| {
+            let mut hasher = DefaultHasher::new();
+            self.inner.hash(&mut hasher);
+            hasher.finish()
+        })
+    }
+
+    pub fn unwrap_or_clone(this: Self) -> Subterm {
+        Rc::unwrap_or_clone(this.inner)
+    }
+}
+
+impl Hash for Term {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.cached_hash());
+    }
+}
+
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        if Rc::ptr_eq(&self.inner, &other.inner) {
+            return true;
+        }
+        if let (Some(a), Some(b)) = (self.hash.get(), other.hash.get()) {
+            if a != b {
+                return false;
+            }
+        }
+        *self.inner == *other.inner
+    }
+}
+
+impl Eq for Term {}
+
+impl Deref for Term {
+    type Target = Subterm;
+    fn deref(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
+impl From<Subterm> for Term {
+    fn from(term: Subterm) -> Self {
+        Self::new(term)
+    }
+}
+
+impl AsRef<Subterm> for Term {
+    fn as_ref(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
+impl From<Term> for Subterm {
+    fn from(s: Term) -> Self {
+        Term::unwrap_or_clone(s)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Scope<A: Arity, B: Bound = Term> {
@@ -134,13 +209,13 @@ pub struct Type;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Telescope<B: Bound> {
     Done(Box<B>),
-    Cons(Subterm, Scope<One, Telescope<B>>),
+    Cons(Term, Scope<One, Telescope<B>>),
 }
 
 impl<B: Bound> Bound for Telescope<B> {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
-        F: FnMut(usize, &Var) -> Option<Term>,
+        F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         match self {
             Telescope::Cons(ty, rest) => {
@@ -162,7 +237,7 @@ impl<B: Bound> Telescope<B> {
         T: Into<Term>,
     {
         let label = label.into();
-        Telescope::Cons(ty.into().into(), Scope::close(One, &[label.as_str()], rest))
+        Telescope::Cons(ty.into(), Scope::close(One, &[label.as_str()], rest))
     }
 
     pub fn build<I, L, T>(entries: I, body: B) -> Self
@@ -237,7 +312,7 @@ impl<B: Bound> Telescope<B> {
                 Telescope::Done(_) => None,
                 Telescope::Cons(ty, rest) => {
                     if j == index {
-                        Some(*ty)
+                        Some(ty)
                     } else {
                         go(rest.open(&[&sub(j)]), index, j + 1, sub)
                     }
@@ -295,8 +370,8 @@ impl Func {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Apply {
-    pub head: Subterm,
-    pub params: Vec<Subterm>,
+    pub head: Term,
+    pub params: Vec<Term>,
 }
 
 impl Apply {
@@ -307,8 +382,8 @@ impl Apply {
         P: Into<Term>,
     {
         Self {
-            head: head.into().into(),
-            params: params.into_iter().map(|p| p.into().into()).collect(),
+            head: head.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
         }
     }
 }
@@ -339,7 +414,7 @@ impl TupleType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tuple {
-    pub fields: Vec<Subterm>,
+    pub fields: Vec<Term>,
 }
 
 impl Tuple {
@@ -353,24 +428,21 @@ impl Tuple {
         T: Into<Term>,
     {
         Self {
-            fields: fields
-                .into_iter()
-                .map(|t| t.into().into())
-                .collect::<Vec<_>>(),
+            fields: fields.into_iter().map(|t| t.into()).collect::<Vec<_>>(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Proj {
-    pub head: Subterm,
+    pub head: Term,
     pub index: usize,
 }
 
 impl Proj {
     pub fn new<H: Into<Term>>(head: H, index: usize) -> Self {
         Self {
-            head: head.into().into(),
+            head: head.into(),
             index,
         }
     }
@@ -379,16 +451,16 @@ impl Proj {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NatMatch {
     Induction {
-        head: Subterm,
+        head: Term,
         motive: Scope<One>,
-        zero_case: Subterm,
+        zero_case: Term,
         succ_case: Scope<Two>,
     },
     Dispatch {
-        head: Subterm,
+        head: Term,
         motive: Scope<One>,
-        cases: BTreeMap<u32, Subterm>,
-        default: Subterm,
+        cases: BTreeMap<u32, Term>,
+        default: Term,
     },
 }
 
@@ -414,12 +486,12 @@ impl NatMatch {
         let ih_label = ih_label.into();
 
         Self::Induction {
-            head: head.into().into(),
+            head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            zero_case: zero_case.into().into(),
+            zero_case: zero_case.into(),
             succ_case: Scope::close(
                 Two,
                 &[pred_label.as_str(), ih_label.as_str()],
@@ -443,26 +515,23 @@ impl NatMatch {
         D: Into<Term>,
     {
         Self::Dispatch {
-            head: head.into().into(),
+            head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            cases: cases
-                .into_iter()
-                .map(|(n, b)| (n, b.into().into()))
-                .collect(),
-            default: default.into().into(),
+            cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
+            default: default.into(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BlnMatch {
-    pub head: Subterm,
+    pub head: Term,
     pub motive: Scope<One>,
-    pub false_case: Subterm,
-    pub true_case: Subterm,
+    pub false_case: Term,
+    pub true_case: Term,
 }
 
 impl BlnMatch {
@@ -480,13 +549,13 @@ impl BlnMatch {
         T: Into<Term>,
     {
         Self {
-            head: head.into().into(),
+            head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            false_case: false_case.into().into(),
-            true_case: true_case.into().into(),
+            false_case: false_case.into(),
+            true_case: true_case.into(),
         }
     }
 }
@@ -510,9 +579,9 @@ impl AtomType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Match {
-    pub head: Subterm,
+    pub head: Term,
     pub motive: Scope<One>,
-    pub cases: BTreeMap<Atom, Subterm>,
+    pub cases: BTreeMap<Atom, Term>,
 }
 
 impl Match {
@@ -525,14 +594,14 @@ impl Match {
         B: Into<Term>,
     {
         Self {
-            head: head.into().into(),
+            head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
             cases: cases
                 .into_iter()
-                .map(|(atom, body)| (atom.into(), body.into().into()))
+                .map(|(atom, body)| (atom.into(), body.into()))
                 .collect(),
         }
     }
@@ -540,8 +609,8 @@ impl Match {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Let {
-    pub type_: Subterm,
-    pub body: Subterm,
+    pub type_: Term,
+    pub body: Term,
     pub tail: Scope<One>,
 }
 
@@ -556,8 +625,8 @@ impl Let {
         let label = label.into();
 
         Self {
-            type_: type_.into().into(),
-            body: body.into().into(),
+            type_: type_.into(),
+            body: body.into(),
             tail: Scope::close(One, &[label.as_str()], tail.into()),
         }
     }
@@ -610,7 +679,7 @@ impl Rec {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sealed {
-    pub witness: Subterm,
+    pub witness: Term,
     pub tail: Scope<One>,
 }
 
@@ -623,7 +692,7 @@ impl Sealed {
     {
         let label = label.into();
         Self {
-            witness: witness.into().into(),
+            witness: witness.into(),
             tail: Scope::close(One, &[label.as_str()], tail.into()),
         }
     }
@@ -631,8 +700,8 @@ impl Sealed {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Seal {
-    pub witness: Subterm,
-    pub value: Subterm,
+    pub witness: Term,
+    pub value: Term,
 }
 
 impl Seal {
@@ -642,16 +711,16 @@ impl Seal {
         V: Into<Term>,
     {
         Self {
-            witness: witness.into().into(),
-            value: value.into().into(),
+            witness: witness.into(),
+            value: value.into(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Unseal {
-    pub witness: Subterm,
-    pub value: Subterm,
+    pub witness: Term,
+    pub value: Term,
 }
 
 impl Unseal {
@@ -661,14 +730,14 @@ impl Unseal {
         V: Into<Term>,
     {
         Self {
-            witness: witness.into().into(),
-            value: value.into().into(),
+            witness: witness.into(),
+            value: value.into(),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Term {
+pub enum Subterm {
     Type,
     Prim(Prim),
     BlnMatch(BlnMatch),
@@ -688,82 +757,82 @@ pub enum Term {
     Seal(Seal),
     Unseal(Unseal),
     Var(Var),
-    Spanned(Span, Subterm),
+    Spanned(Span, Term),
 }
 
-impl PartialEq for Term {
+impl PartialEq for Subterm {
     fn eq(&self, other: &Self) -> bool {
         let mut this = self;
         let mut that = other;
 
         loop {
             match (this, that) {
-                (Term::Spanned(_, inner), _) => this = inner,
-                (_, Term::Spanned(_, inner)) => that = inner,
-                (Term::Type, Term::Type) => break true,
-                (Term::Prim(a), Term::Prim(b)) => break a == b,
-                (Term::BlnMatch(a), Term::BlnMatch(b)) => break a == b,
-                (Term::NatMatch(a), Term::NatMatch(b)) => break a == b,
-                (Term::FuncType(a), Term::FuncType(b)) => break a == b,
-                (Term::Func(a), Term::Func(b)) => break a == b,
-                (Term::Apply(a), Term::Apply(b)) => break a == b,
-                (Term::TupleType(a), Term::TupleType(b)) => break a == b,
-                (Term::Tuple(a), Term::Tuple(b)) => break a == b,
-                (Term::Proj(a), Term::Proj(b)) => break a == b,
-                (Term::AtomType(a), Term::AtomType(b)) => break a == b,
-                (Term::Atom(a), Term::Atom(b)) => break a == b,
-                (Term::Match(a), Term::Match(b)) => break a == b,
-                (Term::Let(a), Term::Let(b)) => break a == b,
-                (Term::Rec(a), Term::Rec(b)) => break a == b,
-                (Term::Sealed(a), Term::Sealed(b)) => break a == b,
-                (Term::Seal(a), Term::Seal(b)) => break a == b,
-                (Term::Unseal(a), Term::Unseal(b)) => break a == b,
-                (Term::Var(a), Term::Var(b)) => break a == b,
+                (Subterm::Spanned(_, inner), _) => this = inner,
+                (_, Subterm::Spanned(_, inner)) => that = inner,
+                (Subterm::Type, Subterm::Type) => break true,
+                (Subterm::Prim(a), Subterm::Prim(b)) => break a == b,
+                (Subterm::BlnMatch(a), Subterm::BlnMatch(b)) => break a == b,
+                (Subterm::NatMatch(a), Subterm::NatMatch(b)) => break a == b,
+                (Subterm::FuncType(a), Subterm::FuncType(b)) => break a == b,
+                (Subterm::Func(a), Subterm::Func(b)) => break a == b,
+                (Subterm::Apply(a), Subterm::Apply(b)) => break a == b,
+                (Subterm::TupleType(a), Subterm::TupleType(b)) => break a == b,
+                (Subterm::Tuple(a), Subterm::Tuple(b)) => break a == b,
+                (Subterm::Proj(a), Subterm::Proj(b)) => break a == b,
+                (Subterm::AtomType(a), Subterm::AtomType(b)) => break a == b,
+                (Subterm::Atom(a), Subterm::Atom(b)) => break a == b,
+                (Subterm::Match(a), Subterm::Match(b)) => break a == b,
+                (Subterm::Let(a), Subterm::Let(b)) => break a == b,
+                (Subterm::Rec(a), Subterm::Rec(b)) => break a == b,
+                (Subterm::Sealed(a), Subterm::Sealed(b)) => break a == b,
+                (Subterm::Seal(a), Subterm::Seal(b)) => break a == b,
+                (Subterm::Unseal(a), Subterm::Unseal(b)) => break a == b,
+                (Subterm::Var(a), Subterm::Var(b)) => break a == b,
                 _ => break false,
             }
         }
     }
 }
 
-impl Eq for Term {}
+impl Eq for Subterm {}
 
-impl Hash for Term {
+impl Hash for Subterm {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let mut term = self;
 
         loop {
             match term {
-                Term::Type => break,
-                Term::Prim(x) => break x.hash(state),
-                Term::BlnMatch(x) => break x.hash(state),
-                Term::NatMatch(x) => break x.hash(state),
-                Term::FuncType(x) => break x.hash(state),
-                Term::Func(x) => break x.hash(state),
-                Term::Apply(x) => break x.hash(state),
-                Term::TupleType(x) => break x.hash(state),
-                Term::Tuple(x) => break x.hash(state),
-                Term::Proj(x) => break x.hash(state),
-                Term::AtomType(x) => break x.hash(state),
-                Term::Atom(x) => break x.hash(state),
-                Term::Match(x) => break x.hash(state),
-                Term::Let(x) => break x.hash(state),
-                Term::Rec(x) => break x.hash(state),
-                Term::Sealed(x) => break x.hash(state),
-                Term::Seal(x) => break x.hash(state),
-                Term::Unseal(x) => break x.hash(state),
-                Term::Var(x) => break x.hash(state),
-                Term::Spanned(_, inner) => term = inner,
+                Subterm::Type => break,
+                Subterm::Prim(x) => break x.hash(state),
+                Subterm::BlnMatch(x) => break x.hash(state),
+                Subterm::NatMatch(x) => break x.hash(state),
+                Subterm::FuncType(x) => break x.hash(state),
+                Subterm::Func(x) => break x.hash(state),
+                Subterm::Apply(x) => break x.hash(state),
+                Subterm::TupleType(x) => break x.hash(state),
+                Subterm::Tuple(x) => break x.hash(state),
+                Subterm::Proj(x) => break x.hash(state),
+                Subterm::AtomType(x) => break x.hash(state),
+                Subterm::Atom(x) => break x.hash(state),
+                Subterm::Match(x) => break x.hash(state),
+                Subterm::Let(x) => break x.hash(state),
+                Subterm::Rec(x) => break x.hash(state),
+                Subterm::Sealed(x) => break x.hash(state),
+                Subterm::Seal(x) => break x.hash(state),
+                Subterm::Unseal(x) => break x.hash(state),
+                Subterm::Var(x) => break x.hash(state),
+                Subterm::Spanned(_, inner) => term = inner,
             }
         }
     }
 }
 
-impl Term {
+impl Subterm {
     pub fn as_nat(&self) -> Option<u32> {
         match self {
-            Term::Prim(Prim::Nat(Nat::Zero)) => Some(0),
-            Term::Prim(Prim::Nat(Nat::Succ(spine, inner))) => match inner.as_ref() {
-                Term::Prim(Prim::Nat(Nat::Zero)) => Some(*spine),
+            Subterm::Prim(Prim::Nat(Nat::Zero)) => Some(0),
+            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => match inner.as_ref() {
+                Subterm::Prim(Prim::Nat(Nat::Zero)) => Some(*spine),
                 _ => None,
             },
             _ => None,
@@ -775,124 +844,238 @@ impl Term {
     }
 }
 
-impl From<Type> for Term {
+impl From<Type> for Subterm {
     fn from(Type: Type) -> Self {
         Self::Type
     }
 }
 
-impl From<Prim> for Term {
+impl From<Prim> for Subterm {
     fn from(value: Prim) -> Self {
         Self::Prim(value)
     }
 }
 
-impl From<FuncType> for Term {
+impl From<FuncType> for Subterm {
     fn from(value: FuncType) -> Self {
         Self::FuncType(value)
     }
 }
 
-impl From<Func> for Term {
+impl From<Func> for Subterm {
     fn from(value: Func) -> Self {
         Self::Func(value)
     }
 }
 
-impl From<Apply> for Term {
+impl From<Apply> for Subterm {
     fn from(value: Apply) -> Self {
         Self::Apply(value)
     }
 }
 
-impl From<TupleType> for Term {
+impl From<TupleType> for Subterm {
     fn from(value: TupleType) -> Self {
         Self::TupleType(value)
     }
 }
 
-impl From<Tuple> for Term {
+impl From<Tuple> for Subterm {
     fn from(value: Tuple) -> Self {
         Self::Tuple(value)
     }
 }
 
-impl From<BlnMatch> for Term {
+impl From<BlnMatch> for Subterm {
     fn from(value: BlnMatch) -> Self {
         Self::BlnMatch(value)
     }
 }
 
-impl From<NatMatch> for Term {
+impl From<NatMatch> for Subterm {
     fn from(value: NatMatch) -> Self {
         Self::NatMatch(value)
     }
 }
 
-impl From<Proj> for Term {
+impl From<Proj> for Subterm {
     fn from(value: Proj) -> Self {
         Self::Proj(value)
     }
 }
 
-impl From<AtomType> for Term {
+impl From<AtomType> for Subterm {
     fn from(value: AtomType) -> Self {
         Self::AtomType(value)
     }
 }
 
-impl From<Atom> for Term {
+impl From<Atom> for Subterm {
     fn from(value: Atom) -> Self {
         Self::Atom(value)
     }
 }
 
-impl From<Match> for Term {
+impl From<Match> for Subterm {
     fn from(value: Match) -> Self {
         Self::Match(value)
     }
 }
 
-impl From<Let> for Term {
+impl From<Let> for Subterm {
     fn from(value: Let) -> Self {
         Self::Let(value)
     }
 }
 
-impl From<Rec> for Term {
+impl From<Rec> for Subterm {
     fn from(value: Rec) -> Self {
         Self::Rec(value)
     }
 }
 
-impl From<Sealed> for Term {
+impl From<Sealed> for Subterm {
     fn from(value: Sealed) -> Self {
         Self::Sealed(value)
     }
 }
 
-impl From<Seal> for Term {
+impl From<Seal> for Subterm {
     fn from(value: Seal) -> Self {
         Self::Seal(value)
     }
 }
 
-impl From<Unseal> for Term {
+impl From<Unseal> for Subterm {
     fn from(value: Unseal) -> Self {
         Self::Unseal(value)
     }
 }
 
-impl From<Var> for Term {
+impl From<Var> for Subterm {
     fn from(value: Var) -> Self {
         Self::Var(value)
+    }
+}
+
+impl From<Type> for Term {
+    fn from(_: Type) -> Self {
+        Self::new(Subterm::Type)
+    }
+}
+
+impl From<Prim> for Term {
+    fn from(value: Prim) -> Self {
+        Self::new(Subterm::Prim(value))
+    }
+}
+
+impl From<FuncType> for Term {
+    fn from(value: FuncType) -> Self {
+        Self::new(Subterm::FuncType(value))
+    }
+}
+
+impl From<Func> for Term {
+    fn from(value: Func) -> Self {
+        Self::new(Subterm::Func(value))
+    }
+}
+
+impl From<Apply> for Term {
+    fn from(value: Apply) -> Self {
+        Self::new(Subterm::Apply(value))
+    }
+}
+
+impl From<TupleType> for Term {
+    fn from(value: TupleType) -> Self {
+        Self::new(Subterm::TupleType(value))
+    }
+}
+
+impl From<Tuple> for Term {
+    fn from(value: Tuple) -> Self {
+        Self::new(Subterm::Tuple(value))
+    }
+}
+
+impl From<BlnMatch> for Term {
+    fn from(value: BlnMatch) -> Self {
+        Self::new(Subterm::BlnMatch(value))
+    }
+}
+
+impl From<NatMatch> for Term {
+    fn from(value: NatMatch) -> Self {
+        Self::new(Subterm::NatMatch(value))
+    }
+}
+
+impl From<Proj> for Term {
+    fn from(value: Proj) -> Self {
+        Self::new(Subterm::Proj(value))
+    }
+}
+
+impl From<AtomType> for Term {
+    fn from(value: AtomType) -> Self {
+        Self::new(Subterm::AtomType(value))
+    }
+}
+
+impl From<Atom> for Term {
+    fn from(value: Atom) -> Self {
+        Self::new(Subterm::Atom(value))
+    }
+}
+
+impl From<Match> for Term {
+    fn from(value: Match) -> Self {
+        Self::new(Subterm::Match(value))
+    }
+}
+
+impl From<Let> for Term {
+    fn from(value: Let) -> Self {
+        Self::new(Subterm::Let(value))
+    }
+}
+
+impl From<Rec> for Term {
+    fn from(value: Rec) -> Self {
+        Self::new(Subterm::Rec(value))
+    }
+}
+
+impl From<Sealed> for Term {
+    fn from(value: Sealed) -> Self {
+        Self::new(Subterm::Sealed(value))
+    }
+}
+
+impl From<Seal> for Term {
+    fn from(value: Seal) -> Self {
+        Self::new(Subterm::Seal(value))
+    }
+}
+
+impl From<Unseal> for Term {
+    fn from(value: Unseal) -> Self {
+        Self::new(Subterm::Unseal(value))
+    }
+}
+
+impl From<Var> for Term {
+    fn from(value: Var) -> Self {
+        Self::new(Subterm::Var(value))
     }
 }
 
 pub trait Bound: Sized + Clone + Eq + Hash + Debug {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
-        F: FnMut(usize, &Var) -> Option<Term>;
+        F: FnMut(usize, &Var) -> Option<Subterm>;
 
     fn shift(&self, amount: usize) -> Self {
         self.traverse(&mut Visit::new(|depth, var| {
@@ -925,7 +1108,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
                 index
                     .checked_sub(depth)
                     .map(|delta| match delta < terms.len() {
-                        true => terms[delta].shift(depth),
+                        true => (**terms[delta]).shift(depth),
                         false => Var::bound(index - terms.len()).into(),
                     })
             })
@@ -947,7 +1130,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
 impl Bound for () {
     fn traverse<F>(&self, _: &mut Visit<F>) -> Self
     where
-        F: FnMut(usize, &Var) -> Option<Term>,
+        F: FnMut(usize, &Var) -> Option<Subterm>,
     {
     }
 }
@@ -955,29 +1138,40 @@ impl Bound for () {
 impl Bound for Term {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
-        F: FnMut(usize, &Var) -> Option<Term>,
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        Term::new((**self).traverse(visit))
+    }
+}
+
+impl Bound for Subterm {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         match self {
-            Term::Type => Type.into(),
-            Term::Prim(prim) => visit.visit_prim(prim).into(),
-            Term::BlnMatch(bm) => visit.visit_bln_match(bm).into(),
-            Term::NatMatch(nm) => visit.visit_nat_match(nm).into(),
-            Term::FuncType(ft) => visit.visit_func_type(ft).into(),
-            Term::Func(func) => visit.visit_func(func).into(),
-            Term::Apply(apply) => visit.visit_apply(apply).into(),
-            Term::TupleType(tt) => visit.visit_tuple_type(tt).into(),
-            Term::Tuple(t) => visit.visit_tuple(t).into(),
-            Term::Proj(proj) => visit.visit_proj(proj).into(),
-            Term::AtomType(at) => at.clone().into(),
-            Term::Atom(atom) => atom.clone().into(),
-            Term::Match(m) => visit.visit_match(m).into(),
-            Term::Let(let_) => visit.visit_let(let_).into(),
-            Term::Rec(rec) => visit.visit_rec(rec).into(),
-            Term::Sealed(sealed) => visit.visit_sealed(sealed).into(),
-            Term::Seal(seal) => visit.visit_seal(seal).into(),
-            Term::Unseal(unseal) => visit.visit_unseal(unseal).into(),
-            Term::Var(var) => (visit.visit)(visit.depth, var).unwrap_or_else(|| var.clone().into()),
-            Term::Spanned(span, inner) => Term::Spanned(*span, visit.visit_subterm(inner)),
+            Subterm::Type => Type.into(),
+            Subterm::Prim(prim) => visit.visit_prim(prim).into(),
+            Subterm::BlnMatch(bm) => visit.visit_bln_match(bm).into(),
+            Subterm::NatMatch(nm) => visit.visit_nat_match(nm).into(),
+            Subterm::FuncType(ft) => visit.visit_func_type(ft).into(),
+            Subterm::Func(func) => visit.visit_func(func).into(),
+            Subterm::Apply(apply) => visit.visit_apply(apply).into(),
+            Subterm::TupleType(tt) => visit.visit_tuple_type(tt).into(),
+            Subterm::Tuple(t) => visit.visit_tuple(t).into(),
+            Subterm::Proj(proj) => visit.visit_proj(proj).into(),
+            Subterm::AtomType(at) => at.clone().into(),
+            Subterm::Atom(atom) => atom.clone().into(),
+            Subterm::Match(m) => visit.visit_match(m).into(),
+            Subterm::Let(let_) => visit.visit_let(let_).into(),
+            Subterm::Rec(rec) => visit.visit_rec(rec).into(),
+            Subterm::Sealed(sealed) => visit.visit_sealed(sealed).into(),
+            Subterm::Seal(seal) => visit.visit_seal(seal).into(),
+            Subterm::Unseal(unseal) => visit.visit_unseal(unseal).into(),
+            Subterm::Var(var) => {
+                (visit.visit)(visit.depth, var).unwrap_or_else(|| var.clone().into())
+            }
+            Subterm::Spanned(span, inner) => Subterm::Spanned(*span, visit.visit_subterm(inner)),
         }
     }
 }
@@ -990,13 +1184,13 @@ pub struct Visit<F> {
 
 impl<F> Visit<F>
 where
-    F: FnMut(usize, &Var) -> Option<Term>,
+    F: FnMut(usize, &Var) -> Option<Subterm>,
 {
     fn new(visit: F) -> Self {
         Self { depth: 0, visit }
     }
 
-    fn visit_subterm(&mut self, subterm: &Subterm) -> Subterm {
+    fn visit_subterm(&mut self, subterm: &Term) -> Term {
         subterm.traverse(self).into()
     }
 
@@ -1325,10 +1519,10 @@ mod tests {
 
     #[test]
     fn close_open_substitutes_label_name() {
-        let term =
-            Scope::close(One, &["x"], Term::from(Var::free("x"))).open(&[&Var::free("y").into()]);
+        let term = Scope::close(One, &["x"], Subterm::from(Var::free("x")))
+            .open(&[&Var::free("y").into()]);
 
-        let Term::Var(var) = term else {
+        let Subterm::Var(var) = term else {
             panic!("unexpected `{term:?}`")
         };
 
@@ -1337,14 +1531,15 @@ mod tests {
 
     #[test]
     fn close_open_preserves_nested_bind() {
-        let term = Scope::close(One, &["x"], Term::from(Func::new(["y"], Var::free("x"))))
+        let term = Scope::close(One, &["x"], Subterm::from(Func::new(["y"], Var::free("x"))))
             .open(&[&Var::free("z").into()]);
 
-        let Term::Func(body) = term else {
+        let Subterm::Func(body) = term else {
             panic!("unexpected `{term:?}`")
         };
 
-        let Term::Var(var) = body.body.open(&[&Var::free("w").into()]) else {
+        let Subterm::Var(var) = Term::unwrap_or_clone(body.body.open(&[&Var::free("w").into()]))
+        else {
             panic!("unexpected term")
         };
 
@@ -1353,10 +1548,10 @@ mod tests {
 
     #[test]
     fn collect_ignores_index_names() {
-        let term = Term::from(Func::new(
+        let term = Subterm::from(Func::new(
             ["x"],
             Tuple::new([
-                Term::from(Var::free("x")),
+                Subterm::from(Var::free("x")),
                 Rec::new(
                     vec![("y", Type, Var::free("z"))],
                     Tuple::new([Var::free("y"), Var::free("w")]),

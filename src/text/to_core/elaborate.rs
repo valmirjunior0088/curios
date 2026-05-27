@@ -34,8 +34,8 @@ impl<'a> Elaborate<'a> {
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
         Ok(match term {
-            Term::Type => core::Term::Type,
-            Term::Prim(prim) => core::Term::Prim(self.prim(prim)?),
+            Term::Type => core::Subterm::Type.into(),
+            Term::Prim(prim) => self.prim(prim)?.into(),
             Term::Name(name) => core::Var::free(match name.is_single() {
                 true => {
                     let label = name.head();
@@ -51,7 +51,7 @@ impl<'a> Elaborate<'a> {
                 false => self.resolve_name(name)?.join(),
             })
             .into(),
-            Term::Atom(atom) => core::Term::Atom(core::Atom::from(atom.as_str())),
+            Term::Atom(atom) => core::Atom::from(atom.as_str()).into(),
             Term::AtomType(at) => {
                 core::AtomType::new(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
                     .into()
@@ -210,10 +210,10 @@ impl<'a> Elaborate<'a> {
                 self.term(&rec.tail)?,
             )
             .into(),
-            Term::Spanned(span, inner) => core::Term::Spanned(
+            Term::Spanned(span, inner) => core::Term::new(core::Subterm::Spanned(
                 *span,
-                self.term(inner).map_err(|error| error.at(*span))?.into(),
-            ),
+                self.term(inner).map_err(|error| error.at(*span))?,
+            )),
         })
     }
 
@@ -224,10 +224,10 @@ impl<'a> Elaborate<'a> {
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
             Prim::Nat(Nat::Succ(NatLiteral::Number(spine), inner)) => {
-                core::Prim::Nat(core::Nat::Succ(*spine, Box::new(self.term(inner)?)))
+                core::Prim::Nat(core::Nat::Succ(*spine, self.term(inner)?))
             }
             Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => {
-                core::Prim::Nat(core::Nat::Succ(*c as u32, Box::new(self.term(inner)?)))
+                core::Prim::Nat(core::Nat::Succ(*c as u32, self.term(inner)?))
             }
             Prim::NatEql(left, right) => core::Prim::nat_eql(self.term(left)?, self.term(right)?),
             Prim::NatNeq(left, right) => core::Prim::nat_neq(self.term(left)?, self.term(right)?),

@@ -10,65 +10,65 @@ use {
 fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
     match prim {
         Prim::BlnType => Ok(Type.into()),
-        Prim::Bln(_) => Ok(Term::Prim(Prim::BlnType)),
+        Prim::Bln(_) => Ok(Subterm::Prim(Prim::BlnType).into()),
         Prim::NatType => Ok(Type.into()),
-        Prim::Nat(_) => Ok(Term::Prim(Prim::NatType)),
+        Prim::Nat(_) => Ok(Subterm::Prim(Prim::NatType).into()),
         Prim::NatEql(left, right)
         | Prim::NatNeq(left, right)
         | Prim::NatLt(left, right)
         | Prim::NatGt(left, right)
         | Prim::NatLte(left, right)
         | Prim::NatGte(left, right) => {
-            erase(context, left, &Term::Prim(Prim::NatType))?;
-            erase(context, right, &Term::Prim(Prim::NatType))?;
+            erase(context, left, &Subterm::Prim(Prim::NatType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::NatType).into())?;
 
-            Ok(Term::Prim(Prim::BlnType))
+            Ok(Subterm::Prim(Prim::BlnType).into())
         }
         Prim::NatAdd(left, right)
         | Prim::NatSub(left, right)
         | Prim::NatMul(left, right)
         | Prim::NatDiv(left, right)
         | Prim::NatRem(left, right) => {
-            erase(context, left, &Term::Prim(Prim::NatType))?;
-            erase(context, right, &Term::Prim(Prim::NatType))?;
+            erase(context, left, &Subterm::Prim(Prim::NatType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::NatType).into())?;
 
-            Ok(Term::Prim(Prim::NatType))
+            Ok(Subterm::Prim(Prim::NatType).into())
         }
         Prim::IntType => Ok(Type.into()),
-        Prim::Int(_) => Ok(Term::Prim(Prim::IntType)),
+        Prim::Int(_) => Ok(Subterm::Prim(Prim::IntType).into()),
         Prim::IntEql(left, right)
         | Prim::IntNeq(left, right)
         | Prim::IntLt(left, right)
         | Prim::IntGt(left, right)
         | Prim::IntLte(left, right)
         | Prim::IntGte(left, right) => {
-            erase(context, left, &Term::Prim(Prim::IntType))?;
-            erase(context, right, &Term::Prim(Prim::IntType))?;
+            erase(context, left, &Subterm::Prim(Prim::IntType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::IntType).into())?;
 
-            Ok(Term::Prim(Prim::BlnType))
+            Ok(Subterm::Prim(Prim::BlnType).into())
         }
         Prim::IntAdd(left, right)
         | Prim::IntSub(left, right)
         | Prim::IntMul(left, right)
         | Prim::IntDiv(left, right)
         | Prim::IntRem(left, right) => {
-            erase(context, left, &Term::Prim(Prim::IntType))?;
-            erase(context, right, &Term::Prim(Prim::IntType))?;
+            erase(context, left, &Subterm::Prim(Prim::IntType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::IntType).into())?;
 
-            Ok(Term::Prim(Prim::IntType))
+            Ok(Subterm::Prim(Prim::IntType).into())
         }
         Prim::FltType => Ok(Type.into()),
-        Prim::Flt(_) => Ok(Term::Prim(Prim::FltType)),
+        Prim::Flt(_) => Ok(Subterm::Prim(Prim::FltType).into()),
         Prim::FltAdd(left, right)
         | Prim::FltSub(left, right)
         | Prim::FltMul(left, right)
         | Prim::FltDiv(left, right)
         | Prim::FltMin(left, right)
         | Prim::FltMax(left, right) => {
-            erase(context, left, &Term::Prim(Prim::FltType))?;
-            erase(context, right, &Term::Prim(Prim::FltType))?;
+            erase(context, left, &Subterm::Prim(Prim::FltType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::FltType).into())?;
 
-            Ok(Term::Prim(Prim::FltType))
+            Ok(Subterm::Prim(Prim::FltType).into())
         }
         Prim::FltNeg(inner)
         | Prim::FltAbs(inner)
@@ -77,9 +77,9 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         | Prim::FltCeil(inner)
         | Prim::FltTrunc(inner)
         | Prim::FltNearest(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
+            erase(context, inner, &Subterm::Prim(Prim::FltType).into())?;
 
-            Ok(Term::Prim(Prim::FltType))
+            Ok(Subterm::Prim(Prim::FltType).into())
         }
         Prim::FltEql(left, right)
         | Prim::FltNeq(left, right)
@@ -87,198 +87,198 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         | Prim::FltGt(left, right)
         | Prim::FltLte(left, right)
         | Prim::FltGte(left, right) => {
-            erase(context, left, &Term::Prim(Prim::FltType))?;
-            erase(context, right, &Term::Prim(Prim::FltType))?;
+            erase(context, left, &Subterm::Prim(Prim::FltType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::FltType).into())?;
 
-            Ok(Term::Prim(Prim::BlnType))
+            Ok(Subterm::Prim(Prim::BlnType).into())
         }
         Prim::NatToStr(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
+            erase(context, inner, &Subterm::Prim(Prim::NatType).into())?;
 
-            Ok(Term::Prim(Prim::BinType))
+            Ok(Subterm::Prim(Prim::BinType).into())
         }
         Prim::IntToStr(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
+            erase(context, inner, &Subterm::Prim(Prim::IntType).into())?;
 
-            Ok(Term::Prim(Prim::BinType))
+            Ok(Subterm::Prim(Prim::BinType).into())
         }
         Prim::FltToStr(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
+            erase(context, inner, &Subterm::Prim(Prim::FltType).into())?;
 
-            Ok(Term::Prim(Prim::BinType))
+            Ok(Subterm::Prim(Prim::BinType).into())
         }
         Prim::NatToInt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
+            erase(context, inner, &Subterm::Prim(Prim::NatType).into())?;
 
-            Ok(Term::Prim(Prim::IntType))
+            Ok(Subterm::Prim(Prim::IntType).into())
         }
         Prim::NatToFlt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::NatType))?;
+            erase(context, inner, &Subterm::Prim(Prim::NatType).into())?;
 
-            Ok(Term::Prim(Prim::FltType))
+            Ok(Subterm::Prim(Prim::FltType).into())
         }
         Prim::IntToNat(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
+            erase(context, inner, &Subterm::Prim(Prim::IntType).into())?;
 
-            Ok(Term::Prim(Prim::NatType))
+            Ok(Subterm::Prim(Prim::NatType).into())
         }
         Prim::IntToFlt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::IntType))?;
+            erase(context, inner, &Subterm::Prim(Prim::IntType).into())?;
 
-            Ok(Term::Prim(Prim::FltType))
+            Ok(Subterm::Prim(Prim::FltType).into())
         }
         Prim::FltToNat(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
+            erase(context, inner, &Subterm::Prim(Prim::FltType).into())?;
 
-            Ok(Term::Prim(Prim::NatType))
+            Ok(Subterm::Prim(Prim::NatType).into())
         }
         Prim::FltToInt(inner) => {
-            erase(context, inner, &Term::Prim(Prim::FltType))?;
+            erase(context, inner, &Subterm::Prim(Prim::FltType).into())?;
 
-            Ok(Term::Prim(Prim::IntType))
+            Ok(Subterm::Prim(Prim::IntType).into())
         }
         Prim::BinType => Ok(Type.into()),
-        Prim::Bin(_) => Ok(Term::Prim(Prim::BinType)),
+        Prim::Bin(_) => Ok(Subterm::Prim(Prim::BinType).into()),
         Prim::BinLen(bin) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce_with(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => Ok(Term::Prim(Prim::NatType)),
+            match &*bin_type {
+                Subterm::Prim(Prim::BinType) => Ok(Subterm::Prim(Prim::NatType).into()),
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
+                    Subterm::Prim(prim.clone()),
+                    other.clone(),
+                    Subterm::Prim(Prim::BinType),
                 )),
             }
         }
         Prim::BinEql(left, right) => {
-            erase(context, left, &Term::Prim(Prim::BinType))?;
-            erase(context, right, &Term::Prim(Prim::BinType))?;
+            erase(context, left, &Subterm::Prim(Prim::BinType).into())?;
+            erase(context, right, &Subterm::Prim(Prim::BinType).into())?;
 
-            Ok(Term::Prim(Prim::BlnType))
+            Ok(Subterm::Prim(Prim::BlnType).into())
         }
         Prim::BinGet(bin, index) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce_with(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, index, &Term::Prim(Prim::NatType))?;
-                    Ok(Term::Prim(Prim::NatType))
+            match &*bin_type {
+                Subterm::Prim(Prim::BinType) => {
+                    erase(context, index, &Subterm::Prim(Prim::NatType).into())?;
+                    Ok(Subterm::Prim(Prim::NatType).into())
                 }
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
+                    Subterm::Prim(prim.clone()),
+                    other.clone(),
+                    Subterm::Prim(Prim::BinType),
                 )),
             }
         }
         Prim::BinSlice(bin, start, end) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce_with(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, start, &Term::Prim(Prim::NatType))?;
-                    erase(context, end, &Term::Prim(Prim::NatType))?;
-                    Ok(Term::Prim(Prim::BinType))
+            match &*bin_type {
+                Subterm::Prim(Prim::BinType) => {
+                    erase(context, start, &Subterm::Prim(Prim::NatType).into())?;
+                    erase(context, end, &Subterm::Prim(Prim::NatType).into())?;
+                    Ok(Subterm::Prim(Prim::BinType).into())
                 }
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
+                    Subterm::Prim(prim.clone()),
+                    other.clone(),
+                    Subterm::Prim(Prim::BinType),
                 )),
             }
         }
         Prim::BinAppend(bin, byte) => {
             let bin_type = infer(context, bin)?;
             let bin_type = reduce_with(context, &bin_type)?;
-            match bin_type {
-                Term::Prim(Prim::BinType) => {
-                    erase(context, byte, &Term::Prim(Prim::NatType))?;
-                    Ok(Term::Prim(Prim::BinType))
+            match &*bin_type {
+                Subterm::Prim(Prim::BinType) => {
+                    erase(context, byte, &Subterm::Prim(Prim::NatType).into())?;
+                    Ok(Subterm::Prim(Prim::BinType).into())
                 }
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::BinType),
+                    Subterm::Prim(prim.clone()),
+                    other.clone(),
+                    Subterm::Prim(Prim::BinType),
                 )),
             }
         }
         Prim::BinConcat(operands) => {
             for operand in operands {
-                erase(context, operand, &Term::Prim(Prim::BinType))?;
+                erase(context, operand, &Subterm::Prim(Prim::BinType).into())?;
             }
-            Ok(Term::Prim(Prim::BinType))
+            Ok(Subterm::Prim(Prim::BinType).into())
         }
         Prim::ArrType(elem) => {
             erase(context, elem, &Type.into())?;
             Ok(Type.into())
         }
-        Prim::Arr(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
+        Prim::Arr(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
         Prim::ArrLen(list) => {
             let list_type = infer(context, list)?;
             let list_type = reduce_with(context, &list_type)?;
-            match list_type {
-                Term::Prim(Prim::ArrType(_)) => Ok(Term::Prim(Prim::NatType)),
+            match &*list_type {
+                Subterm::Prim(Prim::ArrType(_)) => Ok(Subterm::Prim(Prim::NatType).into()),
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::NatType),
+                    Subterm::Prim(prim.clone()),
+                    other.clone(),
+                    Subterm::Prim(Prim::NatType),
                 )),
             }
         }
         Prim::ArrGet(list, index) => {
             let list_type = infer(context, list)?;
             let list_type = reduce_with(context, &list_type)?;
-            match list_type {
-                Term::Prim(Prim::ArrType(elem)) => {
-                    erase(context, index, &Term::Prim(Prim::NatType))?;
-                    Ok(*elem)
+            match &*list_type {
+                Subterm::Prim(Prim::ArrType(elem)) => {
+                    erase(context, index, &Subterm::Prim(Prim::NatType).into())?;
+                    Ok(elem.clone())
                 }
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
-                    other,
-                    Term::Prim(Prim::NatType),
+                    Subterm::Prim(prim.clone()),
+                    other.clone(),
+                    Subterm::Prim(Prim::NatType),
                 )),
             }
         }
         Prim::ArrSlice(list, start, end) => {
             let list_type = infer(context, list)?;
             let list_type = reduce_with(context, &list_type)?;
-            match &list_type {
-                Term::Prim(Prim::ArrType(_)) => {
-                    erase(context, start, &Term::Prim(Prim::NatType))?;
-                    erase(context, end, &Term::Prim(Prim::NatType))?;
+            match &*list_type {
+                Subterm::Prim(Prim::ArrType(_)) => {
+                    erase(context, start, &Subterm::Prim(Prim::NatType).into())?;
+                    erase(context, end, &Subterm::Prim(Prim::NatType).into())?;
                     Ok(list_type)
                 }
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
+                    Subterm::Prim(prim.clone()),
                     other.clone(),
-                    Term::Prim(Prim::NatType),
+                    Subterm::Prim(Prim::NatType),
                 )),
             }
         }
         Prim::ArrAppend(list, elem) => {
             let list_type = infer(context, list)?;
             let list_type = reduce_with(context, &list_type)?;
-            match &list_type {
-                Term::Prim(Prim::ArrType(elem_type)) => {
-                    let elem_type = *elem_type.clone();
+            match &*list_type {
+                Subterm::Prim(Prim::ArrType(elem_type)) => {
+                    let elem_type = elem_type.clone();
                     erase(context, elem, &elem_type)?;
                     Ok(list_type)
                 }
                 other => Err(Error::type_mismatch(
-                    Term::Prim(prim.clone()),
+                    Subterm::Prim(prim.clone()),
                     other.clone(),
-                    Term::Prim(Prim::NatType),
+                    Subterm::Prim(Prim::NatType),
                 )),
             }
         }
-        Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Term::Prim(prim.clone()))),
+        Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
         Prim::SysPrint(inner) => {
-            erase(context, inner, &Term::Prim(Prim::BinType))?;
-            Ok(Term::TupleType(TupleType::unit()))
+            erase(context, inner, &Subterm::Prim(Prim::BinType).into())?;
+            Ok(Subterm::TupleType(TupleType::unit()).into())
         }
-        Prim::SysRead => Ok(Term::Prim(Prim::BinType)),
+        Prim::SysRead => Ok(Subterm::Prim(Prim::BinType).into()),
     }
 }
 
@@ -307,9 +307,9 @@ fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let ft = match head_type {
-        Term::FuncType(ft) => ft,
-        other => return Err(Error::not_a_function(term.clone(), other)),
+    let ft = match &*head_type {
+        Subterm::FuncType(ft) => ft.clone(),
+        other => return Err(Error::not_a_function(term.clone(), other.clone())),
     };
 
     if params.len() != ft.telescope.len() {
@@ -320,17 +320,13 @@ fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term
         ));
     }
 
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<Term>,
-        params: &[Subterm],
-    ) -> Result<Term, Error> {
+    fn walk(context: &mut Context, tele: Telescope<Term>, params: &[Term]) -> Result<Term, Error> {
         match tele {
             Telescope::Done(body) => Ok(*body),
             Telescope::Cons(ty, rest) => {
                 let head = &params[0];
                 erase(context, head, &ty)?;
-                walk(context, rest.open(&[head.as_ref()]), &params[1..])
+                walk(context, rest.open(&[head]), &params[1..])
             }
         }
     }
@@ -368,14 +364,14 @@ fn infer_nat_induction(
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    if !matches!(head_type, Term::Prim(Prim::NatType)) {
+    if !matches!(&*head_type, Subterm::Prim(Prim::NatType)) {
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::NatType));
+        context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
 
         erase(
             context,
@@ -388,23 +384,24 @@ fn infer_nat_induction(
     erase(
         context,
         zero_case,
-        &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(0)))]),
+        &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0))).into()]),
     )?;
 
     let pred_label = context.fresh(succ_case.first_label());
     let ih_label = context.fresh(succ_case.second_label());
 
     context.with_frame(|context| {
-        context.assume(&pred_label, &Term::Prim(Prim::NatType));
+        context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
         context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
 
         erase(
             context,
             &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
-            &motive.open(&[&Term::Prim(Prim::nat_add(
+            &motive.open(&[&Subterm::Prim(Prim::nat_add(
                 Var::free(&pred_label),
-                Term::Prim(Prim::Nat(Nat::new(1))),
-            ))]),
+                Subterm::Prim(Prim::Nat(Nat::new(1))),
+            ))
+            .into()]),
         )
         .map(|_| ())
     })?;
@@ -416,21 +413,21 @@ fn infer_nat_dispatch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<One>,
-    cases: &BTreeMap<u32, Subterm>,
+    cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
 ) -> Result<Term, Error> {
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    if !matches!(head_type, Term::Prim(Prim::NatType)) {
+    if !matches!(&*head_type, Subterm::Prim(Prim::NatType)) {
         return Err(Error::not_nat_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::NatType));
+        context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
         erase(
             context,
             &motive.open(&[&Var::free(head_label).into()]),
@@ -441,11 +438,15 @@ fn infer_nat_dispatch(
 
     for (n, body) in cases {
         context.with_frame(|context| {
-            refine_head(context, head, &Term::Prim(Prim::Nat(Nat::new(*n))))?;
+            refine_head(
+                context,
+                head,
+                &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
+            )?;
             erase(
                 context,
                 body,
-                &motive.open(&[&Term::Prim(Prim::Nat(Nat::new(*n)))]),
+                &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]),
             )
             .map(|_| ())
         })?;
@@ -484,14 +485,14 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    if !matches!(head_type, Term::Prim(Prim::BlnType)) {
+    if !matches!(&*head_type, Subterm::Prim(Prim::BlnType)) {
         return Err(Error::not_bln_type(term.clone(), head_type));
     }
 
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &Term::Prim(Prim::BlnType));
+        context.assume(&head_label, &Subterm::Prim(Prim::BlnType).into());
         erase(
             context,
             &motive.open(&[&Var::free(head_label).into()]),
@@ -501,26 +502,26 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
     })?;
 
     context.with_frame(|context| {
-        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(false)))?;
+        refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into())?;
         erase(
             context,
             false_case,
-            &motive.open(&[&Term::Prim(Prim::Bln(false))]),
+            &motive.open(&[&Subterm::Prim(Prim::Bln(false)).into()]),
         )
         .map(|_| ())
     })?;
 
     context.with_frame(|context| {
-        refine_head(context, head.as_ref(), &Term::Prim(Prim::Bln(true)))?;
+        refine_head(context, head, &Subterm::Prim(Prim::Bln(true)).into())?;
         erase(
             context,
             true_case,
-            &motive.open(&[&Term::Prim(Prim::Bln(true))]),
+            &motive.open(&[&Subterm::Prim(Prim::Bln(true)).into()]),
         )
         .map(|_| ())
     })?;
 
-    Ok(motive.open(&[head.as_ref()]))
+    Ok(motive.open(&[head]))
 }
 
 fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, Error> {
@@ -529,9 +530,9 @@ fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, E
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let TupleType { telescope } = match head_type {
-        Term::TupleType(tt) => tt,
-        other => return Err(Error::not_a_tuple(term.clone(), other)),
+    let TupleType { telescope } = match &*head_type {
+        Subterm::TupleType(tt) => tt.clone(),
+        other => return Err(Error::not_a_tuple(term.clone(), other.clone())),
     };
 
     if *index >= telescope.len() {
@@ -543,7 +544,7 @@ fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, E
     }
 
     Ok(telescope
-        .nth(*index, |j| Proj::new(*head.clone(), j).into())
+        .nth(*index, |j| Proj::new((**head).clone(), j).into())
         .expect("index in range"))
 }
 
@@ -557,9 +558,9 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let atoms = match head_type {
-        Term::AtomType(AtomType { atoms }) => atoms,
-        other => return Err(Error::not_an_atom_type(term.clone(), other)),
+    let atoms = match &*head_type {
+        Subterm::AtomType(AtomType { atoms }) => atoms.clone(),
+        other => return Err(Error::not_an_atom_type(term.clone(), other.clone())),
     };
 
     let head_label = context.fresh(motive.first_label());
@@ -593,12 +594,12 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
         let expected = motive.open(&[&atom.clone().into()]);
 
         context.with_frame(|context| {
-            refine_head(context, head.as_ref(), &atom.clone().into())?;
+            refine_head(context, head, &atom.clone().into())?;
             erase(context, body, &expected)
         })?;
     }
 
-    Ok(motive.open(&[head.as_ref()]))
+    Ok(motive.open(&[head]))
 }
 
 fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
@@ -665,24 +666,24 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
 }
 
 pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    match term {
-        Term::Type => Ok(Type.into()),
-        Term::Prim(prim) => infer_prim(context, prim),
-        Term::BlnMatch(bm) => infer_bln_match(context, bm, term),
-        Term::NatMatch(nm) => infer_nat_match(context, nm, term),
-        Term::FuncType(ft) => infer_func_type(context, ft),
-        Term::Apply(apply) => infer_apply(context, apply, term),
-        Term::TupleType(tt) => infer_tuple_type(context, tt),
-        Term::Proj(proj) => infer_proj(context, proj, term),
-        Term::AtomType(_) => Ok(Type.into()),
-        Term::Match(m) => infer_match(context, m, term),
-        Term::Let(let_) => infer_let(context, let_),
-        Term::Rec(rec) => infer_rec(context, rec),
-        Term::Var(var) => match context.assumption(var.unwrap()) {
+    match &**term {
+        Subterm::Type => Ok(Type.into()),
+        Subterm::Prim(prim) => infer_prim(context, prim),
+        Subterm::BlnMatch(bm) => infer_bln_match(context, bm, term),
+        Subterm::NatMatch(nm) => infer_nat_match(context, nm, term),
+        Subterm::FuncType(ft) => infer_func_type(context, ft),
+        Subterm::Apply(apply) => infer_apply(context, apply, term),
+        Subterm::TupleType(tt) => infer_tuple_type(context, tt),
+        Subterm::Proj(proj) => infer_proj(context, proj, term),
+        Subterm::AtomType(_) => Ok(Type.into()),
+        Subterm::Match(m) => infer_match(context, m, term),
+        Subterm::Let(let_) => infer_let(context, let_),
+        Subterm::Rec(rec) => infer_rec(context, rec),
+        Subterm::Var(var) => match context.assumption(var.unwrap()) {
             Some(type_) => Ok(type_.clone()),
             None => Err(Error::unbound_variable(var.clone())),
         },
-        Term::Spanned(span, inner) => infer(context, inner).map_err(|error| error.at(*span)),
+        Subterm::Spanned(span, inner) => infer(context, inner).map_err(|error| error.at(*span)),
         _ => Err(Error::cannot_infer(term.clone())),
     }
 }

@@ -109,7 +109,7 @@ impl Context {
         A: Into<String>,
     {
         let label = label.into();
-        self.assume(label.as_str(), &Type.into());
+        self.assume(label.as_str(), &Term::new(Type.into()));
         self.witnesses
             .last_mut()
             .unwrap()
@@ -120,11 +120,11 @@ impl Context {
         self.witnesses.iter().rev().find_map(|s| s.get(label))
     }
 
-    pub fn define_proj(&mut self, base: Term, index: usize, value: &Term) {
+    pub fn define_proj(&mut self, base: Term, index: usize, value: Term) {
         self.projections
             .last_mut()
             .unwrap()
-            .insert((base, index), value.clone());
+            .insert((base, index), value);
     }
 
     pub fn projection(&self, base: &Term, index: usize) -> Option<&Term> {
