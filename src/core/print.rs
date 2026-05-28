@@ -384,29 +384,42 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             }),
             pure("]"),
         ]),
-        Prim::ArrLen(list) => flat([pure("Arr.len "), print_term(list, depth)]),
-        Prim::ArrGet(list, index) => flat([
+        Prim::ArrLen(ty, list) => flat([
+            pure("Arr.len "),
+            print_term(ty, depth),
+            pure(" "),
+            print_term(list, depth),
+        ]),
+        Prim::ArrGet(ty, list, index) => flat([
             pure("Arr.get "),
+            print_term(ty, depth),
+            pure(" "),
             print_term(list, depth),
             pure(" "),
             print_term(index, depth),
         ]),
-        Prim::ArrSlice(list, start, end) => flat([
+        Prim::ArrSlice(ty, list, start, end) => flat([
             pure("Arr.slice "),
+            print_term(ty, depth),
+            pure(" "),
             print_term(list, depth),
             pure(" "),
             print_term(start, depth),
             pure(" "),
             print_term(end, depth),
         ]),
-        Prim::ArrAppend(list, elem) => flat([
+        Prim::ArrAppend(ty, list, elem) => flat([
             pure("Arr.append "),
+            print_term(ty, depth),
+            pure(" "),
             print_term(list, depth),
             pure(" "),
             print_term(elem, depth),
         ]),
-        Prim::ArrConcat(operands) => flat([
+        Prim::ArrConcat(ty, operands) => flat([
             pure("Arr.concat "),
+            print_term(ty, depth),
+            pure(" "),
             sep_flat(
                 operands.into_iter().map(move |e| print_term(e, depth)),
                 || pure(", "),

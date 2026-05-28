@@ -1210,7 +1210,6 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
         | Prim::ArrType(t)
-        | Prim::ArrLen(t)
         | Prim::IoPrint(t) => t.reach(),
 
         Prim::NatEql(a, b)
@@ -1250,14 +1249,16 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinEql(a, b)
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
-        | Prim::ArrGet(a, b)
-        | Prim::ArrAppend(a, b) => a.reach().max(b.reach()),
+        | Prim::ArrLen(a, b) => a.reach().max(b.reach()),
 
-        Prim::BinSlice(a, b, c) | Prim::ArrSlice(a, b, c) => {
+        Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
             a.reach().max(b.reach()).max(c.reach())
         }
 
-        Prim::BinConcat(terms) | Prim::ArrConcat(terms) | Prim::Arr(terms) => max_reach(terms),
+        Prim::ArrSlice(a, b, c, d) => a.reach().max(b.reach()).max(c.reach()).max(d.reach()),
+
+        Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
+        Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
     }
 }
 
@@ -1450,21 +1451,29 @@ where
             }
             Prim::ArrType(elem) => Prim::ArrType(self.visit_subterm(elem)),
             Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| self.visit_subterm(e)).collect()),
-            Prim::ArrLen(list) => Prim::ArrLen(self.visit_subterm(list)),
-            Prim::ArrGet(list, index) => {
-                Prim::ArrGet(self.visit_subterm(list), self.visit_subterm(index))
+            Prim::ArrLen(ty, list) => {
+                Prim::ArrLen(self.visit_subterm(ty), self.visit_subterm(list))
             }
-            Prim::ArrSlice(list, start, end) => Prim::ArrSlice(
+            Prim::ArrGet(ty, list, index) => Prim::ArrGet(
+                self.visit_subterm(ty),
+                self.visit_subterm(list),
+                self.visit_subterm(index),
+            ),
+            Prim::ArrSlice(ty, list, start, end) => Prim::ArrSlice(
+                self.visit_subterm(ty),
                 self.visit_subterm(list),
                 self.visit_subterm(start),
                 self.visit_subterm(end),
             ),
-            Prim::ArrAppend(list, elem) => {
-                Prim::ArrAppend(self.visit_subterm(list), self.visit_subterm(elem))
-            }
-            Prim::ArrConcat(operands) => {
-                Prim::ArrConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
-            }
+            Prim::ArrAppend(ty, list, elem) => Prim::ArrAppend(
+                self.visit_subterm(ty),
+                self.visit_subterm(list),
+                self.visit_subterm(elem),
+            ),
+            Prim::ArrConcat(ty, operands) => Prim::ArrConcat(
+                self.visit_subterm(ty),
+                operands.iter().map(|e| self.visit_subterm(e)).collect(),
+            ),
             Prim::IoPrint(inner) => Prim::IoPrint(self.visit_subterm(inner)),
             Prim::IoRead => Prim::IoRead,
         }

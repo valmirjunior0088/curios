@@ -657,16 +657,18 @@ fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted>
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Subterm::Prim(Prim::Arr(elems)))
         }
-        Prim::ArrLen(list) => {
+        Prim::ArrLen(type_, list) => {
+            let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
                 Subterm::Prim(Prim::Arr(elems)) => {
                     Subterm::Prim(Prim::Nat(Nat::new(elems.len() as u32)))
                 }
-                list => Subterm::Prim(Prim::arr_len(list)),
+                list => Subterm::Prim(Prim::arr_len(type_, list)),
             })
         }
-        Prim::ArrGet(list, index) => {
+        Prim::ArrGet(type_, list, index) => {
+            let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let index = reduce(context, index.clone())?;
             let i = index.as_nat();
@@ -676,10 +678,11 @@ fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted>
                     .nth(i as usize)
                     .map(Term::unwrap_or_clone)
                     .expect("Arr.get: index out of bounds"),
-                (list, _) => Subterm::Prim(Prim::arr_get(list, index)),
+                (list, _) => Subterm::Prim(Prim::arr_get(type_, list, index)),
             })
         }
-        Prim::ArrSlice(list, start, end) => {
+        Prim::ArrSlice(type_, list, start, end) => {
+            let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let start = reduce(context, start.clone())?;
             let end = reduce(context, end.clone())?;
@@ -692,10 +695,11 @@ fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted>
                         .expect("Arr.slice: range out of bounds")
                         .to_vec(),
                 )),
-                (list, _, _) => Subterm::Prim(Prim::arr_slice(list, start, end)),
+                (list, _, _) => Subterm::Prim(Prim::arr_slice(type_, list, start, end)),
             })
         }
-        Prim::ArrAppend(list, elem) => {
+        Prim::ArrAppend(type_, list, elem) => {
+            let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let elem = reduce(context, elem.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
@@ -703,10 +707,11 @@ fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted>
                     elems.push(elem);
                     Subterm::Prim(Prim::Arr(elems))
                 }
-                list => Subterm::Prim(Prim::arr_append(list, elem)),
+                list => Subterm::Prim(Prim::arr_append(type_, list, elem)),
             })
         }
-        Prim::ArrConcat(operands) => {
+        Prim::ArrConcat(type_, operands) => {
+            let type_ = reduce(context, type_.clone())?;
             let reduced: Vec<Term> = operands
                 .iter()
                 .map(|e| reduce(context, e.clone()))
@@ -721,7 +726,7 @@ fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted>
             });
             Ok(match merged {
                 Some(elems) => Subterm::Prim(Prim::Arr(elems)),
-                None => Subterm::Prim(Prim::ArrConcat(reduced)),
+                None => Subterm::Prim(Prim::arr_concat(type_, reduced)),
             })
         }
         Prim::IoPrint(_) => panic!("IoPrint cannot appear at the type level"),
@@ -1164,6 +1169,7 @@ mod tests {
             reduce(
                 &mut context,
                 Subterm::Prim(Prim::arr_get(
+                    Subterm::Prim(Prim::NatType),
                     list.clone(),
                     Subterm::Prim(Prim::Nat(Nat::new(0)))
                 ))
@@ -1174,7 +1180,12 @@ mod tests {
         assert_eq!(
             reduce(
                 &mut context,
-                Subterm::Prim(Prim::arr_get(list, Subterm::Prim(Prim::Nat(Nat::new(2))))).into()
+                Subterm::Prim(Prim::arr_get(
+                    Subterm::Prim(Prim::NatType),
+                    list,
+                    Subterm::Prim(Prim::Nat(Nat::new(2)))
+                ))
+                .into()
             ),
             Ok(Subterm::Prim(Prim::Nat(Nat::new(30))).into())
         );
@@ -1189,7 +1200,12 @@ mod tests {
 
         reduce(
             &mut context,
-            Subterm::Prim(Prim::arr_get(list, Subterm::Prim(Prim::Nat(Nat::new(1))))).into(),
+            Subterm::Prim(Prim::arr_get(
+                Subterm::Prim(Prim::NatType),
+                list,
+                Subterm::Prim(Prim::Nat(Nat::new(1))),
+            ))
+            .into(),
         )
         .ok();
     }
@@ -1223,6 +1239,7 @@ mod tests {
             reduce(
                 &mut context,
                 Subterm::Prim(Prim::arr_append(
+                    Subterm::Prim(Prim::NatType),
                     list,
                     Subterm::Prim(Prim::Nat(Nat::new(30)))
                 ))

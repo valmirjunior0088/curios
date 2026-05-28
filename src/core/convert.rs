@@ -111,8 +111,6 @@ impl Convert {
             | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
             | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
             | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
-            | (Prim::ArrGet(this_left, this_right), Prim::ArrGet(that_left, that_right))
-            | (Prim::ArrAppend(this_left, this_right), Prim::ArrAppend(that_left, that_right))
             | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
             | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
             | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
@@ -137,7 +135,6 @@ impl Convert {
             | (Prim::IntToFlt(this), Prim::IntToFlt(that))
             | (Prim::FltToNat(this), Prim::FltToNat(that))
             | (Prim::FltToInt(this), Prim::FltToInt(that))
-            | (Prim::ArrLen(this), Prim::ArrLen(that))
             | (Prim::BinLen(this), Prim::BinLen(that)) => {
                 self.enqueue(Type.into(), this, that);
 
@@ -154,12 +151,39 @@ impl Convert {
                 Ok(true)
             }
             (
-                Prim::ArrSlice(this_list, this_start, this_end),
-                Prim::ArrSlice(that_list, that_start, that_end),
+                Prim::ArrSlice(this_ty, this_list, this_start, this_end),
+                Prim::ArrSlice(that_ty, that_list, that_start, that_end),
             ) => {
+                self.enqueue(Type.into(), this_ty, that_ty);
                 self.enqueue(Type.into(), this_list, that_list);
                 self.enqueue(Type.into(), this_start, that_start);
                 self.enqueue(Type.into(), this_end, that_end);
+
+                Ok(true)
+            }
+            (
+                Prim::ArrGet(this_ty, this_list, this_index),
+                Prim::ArrGet(that_ty, that_list, that_index),
+            ) => {
+                self.enqueue(Type.into(), this_ty, that_ty);
+                self.enqueue(Type.into(), this_list, that_list);
+                self.enqueue(Type.into(), this_index, that_index);
+
+                Ok(true)
+            }
+            (Prim::ArrLen(this_ty, this_list), Prim::ArrLen(that_ty, that_list)) => {
+                self.enqueue(Type.into(), this_ty, that_ty);
+                self.enqueue(Type.into(), this_list, that_list);
+
+                Ok(true)
+            }
+            (
+                Prim::ArrAppend(this_ty, this_list, this_elem),
+                Prim::ArrAppend(that_ty, that_list, that_elem),
+            ) => {
+                self.enqueue(Type.into(), this_ty, that_ty);
+                self.enqueue(Type.into(), this_list, that_list);
+                self.enqueue(Type.into(), this_elem, that_elem);
 
                 Ok(true)
             }
@@ -183,10 +207,11 @@ impl Convert {
                 }
                 Ok(true)
             }
-            (Prim::ArrConcat(this_ops), Prim::ArrConcat(that_ops)) => {
+            (Prim::ArrConcat(this_ty, this_ops), Prim::ArrConcat(that_ty, that_ops)) => {
                 if this_ops.len() != that_ops.len() {
                     return Ok(false);
                 }
+                self.enqueue(Type.into(), this_ty, that_ty);
                 for (this, that) in this_ops.into_iter().zip(that_ops) {
                     self.enqueue(Type.into(), this, that);
                 }

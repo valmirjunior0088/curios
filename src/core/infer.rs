@@ -214,66 +214,42 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             Ok(Type.into())
         }
         Prim::Arr(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
-        Prim::ArrLen(list) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce_with(context, &list_type)?;
-            match &*list_type {
-                Subterm::Prim(Prim::ArrType(_)) => Ok(Subterm::Prim(Prim::NatType).into()),
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::NatType),
-                )),
-            }
+        Prim::ArrLen(type_, list) => {
+            erase(context, type_, &Type.into())?;
+            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            erase(context, list, &expected_list_type)?;
+            Ok(Subterm::Prim(Prim::NatType).into())
         }
-        Prim::ArrGet(list, index) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce_with(context, &list_type)?;
-            match &*list_type {
-                Subterm::Prim(Prim::ArrType(elem)) => {
-                    erase(context, index, &Subterm::Prim(Prim::NatType).into())?;
-                    Ok(elem.clone())
-                }
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::NatType),
-                )),
-            }
+        Prim::ArrGet(type_, list, index) => {
+            erase(context, type_, &Type.into())?;
+            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            erase(context, list, &expected_list_type)?;
+            erase(context, index, &Subterm::Prim(Prim::NatType).into())?;
+            Ok(type_.clone())
         }
-        Prim::ArrSlice(list, start, end) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce_with(context, &list_type)?;
-            match &*list_type {
-                Subterm::Prim(Prim::ArrType(_)) => {
-                    erase(context, start, &Subterm::Prim(Prim::NatType).into())?;
-                    erase(context, end, &Subterm::Prim(Prim::NatType).into())?;
-                    Ok(list_type)
-                }
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::NatType),
-                )),
-            }
+        Prim::ArrSlice(type_, list, start, end) => {
+            erase(context, type_, &Type.into())?;
+            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            erase(context, list, &expected_list_type)?;
+            erase(context, start, &Subterm::Prim(Prim::NatType).into())?;
+            erase(context, end, &Subterm::Prim(Prim::NatType).into())?;
+            Ok(expected_list_type)
         }
-        Prim::ArrAppend(list, elem) => {
-            let list_type = infer(context, list)?;
-            let list_type = reduce_with(context, &list_type)?;
-            match &*list_type {
-                Subterm::Prim(Prim::ArrType(elem_type)) => {
-                    let elem_type = elem_type.clone();
-                    erase(context, elem, &elem_type)?;
-                    Ok(list_type)
-                }
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::NatType),
-                )),
-            }
+        Prim::ArrAppend(type_, list, elem) => {
+            erase(context, type_, &Type.into())?;
+            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            erase(context, list, &expected_list_type)?;
+            erase(context, elem, type_)?;
+            Ok(expected_list_type)
         }
-        Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
+        Prim::ArrConcat(type_, operands) => {
+            erase(context, type_, &Type.into())?;
+            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            for operand in operands {
+                erase(context, operand, &expected_list_type)?;
+            }
+            Ok(expected_list_type)
+        }
         Prim::IoPrint(inner) => {
             erase(context, inner, &Subterm::Prim(Prim::BinType).into())?;
             Ok(Subterm::TupleType(TupleType::unit()).into())

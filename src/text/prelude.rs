@@ -199,13 +199,17 @@ fn arr_ops() -> Vec<TopItem> {
             "len",
             vec![("T", Term::Type), ("a", arr_of(name("T")))],
             nat(),
-            prim(Prim::ArrLen(Box::new(name("a")))),
+            prim(Prim::ArrLen(Box::new(name("T")), Box::new(name("a")))),
         ),
         pub_fn(
             "get",
             vec![("T", Term::Type), ("a", arr_of(name("T"))), ("i", nat())],
             name("T"),
-            prim(Prim::ArrGet(Box::new(name("a")), Box::new(name("i")))),
+            prim(Prim::ArrGet(
+                Box::new(name("T")),
+                Box::new(name("a")),
+                Box::new(name("i")),
+            )),
         ),
         pub_fn(
             "slice",
@@ -217,6 +221,7 @@ fn arr_ops() -> Vec<TopItem> {
             ],
             arr_of(name("T")),
             prim(Prim::ArrSlice(
+                Box::new(name("T")),
                 Box::new(name("a")),
                 Box::new(name("s")),
                 Box::new(name("e")),
@@ -230,7 +235,11 @@ fn arr_ops() -> Vec<TopItem> {
                 ("x", name("T")),
             ],
             arr_of(name("T")),
-            prim(Prim::ArrAppend(Box::new(name("a")), Box::new(name("x")))),
+            prim(Prim::ArrAppend(
+                Box::new(name("T")),
+                Box::new(name("a")),
+                Box::new(name("x")),
+            )),
         ),
         pub_fn(
             "concat",
@@ -240,7 +249,11 @@ fn arr_ops() -> Vec<TopItem> {
                 ("b", arr_of(name("T"))),
             ],
             arr_of(name("T")),
-            prim(Prim::ArrConcat(Box::new(name("a")), Box::new(name("b")))),
+            prim(Prim::ArrConcat(
+                Box::new(name("T")),
+                Box::new(name("a")),
+                Box::new(name("b")),
+            )),
         ),
     ]
 }

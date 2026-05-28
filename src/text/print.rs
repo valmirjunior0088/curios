@@ -172,11 +172,13 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             ),
             pure("]"),
         ]),
-        Prim::ArrLen(operand) => print_prim_call("Arr.len", vec![*operand]),
-        Prim::ArrGet(list, index) => print_prim_call("Arr.get", vec![*list, *index]),
-        Prim::ArrSlice(list, start, end) => print_prim_call("Arr.slice", vec![*list, *start, *end]),
-        Prim::ArrAppend(list, elem) => print_prim_call("Arr.append", vec![*list, *elem]),
-        Prim::ArrConcat(left, right) => print_prim_call("Arr.concat", vec![*left, *right]),
+        Prim::ArrLen(ty, operand) => print_prim_call("Arr.len", vec![*ty, *operand]),
+        Prim::ArrGet(ty, list, index) => print_prim_call("Arr.get", vec![*ty, *list, *index]),
+        Prim::ArrSlice(ty, list, start, end) => {
+            print_prim_call("Arr.slice", vec![*ty, *list, *start, *end])
+        }
+        Prim::ArrAppend(ty, list, elem) => print_prim_call("Arr.append", vec![*ty, *list, *elem]),
+        Prim::ArrConcat(ty, left, right) => print_prim_call("Arr.concat", vec![*ty, *left, *right]),
         Prim::IoPrint(operand) => print_prim_call("Io.print", vec![*operand]),
         Prim::IoRead => pure("Io.read"),
     }

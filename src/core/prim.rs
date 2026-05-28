@@ -86,11 +86,11 @@ pub enum Prim {
     BinConcat(Vec<Term>),
     ArrType(Term),
     Arr(Vec<Term>),
-    ArrLen(Term),
-    ArrGet(Term, Term),
-    ArrSlice(Term, Term, Term),
-    ArrAppend(Term, Term),
-    ArrConcat(Vec<Term>),
+    ArrLen(Term, Term),
+    ArrGet(Term, Term, Term),
+    ArrSlice(Term, Term, Term, Term),
+    ArrAppend(Term, Term, Term),
+    ArrConcat(Term, Vec<Term>),
     IoPrint(Term),
     IoRead,
 }
@@ -535,44 +535,52 @@ impl Prim {
         Self::ArrType(elem.into())
     }
 
-    pub fn arr_len<L>(list: L) -> Self
+    pub fn arr_len<T, L>(type_: T, list: L) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
     {
-        Self::ArrLen(list.into())
+        Self::ArrLen(type_.into(), list.into())
     }
 
-    pub fn arr_get<L, I>(list: L, index: I) -> Self
+    pub fn arr_get<T, L, I>(type_: T, list: L, index: I) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::ArrGet(list.into(), index.into())
+        Self::ArrGet(type_.into(), list.into(), index.into())
     }
 
-    pub fn arr_slice<L, S, E>(list: L, start: S, end: E) -> Self
+    pub fn arr_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrSlice(list.into(), start.into(), end.into())
+        Self::ArrSlice(type_.into(), list.into(), start.into(), end.into())
     }
 
-    pub fn arr_append<L, E>(list: L, elem: E) -> Self
+    pub fn arr_append<T, L, E>(type_: T, list: L, elem: E) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrAppend(list.into(), elem.into())
+        Self::ArrAppend(type_.into(), list.into(), elem.into())
     }
 
-    pub fn arr_concat<I>(operands: I) -> Self
+    pub fn arr_concat<T, O>(type_: T, operands: O) -> Self
     where
-        I: IntoIterator,
-        I::Item: Into<Term>,
+        T: Into<Term>,
+        O: IntoIterator,
+        O::Item: Into<Term>,
     {
-        Self::ArrConcat(operands.into_iter().map(|e| e.into()).collect())
+        Self::ArrConcat(
+            type_.into(),
+            operands.into_iter().map(|e| e.into()).collect(),
+        )
     }
 
     pub fn io_print<T>(inner: T) -> Self

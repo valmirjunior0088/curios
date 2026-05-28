@@ -112,11 +112,11 @@ pub enum Prim {
     BinConcat(Subterm, Subterm),
     ArrType(Subterm),
     Arr(Vec<Subterm>),
-    ArrLen(Subterm),
-    ArrGet(Subterm, Subterm),
-    ArrSlice(Subterm, Subterm, Subterm),
-    ArrAppend(Subterm, Subterm),
-    ArrConcat(Subterm, Subterm),
+    ArrLen(Subterm, Subterm),
+    ArrGet(Subterm, Subterm, Subterm),
+    ArrSlice(Subterm, Subterm, Subterm, Subterm),
+    ArrAppend(Subterm, Subterm, Subterm),
+    ArrConcat(Subterm, Subterm, Subterm),
     IoPrint(Subterm),
     IoRead,
 }
@@ -561,44 +561,54 @@ impl Prim {
         Self::ArrType(elem.into().into())
     }
 
-    pub fn arr_len<L>(list: L) -> Self
+    pub fn arr_len<T, L>(type_: T, list: L) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
     {
-        Self::ArrLen(list.into().into())
+        Self::ArrLen(type_.into().into(), list.into().into())
     }
 
-    pub fn arr_get<L, I>(list: L, index: I) -> Self
+    pub fn arr_get<T, L, I>(type_: T, list: L, index: I) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::ArrGet(list.into().into(), index.into().into())
+        Self::ArrGet(type_.into().into(), list.into().into(), index.into().into())
     }
 
-    pub fn arr_slice<L, S, E>(list: L, start: S, end: E) -> Self
+    pub fn arr_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrSlice(list.into().into(), start.into().into(), end.into().into())
+        Self::ArrSlice(
+            type_.into().into(),
+            list.into().into(),
+            start.into().into(),
+            end.into().into(),
+        )
     }
 
-    pub fn arr_append<L, E>(list: L, elem: E) -> Self
+    pub fn arr_append<T, L, E>(type_: T, list: L, elem: E) -> Self
     where
+        T: Into<Term>,
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrAppend(list.into().into(), elem.into().into())
+        Self::ArrAppend(type_.into().into(), list.into().into(), elem.into().into())
     }
 
-    pub fn arr_concat<F, S>(left: F, right: S) -> Self
+    pub fn arr_concat<T, F, S>(type_: T, left: F, right: S) -> Self
     where
+        T: Into<Term>,
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::ArrConcat(left.into().into(), right.into().into())
+        Self::ArrConcat(type_.into().into(), left.into().into(), right.into().into())
     }
 
     pub fn io_print<T>(inner: T) -> Self

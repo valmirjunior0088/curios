@@ -243,16 +243,21 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .map(|elem| self.term(elem))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Prim::ArrLen(inner) => core::Prim::arr_len(self.term(inner)?),
-            Prim::ArrGet(list, index) => core::Prim::arr_get(self.term(list)?, self.term(index)?),
-            Prim::ArrSlice(list, start, end) => {
-                core::Prim::arr_slice(self.term(list)?, self.term(start)?, self.term(end)?)
+            Prim::ArrLen(ty, inner) => core::Prim::arr_len(self.term(ty)?, self.term(inner)?),
+            Prim::ArrGet(ty, list, index) => {
+                core::Prim::arr_get(self.term(ty)?, self.term(list)?, self.term(index)?)
             }
-            Prim::ArrAppend(list, elem) => {
-                core::Prim::arr_append(self.term(list)?, self.term(elem)?)
+            Prim::ArrSlice(ty, list, start, end) => core::Prim::arr_slice(
+                self.term(ty)?,
+                self.term(list)?,
+                self.term(start)?,
+                self.term(end)?,
+            ),
+            Prim::ArrAppend(ty, list, elem) => {
+                core::Prim::arr_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
             }
-            Prim::ArrConcat(left, right) => {
-                core::Prim::arr_concat([self.term(left)?, self.term(right)?])
+            Prim::ArrConcat(ty, left, right) => {
+                core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
             }
         })
     }
