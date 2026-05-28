@@ -1,8 +1,8 @@
 # Curios — Architecture
 
-Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
+Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two optional external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~30,000 lines in `src/`, ~1,650 in `examples/`.
+**Codebase size:** ~31,300 lines in `src/`, ~2,350 in `examples/`.
 
 ---
 
@@ -37,12 +37,12 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                        | Lines  |
 | ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,502  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,177 |
-| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~3,162 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,418 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 3,413  |
-| WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,300 |
+| Parsing                 | `text/parse.rs`                                    | 1,365  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,164 |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~3,422 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,443 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 3,412  |
+| WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,379 |
 | Binary serialization    | `wasm/writer.rs`                                   | 2,017  |
 
 ---
@@ -91,7 +91,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
 - Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
-- `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)` primitives with all built-in operations
+- Primitive literals plus the prelude-backed `/sys` module, which exposes `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)`, `Bln`, and their operations as ordinary paths
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`
 
@@ -327,9 +327,9 @@ pub trait Provider {
 
 Two implementations ship: `StdioProvider` writes to stdout and reads a line from stdin; `ChannelProvider` routes `print` output through an `mpsc` channel and serves `read` calls from a pre-loaded `VecDeque`. `ChannelProvider::out()` constructs an output-only instance; `ChannelProvider::io(lines)` pre-loads input lines for full IO simulation in tests.
 
-Five operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `sys_print` unpacks the `Bin` argument and calls `provider.print()`; `sys_read` calls `provider.read()` and returns the result as a `Bin`.
+Five operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `io_print` unpacks the `Bin` argument and calls `provider.print()`; `io_read` calls `provider.read()` and returns the result as a `Bin`.
 
-Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `Sys.print` and `Sys.read` through the `Provider`.
+Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/print` and `/sys/Io/read` through the `Provider`.
 
 ---
 
@@ -373,7 +373,7 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 
 ## Testing
 
-194 tests across 12 files, covering every layer:
+206 tests across 12 files, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |

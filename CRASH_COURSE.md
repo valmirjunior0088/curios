@@ -1,6 +1,6 @@
 # Crash Course
 
-This document assumes a Rust background. It skips ceremony and goes straight to where Curios and Rust differ.
+This document assumes a Rust background. It skips ceremony and goes straight to where Curios and Rust differ. Snippets assume the primitive names have been imported. With the bundled `examples/crs` modules, that means `pub mod std; use /std/{Nat, Int, Flt, Bin, Bln, Arr, Io};`; without that module tree, use absolute `/sys/...` paths directly.
 
 ## Bindings and functions
 
@@ -16,16 +16,16 @@ fn double(n: u32) -> u32 { n * 2 }
 -- Curios
 let x : Nat = 42;
 let double(n : Nat) -> Nat =
-    Nat.mul(n, 2);
+    Nat/mul(n, 2);
 ```
 
-`double(n : Nat) -> Nat = …` is function-definition shorthand: it names the parameter and the result type. The underlying value is a lambda, written `n => body` (the same as `|n| body` in Rust), so the shorthand desugars to `let double : Nat -> Nat = n => Nat.mul(n, 2);`.
+`double(n : Nat) -> Nat = …` is function-definition shorthand: it names the parameter and the result type. The underlying value is a lambda, written `n => body` (the same as `|n| body` in Rust), so the shorthand desugars to `let double : Nat -> Nat = n => Nat/mul(n, 2);`.
 
 A function can take several parameters at once. A call passes them in parentheses, comma-separated — `add(2, 3)`:
 
 ```
 let add(a : Nat, b : Nat) -> Nat =
-    Nat.add(a, b);
+    Nat/add(a, b);
 ```
 
 When a function's result is itself a function, calls chain: `f(a)(b)`.
@@ -36,7 +36,7 @@ A `match` over `Nat` uses the `| 0` / `| pred ih` pattern to recurse through its
 let fact(n : Nat) -> Nat =
     match n : Nat
     | 0 => 1
-    | pred ih => Nat.mul(Nat.add(pred, 1), ih)
+    | pred ih => Nat/mul(pred + 1, ih)
     end;
 ```
 
@@ -48,7 +48,7 @@ let fact(n : Nat) -> Nat =
 rec gcd(a : Nat, b : Nat) -> Nat =
     match b : Nat
     | 0 => a
-    | pred _ => gcd(b, Nat.rem(a, b))
+    | pred _ => gcd(b, Nat/rem(a, b))
     end;
 ```
 
@@ -146,8 +146,8 @@ Elimination matches on `s.0` to dispatch on the tag, then accesses `s.1` for the
 ```
 let area(s : Shape) -> Flt =
     match s.0 : Flt
-    | 'circle    => Flt.mul(s.1, s.1)
-    | 'rectangle => Flt.mul(s.1.0, s.1.1)
+    | 'circle    => Flt/mul(s.1, s.1)
+    | 'rectangle => Flt/mul(s.1.0, s.1.1)
     end;
 ```
 
@@ -211,14 +211,14 @@ let one  : Vec(Nat, 1) = (42, ());
 let two  : Vec(Nat, 2) = (1, (2, ()));
 ```
 
-`head` is only defined for non-empty vectors. `Nat.succ(n)` is `n + 1`, so `Vec(T, Nat.succ(n))` is the type of a vector with at least one element:
+`head` is only defined for non-empty vectors. `n + 1` is successor syntax, so `Vec(T, n + 1)` is the type of a vector with at least one element:
 
 ```
-let head(T : Type, n : Nat, v : Vec(T, Nat.succ(n))) -> T =
+let head(T : Type, n : Nat, v : Vec(T, n + 1)) -> T =
     v.0;
 ```
 
-`Vec(T, Nat.succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+`Vec(T, n + 1)` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
 ## Payoff: typed format strings
 

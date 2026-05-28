@@ -35,8 +35,8 @@ A minimal example:
 
 ```
 -- hello.crs
-let msg : Bin = "hello, world";
-Sys.print(msg)
+let msg : /sys/Bin = "hello, world";
+/sys/Io/print(msg)
 ```
 
 ```

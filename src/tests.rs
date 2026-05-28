@@ -42,7 +42,7 @@ fn io_read() {
     let (system, receiver) = crate::ChannelProvider::io(vec![b"hello\n".to_vec()]);
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/print(sys/Io/read(()))"#,
+        r#"sys/Io/print(sys/Io/read())"#,
         system,
     )
     .expect("expected result");

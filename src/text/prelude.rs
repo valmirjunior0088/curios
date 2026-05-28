@@ -253,7 +253,7 @@ fn io_ops() -> Vec<TopItem> {
             unit(),
             prim(Prim::IoPrint(Box::new(name("b")))),
         ),
-        pub_fn("read", vec![("u", unit())], bin(), prim(Prim::IoRead)),
+        pub_fn("read", vec![], bin(), prim(Prim::IoRead)),
     ]
 }
 

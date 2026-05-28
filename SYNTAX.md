@@ -6,9 +6,9 @@
 
 **Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true`
 
-**Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules.
+**Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
 
-The primitive type names (`Nat` `Int` `Flt` `Bin` `Arr` `Bln`) and the universe `Type` are **not** reserved as path segments, so a module may share the name of the type it operates on — e.g. a module `Nat` whose members are reached as `Nat/double`. This is unambiguous because member access uses a slash (`Nat/double`) while primitive operations use a dot (`Nat.add`). A **bare** occurrence always denotes the primitive (the bare form wins), so such a module is reached only through its members (`Nat/…`) or `use`, never by a bare reference.
+The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended `/sys` module, so `/sys/Nat`, `/sys/Bin`, and `/sys/Io/print` parse as ordinary paths. A source file can import those names with `use /sys/{Nat, Bin, Io};`; the example standard library in `examples/crs/std.crs` re-exports the same API under `/std`.
 
 **Whitespace** (spaces, tabs, newlines) is insignificant except as a separator between tokens.
 
@@ -33,10 +33,10 @@ Binds `name` to `body` of type `Type`. The semicolon is required.
 A function may be defined with shorthand that names its parameters and result type:
 
 ```
-pub let add(a : Nat, b : Nat) -> Nat = Nat.add(a, b);
+pub let add(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat = /sys/Nat/add(a, b);
 ```
 
-This is sugar for binding `add`, of type `(a : Nat, b : Nat) -> Nat`, to the lambda `(a, b) => Nat.add(a, b)`.
+This is sugar for binding `add`, of type `(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat`, to the lambda `(a, b) => /sys/Nat/add(a, b)`.
 
 ### Recursive bindings
 
@@ -48,10 +48,10 @@ pub and g : B = body_g;
 Declares a group of mutually recursive bindings. Each binding in the group independently accepts `pub`. The entire group is terminated by a single semicolon after the last binding. Each binding accepts the same forms as `let` — either `name : type = value` or the function-definition shorthand `name(params) -> R = body`:
 
 ```
-pub rec fact(n : Nat) -> Nat =
-    match n : Nat
+pub rec fact(n : /sys/Nat) -> /sys/Nat =
+    match n : /sys/Nat
     | 0 => 1
-    | pred ih => Nat.mul(Nat.add(pred, 1), ih)
+    | pred ih => /sys/Nat/mul(pred + 1, ih)
     end;
 ```
 
@@ -135,7 +135,7 @@ f(a)(b)
 Arguments are arbitrary terms — there is no need to parenthesise compound arguments beyond the call's own parentheses:
 
 ```
-Nat.add(Nat.mul(2, 3), 1)
+/sys/Nat/add(/sys/Nat/mul(2, 3), 1)
 ```
 
 ### Lambda
@@ -157,7 +157,7 @@ tail
 Binds `name` to `body` for the rest of `tail`. The type annotation and semicolon are required. The function-definition shorthand is also available locally:
 
 ```
-let add(a : Nat, b : Nat) -> Nat = Nat.add(a, b);
+let add(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat = /sys/Nat/add(a, b);
 tail
 ```
 
@@ -195,7 +195,7 @@ end
 **Booleans** — both branches required, either order:
 
 ```
-match cond : Bin
+match cond : /sys/Bin
 | true  => true_body
 | false => false_body
 end
@@ -204,7 +204,7 @@ end
 **Structural induction over `Nat`** — `| 0` is the base case; `| pred ih` binds the predecessor and the result already computed for it (`ih`, the induction hypothesis):
 
 ```
-match n : Nat
+match n : /sys/Nat
 | 0 => zero_case
 | pred ih => succ_case
 end
@@ -213,7 +213,7 @@ end
 **Sparse dispatch on `Nat`** — specific values plus a mandatory `| _` default that must appear last:
 
 ```
-match n : Nat
+match n : /sys/Nat
 | 0 => body
 | 3 => body
 | _ => default
@@ -276,20 +276,20 @@ Fields may optionally be named. Labels are used for documentation only; they do 
 ### Array type
 
 ```
-Arr(T)
+/sys/Arr(T)
 ```
 
-A homogeneous array of elements of type `T`. Write `Arr(Arr(Nat))` for nested arrays.
+A homogeneous array of elements of type `T`. Write `/sys/Arr(/sys/Arr(/sys/Nat))` for nested arrays.
 
 ### Primitive types
 
 | Type  | Description                  |
 | ----- | ---------------------------- |
-| `Bln` | Boolean                      |
-| `Nat` | Natural number (u32)         |
-| `Int` | Signed integer (i32)         |
-| `Flt` | Single-precision float (f32) |
-| `Bin` | Byte sequence                |
+| `/sys/Bln` | Boolean                      |
+| `/sys/Nat` | Natural number (u32)         |
+| `/sys/Int` | Signed integer (i32)         |
+| `/sys/Flt` | Single-precision float (f32) |
+| `/sys/Bin` | Byte sequence                |
 
 ## Literals
 
@@ -327,7 +327,7 @@ A sign, a decimal point, and at least one digit after the point are all required
 "hello, world"
 ```
 
-Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `Bin`.
+Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/sys/Bin`.
 
 ### Byte sequences
 
@@ -337,7 +337,7 @@ Raw bytes written as consecutive hex pairs, each prefixed with `\`:
 \ef\bb\bf
 ```
 
-Has type `Bin`.
+Has type `/sys/Bin`.
 
 ### Arrays
 
@@ -360,7 +360,7 @@ false
 true
 ```
 
-Boolean literals. Their type is `Bln`.
+Boolean literals. Their type is `/sys/Bln`.
 
 ### Tuples
 
@@ -377,113 +377,113 @@ Zero or more elements.
 All primitive operations use call syntax: the operation name followed by parenthesised, comma-separated arguments. Arguments are arbitrary terms.
 
 ```
-Nat.add(a, b)
-Bin.slice(s, start, end)
+/sys/Nat/add(a, b)
+/sys/Bin/slice(s, start, end)
 ```
+
+These are normal path references. After `use /sys/{Nat, Bin};`, the same calls can be written `Nat/add(a, b)` and `Bin/slice(s, start, end)`.
 
 ### Nat
 
 | Operation        | Arity | Description           | Returns |
 | ---------------- | ----- | --------------------- | ------- |
-| `Nat.add(a, b)`  | 2     | Addition              | `Nat`   |
-| `Nat.sub(a, b)`  | 2     | Subtraction           | `Nat`   |
-| `Nat.mul(a, b)`  | 2     | Multiplication        | `Nat`   |
-| `Nat.div(a, b)`  | 2     | Division              | `Nat`   |
-| `Nat.rem(a, b)`  | 2     | Remainder             | `Nat`   |
-| `Nat.eql(a, b)`  | 2     | Equality              | `Bln`   |
-| `Nat.neq(a, b)`  | 2     | Inequality            | `Bln`   |
-| `Nat.lt(a, b)`   | 2     | Less than             | `Bln`   |
-| `Nat.gt(a, b)`   | 2     | Greater than          | `Bln`   |
-| `Nat.lte(a, b)`  | 2     | Less than or equal    | `Bln`   |
-| `Nat.gte(a, b)`  | 2     | Greater than or equal | `Bln`   |
-| `Nat.to_int(a)`  | 1     | Convert to Int        | `Int`   |
-| `Nat.to_flt(a)`  | 1     | Convert to Flt        | `Flt`   |
-| `Nat.to_str(a)`  | 1     | Convert to Bin        | `Bin`   |
-| `Nat.succ(a)`    | 1     | Successor (add 1)     | `Nat`   |
-| `Nat.succ(n, a)` | 2     | Add `n` successors    | `Nat`   |
+| `/sys/Nat/add(a, b)`    | 2 | Addition              | `/sys/Nat` |
+| `/sys/Nat/sub(a, b)`    | 2 | Subtraction           | `/sys/Nat` |
+| `/sys/Nat/mul(a, b)`    | 2 | Multiplication        | `/sys/Nat` |
+| `/sys/Nat/div(a, b)`    | 2 | Division              | `/sys/Nat` |
+| `/sys/Nat/rem(a, b)`    | 2 | Remainder             | `/sys/Nat` |
+| `/sys/Nat/eql(a, b)`    | 2 | Equality              | `/sys/Bln` |
+| `/sys/Nat/neq(a, b)`    | 2 | Inequality            | `/sys/Bln` |
+| `/sys/Nat/lt(a, b)`     | 2 | Less than             | `/sys/Bln` |
+| `/sys/Nat/gt(a, b)`     | 2 | Greater than          | `/sys/Bln` |
+| `/sys/Nat/lte(a, b)`    | 2 | Less than or equal    | `/sys/Bln` |
+| `/sys/Nat/gte(a, b)`    | 2 | Greater than or equal | `/sys/Bln` |
+| `/sys/Nat/to_int(a)`    | 1 | Convert to Int        | `/sys/Int` |
+| `/sys/Nat/to_flt(a)`    | 1 | Convert to Flt        | `/sys/Flt` |
+| `/sys/Nat/to_str(a)`    | 1 | Convert to Bin        | `/sys/Bin` |
 
-Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively).
+Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively). Successor syntax is infix over a natural literal and a base term: `n + 1`, `2 + n`.
 
 ### Int
 
 | Operation       | Arity | Description           | Returns |
 | --------------- | ----- | --------------------- | ------- |
-| `Int.add(a, b)` | 2     | Addition              | `Int`   |
-| `Int.sub(a, b)` | 2     | Subtraction           | `Int`   |
-| `Int.mul(a, b)` | 2     | Multiplication        | `Int`   |
-| `Int.div(a, b)` | 2     | Division              | `Int`   |
-| `Int.rem(a, b)` | 2     | Remainder             | `Int`   |
-| `Int.eql(a, b)` | 2     | Equality              | `Bln`   |
-| `Int.neq(a, b)` | 2     | Inequality            | `Bln`   |
-| `Int.lt(a, b)`  | 2     | Less than             | `Bln`   |
-| `Int.gt(a, b)`  | 2     | Greater than          | `Bln`   |
-| `Int.lte(a, b)` | 2     | Less than or equal    | `Bln`   |
-| `Int.gte(a, b)` | 2     | Greater than or equal | `Bln`   |
-| `Int.to_nat(a)` | 1     | Convert to Nat        | `Nat`   |
-| `Int.to_flt(a)` | 1     | Convert to Flt        | `Flt`   |
-| `Int.to_str(a)` | 1     | Convert to Bin        | `Bin`   |
+| `/sys/Int/add(a, b)`    | 2 | Addition              | `/sys/Int` |
+| `/sys/Int/sub(a, b)`    | 2 | Subtraction           | `/sys/Int` |
+| `/sys/Int/mul(a, b)`    | 2 | Multiplication        | `/sys/Int` |
+| `/sys/Int/div(a, b)`    | 2 | Division              | `/sys/Int` |
+| `/sys/Int/rem(a, b)`    | 2 | Remainder             | `/sys/Int` |
+| `/sys/Int/eql(a, b)`    | 2 | Equality              | `/sys/Bln` |
+| `/sys/Int/neq(a, b)`    | 2 | Inequality            | `/sys/Bln` |
+| `/sys/Int/lt(a, b)`     | 2 | Less than             | `/sys/Bln` |
+| `/sys/Int/gt(a, b)`     | 2 | Greater than          | `/sys/Bln` |
+| `/sys/Int/lte(a, b)`    | 2 | Less than or equal    | `/sys/Bln` |
+| `/sys/Int/gte(a, b)`    | 2 | Greater than or equal | `/sys/Bln` |
+| `/sys/Int/to_nat(a)`    | 1 | Convert to Nat        | `/sys/Nat` |
+| `/sys/Int/to_flt(a)`    | 1 | Convert to Flt        | `/sys/Flt` |
+| `/sys/Int/to_str(a)`    | 1 | Convert to Bin        | `/sys/Bin` |
 
 ### Flt
 
 | Operation        | Arity | Description           | Returns |
 | ---------------- | ----- | --------------------- | ------- |
-| `Flt.add(a, b)`  | 2     | Addition              | `Flt`   |
-| `Flt.sub(a, b)`  | 2     | Subtraction           | `Flt`   |
-| `Flt.mul(a, b)`  | 2     | Multiplication        | `Flt`   |
-| `Flt.div(a, b)`  | 2     | Division              | `Flt`   |
-| `Flt.eql(a, b)`  | 2     | Equality              | `Bln`   |
-| `Flt.neq(a, b)`  | 2     | Inequality            | `Bln`   |
-| `Flt.lt(a, b)`   | 2     | Less than             | `Bln`   |
-| `Flt.gt(a, b)`   | 2     | Greater than          | `Bln`   |
-| `Flt.lte(a, b)`  | 2     | Less than or equal    | `Bln`   |
-| `Flt.gte(a, b)`  | 2     | Greater than or equal | `Bln`   |
-| `Flt.min(a, b)`  | 2     | Minimum               | `Flt`   |
-| `Flt.max(a, b)`  | 2     | Maximum               | `Flt`   |
-| `Flt.neg(a)`     | 1     | Negation              | `Flt`   |
-| `Flt.abs(a)`     | 1     | Absolute value        | `Flt`   |
-| `Flt.sqrt(a)`    | 1     | Square root           | `Flt`   |
-| `Flt.floor(a)`   | 1     | Floor                 | `Flt`   |
-| `Flt.ceil(a)`    | 1     | Ceiling               | `Flt`   |
-| `Flt.trunc(a)`   | 1     | Truncate toward zero  | `Flt`   |
-| `Flt.nearest(a)` | 1     | Round to nearest      | `Flt`   |
-| `Flt.to_nat(a)`  | 1     | Convert to Nat        | `Nat`   |
-| `Flt.to_int(a)`  | 1     | Convert to Int        | `Int`   |
-| `Flt.to_str(a)`  | 1     | Convert to Bin        | `Bin`   |
+| `/sys/Flt/add(a, b)`     | 2 | Addition              | `/sys/Flt` |
+| `/sys/Flt/sub(a, b)`     | 2 | Subtraction           | `/sys/Flt` |
+| `/sys/Flt/mul(a, b)`     | 2 | Multiplication        | `/sys/Flt` |
+| `/sys/Flt/div(a, b)`     | 2 | Division              | `/sys/Flt` |
+| `/sys/Flt/eql(a, b)`     | 2 | Equality              | `/sys/Bln` |
+| `/sys/Flt/neq(a, b)`     | 2 | Inequality            | `/sys/Bln` |
+| `/sys/Flt/lt(a, b)`      | 2 | Less than             | `/sys/Bln` |
+| `/sys/Flt/gt(a, b)`      | 2 | Greater than          | `/sys/Bln` |
+| `/sys/Flt/lte(a, b)`     | 2 | Less than or equal    | `/sys/Bln` |
+| `/sys/Flt/gte(a, b)`     | 2 | Greater than or equal | `/sys/Bln` |
+| `/sys/Flt/min(a, b)`     | 2 | Minimum               | `/sys/Flt` |
+| `/sys/Flt/max(a, b)`     | 2 | Maximum               | `/sys/Flt` |
+| `/sys/Flt/neg(a)`        | 1 | Negation              | `/sys/Flt` |
+| `/sys/Flt/abs(a)`        | 1 | Absolute value        | `/sys/Flt` |
+| `/sys/Flt/sqrt(a)`       | 1 | Square root           | `/sys/Flt` |
+| `/sys/Flt/floor(a)`      | 1 | Floor                 | `/sys/Flt` |
+| `/sys/Flt/ceil(a)`       | 1 | Ceiling               | `/sys/Flt` |
+| `/sys/Flt/trunc(a)`      | 1 | Truncate toward zero  | `/sys/Flt` |
+| `/sys/Flt/nearest(a)`    | 1 | Round to nearest      | `/sys/Flt` |
+| `/sys/Flt/to_nat(a)`     | 1 | Convert to Nat        | `/sys/Nat` |
+| `/sys/Flt/to_int(a)`     | 1 | Convert to Int        | `/sys/Int` |
+| `/sys/Flt/to_str(a)`     | 1 | Convert to Bin        | `/sys/Bin` |
 
 ### Bin
 
 | Operation                  | Arity    | Description                         | Returns |
 | -------------------------- | -------- | ----------------------------------- | ------- |
-| `Bin.len(a)`               | 1        | Byte length                         | `Nat`   |
-| `Bin.eql(a, b)`            | 2        | Equality                            | `Bln`   |
-| `Bin.get(a, i)`            | 2        | Byte at index `i`                   | `Nat`   |
-| `Bin.slice(a, start, end)` | 3        | Subsequence from `start` to `end`   | `Bin`   |
-| `Bin.append(a, byte)`      | 2        | Append a single byte                | `Bin`   |
-| `Bin.concat(a, b, ...)`    | variadic | Concatenate any number of sequences | `Bin`   |
+| `/sys/Bin/len(a)`               | 1 | Byte length                       | `/sys/Nat` |
+| `/sys/Bin/eql(a, b)`            | 2 | Equality                          | `/sys/Bln` |
+| `/sys/Bin/get(a, i)`            | 2 | Byte at index `i`                 | `/sys/Nat` |
+| `/sys/Bin/slice(a, start, end)` | 3 | Subsequence from `start` to `end` | `/sys/Bin` |
+| `/sys/Bin/append(a, byte)`      | 2 | Append a single byte              | `/sys/Bin` |
+| `/sys/Bin/concat(a, b)`         | 2 | Concatenate two sequences         | `/sys/Bin` |
 
 ### Arr
 
 | Operation                  | Arity    | Description                      | Returns  |
 | -------------------------- | -------- | -------------------------------- | -------- |
-| `Arr.len(a)`               | 1        | Element count                    | `Nat`    |
-| `Arr.get(a, i)`            | 2        | Element at index `i`             | `T`      |
-| `Arr.slice(a, start, end)` | 3        | Subarray from `start` to `end`   | `Arr(T)` |
-| `Arr.append(a, elem)`      | 2        | Append a single element          | `Arr(T)` |
-| `Arr.concat(a, b, ...)`    | variadic | Concatenate any number of arrays | `Arr(T)` |
+| `/sys/Arr/len(T, a)`               | 2 | Element count                  | `/sys/Nat`    |
+| `/sys/Arr/get(T, a, i)`            | 3 | Element at index `i`           | `T`           |
+| `/sys/Arr/slice(T, a, start, end)` | 4 | Subarray from `start` to `end` | `/sys/Arr(T)` |
+| `/sys/Arr/append(T, a, elem)`      | 3 | Append a single element        | `/sys/Arr(T)` |
+| `/sys/Arr/concat(T, a, b)`         | 3 | Concatenate two arrays         | `/sys/Arr(T)` |
 
-`Bin.concat` and `Arr.concat` take any number of comma-separated arguments:
+`Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more:
 
 ```
-Bin.concat("hello", ", ", "world")
-Arr.concat([1, 2], [3, 4], [5])
+/sys/Bin/concat(/sys/Bin/concat("hello", ", "), "world")
+/sys/Arr/concat(/sys/Nat, /sys/Arr/concat(/sys/Nat, [1, 2], [3, 4]), [5])
 ```
 
 ### Io
 
 | Operation     | Arity | Description                                                   | Returns |
 | ------------- | ----- | ------------------------------------------------------------- | ------- |
-| `Io.print(a)` | 1     | Print `a : Bin` to stdout                                     | `{}`    |
-| `Io.read`     | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
+| `/sys/Io/print(a)` | 1 | Print `a : /sys/Bin` to stdout                               | `{}`       |
+| `/sys/Io/read()`   | 0 | Read a line from stdin (`\n` included); empty `/sys/Bin` means EOF | `/sys/Bin` |
 
 ## Idioms
 
@@ -518,7 +518,7 @@ A value is a two-element tuple of the variant atom and its payload.
 Use `match` on the first field to dispatch on the tag, then access the second field for the payload:
 
 ```
-let unwrap_or(A : Type, r : Result(A, Bin), default : A) -> A =
+let unwrap_or(A : Type, r : Result(A, /sys/Bin), default : A) -> A =
     match r.0 : A
     | 'ok  => r.1
     | 'err => default
@@ -557,10 +557,10 @@ let three : List(Nat) = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, ())))))));
 A recursive function over the list is itself written with `rec`:
 
 ```
-rec length(A : Type, list : List(A)) -> Nat =
-    match list.0 : Nat
+rec length(A : Type, list : List(A)) -> /sys/Nat =
+    match list.0 : /sys/Nat
     | 'nil  => 0
-    | 'cons => Nat.add(1, length(A, list.1.1))
+    | 'cons => /sys/Nat/add(1, length(A, list.1.1))
     end;
 ```
 

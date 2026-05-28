@@ -14,7 +14,7 @@ fn main() {
 
         pub mod fmt;
 
-        let name : Bin = Str/trim(Io/read(()));
+        let name : Bin = Str/trim(Io/read());
         fmt/printf("%s is %d")(name)(30)
         "#;
 
