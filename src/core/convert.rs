@@ -5,7 +5,7 @@ use {
     },
     std::{
         collections::{HashSet, VecDeque},
-        time::{Duration, Instant},
+        time::Instant,
     },
 };
 
@@ -22,20 +22,18 @@ pub fn convert(
     this: &Term,
     that: &Term,
 ) -> Result<bool, Preempted> {
-    Convert::new(context.timeout(), type_.clone(), this.clone(), that.clone()).convert(context)
+    Convert::new(type_.clone(), this.clone(), that.clone()).convert(context)
 }
 
 #[derive(Debug)]
 struct Convert {
-    deadline: Instant,
     history: HashSet<Goal>,
     pending: VecDeque<Goal>,
 }
 
 impl Convert {
-    fn new(timeout: Duration, type_: Term, this: Term, that: Term) -> Self {
+    fn new(type_: Term, this: Term, that: Term) -> Self {
         Self {
-            deadline: Instant::now() + timeout,
             history: HashSet::new(),
             pending: VecDeque::from([Goal { type_, this, that }]),
         }
@@ -49,8 +47,8 @@ impl Convert {
         self.pending.push_back(Goal { type_, this, that });
     }
 
-    fn dequeue(&mut self) -> Result<Option<Goal>, Preempted> {
-        if Instant::now() > self.deadline {
+    fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, Preempted> {
+        if Instant::now() > context.deadline() {
             return Err(Preempted);
         }
 
@@ -602,7 +600,7 @@ impl Convert {
     }
 
     fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
-        while let Some(Goal { type_, this, that }) = self.dequeue()? {
+        while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
             let type_ = reduce(context, type_)?;

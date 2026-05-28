@@ -988,6 +988,13 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
     /// `>= depth`, so `shift`/`release` at that depth are the identity on it.
     fn reach(&self) -> usize;
 
+    /// `true` iff the term has no loose de Bruijn indices — i.e. it's not floating
+    /// inside some outer scope. Reducing a non-closed term doesn't make sense; this
+    /// is also the gate for memoising reductions.
+    fn closed(&self) -> bool {
+        self.reach() == 0
+    }
+
     fn shift(&self, amount: usize) -> Self {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound()
@@ -1181,7 +1188,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::SysRead => 0,
+        | Prim::IoRead => 0,
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.reach(),
 
@@ -1204,7 +1211,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinLen(t)
         | Prim::ArrType(t)
         | Prim::ArrLen(t)
-        | Prim::SysPrint(t) => t.reach(),
+        | Prim::IoPrint(t) => t.reach(),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1458,8 +1465,8 @@ where
             Prim::ArrConcat(operands) => {
                 Prim::ArrConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
             }
-            Prim::SysPrint(inner) => Prim::SysPrint(self.visit_subterm(inner)),
-            Prim::SysRead => Prim::SysRead,
+            Prim::IoPrint(inner) => Prim::IoPrint(self.visit_subterm(inner)),
+            Prim::IoRead => Prim::IoRead,
         }
     }
 

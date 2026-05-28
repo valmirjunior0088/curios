@@ -107,10 +107,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
         });
 
-        if self.table.sys_print_used() {
-            let sys_print_type = wasm::TypeName::from("sys_print_type");
+        if self.table.io_print_used() {
+            let io_print_type = wasm::TypeName::from("io_print_type");
             self.module.add_type(
-                sys_print_type.clone(),
+                io_print_type.clone(),
                 wasm::SubType {
                     is_final: true,
                     super_types: vec![],
@@ -122,18 +122,18 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
             self.module.add_import(
                 "env",
-                "sys_print",
+                "io_print",
                 wasm::Import::Func {
-                    func_name: self.table.sys_print_func().clone(),
-                    type_name: sys_print_type,
+                    func_name: self.table.io_print_func().clone(),
+                    type_name: io_print_type,
                 },
             );
         }
 
-        if self.table.sys_read_used() {
-            let sys_read_type = wasm::TypeName::from("sys_read_type");
+        if self.table.io_read_used() {
+            let io_read_type = wasm::TypeName::from("io_read_type");
             self.module.add_type(
-                sys_read_type.clone(),
+                io_read_type.clone(),
                 wasm::SubType {
                     is_final: true,
                     super_types: vec![],
@@ -145,10 +145,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
             self.module.add_import(
                 "env",
-                "sys_read",
+                "io_read",
                 wasm::Import::Func {
-                    func_name: self.table.sys_read_func().clone(),
-                    type_name: sys_read_type,
+                    func_name: self.table.io_read_func().clone(),
+                    type_name: io_read_type,
                 },
             );
         }

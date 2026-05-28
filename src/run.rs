@@ -18,7 +18,8 @@ pub fn run<P: Provider + Send + Sync + 'static>(
 ) -> Result<(), String> {
     let entrypoint = source
         .parse::<text::Entrypoint>()
-        .map_err(|error| error.format(source))?;
+        .map_err(|error| error.format(source))?
+        .with_prelude();
 
     let term = text::to_core(&entrypoint, loader).map_err(|error| error.format(source))?;
 
@@ -141,15 +142,15 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
         linker
             .func_new(
                 "env",
-                "sys_print",
+                "io_print",
                 bin_to_unit,
                 move |mut caller: Caller<'_, ()>, params, _results| {
                     let Val::AnyRef(Some(anyref)) = &params[0] else {
-                        return Err(wasmtime::Error::msg("sys_print: expected non-null anyref"));
+                        return Err(wasmtime::Error::msg("io_print: expected non-null anyref"));
                     };
                     let array_ref = anyref
                         .as_array(&caller)?
-                        .ok_or_else(|| wasmtime::Error::msg("sys_print: expected array ref"))?;
+                        .ok_or_else(|| wasmtime::Error::msg("io_print: expected array ref"))?;
                     let len = array_ref.len(&caller)?;
                     let bytes: Vec<u8> = (0..len)
                         .map(|i| array_ref.get(&mut caller, i).map(|v| v.unwrap_i32() as u8))
@@ -158,7 +159,7 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
                     Ok(())
                 },
             )
-            .map_err(|e| format!("failed to define sys_print: {e}"))?;
+            .map_err(|e| format!("failed to define io_print: {e}"))?;
     }
 
     {
@@ -169,7 +170,7 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
         linker
             .func_new(
                 "env",
-                "sys_read",
+                "io_read",
                 unit_to_bin,
                 move |mut caller: Caller<'_, ()>, _params, results| {
                     let bytes = provider.read();
@@ -181,7 +182,7 @@ pub fn run_wasm<P: Provider + Send + Sync + 'static>(
                     Ok(())
                 },
             )
-            .map_err(|e| format!("failed to define sys_read: {e}"))?;
+            .map_err(|e| format!("failed to define io_read: {e}"))?;
     }
 
     let mut store = Store::new(&engine, ());

@@ -1,5 +1,8 @@
+pub use /sys/Arr/*;
+use /sys/{Arr, Nat};
+
 pub let fold(T : Type, A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
-    match Arr.len(arr) : A
+    match len(T, arr) : A
     | 0 => init
-    | pred ih => f(Arr.get(arr, pred), ih)
+    | pred ih => f(get(T, arr, pred), ih)
     end;

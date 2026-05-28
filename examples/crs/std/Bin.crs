@@ -1,5 +1,8 @@
+pub use /sys/Bin/*;
+use /sys/{Bin, Nat};
+
 pub let fold(A : Type, str : Bin, init : A, f : (Nat, A) -> A) -> A =
-    match Bin.len(str) : A
+    match len(str) : A
     | 0 => init
-    | pred ih => f(Bin.get(str, pred), ih)
+    | pred ih => f(get(str, pred), ih)
     end;

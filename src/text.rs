@@ -18,6 +18,9 @@ pub use to_core::*;
 
 mod print;
 
+mod prelude;
+pub use prelude::*;
+
 mod parse;
 
 mod module;

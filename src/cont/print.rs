@@ -491,8 +491,8 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(" "),
             pure(index.to_string()),
         ]),
-        Code::SysPrint(operand) => flat([pure("Sys.print"), pure(" "), print_value_name(operand)]),
-        Code::SysRead => pure("Sys.read"),
+        Code::IoPrint(operand) => flat([pure("Io.print"), pure(" "), print_value_name(operand)]),
+        Code::IoRead => pure("Io.read"),
     }
 }
 

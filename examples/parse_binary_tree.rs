@@ -5,6 +5,7 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Int};
         rec Tree : Type = {
             label : '[leaf, node],
             match label : _ => Type
@@ -15,7 +16,7 @@ fn main() {
             match t.0 : _ => Int
             | 'leaf => t.1
             | 'node =>
-                Int.add(t.1.0, Int.add(sum(t.1.1), sum(t.1.2)))
+                Int/add(t.1.0, Int/add(sum(t.1.1), sum(t.1.2)))
             end;
         let tree : Tree =
             ('node, (+1,
@@ -24,7 +25,8 @@ fn main() {
         sum(tree)
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");
@@ -40,7 +42,10 @@ fn main() {
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
         &text::to_core(
-            &"Int".parse().expect("expected result type"),
+            &"use /sys/{Int}; Int"
+                .parse::<text::Entrypoint>()
+                .expect("expected result type")
+                .with_prelude(),
             &curios::text::PanicLoader,
         )
         .expect("expected result type"),

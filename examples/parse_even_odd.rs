@@ -5,6 +5,7 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Nat, Bln};
         rec is_even : Nat -> Bln = n =>
             match n : _ => Bln
             | 0 => true
@@ -18,7 +19,8 @@ fn main() {
         is_even(10)
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");
@@ -34,7 +36,10 @@ fn main() {
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
         &text::to_core(
-            &"Bln".parse().expect("expected result type"),
+            &"use /sys/{Bln}; Bln"
+                .parse::<text::Entrypoint>()
+                .expect("expected result type")
+                .with_prelude(),
             &curios::text::PanicLoader,
         )
         .expect("expected result type"),

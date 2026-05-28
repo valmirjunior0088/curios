@@ -1,8 +1,8 @@
 pub mod Value;
-pub use Value/Value;
+pub use Value/{Value};
 
 pub mod encode;
-pub use encode/encode;
+pub use encode/{encode};
 
 pub mod decode;
-pub use decode/decode;
+pub use decode/{decode};

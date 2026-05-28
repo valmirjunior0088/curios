@@ -109,16 +109,16 @@ pub enum Prim {
     BinGet(Subterm, Subterm),
     BinSlice(Subterm, Subterm, Subterm),
     BinAppend(Subterm, Subterm),
-    BinConcat(Vec<Subterm>),
+    BinConcat(Subterm, Subterm),
     ArrType(Subterm),
     Arr(Vec<Subterm>),
     ArrLen(Subterm),
     ArrGet(Subterm, Subterm),
     ArrSlice(Subterm, Subterm, Subterm),
     ArrAppend(Subterm, Subterm),
-    ArrConcat(Vec<Subterm>),
-    SysPrint(Subterm),
-    SysRead,
+    ArrConcat(Subterm, Subterm),
+    IoPrint(Subterm),
+    IoRead,
 }
 
 impl Prim {
@@ -546,17 +546,12 @@ impl Prim {
         Self::BinAppend(bin.into().into(), byte.into().into())
     }
 
-    pub fn bin_concat<I>(operands: I) -> Self
+    pub fn bin_concat<F, S>(left: F, right: S) -> Self
     where
-        I: IntoIterator,
-        I::Item: Into<Term>,
+        F: Into<Term>,
+        S: Into<Term>,
     {
-        Self::BinConcat(
-            operands
-                .into_iter()
-                .map(|operand| operand.into().into())
-                .collect(),
-        )
+        Self::BinConcat(left.into().into(), right.into().into())
     }
 
     pub fn arr_type<T>(elem: T) -> Self
@@ -598,24 +593,19 @@ impl Prim {
         Self::ArrAppend(list.into().into(), elem.into().into())
     }
 
-    pub fn arr_concat<I>(operands: I) -> Self
+    pub fn arr_concat<F, S>(left: F, right: S) -> Self
     where
-        I: IntoIterator,
-        I::Item: Into<Term>,
+        F: Into<Term>,
+        S: Into<Term>,
     {
-        Self::ArrConcat(
-            operands
-                .into_iter()
-                .map(|operand| operand.into().into())
-                .collect(),
-        )
+        Self::ArrConcat(left.into().into(), right.into().into())
     }
 
-    pub fn sys_print<T>(inner: T) -> Self
+    pub fn io_print<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::SysPrint(inner.into().into())
+        Self::IoPrint(inner.into().into())
     }
 }
 

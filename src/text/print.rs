@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, Let,
-        Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopItem, TopLet, TopMod,
-        TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
+        GroupItem, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopItem,
+        TopLet, TopMod, TopUse, Tuple, TupleType, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -162,9 +162,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinGet(bin, index) => print_prim_call("Bin.get", vec![*bin, *index]),
         Prim::BinSlice(bin, start, end) => print_prim_call("Bin.slice", vec![*bin, *start, *end]),
         Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![*bin, *byte]),
-        Prim::BinConcat(operands) => {
-            print_prim_call("Bin.concat", operands.into_iter().map(|b| *b).collect())
-        }
+        Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![*left, *right]),
         Prim::ArrType(elem) => print_prim_call("Arr", vec![*elem]),
         Prim::Arr(elems) => flat([
             pure("["),
@@ -178,11 +176,9 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::ArrGet(list, index) => print_prim_call("Arr.get", vec![*list, *index]),
         Prim::ArrSlice(list, start, end) => print_prim_call("Arr.slice", vec![*list, *start, *end]),
         Prim::ArrAppend(list, elem) => print_prim_call("Arr.append", vec![*list, *elem]),
-        Prim::ArrConcat(operands) => {
-            print_prim_call("Arr.concat", operands.into_iter().map(|b| *b).collect())
-        }
-        Prim::SysPrint(operand) => print_prim_call("Sys.print", vec![*operand]),
-        Prim::SysRead => pure("Sys.read"),
+        Prim::ArrConcat(left, right) => print_prim_call("Arr.concat", vec![*left, *right]),
+        Prim::IoPrint(operand) => print_prim_call("Io.print", vec![*operand]),
+        Prim::IoRead => pure("Io.read"),
     }
 }
 
@@ -390,15 +386,29 @@ fn print_pub(is_pub: bool) -> Printer<'static> {
     if is_pub { pure("pub ") } else { pure("") }
 }
 
+fn print_group_item(item: &GroupItem) -> String {
+    match item {
+        GroupItem::Mod(s) => format!("mod {s}"),
+        GroupItem::Let(s) => format!("let {s}"),
+        GroupItem::Both(s) => s.clone(),
+    }
+}
+
 fn print_top_use(item: TopUse) -> Printer<'static> {
     flat([
         print_pub(item.is_pub),
         pure("use "),
-        if item.is_abs { pure("/") } else { pure("") },
         pure(item.name.join()),
         match item.group {
-            None => pure(""),
-            Some(labels) => pure(format!("/{{{}}}", labels.join(", "))),
+            UseGroup::Named(items) => pure(format!(
+                "/{{{}}}",
+                items
+                    .iter()
+                    .map(print_group_item)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            UseGroup::Glob => pure("/*"),
         },
         pure(";"),
     ])

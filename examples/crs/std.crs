@@ -1,14 +1,24 @@
-pub mod Arr;
-
-pub mod Bin;
-
-pub mod Bln;
+pub mod Nat;
+pub let Nat : Type = /sys/Nat;
 
 pub mod Int;
+pub let Int : Type = /sys/Int;
 
-pub mod Nat;
+pub mod Flt;
+pub let Flt : Type = /sys/Flt;
+
+pub mod Bin;
+pub let Bin : Type = /sys/Bin;
+
+pub mod Bln;
+pub let Bln : Type = /sys/Bln;
+
+pub mod Arr;
+pub let Arr(T : Type) -> Type = /sys/Arr(T);
+
+pub mod Io;
 
 pub mod Str;
 
 pub mod Parse;
-pub use Parse/Parse;
+pub use Parse/{Parse};

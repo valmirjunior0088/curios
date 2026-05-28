@@ -6,16 +6,16 @@ fn end_to_end() {
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type
-            | 'left => Int
-            | 'right => Flt
+            | 'left => sys/Int
+            | 'right => sys/Flt
             end };
         let pair : pair_ty = ('left, +42);
-        let score : (_ : pair_ty) -> Int = p =>
-            match p.0 : _ => Int
+        let score : (_ : pair_ty) -> sys/Int = p =>
+            match p.0 : _ => sys/Int
             | 'left => +42
             | 'right => +7
             end;
-        Sys.print(Int.to_str(score(pair)))
+        sys/Io/print(sys/Int/to_str(score(pair)))
         "#;
 
     let (system, receiver) = crate::ChannelProvider::out();
@@ -27,9 +27,9 @@ fn end_to_end() {
 }
 
 #[test]
-fn sys_print() {
+fn io_print() {
     let (system, receiver) = crate::ChannelProvider::out();
-    crate::run_text(Duration::from_secs(5), r#"Sys.print("hello")"#, system)
+    crate::run_text(Duration::from_secs(5), r#"sys/Io/print("hello")"#, system)
         .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
@@ -38,10 +38,14 @@ fn sys_print() {
 }
 
 #[test]
-fn sys_read() {
+fn io_read() {
     let (system, receiver) = crate::ChannelProvider::io(vec![b"hello\n".to_vec()]);
-    crate::run_text(Duration::from_secs(5), r#"Sys.print(Sys.read)"#, system)
-        .expect("expected result");
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"sys/Io/print(sys/Io/read(()))"#,
+        system,
+    )
+    .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"hello\n".to_vec()]
@@ -51,12 +55,12 @@ fn sys_read() {
 #[test]
 fn triangular_sum() {
     let source = r#"
-        let result : Nat =
-            match 5 : _ => Nat
+        let result : sys/Nat =
+            match 5 : _ => sys/Nat
             | 0 => 0
-            | pred ih => Nat.add(ih, pred)
+            | pred ih => sys/Nat/add(ih, pred)
             end;
-        Sys.print(Nat.to_str(result))
+        sys/Io/print(sys/Nat/to_str(result))
         "#;
 
     let (system, receiver) = crate::ChannelProvider::out();
@@ -70,8 +74,8 @@ fn triangular_sum() {
 #[test]
 fn multi_arg_function() {
     let source = r#"
-        let add : (Int, Int) -> Int = (x, y) => Int.add(x, y);
-        Sys.print(Int.to_str(add(+3, +4)))
+        let add : (sys/Int, sys/Int) -> sys/Int = (x, y) => sys/Int/add(x, y);
+        sys/Io/print(sys/Int/to_str(add(+3, +4)))
         "#;
 
     let (system, receiver) = crate::ChannelProvider::out();
@@ -82,8 +86,8 @@ fn multi_arg_function() {
 #[test]
 fn curried_function() {
     let source = r#"
-        let add : Int -> Int -> Int = x => y => Int.add(x, y);
-        Sys.print(Int.to_str(add(+3)(+4)))
+        let add : sys/Int -> sys/Int -> sys/Int = x => y => sys/Int/add(x, y);
+        sys/Io/print(sys/Int/to_str(add(+3)(+4)))
         "#;
 
     let (system, receiver) = crate::ChannelProvider::out();
@@ -94,20 +98,20 @@ fn curried_function() {
 #[test]
 fn vec_cons_with_nat_succ() {
     let source = r#"
-        rec Vec(T : Type, n : Nat) -> Type =
+        rec Vec(T : Type, n : sys/Nat) -> Type =
             match n : Type
             | 0 => '[nil]
             | pred ih => { T, ih }
             end;
 
-        let cons(T : Type, n : Nat, x : T, xs : Vec(T, n)) -> Vec(T, Nat.succ(n)) =
+        let cons(T : Type, n : sys/Nat, x : T, xs : Vec(T, n)) -> Vec(T, n + 1) =
             (x, xs);
 
-        let head(T : Type, n : Nat, xs : Vec(T, Nat.succ(n))) -> T =
+        let head(T : Type, n : sys/Nat, xs : Vec(T, n + 1)) -> T =
             xs.0;
 
-        let v : Vec(Nat, 1) = cons(Nat, 0, 42, 'nil);
-        Sys.print(Nat.to_str(head(Nat, 0, v)))
+        let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, 'nil);
+        sys/Io/print(sys/Nat/to_str(head(sys/Nat, 0, v)))
     "#;
 
     let (system, receiver) = crate::ChannelProvider::out();

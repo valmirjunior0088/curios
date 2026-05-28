@@ -1,4 +1,4 @@
-use /std/Parse;
+use /std/{Bin, Nat, Parse, Io, Bln};
 
 pub rec Fmt : Type = {
     tag : '[nil, lit, str, nat],
@@ -24,10 +24,10 @@ let is_not_pct(byte : Nat) -> Bln =
     end;
 
 rec parse_fmt : Parse(Fmt) = (input, pos) =>
-    match Nat.lt(pos, Bin.len(input)) : Parse/Result({ Nat, Fmt })
+    match Nat/lt(pos, Bin/len(input)) : Parse/Result({ Nat, Fmt })
     | false => ('ok, (pos, ('nil, ())))
     | true  =>
-        match Nat.eql(Bin.get(input, pos), '%') : Parse/Result({ Nat, Fmt })
+        match Nat/eql(Bin/get(input, pos), '%') : Parse/Result({ Nat, Fmt })
         | false => parse_lit(input, pos)
         | true  => parse_spec(input, pos)
         end
@@ -58,13 +58,13 @@ pub let parse(input : Bin) -> Fmt =
 rec go_with(result : Type, finish : Bin -> result, f : Fmt, acc : Bin) -> format_type_with(result, f) =
     match f.0 : format_type_with(result, f)
     | 'nil => finish(acc)
-    | 'lit => go_with(result, finish, f.1.1, Bin.concat(acc, f.1.0))
-    | 'str => s => go_with(result, finish, f.1, Bin.concat(acc, s))
-    | 'nat => n => go_with(result, finish, f.1, Bin.concat(acc, Nat.to_str(n)))
+    | 'lit => go_with(result, finish, f.1.1, Bin/concat(acc, f.1.0))
+    | 'str => s => go_with(result, finish, f.1, Bin/concat(acc, s))
+    | 'nat => n => go_with(result, finish, f.1, Bin/concat(acc, Nat/to_str(n)))
     end;
 
 pub let format(s : Bin) -> format_type_with(Bin, parse(s)) =
     go_with(Bin, x => x, parse(s), "");
 
 pub let printf(s : Bin) -> format_type_with({}, parse(s)) =
-    go_with({}, x => Sys.print(x), parse(s), "");
+    go_with({}, x => Io/print(x), parse(s), "");

@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, Let,
-        Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, RecItem, Term,
-        TopItem, TopLet, TopMod, TopUse, Tuple, TupleType,
+        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
+        GroupItem, Let, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Path, Prim, Proj,
+        Rec, RecItem, Term, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType, UseGroup,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -44,26 +44,27 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 }
 
 fn parse_name<'a>() -> Parser<'a, Name> {
-    parse_identifier()
-        .and(many0(|| {
+    catch(take_exact("/"))
+        .map(|()| true)
+        .or(pure(false))
+        .and(parse_identifier().and(many0(|| {
             catch(take_exact("/").and_keep(parse_identifier()))
-        }))
-        .map(|(first, rest)| {
-            iter::once(first)
+        })))
+        .flat_map(|(is_abs, (first, rest))| {
+            let segments = iter::once(first)
                 .chain(rest)
                 .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .flat_map(|path| {
-            match path
+                .collect::<Vec<_>>();
+
+            match segments
                 .iter()
                 .any(|segment| KEYWORDS.contains(&segment.as_str()))
             {
                 true => fail(format!(
                     "path '{}' contains a reserved keyword",
-                    path.join("/")
+                    segments.join("/")
                 )),
-                false => pure(Name::from(path)),
+                false => pure(Name::new(is_abs, Path::from(segments))),
             }
         })
 }
@@ -135,24 +136,29 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
     })
 }
 
+// Successor as the infix `+`: a nat literal on either side of a base term
+// produces `Nat::Succ(literal, base)`. Whitespace around `+` is conventional
+// (keeps `n + 1` distinct from the `+1` int literal at a glance).
 fn parse_nat_succ<'a>() -> Parser<'a, Term> {
-    catch(
-        parse_literal("Nat.succ")
-            .and_drop(parse_literal("("))
-            .and_keep(parse_nat_literal())
-            .and_drop(parse_literal(",")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(")"))
-    .map(|(spine, inner)| {
-        Term::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::Number(spine),
-            Box::new(inner),
-        )))
-    })
-    .or(parse_prim1("Nat.succ", |a| {
-        Prim::Nat(Nat::Succ(NatLiteral::Number(1), Box::new(a)))
-    }))
+    let lit_first = catch(parse_nat_literal().and_drop(parse_literal("+")))
+        .and(parse_atomic_term())
+        .map(|(spine, base)| {
+            Term::Prim(Prim::Nat(Nat::Succ(
+                NatLiteral::Number(spine),
+                Box::new(base),
+            )))
+        });
+
+    let base_first = catch(parse_atomic_term().and_drop(parse_literal("+")))
+        .and(parse_nat_literal())
+        .map(|(base, spine)| {
+            Term::Prim(Prim::Nat(Nat::Succ(
+                NatLiteral::Number(spine),
+                Box::new(base),
+            )))
+        });
+
+    lit_first.or(base_first)
 }
 
 fn parse_nat_literal<'a>() -> Parser<'a, u32> {
@@ -201,118 +207,6 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
             .and_drop(parse_whitespace()),
     )
     .map(|value| Term::Prim(Prim::Flt(value)))
-}
-
-fn parse_prim1<'a, F>(name: &'static str, ctor: F) -> Parser<'a, Term>
-where
-    F: FnOnce(Term) -> Prim + 'a,
-{
-    catch(parse_literal(name).and_drop(parse_literal("(")))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(")"))
-        .map(move |a| Term::Prim(ctor(a)))
-}
-
-fn parse_prim2<'a, F>(name: &'static str, ctor: F) -> Parser<'a, Term>
-where
-    F: FnOnce(Term, Term) -> Prim + 'a,
-{
-    catch(parse_literal(name).and_drop(parse_literal("(")))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(","))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(")"))
-        .map(move |(a, b)| Term::Prim(ctor(a, b)))
-}
-
-fn parse_prim3<'a, F>(name: &'static str, ctor: F) -> Parser<'a, Term>
-where
-    F: FnOnce(Term, Term, Term) -> Prim + 'a,
-{
-    catch(parse_literal(name).and_drop(parse_literal("(")))
-        .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(","))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(","))
-        .and(lazy(parse_term))
-        .and_drop(parse_literal(")"))
-        .map(move |((a, b), c)| Term::Prim(ctor(a, b, c)))
-}
-
-fn parse_prim_variadic<'a, F>(name: &'static str, ctor: F) -> Parser<'a, Term>
-where
-    F: FnOnce(Vec<Term>) -> Prim + 'a,
-{
-    catch(parse_literal(name).and_drop(parse_literal("(")))
-        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
-        .and_drop(parse_literal(")"))
-        .map(move |ops| Term::Prim(ctor(ops)))
-}
-
-fn parse_nat_prim<'a>() -> Parser<'a, Term> {
-    parse_prim2("Nat.eql", Prim::nat_eql)
-        .or(parse_prim2("Nat.neq", Prim::nat_neq))
-        .or(parse_prim2("Nat.add", Prim::nat_add))
-        .or(parse_prim2("Nat.sub", Prim::nat_sub))
-        .or(parse_prim2("Nat.mul", Prim::nat_mul))
-        .or(parse_prim2("Nat.lte", Prim::nat_lte))
-        .or(parse_prim2("Nat.gte", Prim::nat_gte))
-        .or(parse_prim2("Nat.lt", Prim::nat_lt))
-        .or(parse_prim2("Nat.div", Prim::nat_div))
-        .or(parse_prim2("Nat.rem", Prim::nat_rem))
-        .or(parse_prim2("Nat.gt", Prim::nat_gt))
-        .or(parse_prim1("Nat.to_int", Prim::nat_to_int))
-        .or(parse_prim1("Nat.to_flt", Prim::nat_to_flt))
-        .or(parse_prim1("Nat.to_str", Prim::nat_to_str))
-        .or(parse_nat_succ())
-        .or(parse_nat_value())
-        .or(catch(parse_keyword("Nat")).map(|()| Term::Prim(Prim::NatType)))
-}
-
-fn parse_int_prim<'a>() -> Parser<'a, Term> {
-    parse_prim2("Int.eql", Prim::int_eql)
-        .or(parse_prim2("Int.neq", Prim::int_neq))
-        .or(parse_prim2("Int.add", Prim::int_add))
-        .or(parse_prim2("Int.sub", Prim::int_sub))
-        .or(parse_prim2("Int.mul", Prim::int_mul))
-        .or(parse_prim2("Int.div", Prim::int_div))
-        .or(parse_prim2("Int.rem", Prim::int_rem))
-        .or(parse_prim2("Int.lte", Prim::int_lte))
-        .or(parse_prim2("Int.gte", Prim::int_gte))
-        .or(parse_prim2("Int.lt", Prim::int_lt))
-        .or(parse_prim2("Int.gt", Prim::int_gt))
-        .or(parse_prim1("Int.to_nat", Prim::int_to_nat))
-        .or(parse_prim1("Int.to_flt", Prim::int_to_flt))
-        .or(parse_prim1("Int.to_str", Prim::int_to_str))
-        .or(parse_int_value())
-        .or(catch(parse_keyword("Int")).map(|()| Term::Prim(Prim::IntType)))
-}
-
-fn parse_flt_prim<'a>() -> Parser<'a, Term> {
-    parse_prim2("Flt.add", Prim::flt_add)
-        .or(parse_prim2("Flt.sub", Prim::flt_sub))
-        .or(parse_prim2("Flt.mul", Prim::flt_mul))
-        .or(parse_prim2("Flt.div", Prim::flt_div))
-        .or(parse_prim2("Flt.eql", Prim::flt_eql))
-        .or(parse_prim2("Flt.neq", Prim::flt_neq))
-        .or(parse_prim2("Flt.lte", Prim::flt_lte))
-        .or(parse_prim2("Flt.gte", Prim::flt_gte))
-        .or(parse_prim2("Flt.lt", Prim::flt_lt))
-        .or(parse_prim2("Flt.gt", Prim::flt_gt))
-        .or(parse_prim2("Flt.min", Prim::flt_min))
-        .or(parse_prim2("Flt.max", Prim::flt_max))
-        .or(parse_prim1("Flt.neg", Prim::flt_neg))
-        .or(parse_prim1("Flt.abs", Prim::flt_abs))
-        .or(parse_prim1("Flt.sqrt", Prim::flt_sqrt))
-        .or(parse_prim1("Flt.floor", Prim::flt_floor))
-        .or(parse_prim1("Flt.ceil", Prim::flt_ceil))
-        .or(parse_prim1("Flt.trunc", Prim::flt_trunc))
-        .or(parse_prim1("Flt.nearest", Prim::flt_nearest))
-        .or(parse_prim1("Flt.to_nat", Prim::flt_to_nat))
-        .or(parse_prim1("Flt.to_int", Prim::flt_to_int))
-        .or(parse_prim1("Flt.to_str", Prim::flt_to_str))
-        .or(parse_flt_value())
-        .or(catch(parse_keyword("Flt")).map(|()| Term::Prim(Prim::FltType)))
 }
 
 fn parse_hex_byte<'a>() -> Parser<'a, u8> {
@@ -374,20 +268,6 @@ fn parse_bin_literal<'a>() -> Parser<'a, Term> {
         .map(|bytes| Term::Prim(Prim::Bin(BinLiteral::Bytes(bytes))))
 }
 
-fn parse_bin_prim<'a>() -> Parser<'a, Term> {
-    parse_prim1("Bin.len", Prim::bin_len)
-        .or(parse_prim2("Bin.eql", Prim::bin_eql))
-        .or(parse_prim2("Bin.get", Prim::bin_get))
-        .or(parse_prim3("Bin.slice", Prim::bin_slice))
-        .or(parse_prim2("Bin.append", Prim::bin_append))
-        .or(parse_prim_variadic("Bin.concat", |ops| {
-            Prim::bin_concat(ops)
-        }))
-        .or(catch(parse_keyword("Bin")).map(|()| Term::Prim(Prim::BinType)))
-        .or(parse_string_literal())
-        .or(parse_bin_literal())
-}
-
 fn parse_arr_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
@@ -399,41 +279,23 @@ fn parse_arr_literal<'a>() -> Parser<'a, Term> {
         })
 }
 
-fn parse_arr_prim<'a>() -> Parser<'a, Term> {
-    parse_prim1("Arr.len", Prim::arr_len)
-        .or(parse_prim2("Arr.get", Prim::arr_get))
-        .or(parse_prim3("Arr.slice", Prim::arr_slice))
-        .or(parse_prim2("Arr.append", Prim::arr_append))
-        .or(parse_prim_variadic("Arr.concat", |ops| {
-            Prim::arr_concat(ops)
-        }))
-        .or(catch(parse_keyword("Arr").and_drop(parse_literal("(")))
-            .and_keep(lazy(parse_term))
-            .and_drop(parse_literal(")"))
-            .map(|elem| Term::Prim(Prim::arr_type(elem))))
-        .or(parse_arr_literal())
-}
-
-fn parse_sys_prim<'a>() -> Parser<'a, Term> {
-    parse_prim1("Sys.print", Prim::sys_print)
-        .or(catch(parse_literal("Sys.read")).map(|_| Term::Prim(Prim::SysRead)))
-}
-
 fn parse_bln_prim<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Bln"))
-        .map(|()| Term::Prim(Prim::BlnType))
-        .or(catch(parse_keyword("false")).map(|()| Term::Prim(Prim::Bln(false))))
+    catch(parse_keyword("false"))
+        .map(|()| Term::Prim(Prim::Bln(false)))
         .or(catch(parse_keyword("true")).map(|()| Term::Prim(Prim::Bln(true))))
 }
 
+// Primitive types and operations are no longer surface syntax — they live in the
+// `sys` module (see `prelude.rs`) and parse as ordinary names. Only genuine
+// literals (and the boolean keywords) remain here.
 fn parse_prim<'a>() -> Parser<'a, Term> {
     parse_bln_prim()
-        .or(parse_flt_prim())
-        .or(parse_int_prim())
-        .or(parse_nat_prim())
-        .or(parse_bin_prim())
-        .or(parse_arr_prim())
-        .or(parse_sys_prim())
+        .or(parse_flt_value())
+        .or(parse_int_value())
+        .or(parse_nat_value())
+        .or(parse_string_literal())
+        .or(parse_bin_literal())
+        .or(parse_arr_literal())
 }
 
 fn parse_atom_label<'a>() -> Parser<'a, Atom> {
@@ -869,6 +731,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
             .or(parse_match())
             .or(parse_func_type())
             .or(parse_func())
+            .or(parse_nat_succ())
             .or(parse_atomic_term()),
     )
 }
@@ -951,31 +814,77 @@ fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-fn parse_brace_group<'a>() -> Parser<'a, Vec<String>> {
+// Like `parse_name`, but additionally accepts an empty absolute path. The
+// leading `/` is only consumed when followed by an identifier — so for
+// `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for
+// `parse_use_group` to consume as its separator.
+fn parse_use_path<'a>() -> Parser<'a, Name> {
+    catch(
+        take_exact("/")
+            .and_keep(parse_identifier())
+            .and(many0(|| catch(take_exact("/").and_keep(parse_identifier())))),
+    )
+    .map(|(first, rest)| {
+        Name::new(
+            true,
+            Path::from(iter::once(first).chain(rest).map(str::to_string).collect::<Vec<_>>()),
+        )
+    })
+    .or(catch(
+        parse_identifier()
+            .and(many0(|| catch(take_exact("/").and_keep(parse_identifier())))),
+    )
+    .map(|(first, rest)| {
+        Name::new(
+            false,
+            Path::from(iter::once(first).chain(rest).map(str::to_string).collect::<Vec<_>>()),
+        )
+    }))
+    .or(pure(Name::new(true, Path::empty())))
+    .flat_map(|name| {
+        match name
+            .path()
+            .segments()
+            .iter()
+            .any(|segment| KEYWORDS.contains(&segment.as_str()))
+        {
+            true => fail(format!(
+                "path '{}' contains a reserved keyword",
+                name.path().join()
+            )),
+            false => pure(name),
+        }
+    })
+}
+
+fn parse_group_item<'a>() -> Parser<'a, GroupItem> {
+    catch(parse_keyword("mod").and_keep(parse_identifier()))
+        .map(|s| GroupItem::Mod(s.to_string()))
+        .or(catch(parse_keyword("let").and_keep(parse_identifier()))
+            .map(|s| GroupItem::Let(s.to_string())))
+        .or(parse_identifier().map(|s| GroupItem::Both(s.to_string())))
+}
+
+fn parse_brace_group<'a>() -> Parser<'a, Vec<GroupItem>> {
     catch(parse_literal("{"))
-        .and_keep(sep_by1(
-            || parse_identifier().map(|s| s.to_string()),
-            || parse_literal(","),
-        ))
+        .and_keep(sep_by0(parse_group_item, || parse_literal(",")))
         .and_drop(parse_literal("}"))
+}
+
+fn parse_use_group<'a>() -> Parser<'a, UseGroup> {
+    catch(take_exact("/").and_keep(parse_brace_group()))
+        .map(UseGroup::Named)
+        .or(catch(take_exact("/").and_keep(parse_literal("*"))).map(|()| UseGroup::Glob))
 }
 
 fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("use"))).flat_map(|(is_pub, ())| {
-        catch(take_exact("/"))
-            .map(|()| true)
-            .or(pure(false))
-            .and(parse_name())
-            .and(
-                catch(take_exact("/").and_keep(parse_brace_group()))
-                    .map(Some)
-                    .or(pure(None)),
-            )
+        parse_use_path()
+            .and(parse_use_group())
             .and_drop(parse_literal(";"))
-            .map(move |((is_abs, name), group)| {
+            .map(move |(name, group)| {
                 TopItem::Use(TopUse {
                     is_pub,
-                    is_abs,
                     name,
                     group,
                 })
@@ -1013,7 +922,7 @@ impl FromStr for Entrypoint {
                 .and_keep(many0(parse_top_item))
                 .and(lazy(parse_term))
                 .and_drop(take_eof())
-                .map(|(items, tail)| Entrypoint { items, tail }),
+                .map(|(items, tail)| Entrypoint::new(items, tail)),
             input,
         )
     }
@@ -1116,9 +1025,6 @@ mod tests {
 
     #[test]
     fn parse_prim() {
-        assert_eq!("Int".parse::<Term>().unwrap(), Term::Prim(Prim::IntType));
-        assert_eq!("Flt".parse::<Term>().unwrap(), Term::Prim(Prim::FltType));
-        assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
         assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
         assert_eq!(
             "42".parse::<Term>().unwrap(),
@@ -1132,34 +1038,10 @@ mod tests {
             Term::Prim(Prim::Flt(1.5_f32))
         );
         assert_eq!(
-            "Int.add(+1, +2)".parse::<Term>().unwrap(),
-            Term::Prim(Prim::IntAdd(
-                Term::Prim(Prim::Int(1)).into(),
-                Term::Prim(Prim::Int(2)).into(),
-            ))
+            "false".parse::<Term>().unwrap(),
+            Term::Prim(Prim::Bln(false))
         );
-        assert_eq!(
-            "Nat.add(1, 2)".parse::<Term>().unwrap(),
-            Term::Prim(Prim::NatAdd(
-                Term::Prim(Prim::Nat(Nat::Succ(
-                    NatLiteral::Number(1),
-                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-                )))
-                .into(),
-                Term::Prim(Prim::Nat(Nat::Succ(
-                    NatLiteral::Number(2),
-                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-                )))
-                .into(),
-            ))
-        );
-        assert_eq!(
-            "Flt.mul(+1.5, +2.0)".parse::<Term>().unwrap(),
-            Term::Prim(Prim::FltMul(
-                Term::Prim(Prim::Flt(1.5_f32)).into(),
-                Term::Prim(Prim::Flt(2.0_f32)).into(),
-            ))
-        );
+        assert_eq!("true".parse::<Term>().unwrap(), Term::Prim(Prim::Bln(true)));
     }
 
     #[test]
@@ -1266,7 +1148,7 @@ mod tests {
     #[test]
     fn parse_module_roundtrip() {
         let m = r#"
-            use Bar;
+            use Bar/{x};
             pub let x : Type = Type;
             rec f : Type = Type;
         "#
@@ -1310,8 +1192,8 @@ mod tests {
     #[test]
     fn parse_entrypoint_roundtrip() {
         let entrypoint = r#"
-            use Foo;
-            use Bar;
+            use Foo/{x};
+            use Bar/{x};
             pub rec f : Type = Type;
             let x : Type = Type;
             f
@@ -1354,46 +1236,20 @@ mod tests {
     }
 
     #[test]
-    fn bare_type_names_still_parse_as_prims() {
-        assert_eq!("Nat".parse::<Term>().unwrap(), Term::Prim(Prim::NatType));
+    fn bare_type_names_parse_as_names() {
+        assert_eq!(
+            "Nat".parse::<Term>().unwrap(),
+            Term::Name(Name::from(["Nat".to_string()]))
+        );
+        assert_eq!(
+            "Int".parse::<Term>().unwrap(),
+            Term::Name(Name::from(["Int".to_string()]))
+        );
+        assert_eq!(
+            "Flt".parse::<Term>().unwrap(),
+            Term::Name(Name::from(["Flt".to_string()]))
+        );
         assert_eq!("Type".parse::<Term>().unwrap(), Term::Type);
-        assert_eq!(
-            "Nat.add(1, 2)".parse::<Term>().unwrap(),
-            Term::Prim(Prim::NatAdd(
-                Term::Prim(Prim::Nat(Nat::Succ(
-                    NatLiteral::Number(1),
-                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-                )))
-                .into(),
-                Term::Prim(Prim::Nat(Nat::Succ(
-                    NatLiteral::Number(2),
-                    Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-                )))
-                .into(),
-            ))
-        );
-    }
-
-    #[test]
-    fn parse_use_of_type_named_module() {
-        assert_eq!(
-            "use Nat;".parse::<Module>().unwrap().items,
-            vec![TopItem::Use(TopUse {
-                is_pub: false,
-                is_abs: false,
-                name: Name::from(["Nat".to_string()]),
-                group: None,
-            })]
-        );
-        assert_eq!(
-            "use Foo/Int;".parse::<Module>().unwrap().items,
-            vec![TopItem::Use(TopUse {
-                is_pub: false,
-                is_abs: false,
-                name: Name::from(["Foo".to_string(), "Int".to_string()]),
-                group: None,
-            })]
-        );
     }
 
     #[test]
@@ -1402,9 +1258,54 @@ mod tests {
             "use /std/{Bin, Arr};".parse::<Module>().unwrap().items,
             vec![TopItem::Use(TopUse {
                 is_pub: false,
-                is_abs: true,
-                name: Name::from(["std".to_string()]),
-                group: Some(vec!["Bin".to_string(), "Arr".to_string()]),
+                name: Name::new(true, Path::from(["std".to_string()])),
+                group: UseGroup::Named(vec![
+                    GroupItem::Both("Bin".to_string()),
+                    GroupItem::Both("Arr".to_string()),
+                ]),
+            })]
+        );
+    }
+
+    #[test]
+    fn parse_use_brace_group_kinds() {
+        assert_eq!(
+            "use /std/{mod Bin, let Nat, Arr};"
+                .parse::<Module>()
+                .unwrap()
+                .items,
+            vec![TopItem::Use(TopUse {
+                is_pub: false,
+                name: Name::new(true, Path::from(["std".to_string()])),
+                group: UseGroup::Named(vec![
+                    GroupItem::Mod("Bin".to_string()),
+                    GroupItem::Let("Nat".to_string()),
+                    GroupItem::Both("Arr".to_string()),
+                ]),
+            })]
+        );
+    }
+
+    #[test]
+    fn parse_use_brace_group_empty() {
+        assert_eq!(
+            "use /std/{};".parse::<Module>().unwrap().items,
+            vec![TopItem::Use(TopUse {
+                is_pub: false,
+                name: Name::new(true, Path::from(["std".to_string()])),
+                group: UseGroup::Named(vec![]),
+            })]
+        );
+    }
+
+    #[test]
+    fn parse_use_glob() {
+        assert_eq!(
+            "use /sys/Nat/*;".parse::<Module>().unwrap().items,
+            vec![TopItem::Use(TopUse {
+                is_pub: false,
+                name: Name::new(true, Path::from(["sys".to_string(), "Nat".to_string()])),
+                group: UseGroup::Glob,
             })]
         );
     }

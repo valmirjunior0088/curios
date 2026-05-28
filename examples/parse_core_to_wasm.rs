@@ -5,6 +5,7 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Nat, Int, Flt, Bin, Arr};
         let pair_ty : Type = {
             label : '[left, right],
             match label : _ => Type
@@ -20,13 +21,14 @@ fn main() {
         let my_list : Arr(Nat) = [1, 2, 3];
         let my_bin : Bin = \01\02\03;
         let my_str : Bin = "hello";
-        let list_len : Nat = Arr.len(my_list);
-        let bin_len : Nat = Bin.len(my_bin);
-        let str_len : Nat = Bin.len(my_str);
-        Int.add(score(pair), Nat.to_int(Nat.add(list_len, Nat.add(bin_len, str_len))))
+        let list_len : Nat = Arr/len(Nat, my_list);
+        let bin_len : Nat = Bin/len(my_bin);
+        let str_len : Nat = Bin/len(my_str);
+        Int/add(score(pair), Nat/to_int(Nat/add(list_len, Nat/add(bin_len, str_len))))
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");
@@ -42,7 +44,10 @@ fn main() {
         &mut core::Context::new(Duration::from_secs(1)),
         &core_term,
         &text::to_core(
-            &"Int".parse().expect("expected result type"),
+            &"use /sys/{Int}; Int"
+                .parse::<text::Entrypoint>()
+                .expect("expected result type")
+                .with_prelude(),
             &curios::text::PanicLoader,
         )
         .expect("expected result type"),

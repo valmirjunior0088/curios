@@ -91,8 +91,8 @@ pub enum Prim {
     ArrSlice(Term, Term, Term),
     ArrAppend(Term, Term),
     ArrConcat(Vec<Term>),
-    SysPrint(Term),
-    SysRead,
+    IoPrint(Term),
+    IoRead,
 }
 
 impl Prim {
@@ -575,15 +575,15 @@ impl Prim {
         Self::ArrConcat(operands.into_iter().map(|e| e.into()).collect())
     }
 
-    pub fn sys_print<T>(inner: T) -> Self
+    pub fn io_print<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::SysPrint(inner.into())
+        Self::IoPrint(inner.into())
     }
 
-    pub fn sys_read() -> Self {
-        Self::SysRead
+    pub fn io_read() -> Self {
+        Self::IoRead
     }
 }
 

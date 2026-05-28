@@ -5,6 +5,7 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Int};
         rec IntList : Type = {
             label : '[nil, cons],
             match label : _ => Type
@@ -15,14 +16,15 @@ fn main() {
             match list.0 : _ => Int
             | 'nil => +0
             | 'cons =>
-                Int.add(list.1.0, sum(list.1.1))
+                Int/add(list.1.0, sum(list.1.1))
             end;
         let xs : IntList =
             ('cons, (+1, ('cons, (+2, ('cons, (+3, ('nil, +0)))))));
         sum(xs)
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");
@@ -38,7 +40,10 @@ fn main() {
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
         &text::to_core(
-            &"Int".parse().expect("expected result type"),
+            &"use /sys/{Int}; Int"
+                .parse::<text::Entrypoint>()
+                .expect("expected result type")
+                .with_prelude(),
             &curios::text::PanicLoader,
         )
         .expect("expected result type"),

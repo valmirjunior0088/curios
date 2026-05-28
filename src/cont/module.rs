@@ -101,8 +101,8 @@ pub enum Code {
     ArrAppend(ValueName, ValueName),
     ArrConcat(Vec<ValueName>),
     TplGet(ValueName, usize),
-    SysPrint(ValueName),
-    SysRead,
+    IoPrint(ValueName),
+    IoRead,
 }
 
 #[derive(Debug)]

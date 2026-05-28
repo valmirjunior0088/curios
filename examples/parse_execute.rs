@@ -5,6 +5,7 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Int, Flt};
         rec id : Type -> Type = x => x;
         let witness : Type = id(Int);
         let pair_ty : Type = {
@@ -13,18 +14,19 @@ fn main() {
             | 'left => Int
             | 'right => Flt
             end };
-        let value : pair_ty = ('left, Int.mul(+20, +2));
+        let value : pair_ty = ('left, Int/mul(+20, +2));
         let decoded : Int =
             match value.0 : _ => Int
-            | 'left => Int.add(+40, +2)
+            | 'left => Int/add(+40, +2)
             | 'right => +7
             end;
         let make : Int -> {witness, Flt} = x =>
-            (x, Flt.add(+0.25, +0.5));
+            (x, Flt/add(+0.25, +0.5));
         make(decoded)
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");

@@ -69,8 +69,8 @@ pub enum Prim {
     ArrAppend(Subterm, Subterm),
     ArrConcat(Vec<Subterm>),
     Unit,
-    SysPrint(Subterm),
-    SysRead,
+    IoPrint(Subterm),
+    IoRead,
 }
 
 impl Prim {
@@ -78,11 +78,11 @@ impl Prim {
         use Prim::*;
 
         let operands: Vec<&Subterm> = match self {
-            Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit | SysRead => vec![],
+            Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit | IoRead => vec![],
             NatToStr(a) | IntToStr(a) | FltToStr(a) | NatToInt(a) | NatToFlt(a) | IntToNat(a)
             | IntToFlt(a) | FltToNat(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a)
             | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a)
-            | SysPrint(a) => vec![a],
+            | IoPrint(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)

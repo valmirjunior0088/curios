@@ -990,26 +990,26 @@ fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ersd::Prim::ArrConcat(erased).into())
         }
-        Prim::SysPrint(inner) => {
+        Prim::IoPrint(inner) => {
             expect(
                 context,
                 term,
                 &Subterm::TupleType(TupleType::unit()).into(),
                 expected,
             )?;
-            Ok(ersd::Prim::SysPrint(
+            Ok(ersd::Prim::IoPrint(
                 erase(context, inner, &Subterm::Prim(Prim::BinType).into())?.into(),
             )
             .into())
         }
-        Prim::SysRead => {
+        Prim::IoRead => {
             expect(
                 context,
                 term,
                 &Subterm::Prim(Prim::BinType).into(),
                 expected,
             )?;
-            Ok(ersd::Prim::SysRead.into())
+            Ok(ersd::Prim::IoRead.into())
         }
     }
 }

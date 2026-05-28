@@ -1,5 +1,8 @@
+pub use /sys/Int/*;
+use /sys/{Int, Nat};
+
 pub let abs(n : Int) -> Nat =
-    match Int.gte(n, +0) : Nat
-    | true  => Int.to_nat(n)
-    | false => Int.to_nat(Int.sub(+0, n))
+    match gte(n, +0) : Nat
+    | true  => to_nat(n)
+    | false => to_nat(sub(+0, n))
     end;

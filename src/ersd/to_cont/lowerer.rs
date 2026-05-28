@@ -880,16 +880,16 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Prim(ersd::Prim::Unit) => {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])))
             }
-            ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
+            ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
                 emit_fresh_value(
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::SysPrint(operand)),
+                    cont::Value::Eval(cont::Code::IoPrint(operand)),
                 )
             }
-            ersd::Term::Prim(ersd::Prim::SysRead) => {
-                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::SysRead))
+            ersd::Term::Prim(ersd::Prim::IoRead) => {
+                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::IoRead))
             }
             ersd::Term::Atom(atom) => emit_fresh_value(
                 state,
@@ -1332,12 +1332,12 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Prim(ersd::Prim::Unit) => {
                 builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![])));
             }
-            ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => {
+            ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => {
                 let operand = self.lower_letrec_name(operand, frame, state, builder);
-                builder.add_value(target, cont::Value::Eval(cont::Code::SysPrint(operand)));
+                builder.add_value(target, cont::Value::Eval(cont::Code::IoPrint(operand)));
             }
-            ersd::Term::Prim(ersd::Prim::SysRead) => {
-                builder.add_value(target, cont::Value::Eval(cont::Code::SysRead));
+            ersd::Term::Prim(ersd::Prim::IoRead) => {
+                builder.add_value(target, cont::Value::Eval(cont::Code::IoRead));
             }
             ersd::Term::Atom(atom) => {
                 builder.add_value(
@@ -2868,7 +2868,7 @@ impl<'a> Lowerer<'a> {
                     emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])));
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::SysPrint(operand)) => self.lower_to_name(
+            ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => self.lower_to_name(
                 operand,
                 frame,
                 state,
@@ -2877,14 +2877,13 @@ impl<'a> Lowerer<'a> {
                     let value = emit_fresh_value(
                         state,
                         builder,
-                        cont::Value::Eval(cont::Code::SysPrint(operand)),
+                        cont::Value::Eval(cont::Code::IoPrint(operand)),
                     );
                     cont(this, state, builder, value)
                 }),
             ),
-            ersd::Term::Prim(ersd::Prim::SysRead) => {
-                let value =
-                    emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::SysRead));
+            ersd::Term::Prim(ersd::Prim::IoRead) => {
+                let value = emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::IoRead));
                 cont(self, state, builder, value)
             }
             ersd::Term::Atom(atom) => {

@@ -5,16 +5,18 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Nat, Int};
         rec fib_pair : Nat -> {Int, Int} = n =>
             match n : _ => {Int, Int}
             | 0 => (+0, +1)
             | pred ih =>
-                (ih.1, Int.add(ih.0, ih.1))
+                (ih.1, Int/add(ih.0, ih.1))
             end;
         fib_pair(10).0
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");
@@ -30,7 +32,10 @@ fn main() {
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
         &text::to_core(
-            &"Int".parse().expect("expected result type"),
+            &"use /sys/{Int}; Int"
+                .parse::<text::Entrypoint>()
+                .expect("expected result type")
+                .with_prelude(),
             &curios::text::PanicLoader,
         )
         .expect("expected result type"),

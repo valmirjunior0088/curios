@@ -2,20 +2,22 @@ use crate::macros::name;
 
 name!(Atom);
 
+// `Path` is a canonical, resolved identity: a sequence of module segments
+// rooted at the module root. It is what the resolution tables key on.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Name {
-    path: Vec<String>,
+pub struct Path {
+    segments: Vec<String>,
 }
 
-impl Name {
+impl Path {
     pub fn empty() -> Self {
-        Self { path: vec![] }
+        Self { segments: vec![] }
     }
 
     pub fn with(&self, segment: &str) -> Self {
         Self {
-            path: self
-                .path
+            segments: self
+                .segments
                 .iter()
                 .cloned()
                 .chain([segment.to_string()])
@@ -23,36 +25,101 @@ impl Name {
         }
     }
 
-    pub fn extend(&self, tail: &[String]) -> Self {
-        Self::from(self.path.iter().cloned().chain(tail.iter().cloned()))
-    }
-
     pub fn join(&self) -> String {
-        self.path.join("/")
+        self.segments.join("/")
     }
 
     pub fn is_single(&self) -> bool {
-        self.path.len() == 1
+        self.segments.len() == 1
     }
 
     pub fn head(&self) -> &str {
-        &self.path[0]
+        &self.segments[0]
     }
 
     pub fn last(&self) -> &str {
-        self.path.last().unwrap()
-    }
-
-    pub fn tail(&self) -> &[String] {
-        &self.path[1..]
+        self.segments.last().unwrap()
     }
 
     pub fn interior(&self) -> &[String] {
-        &self.path[1..self.path.len() - 1]
+        &self.segments[1..self.segments.len() - 1]
+    }
+
+    pub fn init(&self) -> &[String] {
+        &self.segments[..self.segments.len() - 1]
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.path.iter().map(String::as_str)
+        self.segments.iter().map(String::as_str)
+    }
+
+    pub fn segments(&self) -> &[String] {
+        &self.segments
+    }
+}
+
+impl<S, I> From<I> for Path
+where
+    S: Into<String>,
+    I: IntoIterator<Item = S>,
+{
+    fn from(iter: I) -> Self {
+        Self {
+            segments: iter.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+// `Name` is a surface reference, exactly as written in source: a `Path` plus an
+// `is_abs` flag marking a leading `/` (an absolute, root-anchored reference).
+// Resolution turns a `Name` into a canonical `Path`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Name {
+    is_abs: bool,
+    path: Path,
+}
+
+impl Name {
+    pub fn new(is_abs: bool, path: Path) -> Self {
+        Self { is_abs, path }
+    }
+
+    pub fn is_abs(&self) -> bool {
+        self.is_abs
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn with(&self, segment: &str) -> Self {
+        Self {
+            is_abs: self.is_abs,
+            path: self.path.with(segment),
+        }
+    }
+
+    pub fn join(&self) -> String {
+        match self.is_abs {
+            true => format!("/{}", self.path.join()),
+            false => self.path.join(),
+        }
+    }
+
+    pub fn is_single(&self) -> bool {
+        self.path.is_single()
+    }
+
+    pub fn head(&self) -> &str {
+        self.path.head()
+    }
+
+    pub fn last(&self) -> &str {
+        self.path.last()
+    }
+
+    pub fn interior(&self) -> &[String] {
+        self.path.interior()
     }
 }
 
@@ -63,7 +130,8 @@ where
 {
     fn from(iter: I) -> Self {
         Self {
-            path: iter.into_iter().map(Into::into).collect(),
+            is_abs: false,
+            path: Path::from(iter),
         }
     }
 }

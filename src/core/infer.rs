@@ -274,11 +274,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             }
         }
         Prim::ArrConcat(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
-        Prim::SysPrint(inner) => {
+        Prim::IoPrint(inner) => {
             erase(context, inner, &Subterm::Prim(Prim::BinType).into())?;
             Ok(Subterm::TupleType(TupleType::unit()).into())
         }
-        Prim::SysRead => Ok(Subterm::Prim(Prim::BinType).into()),
+        Prim::IoRead => Ok(Subterm::Prim(Prim::BinType).into()),
     }
 }
 

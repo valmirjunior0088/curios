@@ -87,7 +87,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -302,7 +302,7 @@ mod tests {
                                     ),
                                     (
                                         cont::ValueName::from("unit"),
-                                        cont::Value::Eval(cont::Code::SysPrint(
+                                        cont::Value::Eval(cont::Code::IoPrint(
                                             cont::ValueName::from("str"),
                                         )),
                                     ),
@@ -380,7 +380,7 @@ mod tests {
                                     ),
                                     (
                                         cont::ValueName::from("unit"),
-                                        cont::Value::Eval(cont::Code::SysPrint(
+                                        cont::Value::Eval(cont::Code::IoPrint(
                                             cont::ValueName::from("str"),
                                         )),
                                     ),
@@ -461,7 +461,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -508,7 +508,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -585,7 +585,7 @@ mod tests {
                                     ),
                                     (
                                         cont::ValueName::from("unit"),
-                                        cont::Value::Eval(cont::Code::SysPrint(
+                                        cont::Value::Eval(cont::Code::IoPrint(
                                             cont::ValueName::from("str"),
                                         )),
                                     ),
@@ -640,7 +640,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -689,7 +689,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -742,7 +742,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -803,7 +803,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -864,7 +864,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -905,7 +905,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -946,7 +946,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -987,7 +987,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1028,7 +1028,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1073,7 +1073,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1118,7 +1118,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1163,7 +1163,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1211,7 +1211,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1256,7 +1256,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1301,7 +1301,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1346,7 +1346,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1391,7 +1391,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1432,7 +1432,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1473,7 +1473,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1514,7 +1514,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1557,7 +1557,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1598,7 +1598,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1643,7 +1643,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1688,7 +1688,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1733,7 +1733,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1778,7 +1778,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1823,7 +1823,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1867,7 +1867,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1915,7 +1915,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -1971,7 +1971,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -2022,7 +2022,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -2073,7 +2073,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -2134,7 +2134,7 @@ mod tests {
                         ),
                         (
                             cont::ValueName::from("unit"),
-                            cont::Value::Eval(cont::Code::SysPrint(cont::ValueName::from("str"))),
+                            cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
                         ),
                     ],
                     blocks: vec![],
@@ -2183,7 +2183,7 @@ mod tests {
                                         ),
                                         (
                                             cont::ValueName::from("unit"),
-                                            cont::Value::Eval(cont::Code::SysPrint(
+                                            cont::Value::Eval(cont::Code::IoPrint(
                                                 cont::ValueName::from("str"),
                                             )),
                                         ),

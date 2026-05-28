@@ -86,24 +86,36 @@ end
 ### Import
 
 ```
-pub use path;
+use path/{item, item, ...};
+use path/*;
 ```
 
-Brings the names exported by `path` into scope. An absolute path (from the root module) is written with a leading `/`:
+A `use` declaration must end in either a brace group `/{...}` or a glob `/*`; bare `use path;` is not allowed.
+
+An absolute path (from the root module) is written with a leading `/`. To import directly from the root, leave the path empty:
 
 ```
-use /Std/Prelude;
+use /std/{Bin, Arr};
+use /{Foo};
 ```
 
 When using an absolute path, the first segment must refer to a `pub mod` at the root. A private root module cannot be accessed via an absolute path.
 
-Multiple names from the same module can be imported in one declaration using a brace group:
+Each item inside the group may be:
+
+- `Name` — import both the module *and* the binding named `Name`, if either exists. Errors if neither exists publicly. This is the default.
+- `mod Name` — import only the module named `Name`. Errors if there is no public module by that name.
+- `let Name` — import only the binding named `Name`. Errors if there is no public binding by that name.
 
 ```
-use /std/{Bin, Arr};
+use /std/{Bin, Arr};               -- both kinds of each (where present)
+use /std/{mod Bin, let Nat};       -- module `Bin`, binding `Nat`
+use /std/{};                       -- empty group; no-op
 ```
 
-This is equivalent to writing a separate `use` for each name. The brace group is only available with an absolute path.
+A glob `use path/*;` imports every public child module and binding of `path`.
+
+`pub use ...;` re-exports the imported names from the enclosing module.
 
 ## Terms
 
@@ -466,12 +478,12 @@ Bin.concat("hello", ", ", "world")
 Arr.concat([1, 2], [3, 4], [5])
 ```
 
-### Sys
+### Io
 
-| Operation      | Arity | Description                                                   | Returns |
-| -------------- | ----- | ------------------------------------------------------------- | ------- |
-| `Sys.print(a)` | 1     | Print `a : Bin` to stdout                                     | `{}`    |
-| `Sys.read`     | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
+| Operation     | Arity | Description                                                   | Returns |
+| ------------- | ----- | ------------------------------------------------------------- | ------- |
+| `Io.print(a)` | 1     | Print `a : Bin` to stdout                                     | `{}`    |
+| `Io.read`     | 0     | Read a line from stdin (`\n` included); empty `Bin` means EOF | `Bin`   |
 
 ## Idioms
 

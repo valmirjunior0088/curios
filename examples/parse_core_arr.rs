@@ -5,15 +5,17 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Nat, Arr};
         let xs : Arr(Nat) = [10, 20, 30];
-        let len : Nat = Arr.len(xs);
-        let first : Nat = Arr.get(xs, 0);
-        let rest : Arr(Nat) = Arr.slice(xs, 1, 3);
-        let doubled : Arr(Nat) = Arr.concat(xs, xs);
-        Arr.len(doubled)
+        let len : Nat = Arr/len(Nat, xs);
+        let first : Nat = Arr/get(Nat, xs, 0);
+        let rest : Arr(Nat) = Arr/slice(Nat, xs, 1, 3);
+        let doubled : Arr(Nat) = Arr/concat(Nat, xs, xs);
+        Arr/len(Nat, doubled)
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");
@@ -29,7 +31,10 @@ fn main() {
         &mut core::Context::new(Duration::from_secs(1)),
         &core_term,
         &text::to_core(
-            &"Nat".parse().expect("expected result type"),
+            &"use /sys/{Nat}; Nat"
+                .parse::<text::Entrypoint>()
+                .expect("expected result type")
+                .with_prelude(),
             &curios::text::PanicLoader,
         )
         .expect("expected result type"),

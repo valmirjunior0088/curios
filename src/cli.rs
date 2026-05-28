@@ -39,7 +39,8 @@ pub fn cli() -> Result<(), String> {
 
     let entrypoint = source
         .parse::<crate::text::Entrypoint>()
-        .map_err(|error| error.format(&source))?;
+        .map_err(|error| error.format(&source))?
+        .with_prelude();
 
     let term = crate::text::to_core(&entrypoint, &crate::text::FileLoader::new(base))
         .map_err(|error| error.format(&source))?;

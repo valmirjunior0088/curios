@@ -71,28 +71,41 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
-                let names = match &use_item.group {
-                    None => vec![use_item.name.clone()],
-                    Some(labels) => labels
+                let imports: Vec<(String, UseResolved)> = match &use_item.group {
+                    UseGroup::Named(items) => items
                         .iter()
-                        .map(|l| use_item.name.with(l))
-                        .collect::<Vec<Name>>(),
+                        .map(|item| {
+                            let label = item.label().to_string();
+                            let full = use_item.name.with(&label);
+
+                            let resolved = match item {
+                                GroupItem::Mod(_) => UseResolved {
+                                    module: Some(context.resolve_module_use(&full)),
+                                    binding: None,
+                                },
+                                GroupItem::Let(_) => UseResolved {
+                                    module: None,
+                                    binding: Some(context.resolve_binding_use(&full)),
+                                },
+                                GroupItem::Both(_) => context.resolve_both_use(&full),
+                            };
+
+                            (label, resolved)
+                        })
+                        .collect(),
+                    UseGroup::Glob => context.resolve_glob(&use_item.name),
                 };
 
-                for name in &names {
-                    let resolved = context.resolve_use(use_item.is_abs, name);
-
-                    if use_item.is_pub {
-                        let label = name.last().to_string();
-
+                if use_item.is_pub {
+                    for (label, resolved) in &imports {
                         if resolved.module.is_some() {
-                            context.register_alias(&label);
+                            context.register_alias(label);
                             context.export_child(label.clone());
                         }
 
                         if resolved.binding.is_some() {
-                            context.register_binding_alias(&label);
-                            context.export_binding(label);
+                            context.register_binding_alias(label);
+                            context.export_binding(label.clone());
                         }
                     }
                 }
@@ -233,7 +246,7 @@ mod tests {
                         pub let f : Type = Type;
                     end
                 end
-                use Foo/Bar;
+                use Foo/{Bar};
                 Bar/f
             "#),
             core::Let::new(
@@ -253,18 +266,6 @@ mod tests {
                 pub let f : Type = Type;
             end
             pub let g : Type = Type;
-            Type
-        "#);
-    }
-
-    #[test]
-    #[should_panic(expected = "single-segment relative use is forbidden")]
-    fn rejects_single_segment_relative_use() {
-        run(r#"
-            mod Foo
-                let x : Type = Type;
-            end
-            use Foo;
             Type
         "#);
     }
@@ -320,28 +321,28 @@ mod tests {
                     pub let g : Type = Type;
                 end
             end
-            use Foo/Baz;
-            use Bar/Baz;
+            use Foo/{Baz};
+            use Bar/{Baz};
             Type
         "#);
     }
 
     #[test]
-    #[should_panic(expected = "unknown item or submodule: Nonexistent")]
+    #[should_panic(expected = "no module or binding named Nonexistent")]
     fn rejects_use_of_nonexistent_child() {
         run(r#"
             mod Foo
             end
-            use Foo/Nonexistent;
+            use Foo/{Nonexistent};
             Type
         "#);
     }
 
     #[test]
-    #[should_panic(expected = "unknown item or submodule: Nonexistent")]
+    #[should_panic(expected = "no module or binding named Nonexistent")]
     fn rejects_absolute_use_of_nonexistent_module() {
         run(r#"
-            use /Nonexistent;
+            use /{Nonexistent};
             Type
         "#);
     }
@@ -356,7 +357,7 @@ mod tests {
                     end
                 end
                 pub mod MyMod
-                    pub use /Foo/Bar;
+                    pub use /Foo/{Bar};
                 end
                 MyMod/Bar/f
             "#),
@@ -379,7 +380,7 @@ mod tests {
                     pub let f : Type = Type;
                 end
             end
-            use Foo/Bar;
+            use Foo/{Bar};
             mod Bar
             end
             Type
@@ -396,9 +397,9 @@ mod tests {
                     end
                 end
                 pub mod MyMod
-                    pub use /Foo/Bar;
+                    pub use /Foo/{Bar};
                 end
-                use /MyMod/Bar;
+                use /MyMod/{Bar};
                 Bar/f
             "#),
             core::Let::new(
@@ -421,10 +422,10 @@ mod tests {
                     end
                 end
                 pub mod B
-                    pub use /A/X;
+                    pub use /A/{X};
                 end
                 pub mod C
-                    pub use /B/X;
+                    pub use /B/{X};
                 end
                 C/X/f
             "#),
@@ -440,7 +441,7 @@ mod tests {
                 pub let f : Type = Type;
             end
             pub mod Bar
-                use /Foo;
+                use /{Foo};
             end
             Type
         "#);
@@ -453,7 +454,7 @@ mod tests {
                 pub let f : Type = Type;
             end
             pub mod Bar
-                use /Foo;
+                use /{Foo};
             end
             Type
         "#);
@@ -470,7 +471,7 @@ mod tests {
                 end
             end
             pub mod MyMod
-                use /Foo/Bar;
+                use /Foo/{Bar};
             end
             MyMod/Bar/f
         "#
@@ -485,7 +486,7 @@ mod tests {
             pub mod Foo
                 pub let x : Type = Type;
             end
-            use /Foo/x;
+            use /Foo/{x};
             x
         "#);
     }
@@ -497,7 +498,7 @@ mod tests {
             pub mod Foo
                 let x : Type = Type;
             end
-            use /Foo/x;
+            use /Foo/{x};
             x
         "#);
     }
@@ -509,9 +510,9 @@ mod tests {
                 pub let x : Type = Type;
             end
             pub mod Bar
-                pub use /Foo/x;
+                pub use /Foo/{x};
             end
-            use /Bar/x;
+            use /Bar/{x};
             x
         "#);
     }
@@ -523,7 +524,7 @@ mod tests {
                 pub let x : Type = Type;
             end
             pub mod Bar
-                pub use /Foo/x;
+                pub use /Foo/{x};
             end
             Bar/x
         "#);
@@ -536,7 +537,7 @@ mod tests {
             pub mod Foo
                 pub let x : Type = Type;
             end
-            use /Foo/x;
+            use /Foo/{x};
             let x : Type = Type;
             x
         "#);
@@ -552,8 +553,8 @@ mod tests {
             pub mod Bar
                 pub let x : Type = Type;
             end
-            use /Foo/x;
-            use /Bar/x;
+            use /Foo/{x};
+            use /Bar/{x};
             x
         "#);
     }
@@ -565,8 +566,8 @@ mod tests {
                 pub let x : Type = Type;
             end
             pub mod Bar
-                use /Foo;
-                use Foo/x;
+                use /{Foo};
+                use Foo/{x};
                 pub let y : Type = x;
             end
             Bar/y
@@ -574,13 +575,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "unknown item or submodule: nope")]
+    #[should_panic(expected = "no module or binding named nope")]
     fn rejects_use_of_unknown_item() {
         run(r#"
             pub mod Foo
                 pub let x : Type = Type;
             end
-            use /Foo/nope;
+            use /Foo/{nope};
             Type
         "#);
     }
@@ -592,10 +593,10 @@ mod tests {
                 pub mod X
                     pub let y : Type = Type;
                 end
-                pub use X/y;
+                pub use X/{y};
             end
             pub mod Bar
-                use /Foo/y;
+                use /Foo/{y};
                 pub let direct : Type = y;
                 pub let via_path : Type = y;
             end
@@ -610,9 +611,9 @@ mod tests {
                 pub mod X
                     pub let y : Type = Type;
                 end
-                pub use X/y;
+                pub use X/{y};
             end
-            use /Foo/y;
+            use /Foo/{y};
             y
         "#);
     }
@@ -625,7 +626,7 @@ mod tests {
                     pub let y : Type = Type;
                     pub let q : Type = Type;
                 end
-                pub use X/y;
+                pub use X/{y};
             end
             Foo/y
         "#);
@@ -638,10 +639,10 @@ mod tests {
                 pub mod X
                     pub let z : Type = Type;
                 end
-                use X/z;
+                use X/{z};
                 let X : Type = z;
             end
-            use /Foo/X;
+            use /Foo/{X};
             X/z
         "#);
     }
@@ -653,10 +654,10 @@ mod tests {
                 mod X
                     pub let z : Type = Type;
                 end
-                use X/z;
+                use X/{z};
                 pub let X : Type = z;
             end
-            use /Foo/X;
+            use /Foo/{X};
             X
         "#);
     }
@@ -668,9 +669,9 @@ mod tests {
                 pub mod X
                     pub let X : Type = Type;
                 end
-                pub use X/X;
+                pub use X/{X};
             end
-            use /Foo/X;
+            use /Foo/{X};
             X
         "#);
     }
@@ -683,9 +684,9 @@ mod tests {
                     pub let X : Type = Type;
                     pub let q : Type = Type;
                 end
-                pub use X/X;
+                pub use X/{X};
             end
-            use /Foo/X;
+            use /Foo/{X};
             X/q
         "#);
     }
@@ -711,18 +712,114 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "private child module and binding: X")]
+    #[should_panic(expected = "private child module: X")]
     fn rejects_use_when_both_sides_private() {
         run(r#"
             pub mod Foo
                 mod X
                     pub let z : Type = Type;
                 end
-                use X/z;
+                use X/{z};
                 let X : Type = z;
             end
-            use /Foo/X;
+            use /Foo/{X};
             Type
+        "#);
+    }
+
+    #[test]
+    fn use_glob_imports_all_public_bindings() {
+        assert_eq!(
+            run(r#"
+                pub mod Foo
+                    pub let x : Type = Type;
+                    pub let y : Type = Type;
+                end
+                use /Foo/*;
+                x
+            "#),
+            core::Let::new(
+                "Foo/x",
+                core::Type,
+                core::Type,
+                core::Let::new("Foo/y", core::Type, core::Type, core::Var::free("Foo/x"))
+            )
+            .into(),
+        );
+    }
+
+    #[test]
+    fn use_glob_imports_child_modules_as_qualifiers() {
+        run(r#"
+            pub mod Foo
+                pub mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            use /Foo/*;
+            Bar/f
+        "#);
+    }
+
+    #[test]
+    fn use_glob_skips_private_child_modules() {
+        assert!(
+            run_err(
+                r#"
+            pub mod Foo
+                mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            use /Foo/*;
+            Bar/f
+        "#
+            )
+            .contains("unresolved qualifier")
+        );
+    }
+
+    #[test]
+    fn relative_use_glob_imports_from_qualifier() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+            end
+            use Foo/*;
+            x
+        "#);
+    }
+
+    #[test]
+    fn pub_use_glob_re_exports_all_public_labels() {
+        run(r#"
+            pub mod Foo
+                pub let x : Type = Type;
+                pub mod Bar
+                    pub let f : Type = Type;
+                end
+            end
+            pub mod Mine
+                pub use /Foo/*;
+            end
+            use /Mine/{Bar};
+            use /Mine/{x};
+            Bar/f
+        "#);
+    }
+
+    #[test]
+    fn use_glob_on_dual_existence_imports_once() {
+        run(r#"
+            pub mod Foo
+                pub mod X
+                    pub let X : Type = Type;
+                    pub let q : Type = Type;
+                end
+                pub use X/{X};
+            end
+            use /Foo/*;
+            X/q
         "#);
     }
 }

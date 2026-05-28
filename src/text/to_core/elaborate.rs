@@ -2,7 +2,7 @@ use {
     super::Context,
     crate::{
         core,
-        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Prim, Term},
+        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Term},
     },
 };
 
@@ -19,19 +19,20 @@ impl<'a, 'b> Elaborate<'a, 'b> {
         Ok(match term {
             Term::Type => core::Subterm::Type.into(),
             Term::Prim(prim) => self.prim(prim)?.into(),
-            Term::Name(name) => core::Var::free(match name.is_single() {
-                true => {
+            Term::Name(name) => {
+                let resolved = if name.is_abs() || !name.is_single() {
+                    self.resolve_name(name)?.join()
+                } else {
                     let label = name.head();
 
-                    if let Some(full) = self.context.bindings().get(label) {
-                        full.join()
-                    } else {
-                        label.to_string()
+                    match self.context.bindings().get(label) {
+                        Some(full) => full.join(),
+                        None => label.to_string(),
                     }
-                }
-                false => self.resolve_name(name)?.join(),
-            })
-            .into(),
+                };
+
+                core::Var::free(resolved).into()
+            }
             Term::Atom(atom) => core::Atom::from(atom.as_str()).into(),
             Term::AtomType(at) => {
                 core::AtomType::new(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
@@ -212,8 +213,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::FltTrunc(inner) => core::Prim::flt_trunc(self.term(inner)?),
             Prim::FltNearest(inner) => core::Prim::flt_nearest(self.term(inner)?),
             Prim::NatToStr(inner) => core::Prim::nat_to_str(self.term(inner)?),
-            Prim::SysPrint(inner) => core::Prim::sys_print(self.term(inner)?),
-            Prim::SysRead => core::Prim::SysRead,
+            Prim::IoPrint(inner) => core::Prim::io_print(self.term(inner)?),
+            Prim::IoRead => core::Prim::IoRead,
             Prim::IntToStr(inner) => core::Prim::int_to_str(self.term(inner)?),
             Prim::FltToStr(inner) => core::Prim::flt_to_str(self.term(inner)?),
             Prim::NatToInt(inner) => core::Prim::nat_to_int(self.term(inner)?),
@@ -232,12 +233,9 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 core::Prim::bin_slice(self.term(bin)?, self.term(start)?, self.term(end)?)
             }
             Prim::BinAppend(bin, byte) => core::Prim::bin_append(self.term(bin)?, self.term(byte)?),
-            Prim::BinConcat(operands) => core::Prim::bin_concat(
-                operands
-                    .iter()
-                    .map(|operand| self.term(operand))
-                    .collect::<Result<Vec<_>, Error>>()?,
-            ),
+            Prim::BinConcat(left, right) => {
+                core::Prim::bin_concat([self.term(left)?, self.term(right)?])
+            }
             Prim::ArrType(inner) => core::Prim::arr_type(self.term(inner)?),
             Prim::Arr(elems) => core::Prim::Arr(
                 elems
@@ -253,28 +251,34 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::ArrAppend(list, elem) => {
                 core::Prim::arr_append(self.term(list)?, self.term(elem)?)
             }
-            Prim::ArrConcat(operands) => core::Prim::arr_concat(
-                operands
-                    .iter()
-                    .map(|operand| self.term(operand))
-                    .collect::<Result<Vec<_>, Error>>()?,
-            ),
+            Prim::ArrConcat(left, right) => {
+                core::Prim::arr_concat([self.term(left)?, self.term(right)?])
+            }
         })
     }
 
-    fn resolve_name(&self, name: &Name) -> Result<Name, Error> {
-        let qualifier = name.head();
+    fn resolve_name(&self, name: &Name) -> Result<Path, Error> {
+        // Walk to the module that should contain the final segment. An absolute
+        // reference starts at the root and walks every segment but the last; a
+        // relative one starts at the resolved head qualifier and walks the interior.
+        let (mut current, walk): (Path, &[String]) = if name.is_abs() {
+            (Path::empty(), name.path().init())
+        } else {
+            let qualifier = name.head();
 
-        let mut current = self
-            .context
-            .qualifiers()
-            .get(qualifier)
-            .ok_or_else(|| Error::UnresolvedQualifier {
-                qualifier: qualifier.to_string(),
-            })?
-            .clone();
+            let start = self
+                .context
+                .qualifiers()
+                .get(qualifier)
+                .ok_or_else(|| Error::UnresolvedQualifier {
+                    qualifier: qualifier.to_string(),
+                })?
+                .clone();
 
-        for segment in name.interior() {
+            (start, name.interior())
+        };
+
+        for segment in walk {
             let info = self
                 .context
                 .table()

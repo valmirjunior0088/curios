@@ -5,11 +5,13 @@ use {
 
 fn main() {
     let text_entrypoint = r#"
+        use /sys/{Int};
         let triple : {Int, Int, Int} = (+1, +2, +3);
-        Int.add(triple.0, Int.add(triple.1, triple.2))
+        Int/add(triple.0, Int/add(triple.1, triple.2))
         "#
     .parse::<text::Entrypoint>()
-    .expect("expected text term");
+    .expect("expected text term")
+    .with_prelude();
 
     println!("=== text ===");
     println!("{text_entrypoint}");

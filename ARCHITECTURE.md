@@ -92,7 +92,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
 - `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)` primitives with all built-in operations
-- Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/name;`, `pub use ...;`
+- Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`
 
 `text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(u32) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.

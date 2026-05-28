@@ -6,20 +6,23 @@ use {
 fn main() {
     let base = Path::new(file!()).parent().unwrap().join("crs");
     let loader = text::FileLoader::new(&base);
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(15);
 
     let source = r#"
         pub mod std;
-        use /std/Str;
+        use /std/{Str, Io, Bin};
 
         pub mod fmt;
 
-        let name : Bin = Str/trim(Sys.read);
+        let name : Bin = Str/trim(Io/read(()));
         fmt/printf("%s is %d")(name)(30)
         "#;
 
     let t = Instant::now();
-    let text_entrypoint: text::Entrypoint = source.parse().expect("failed to parse source");
+    let text_entrypoint: text::Entrypoint = source
+        .parse::<text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_prelude();
     println!("text:  {:?}", t.elapsed());
 
     let t = Instant::now();
@@ -62,7 +65,8 @@ fn main() {
 
     let text_entrypoint = ill_typed
         .parse::<text::Entrypoint>()
-        .expect("failed to parse ill-typed source");
+        .expect("failed to parse ill-typed source")
+        .with_prelude();
     let core_term = text::to_core(&text_entrypoint, &loader).expect("expected core term");
     let t = Instant::now();
     let result = core::infer(&mut core::Context::new(timeout), &core_term);
