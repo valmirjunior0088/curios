@@ -1322,10 +1322,7 @@ mod tests {
         // Inside a frame, define x and reduce — the cache will hold x → "inner".
         context.with_frame(|context| {
             context.define("x", &Atom::from("inner").into());
-            assert_eq!(
-                reduce(context, x.clone()),
-                Ok(Atom::from("inner").into())
-            );
+            assert_eq!(reduce(context, x.clone()), Ok(Atom::from("inner").into()));
         });
 
         // After the frame pops, x has no definition again. A stale cache entry

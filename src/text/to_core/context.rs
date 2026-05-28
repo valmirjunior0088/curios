@@ -381,7 +381,10 @@ impl<'a> Context<'a> {
                 .get(&parent_path)
                 .unwrap_or_else(|| panic!("module not found: {}", parent_path.join()));
 
-            (parent_info.get_child(&label), parent_info.get_binding(&label))
+            (
+                parent_info.get_child(&label),
+                parent_info.get_binding(&label),
+            )
         };
 
         if !matches!(child, Some(true)) && !matches!(binding, Some(true)) {

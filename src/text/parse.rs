@@ -819,25 +819,32 @@ fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
 // `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for
 // `parse_use_group` to consume as its separator.
 fn parse_use_path<'a>() -> Parser<'a, Name> {
-    catch(
-        take_exact("/")
-            .and_keep(parse_identifier())
-            .and(many0(|| catch(take_exact("/").and_keep(parse_identifier())))),
-    )
+    catch(take_exact("/").and_keep(parse_identifier()).and(many0(|| {
+        catch(take_exact("/").and_keep(parse_identifier()))
+    })))
     .map(|(first, rest)| {
         Name::new(
             true,
-            Path::from(iter::once(first).chain(rest).map(str::to_string).collect::<Vec<_>>()),
+            Path::from(
+                iter::once(first)
+                    .chain(rest)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>(),
+            ),
         )
     })
-    .or(catch(
-        parse_identifier()
-            .and(many0(|| catch(take_exact("/").and_keep(parse_identifier())))),
-    )
+    .or(catch(parse_identifier().and(many0(|| {
+        catch(take_exact("/").and_keep(parse_identifier()))
+    })))
     .map(|(first, rest)| {
         Name::new(
             false,
-            Path::from(iter::once(first).chain(rest).map(str::to_string).collect::<Vec<_>>()),
+            Path::from(
+                iter::once(first)
+                    .chain(rest)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>(),
+            ),
         )
     }))
     .or(pure(Name::new(true, Path::empty())))

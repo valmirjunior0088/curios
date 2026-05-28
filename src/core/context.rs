@@ -16,6 +16,10 @@ pub struct Context {
     projections: Vec<HashMap<(Term, usize), Term>>,
 }
 
+// Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
+// interior mutability warning. However, the logical value is fully immutable, and the
+// hash/equality check remains stable.
+#[allow(clippy::mutable_key_type)]
 impl Context {
     // The deadline is set once at construction and shared across every
     // `reduce`/`convert`/`infer`/`erase` call that uses this context, so the
@@ -112,6 +116,7 @@ impl Context {
             .last_mut()
             .unwrap()
             .insert(label.into(), term.clone());
+
         self.reductions.clear();
     }
 
@@ -136,6 +141,7 @@ impl Context {
             .last_mut()
             .unwrap()
             .insert((base, index), value);
+
         self.reductions.clear();
     }
 
