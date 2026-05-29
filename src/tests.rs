@@ -1,4 +1,4 @@
-use {super::ChannelProvider, std::time::Duration};
+use {super::ChannelHost, std::time::Duration};
 
 #[test]
 fn end_to_end() {
@@ -18,7 +18,7 @@ fn end_to_end() {
         sys/Io/print(sys/Int/to_str(score(pair)))
         "#;
 
-    let (system, receiver) = ChannelProvider::out();
+    let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
@@ -28,7 +28,7 @@ fn end_to_end() {
 
 #[test]
 fn io_print() {
-    let (system, receiver) = ChannelProvider::out();
+    let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), r#"sys/Io/print("hello")"#, system)
         .expect("expected result");
     assert_eq!(
@@ -39,7 +39,7 @@ fn io_print() {
 
 #[test]
 fn io_read() {
-    let (system, receiver) = ChannelProvider::in_out(["hello"]);
+    let (system, receiver) = ChannelHost::in_out(["hello"]);
     crate::run_text(
         Duration::from_secs(5),
         r#"sys/Io/print(sys/Io/read())"#,
@@ -63,7 +63,7 @@ fn triangular_sum() {
         sys/Io/print(sys/Nat/to_str(result))
         "#;
 
-    let (system, receiver) = ChannelProvider::out();
+    let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
@@ -78,7 +78,7 @@ fn multi_arg_function() {
         sys/Io/print(sys/Int/to_str(add(+3, +4)))
         "#;
 
-    let (system, receiver) = ChannelProvider::out();
+    let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
 }
@@ -90,7 +90,7 @@ fn curried_function() {
         sys/Io/print(sys/Int/to_str(add(+3)(+4)))
         "#;
 
-    let (system, receiver) = ChannelProvider::out();
+    let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
 }
@@ -114,7 +114,7 @@ fn vec_cons_with_nat_succ() {
         sys/Io/print(sys/Nat/to_str(head(sys/Nat, 0, v)))
     "#;
 
-    let (system, receiver) = ChannelProvider::out();
+    let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),

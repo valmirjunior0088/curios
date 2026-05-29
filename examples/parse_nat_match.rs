@@ -1,5 +1,5 @@
 use {
-    curios::{cont, core, ersd, text},
+    curios::{Stage, compile},
     std::time::Duration,
 };
 
@@ -8,59 +8,50 @@ use {
 // result is 'lbracket.  The sparse cases exercise the binary-search
 // WASM codegen path end-to-end from surface syntax.
 fn main() {
-    let text_entrypoint = r#"
+    let source = r#"
         match 91 : _ => '[quote, lbracket, lbrace, other]
         | '"' => 'quote
         | '[' => 'lbracket
         | '{' => 'lbrace
         | _ => 'other
         end
-        "#
-    .parse::<text::Entrypoint>()
-    .expect("expected text term");
+        "#;
 
-    println!("=== text ===");
-    println!("{text_entrypoint}");
-
-    let core_term =
-        text::to_core(&text_entrypoint, &curios::text::PanicLoader).expect("expected core term");
-
-    println!();
-    println!("=== core ===");
-    println!("{core_term}");
-
-    let result_type = text::to_core(
-        &"'[quote, lbracket, lbrace, other]"
-            .parse()
-            .expect("expected result type"),
+    let wasm_module = compile(
+        Duration::from_secs(5),
         &curios::text::PanicLoader,
+        Some("'[quote, lbracket, lbrace, other]"),
+        source,
+        |stage| match stage {
+            Stage::Text(entrypoint) => {
+                println!("=== text ===");
+                println!("{entrypoint}");
+            }
+            Stage::Core(term) => {
+                println!();
+                println!("=== core ===");
+                println!("{term}");
+            }
+            Stage::Ersd(term) => {
+                println!();
+                println!("=== ersd ===");
+                println!("{term}");
+            }
+            Stage::Cont(module) => {
+                println!();
+                println!("=== cont ===");
+                println!("{module}");
+            }
+            Stage::Wasm(module) => {
+                println!();
+                println!("=== wasm ===");
+                println!("{module}");
+            }
+        },
     )
-    .expect("expected result type");
-
-    let ersd_term = core::erase(
-        &mut core::Context::new(Duration::from_secs(5)),
-        &core_term,
-        &result_type,
-    )
-    .expect("expected erased term");
-
-    println!();
-    println!("=== ersd ===");
-    println!("{ersd_term}");
-
-    let cont_module = ersd::to_cont(&ersd_term);
-
-    println!();
-    println!("=== cont ===");
-    println!("{cont_module}");
-
-    let wasm_module = cont::to_wasm(&cont_module);
-
-    println!();
-    println!("=== wasm ===");
-    println!("{wasm_module}");
+    .expect("expected wasm module");
 
     println!();
     println!("=== result ===");
-    curios::run_wasm(&wasm_module, curios::StdioProvider).unwrap();
+    curios::run_wasm(&wasm_module, curios::StdioHost).unwrap();
 }

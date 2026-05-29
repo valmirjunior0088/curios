@@ -6,14 +6,31 @@ use std::{
     },
 };
 
-pub trait Provider {
+pub trait Host {
+    fn nat_to_str(&self, value: u32) -> Vec<u8> {
+        format!("{value}").into_bytes()
+    }
+
+    fn int_to_str(&self, value: i32) -> Vec<u8> {
+        format!("{value}").into_bytes()
+    }
+
+    fn flt_to_str(&self, value: f32) -> Vec<u8> {
+        let formatted = format!("{value}");
+        if formatted.starts_with('-') {
+            formatted.into_bytes()
+        } else {
+            format!("+{formatted}").into_bytes()
+        }
+    }
+
     fn read(&self) -> Vec<u8>;
     fn print(&self, bytes: &[u8]);
 }
 
-pub struct StdioProvider;
+pub struct StdioHost;
 
-impl Provider for StdioProvider {
+impl Host for StdioHost {
     fn read(&self) -> Vec<u8> {
         let mut line = String::new();
 
@@ -29,12 +46,12 @@ impl Provider for StdioProvider {
     }
 }
 
-pub struct ChannelProvider {
+pub struct ChannelHost {
     input_receiver: Mutex<Receiver<Vec<u8>>>,
     output_sender: Arc<Mutex<Sender<Vec<u8>>>>,
 }
 
-impl ChannelProvider {
+impl ChannelHost {
     pub fn in_out<L, I>(lines: I) -> (Self, Receiver<Vec<u8>>)
     where
         L: AsRef<[u8]>,
@@ -48,7 +65,7 @@ impl ChannelProvider {
         }
 
         (
-            ChannelProvider {
+            ChannelHost {
                 input_receiver: Mutex::new(input_receiver),
                 output_sender: Arc::new(Mutex::new(output_sender)),
             },
@@ -61,7 +78,7 @@ impl ChannelProvider {
     }
 }
 
-impl Provider for ChannelProvider {
+impl Host for ChannelHost {
     fn read(&self) -> Vec<u8> {
         match self.input_receiver.lock().unwrap().recv() {
             Ok(line) => line.into_iter().chain([b'\n']).collect(),

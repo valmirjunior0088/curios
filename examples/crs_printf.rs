@@ -1,6 +1,9 @@
 use {
-    curios::{cont, core, ersd, text},
-    std::{path::Path, time::Duration, time::Instant},
+    curios::{Stage, compile, core, text},
+    std::{
+        path::Path,
+        time::{Duration, Instant},
+    },
 };
 
 fn main() {
@@ -18,38 +21,30 @@ fn main() {
         fmt/printf("%s is %d")(name)(30)
         "#;
 
-    let t = Instant::now();
-    let text_entrypoint: text::Entrypoint = source
-        .parse::<text::Entrypoint>()
-        .expect("failed to parse source")
-        .with_prelude();
-    println!("text:  {:?}", t.elapsed());
+    let mut last = Instant::now();
 
-    let t = Instant::now();
-    let core_term = text::to_core(&text_entrypoint, &loader).expect("expected core term");
-    println!("core:  {:?}", t.elapsed());
+    let wasm_module = compile(timeout, &loader, Some("()"), source, |stage| {
+        let now = Instant::now();
+        let elapsed = now - last;
+        last = now;
 
-    let t = Instant::now();
-    let ersd_term = core::erase(
-        &mut core::Context::new(timeout),
-        &core_term,
-        &core::TupleType::unit().into(),
-    )
-    .unwrap_or_else(|e| panic!("failed to erase term: {e}"));
-    println!("ersd:  {:?}", t.elapsed());
+        println!(
+            "{}: {elapsed:?}",
+            match stage {
+                Stage::Text(_) => "text",
+                Stage::Core(_) => "core",
+                Stage::Ersd(_) => "ersd",
+                Stage::Cont(_) => "cont",
+                Stage::Wasm(_) => "wasm",
+            }
+        );
+    })
+    .expect("expected wasm module");
 
-    let t = Instant::now();
-    let cont_module = ersd::to_cont(&ersd_term);
-    println!("cont:  {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let wasm_module = cont::to_wasm(&cont_module);
-    println!("wasm:  {:?}", t.elapsed());
-
-    let (system, receiver) = curios::ChannelProvider::in_out(["Alice"]);
+    let (system, receiver) = curios::ChannelHost::in_out(["Alice"]);
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
-    println!("run:   {:?}", t.elapsed());
+    println!("run:  {:?}", t.elapsed());
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"Alice is 30".to_vec()]
@@ -63,16 +58,16 @@ fn main() {
         fmt/printf("%d")("Alice")
         "#;
 
-    let text_entrypoint = ill_typed
+    let entrypoint = ill_typed
         .parse::<text::Entrypoint>()
         .expect("failed to parse ill-typed source")
         .with_prelude();
-    let core_term = text::to_core(&text_entrypoint, &loader).expect("expected core term");
-    let t = Instant::now();
-    let result = core::infer(&mut core::Context::new(timeout), &core_term);
-    println!("ill-typed infer: {:?}", t.elapsed());
+
+    let core_term = text::to_core(&entrypoint, &loader).expect("expected core term");
+    let core_type = core::infer(&mut core::Context::new(timeout), &core_term);
+
     assert!(matches!(
-        &result,
+        &core_type,
         Err(core::Error::Located { error, .. })
             if matches!(error.as_ref(), core::Error::TypeMismatch { .. })
     ));

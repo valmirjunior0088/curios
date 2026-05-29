@@ -54,5 +54,5 @@ fn main() {
 
     println!();
     println!("=== result ===");
-    curios::run_wasm(&wasm_module, curios::StdioProvider).unwrap();
+    curios::run_wasm(&wasm_module, curios::StdioHost).unwrap();
 }

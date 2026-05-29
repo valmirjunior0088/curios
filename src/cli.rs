@@ -36,51 +36,43 @@ pub fn cli() -> Result<(), String> {
         .map_err(|e| format!("failed to read {}: {e}", cli.path.display()))?;
 
     let base = cli.path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let loader = crate::text::FileLoader::new(base);
 
-    let entrypoint = source
-        .parse::<crate::text::Entrypoint>()
-        .map_err(|error| error.format(&source))?
-        .with_prelude();
-
-    let term = crate::text::to_core(&entrypoint, &crate::text::FileLoader::new(base))
-        .map_err(|error| error.format(&source))?;
-
-    if cli.print {
-        println!("=== core ===");
-        println!("{term}");
-    }
-
-    let type_ = crate::core::infer(&mut crate::core::Context::new(cli.timeout), &term)
-        .map_err(|error| error.format(&source))?;
-
-    let term = crate::core::erase(&mut crate::core::Context::new(cli.timeout), &term, &type_)
-        .map_err(|error| error.format(&source))?;
-
-    if cli.print {
-        println!();
-        println!("=== ersd ===");
-        println!("{term}");
-    }
-
-    let cont_module = crate::ersd::to_cont(&term);
-
-    if cli.print {
-        println!();
-        println!("=== cont ===");
-        println!("{cont_module}");
-    }
-
-    let wasm_module = crate::cont::to_wasm(&cont_module);
-
-    if cli.print {
-        println!();
-        println!("=== wasm ===");
-        println!("{wasm_module}");
-        println!();
-    }
+    let module = crate::compile(cli.timeout, &loader, None, &source, |stage| {
+        if !cli.print {
+            return;
+        }
+        match stage {
+            crate::Stage::Text(entrypoint) => {
+                println!("=== text ===");
+                println!("{entrypoint}");
+            }
+            crate::Stage::Core(term) => {
+                println!();
+                println!("=== core ===");
+                println!("{term}");
+            }
+            crate::Stage::Ersd(term) => {
+                println!();
+                println!("=== ersd ===");
+                println!("{term}");
+            }
+            crate::Stage::Cont(cont_module) => {
+                println!();
+                println!("=== cont ===");
+                println!("{cont_module}");
+            }
+            crate::Stage::Wasm(wasm_module) => {
+                println!();
+                println!("=== wasm ===");
+                println!("{wasm_module}");
+                println!();
+            }
+        }
+    })?;
 
     if !cli.check {
-        crate::run_wasm(&wasm_module, crate::StdioProvider)?;
+        crate::run_wasm(&module, crate::StdioHost)?;
     }
 
     Ok(())

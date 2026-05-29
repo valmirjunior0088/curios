@@ -1,6 +1,9 @@
 use {
-    curios::{cont, core, ersd, text},
-    std::{path::Path, time::Duration, time::Instant},
+    curios::{Stage, compile, text},
+    std::{
+        path::Path,
+        time::{Duration, Instant},
+    },
 };
 
 fn main() {
@@ -28,41 +31,25 @@ fn main() {
         end
         "#;
 
-    let t = Instant::now();
-    let text_entrypoint: text::Entrypoint = source
-        .parse::<text::Entrypoint>()
-        .expect("failed to parse source")
-        .with_prelude();
-    println!("text: {:?}", t.elapsed());
+    let loader = text::FileLoader::new(Path::new(file!()).parent().unwrap().join("crs"));
+    let mut last = Instant::now();
 
-    let t = Instant::now();
-    let core_term = text::to_core(
-        &text_entrypoint,
-        &text::FileLoader::new(Path::new(file!()).parent().unwrap().join("crs")),
-    )
-    .expect("expected core term");
-    println!("core: {:?}", t.elapsed());
+    let wasm_module = compile(Duration::from_secs(10), &loader, None, source, |stage| {
+        let now = Instant::now();
+        let elapsed = now - last;
+        last = now;
+        let name = match stage {
+            Stage::Text(_) => "text",
+            Stage::Core(_) => "core",
+            Stage::Ersd(_) => "ersd",
+            Stage::Cont(_) => "cont",
+            Stage::Wasm(_) => "wasm",
+        };
+        println!("{name}: {elapsed:?}");
+    })
+    .expect("expected wasm module");
 
-    let timeout = Duration::from_secs(10);
-    let t = Instant::now();
-    let ersd_term = core::erase(
-        &mut core::Context::new(timeout),
-        &core_term,
-        &core::infer(&mut core::Context::new(timeout), &core_term)
-            .unwrap_or_else(|e| panic!("failed to infer type: {e}")),
-    )
-    .unwrap_or_else(|e| panic!("failed to erase term: {e}"));
-    println!("ersd: {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let cont_module = ersd::to_cont(&ersd_term);
-    println!("cont: {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let wasm_module = cont::to_wasm(&cont_module);
-    println!("wasm: {:?}", t.elapsed());
-
-    let (system, receiver) = curios::ChannelProvider::out();
+    let (system, receiver) = curios::ChannelHost::out();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());
