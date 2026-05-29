@@ -1,24 +1,19 @@
 use std::{
-    collections::VecDeque,
     io::{BufRead, Write, stdin, stdout},
     sync::{
         Arc, Mutex,
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvError, Sender},
     },
 };
 
 pub trait Provider {
-    fn print(&self, bytes: &[u8]);
     fn read(&self) -> Vec<u8>;
+    fn print(&self, bytes: &[u8]);
 }
 
 pub struct StdioProvider;
 
 impl Provider for StdioProvider {
-    fn print(&self, bytes: &[u8]) {
-        stdout().write_all(bytes).unwrap();
-    }
-
     fn read(&self) -> Vec<u8> {
         let mut line = String::new();
 
@@ -28,43 +23,57 @@ impl Provider for StdioProvider {
             Err(_) => vec![],
         }
     }
+
+    fn print(&self, bytes: &[u8]) {
+        stdout().write_all(bytes).unwrap();
+    }
 }
 
 pub struct ChannelProvider {
-    sender: Arc<Mutex<Sender<Vec<u8>>>>,
-    input: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    input_receiver: Mutex<Receiver<Vec<u8>>>,
+    output_sender: Arc<Mutex<Sender<Vec<u8>>>>,
 }
 
 impl ChannelProvider {
-    pub fn out() -> (Self, Receiver<Vec<u8>>) {
-        let (sender, receiver) = mpsc::channel();
+    pub fn in_out<L, I>(lines: I) -> (Self, Receiver<Vec<u8>>)
+    where
+        L: AsRef<[u8]>,
+        I: IntoIterator<Item = L>,
+    {
+        let (input_sender, input_receiver) = mpsc::channel();
+        let (output_sender, output_receiver) = mpsc::channel();
+
+        for line in lines {
+            input_sender.send(line.as_ref().to_vec()).unwrap();
+        }
+
         (
             ChannelProvider {
-                sender: Arc::new(Mutex::new(sender)),
-                input: Arc::new(Mutex::new(VecDeque::new())),
+                input_receiver: Mutex::new(input_receiver),
+                output_sender: Arc::new(Mutex::new(output_sender)),
             },
-            receiver,
+            output_receiver,
         )
     }
 
-    pub fn io(lines: Vec<Vec<u8>>) -> (Self, Receiver<Vec<u8>>) {
-        let (sender, receiver) = mpsc::channel();
-        (
-            ChannelProvider {
-                sender: Arc::new(Mutex::new(sender)),
-                input: Arc::new(Mutex::new(VecDeque::from(lines))),
-            },
-            receiver,
-        )
+    pub fn out() -> (Self, Receiver<Vec<u8>>) {
+        Self::in_out::<&[u8], [&[u8]; 0]>([])
     }
 }
 
 impl Provider for ChannelProvider {
-    fn print(&self, bytes: &[u8]) {
-        self.sender.lock().unwrap().send(bytes.to_vec()).unwrap();
+    fn read(&self) -> Vec<u8> {
+        match self.input_receiver.lock().unwrap().recv() {
+            Ok(line) => line.into_iter().chain([b'\n']).collect(),
+            Err(RecvError) => vec![],
+        }
     }
 
-    fn read(&self) -> Vec<u8> {
-        self.input.lock().unwrap().pop_front().unwrap_or_default()
+    fn print(&self, bytes: &[u8]) {
+        self.output_sender
+            .lock()
+            .unwrap()
+            .send(bytes.to_owned())
+            .unwrap();
     }
 }

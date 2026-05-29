@@ -46,7 +46,7 @@ fn main() {
     let wasm_module = cont::to_wasm(&cont_module);
     println!("wasm:  {:?}", t.elapsed());
 
-    let (system, receiver) = curios::ChannelProvider::io(vec![b"Alice\n".to_vec()]);
+    let (system, receiver) = curios::ChannelProvider::in_out(["Alice"]);
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:   {:?}", t.elapsed());
