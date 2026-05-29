@@ -38,7 +38,11 @@ enum Mode {
         #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
         input_path: PathBuf,
 
-        #[arg(long, value_name = "PATH", help = "Write the compiled WebAssembly binary to PATH")]
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Write the compiled WebAssembly binary to PATH"
+        )]
         output_path: Option<PathBuf>,
     },
 }

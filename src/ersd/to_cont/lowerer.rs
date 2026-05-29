@@ -1,122 +1,15 @@
 use {
-    super::{Entropy, Frame, FrameEntropy},
+    super::{
+        Backpatch, Cont, ContMany, Entropy, Frame, FrameEntropy, RecBody, RegionBuilder,
+        emit_fresh_value, rec_computed_order, unsupported_sync_rec_item,
+    },
     crate::{cont, ersd},
     std::collections::{BTreeMap, HashMap},
 };
 
-fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
-    panic!(
-        "`to_cont` does not support a call-valued `rec` item in value position: \
-         the following term reaches `Apply`/`Match`/`NatMatch` on its construction path \
-         but is bound where a synchronous value is required: {term:?}",
-    )
-}
-
-/// Post-order (dependencies first) of the call/match-valued `rec` bindings, panicking
-/// with the offending cycle if two such bindings depend on each other's value — that
-/// case needs runtime fixpoint cells, which are out of scope.
-fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
-    fn visit(
-        node: usize,
-        names: &[&str],
-        deps: &[Vec<usize>],
-        marks: &mut [u8],
-        stack: &mut Vec<usize>,
-        order: &mut Vec<usize>,
-    ) {
-        marks[node] = 1;
-        stack.push(node);
-
-        for &next in &deps[node] {
-            match marks[next] {
-                1 => {
-                    let start = stack.iter().position(|&n| n == next).unwrap();
-                    let cycle = stack[start..]
-                        .iter()
-                        .chain([&next])
-                        .map(|&n| names[n])
-                        .collect::<Vec<_>>()
-                        .join(" -> ");
-
-                    panic!(
-                        "`to_cont` does not support value-level mutual recursion through calls: \
-                         {cycle} would require runtime fixpoint cells",
-                    );
-                }
-                0 => visit(next, names, deps, marks, stack, order),
-                _ => {}
-            }
-        }
-
-        stack.pop();
-        marks[node] = 2;
-        order.push(node);
-    }
-
-    let mut marks = vec![0u8; names.len()];
-    let mut stack = vec![];
-    let mut order = vec![];
-
-    for node in 0..names.len() {
-        if marks[node] == 0 {
-            visit(node, names, deps, &mut marks, &mut stack, &mut order);
-        }
-    }
-
-    order
-}
-
-fn emit_fresh_value(
-    state: &mut FrameEntropy,
-    builder: &mut RegionBuilder,
-    value: cont::Value,
-) -> cont::ValueName {
-    let name = state.fresh_value();
-    builder.add_value(name.clone(), value);
-
-    name
-}
-
-struct RegionBuilder {
-    preallocs: Vec<(cont::ValueName, cont::Prealloc)>,
-    values: Vec<(cont::ValueName, cont::Value)>,
-    blocks: Vec<(cont::BlockName, cont::Block)>,
-}
-
-impl RegionBuilder {
-    fn new() -> Self {
-        Self {
-            preallocs: vec![],
-            values: vec![],
-            blocks: vec![],
-        }
-    }
-
-    fn add_prealloc(&mut self, name: cont::ValueName, prealloc: cont::Prealloc) {
-        self.preallocs.push((name, prealloc));
-    }
-
-    fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
-        self.values.push((name, value));
-    }
-
-    fn add_block(&mut self, name: cont::BlockName, block: cont::Block) {
-        self.blocks.push((name, block));
-    }
-
-    fn finish(self, tail: cont::Tail) -> cont::Region {
-        cont::Region {
-            preallocs: self.preallocs,
-            values: self.values,
-            blocks: self.blocks,
-            tail,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Lowerer<'a> {
-    pub module: &'a mut cont::Module,
+    module: &'a mut cont::Module,
     clsrs: Entropy<cont::ClsrName>,
 }
 
@@ -191,10 +84,8 @@ impl<'a> Lowerer<'a> {
 
         (resume, builder.finish(tail))
     }
-}
 
-impl<'a> Lowerer<'a> {
-    fn lower_letrec_bindings(
+    pub fn lower_letrec_bindings(
         &mut self,
         letrec: &ersd::Rec,
         frame: &Frame,
@@ -214,10 +105,10 @@ impl<'a> Lowerer<'a> {
             .collect::<Vec<_>>();
 
         for (item, target) in letrec.items.iter().zip(reserved) {
-            match self.plan_aggregate(item, &frame) {
-                Some(fill) => {
-                    builder.add_prealloc(target.clone(), fill.prealloc());
-                    self.emit_agg_fill(target, &fill, &frame, state, builder);
+            match self.plan_backpatch(item, &frame) {
+                Some(backpatch) => {
+                    builder.add_prealloc(target.clone(), backpatch.prealloc());
+                    self.emit_backpatch(target, &backpatch, &frame, state, builder);
                 }
                 None => match item.as_ref() {
                     ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
@@ -231,7 +122,7 @@ impl<'a> Lowerer<'a> {
         frame
     }
 
-    fn lower_letrec_name(
+    pub fn lower_pure_name(
         &mut self,
         term: &ersd::Term,
         frame: &Frame,
@@ -247,114 +138,37 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Nat(*value)))
             }
             ersd::Term::Prim(ersd::Prim::NatEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatEql(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatEql)
             }
             ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatNeq(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatNeq)
             }
             ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatAdd(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatAdd)
             }
             ersd::Term::Prim(ersd::Prim::NatSub(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatSub(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatSub)
             }
             ersd::Term::Prim(ersd::Prim::NatMul(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatMul(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatMul)
             }
             ersd::Term::Prim(ersd::Prim::NatLt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatLt(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatLt)
             }
             ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatDiv(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatDiv)
             }
             ersd::Term::Prim(ersd::Prim::NatRem(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatRem(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatRem)
             }
             ersd::Term::Prim(ersd::Prim::NatGt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatGt(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatGt)
             }
             ersd::Term::Prim(ersd::Prim::NatLte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatLte(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatLte)
             }
             ersd::Term::Prim(ersd::Prim::NatGte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatGte(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::NatGte)
             }
             ersd::Term::Prim(ersd::Prim::Int(value)) => {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Int(*value)))
@@ -363,378 +177,121 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Flt(*value)))
             }
             ersd::Term::Prim(ersd::Prim::IntEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntEql(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntEql)
             }
             ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntNeq(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntNeq)
             }
             ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntAdd(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntAdd)
             }
             ersd::Term::Prim(ersd::Prim::IntSub(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntSub(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntSub)
             }
             ersd::Term::Prim(ersd::Prim::IntMul(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntMul(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntMul)
             }
             ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntDiv(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntDiv)
             }
             ersd::Term::Prim(ersd::Prim::IntRem(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntRem(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntRem)
             }
             ersd::Term::Prim(ersd::Prim::IntLt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntLt(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntLt)
             }
             ersd::Term::Prim(ersd::Prim::IntGt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntGt(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntGt)
             }
             ersd::Term::Prim(ersd::Prim::IntLte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntLte(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntLte)
             }
             ersd::Term::Prim(ersd::Prim::IntGte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntGte(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::IntGte)
             }
             ersd::Term::Prim(ersd::Prim::FltAdd(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltAdd(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltAdd)
             }
             ersd::Term::Prim(ersd::Prim::FltSub(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltSub(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltSub)
             }
             ersd::Term::Prim(ersd::Prim::FltMul(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltMul(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltMul)
             }
             ersd::Term::Prim(ersd::Prim::FltDiv(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltDiv(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltDiv)
             }
             ersd::Term::Prim(ersd::Prim::FltEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltEql(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltEql)
             }
             ersd::Term::Prim(ersd::Prim::FltNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltNeq(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltNeq)
             }
             ersd::Term::Prim(ersd::Prim::FltLt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltLt(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltLt)
             }
             ersd::Term::Prim(ersd::Prim::FltGt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltGt(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltGt)
             }
             ersd::Term::Prim(ersd::Prim::FltLte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltLte(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltLte)
             }
             ersd::Term::Prim(ersd::Prim::FltGte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltGte(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltGte)
             }
             ersd::Term::Prim(ersd::Prim::FltMin(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltMin(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltMin)
             }
             ersd::Term::Prim(ersd::Prim::FltMax(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltMax(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::FltMax)
             }
             ersd::Term::Prim(ersd::Prim::FltNeg(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltNeg(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltNeg)
             }
             ersd::Term::Prim(ersd::Prim::FltAbs(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltAbs(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltAbs)
             }
             ersd::Term::Prim(ersd::Prim::FltSqrt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltSqrt(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltSqrt)
             }
             ersd::Term::Prim(ersd::Prim::FltFloor(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltFloor(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltFloor)
             }
             ersd::Term::Prim(ersd::Prim::FltCeil(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltCeil(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltCeil)
             }
             ersd::Term::Prim(ersd::Prim::FltTrunc(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltTrunc(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltTrunc)
             }
             ersd::Term::Prim(ersd::Prim::FltNearest(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltNearest(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltNearest)
             }
             ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatToStr(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::NatToStr)
             }
             ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntToStr(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::IntToStr)
             }
             ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltToStr(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltToStr)
             }
             ersd::Term::Prim(ersd::Prim::NatToInt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatToInt(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::NatToInt)
             }
             ersd::Term::Prim(ersd::Prim::NatToFlt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::NatToFlt(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::NatToFlt)
             }
             ersd::Term::Prim(ersd::Prim::IntToNat(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntToNat(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::IntToNat)
             }
             ersd::Term::Prim(ersd::Prim::IntToFlt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IntToFlt(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::IntToFlt)
             }
             ersd::Term::Prim(ersd::Prim::FltToNat(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltToNat(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltToNat)
             }
             ersd::Term::Prim(ersd::Prim::FltToInt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::FltToInt(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::FltToInt)
             }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => emit_fresh_value(
                 state,
@@ -742,56 +299,29 @@ impl<'a> Lowerer<'a> {
                 cont::Value::Pure(cont::Data::Bin(bytes.clone())),
             ),
             ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-
-                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::BinLen(bin)))
+                self.lower_pure_unary_code(bin, frame, state, builder, cont::Code::BinLen)
             }
             ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::BinEql(left, right)),
-                )
+                self.lower_pure_binary_code(left, right, frame, state, builder, cont::Code::BinEql)
             }
             ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
-
-                emit_fresh_value(
+                self.lower_pure_binary_code(bin, idx, frame, state, builder, cont::Code::BinGet)
+            }
+            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => self
+                .lower_pure_ternary_code(
+                    bin,
+                    start,
+                    end,
+                    frame,
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::BinGet(bin, idx)),
-                )
-            }
-            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-                let start = self.lower_letrec_name(start, frame, state, builder);
-                let end = self.lower_letrec_name(end, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
-                )
-            }
+                    cont::Code::BinSlice,
+                ),
             ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-                let byte = self.lower_letrec_name(byte, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::BinAppend(bin, byte)),
-                )
+                self.lower_pure_binary_code(bin, byte, frame, state, builder, cont::Code::BinAppend)
             }
             ersd::Term::Prim(ersd::Prim::BinConcat(operands)) => {
-                let names = operands
-                    .iter()
-                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
-                    .collect();
+                let names = self.lower_pure_names(operands, frame, state, builder);
 
                 emit_fresh_value(
                     state,
@@ -800,54 +330,31 @@ impl<'a> Lowerer<'a> {
                 )
             }
             ersd::Term::Prim(ersd::Prim::Arr(elements)) => {
-                let names = elements
-                    .iter()
-                    .map(|e| self.lower_letrec_name(e, frame, state, builder))
-                    .collect();
+                let names = self.lower_pure_names(elements, frame, state, builder);
 
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Arr(names)))
             }
             ersd::Term::Prim(ersd::Prim::ArrLen(lst)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-
-                emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::ArrLen(lst)))
+                self.lower_pure_unary_code(lst, frame, state, builder, cont::Code::ArrLen)
             }
             ersd::Term::Prim(ersd::Prim::ArrGet(lst, idx)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
-
-                emit_fresh_value(
+                self.lower_pure_binary_code(lst, idx, frame, state, builder, cont::Code::ArrGet)
+            }
+            ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => self
+                .lower_pure_ternary_code(
+                    lst,
+                    start,
+                    end,
+                    frame,
                     state,
                     builder,
-                    cont::Value::Eval(cont::Code::ArrGet(lst, idx)),
-                )
-            }
-            ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-                let start = self.lower_letrec_name(start, frame, state, builder);
-                let end = self.lower_letrec_name(end, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::ArrSlice(lst, start, end)),
-                )
-            }
+                    cont::Code::ArrSlice,
+                ),
             ersd::Term::Prim(ersd::Prim::ArrAppend(lst, elem)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-                let elem = self.lower_letrec_name(elem, frame, state, builder);
-
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::ArrAppend(lst, elem)),
-                )
+                self.lower_pure_binary_code(lst, elem, frame, state, builder, cont::Code::ArrAppend)
             }
             ersd::Term::Prim(ersd::Prim::ArrConcat(operands)) => {
-                let names = operands
-                    .iter()
-                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
-                    .collect();
+                let names = self.lower_pure_names(operands, frame, state, builder);
 
                 emit_fresh_value(
                     state,
@@ -868,7 +375,7 @@ impl<'a> Lowerer<'a> {
                 let field_names = s
                     .fields
                     .iter()
-                    .map(|f| self.lower_letrec_name(f, frame, state, builder))
+                    .map(|f| self.lower_pure_name(f, frame, state, builder))
                     .collect::<Vec<_>>();
 
                 emit_fresh_value(
@@ -881,12 +388,7 @@ impl<'a> Lowerer<'a> {
                 emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])))
             }
             ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-                emit_fresh_value(
-                    state,
-                    builder,
-                    cont::Value::Eval(cont::Code::IoPrint(operand)),
-                )
+                self.lower_pure_unary_code(operand, frame, state, builder, cont::Code::IoPrint)
             }
             ersd::Term::Prim(ersd::Prim::IoRead) => {
                 emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::IoRead))
@@ -897,18 +399,18 @@ impl<'a> Lowerer<'a> {
                 cont::Value::Pure(cont::Data::Nat(atom.index as u32)),
             ),
             ersd::Term::Let(let_) => {
-                let body = self.lower_letrec_name(&let_.body, frame, state, builder);
+                let body = self.lower_pure_name(&let_.body, frame, state, builder);
                 let frame = frame.extended([(let_.name.clone(), body)]);
 
-                self.lower_letrec_name(&let_.tail, &frame, state, builder)
+                self.lower_pure_name(&let_.tail, &frame, state, builder)
             }
             ersd::Term::Rec(letrec) => {
                 let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
 
-                self.lower_letrec_name(&letrec.tail, &frame, state, builder)
+                self.lower_pure_name(&letrec.tail, &frame, state, builder)
             }
             ersd::Term::Proj(proj) => {
-                let head = self.lower_letrec_name(&proj.head, frame, state, builder);
+                let head = self.lower_pure_name(&proj.head, frame, state, builder);
                 emit_fresh_value(
                     state,
                     builder,
@@ -921,7 +423,7 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_letrec_item(
+    pub fn lower_letrec_item(
         &mut self,
         term: &ersd::Term,
         target: cont::ValueName,
@@ -930,646 +432,174 @@ impl<'a> Lowerer<'a> {
         builder: &mut RegionBuilder,
     ) {
         match term {
-            ersd::Term::Erased => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![])));
-            }
-            ersd::Term::Prim(ersd::Prim::Nat(value)) => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Nat(*value)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatEql(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatAdd(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatSub(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatSub(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatMul(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatMul(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatLt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatLt(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatNeq(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatDiv(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatRem(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatRem(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatGt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatGt(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatLte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatLte(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatGte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatGte(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::Int(value)) => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Int(*value)));
-            }
-            ersd::Term::Prim(ersd::Prim::Flt(value)) => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Flt(*value)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntEql(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntAdd(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntSub(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntSub(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntMul(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntMul(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntNeq(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntDiv(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntRem(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntRem(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntLt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntLt(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntGt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntGt(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntLte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntLte(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntGte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntGte(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltAdd(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltAdd(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltSub(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltSub(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltMul(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltMul(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltDiv(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltDiv(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltEql(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltNeq(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltNeq(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltLt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltLt(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltGt(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltGt(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltLte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltLte(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltGte(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltGte(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltMin(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltMin(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltMax(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltMax(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltNeg(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltNeg(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltAbs(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltAbs(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltSqrt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltSqrt(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltFloor(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltFloor(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltCeil(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltCeil(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltTrunc(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltTrunc(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltNearest(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltNearest(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatToStr(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntToStr(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltToStr(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatToInt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatToInt(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntToNat(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntToNat(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::IntToFlt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::IntToFlt(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::NatToFlt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::NatToFlt(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltToInt(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltToInt(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::FltToNat(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::FltToNat(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Bin(bytes.clone())));
-            }
-            ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinLen(bin)));
-            }
-            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => {
-                let left = self.lower_letrec_name(left, frame, state, builder);
-                let right = self.lower_letrec_name(right, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinEql(left, right)));
-            }
-            ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinGet(bin, idx)));
-            }
-            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-                let start = self.lower_letrec_name(start, frame, state, builder);
-                let end = self.lower_letrec_name(end, frame, state, builder);
-
-                builder.add_value(
-                    target,
-                    cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
-                );
-            }
-            ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => {
-                let bin = self.lower_letrec_name(bin, frame, state, builder);
-                let byte = self.lower_letrec_name(byte, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinAppend(bin, byte)));
-            }
-            ersd::Term::Prim(ersd::Prim::BinConcat(operands)) => {
-                let names = operands
-                    .iter()
-                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
-                    .collect();
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::BinConcat(names)));
-            }
-            ersd::Term::Prim(ersd::Prim::Arr(elements)) => {
-                let names = elements
-                    .iter()
-                    .map(|e| self.lower_letrec_name(e, frame, state, builder))
-                    .collect();
-
-                builder.add_value(target, cont::Value::Pure(cont::Data::Arr(names)));
-            }
-            ersd::Term::Prim(ersd::Prim::ArrLen(lst)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::ArrLen(lst)));
-            }
-            ersd::Term::Prim(ersd::Prim::ArrGet(lst, idx)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-                let idx = self.lower_letrec_name(idx, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::ArrGet(lst, idx)));
-            }
-            ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-                let start = self.lower_letrec_name(start, frame, state, builder);
-                let end = self.lower_letrec_name(end, frame, state, builder);
-
-                builder.add_value(
-                    target,
-                    cont::Value::Eval(cont::Code::ArrSlice(lst, start, end)),
-                );
-            }
-            ersd::Term::Prim(ersd::Prim::ArrAppend(lst, elem)) => {
-                let lst = self.lower_letrec_name(lst, frame, state, builder);
-                let elem = self.lower_letrec_name(elem, frame, state, builder);
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::ArrAppend(lst, elem)));
-            }
-            ersd::Term::Prim(ersd::Prim::ArrConcat(operands)) => {
-                let names = operands
-                    .iter()
-                    .map(|op| self.lower_letrec_name(op, frame, state, builder))
-                    .collect();
-
-                builder.add_value(target, cont::Value::Eval(cont::Code::ArrConcat(names)));
-            }
-            ersd::Term::Func(func) => {
-                let (clsr_name, captured_values) = self.lower_closure(func, frame);
-                builder.add_value(
-                    target,
-                    cont::Value::Pure(cont::Data::Clsr(clsr_name, captured_values)),
-                );
-            }
-            ersd::Term::Tuple(s) => {
-                let field_names = s
-                    .fields
-                    .iter()
-                    .map(|f| self.lower_letrec_name(f, frame, state, builder))
-                    .collect::<Vec<_>>();
-
-                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(field_names)));
-            }
-            ersd::Term::Prim(ersd::Prim::Unit) => {
-                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(vec![])));
-            }
-            ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => {
-                let operand = self.lower_letrec_name(operand, frame, state, builder);
-                builder.add_value(target, cont::Value::Eval(cont::Code::IoPrint(operand)));
-            }
-            ersd::Term::Prim(ersd::Prim::IoRead) => {
-                builder.add_value(target, cont::Value::Eval(cont::Code::IoRead));
-            }
-            ersd::Term::Atom(atom) => {
-                builder.add_value(
-                    target,
-                    cont::Value::Pure(cont::Data::Nat(atom.index as u32)),
-                );
-            }
-            ersd::Term::Let(let_) => {
-                let body = self.lower_letrec_name(&let_.body, frame, state, builder);
-                let frame = frame.extended([(let_.name.clone(), body)]);
-                self.lower_letrec_item(&let_.tail, target, &frame, state, builder);
-            }
-            ersd::Term::Rec(letrec) => {
-                let frame = self.lower_letrec_bindings(letrec, frame, state, builder);
-                self.lower_letrec_item(&letrec.tail, target, &frame, state, builder);
-            }
-            ersd::Term::Name(name) => {
-                builder.add_value(target, cont::Value::Alias(frame.find(name.as_str())));
-            }
-            ersd::Term::Proj(proj) => {
-                let head = self.lower_letrec_name(&proj.head, frame, state, builder);
-                builder.add_value(
-                    target,
-                    cont::Value::Eval(cont::Code::TplGet(head, proj.index)),
-                );
-            }
             ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
             }
-        }
-    }
-}
-
-type Cont<'a> = Box<
-    dyn FnOnce(
-            &mut Lowerer<'_>,
-            &mut FrameEntropy,
-            &mut RegionBuilder,
-            cont::ValueName,
-        ) -> cont::Tail
-        + 'a,
->;
-
-type ContMany<'a> = Box<
-    dyn FnOnce(
-            &mut Lowerer<'_>,
-            &mut FrameEntropy,
-            &mut RegionBuilder,
-            Vec<cont::ValueName>,
-        ) -> cont::Tail
-        + 'a,
->;
-
-type RecBody<'a> = Box<
-    dyn FnOnce(&mut Lowerer<'_>, &Frame, &mut FrameEntropy, &mut RegionBuilder) -> cont::Tail + 'a,
->;
-
-/// How a `rec`-bound aggregate's prealloc'd shell is filled. A `Func` is lowered eagerly so
-/// its `ClsrName` is shared by both the prealloc declaration and the fill; tuples and arrays
-/// only need their length up front and lower their elements at fill time.
-enum AggFill<'b> {
-    Clsr(cont::ClsrName, Vec<cont::ValueName>),
-    Tpl(&'b [ersd::Subterm]),
-    Arr(&'b [ersd::Subterm]),
-}
-
-impl AggFill<'_> {
-    fn prealloc(&self) -> cont::Prealloc {
-        match self {
-            AggFill::Clsr(clsr, _) => cont::Prealloc::Clsr(clsr.clone()),
-            AggFill::Tpl(fields) => cont::Prealloc::Tpl(fields.len()),
-            AggFill::Arr(elems) => cont::Prealloc::Arr(elems.len()),
-        }
-    }
-}
-
-impl<'a> Lowerer<'a> {
-    /// Classify a `rec` item: aggregates (`Func`/`Tuple`/`Arr`) get a prealloc'd shell so
-    /// their identity is available before their fields; a `Func` is lowered here so its
-    /// `ClsrName` is fixed. Everything else is "computed" (lowered via `lower_to_name`).
-    fn plan_aggregate<'b>(&mut self, item: &'b ersd::Term, frame: &Frame) -> Option<AggFill<'b>> {
-        match item {
-            ersd::Term::Func(func) => {
-                let (clsr_name, captures) = self.lower_closure(func, frame);
-
-                Some(AggFill::Clsr(clsr_name, captures))
+            _ => {
+                let value = self.lower_pure_name(term, frame, state, builder);
+                builder.add_value(target, cont::Value::Alias(value));
             }
-            ersd::Term::Tuple(tuple) => Some(AggFill::Tpl(&tuple.fields)),
-            ersd::Term::Prim(ersd::Prim::Arr(elems)) => Some(AggFill::Arr(elems)),
-            _ => None,
         }
     }
 
-    fn emit_agg_fill(
+    fn lower_pure_unary_code(
         &mut self,
-        target: cont::ValueName,
-        fill: &AggFill,
+        operand: &ersd::Term,
         frame: &Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
-    ) {
-        match fill {
-            AggFill::Clsr(clsr_name, captures) => builder.add_value(
-                target,
-                cont::Value::Pure(cont::Data::Clsr(clsr_name.clone(), captures.clone())),
-            ),
-            AggFill::Tpl(fields) => {
-                let names = fields
-                    .iter()
-                    .map(|field| self.lower_letrec_name(field, frame, state, builder))
-                    .collect();
-
-                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(names)));
-            }
-            AggFill::Arr(elems) => {
-                let names = elems
-                    .iter()
-                    .map(|elem| self.lower_letrec_name(elem, frame, state, builder))
-                    .collect();
-
-                builder.add_value(target, cont::Value::Pure(cont::Data::Arr(names)));
-            }
-        }
+        code: impl FnOnce(cont::ValueName) -> cont::Code,
+    ) -> cont::ValueName {
+        let operand = self.lower_pure_name(operand, frame, state, builder);
+        emit_fresh_value(state, builder, cont::Value::Eval(code(operand)))
     }
 
-    /// Lower a `rec` group, then `body`. Aggregates are prealloc'd at region entry; call/match
-    /// -valued bindings are lowered in dependency order through resume blocks; aggregate fills
-    /// (which may reference those results) run last, just before `body`.
-    fn lower_rec<'b>(
+    fn lower_pure_binary_code(
         &mut self,
-        letrec: &'b ersd::Rec,
+        left: &ersd::Term,
+        right: &ersd::Term,
         frame: &Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
-        body: RecBody<'b>,
-    ) -> cont::Tail {
-        let mut frame = frame.clone();
-        let targets = letrec
-            .names
-            .iter()
-            .map(|name| {
-                let target = state.fresh_value();
-                frame.push(name.clone(), target.clone());
-
-                target
-            })
-            .collect::<Vec<_>>();
-
-        let mut aggregates: Vec<(cont::ValueName, AggFill<'b>)> = vec![];
-        let mut computed: Vec<(usize, cont::ValueName, &'b ersd::Term)> = vec![];
-
-        for (index, (item, target)) in letrec.items.iter().zip(&targets).enumerate() {
-            match self.plan_aggregate(item, &frame) {
-                Some(fill) => aggregates.push((target.clone(), fill)),
-                None => computed.push((index, target.clone(), item)),
-            }
-        }
-
-        let computed_names = computed
-            .iter()
-            .map(|(index, _, _)| letrec.names[*index].as_str())
-            .collect::<Vec<_>>();
-
-        let name_to_pos = computed_names
-            .iter()
-            .enumerate()
-            .map(|(pos, name)| (*name, pos))
-            .collect::<HashMap<_, _>>();
-
-        let deps = computed
-            .iter()
-            .map(|(_, _, rhs)| {
-                rhs.free_names()
-                    .iter()
-                    .filter_map(|name| name_to_pos.get(name.as_str()).copied())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-
-        let order = rec_computed_order(&computed_names, &deps);
-
-        for (target, fill) in &aggregates {
-            builder.add_prealloc(target.clone(), fill.prealloc());
-        }
-
-        let sorted = order
-            .into_iter()
-            .map(|pos| {
-                let (_, target, rhs) = &computed[pos];
-                (target.clone(), *rhs)
-            })
-            .collect::<Vec<_>>();
-
-        let fill_body: RecBody<'b> = Box::new(move |this, frame, state, builder| {
-            for (target, fill) in &aggregates {
-                this.emit_agg_fill(target.clone(), fill, frame, state, builder);
-            }
-
-            body(this, frame, state, builder)
-        });
-
-        self.lower_rec_computed(&sorted, &frame, state, builder, fill_body)
+        code: impl FnOnce(cont::ValueName, cont::ValueName) -> cont::Code,
+    ) -> cont::ValueName {
+        let left = self.lower_pure_name(left, frame, state, builder);
+        let right = self.lower_pure_name(right, frame, state, builder);
+        emit_fresh_value(state, builder, cont::Value::Eval(code(left, right)))
     }
 
-    fn lower_rec_computed<'b>(
+    fn lower_pure_ternary_code(
         &mut self,
-        computed: &'b [(cont::ValueName, &'b ersd::Term)],
+        first: &ersd::Term,
+        second: &ersd::Term,
+        third: &ersd::Term,
+        frame: &Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        code: impl FnOnce(cont::ValueName, cont::ValueName, cont::ValueName) -> cont::Code,
+    ) -> cont::ValueName {
+        let first = self.lower_pure_name(first, frame, state, builder);
+        let second = self.lower_pure_name(second, frame, state, builder);
+        let third = self.lower_pure_name(third, frame, state, builder);
+        emit_fresh_value(
+            state,
+            builder,
+            cont::Value::Eval(code(first, second, third)),
+        )
+    }
+
+    fn lower_pure_names(
+        &mut self,
+        terms: &[ersd::Subterm],
+        frame: &Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+    ) -> Vec<cont::ValueName> {
+        terms
+            .iter()
+            .map(|term| self.lower_pure_name(term, frame, state, builder))
+            .collect()
+    }
+
+    fn lower_unary_code<'b>(
+        &mut self,
+        operand: &'b ersd::Term,
         frame: &'b Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
-        body: RecBody<'b>,
+        cont: Cont<'b>,
+        code: impl FnOnce(cont::ValueName) -> cont::Code + 'b,
     ) -> cont::Tail {
-        match computed {
-            [] => body(self, frame, state, builder),
-            [(target, rhs), rest @ ..] => {
-                let target = target.clone();
+        self.lower_value_name(
+            operand,
+            frame,
+            state,
+            builder,
+            Box::new(move |this, state, builder, operand| {
+                let value = emit_fresh_value(state, builder, cont::Value::Eval(code(operand)));
 
-                self.lower_to_name(
-                    rhs,
+                cont(this, state, builder, value)
+            }),
+        )
+    }
+
+    fn lower_binary_code<'b>(
+        &mut self,
+        left: &'b ersd::Term,
+        right: &'b ersd::Term,
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        cont: Cont<'b>,
+        code: impl FnOnce(cont::ValueName, cont::ValueName) -> cont::Code + 'b,
+    ) -> cont::Tail {
+        self.lower_value_name(
+            left,
+            frame,
+            state,
+            builder,
+            Box::new(move |this, state, builder, left| {
+                this.lower_value_name(
+                    right,
                     frame,
                     state,
                     builder,
-                    Box::new(move |this, state, builder, result| {
-                        builder.add_value(target, cont::Value::Alias(result));
-                        this.lower_rec_computed(rest, frame, state, builder, body)
+                    Box::new(move |this, state, builder, right| {
+                        let value =
+                            emit_fresh_value(state, builder, cont::Value::Eval(code(left, right)));
+
+                        cont(this, state, builder, value)
                     }),
                 )
-            }
-        }
+            }),
+        )
     }
 
-    fn lower_to_name(
+    fn lower_ternary_code<'b>(
+        &mut self,
+        first: &'b ersd::Term,
+        second: &'b ersd::Term,
+        third: &'b ersd::Term,
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        cont: Cont<'b>,
+        code: impl FnOnce(cont::ValueName, cont::ValueName, cont::ValueName) -> cont::Code + 'b,
+    ) -> cont::Tail {
+        self.lower_value_name(
+            first,
+            frame,
+            state,
+            builder,
+            Box::new(move |this, state, builder, first| {
+                this.lower_value_name(
+                    second,
+                    frame,
+                    state,
+                    builder,
+                    Box::new(move |this, state, builder, second| {
+                        this.lower_value_name(
+                            third,
+                            frame,
+                            state,
+                            builder,
+                            Box::new(move |this, state, builder, third| {
+                                let value = emit_fresh_value(
+                                    state,
+                                    builder,
+                                    cont::Value::Eval(code(first, second, third)),
+                                );
+
+                                cont(this, state, builder, value)
+                            }),
+                        )
+                    }),
+                )
+            }),
+        )
+    }
+
+    pub fn lower_value_name(
         &mut self,
         term: &ersd::Term,
         frame: &Frame,
@@ -1591,259 +621,39 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::NatEql(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatEql(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatAdd(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatSub(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatSub(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatMul(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatMul(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatLt(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatLt(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatNeq(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatDiv(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatRem(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatRem(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatGt(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatGt(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatLte(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatLte(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatGte(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::NatGte(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
+            ersd::Term::Prim(ersd::Prim::NatEql(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatEql)
+            }
+            ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatAdd)
+            }
+            ersd::Term::Prim(ersd::Prim::NatSub(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatSub)
+            }
+            ersd::Term::Prim(ersd::Prim::NatMul(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatMul)
+            }
+            ersd::Term::Prim(ersd::Prim::NatLt(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatLt)
+            }
+            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatNeq)
+            }
+            ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatDiv)
+            }
+            ersd::Term::Prim(ersd::Prim::NatRem(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatRem)
+            }
+            ersd::Term::Prim(ersd::Prim::NatGt(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatGt)
+            }
+            ersd::Term::Prim(ersd::Prim::NatLte(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatLte)
+            }
+            ersd::Term::Prim(ersd::Prim::NatGte(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatGte)
+            }
             ersd::Term::Prim(ersd::Prim::Int(value)) => {
                 let value =
                     emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Int(*value)));
@@ -1856,775 +666,123 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::IntEql(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntEql(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntAdd(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntSub(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntSub(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntMul(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntMul(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntNeq(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntDiv(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntRem(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntRem(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntLt(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntLt(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntGt(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntGt(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntLte(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntLte(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntGte(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::IntGte(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltAdd(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltAdd(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltSub(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltSub(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltMul(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltMul(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltDiv(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltDiv(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltEql(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltEql(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltNeq(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltNeq(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltLt(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltLt(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltGt(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltGt(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltLte(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltLte(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltGte(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltGte(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltMin(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltMin(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltMax(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::FltMax(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltNeg(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltNeg(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltAbs(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltAbs(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltSqrt(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltSqrt(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltFloor(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltFloor(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltCeil(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltCeil(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltTrunc(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltTrunc(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltNearest(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltNearest(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::NatToStr(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::IntToStr(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltToStr(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatToInt(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::NatToInt(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntToNat(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::IntToNat(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::IntToFlt(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::IntToFlt(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::NatToFlt(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::NatToFlt(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltToInt(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltToInt(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::FltToNat(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::FltToNat(operand)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
-            ),
+            ersd::Term::Prim(ersd::Prim::IntEql(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntEql)
+            }
+            ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntAdd)
+            }
+            ersd::Term::Prim(ersd::Prim::IntSub(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntSub)
+            }
+            ersd::Term::Prim(ersd::Prim::IntMul(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntMul)
+            }
+            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntNeq)
+            }
+            ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntDiv)
+            }
+            ersd::Term::Prim(ersd::Prim::IntRem(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntRem)
+            }
+            ersd::Term::Prim(ersd::Prim::IntLt(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntLt)
+            }
+            ersd::Term::Prim(ersd::Prim::IntGt(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntGt)
+            }
+            ersd::Term::Prim(ersd::Prim::IntLte(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntLte)
+            }
+            ersd::Term::Prim(ersd::Prim::IntGte(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntGte)
+            }
+            ersd::Term::Prim(ersd::Prim::FltAdd(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltAdd)
+            }
+            ersd::Term::Prim(ersd::Prim::FltSub(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltSub)
+            }
+            ersd::Term::Prim(ersd::Prim::FltMul(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltMul)
+            }
+            ersd::Term::Prim(ersd::Prim::FltDiv(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltDiv)
+            }
+            ersd::Term::Prim(ersd::Prim::FltEql(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltEql)
+            }
+            ersd::Term::Prim(ersd::Prim::FltNeq(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltNeq)
+            }
+            ersd::Term::Prim(ersd::Prim::FltLt(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltLt)
+            }
+            ersd::Term::Prim(ersd::Prim::FltGt(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltGt)
+            }
+            ersd::Term::Prim(ersd::Prim::FltLte(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltLte)
+            }
+            ersd::Term::Prim(ersd::Prim::FltGte(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltGte)
+            }
+            ersd::Term::Prim(ersd::Prim::FltMin(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltMin)
+            }
+            ersd::Term::Prim(ersd::Prim::FltMax(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltMax)
+            }
+            ersd::Term::Prim(ersd::Prim::FltNeg(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltNeg)
+            }
+            ersd::Term::Prim(ersd::Prim::FltAbs(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltAbs)
+            }
+            ersd::Term::Prim(ersd::Prim::FltSqrt(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltSqrt)
+            }
+            ersd::Term::Prim(ersd::Prim::FltFloor(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltFloor)
+            }
+            ersd::Term::Prim(ersd::Prim::FltCeil(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltCeil)
+            }
+            ersd::Term::Prim(ersd::Prim::FltTrunc(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltTrunc)
+            }
+            ersd::Term::Prim(ersd::Prim::FltNearest(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltNearest)
+            }
+            ersd::Term::Prim(ersd::Prim::NatToStr(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::NatToStr)
+            }
+            ersd::Term::Prim(ersd::Prim::IntToStr(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::IntToStr)
+            }
+            ersd::Term::Prim(ersd::Prim::FltToStr(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltToStr)
+            }
+            ersd::Term::Prim(ersd::Prim::NatToInt(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::NatToInt)
+            }
+            ersd::Term::Prim(ersd::Prim::IntToNat(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::IntToNat)
+            }
+            ersd::Term::Prim(ersd::Prim::IntToFlt(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::IntToFlt)
+            }
+            ersd::Term::Prim(ersd::Prim::NatToFlt(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::NatToFlt)
+            }
+            ersd::Term::Prim(ersd::Prim::FltToInt(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltToInt)
+            }
+            ersd::Term::Prim(ersd::Prim::FltToNat(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltToNat)
+            }
             ersd::Term::Prim(ersd::Prim::Bin(bytes)) => {
                 let value = emit_fresh_value(
                     state,
@@ -2634,120 +792,33 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::BinLen(bin)) => self.lower_to_name(
+            ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
+                self.lower_unary_code(bin, frame, state, builder, cont, cont::Code::BinLen)
+            }
+            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => {
+                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::BinEql)
+            }
+            ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
+                self.lower_binary_code(bin, idx, frame, state, builder, cont, cont::Code::BinGet)
+            }
+            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => self.lower_ternary_code(
                 bin,
+                start,
+                end,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, bin| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::BinLen(bin)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
+                cont,
+                cont::Code::BinSlice,
             ),
-            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => self.lower_to_name(
-                left,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, left| {
-                    this.lower_to_name(
-                        right,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, right| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::BinEql(left, right)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => self.lower_to_name(
+            ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => self.lower_binary_code(
                 bin,
+                byte,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, bin| {
-                    this.lower_to_name(
-                        idx,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, idx| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::BinGet(bin, idx)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => self.lower_to_name(
-                bin,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, bin| {
-                    this.lower_to_name(
-                        start,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, start| {
-                            this.lower_to_name(
-                                end,
-                                frame,
-                                state,
-                                builder,
-                                Box::new(move |this, state, builder, end| {
-                                    let value = emit_fresh_value(
-                                        state,
-                                        builder,
-                                        cont::Value::Eval(cont::Code::BinSlice(bin, start, end)),
-                                    );
-
-                                    cont(this, state, builder, value)
-                                }),
-                            )
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => self.lower_to_name(
-                bin,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, bin| {
-                    this.lower_to_name(
-                        byte,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, byte| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::BinAppend(bin, byte)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
+                cont,
+                cont::Code::BinAppend,
             ),
             ersd::Term::Prim(ersd::Prim::BinConcat(operands)) => {
                 self.lower_bin_concat(operands, frame, state, builder, vec![], cont)
@@ -2755,97 +826,30 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Prim(ersd::Prim::Arr(elements)) => {
                 self.lower_lst(elements, frame, state, builder, vec![], cont)
             }
-            ersd::Term::Prim(ersd::Prim::ArrLen(lst)) => self.lower_to_name(
+            ersd::Term::Prim(ersd::Prim::ArrLen(lst)) => {
+                self.lower_unary_code(lst, frame, state, builder, cont, cont::Code::ArrLen)
+            }
+            ersd::Term::Prim(ersd::Prim::ArrGet(lst, idx)) => {
+                self.lower_binary_code(lst, idx, frame, state, builder, cont, cont::Code::ArrGet)
+            }
+            ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => self.lower_ternary_code(
                 lst,
+                start,
+                end,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, lst| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::ArrLen(lst)),
-                    );
-
-                    cont(this, state, builder, value)
-                }),
+                cont,
+                cont::Code::ArrSlice,
             ),
-            ersd::Term::Prim(ersd::Prim::ArrGet(lst, idx)) => self.lower_to_name(
+            ersd::Term::Prim(ersd::Prim::ArrAppend(lst, elem)) => self.lower_binary_code(
                 lst,
+                elem,
                 frame,
                 state,
                 builder,
-                Box::new(move |this, state, builder, lst| {
-                    this.lower_to_name(
-                        idx,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, idx| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::ArrGet(lst, idx)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => self.lower_to_name(
-                lst,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, lst| {
-                    this.lower_to_name(
-                        start,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, start| {
-                            this.lower_to_name(
-                                end,
-                                frame,
-                                state,
-                                builder,
-                                Box::new(move |this, state, builder, end| {
-                                    let value = emit_fresh_value(
-                                        state,
-                                        builder,
-                                        cont::Value::Eval(cont::Code::ArrSlice(lst, start, end)),
-                                    );
-
-                                    cont(this, state, builder, value)
-                                }),
-                            )
-                        }),
-                    )
-                }),
-            ),
-            ersd::Term::Prim(ersd::Prim::ArrAppend(lst, elem)) => self.lower_to_name(
-                lst,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, lst| {
-                    this.lower_to_name(
-                        elem,
-                        frame,
-                        state,
-                        builder,
-                        Box::new(move |this, state, builder, elem| {
-                            let value = emit_fresh_value(
-                                state,
-                                builder,
-                                cont::Value::Eval(cont::Code::ArrAppend(lst, elem)),
-                            );
-
-                            cont(this, state, builder, value)
-                        }),
-                    )
-                }),
+                cont,
+                cont::Code::ArrAppend,
             ),
             ersd::Term::Prim(ersd::Prim::ArrConcat(operands)) => {
                 self.lower_arr_concat(operands, frame, state, builder, vec![], cont)
@@ -2868,20 +872,9 @@ impl<'a> Lowerer<'a> {
                     emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Tpl(vec![])));
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => self.lower_to_name(
-                operand,
-                frame,
-                state,
-                builder,
-                Box::new(move |this, state, builder, operand| {
-                    let value = emit_fresh_value(
-                        state,
-                        builder,
-                        cont::Value::Eval(cont::Code::IoPrint(operand)),
-                    );
-                    cont(this, state, builder, value)
-                }),
-            ),
+            ersd::Term::Prim(ersd::Prim::IoPrint(operand)) => {
+                self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::IoPrint)
+            }
             ersd::Term::Prim(ersd::Prim::IoRead) => {
                 let value = emit_fresh_value(state, builder, cont::Value::Eval(cont::Code::IoRead));
                 cont(self, state, builder, value)
@@ -2898,7 +891,7 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Let(let_) => {
                 let name = let_.name.clone();
 
-                self.lower_to_name(
+                self.lower_value_name(
                     &let_.body,
                     frame,
                     state,
@@ -2906,7 +899,7 @@ impl<'a> Lowerer<'a> {
                     Box::new(move |this, state, builder, body| {
                         let frame = frame.extended([(name, body)]);
 
-                        this.lower_to_name(&let_.tail, &frame, state, builder, cont)
+                        this.lower_value_name(&let_.tail, &frame, state, builder, cont)
                     }),
                 )
             }
@@ -2916,13 +909,13 @@ impl<'a> Lowerer<'a> {
                 state,
                 builder,
                 Box::new(move |this, frame, state, builder| {
-                    this.lower_to_name(&letrec.tail, frame, state, builder, cont)
+                    this.lower_value_name(&letrec.tail, frame, state, builder, cont)
                 }),
             ),
             ersd::Term::Proj(proj) => {
                 let index = proj.index;
 
-                self.lower_to_name(
+                self.lower_value_name(
                     &proj.head,
                     frame,
                     state,
@@ -2973,7 +966,7 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            [head, tail @ ..] => self.lower_to_name(
+            [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
                 state,
@@ -3005,7 +998,7 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            [head, tail @ ..] => self.lower_to_name(
+            [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
                 state,
@@ -3037,7 +1030,7 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            [head, tail @ ..] => self.lower_to_name(
+            [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
                 state,
@@ -3050,7 +1043,7 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_names<'b>(
+    pub fn lower_names<'b>(
         &mut self,
         params: &'b [ersd::Subterm],
         frame: &'b Frame,
@@ -3061,7 +1054,7 @@ impl<'a> Lowerer<'a> {
     ) -> cont::Tail {
         match params {
             [] => cont(self, state, builder, names),
-            [head, tail @ ..] => self.lower_to_name(
+            [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
                 state,
@@ -3090,7 +1083,7 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            [head, tail @ ..] => self.lower_to_name(
+            [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
                 state,
@@ -3103,7 +1096,165 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_tail(
+    /// Classify a `rec` item: backpatches (`Func`/`Tuple`/`Arr`) get a prealloc'd shell so
+    /// their identity is available before their fields; a `Func` is lowered here so its
+    /// `ClsrName` is fixed. Everything else is "computed" (lowered via `lower_value_name`).
+    pub fn plan_backpatch<'b>(
+        &mut self,
+        item: &'b ersd::Term,
+        frame: &Frame,
+    ) -> Option<Backpatch<'b>> {
+        match item {
+            ersd::Term::Func(func) => {
+                let (clsr_name, captures) = self.lower_closure(func, frame);
+
+                Some(Backpatch::Clsr(clsr_name, captures))
+            }
+            ersd::Term::Tuple(tuple) => Some(Backpatch::Tpl(&tuple.fields)),
+            ersd::Term::Prim(ersd::Prim::Arr(elems)) => Some(Backpatch::Arr(elems)),
+            _ => None,
+        }
+    }
+
+    pub fn emit_backpatch(
+        &mut self,
+        target: cont::ValueName,
+        backpatch: &Backpatch,
+        frame: &Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+    ) {
+        match backpatch {
+            Backpatch::Clsr(clsr_name, captures) => builder.add_value(
+                target,
+                cont::Value::Pure(cont::Data::Clsr(clsr_name.clone(), captures.clone())),
+            ),
+            Backpatch::Tpl(fields) => {
+                let names = fields
+                    .iter()
+                    .map(|field| self.lower_pure_name(field, frame, state, builder))
+                    .collect();
+
+                builder.add_value(target, cont::Value::Pure(cont::Data::Tpl(names)));
+            }
+            Backpatch::Arr(elems) => {
+                let names = elems
+                    .iter()
+                    .map(|elem| self.lower_pure_name(elem, frame, state, builder))
+                    .collect();
+
+                builder.add_value(target, cont::Value::Pure(cont::Data::Arr(names)));
+            }
+        }
+    }
+
+    /// Lower a `rec` group, then `body`. Backpatches are prealloc'd at region entry; call/match
+    /// -valued bindings are lowered in dependency order through resume blocks; patches
+    /// (which may reference those results) run last, just before `body`.
+    pub fn lower_rec<'b>(
+        &mut self,
+        letrec: &'b ersd::Rec,
+        frame: &Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        body: RecBody<'b>,
+    ) -> cont::Tail {
+        let mut frame = frame.clone();
+        let targets = letrec
+            .names
+            .iter()
+            .map(|name| {
+                let target = state.fresh_value();
+                frame.push(name.clone(), target.clone());
+
+                target
+            })
+            .collect::<Vec<_>>();
+
+        let mut backpatches: Vec<(cont::ValueName, Backpatch<'b>)> = vec![];
+        let mut computed: Vec<(usize, cont::ValueName, &'b ersd::Term)> = vec![];
+
+        for (index, (item, target)) in letrec.items.iter().zip(&targets).enumerate() {
+            match self.plan_backpatch(item, &frame) {
+                Some(backpatch) => backpatches.push((target.clone(), backpatch)),
+                None => computed.push((index, target.clone(), item)),
+            }
+        }
+
+        let computed_names = computed
+            .iter()
+            .map(|(index, _, _)| letrec.names[*index].as_str())
+            .collect::<Vec<_>>();
+
+        let name_to_pos = computed_names
+            .iter()
+            .enumerate()
+            .map(|(pos, name)| (*name, pos))
+            .collect::<HashMap<_, _>>();
+
+        let deps = computed
+            .iter()
+            .map(|(_, _, rhs)| {
+                rhs.free_names()
+                    .iter()
+                    .filter_map(|name| name_to_pos.get(name.as_str()).copied())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let order = rec_computed_order(&computed_names, &deps);
+
+        for (target, backpatch) in &backpatches {
+            builder.add_prealloc(target.clone(), backpatch.prealloc());
+        }
+
+        let sorted = order
+            .into_iter()
+            .map(|pos| {
+                let (_, target, rhs) = &computed[pos];
+                (target.clone(), *rhs)
+            })
+            .collect::<Vec<_>>();
+
+        let backpatch_body: RecBody<'b> = Box::new(move |this, frame, state, builder| {
+            for (target, backpatch) in &backpatches {
+                this.emit_backpatch(target.clone(), backpatch, frame, state, builder);
+            }
+
+            body(this, frame, state, builder)
+        });
+
+        self.lower_rec_computed(&sorted, &frame, state, builder, backpatch_body)
+    }
+
+    pub fn lower_rec_computed<'b>(
+        &mut self,
+        computed: &'b [(cont::ValueName, &'b ersd::Term)],
+        frame: &'b Frame,
+        state: &mut FrameEntropy,
+        builder: &mut RegionBuilder,
+        body: RecBody<'b>,
+    ) -> cont::Tail {
+        match computed {
+            [] => body(self, frame, state, builder),
+            [(target, rhs), rest @ ..] => {
+                let target = target.clone();
+
+                self.lower_value_name(
+                    rhs,
+                    frame,
+                    state,
+                    builder,
+                    Box::new(move |this, state, builder, result| {
+                        builder.add_value(target, cont::Value::Alias(result));
+                        this.lower_rec_computed(rest, frame, state, builder, body)
+                    }),
+                )
+            }
+        }
+    }
+
+    pub fn lower_tail(
         &mut self,
         term: &ersd::Term,
         frame: &Frame,
@@ -3112,7 +1263,7 @@ impl<'a> Lowerer<'a> {
         builder: &mut RegionBuilder,
     ) -> cont::Tail {
         match term {
-            ersd::Term::Apply(apply) => self.lower_to_name(
+            ersd::Term::Apply(apply) => self.lower_value_name(
                 &apply.head,
                 frame,
                 state,
@@ -3134,7 +1285,7 @@ impl<'a> Lowerer<'a> {
                     )
                 }),
             ),
-            ersd::Term::Match(m) => self.lower_to_name(
+            ersd::Term::Match(m) => self.lower_value_name(
                 &m.head,
                 frame,
                 state,
@@ -3178,7 +1329,7 @@ impl<'a> Lowerer<'a> {
                 pred,
                 ih,
                 succ_case,
-            }) => self.lower_to_name(
+            }) => self.lower_value_name(
                 nat_head,
                 frame,
                 state,
@@ -3322,7 +1473,7 @@ impl<'a> Lowerer<'a> {
                 head: nm_head,
                 cases: nm_cases,
                 default: nm_default,
-            }) => self.lower_to_name(
+            }) => self.lower_value_name(
                 nm_head,
                 frame,
                 state,
@@ -3375,7 +1526,7 @@ impl<'a> Lowerer<'a> {
             ),
             ersd::Term::Let(let_) => {
                 let name = let_.name.clone();
-                self.lower_to_name(
+                self.lower_value_name(
                     &let_.body,
                     frame,
                     state,
@@ -3395,7 +1546,7 @@ impl<'a> Lowerer<'a> {
                     this.lower_tail(&letrec.tail, frame, resume, state, builder)
                 }),
             ),
-            _ => self.lower_to_name(
+            _ => self.lower_value_name(
                 term,
                 frame,
                 state,

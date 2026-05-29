@@ -4,8 +4,17 @@ use entropy::*;
 mod frame;
 use frame::*;
 
+mod builder;
+use builder::*;
+
+mod conts;
+use conts::*;
+
 mod lowerer;
 use lowerer::*;
+
+mod rec;
+use rec::*;
 
 use crate::{cont, ersd};
 
