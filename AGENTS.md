@@ -4,7 +4,7 @@ Curios is a dependently-typed functional language that compiles to WebAssembly.
 
 Consult these first when questions arise about the language, type system, primitives, idioms, or compiler architecture.
 
-- **`README.md`** — project pitch, install via `cargo install`, CLI flags (`--timeout`, `--check`, `--print`), minimal `/sys/Io/print` entrypoint.
+- **`README.md`** — project pitch, install via `cargo install`, CLI subcommands (`run`, `check`, `compile`) with `--timeout`, `--print`, and `compile --output-path`, minimal `/sys/Io/print` entrypoint.
 - **`SYNTAX.md`** — complete language reference: lexical basics, top-level forms (`let`, `rec`, `mod`, `use`), every term and type form, literals, the `/sys` prelude (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, `Bln`, `Io`), and canonical idioms for sum and recursive types.
 - **`CRASH_COURSE.md`** — Rust-programmer's introduction: bindings, lambdas, `match` over `Nat`, primitives, tuples, atoms, dependent-tuple sum types, Π-types, length-indexed vectors, with Rust and Curios side by side.
 - **`ARCHITECTURE.md`** — compiler pipeline across six stages: parsing (`text`), elaboration (`text/to_core`), type checking and erasure (`core/typing.rs`), CPS lowering (`ersd/to_cont`), WASM codegen (`cont/to_wasm`), and binary serialization (`wasm/writer.rs`); also module conventions, WASM value representation, the `Provider` trait, the test suite, and a recommended reading order.

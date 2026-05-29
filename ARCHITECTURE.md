@@ -49,25 +49,24 @@ result                    printed by src/run.rs
 
 ## Module layout
 
-Every stage (`text`, `core`, `ersd`, `cont`, `wasm`) follows an identical layout:
+The stages share a common pattern of a small facade module that re-exports the stage's public surface, but the exact internal files differ by stage.
 
 ```
-src/<stage>.rs              facade — mod X; pub use X::*;
-src/<stage>/names.rs        newtype name wrappers via name! macro
-src/<stage>/prim.rs         primitive types and operations enum
-src/<stage>/term.rs         central AST enum + supporting structs
-src/<stage>/print.rs        Display impl via printer combinators (not re-exported)
-src/<stage>/to_<next>.rs    transformation to next stage (may be a folder)
+src/text.rs          facade; re-exports names, term, prim, module, parse, loader, prelude, to_core, error
+src/core.rs          facade; re-exports names, term, prim, arity, context, infer, erase, typing, reduce, convert
+src/ersd.rs          facade; re-exports names, prim, term, to_cont
+src/cont.rs          facade; re-exports names, module, to_wasm
+src/wasm.rs          facade; re-exports names, types, expr, module, writer; exposes parse and print
 ```
 
-Transformation entry points (`to_cont.rs`, `to_wasm.rs`) declare submodules privately — callers see only the public transformation function.
+Transformation entry points (`src/text/to_core.rs`, `src/ersd/to_cont.rs`, `src/cont/to_wasm.rs`) declare submodules privately, so callers see only the public transformation function.
 
 Three top-level modules fall outside this pattern:
 
 | Module        | Role                                                                                                       |
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
 | `src/span.rs` | `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting) |
-| `src/run.rs`  | Wasmtime execution and result printing; gated behind the `run` Cargo feature                               |
+| `src/run.rs`  | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature |
 | `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                            |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
@@ -307,29 +306,33 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 
 ---
 
-## Execution (`src/run.rs`)
+## Execution (`src/run.rs` and `src/run/`)
 
-Four public entry points, all accepting a `provider: P where P: Provider + Send + Sync + 'static`:
+`src/run.rs` re-exports everything from `src/run/{host,engine,compile,lift,lower}.rs` and defines the top-level entry points. All public entry points are generic over a host `H: Host + Send + Sync + 'static`:
 
-- `run_text(timeout, source, provider)` — inline source with `PanicLoader`
-- `run_file(timeout, path, provider)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
-- `run(timeout, source, loader, provider)` — shared core: full pipeline → `run_wasm`
-- `run_wasm(wasm_module, provider)` — executes a `wasm::Module` directly via Wasmtime
+- `run_text(timeout, source, host)` — inline source with `PanicLoader`
+- `run_file(timeout, path, host)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
+- `run(timeout, source, loader, host)` — shared core: full pipeline → `run_wasm`
+- `run_wasm(wasm_module, host)` — executes a `wasm::Module` directly via Wasmtime (`src/run/engine.rs`)
+- `compile(timeout, loader, base, source, observe)` — runs the full pipeline from text to `wasm::Module` without execution; the `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
 
-The `Provider` trait (`src/run/provider.rs`) abstracts all program IO:
+The `Host` trait (`src/run/host.rs`) abstracts all program IO:
 
 ```rust
-pub trait Provider {
-    fn print(&self, bytes: &[u8]);
+pub trait Host {
+    fn nat_to_str(&self, value: u32) -> Vec<u8> { /* default: format!("{value}") */ }
+    fn int_to_str(&self, value: i32) -> Vec<u8> { /* default: format!("{value}") */ }
+    fn flt_to_str(&self, value: f32) -> Vec<u8> { /* default: signed format!("{value}") */ }
     fn read(&self) -> Vec<u8>;
+    fn print(&self, bytes: &[u8]);
 }
 ```
 
-Two implementations ship: `StdioProvider` writes to stdout and reads a line from stdin; `ChannelProvider` routes `print` output through an `mpsc` channel and serves `read` calls from a pre-loaded `VecDeque`. `ChannelProvider::out()` constructs an output-only instance; `ChannelProvider::io(lines)` pre-loads input lines for full IO simulation in tests.
+Two implementations ship: `StdioHost` writes to stdout and reads a line from stdin; `ChannelHost` routes `print` output through an `mpsc::Sender<Vec<u8>>` and serves `read` calls from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand for output-only simulation.
 
-Five operations are wired as Wasmtime host imports under `"env"`: `nat_to_str`, `int_to_str`, and `flt_to_str` are pure Rust functions that convert primitive values to `Bin`; `io_print` unpacks the `Bin` argument and calls `provider.print()`; `io_read` calls `provider.read()` and returns the result as a `Bin`.
+Five operations are wired as Wasmtime host imports under `"env"`, all routed through the `Host` Arc held by `run_wasm`: `nat_to_str`/`int_to_str`/`flt_to_str` convert primitive values to `Bin` (the trait's default impls cover the common case); `io_print` unpacks the `Bin` argument and calls `host.print()`; `io_read` calls `host.read()` and returns the result as a `Bin`.
 
-Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/print` and `/sys/Io/read` through the `Provider`.
+Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/print` and `/sys/Io/read` through the `Host`.
 
 ---
 
@@ -358,16 +361,18 @@ Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/error.rs`) whose
 
 ## CLI (`src/cli.rs`)
 
-A Clap wrapper that runs the full compilation pipeline with optional flags:
+A Clap wrapper that runs the full compilation pipeline. Top-level options precede a subcommand:
 
 ```
-curios [--timeout <MILLIS>] [--check] [--print] <path>
+curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output-path PATH]
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure (default: off)
-- `--print` prints every intermediate representation — core, ersd, cont, and wasm — before executing (default: off)
-- `<file>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
+- `--print` prints every intermediate representation — core, ersd, cont, and wasm — to stderr (default: off)
+- `run` compiles and executes the entrypoint
+- `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
+- `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path
+- `<input-path>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
 
 ---
 
@@ -402,4 +407,4 @@ curios [--timeout <MILLIS>] [--check] [--print] <path>
 8. **`src/cont/module.rs`** — the CPS IR types; pay attention to how `Call` specifies a `resume` block.
 9. **`src/ersd/to_cont/lowerer.rs`** — how `ersd::Term` becomes CPS; the `lower_tail` vs `lower_to_name` distinction is the key insight.
 10. **`src/cont/to_wasm/expr_emitter.rs`** + **`src/cont/to_wasm/module_emitter.rs`** — how CPS maps to WASM instructions.
-11. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_wasm` tie the whole pipeline together.
+11. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_wasm`, and `compile` (with the `Stage` observer) tie the whole pipeline together; the implementation lives under `src/run/`.

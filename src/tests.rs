@@ -22,7 +22,7 @@ fn end_to_end() {
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"42".to_vec()]
+        vec![b"+42".to_vec()]
     );
 }
 
@@ -80,7 +80,7 @@ fn multi_arg_function() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+7".to_vec()]);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn curried_function() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+7".to_vec()]);
 }
 
 #[test]

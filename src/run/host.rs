@@ -12,19 +12,15 @@ pub trait Host {
     }
 
     fn int_to_str(&self, value: i32) -> Vec<u8> {
-        format!("{value}").into_bytes()
+        format!("{value:+}").into_bytes()
     }
 
     fn flt_to_str(&self, value: f32) -> Vec<u8> {
-        let formatted = format!("{value}");
-        if formatted.starts_with('-') {
-            formatted.into_bytes()
-        } else {
-            format!("+{formatted}").into_bytes()
-        }
+        format!("{value:+}").into_bytes()
     }
 
     fn read(&self) -> Vec<u8>;
+
     fn print(&self, bytes: &[u8]);
 }
 

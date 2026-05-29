@@ -1,6 +1,12 @@
 use {
-    clap::Parser,
+    super::{
+        Stage, StdioHost, compile, run_wasm,
+        text::FileLoader,
+        wasm::{self, Module},
+    },
+    clap::{Parser, Subcommand},
     std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     },
@@ -13,66 +19,120 @@ fn parse_timeout(input: &str) -> Result<Duration, String> {
         .map_err(|error| format!("invalid timeout in milliseconds: {error}"))
 }
 
+#[derive(Debug, Subcommand)]
+enum Mode {
+    #[command(about = "Execute the compiled WASM module")]
+    Run {
+        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
+        input_path: PathBuf,
+    },
+
+    #[command(about = "Type-check the entrypoint without executing")]
+    Check {
+        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
+        input_path: PathBuf,
+    },
+
+    #[command(about = "Emit the compiled WASM module")]
+    Compile {
+        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
+        input_path: PathBuf,
+
+        #[arg(long, value_name = "PATH", help = "Write the compiled WebAssembly binary to PATH")]
+        output_path: Option<PathBuf>,
+    },
+}
+
 #[derive(Debug, Parser)]
 #[command(version, about)]
 struct Cli {
     #[arg(long, default_value = "1000", value_name = "MILLIS", value_parser = parse_timeout, help = "Type-checker reduction timeout in milliseconds")]
     timeout: Duration,
 
-    #[arg(long, help = "Run the full pipeline without executing the result")]
-    check: bool,
-
-    #[arg(long, help = "Print each intermediate representation to stdout")]
+    #[arg(long, help = "Print each intermediate representation to stderr")]
     print: bool,
 
-    #[arg(help = "Path to the .crs entrypoint file")]
-    path: PathBuf,
+    #[command(subcommand)]
+    mode: Mode,
+}
+
+fn compile_file(timeout: Duration, print: bool, input_path: &Path) -> Result<Module, String> {
+    let source = fs::read_to_string(input_path)
+        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
+
+    let loader = FileLoader::new(input_path.parent().unwrap_or(Path::new(".")).to_path_buf());
+
+    compile(timeout, &loader, None, &source, |stage| {
+        if !print {
+            return;
+        }
+
+        match stage {
+            Stage::Text(entrypoint) => {
+                eprintln!("=== text ===");
+                eprintln!("{entrypoint}");
+            }
+            Stage::Core(term) => {
+                eprintln!();
+                eprintln!("=== core ===");
+                eprintln!("{term}");
+            }
+            Stage::Ersd(term) => {
+                eprintln!();
+                eprintln!("=== ersd ===");
+                eprintln!("{term}");
+            }
+            Stage::Cont(cont_module) => {
+                eprintln!();
+                eprintln!("=== cont ===");
+                eprintln!("{cont_module}");
+            }
+            Stage::Wasm(wasm_module) => {
+                eprintln!();
+                eprintln!("=== wasm ===");
+                eprintln!("{wasm_module}");
+            }
+        }
+    })
+}
+
+fn default_output_path(input_path: &Path) -> PathBuf {
+    PathBuf::from(
+        input_path
+            .file_stem()
+            .unwrap_or_else(|| input_path.as_os_str()),
+    )
+    .with_extension("wasm")
+}
+
+fn emit_executable(module: &Module, output_path: &Path) -> Result<(), String> {
+    fs::write(output_path, &wasm::to_bytes(module))
+        .map_err(|error| format!("failed to write {}: {error}", output_path.display()))
 }
 
 pub fn cli() -> Result<(), String> {
-    let cli = Cli::parse();
+    let Cli {
+        timeout,
+        print,
+        mode,
+    } = Cli::parse();
 
-    let source = std::fs::read_to_string(&cli.path)
-        .map_err(|e| format!("failed to read {}: {e}", cli.path.display()))?;
-
-    let base = cli.path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let loader = crate::text::FileLoader::new(base);
-
-    let module = crate::compile(cli.timeout, &loader, None, &source, |stage| {
-        if !cli.print {
-            return;
+    match mode {
+        Mode::Run { input_path } => {
+            run_wasm(&compile_file(timeout, print, &input_path)?, StdioHost)?;
         }
-        match stage {
-            crate::Stage::Text(entrypoint) => {
-                println!("=== text ===");
-                println!("{entrypoint}");
-            }
-            crate::Stage::Core(term) => {
-                println!();
-                println!("=== core ===");
-                println!("{term}");
-            }
-            crate::Stage::Ersd(term) => {
-                println!();
-                println!("=== ersd ===");
-                println!("{term}");
-            }
-            crate::Stage::Cont(cont_module) => {
-                println!();
-                println!("=== cont ===");
-                println!("{cont_module}");
-            }
-            crate::Stage::Wasm(wasm_module) => {
-                println!();
-                println!("=== wasm ===");
-                println!("{wasm_module}");
-                println!();
-            }
+        Mode::Check { input_path } => {
+            compile_file(timeout, print, &input_path)?;
         }
-    })?;
-
-    if !cli.check {
-        crate::run_wasm(&module, crate::StdioHost)?;
+        Mode::Compile {
+            input_path,
+            output_path,
+        } => {
+            emit_executable(
+                &compile_file(timeout, print, &input_path)?,
+                &output_path.unwrap_or_else(|| default_output_path(&input_path)),
+            )?;
+        }
     }
 
     Ok(())

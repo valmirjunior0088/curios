@@ -23,13 +23,15 @@ cargo install --path .
 ## Usage
 
 ```
-curios [--timeout MILLIS] [--check] [--print] <file>
+curios [--timeout MILLIS] [--print] <run|check|compile> <input-path> [--output-path PATH]
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure (default: off)
-- `--print` prints every intermediate representation — core, ersd, cont, and wasm — before executing (default: off)
-- `<file>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
+- `--print` prints every intermediate representation — core, ersd, cont, and wasm — to stderr (default: off)
+- `run` compiles and executes the entrypoint
+- `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
+- `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path
+- `<input-path>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
 
 A minimal example:
 
@@ -40,7 +42,7 @@ let msg : /sys/Bin = "hello, world";
 ```
 
 ```
-curios hello.crs
+curios run hello.crs
 ```
 
 ## Examples
@@ -67,6 +69,6 @@ fmt/printf("%d")("Alice")
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — full architectural overview of the compiler pipeline, from parsing through type checking, erasure, CPS lowering, and WebAssembly code generation, including a "Start Here" guide for newcomers.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — full architectural overview of the compiler pipeline, from parsing through type checking, erasure, CPS lowering, and WebAssembly code generation, including a "Reading order" guide for newcomers.
 - [SYNTAX.md](SYNTAX.md) — language syntax reference covering lexical basics, all term and type forms, primitive operations, and idioms for sum types and recursive types.
 - [CRASH_COURSE.md](CRASH_COURSE.md) — guided introduction for Rust programmers, building from familiar constructs up to dependent function types and length-indexed vectors.
