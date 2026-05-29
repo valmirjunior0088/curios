@@ -739,13 +739,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, Preempted
     let param_refs = params.iter().collect::<Vec<_>>();
     match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Func(Func { body }) => Ok(Reduce::Continue(body.open(&param_refs))),
-        head => Ok(Reduce::Break(
-            Apply {
-                head: head.into(),
-                params,
-            }
-            .into(),
-        )),
+        head => Ok(Reduce::Break(Term::apply(head, params))),
     }
 }
 
@@ -765,7 +759,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, Preempted> {
             let head: Term = head.into();
             match context.projection(&head, index) {
                 Some(v) => Ok(Reduce::Continue(v.clone())),
-                None => Ok(Reduce::Break(Proj { head, index }.into())),
+                None => Ok(Reduce::Break(Term::proj(head, index))),
             }
         }
     }
@@ -789,14 +783,14 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, Preempte
             {
                 Ok(Reduce::Continue(head))
             }
-            _ => Ok(Reduce::Break(func.into())),
+            _ => Ok(Reduce::Break(Term::new(Subterm::Func(func)))),
         }
 }
 
 fn eta_reduce_tuple(tuple: Tuple) -> Subterm {
     let n = tuple.fields.len();
     if n == 0 {
-        return tuple.into();
+        return Subterm::Tuple(tuple);
     }
     let mut base: Option<Subterm> = None;
     for (i, f) in tuple.fields.iter().enumerate() {
@@ -806,10 +800,10 @@ fn eta_reduce_tuple(tuple: Tuple) -> Subterm {
                 match &base {
                     None => base = Some(h),
                     Some(b) if b == &h => {}
-                    _ => return tuple.into(),
+                    _ => return Subterm::Tuple(tuple),
                 }
             }
-            _ => return tuple.into(),
+            _ => return Subterm::Tuple(tuple),
         }
     }
     base.unwrap()
@@ -839,15 +833,14 @@ fn reduce_nat_induction(
             .into();
             Ok(Reduce::Continue(succ_case.open(&[&pred, &ih])))
         }
-        head => Ok(Reduce::Break(
+        head => Ok(Reduce::Break(Term::new(Subterm::NatMatch(
             NatMatch::Induction {
                 head: head.into(),
                 motive,
                 zero_case,
                 succ_case,
-            }
-            .into(),
-        )),
+            },
+        )))),
     }
 }
 
@@ -861,15 +854,12 @@ fn reduce_bln_match(context: &mut Context, bm: BlnMatch) -> Result<Reduce, Preem
     match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Prim(Prim::Bln(false)) => Ok(Reduce::Continue(false_case)),
         Subterm::Prim(Prim::Bln(true)) => Ok(Reduce::Continue(true_case)),
-        head => Ok(Reduce::Break(
-            BlnMatch {
-                head: head.into(),
-                motive,
-                false_case,
-                true_case,
-            }
-            .into(),
-        )),
+        head => Ok(Reduce::Break(Term::new(Subterm::BlnMatch(BlnMatch {
+            head: head.into(),
+            motive,
+            false_case,
+            true_case,
+        })))),
     }
 }
 
@@ -893,15 +883,14 @@ fn reduce_nat_dispatch(
                 None => Ok(Reduce::Continue(default.clone())),
             }
         }
-        head => Ok(Reduce::Break(
+        head => Ok(Reduce::Break(Term::new(Subterm::NatMatch(
             NatMatch::Dispatch {
                 head: head.into(),
                 motive,
                 cases,
                 default,
-            }
-            .into(),
-        )),
+            },
+        )))),
     }
 }
 
@@ -937,27 +926,21 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, Preempted> {
     let atom = match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Atom(atom) => atom,
         head => {
-            return Ok(Reduce::Break(
-                Match {
-                    head: head.into(),
-                    motive,
-                    cases,
-                }
-                .into(),
-            ));
+            return Ok(Reduce::Break(Term::new(Subterm::Match(Match {
+                head: head.into(),
+                motive,
+                cases,
+            }))));
         }
     };
 
     match cases.get(&atom) {
         Some(body) => Ok(Reduce::Continue(body.clone())),
-        None => Ok(Reduce::Break(
-            Match {
-                head: Subterm::from(atom).into(),
-                motive,
-                cases,
-            }
-            .into(),
-        )),
+        None => Ok(Reduce::Break(Term::new(Subterm::Match(Match {
+            head: Term::atom(atom),
+            motive,
+            cases,
+        })))),
     }
 }
 
@@ -1008,7 +991,7 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
 mod tests {
     use {
         super::*,
-        crate::core::{Atom, AtomType, Let, Match, Nat, NatMatch, Prim, Tuple, Type, Var},
+        crate::core::{Atom, Nat, Prim, Type, Var},
         std::time::Duration,
     };
 
@@ -1020,7 +1003,7 @@ mod tests {
     fn reduce_apply_beta_reduces() {
         let mut context = context();
 
-        let term: Term = Apply::new(Func::new(["x"], Var::free("x")), [Atom::from("ok")]).into();
+        let term: Term = Term::apply(Term::func(["x"], Var::free("x")), [Atom::from("ok")]).into();
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1032,7 +1015,7 @@ mod tests {
     fn reduce_match_selects_match() {
         let mut context = context();
 
-        let term: Term = Match::new(
+        let term: Term = Term::match_(
             Atom::from("a"),
             Some("m"),
             Type,
@@ -1050,10 +1033,10 @@ mod tests {
     fn reduce_nat_fold_zero_is_not_true() {
         let mut context = context();
 
-        let term: Term = NatMatch::induction(
+        let term: Term = Term::nat_induction(
             Subterm::Prim(Prim::Nat(Nat::new(0))),
             Some("m"),
-            AtomType::new(["false", "true"]),
+            Term::atom_type(["false", "true"]),
             Atom::from("false"),
             "pred",
             "ih",
@@ -1073,7 +1056,7 @@ mod tests {
 
         context.define("y", &Atom::from("done").into());
 
-        let term: Term = Let::new("x", Type, Var::free("y"), Var::free("x")).into();
+        let term: Term = Term::let_("x", Type, Var::free("y"), Var::free("x")).into();
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1258,7 +1241,7 @@ mod tests {
     fn reduce_proj_beta_reduces() {
         let mut context = context();
 
-        let term: Term = Proj::new(Tuple::new([Atom::from("a"), Atom::from("b")]), 1).into();
+        let term: Term = Term::proj(Term::tuple([Atom::from("a"), Atom::from("b")]), 1).into();
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1272,7 +1255,7 @@ mod tests {
 
         context.define_projection(Var::free("r").into(), 0, Atom::from("ok").into());
 
-        let term: Term = Proj::new(Var::free("r"), 0).into();
+        let term: Term = Term::proj(Var::free("r"), 0).into();
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1285,7 +1268,7 @@ mod tests {
         let mut context = context();
 
         let term: Term =
-            Tuple::new([Proj::new(Var::free("r"), 0), Proj::new(Var::free("r"), 1)]).into();
+            Term::tuple([Term::proj(Var::free("r"), 0), Term::proj(Var::free("r"), 1)]).into();
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1297,7 +1280,7 @@ mod tests {
     fn eta_reduce_func_fires() {
         let mut context = context();
 
-        let term: Term = Func::new(["y"], Apply::new(Var::free("f"), [Var::free("y")])).into();
+        let term: Term = Term::func(["y"], Term::apply(Var::free("f"), [Var::free("y")])).into();
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1321,7 +1304,7 @@ mod tests {
     #[test]
     fn define_projection_invalidates_cached_reduction() {
         let mut context = context();
-        let proj: Term = Proj::new(Var::free("r"), 0).into();
+        let proj: Term = Term::proj(Var::free("r"), 0).into();
 
         // No projection entry yet: proj reduces to itself and is cached.
         assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));

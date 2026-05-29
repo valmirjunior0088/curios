@@ -4,23 +4,23 @@ use {
 };
 
 fn main() {
-    let core_term: core::Term = core::Rec::new(
+    let core_term: core::Term = core::Term::rec(
         vec![(
             "id",
-            core::FuncType::new([("_", core::Type)], core::Type),
-            core::Func::new(["x"], core::Var::free("x")),
+            core::Term::func_type([("_", core::Type)], core::Type),
+            core::Term::func(["x"], core::Var::free("x")),
         )],
-        core::Let::new(
+        core::Term::let_(
             "tuple_ty",
             core::Type,
-            core::TupleType::new([
+            core::Term::tuple_type([
                 (
                     "label",
-                    core::Term::from(core::AtomType::new(["left", "right"])),
+                    core::Term::from(core::Term::atom_type(["left", "right"])),
                 ),
                 (
                     "value",
-                    core::Term::from(core::Match::new(
+                    core::Term::from(core::Term::match_(
                         core::Var::free("label"),
                         None,
                         core::Type,
@@ -28,29 +28,29 @@ fn main() {
                     )),
                 ),
             ]),
-            core::Let::new(
+            core::Term::let_(
                 "p",
                 core::Var::free("tuple_ty"),
-                core::Tuple::new([
+                core::Term::tuple([
                     core::Term::from(core::Atom::from("left")),
                     core::Type.into(),
                 ]),
-                core::Let::new(
+                core::Term::let_(
                     "label",
-                    core::AtomType::new(["left", "right"]),
-                    core::Proj::new(core::Var::free("p"), 0),
-                    core::Let::new(
+                    core::Term::atom_type(["left", "right"]),
+                    core::Term::proj(core::Var::free("p"), 0),
+                    core::Term::let_(
                         "value",
                         core::Type,
-                        core::Proj::new(core::Var::free("p"), 1),
-                        core::Match::new(
+                        core::Term::proj(core::Var::free("p"), 1),
+                        core::Term::match_(
                             core::Var::free("label"),
                             None,
                             core::Type,
                             [
                                 (
                                     "left",
-                                    core::Term::from(core::Apply::new(
+                                    core::Term::from(core::Term::apply(
                                         core::Var::free("id"),
                                         [core::Var::free("value")],
                                     )),

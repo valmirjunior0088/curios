@@ -252,7 +252,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         }
         Prim::IoPrint(inner) => {
             erase(context, inner, &Subterm::Prim(Prim::BinType).into())?;
-            Ok(Subterm::TupleType(TupleType::unit()).into())
+            Ok(Term::tuple_type_unit())
         }
         Prim::IoRead => Ok(Subterm::Prim(Prim::BinType).into()),
     }
@@ -520,7 +520,7 @@ fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, E
     }
 
     Ok(telescope
-        .nth(*index, |j| Proj::new((**head).clone(), j).into())
+        .nth(*index, |j| Term::proj((**head).clone(), j).into())
         .expect("index in range"))
 }
 
@@ -542,7 +542,7 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
+        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()).into());
 
         erase(
             context,

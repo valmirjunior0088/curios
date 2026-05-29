@@ -17,7 +17,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
         Ok(match term {
-            Term::Type => core::Subterm::Type.into(),
+            Term::Type => core::Term::type_(),
             Term::Prim(prim) => self.prim(prim)?.into(),
             Term::Name(name) => {
                 let resolved = if name.is_abs() || !name.is_single() {
@@ -34,55 +34,49 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 core::Var::free(resolved).into()
             }
             Term::Atom(atom) => core::Atom::from(atom.as_str()).into(),
-            Term::AtomType(at) => {
-                core::AtomType::new(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
-                    .into()
-            }
-            Term::FuncType(ft) => core::FuncType::new(
+            Term::AtomType(at) => core::Term::atom_type(
+                at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())),
+            ),
+            Term::FuncType(ft) => core::Term::func_type(
                 ft.params
                     .iter()
                     .map(|(label, ty)| Ok((label.clone().unwrap_or_default(), self.term(ty)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&ft.output)?,
-            )
-            .into(),
-            Term::Func(func) => core::Func::new(func.params.clone(), self.term(&func.body)?).into(),
-            Term::Apply(apply) => core::Apply::new(
+            ),
+            Term::Func(func) => core::Term::func(func.params.clone(), self.term(&func.body)?),
+            Term::Apply(apply) => core::Term::apply(
                 self.term(&apply.head)?,
                 apply
                     .params
                     .iter()
                     .map(|p| self.term(p))
                     .collect::<Result<Vec<_>, Error>>()?,
-            )
-            .into(),
-            Term::TupleType(tt) => core::TupleType::new(
+            ),
+            Term::TupleType(tt) => core::Term::tuple_type(
                 tt.fields
                     .iter()
                     .map(|(label, type_)| {
                         Ok((label.clone().unwrap_or_default(), self.term(type_)?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
-            )
-            .into(),
-            Term::Tuple(tuple) => core::Tuple::new(
+            ),
+            Term::Tuple(tuple) => core::Term::tuple(
                 tuple
                     .fields
                     .iter()
                     .map(|field| self.term(field))
                     .collect::<Result<Vec<_>, Error>>()?,
-            )
-            .into(),
-            Term::Proj(proj) => core::Proj::new(self.term(&proj.head)?, proj.index).into(),
+            ),
+            Term::Proj(proj) => core::Term::proj(self.term(&proj.head)?, proj.index),
             Term::Match(match_) => match match_ {
-                Match::Bln(bm) => core::BlnMatch::new(
+                Match::Bln(bm) => core::Term::bln_match(
                     self.term(&bm.head)?,
                     bm.motive.label.as_deref(),
                     self.term(&bm.motive.body)?,
                     self.term(&bm.false_case)?,
                     self.term(&bm.true_case)?,
-                )
-                .into(),
+                ),
                 Match::Nat(NatMatch::Induction {
                     head,
                     motive,
@@ -90,7 +84,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     pred_label,
                     ih_label,
                     succ_case,
-                }) => core::NatMatch::induction(
+                }) => core::Term::nat_induction(
                     self.term(head)?,
                     motive.label.as_deref(),
                     self.term(&motive.body)?,
@@ -98,14 +92,13 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     pred_label.clone(),
                     ih_label.clone(),
                     self.term(succ_case)?,
-                )
-                .into(),
+                ),
                 Match::Nat(NatMatch::Dispatch {
                     head,
                     motive,
                     cases,
                     default,
-                }) => core::NatMatch::dispatch(
+                }) => core::Term::nat_dispatch(
                     self.term(head)?,
                     motive.label.as_deref(),
                     self.term(&motive.body)?,
@@ -114,9 +107,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                         .map(|(&nat, body)| Ok((nat, self.term(body)?)))
                         .collect::<Result<Vec<_>, Error>>()?,
                     self.term(default)?,
-                )
-                .into(),
-                Match::Atom(am) => core::Match::new(
+                ),
+                Match::Atom(am) => core::Term::match_(
                     self.term(&am.head)?,
                     am.motive.label.as_deref(),
                     self.term(&am.motive.body)?,
@@ -124,17 +116,15 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                         .iter()
                         .map(|(atom, body)| Ok((core::Atom::from(atom.as_str()), self.term(body)?)))
                         .collect::<Result<Vec<_>, Error>>()?,
-                )
-                .into(),
+                ),
             },
-            Term::Let(let_) => core::Let::new(
+            Term::Let(let_) => core::Term::let_(
                 let_.label.clone(),
                 self.term(&let_.type_)?,
                 self.term(&let_.body)?,
                 self.term(&let_.tail)?,
-            )
-            .into(),
-            Term::Rec(rec) => core::Rec::new(
+            ),
+            Term::Rec(rec) => core::Term::rec(
                 rec.items
                     .iter()
                     .map(|it| {
@@ -146,12 +136,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&rec.tail)?,
-            )
-            .into(),
-            Term::Spanned(span, inner) => core::Term::new(core::Subterm::Spanned(
-                *span,
-                self.term(inner).map_err(|error| error.at(*span))?,
-            )),
+            ),
+            Term::Spanned(span, inner) => {
+                core::Term::spanned(*span, self.term(inner).map_err(|error| error.at(*span))?)
+            }
         })
     }
 

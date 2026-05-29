@@ -1,9 +1,7 @@
 use {
     super::erase,
     crate::{
-        core::{
-            Context, Error, Nat, Prim, Subterm, Term, TupleType, Type, expect, infer, reduce_with,
-        },
+        core::{Context, Error, Nat, Prim, Subterm, Term, Type, expect, infer, reduce_with},
         ersd,
     },
 };
@@ -37,7 +35,7 @@ fn bin_type() -> Term {
 }
 
 fn unit_type() -> Term {
-    Subterm::TupleType(TupleType::unit()).into()
+    Term::tuple_type_unit()
 }
 
 pub fn erase_prim(

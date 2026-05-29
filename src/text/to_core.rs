@@ -143,14 +143,13 @@ fn process_items(
 
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     match item {
-        FlatItem::Let(let_) => core::Let::new(let_.name.join(), let_.type_, let_.body, acc).into(),
-        FlatItem::Rec(items) => core::Rec::new(
+        FlatItem::Let(let_) => core::Term::let_(let_.name.join(), let_.type_, let_.body, acc),
+        FlatItem::Rec(items) => core::Term::rec(
             items
                 .into_iter()
                 .map(|item| (item.name.join(), item.type_, item.body)),
             acc,
-        )
-        .into(),
+        ),
     }
 }
 
@@ -191,7 +190,7 @@ mod tests {
 
     #[test]
     fn no_items_simple_tail() {
-        assert_eq!(run("Type"), core::Term::new(core::Subterm::Type));
+        assert_eq!(run("Type"), core::Term::type_());
     }
 
     #[test]
@@ -201,7 +200,7 @@ mod tests {
                 let x : Type = Type;
                 x
             "#),
-            core::Let::new("x", core::Type, core::Type, core::Var::free("x")).into(),
+            core::Term::let_("x", core::Type, core::Type, core::Var::free("x")).into(),
         );
     }
 
@@ -214,7 +213,7 @@ mod tests {
                 end
                 Foo/f
             "#),
-            core::Let::new("Foo/f", core::Type, core::Type, core::Var::free("Foo/f")).into(),
+            core::Term::let_("Foo/f", core::Type, core::Type, core::Var::free("Foo/f")).into(),
         );
     }
 
@@ -227,7 +226,7 @@ mod tests {
                 end
                 Nat/double
             "#),
-            core::Let::new(
+            core::Term::let_(
                 "Nat/double",
                 core::Type,
                 core::Type,
@@ -249,7 +248,7 @@ mod tests {
                 use Foo/{Bar};
                 Bar/f
             "#),
-            core::Let::new(
+            core::Term::let_(
                 "Foo/Bar/f",
                 core::Type,
                 core::Type,
@@ -361,7 +360,7 @@ mod tests {
                 end
                 MyMod/Bar/f
             "#),
-            core::Let::new(
+            core::Term::let_(
                 "Foo/Bar/f",
                 core::Type,
                 core::Type,
@@ -402,7 +401,7 @@ mod tests {
                 use /MyMod/{Bar};
                 Bar/f
             "#),
-            core::Let::new(
+            core::Term::let_(
                 "Foo/Bar/f",
                 core::Type,
                 core::Type,
@@ -429,7 +428,7 @@ mod tests {
                 end
                 C/X/f
             "#),
-            core::Let::new("A/X/f", core::Type, core::Type, core::Var::free("A/X/f")).into(),
+            core::Term::let_("A/X/f", core::Type, core::Type, core::Var::free("A/X/f")).into(),
         );
     }
 
@@ -738,11 +737,11 @@ mod tests {
                 use /Foo/*;
                 x
             "#),
-            core::Let::new(
+            core::Term::let_(
                 "Foo/x",
                 core::Type,
                 core::Type,
-                core::Let::new("Foo/y", core::Type, core::Type, core::Var::free("Foo/x"))
+                core::Term::let_("Foo/y", core::Type, core::Type, core::Var::free("Foo/x"))
             )
             .into(),
         );

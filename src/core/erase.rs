@@ -123,12 +123,17 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
 
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::TupleType(TupleType { telescope }) => telescope,
-        _ => return Err(Error::not_a_tuple_type(tuple.clone(), expected.clone())),
+        _ => {
+            return Err(Error::not_a_tuple_type(
+                Term::new(Subterm::Tuple(tuple.clone())),
+                expected.clone(),
+            ));
+        }
     };
 
     if fields.len() != type_telescope.len() {
         return Err(Error::tuple_arity_mismatch(
-            tuple.clone(),
+            Term::new(Subterm::Tuple(tuple.clone())),
             type_telescope.len(),
             fields.len(),
         ));
@@ -389,7 +394,7 @@ fn erase_proj(
     }
 
     let field_type = telescope
-        .nth(*index, |j| Proj::new((**head).clone(), j).into())
+        .nth(*index, |j| Term::proj((**head).clone(), j).into())
         .expect("index in range");
 
     expect(context, term, &field_type, expected)?;
@@ -412,7 +417,7 @@ fn erase_atom(
         _ => {
             return Err(Error::type_mismatch(
                 term.clone(),
-                AtomType::new([atom.clone()]),
+                Term::atom_type([atom.clone()]),
                 expected.clone(),
             ));
         }
@@ -424,7 +429,7 @@ fn erase_atom(
         .ok_or_else(|| {
             Error::type_mismatch(
                 term.clone(),
-                AtomType::new([atom.clone()]),
+                Term::atom_type([atom.clone()]),
                 expected.clone(),
             )
         })?;
@@ -455,7 +460,7 @@ fn erase_match(
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &AtomType::new(atoms.iter().cloned()).into());
+        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()).into());
 
         erase(
             context,
