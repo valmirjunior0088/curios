@@ -99,9 +99,7 @@ impl PartialEq for Term {
             return true;
         }
 
-        if let (Some(a), Some(b)) = (self.hash.get(), other.hash.get())
-            && a != b
-        {
+        if self.get_or_init_hash() != other.get_or_init_hash() {
             return false;
         }
 
@@ -526,12 +524,7 @@ impl Term {
         }))
     }
 
-    pub fn match_<H, M, I, A, B>(
-        head: H,
-        motive_label: Option<&str>,
-        motive: M,
-        cases: I,
-    ) -> Self
+    pub fn match_<H, M, I, A, B>(head: H, motive_label: Option<&str>, motive: M, cases: I) -> Self
     where
         H: Into<Term>,
         M: Into<Term>,
@@ -1418,7 +1411,6 @@ where
             body,
         }
     }
-
 }
 
 #[cfg(test)]
