@@ -1104,6 +1104,36 @@ mod tests {
     }
 
     #[test]
+    fn convert_partial_projection_tuple_at_narrow_type() {
+        let mut context = context();
+
+        // p = (a, b), q = (a, c) — both 2-tuples agreeing on field 0, differing on field 1.
+        context.define(
+            "p",
+            &Term::tuple([Atom::from("a"), Atom::from("b")]).into(),
+        );
+        context.define(
+            "q",
+            &Term::tuple([Atom::from("a"), Atom::from("c")]).into(),
+        );
+
+        // Type is a 1-field tuple type {A : {a}}.
+        let type_: Term = Term::tuple_type([("x", Term::atom_type(["a"]))]).into();
+
+        // this = (p.0), that = (q.0). At the 1-field type both denote (a),
+        // so conversion should return true.
+        let this: Term = Term::tuple([Term::proj(Var::free("p"), 0)]).into();
+        let that: Term = Term::tuple([Term::proj(Var::free("q"), 0)]).into();
+
+        // Even though eta_reduce_tuple widens each 1-tuple to its bare base
+        // (`Var p`, `Var q`), the convert loop then routes the neutral pair
+        // through `eta_expand_neutral`, which re-projects according to the
+        // TRUE type telescope (1 field). Each `proj(_, 0)` then reduces to
+        // `a`, so the comparison succeeds — the bug is masked here.
+        assert_eq!(convert(&mut context, &type_, &this, &that), Ok(true));
+    }
+
+    #[test]
     fn convert_times_out_on_pathological_inputs() {
         let mut context = context();
 

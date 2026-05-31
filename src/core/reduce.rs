@@ -787,28 +787,6 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, Preempte
         }
 }
 
-fn eta_reduce_tuple(tuple: Tuple) -> Subterm {
-    let n = tuple.fields.len();
-    if n == 0 {
-        return Subterm::Tuple(tuple);
-    }
-    let mut base: Option<Subterm> = None;
-    for (i, f) in tuple.fields.iter().enumerate() {
-        match f.as_ref() {
-            Subterm::Proj(Proj { head, index }) if *index == i => {
-                let h = (**head).clone();
-                match &base {
-                    None => base = Some(h),
-                    Some(b) if b == &h => {}
-                    _ => return Subterm::Tuple(tuple),
-                }
-            }
-            _ => return Subterm::Tuple(tuple),
-        }
-    }
-    base.unwrap()
-}
-
 fn reduce_nat_induction(
     context: &mut Context,
     head: Subterm,
@@ -974,7 +952,6 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
                 Subterm::Match(m) => reduce_match(context, m)?,
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
-                Subterm::Tuple(t) => Reduce::Break(eta_reduce_tuple(t).into()),
                 Subterm::Spanned(_, inner) => Reduce::Continue(inner),
                 term => Reduce::Break(term.into()),
             };
@@ -1264,16 +1241,17 @@ mod tests {
     }
 
     #[test]
-    fn eta_reduce_tuple_fires() {
+    fn reduce_does_not_eta_reduce_tuple() {
         let mut context = context();
 
+        // Tuple η is type-directed and lives in `convert`, not `reduce`:
+        // `reduce` cannot verify `r`'s arity without type info, so collapsing
+        // `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more
+        // fields than the tuple does.
         let term: Term =
             Term::tuple([Term::proj(Var::free("r"), 0), Term::proj(Var::free("r"), 1)]).into();
 
-        assert_eq!(
-            reduce(&mut context, term.clone()),
-            Ok(Var::free("r").into())
-        );
+        assert_eq!(reduce(&mut context, term.clone()), Ok(term));
     }
 
     #[test]
