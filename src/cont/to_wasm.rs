@@ -25,3 +25,12 @@ pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+use tests::*;
+
+#[cfg(test)]
+mod lowering_tests;
+
+#[cfg(test)]
+mod prim_tests;
