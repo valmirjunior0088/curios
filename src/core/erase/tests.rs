@@ -101,7 +101,10 @@ fn erase_match_singleton_lowers_to_match() {
 fn erase_rec_single_identity_function() {
     let mut context = context();
 
-    let func_type = Term::func_type([("x", Term::atom_type(["a"]))], Term::atom_type(["a"]));
+    let func_type = Term::func_type(
+        [("x", Term::atom_type(["a"]))],
+        Term::atom_type(["a"]),
+    );
 
     let term = Term::rec(
         vec![("f", func_type.clone(), Term::func(["x"], Var::free("x")))],
@@ -167,7 +170,10 @@ fn erase_prim_ops_typecheck() {
 #[test]
 fn erase_func_captures_free_variables_before_opening_body() {
     let atom_type = Term::atom_type(["a"]);
-    let tuple_type = Term::tuple_type([("z", atom_type.clone()), ("w", atom_type.clone())]);
+    let tuple_type = Term::tuple_type([
+        ("z", atom_type.clone()),
+        ("w", atom_type.clone()),
+    ]);
     let type_ = Term::func_type([("x", atom_type.clone())], tuple_type);
     let term = Term::func(
         ["x"],

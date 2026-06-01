@@ -825,9 +825,15 @@ mod tests {
     fn convert_prim_flt_neg_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::func(["x"], Subterm::Prim(Prim::flt_neg(Var::free("x"))));
+        let this = Term::func(
+            ["x"],
+            Subterm::Prim(Prim::flt_neg(Var::free("x"))),
+        );
 
-        let that = Term::func(["y"], Subterm::Prim(Prim::flt_neg(Var::free("y"))));
+        let that = Term::func(
+            ["y"],
+            Subterm::Prim(Prim::flt_neg(Var::free("y"))),
+        );
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -836,9 +842,15 @@ mod tests {
     fn convert_prim_nat_to_int_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::func(["x"], Subterm::Prim(Prim::nat_to_int(Var::free("x"))));
+        let this = Term::func(
+            ["x"],
+            Subterm::Prim(Prim::nat_to_int(Var::free("x"))),
+        );
 
-        let that = Term::func(["y"], Subterm::Prim(Prim::nat_to_int(Var::free("y"))));
+        let that = Term::func(
+            ["y"],
+            Subterm::Prim(Prim::nat_to_int(Var::free("y"))),
+        );
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -914,8 +926,14 @@ mod tests {
     fn convert_prim_bin_len_recurses_into_operand() {
         let mut context = context();
 
-        let this = Term::func(["x"], Subterm::Prim(Prim::bin_len(Var::free("x"))));
-        let that = Term::func(["y"], Subterm::Prim(Prim::bin_len(Var::free("y"))));
+        let this = Term::func(
+            ["x"],
+            Subterm::Prim(Prim::bin_len(Var::free("x"))),
+        );
+        let that = Term::func(
+            ["y"],
+            Subterm::Prim(Prim::bin_len(Var::free("y"))),
+        );
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -1007,8 +1025,14 @@ mod tests {
     fn convert_tuple_equal() {
         let mut context = context();
 
-        let this = Term::tuple([Term::from(Atom::from("x")), Term::from(Atom::from("y"))]);
-        let that = Term::tuple([Term::from(Atom::from("x")), Term::from(Atom::from("y"))]);
+        let this = Term::tuple([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("y")),
+        ]);
+        let that = Term::tuple([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("y")),
+        ]);
 
         assert_eq!(conv(&mut context, &this, &that), Ok(true));
     }
@@ -1017,8 +1041,14 @@ mod tests {
     fn convert_tuple_unequal_field() {
         let mut context = context();
 
-        let this = Term::tuple([Term::from(Atom::from("x")), Term::from(Atom::from("y"))]);
-        let that = Term::tuple([Term::from(Atom::from("x")), Term::from(Atom::from("z"))]);
+        let this = Term::tuple([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("y")),
+        ]);
+        let that = Term::tuple([
+            Term::from(Atom::from("x")),
+            Term::from(Atom::from("z")),
+        ]);
 
         assert_eq!(conv(&mut context, &this, &that), Ok(false));
     }
@@ -1065,8 +1095,8 @@ mod tests {
         let mut context = context();
 
         // p = (a, b), q = (a, c) — both 2-tuples agreeing on field 0, differing on field 1.
-        context.define("p", &Term::tuple([Atom::from("a"), Atom::from("b")]).into());
-        context.define("q", &Term::tuple([Atom::from("a"), Atom::from("c")]).into());
+        context.define("p", &Term::tuple([Atom::from("a"), Atom::from("b")]));
+        context.define("q", &Term::tuple([Atom::from("a"), Atom::from("c")]));
 
         // Type is a 1-field tuple type {A : {a}}.
         let type_: Term = Term::tuple_type([("x", Term::atom_type(["a"]))]);
@@ -1093,12 +1123,18 @@ mod tests {
         let this = Term::tuple_type([
             (
                 "x",
-                Term::apply(Term::func(["z"], Var::free("z")), [Var::free("loop")]),
+                Term::apply(
+                    Term::func(["z"], Var::free("z")),
+                    [Var::free("loop")],
+                ),
             ),
             ("y", Term::from(Var::free("x"))),
         ]);
 
-        let that = Term::tuple_type([("x", Var::free("loop")), ("y", Var::free("x"))]);
+        let that = Term::tuple_type([
+            ("x", Var::free("loop")),
+            ("y", Var::free("x")),
+        ]);
 
         assert_eq!(conv(&mut context, &this, &that), Err(Preempted));
     }
