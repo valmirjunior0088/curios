@@ -13,6 +13,9 @@ use conts::*;
 mod lowerer;
 use lowerer::*;
 
+mod lower_prim;
+use lower_prim::*;
+
 mod rec;
 use rec::*;
 
