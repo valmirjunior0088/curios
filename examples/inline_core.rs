@@ -14,10 +14,7 @@ fn main() {
             "tuple_ty",
             core::Type,
             core::Term::tuple_type([
-                (
-                    "label",
-                    core::Term::atom_type(["left", "right"]),
-                ),
+                ("label", core::Term::atom_type(["left", "right"])),
                 (
                     "value",
                     core::Term::match_(
