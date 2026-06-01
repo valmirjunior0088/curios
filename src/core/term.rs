@@ -1,5 +1,5 @@
 use {
-    super::{Arity, Atom, Many, Nat, One, Prim, Two},
+    super::{Arity, Atom, Flt, Many, Nat, One, Prim, Two},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -728,6 +728,20 @@ impl Subterm {
                 Subterm::Prim(Prim::Nat(Nat::Zero)) => Some(*spine),
                 _ => None,
             },
+            _ => None,
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i32> {
+        match self {
+            Subterm::Prim(Prim::Int(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_flt(&self) -> Option<Flt> {
+        match self {
+            Subterm::Prim(Prim::Flt(value)) => Some(*value),
             _ => None,
         }
     }

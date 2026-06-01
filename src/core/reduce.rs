@@ -11,6 +11,104 @@ enum Reduce {
     Break(Term),
 }
 
+/// Reduce both operands of a `Nat` binary primitive, then either `fold` the two literals or
+/// `rebuild` the neutral term from the reduced operands.
+fn reduce_nat_binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    fold: impl FnOnce(u32, u32) -> Prim,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, Preempted> {
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    Ok(Subterm::Prim(match (left.as_nat(), right.as_nat()) {
+        (Some(l), Some(r)) => fold(l, r),
+        _ => rebuild(left, right),
+    }))
+}
+
+/// `Int` counterpart of [`reduce_nat_binary`].
+fn reduce_int_binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    fold: impl FnOnce(i32, i32) -> Prim,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, Preempted> {
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    Ok(Subterm::Prim(match (left.as_int(), right.as_int()) {
+        (Some(l), Some(r)) => fold(l, r),
+        _ => rebuild(left, right),
+    }))
+}
+
+/// `Flt` counterpart of [`reduce_nat_binary`].
+fn reduce_flt_binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    fold: impl FnOnce(Flt, Flt) -> Prim,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, Preempted> {
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    Ok(Subterm::Prim(match (left.as_flt(), right.as_flt()) {
+        (Some(l), Some(r)) => fold(l, r),
+        _ => rebuild(left, right),
+    }))
+}
+
+/// Reduce the operand of a `Nat` unary primitive, then either `fold` the literal or `rebuild`
+/// the neutral term from the reduced operand.
+fn reduce_nat_unary(
+    context: &mut Context,
+    inner: &Term,
+    fold: impl FnOnce(u32) -> Prim,
+    rebuild: impl FnOnce(Term) -> Prim,
+) -> Result<Subterm, Preempted> {
+    let inner = reduce(context, inner.clone())?;
+
+    Ok(Subterm::Prim(match inner.as_nat() {
+        Some(value) => fold(value),
+        None => rebuild(inner),
+    }))
+}
+
+/// `Int` counterpart of [`reduce_nat_unary`].
+fn reduce_int_unary(
+    context: &mut Context,
+    inner: &Term,
+    fold: impl FnOnce(i32) -> Prim,
+    rebuild: impl FnOnce(Term) -> Prim,
+) -> Result<Subterm, Preempted> {
+    let inner = reduce(context, inner.clone())?;
+
+    Ok(Subterm::Prim(match inner.as_int() {
+        Some(value) => fold(value),
+        None => rebuild(inner),
+    }))
+}
+
+/// `Flt` counterpart of [`reduce_nat_unary`].
+fn reduce_flt_unary(
+    context: &mut Context,
+    inner: &Term,
+    fold: impl FnOnce(Flt) -> Prim,
+    rebuild: impl FnOnce(Term) -> Prim,
+) -> Result<Subterm, Preempted> {
+    let inner = reduce(context, inner.clone())?;
+
+    Ok(Subterm::Prim(match inner.as_flt() {
+        Some(value) => fold(value),
+        None => rebuild(inner),
+    }))
+}
+
 fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted> {
     match prim {
         Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
@@ -27,541 +125,298 @@ fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted>
             })
         }
         Prim::NatEql(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Bln(l == r)),
-                _ => Subterm::Prim(Prim::nat_eql(left, right)),
-            })
+            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l == r), Prim::NatEql)
         }
         Prim::NatNeq(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Bln(l != r)),
-                _ => Subterm::Prim(Prim::nat_neq(left, right)),
-            })
+            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l != r), Prim::NatNeq)
         }
-        Prim::NatAdd(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Nat(Nat::new(l.wrapping_add(r)))),
-                _ => Subterm::Prim(Prim::nat_add(left, right)),
-            })
-        }
-        Prim::NatSub(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Nat(Nat::new(l.wrapping_sub(r)))),
-                _ => Subterm::Prim(Prim::nat_sub(left, right)),
-            })
-        }
-        Prim::NatMul(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Nat(Nat::new(l.wrapping_mul(r)))),
-                _ => Subterm::Prim(Prim::nat_mul(left, right)),
-            })
-        }
+        Prim::NatAdd(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Prim::Nat(Nat::new(l.wrapping_add(r))),
+            Prim::NatAdd,
+        ),
+        Prim::NatSub(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Prim::Nat(Nat::new(l.wrapping_sub(r))),
+            Prim::NatSub,
+        ),
+        Prim::NatMul(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Prim::Nat(Nat::new(l.wrapping_mul(r))),
+            Prim::NatMul,
+        ),
         Prim::NatLt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Bln(l < r)),
-                _ => Subterm::Prim(Prim::nat_lt(left, right)),
-            })
+            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l < r), Prim::NatLt)
         }
-        Prim::NatDiv(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Nat(Nat::new(l.wrapping_div(r)))),
-                _ => Subterm::Prim(Prim::nat_div(left, right)),
-            })
-        }
-        Prim::NatRem(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Nat(Nat::new(l.wrapping_rem(r)))),
-                _ => Subterm::Prim(Prim::nat_rem(left, right)),
-            })
-        }
+        Prim::NatDiv(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Prim::Nat(Nat::new(l.wrapping_div(r))),
+            Prim::NatDiv,
+        ),
+        Prim::NatRem(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Prim::Nat(Nat::new(l.wrapping_rem(r))),
+            Prim::NatRem,
+        ),
         Prim::NatGt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Bln(l > r)),
-                _ => Subterm::Prim(Prim::nat_gt(left, right)),
-            })
+            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l > r), Prim::NatGt)
         }
         Prim::NatLte(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Bln(l <= r)),
-                _ => Subterm::Prim(Prim::nat_lte(left, right)),
-            })
+            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l <= r), Prim::NatLte)
         }
         Prim::NatGte(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(match (left.as_nat(), right.as_nat()) {
-                (Some(l), Some(r)) => Subterm::Prim(Prim::Bln(l >= r)),
-                _ => Subterm::Prim(Prim::nat_gte(left, right)),
-            })
+            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l >= r), Prim::NatGte)
         }
         Prim::IntType => Ok(Subterm::Prim(Prim::IntType)),
         Prim::Int(value) => Ok(Subterm::Prim(Prim::Int(*value))),
-        Prim::IntEql(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Bln(left == right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_eql(left, right)),
-                },
-            )
-        }
-        Prim::IntNeq(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Bln(left != right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_neq(left, right)),
-                },
-            )
-        }
-        Prim::IntAdd(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Int(left.wrapping_add(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_add(left, right)),
-                },
-            )
-        }
-        Prim::IntSub(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Int(left.wrapping_sub(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_sub(left, right)),
-                },
-            )
-        }
-        Prim::IntMul(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Int(left.wrapping_mul(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_mul(left, right)),
-                },
-            )
-        }
-        Prim::IntDiv(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Int(left.wrapping_div(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_div(left, right)),
-                },
-            )
-        }
-        Prim::IntRem(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Int(left.wrapping_rem(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_rem(left, right)),
-                },
-            )
-        }
-        Prim::IntLt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Bln(left < right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_lt(left, right)),
-                },
-            )
-        }
-        Prim::IntGt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Bln(left > right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_gt(left, right)),
-                },
-            )
-        }
-        Prim::IntLte(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Bln(left <= right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_lte(left, right)),
-                },
-            )
-        }
-        Prim::IntGte(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Int(left)), Subterm::Prim(Prim::Int(right))) => {
-                        Subterm::Prim(Prim::Bln(left >= right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::int_gte(left, right)),
-                },
-            )
-        }
+        Prim::IntEql(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left == right),
+            Prim::IntEql,
+        ),
+        Prim::IntNeq(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left != right),
+            Prim::IntNeq,
+        ),
+        Prim::IntAdd(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Int(left.wrapping_add(right)),
+            Prim::IntAdd,
+        ),
+        Prim::IntSub(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Int(left.wrapping_sub(right)),
+            Prim::IntSub,
+        ),
+        Prim::IntMul(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Int(left.wrapping_mul(right)),
+            Prim::IntMul,
+        ),
+        Prim::IntDiv(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Int(left.wrapping_div(right)),
+            Prim::IntDiv,
+        ),
+        Prim::IntRem(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Int(left.wrapping_rem(right)),
+            Prim::IntRem,
+        ),
+        Prim::IntLt(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left < right),
+            Prim::IntLt,
+        ),
+        Prim::IntGt(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left > right),
+            Prim::IntGt,
+        ),
+        Prim::IntLte(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left <= right),
+            Prim::IntLte,
+        ),
+        Prim::IntGte(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left >= right),
+            Prim::IntGte,
+        ),
         Prim::FltType => Ok(Subterm::Prim(Prim::FltType)),
         Prim::Flt(flt) => Ok(Subterm::Prim(Prim::Flt(*flt))),
-        Prim::FltAdd(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Flt(left + right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_add(left, right)),
-                },
-            )
-        }
-        Prim::FltSub(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Flt(left - right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_sub(left, right)),
-                },
-            )
-        }
-        Prim::FltMul(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Flt(left * right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_mul(left, right)),
-                },
-            )
-        }
-        Prim::FltDiv(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Flt(left / right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_div(left, right)),
-                },
-            )
-        }
-        Prim::FltMin(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Flt(left.min(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_min(left, right)),
-                },
-            )
-        }
-        Prim::FltMax(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Flt(left.max(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_max(left, right)),
-                },
-            )
-        }
-        Prim::FltEql(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Bln(left.eql(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_eql(left, right)),
-                },
-            )
-        }
-        Prim::FltNeq(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Bln(left.neq(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_neq(left, right)),
-                },
-            )
-        }
-        Prim::FltLt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Bln(left.lt(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_lt(left, right)),
-                },
-            )
-        }
-        Prim::FltGt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Bln(left.gt(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_gt(left, right)),
-                },
-            )
-        }
-        Prim::FltLte(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Bln(left.lte(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_lte(left, right)),
-                },
-            )
-        }
-        Prim::FltGte(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Flt(left)), Subterm::Prim(Prim::Flt(right))) => {
-                        Subterm::Prim(Prim::Bln(left.gte(right)))
-                    }
-                    (left, right) => Subterm::Prim(Prim::flt_gte(left, right)),
-                },
-            )
-        }
+        Prim::FltAdd(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left + right),
+            Prim::FltAdd,
+        ),
+        Prim::FltSub(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left - right),
+            Prim::FltSub,
+        ),
+        Prim::FltMul(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left * right),
+            Prim::FltMul,
+        ),
+        Prim::FltDiv(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left / right),
+            Prim::FltDiv,
+        ),
+        Prim::FltMin(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left.min(right)),
+            Prim::FltMin,
+        ),
+        Prim::FltMax(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left.max(right)),
+            Prim::FltMax,
+        ),
+        Prim::FltEql(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left.eql(right)),
+            Prim::FltEql,
+        ),
+        Prim::FltNeq(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left.neq(right)),
+            Prim::FltNeq,
+        ),
+        Prim::FltLt(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left.lt(right)),
+            Prim::FltLt,
+        ),
+        Prim::FltGt(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left.gt(right)),
+            Prim::FltGt,
+        ),
+        Prim::FltLte(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left.lte(right)),
+            Prim::FltLte,
+        ),
+        Prim::FltGte(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Bln(left.gte(right)),
+            Prim::FltGte,
+        ),
         Prim::FltNeg(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(-flt)),
-                inner => Subterm::Prim(Prim::flt_neg(inner)),
-            })
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(-flt), Prim::FltNeg)
         }
         Prim::FltAbs(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(flt.abs())),
-                inner => Subterm::Prim(Prim::flt_abs(inner)),
-            })
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.abs()), Prim::FltAbs)
         }
         Prim::FltSqrt(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(flt.sqrt())),
-                inner => Subterm::Prim(Prim::flt_sqrt(inner)),
-            })
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.sqrt()), Prim::FltSqrt)
         }
         Prim::FltFloor(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(flt.floor())),
-                inner => Subterm::Prim(Prim::flt_floor(inner)),
-            })
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.floor()), Prim::FltFloor)
         }
         Prim::FltCeil(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(flt.ceil())),
-                inner => Subterm::Prim(Prim::flt_ceil(inner)),
-            })
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.ceil()), Prim::FltCeil)
         }
         Prim::FltTrunc(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(flt.trunc())),
-                inner => Subterm::Prim(Prim::flt_trunc(inner)),
-            })
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.trunc()), Prim::FltTrunc)
         }
-        Prim::FltNearest(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Flt(flt.nearest())),
-                inner => Subterm::Prim(Prim::flt_nearest(inner)),
-            })
-        }
-        Prim::NatToStr(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match inner.as_nat() {
-                Some(v) => Subterm::Prim(Prim::Bin(format!("{v}").into_bytes())),
-                None => Subterm::Prim(Prim::nat_to_str(inner)),
-            })
-        }
-        Prim::IntToStr(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Int(v)) => {
-                    Subterm::Prim(Prim::Bin(format!("{v}").into_bytes()))
-                }
-                inner => Subterm::Prim(Prim::int_to_str(inner)),
-            })
-        }
-        Prim::FltToStr(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(v)) => {
-                    Subterm::Prim(Prim::Bin(format!("{}", v.to_f32()).into_bytes()))
-                }
-                inner => Subterm::Prim(Prim::flt_to_str(inner)),
-            })
-        }
+        Prim::FltNearest(inner) => reduce_flt_unary(
+            context,
+            inner,
+            |flt| Prim::Flt(flt.nearest()),
+            Prim::FltNearest,
+        ),
+        Prim::NatToStr(inner) => reduce_nat_unary(
+            context,
+            inner,
+            |v| Prim::Bin(format!("{v}").into_bytes()),
+            Prim::NatToStr,
+        ),
+        Prim::IntToStr(inner) => reduce_int_unary(
+            context,
+            inner,
+            |v| Prim::Bin(format!("{v}").into_bytes()),
+            Prim::IntToStr,
+        ),
+        Prim::FltToStr(inner) => reduce_flt_unary(
+            context,
+            inner,
+            |v| Prim::Bin(format!("{}", v.to_f32()).into_bytes()),
+            Prim::FltToStr,
+        ),
         Prim::NatToInt(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match inner.as_nat() {
-                Some(v) => Subterm::Prim(Prim::Int(v as i32)),
-                None => Subterm::Prim(Prim::nat_to_int(inner)),
-            })
+            reduce_nat_unary(context, inner, |v| Prim::Int(v as i32), Prim::NatToInt)
         }
-        Prim::NatToFlt(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match inner.as_nat() {
-                Some(v) => Subterm::Prim(Prim::Flt(Flt::from_f32(v as f32))),
-                None => Subterm::Prim(Prim::nat_to_flt(inner)),
-            })
-        }
-        Prim::IntToNat(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Int(v)) => Subterm::Prim(Prim::Nat(Nat::new(v as u32))),
-                inner => Subterm::Prim(Prim::int_to_nat(inner)),
-            })
-        }
-        Prim::IntToFlt(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Int(v)) => Subterm::Prim(Prim::Flt(Flt::from_f32(v as f32))),
-                inner => Subterm::Prim(Prim::int_to_flt(inner)),
-            })
-        }
-        Prim::FltToNat(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => {
-                    Subterm::Prim(Prim::Nat(Nat::new(flt.to_f32() as u32)))
-                }
-                inner => Subterm::Prim(Prim::flt_to_nat(inner)),
-            })
-        }
-        Prim::FltToInt(inner) => {
-            let inner = reduce(context, inner.clone())?;
-
-            Ok(match Term::unwrap_or_clone(inner) {
-                Subterm::Prim(Prim::Flt(flt)) => Subterm::Prim(Prim::Int(flt.to_f32() as i32)),
-                inner => Subterm::Prim(Prim::flt_to_int(inner)),
-            })
-        }
+        Prim::NatToFlt(inner) => reduce_nat_unary(
+            context,
+            inner,
+            |v| Prim::Flt(Flt::from_f32(v as f32)),
+            Prim::NatToFlt,
+        ),
+        Prim::IntToNat(inner) => reduce_int_unary(
+            context,
+            inner,
+            |v| Prim::Nat(Nat::new(v as u32)),
+            Prim::IntToNat,
+        ),
+        Prim::IntToFlt(inner) => reduce_int_unary(
+            context,
+            inner,
+            |v| Prim::Flt(Flt::from_f32(v as f32)),
+            Prim::IntToFlt,
+        ),
+        Prim::FltToNat(inner) => reduce_flt_unary(
+            context,
+            inner,
+            |flt| Prim::Nat(Nat::new(flt.to_f32() as u32)),
+            Prim::FltToNat,
+        ),
+        Prim::FltToInt(inner) => reduce_flt_unary(
+            context,
+            inner,
+            |flt| Prim::Int(flt.to_f32() as i32),
+            Prim::FltToInt,
+        ),
         Prim::BinType => Ok(Subterm::Prim(Prim::BinType)),
         Prim::Bin(bytes) => Ok(Subterm::Prim(Prim::Bin(bytes.clone()))),
         Prim::BinLen(bin) => {

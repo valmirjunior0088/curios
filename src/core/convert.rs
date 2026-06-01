@@ -1065,8 +1065,8 @@ mod tests {
         let mut context = context();
 
         // p = (a, b), q = (a, c) — both 2-tuples agreeing on field 0, differing on field 1.
-        context.define("p", &Term::tuple([Atom::from("a"), Atom::from("b")]));
-        context.define("q", &Term::tuple([Atom::from("a"), Atom::from("c")]));
+        context.define("p", &Term::tuple([Atom::from("a"), Atom::from("b")]).into());
+        context.define("q", &Term::tuple([Atom::from("a"), Atom::from("c")]).into());
 
         // Type is a 1-field tuple type {A : {a}}.
         let type_: Term = Term::tuple_type([("x", Term::atom_type(["a"]))]);

@@ -1,14 +1,59 @@
 use {super::FrameEntropy, crate::cont};
 
-pub fn emit_fresh_value(
-    state: &mut FrameEntropy,
-    builder: &mut RegionBuilder,
-    value: cont::Value,
-) -> cont::ValueName {
-    let name = state.fresh_value();
-    builder.add_value(name.clone(), value);
+/// A region under construction together with access to the shared name supply.
+///
+/// `state` is the per-function fresh-name counter (borrowed, long-lived); `builder`
+/// is the region being assembled (owned). Sub-regions reborrow the same name supply
+/// via [`Emit::subregion`], so freshly-minted blocks share one monotonic namespace.
+pub struct Emit<'s> {
+    state: &'s mut FrameEntropy,
+    builder: RegionBuilder,
+}
 
-    name
+impl<'s> Emit<'s> {
+    pub fn new(state: &'s mut FrameEntropy) -> Self {
+        Self {
+            state,
+            builder: RegionBuilder::new(),
+        }
+    }
+
+    /// A nested region that draws fresh names from the same supply as `self`.
+    pub fn subregion(&mut self) -> Emit<'_> {
+        Emit::new(&mut *self.state)
+    }
+
+    pub fn fresh_value(&mut self) -> cont::ValueName {
+        self.state.fresh_value()
+    }
+
+    pub fn fresh_block(&mut self) -> cont::BlockName {
+        self.state.fresh_block()
+    }
+
+    /// Bind `value` to a fresh name in this region and return that name.
+    pub fn fresh(&mut self, value: cont::Value) -> cont::ValueName {
+        let name = self.state.fresh_value();
+        self.builder.add_value(name.clone(), value);
+
+        name
+    }
+
+    pub fn add_prealloc(&mut self, name: cont::ValueName, prealloc: cont::Prealloc) {
+        self.builder.add_prealloc(name, prealloc);
+    }
+
+    pub fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
+        self.builder.add_value(name, value);
+    }
+
+    pub fn add_block(&mut self, name: cont::BlockName, block: cont::Block) {
+        self.builder.add_block(name, block);
+    }
+
+    pub fn finish(self, tail: cont::Tail) -> cont::Region {
+        self.builder.finish(tail)
+    }
 }
 
 pub struct RegionBuilder {

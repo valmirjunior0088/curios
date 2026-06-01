@@ -32,7 +32,7 @@ pub enum Context<'a, 'b> {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LoadAs {
     Null,
     NonNull,
