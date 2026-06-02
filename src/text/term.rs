@@ -1,74 +1,133 @@
 use {
     super::{Atom, Name, Prim},
     crate::Span,
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        ops::Deref,
+    },
 };
 
-pub type Subterm = Box<Term>;
+#[derive(Debug, Clone)]
+pub struct Term {
+    span: Option<Span>,
+    inner: Box<Subterm>,
+}
+
+impl Term {
+    pub fn new(subterm: Subterm) -> Self {
+        Self {
+            span: None,
+            inner: Box::new(subterm),
+        }
+    }
+
+    /// Attaches a span to this term. If the term already carries a span (the
+    /// innermost one), it is preserved — innermost wins, matching how
+    /// `Error::at` keeps the first span it sees as errors propagate up.
+    pub fn with_span(mut self, span: Span) -> Self {
+        if self.span.is_none() {
+            self.span = Some(span);
+        }
+
+        self
+    }
+
+    pub fn span(&self) -> Option<&Span> {
+        self.span.as_ref()
+    }
+
+    pub fn into_subterm(self) -> Subterm {
+        *self.inner
+    }
+
+    pub fn as_subterm(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
+impl Deref for Term {
+    type Target = Subterm;
+
+    fn deref(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
+impl From<Subterm> for Term {
+    fn from(subterm: Subterm) -> Self {
+        Term::new(subterm)
+    }
+}
+
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
-    pub params: Vec<(Option<String>, Subterm)>,
-    pub output: Subterm,
+    pub params: Vec<(Option<String>, Term)>,
+    pub output: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
     pub params: Vec<String>,
-    pub body: Subterm,
+    pub body: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Apply {
-    pub head: Subterm,
-    pub params: Vec<Subterm>,
+    pub head: Term,
+    pub params: Vec<Term>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType {
-    pub fields: Vec<(Option<String>, Subterm)>,
+    pub fields: Vec<(Option<String>, Term)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
-    pub fields: Vec<Subterm>,
+    pub fields: Vec<Term>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Motive {
     pub label: Option<String>,
-    pub body: Subterm,
+    pub body: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NatMatch {
     Induction {
-        head: Subterm,
+        head: Term,
         motive: Motive,
-        zero_case: Subterm,
+        zero_case: Term,
         pred_label: String,
         ih_label: String,
-        succ_case: Subterm,
+        succ_case: Term,
     },
     Dispatch {
-        head: Subterm,
+        head: Term,
         motive: Motive,
-        cases: BTreeMap<u32, Subterm>,
-        default: Subterm,
+        cases: BTreeMap<u32, Term>,
+        default: Term,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlnMatch {
-    pub head: Subterm,
+    pub head: Term,
     pub motive: Motive,
-    pub false_case: Subterm,
-    pub true_case: Subterm,
+    pub false_case: Term,
+    pub true_case: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Proj {
-    pub head: Subterm,
+    pub head: Term,
     pub index: usize,
 }
 
@@ -79,20 +138,20 @@ pub struct AtomType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomMatch {
-    pub head: Subterm,
+    pub head: Term,
     pub motive: Motive,
-    pub cases: BTreeMap<Atom, Subterm>,
+    pub cases: BTreeMap<Atom, Term>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionCase {
     pub binders: Vec<String>,
-    pub body: Subterm,
+    pub body: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionMatch {
-    pub head: Subterm,
+    pub head: Term,
     pub motive: Motive,
     pub cases: BTreeMap<String, UnionCase>,
 }
@@ -108,26 +167,26 @@ pub enum Match {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     pub label: String,
-    pub type_: Subterm,
-    pub body: Subterm,
-    pub tail: Subterm,
+    pub type_: Term,
+    pub body: Term,
+    pub tail: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecItem {
     pub label: String,
-    pub type_: Subterm,
-    pub value: Subterm,
+    pub type_: Term,
+    pub value: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rec {
     pub items: Vec<RecItem>,
-    pub tail: Subterm,
+    pub tail: Term,
 }
 
-#[derive(Debug, Clone)]
-pub enum Term {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Subterm {
     Type,
     Prim(Prim),
     FuncType(FuncType),
@@ -142,34 +201,4 @@ pub enum Term {
     Let(Let),
     Rec(Rec),
     Name(Name),
-    Spanned(Span, Subterm),
-}
-
-impl PartialEq for Term {
-    fn eq(&self, other: &Self) -> bool {
-        let mut this = self;
-        let mut that = other;
-
-        loop {
-            match (this, that) {
-                (Term::Spanned(_, inner), _) => this = inner,
-                (_, Term::Spanned(_, inner)) => that = inner,
-                (Term::Type, Term::Type) => break true,
-                (Term::Prim(a), Term::Prim(b)) => break a == b,
-                (Term::FuncType(a), Term::FuncType(b)) => break a == b,
-                (Term::Func(a), Term::Func(b)) => break a == b,
-                (Term::Apply(a), Term::Apply(b)) => break a == b,
-                (Term::TupleType(a), Term::TupleType(b)) => break a == b,
-                (Term::Tuple(a), Term::Tuple(b)) => break a == b,
-                (Term::Proj(a), Term::Proj(b)) => break a == b,
-                (Term::AtomType(a), Term::AtomType(b)) => break a == b,
-                (Term::Atom(a), Term::Atom(b)) => break a == b,
-                (Term::Match(a), Term::Match(b)) => break a == b,
-                (Term::Let(a), Term::Let(b)) => break a == b,
-                (Term::Rec(a), Term::Rec(b)) => break a == b,
-                (Term::Name(a), Term::Name(b)) => break a == b,
-                _ => break false,
-            }
-        }
-    }
 }

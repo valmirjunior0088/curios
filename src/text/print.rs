@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopCase,
-        TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch,
-        UseGroup,
+        GroupItem, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Subterm, Term,
+        TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase,
+        UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -48,7 +48,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(nat, inner)) => {
-            if matches!(inner.as_ref(), Term::Prim(Prim::Nat(Nat::Zero))) {
+            if matches!(inner.as_subterm(), Subterm::Prim(Prim::Nat(Nat::Zero))) {
                 match nat {
                     NatLiteral::Number(n) => pure(format!("{n}")),
                     NatLiteral::Char(c) => {
@@ -66,75 +66,75 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             } else {
                 match nat {
                     NatLiteral::Number(1) => {
-                        flat([pure("Nat.succ("), print_term(*inner), pure(")")])
+                        flat([pure("Nat.succ("), print_term(inner), pure(")")])
                     }
                     NatLiteral::Number(n) => flat([
                         pure(format!("Nat.succ({n}, ")),
-                        print_term(*inner),
+                        print_term(inner),
                         pure(")"),
                     ]),
                     NatLiteral::Char(c) => flat([
                         pure(format!("Nat.succ({}, ", c as u32)),
-                        print_term(*inner),
+                        print_term(inner),
                         pure(")"),
                     ]),
                 }
             }
         }
-        Prim::NatEql(left, right) => print_prim_call("Nat.eql", vec![*left, *right]),
-        Prim::NatNeq(left, right) => print_prim_call("Nat.neq", vec![*left, *right]),
-        Prim::NatAdd(left, right) => print_prim_call("Nat.add", vec![*left, *right]),
-        Prim::NatSub(left, right) => print_prim_call("Nat.sub", vec![*left, *right]),
-        Prim::NatMul(left, right) => print_prim_call("Nat.mul", vec![*left, *right]),
-        Prim::NatLt(left, right) => print_prim_call("Nat.lt", vec![*left, *right]),
-        Prim::NatDiv(left, right) => print_prim_call("Nat.div", vec![*left, *right]),
-        Prim::NatRem(left, right) => print_prim_call("Nat.rem", vec![*left, *right]),
-        Prim::NatGt(left, right) => print_prim_call("Nat.gt", vec![*left, *right]),
-        Prim::NatLte(left, right) => print_prim_call("Nat.lte", vec![*left, *right]),
-        Prim::NatGte(left, right) => print_prim_call("Nat.gte", vec![*left, *right]),
-        Prim::NatToStr(operand) => print_prim_call("Nat.to_str", vec![*operand]),
+        Prim::NatEql(left, right) => print_prim_call("Nat.eql", vec![left, right]),
+        Prim::NatNeq(left, right) => print_prim_call("Nat.neq", vec![left, right]),
+        Prim::NatAdd(left, right) => print_prim_call("Nat.add", vec![left, right]),
+        Prim::NatSub(left, right) => print_prim_call("Nat.sub", vec![left, right]),
+        Prim::NatMul(left, right) => print_prim_call("Nat.mul", vec![left, right]),
+        Prim::NatLt(left, right) => print_prim_call("Nat.lt", vec![left, right]),
+        Prim::NatDiv(left, right) => print_prim_call("Nat.div", vec![left, right]),
+        Prim::NatRem(left, right) => print_prim_call("Nat.rem", vec![left, right]),
+        Prim::NatGt(left, right) => print_prim_call("Nat.gt", vec![left, right]),
+        Prim::NatLte(left, right) => print_prim_call("Nat.lte", vec![left, right]),
+        Prim::NatGte(left, right) => print_prim_call("Nat.gte", vec![left, right]),
+        Prim::NatToStr(operand) => print_prim_call("Nat.to_str", vec![operand]),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{value:+}")),
-        Prim::IntEql(left, right) => print_prim_call("Int.eql", vec![*left, *right]),
-        Prim::IntNeq(left, right) => print_prim_call("Int.neq", vec![*left, *right]),
-        Prim::IntAdd(left, right) => print_prim_call("Int.add", vec![*left, *right]),
-        Prim::IntSub(left, right) => print_prim_call("Int.sub", vec![*left, *right]),
-        Prim::IntMul(left, right) => print_prim_call("Int.mul", vec![*left, *right]),
-        Prim::IntDiv(left, right) => print_prim_call("Int.div", vec![*left, *right]),
-        Prim::IntRem(left, right) => print_prim_call("Int.rem", vec![*left, *right]),
-        Prim::IntLt(left, right) => print_prim_call("Int.lt", vec![*left, *right]),
-        Prim::IntGt(left, right) => print_prim_call("Int.gt", vec![*left, *right]),
-        Prim::IntLte(left, right) => print_prim_call("Int.lte", vec![*left, *right]),
-        Prim::IntGte(left, right) => print_prim_call("Int.gte", vec![*left, *right]),
-        Prim::IntToStr(operand) => print_prim_call("Int.to_str", vec![*operand]),
+        Prim::IntEql(left, right) => print_prim_call("Int.eql", vec![left, right]),
+        Prim::IntNeq(left, right) => print_prim_call("Int.neq", vec![left, right]),
+        Prim::IntAdd(left, right) => print_prim_call("Int.add", vec![left, right]),
+        Prim::IntSub(left, right) => print_prim_call("Int.sub", vec![left, right]),
+        Prim::IntMul(left, right) => print_prim_call("Int.mul", vec![left, right]),
+        Prim::IntDiv(left, right) => print_prim_call("Int.div", vec![left, right]),
+        Prim::IntRem(left, right) => print_prim_call("Int.rem", vec![left, right]),
+        Prim::IntLt(left, right) => print_prim_call("Int.lt", vec![left, right]),
+        Prim::IntGt(left, right) => print_prim_call("Int.gt", vec![left, right]),
+        Prim::IntLte(left, right) => print_prim_call("Int.lte", vec![left, right]),
+        Prim::IntGte(left, right) => print_prim_call("Int.gte", vec![left, right]),
+        Prim::IntToStr(operand) => print_prim_call("Int.to_str", vec![operand]),
         Prim::FltType => pure("Flt"),
         Prim::Flt(value) => print_flt(value),
-        Prim::FltAdd(left, right) => print_prim_call("Flt.add", vec![*left, *right]),
-        Prim::FltSub(left, right) => print_prim_call("Flt.sub", vec![*left, *right]),
-        Prim::FltMul(left, right) => print_prim_call("Flt.mul", vec![*left, *right]),
-        Prim::FltDiv(left, right) => print_prim_call("Flt.div", vec![*left, *right]),
-        Prim::FltEql(left, right) => print_prim_call("Flt.eql", vec![*left, *right]),
-        Prim::FltNeq(left, right) => print_prim_call("Flt.neq", vec![*left, *right]),
-        Prim::FltLt(left, right) => print_prim_call("Flt.lt", vec![*left, *right]),
-        Prim::FltGt(left, right) => print_prim_call("Flt.gt", vec![*left, *right]),
-        Prim::FltLte(left, right) => print_prim_call("Flt.lte", vec![*left, *right]),
-        Prim::FltGte(left, right) => print_prim_call("Flt.gte", vec![*left, *right]),
-        Prim::FltMin(left, right) => print_prim_call("Flt.min", vec![*left, *right]),
-        Prim::FltMax(left, right) => print_prim_call("Flt.max", vec![*left, *right]),
-        Prim::FltNeg(operand) => print_prim_call("Flt.neg", vec![*operand]),
-        Prim::FltAbs(operand) => print_prim_call("Flt.abs", vec![*operand]),
-        Prim::FltSqrt(operand) => print_prim_call("Flt.sqrt", vec![*operand]),
-        Prim::FltFloor(operand) => print_prim_call("Flt.floor", vec![*operand]),
-        Prim::FltCeil(operand) => print_prim_call("Flt.ceil", vec![*operand]),
-        Prim::FltTrunc(operand) => print_prim_call("Flt.trunc", vec![*operand]),
-        Prim::FltNearest(operand) => print_prim_call("Flt.nearest", vec![*operand]),
-        Prim::FltToStr(operand) => print_prim_call("Flt.to_str", vec![*operand]),
-        Prim::NatToInt(operand) => print_prim_call("Nat.to_int", vec![*operand]),
-        Prim::NatToFlt(operand) => print_prim_call("Nat.to_flt", vec![*operand]),
-        Prim::IntToNat(operand) => print_prim_call("Int.to_nat", vec![*operand]),
-        Prim::IntToFlt(operand) => print_prim_call("Int.to_flt", vec![*operand]),
-        Prim::FltToNat(operand) => print_prim_call("Flt.to_nat", vec![*operand]),
-        Prim::FltToInt(operand) => print_prim_call("Flt.to_int", vec![*operand]),
+        Prim::FltAdd(left, right) => print_prim_call("Flt.add", vec![left, right]),
+        Prim::FltSub(left, right) => print_prim_call("Flt.sub", vec![left, right]),
+        Prim::FltMul(left, right) => print_prim_call("Flt.mul", vec![left, right]),
+        Prim::FltDiv(left, right) => print_prim_call("Flt.div", vec![left, right]),
+        Prim::FltEql(left, right) => print_prim_call("Flt.eql", vec![left, right]),
+        Prim::FltNeq(left, right) => print_prim_call("Flt.neq", vec![left, right]),
+        Prim::FltLt(left, right) => print_prim_call("Flt.lt", vec![left, right]),
+        Prim::FltGt(left, right) => print_prim_call("Flt.gt", vec![left, right]),
+        Prim::FltLte(left, right) => print_prim_call("Flt.lte", vec![left, right]),
+        Prim::FltGte(left, right) => print_prim_call("Flt.gte", vec![left, right]),
+        Prim::FltMin(left, right) => print_prim_call("Flt.min", vec![left, right]),
+        Prim::FltMax(left, right) => print_prim_call("Flt.max", vec![left, right]),
+        Prim::FltNeg(operand) => print_prim_call("Flt.neg", vec![operand]),
+        Prim::FltAbs(operand) => print_prim_call("Flt.abs", vec![operand]),
+        Prim::FltSqrt(operand) => print_prim_call("Flt.sqrt", vec![operand]),
+        Prim::FltFloor(operand) => print_prim_call("Flt.floor", vec![operand]),
+        Prim::FltCeil(operand) => print_prim_call("Flt.ceil", vec![operand]),
+        Prim::FltTrunc(operand) => print_prim_call("Flt.trunc", vec![operand]),
+        Prim::FltNearest(operand) => print_prim_call("Flt.nearest", vec![operand]),
+        Prim::FltToStr(operand) => print_prim_call("Flt.to_str", vec![operand]),
+        Prim::NatToInt(operand) => print_prim_call("Nat.to_int", vec![operand]),
+        Prim::NatToFlt(operand) => print_prim_call("Nat.to_flt", vec![operand]),
+        Prim::IntToNat(operand) => print_prim_call("Int.to_nat", vec![operand]),
+        Prim::IntToFlt(operand) => print_prim_call("Int.to_flt", vec![operand]),
+        Prim::FltToNat(operand) => print_prim_call("Flt.to_nat", vec![operand]),
+        Prim::FltToInt(operand) => print_prim_call("Flt.to_int", vec![operand]),
         Prim::BinType => pure("Bin"),
         Prim::Bin(bin) => match bin {
             BinLiteral::Bytes(bytes) => pure(
@@ -158,59 +158,59 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                 pure(format!("\"{escaped}\""))
             }
         },
-        Prim::BinLen(operand) => print_prim_call("Bin.len", vec![*operand]),
-        Prim::BinEql(left, right) => print_prim_call("Bin.eql", vec![*left, *right]),
-        Prim::BinGet(bin, index) => print_prim_call("Bin.get", vec![*bin, *index]),
-        Prim::BinSlice(bin, start, end) => print_prim_call("Bin.slice", vec![*bin, *start, *end]),
-        Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![*bin, *byte]),
-        Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![*left, *right]),
-        Prim::ArrType(elem) => print_prim_call("Arr", vec![*elem]),
+        Prim::BinLen(operand) => print_prim_call("Bin.len", vec![operand]),
+        Prim::BinEql(left, right) => print_prim_call("Bin.eql", vec![left, right]),
+        Prim::BinGet(bin, index) => print_prim_call("Bin.get", vec![bin, index]),
+        Prim::BinSlice(bin, start, end) => print_prim_call("Bin.slice", vec![bin, start, end]),
+        Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
+        Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
+        Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
         Prim::Arr(elems) => flat([
             pure("["),
             sep_flat(
-                elems.into_iter().map(|operand| print_term(*operand)),
+                elems.into_iter().map(|operand| print_term(operand)),
                 || pure(", "),
             ),
             pure("]"),
         ]),
-        Prim::ArrLen(ty, operand) => print_prim_call("Arr.len", vec![*ty, *operand]),
-        Prim::ArrGet(ty, list, index) => print_prim_call("Arr.get", vec![*ty, *list, *index]),
+        Prim::ArrLen(ty, operand) => print_prim_call("Arr.len", vec![ty, operand]),
+        Prim::ArrGet(ty, list, index) => print_prim_call("Arr.get", vec![ty, list, index]),
         Prim::ArrSlice(ty, list, start, end) => {
-            print_prim_call("Arr.slice", vec![*ty, *list, *start, *end])
+            print_prim_call("Arr.slice", vec![ty, list, start, end])
         }
-        Prim::ArrAppend(ty, list, elem) => print_prim_call("Arr.append", vec![*ty, *list, *elem]),
-        Prim::ArrConcat(ty, left, right) => print_prim_call("Arr.concat", vec![*ty, *left, *right]),
-        Prim::IoPrint(operand) => print_prim_call("Io.print", vec![*operand]),
+        Prim::ArrAppend(ty, list, elem) => print_prim_call("Arr.append", vec![ty, list, elem]),
+        Prim::ArrConcat(ty, left, right) => print_prim_call("Arr.concat", vec![ty, left, right]),
+        Prim::IoPrint(operand) => print_prim_call("Io.print", vec![operand]),
         Prim::IoRead => pure("Io.read"),
     }
 }
 
 fn print_term(term: Term) -> Printer<'static> {
-    match term {
-        Term::Type => pure("Type"),
-        Term::Prim(prim) => print_prim(prim),
-        Term::Name(name) => pure(name.join()),
-        Term::Atom(atom) => print_atom(atom),
-        Term::AtomType(AtomType { atoms }) => flat([
+    match term.into_subterm() {
+        Subterm::Type => pure("Type"),
+        Subterm::Prim(prim) => print_prim(prim),
+        Subterm::Name(name) => pure(name.join()),
+        Subterm::Atom(atom) => print_atom(atom),
+        Subterm::AtomType(AtomType { atoms }) => flat([
             pure("'["),
             sep_flat(atoms.into_iter().map(|atom| pure(atom.as_string())), || {
                 pure(", ")
             }),
             pure("]"),
         ]),
-        Term::FuncType(FuncType { params, output }) => flat([
+        Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
             sep_flat(
                 params.into_iter().map(|(label, ty)| match label {
-                    Some(label) => flat([pure(label), pure(" : "), print_term(*ty)]),
-                    None => print_term(*ty),
+                    Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
+                    None => print_term(ty),
                 }),
                 || pure(", "),
             ),
             pure(") -> "),
-            print_term(*output),
+            print_term(output),
         ]),
-        Term::Func(Func { params, body }) => flat([
+        Subterm::Func(Func { params, body }) => flat([
             match params.as_slice() {
                 [single] => flat([pure(single.clone())]),
                 _ => flat([
@@ -220,42 +220,42 @@ fn print_term(term: Term) -> Printer<'static> {
                 ]),
             },
             pure(" =>\n"),
-            indent(print_term(*body)),
+            indent(print_term(body)),
         ]),
-        Term::Apply(Apply { head, params }) => flat([
-            print_term(*head),
+        Subterm::Apply(Apply { head, params }) => flat([
+            print_term(head),
             pure("("),
-            sep_flat(params.into_iter().map(|p| print_term(*p)), || pure(", ")),
+            sep_flat(params.into_iter().map(|p| print_term(p)), || pure(", ")),
             pure(")"),
         ]),
-        Term::TupleType(TupleType { fields }) => {
+        Subterm::TupleType(TupleType { fields }) => {
             let items = fields.into_iter().map(|(label, field_type)| match label {
-                Some(label) => indent(flat([pure(label), pure(" : "), print_term(*field_type)])),
-                None => indent(print_term(*field_type)),
+                Some(label) => indent(flat([pure(label), pure(" : "), print_term(field_type)])),
+                None => indent(print_term(field_type)),
             });
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
-        Term::Tuple(Tuple { fields }) => {
+        Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {
                 flat([
                     pure("("),
-                    print_term(*fields.into_iter().next().unwrap()),
+                    print_term(fields.into_iter().next().unwrap()),
                     pure(",)"),
                 ])
             } else {
                 flat([
                     pure("("),
-                    sep_flat(fields.into_iter().map(|field| print_term(*field)), || {
+                    sep_flat(fields.into_iter().map(|field| print_term(field)), || {
                         pure(", ")
                     }),
                     pure(")"),
                 ])
             }
         }
-        Term::Proj(Proj { head, index }) => {
-            flat([pure("("), print_term(*head), pure(format!(").{index}"))])
+        Subterm::Proj(Proj { head, index }) => {
+            flat([pure("("), print_term(head), pure(format!(").{index}"))])
         }
-        Term::Match(match_) => match match_ {
+        Subterm::Match(match_) => match match_ {
             Match::Bln(BlnMatch {
                 head,
                 motive,
@@ -263,16 +263,16 @@ fn print_term(term: Term) -> Printer<'static> {
                 true_case,
             }) => flat([
                 pure("match "),
-                print_term(*head),
+                print_term(head),
                 pure(" : "),
                 match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                    None => print_term(*motive.body),
+                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
+                    None => print_term(motive.body),
                 },
                 pure("\n| false =>\n"),
-                indent(print_term(*false_case)),
+                indent(print_term(false_case)),
                 pure("\n| true =>\n"),
-                indent(print_term(*true_case)),
+                indent(print_term(true_case)),
                 pure("\nend"),
             ]),
             Match::Nat(NatMatch::Induction {
@@ -284,20 +284,20 @@ fn print_term(term: Term) -> Printer<'static> {
                 succ_case,
             }) => flat([
                 pure("match "),
-                print_term(*head),
+                print_term(head),
                 pure(" : "),
                 match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                    None => print_term(*motive.body),
+                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
+                    None => print_term(motive.body),
                 },
                 pure("\n| 0 =>\n"),
-                indent(print_term(*zero_case)),
+                indent(print_term(zero_case)),
                 pure("\n| "),
                 pure(pred_label),
                 pure(" "),
                 pure(ih_label),
                 pure(" =>\n"),
-                indent(print_term(*succ_case)),
+                indent(print_term(succ_case)),
                 pure("\nend"),
             ]),
             Match::Nat(NatMatch::Dispatch {
@@ -307,22 +307,22 @@ fn print_term(term: Term) -> Printer<'static> {
                 default,
             }) => flat([
                 pure("match "),
-                print_term(*head),
+                print_term(head),
                 pure(" : "),
                 match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                    None => print_term(*motive.body),
+                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
+                    None => print_term(motive.body),
                 },
                 flat(
                     cases
                         .into_iter()
                         .map(|(nat, body)| {
-                            flat([pure(format!("\n| {nat} =>\n")), indent(print_term(*body))])
+                            flat([pure(format!("\n| {nat} =>\n")), indent(print_term(body))])
                         })
                         .collect::<Vec<_>>(),
                 ),
                 pure("\n| _ =>\n"),
-                indent(print_term(*default)),
+                indent(print_term(default)),
                 pure("\nend"),
             ]),
             Match::Atom(AtomMatch {
@@ -331,11 +331,11 @@ fn print_term(term: Term) -> Printer<'static> {
                 cases,
             }) => flat([
                 pure("match "),
-                print_term(*head),
+                print_term(head),
                 pure(" : "),
                 match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                    None => print_term(*motive.body),
+                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
+                    None => print_term(motive.body),
                 },
                 flat(
                     cases
@@ -345,7 +345,7 @@ fn print_term(term: Term) -> Printer<'static> {
                                 pure("\n| "),
                                 print_atom(atom),
                                 pure(" =>\n"),
-                                indent(print_term(*body)),
+                                indent(print_term(body)),
                             ])
                         })
                         .collect::<Vec<_>>(),
@@ -354,11 +354,11 @@ fn print_term(term: Term) -> Printer<'static> {
             ]),
             Match::Union(UnionMatch { head, motive, cases }) => flat([
                 pure("match "),
-                print_term(*head),
+                print_term(head),
                 pure(" : "),
                 match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
-                    None => print_term(*motive.body),
+                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
+                    None => print_term(motive.body),
                 },
                 flat(
                     cases
@@ -368,7 +368,7 @@ fn print_term(term: Term) -> Printer<'static> {
                                 pure(format!("\n| {label}(")),
                                 pure(binders.join(", ")),
                                 pure(") =>\n"),
-                                indent(print_term(*body)),
+                                indent(print_term(body)),
                             ])
                         })
                         .collect::<Vec<_>>(),
@@ -376,7 +376,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("\nend"),
             ]),
         },
-        Term::Let(Let {
+        Subterm::Let(Let {
             label,
             type_,
             body,
@@ -385,30 +385,29 @@ fn print_term(term: Term) -> Printer<'static> {
             pure("let "),
             pure(label),
             pure(" : "),
-            print_term(*type_),
+            print_term(type_),
             pure(" =\n"),
-            indent(flat([print_term(*body), pure(";")])),
+            indent(flat([print_term(body), pure(";")])),
             pure("\n"),
-            print_term(*tail),
+            print_term(tail),
         ]),
-        Term::Rec(Rec { items, tail }) => {
+        Subterm::Rec(Rec { items, tail }) => {
             let bindings = items.into_iter().map(|item| {
                 flat([
                     pure(item.label),
                     pure(" : "),
-                    print_term(*item.type_),
+                    print_term(item.type_),
                     pure(" =\n"),
-                    indent(print_term(*item.value)),
+                    indent(print_term(item.value)),
                 ])
             });
             flat([
                 pure("rec "),
                 sep_flat(bindings, || pure("\nand ")),
                 pure(";\n"),
-                print_term(*tail),
+                print_term(tail),
             ])
         }
-        Term::Spanned(_, inner) => print_term(*inner),
     }
 }
 
@@ -456,9 +455,9 @@ fn print_top_let(item: TopLet) -> Printer<'static> {
         pure("let "),
         pure(item.label),
         pure(" : "),
-        print_term(*item.type_),
+        print_term(item.type_),
         pure(" =\n"),
-        indent(flat([print_term(*item.body), pure(";")])),
+        indent(flat([print_term(item.body), pure(";")])),
     ])
 }
 
@@ -472,9 +471,9 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
         pure("rec "),
         pure(first.label),
         pure(" : "),
-        print_term(*first.type_),
+        print_term(first.type_),
         pure(" =\n"),
-        indent(print_term(*first.body)),
+        indent(print_term(first.body)),
         flat(
             rest.into_iter()
                 .map(|item| {
@@ -483,9 +482,9 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
                         print_pub(item.is_pub),
                         pure(item.label),
                         pure(" : "),
-                        print_term(*item.type_),
+                        print_term(item.type_),
                         pure(" =\n"),
-                        indent(print_term(*item.body)),
+                        indent(print_term(item.body)),
                     ])
                 })
                 .collect::<Vec<_>>(),
@@ -523,7 +522,7 @@ fn print_top_union_case(case: TopCase) -> Printer<'static> {
         flat(
             case.payload_types
                 .into_iter()
-                .map(|t| print_term(*t))
+                .map(|t| print_term(t))
                 .collect::<Vec<_>>(),
         ),
         pure(")"),

@@ -9,11 +9,11 @@ use super::{
 // needs no internal name resolution.
 
 fn name(label: &str) -> Term {
-    Term::Name(Name::from([label.to_string()]))
+    Subterm::Name(Name::from([label.to_string()])).into()
 }
 
 fn prim(p: Prim) -> Term {
-    Term::Prim(p)
+    Subterm::Prim(p).into()
 }
 
 fn nat() -> Term {
@@ -37,19 +37,23 @@ fn bln() -> Term {
 }
 
 fn unit() -> Term {
-    Term::TupleType(TupleType { fields: vec![] })
+    Subterm::TupleType(TupleType { fields: vec![] }).into()
 }
 
 fn arr_of(elem: Term) -> Term {
-    prim(Prim::ArrType(Box::new(elem)))
+    prim(Prim::ArrType(elem))
+}
+
+fn type_() -> Term {
+    Subterm::Type.into()
 }
 
 fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     TopItem::Let(TopLet {
         is_pub: true,
         label: label.to_string(),
-        type_: Box::new(type_),
-        body: Box::new(body),
+        type_,
+        body,
     })
 }
 
@@ -64,38 +68,35 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
 fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
     let param_names = params.iter().map(|(n, _)| n.to_string()).collect();
 
-    let type_ = Term::FuncType(FuncType {
+    let type_: Term = Subterm::FuncType(FuncType {
         params: params
             .into_iter()
-            .map(|(n, t)| (Some(n.to_string()), Box::new(t)))
+            .map(|(n, t)| (Some(n.to_string()), t))
             .collect(),
-        output: Box::new(output),
-    });
+        output,
+    })
+    .into();
 
-    let value = Term::Func(Func {
+    let value: Term = Subterm::Func(Func {
         params: param_names,
-        body: Box::new(body),
-    });
+        body,
+    })
+    .into();
 
     pub_let(label, type_, value)
 }
 
-fn binary(label: &str, operand: Term, output: Term, ctor: fn(Subterm, Subterm) -> Prim) -> TopItem {
+fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {
     pub_fn(
         label,
         vec![("a", operand.clone()), ("b", operand)],
         output,
-        prim(ctor(Box::new(name("a")), Box::new(name("b")))),
+        prim(ctor(name("a"), name("b"))),
     )
 }
 
-fn unary(label: &str, input: Term, output: Term, ctor: fn(Subterm) -> Prim) -> TopItem {
-    pub_fn(
-        label,
-        vec![("a", input)],
-        output,
-        prim(ctor(Box::new(name("a")))),
-    )
+fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Prim) -> TopItem {
+    pub_fn(label, vec![("a", input)], output, prim(ctor(name("a"))))
 }
 
 fn nat_ops() -> Vec<TopItem> {
@@ -171,23 +172,19 @@ fn bin_ops() -> Vec<TopItem> {
             "get",
             vec![("b", bin()), ("i", nat())],
             nat(),
-            prim(Prim::BinGet(Box::new(name("b")), Box::new(name("i")))),
+            prim(Prim::BinGet(name("b"), name("i"))),
         ),
         pub_fn(
             "slice",
             vec![("b", bin()), ("s", nat()), ("e", nat())],
             bin(),
-            prim(Prim::BinSlice(
-                Box::new(name("b")),
-                Box::new(name("s")),
-                Box::new(name("e")),
-            )),
+            prim(Prim::BinSlice(name("b"), name("s"), name("e"))),
         ),
         pub_fn(
             "append",
             vec![("b", bin()), ("x", nat())],
             bin(),
-            prim(Prim::BinAppend(Box::new(name("b")), Box::new(name("x")))),
+            prim(Prim::BinAppend(name("b"), name("x"))),
         ),
         binary("concat", bin(), bin(), Prim::BinConcat),
     ]
@@ -197,63 +194,42 @@ fn arr_ops() -> Vec<TopItem> {
     vec![
         pub_fn(
             "len",
-            vec![("T", Term::Type), ("a", arr_of(name("T")))],
+            vec![("T", type_()), ("a", arr_of(name("T")))],
             nat(),
-            prim(Prim::ArrLen(Box::new(name("T")), Box::new(name("a")))),
+            prim(Prim::ArrLen(name("T"), name("a"))),
         ),
         pub_fn(
             "get",
-            vec![("T", Term::Type), ("a", arr_of(name("T"))), ("i", nat())],
+            vec![("T", type_()), ("a", arr_of(name("T"))), ("i", nat())],
             name("T"),
-            prim(Prim::ArrGet(
-                Box::new(name("T")),
-                Box::new(name("a")),
-                Box::new(name("i")),
-            )),
+            prim(Prim::ArrGet(name("T"), name("a"), name("i"))),
         ),
         pub_fn(
             "slice",
             vec![
-                ("T", Term::Type),
+                ("T", type_()),
                 ("a", arr_of(name("T"))),
                 ("s", nat()),
                 ("e", nat()),
             ],
             arr_of(name("T")),
-            prim(Prim::ArrSlice(
-                Box::new(name("T")),
-                Box::new(name("a")),
-                Box::new(name("s")),
-                Box::new(name("e")),
-            )),
+            prim(Prim::ArrSlice(name("T"), name("a"), name("s"), name("e"))),
         ),
         pub_fn(
             "append",
-            vec![
-                ("T", Term::Type),
-                ("a", arr_of(name("T"))),
-                ("x", name("T")),
-            ],
+            vec![("T", type_()), ("a", arr_of(name("T"))), ("x", name("T"))],
             arr_of(name("T")),
-            prim(Prim::ArrAppend(
-                Box::new(name("T")),
-                Box::new(name("a")),
-                Box::new(name("x")),
-            )),
+            prim(Prim::ArrAppend(name("T"), name("a"), name("x"))),
         ),
         pub_fn(
             "concat",
             vec![
-                ("T", Term::Type),
+                ("T", type_()),
                 ("a", arr_of(name("T"))),
                 ("b", arr_of(name("T"))),
             ],
             arr_of(name("T")),
-            prim(Prim::ArrConcat(
-                Box::new(name("T")),
-                Box::new(name("a")),
-                Box::new(name("b")),
-            )),
+            prim(Prim::ArrConcat(name("T"), name("a"), name("b"))),
         ),
     ]
 }
@@ -264,7 +240,7 @@ fn io_ops() -> Vec<TopItem> {
             "print",
             vec![("b", bin())],
             unit(),
-            prim(Prim::IoPrint(Box::new(name("b")))),
+            prim(Prim::IoPrint(name("b"))),
         ),
         pub_fn("read", vec![], bin(), prim(Prim::IoRead)),
     ]
@@ -272,17 +248,12 @@ fn io_ops() -> Vec<TopItem> {
 
 pub fn prelude() -> TopItem {
     let items = vec![
-        pub_let("Nat", Term::Type, nat()),
-        pub_let("Int", Term::Type, int()),
-        pub_let("Flt", Term::Type, flt()),
-        pub_let("Bin", Term::Type, bin()),
-        pub_let("Bln", Term::Type, bln()),
-        pub_fn(
-            "Arr",
-            vec![("T", Term::Type)],
-            Term::Type,
-            arr_of(name("T")),
-        ),
+        pub_let("Nat", type_(), nat()),
+        pub_let("Int", type_(), int()),
+        pub_let("Flt", type_(), flt()),
+        pub_let("Bin", type_(), bin()),
+        pub_let("Bln", type_(), bln()),
+        pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
         pub_mod("Nat", nat_ops()),
         pub_mod("Int", int_ops()),
         pub_mod("Flt", flt_ops()),

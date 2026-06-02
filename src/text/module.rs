@@ -1,5 +1,5 @@
 use {
-    super::{Name, Subterm, Term},
+    super::{Name, Term},
     std::iter,
 };
 
@@ -42,21 +42,21 @@ pub struct TopUse {
 pub struct TopLet {
     pub is_pub: bool,
     pub label: String,
-    pub type_: Subterm,
-    pub body: Subterm,
+    pub type_: Term,
+    pub body: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase {
     pub label: String,
-    pub payload_types: Vec<Subterm>,
+    pub payload_types: Vec<Term>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopUnion {
     pub is_pub: bool,
     pub label: String,
-    pub params: Vec<(String, Subterm)>,
+    pub params: Vec<(String, Term)>,
     pub cases: Vec<TopCase>,
 }
 

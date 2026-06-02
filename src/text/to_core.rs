@@ -155,60 +155,66 @@ fn process_items(
                         let elab = Elaborate::new(context);
 
                         // Build atom type '[c_1, ..., c_m]
-                        let atom_type = Term::AtomType(AtomType {
+                        let atom_type: Term = Subterm::AtomType(AtomType {
                             atoms: u.cases.iter().map(|c| Atom::from(c.label.as_str())).collect(),
-                        });
+                        })
+                        .into();
 
                         // For each case build payload tuple type.
                         let match_cases = u
                             .cases
                             .iter()
                             .map(|c| {
-                                let payload = Term::TupleType(TupleType {
+                                let payload: Term = Subterm::TupleType(TupleType {
                                     fields: c
                                         .payload_types
                                         .iter()
                                         .map(|t| (None, t.clone()))
                                         .collect::<Vec<_>>(),
-                                });
-                                (Atom::from(c.label.as_str()), payload.into())
+                                })
+                                .into();
+                                (Atom::from(c.label.as_str()), payload)
                             })
                             .collect::<BTreeMap<_, _>>();
 
                         // match tag : Type | 'c_i => payload_i ...
-                        let tag_match = Term::Match(Match::Atom(AtomMatch {
-                            head: Term::Name(Name::from(vec!["tag".to_string()])).into(),
+                        let tag_match: Term = Subterm::Match(Match::Atom(AtomMatch {
+                            head: Subterm::Name(Name::from(vec!["tag".to_string()])).into(),
                             motive: Motive {
                                 label: None,
-                                body: Term::Type.into(),
+                                body: Subterm::Type.into(),
                             },
                             cases: match_cases,
-                        }));
+                        }))
+                        .into();
 
                         // { tag : '[...], <match> }
-                        let tagged_tuple = Term::TupleType(TupleType {
+                        let tagged_tuple: Term = Subterm::TupleType(TupleType {
                             fields: vec![
-                                (Some("tag".to_string()), atom_type.into()),
-                                (None, tag_match.into()),
+                                (Some("tag".to_string()), atom_type),
+                                (None, tag_match),
                             ],
-                        });
+                        })
+                        .into();
 
                         // For parameterized unions wrap in a function.
-                        let (type_ann, type_body) = if u.params.is_empty() {
-                            (Term::Type, tagged_tuple)
+                        let (type_ann, type_body): (Term, Term) = if u.params.is_empty() {
+                            (Subterm::Type.into(), tagged_tuple)
                         } else {
-                            let func_type = Term::FuncType(FuncType {
+                            let func_type: Term = Subterm::FuncType(FuncType {
                                 params: u
                                     .params
                                     .iter()
                                     .map(|(n, t)| (Some(n.clone()), t.clone()))
                                     .collect(),
-                                output: Term::Type.into(),
-                            });
-                            let func_body = Term::Func(Func {
+                                output: Subterm::Type.into(),
+                            })
+                            .into();
+                            let func_body: Term = Subterm::Func(Func {
                                 params: u.params.iter().map(|(n, _)| n.clone()).collect(),
-                                body: tagged_tuple.into(),
-                            });
+                                body: tagged_tuple,
+                            })
+                            .into();
                             (func_type, func_body)
                         };
 
@@ -235,16 +241,17 @@ fn process_items(
 
                     // Build the output type term: T or T(A, B, ...).
                     let output_type: Term = if u.params.is_empty() {
-                        Term::Name(Name::from(vec![u.label.clone()]))
+                        Subterm::Name(Name::from(vec![u.label.clone()])).into()
                     } else {
-                        Term::Apply(Apply {
-                            head: Term::Name(Name::from(vec![u.label.clone()])).into(),
+                        Subterm::Apply(Apply {
+                            head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
                             params: u
                                 .params
                                 .iter()
-                                .map(|(n, _)| Term::Name(Name::from(vec![n.clone()])).into())
+                                .map(|(n, _)| Subterm::Name(Name::from(vec![n.clone()])).into())
                                 .collect(),
                         })
+                        .into()
                     };
 
                     for c in &u.cases {
@@ -252,7 +259,7 @@ fn process_items(
                         let elab = Elaborate::new(context);
 
                         // Constructor type: (type_params..., _0 : T_0, ...) -> T
-                        let all_params: Vec<(Option<String>, Subterm)> = u
+                        let all_params: Vec<(Option<String>, Term)> = u
                             .params
                             .iter()
                             .map(|(n, t)| (Some(n.clone()), t.clone()))
@@ -261,10 +268,11 @@ fn process_items(
                             }))
                             .collect();
 
-                        let ctor_type_term = Term::FuncType(FuncType {
+                        let ctor_type_term: Term = Subterm::FuncType(FuncType {
                             params: all_params,
-                            output: output_type.clone().into(),
-                        });
+                            output: output_type.clone(),
+                        })
+                        .into();
 
                         // Constructor body: (type_params..., _0, ...) => ('c, (_0, ...))
                         let all_param_names: Vec<String> = u
@@ -274,25 +282,27 @@ fn process_items(
                             .chain((0..k).map(|i| format!("_{i}")))
                             .collect();
 
-                        let payload_fields: Vec<Subterm> = (0..k)
+                        let payload_fields: Vec<Term> = (0..k)
                             .map(|i| {
-                                Term::Name(Name::from(vec![format!("_{i}")])).into()
+                                Subterm::Name(Name::from(vec![format!("_{i}")])).into()
                             })
                             .collect();
-                        let payload_tuple = Term::Tuple(Tuple {
+                        let payload_tuple: Term = Subterm::Tuple(Tuple {
                             fields: payload_fields,
-                        });
+                        })
+                        .into();
 
-                        let ctor_body_term = Term::Func(Func {
+                        let ctor_body_term: Term = Subterm::Func(Func {
                             params: all_param_names,
-                            body: Term::Tuple(Tuple {
+                            body: Subterm::Tuple(Tuple {
                                 fields: vec![
-                                    Term::Atom(Atom::from(c.label.as_str())).into(),
-                                    payload_tuple.into(),
+                                    Subterm::Atom(Atom::from(c.label.as_str())).into(),
+                                    payload_tuple,
                                 ],
                             })
                             .into(),
-                        });
+                        })
+                        .into();
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),

@@ -2,7 +2,7 @@ use {
     super::Context,
     crate::{
         core,
-        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Term},
+        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Subterm, Term},
     },
 };
 
@@ -16,10 +16,24 @@ impl<'a, 'b> Elaborate<'a, 'b> {
     }
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
+        let span = term.span().cloned();
+        let core = match span.as_ref() {
+            Some(s) => self
+                .subterm(term.as_subterm())
+                .map_err(|error| error.at(s.clone()))?,
+            None => self.subterm(term.as_subterm())?,
+        };
+        Ok(match span {
+            Some(s) => core::Term::spanned(s, core),
+            None => core,
+        })
+    }
+
+    fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
         Ok(match term {
-            Term::Type => core::Term::type_(),
-            Term::Prim(prim) => self.prim(prim)?.into(),
-            Term::Name(name) => {
+            Subterm::Type => core::Term::type_(),
+            Subterm::Prim(prim) => self.prim(prim)?.into(),
+            Subterm::Name(name) => {
                 let resolved = if name.is_abs() || !name.is_single() {
                     self.resolve_name(name)?.join()
                 } else {
@@ -33,19 +47,19 @@ impl<'a, 'b> Elaborate<'a, 'b> {
 
                 core::Var::free(resolved).into()
             }
-            Term::Atom(atom) => core::Atom::from(atom.as_str()).into(),
-            Term::AtomType(at) => core::Term::atom_type(
+            Subterm::Atom(atom) => core::Atom::from(atom.as_str()).into(),
+            Subterm::AtomType(at) => core::Term::atom_type(
                 at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())),
             ),
-            Term::FuncType(ft) => core::Term::func_type(
+            Subterm::FuncType(ft) => core::Term::func_type(
                 ft.params
                     .iter()
                     .map(|(label, ty)| Ok((label.clone().unwrap_or_default(), self.term(ty)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&ft.output)?,
             ),
-            Term::Func(func) => core::Term::func(func.params.clone(), self.term(&func.body)?),
-            Term::Apply(apply) => core::Term::apply(
+            Subterm::Func(func) => core::Term::func(func.params.clone(), self.term(&func.body)?),
+            Subterm::Apply(apply) => core::Term::apply(
                 self.term(&apply.head)?,
                 apply
                     .params
@@ -53,7 +67,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .map(|p| self.term(p))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Term::TupleType(tt) => core::Term::tuple_type(
+            Subterm::TupleType(tt) => core::Term::tuple_type(
                 tt.fields
                     .iter()
                     .map(|(label, type_)| {
@@ -61,15 +75,15 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Term::Tuple(tuple) => core::Term::tuple(
+            Subterm::Tuple(tuple) => core::Term::tuple(
                 tuple
                     .fields
                     .iter()
                     .map(|field| self.term(field))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Term::Proj(proj) => core::Term::proj(self.term(&proj.head)?, proj.index),
-            Term::Match(match_) => match match_ {
+            Subterm::Proj(proj) => core::Term::proj(self.term(&proj.head)?, proj.index),
+            Subterm::Match(match_) => match match_ {
                 Match::Bln(bm) => core::Term::bln_match(
                     self.term(&bm.head)?,
                     bm.motive.label.as_deref(),
@@ -152,13 +166,13 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     core::Term::match_(tag, um.motive.label.as_deref(), motive_core, cases)
                 }
             },
-            Term::Let(let_) => core::Term::let_(
+            Subterm::Let(let_) => core::Term::let_(
                 let_.label.clone(),
                 self.term(&let_.type_)?,
                 self.term(&let_.body)?,
                 self.term(&let_.tail)?,
             ),
-            Term::Rec(rec) => core::Term::rec(
+            Subterm::Rec(rec) => core::Term::rec(
                 rec.items
                     .iter()
                     .map(|it| {
@@ -170,10 +184,6 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&rec.tail)?,
-            ),
-            Term::Spanned(span, inner) => core::Term::spanned(
-                span.clone(),
-                self.term(inner).map_err(|error| error.at(span.clone()))?,
             ),
         })
     }

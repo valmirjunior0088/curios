@@ -2,8 +2,8 @@ use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Path, Prim, Proj,
-        Rec, RecItem, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
-        UnionCase, UnionMatch, UseGroup,
+        Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple,
+        TupleType, UnionCase, UnionMatch, UseGroup,
     },
     crate::{
         Source,
@@ -90,7 +90,9 @@ fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
 }
 
 fn parse_type<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("Type")).map(|()| Term::Type)
+    catch(parse_keyword("Type"))
+        .map(|()| Subterm::Type)
+        .map(Into::into)
 }
 
 fn parse_int_value<'a>() -> Parser<'a, Term> {
@@ -107,7 +109,8 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
             })
             .and_drop(parse_whitespace()),
     )
-    .map(|value| Term::Prim(Prim::Int(value)))
+    .map(|value| Subterm::Prim(Prim::Int(value)))
+    .map(Into::into)
 }
 
 fn parse_u32<'a>() -> Parser<'a, u32> {
@@ -131,13 +134,15 @@ fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
-    parse_nat().map(|nat| match nat {
-        NatLiteral::Number(0) => Term::Prim(Prim::Nat(Nat::Zero)),
-        nat => Term::Prim(Prim::Nat(Nat::Succ(
-            nat,
-            Box::new(Term::Prim(Prim::Nat(Nat::Zero))),
-        ))),
-    })
+    parse_nat()
+        .map(|nat| match nat {
+            NatLiteral::Number(0) => Subterm::Prim(Prim::Nat(Nat::Zero)),
+            nat => Subterm::Prim(Prim::Nat(Nat::Succ(
+                nat,
+                Subterm::Prim(Prim::Nat(Nat::Zero)).into(),
+            ))),
+        })
+        .map(Into::into)
 }
 
 // Successor as the infix `+`: a nat literal on either side of a base term
@@ -146,23 +151,13 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
 fn parse_nat_succ<'a>() -> Parser<'a, Term> {
     let lit_first = catch(parse_nat_literal().and_drop(parse_literal("+")))
         .and(parse_atomic_term())
-        .map(|(spine, base)| {
-            Term::Prim(Prim::Nat(Nat::Succ(
-                NatLiteral::Number(spine),
-                Box::new(base),
-            )))
-        });
+        .map(|(spine, base)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::Number(spine), base))));
 
     let base_first = catch(parse_atomic_term().and_drop(parse_literal("+")))
         .and(parse_nat_literal())
-        .map(|(base, spine)| {
-            Term::Prim(Prim::Nat(Nat::Succ(
-                NatLiteral::Number(spine),
-                Box::new(base),
-            )))
-        });
+        .map(|(base, spine)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::Number(spine), base))));
 
-    lit_first.or(base_first)
+    lit_first.or(base_first).map(Into::into)
 }
 
 fn parse_nat_literal<'a>() -> Parser<'a, u32> {
@@ -210,7 +205,8 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
             })
             .and_drop(parse_whitespace()),
     )
-    .map(|value| Term::Prim(Prim::Flt(value)))
+    .map(|value| Subterm::Prim(Prim::Flt(value)))
+    .map(Into::into)
 }
 
 fn parse_hex_byte<'a>() -> Parser<'a, u8> {
@@ -264,12 +260,14 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace())
-        .map(|chunks| Term::Prim(Prim::Bin(BinLiteral::String(chunks.concat()))))
+        .map(|chunks| Subterm::Prim(Prim::Bin(BinLiteral::String(chunks.concat()))))
+        .map(Into::into)
 }
 
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     catch(many1(parse_hex_byte).and_drop(parse_whitespace()))
-        .map(|bytes| Term::Prim(Prim::Bin(BinLiteral::Bytes(bytes))))
+        .map(|bytes| Subterm::Prim(Prim::Bin(BinLiteral::Bytes(bytes))))
+        .map(Into::into)
 }
 
 fn parse_arr_literal<'a>() -> Parser<'a, Term> {
@@ -277,16 +275,18 @@ fn parse_arr_literal<'a>() -> Parser<'a, Term> {
         .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
         .and_drop(parse_literal("]"))
         .map(|elems| {
-            Term::Prim(Prim::Arr(
+            Subterm::Prim(Prim::Arr(
                 elems.into_iter().map(|elem| elem.into()).collect(),
             ))
         })
+        .map(Into::into)
 }
 
 fn parse_bln_prim<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("false"))
-        .map(|()| Term::Prim(Prim::Bln(false)))
-        .or(catch(parse_keyword("true")).map(|()| Term::Prim(Prim::Bln(true))))
+        .map(|()| Subterm::Prim(Prim::Bln(false)))
+        .or(catch(parse_keyword("true")).map(|()| Subterm::Prim(Prim::Bln(true))))
+        .map(Into::into)
 }
 
 // Primitive types and operations are no longer surface syntax — they live in the
@@ -307,7 +307,7 @@ fn parse_atom_label<'a>() -> Parser<'a, Atom> {
 }
 
 fn parse_atom<'a>() -> Parser<'a, Term> {
-    parse_atom_label().map(Term::Atom)
+    parse_atom_label().map(Subterm::Atom).map(Into::into)
 }
 
 fn parse_atom_type<'a>() -> Parser<'a, Term> {
@@ -318,10 +318,11 @@ fn parse_atom_type<'a>() -> Parser<'a, Term> {
         ))
         .and_drop(parse_literal("]"))
         .map(|atoms| {
-            Term::AtomType(AtomType {
+            Subterm::AtomType(AtomType {
                 atoms: atoms.into_iter().collect(),
             })
         })
+        .map(Into::into)
 }
 
 fn parse_parens<'a>() -> Parser<'a, Term> {
@@ -342,13 +343,14 @@ fn parse_tuple_type<'a>() -> Parser<'a, Term> {
         .and_keep(sep_by0(parse_tuple_type_field, || parse_literal(",")))
         .and_drop(parse_literal("}"))
         .map(|fields| {
-            Term::TupleType(TupleType {
+            Subterm::TupleType(TupleType {
                 fields: fields
                     .into_iter()
                     .map(|(label, term)| (label, term.into()))
                     .collect(),
             })
         })
+        .map(Into::into)
 }
 
 fn parse_tuple<'a>() -> Parser<'a, Term> {
@@ -360,13 +362,14 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .and(sep_by0(|| lazy(parse_term), || parse_literal(",")))
     .and_drop(parse_literal(")"))
     .map(|(first, rest)| {
-        Term::Tuple(Tuple {
+        Subterm::Tuple(Tuple {
             fields: iter::once(first)
                 .chain(rest)
                 .map(|term| term.into())
                 .collect(),
         })
     })
+    .map(Into::into)
 }
 
 fn parse_func_type_param<'a>() -> Parser<'a, (Option<String>, Term)> {
@@ -385,22 +388,24 @@ fn parse_paren_func_type<'a>() -> Parser<'a, Term> {
     )
     .and(lazy(parse_term))
     .map(|(params, output): (Vec<(Option<String>, Term)>, Term)| {
-        Term::FuncType(FuncType {
+        Subterm::FuncType(FuncType {
             params: params.into_iter().map(|(l, t)| (l, t.into())).collect(),
             output: output.into(),
         })
     })
+    .map(Into::into)
 }
 
 fn parse_non_dependent_func_type<'a>() -> Parser<'a, Term> {
     catch(parse_atomic_term().and_drop(parse_literal("->")))
         .and(lazy(parse_term))
         .map(|(input, output)| {
-            Term::FuncType(FuncType {
+            Subterm::FuncType(FuncType {
                 params: vec![(None, input.into())],
                 output: output.into(),
             })
         })
+        .map(Into::into)
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
@@ -419,7 +424,7 @@ fn parse_func<'a>() -> Parser<'a, Term> {
     )
     .and(lazy(parse_term))
     .map(|(params, body)| {
-        Term::Func(Func {
+        Subterm::Func(Func {
             params,
             body: body.into(),
         })
@@ -428,13 +433,13 @@ fn parse_func<'a>() -> Parser<'a, Term> {
     let single = catch(parse_identifier().and_drop(parse_literal("=>")))
         .and(lazy(parse_term))
         .map(|(label, body): (&str, Term)| {
-            Term::Func(Func {
+            Subterm::Func(Func {
                 params: vec![label.to_string()],
                 body: body.into(),
             })
         });
 
-    multi.or(single)
+    multi.or(single).map(Into::into)
 }
 
 fn parse_motive<'a>() -> Parser<'a, Motive> {
@@ -480,13 +485,14 @@ fn parse_bln_match<'a>() -> Parser<'a, Term> {
         )
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), (false_case, true_case))| {
-            Term::Match(Match::Bln(BlnMatch {
+            Subterm::Match(Match::Bln(BlnMatch {
                 head: head.into(),
                 motive,
                 false_case: false_case.into(),
                 true_case: true_case.into(),
             }))
         })
+        .map(Into::into)
 }
 
 fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
@@ -513,7 +519,7 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
         .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
-                Term::Match(Match::Nat(NatMatch::Induction {
+                Subterm::Match(Match::Nat(NatMatch::Induction {
                     head: head.into(),
                     motive,
                     zero_case: zero_case.into(),
@@ -523,6 +529,7 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
                 }))
             },
         )
+        .map(Into::into)
 }
 
 fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {
@@ -542,15 +549,13 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
         .and(catch(many0(parse_nat_case).and(parse_nat_default())))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), (cases, default))| {
-            Term::Match(Match::Nat(NatMatch::Dispatch {
-                head: head.into(),
+            Subterm::Match(Match::Nat(NatMatch::Dispatch {
+                head,
                 motive,
-                cases: cases
-                    .into_iter()
-                    .map(|(nat, term)| (nat, term.into()))
-                    .collect(),
-                default: default.into(),
+                cases: cases.into_iter().collect(),
+                default,
             }))
+            .into()
         })
 }
 
@@ -565,7 +570,7 @@ fn parse_atom_match<'a>() -> Parser<'a, Term> {
         .and(many1(parse_atom_branch))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), cases)| {
-            Term::Match(Match::Atom(AtomMatch {
+            Subterm::Match(Match::Atom(AtomMatch {
                 head: head.into(),
                 motive,
                 cases: cases
@@ -574,6 +579,7 @@ fn parse_atom_match<'a>() -> Parser<'a, Term> {
                     .collect(),
             }))
         })
+        .map(Into::into)
 }
 
 fn parse_union_match_branch<'a>() -> Parser<'a, (String, UnionCase)> {
@@ -604,12 +610,13 @@ fn parse_union_match<'a>() -> Parser<'a, Term> {
         .and(many1(parse_union_match_branch))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), branches)| {
-            Term::Match(Match::Union(UnionMatch {
+            Subterm::Match(Match::Union(UnionMatch {
                 head: head.into(),
                 motive,
                 cases: branches.into_iter().collect(),
             }))
         })
+        .map(Into::into)
 }
 
 fn parse_match<'a>() -> Parser<'a, Term> {
@@ -636,11 +643,12 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
         .map(|(items, tail)| {
-            Term::Rec(Rec {
+            Subterm::Rec(Rec {
                 items,
                 tail: tail.into(),
             })
         })
+        .map(Into::into)
 }
 
 fn parse_func_sugar_param<'a>() -> Parser<'a, (String, Term)> {
@@ -665,17 +673,19 @@ fn parse_let_signature<'a>() -> Parser<'a, (Term, Term)> {
     .and(lazy(parse_term))
     .map(
         |((params, output), body): ((Vec<(String, Term)>, Term), Term)| {
-            let type_ = Term::FuncType(FuncType {
+            let type_: Term = Subterm::FuncType(FuncType {
                 params: params
                     .iter()
-                    .map(|(name, ty)| (Some(name.clone()), ty.clone().into()))
+                    .map(|(name, ty)| (Some(name.clone()), ty.clone()))
                     .collect(),
-                output: output.into(),
-            });
-            let value = Term::Func(Func {
+                output,
+            })
+            .into();
+            let value: Term = Subterm::Func(Func {
                 params: params.into_iter().map(|(name, _)| name).collect(),
-                body: body.into(),
-            });
+                body,
+            })
+            .into();
             (type_, value)
         },
     )
@@ -692,13 +702,14 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
         .map(|((label, (type_, body)), tail)| {
-            Term::Let(Let {
+            Subterm::Let(Let {
                 label: label.to_string(),
                 type_: type_.into(),
                 body: body.into(),
                 tail: tail.into(),
             })
         })
+        .map(Into::into)
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
@@ -727,17 +738,18 @@ fn parse_suffix<'a>() -> Parser<'a, Suffix> {
 
 fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
     catch(parse_literal("(").and_keep(parse_literal(")")))
-        .map(|_| Term::Tuple(Tuple { fields: vec![] }))
+        .map(|_| Subterm::Tuple(Tuple { fields: vec![] }))
+        .map(Into::into)
 }
 
 fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
-    spanned(parser).map(|(span, term)| Term::Spanned(span, term.into()))
+    spanned(parser).map(|(span, term)| term.with_span(span))
 }
 
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     with_span(
         parse_qualified_name()
-            .map(Term::Name)
+            .map(|n| Subterm::Name(n).into())
             .or(parse_type())
             .or(parse_prim())
             .or(parse_atom_type())
@@ -746,20 +758,14 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
             .or(parse_empty_tuple())
             .or(parse_tuple())
             .or(parse_parens())
-            .or(parse_name().map(Term::Name))
+            .or(parse_name().map(|n| Subterm::Name(n).into()))
             .and(many0(parse_suffix))
-            .map(|(head, suffixes)| {
+            .map(|(head, suffixes): (Term, _)| {
                 suffixes
                     .into_iter()
                     .fold(head, |head, suffix| match suffix {
-                        Suffix::Proj(index) => Term::Proj(Proj {
-                            head: head.into(),
-                            index,
-                        }),
-                        Suffix::Apply(params) => Term::Apply(Apply {
-                            head: head.into(),
-                            params: params.into_iter().map(Into::into).collect(),
-                        }),
+                        Suffix::Proj(index) => Subterm::Proj(Proj { head, index }).into(),
+                        Suffix::Apply(params) => Subterm::Apply(Apply { head, params }).into(),
                     })
             }),
     )
@@ -972,13 +978,11 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
         )
         .and(many1(parse_top_union_case))
         .map(
-            move |((label, params), cases): ((&str, Vec<(String, Term)>), Vec<TopCase>)| {
-                TopUnion {
-                    is_pub,
-                    label: label.to_string(),
-                    params: params.into_iter().map(|(n, t)| (n, t.into())).collect(),
-                    cases,
-                }
+            move |((label, params), cases): ((&str, Vec<(String, Term)>), Vec<TopCase>)| TopUnion {
+                is_pub,
+                label: label.to_string(),
+                params: params.into_iter().map(|(n, t)| (n, t.into())).collect(),
+                cases,
             },
         )
 }
@@ -987,14 +991,11 @@ fn parse_top_union<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("union"))).flat_map(|(is_pub, ())| {
         parse_top_union_body(is_pub)
             .and(many0(|| {
-                catch(parse_pub().and(parse_keyword("and"))).flat_map(|(is_pub2, ())| {
-                    parse_top_union_body(is_pub2)
-                })
+                catch(parse_pub().and(parse_keyword("and")))
+                    .flat_map(|(is_pub2, ())| parse_top_union_body(is_pub2))
             }))
             .and_drop(parse_keyword("end"))
-            .map(|(first, rest)| {
-                TopItem::Union(iter::once(first).chain(rest).collect())
-            })
+            .map(|(first, rest)| TopItem::Union(iter::once(first).chain(rest).collect()))
     })
 }
 
@@ -1057,26 +1058,27 @@ mod tests {
             "rec id : (x : Type) -> Type = x => x; id(a)"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Rec(Rec {
+            Subterm::Rec(Rec {
                 items: vec![RecItem {
                     label: "id".to_string(),
-                    type_: Term::FuncType(FuncType {
-                        params: vec![(Some("x".to_string()), Term::Type.into())],
-                        output: Term::Type.into(),
+                    type_: Subterm::FuncType(FuncType {
+                        params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                        output: Subterm::Type.into(),
                     })
                     .into(),
-                    value: Term::Func(Func {
+                    value: Subterm::Func(Func {
                         params: vec!["x".to_string()],
-                        body: Term::Name(Name::from(["x".to_string()])).into(),
+                        body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
                 }],
-                tail: Term::Apply(Apply {
-                    head: Term::Name(Name::from(["id".to_string()])).into(),
-                    params: vec![Term::Name(Name::from(["a".to_string()])).into()],
+                tail: Subterm::Apply(Apply {
+                    head: Subterm::Name(Name::from(["id".to_string()])).into(),
+                    params: vec![Subterm::Name(Name::from(["a".to_string()])).into()],
                 })
                 .into(),
             })
+            .into()
         );
     }
 
@@ -1086,21 +1088,22 @@ mod tests {
             "let x : '[hot, cold] = 'hot; (x, 'cold)"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Let(Let {
+            Subterm::Let(Let {
                 label: "x".to_string(),
-                type_: Term::AtomType(AtomType {
+                type_: Subterm::AtomType(AtomType {
                     atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
                 })
                 .into(),
-                body: Term::Atom(Atom::from("hot")).into(),
-                tail: Term::Tuple(Tuple {
+                body: Subterm::Atom(Atom::from("hot")).into(),
+                tail: Subterm::Tuple(Tuple {
                     fields: vec![
-                        Term::Name(Name::from(["x".to_string()])).into(),
-                        Term::Atom(Atom::from("cold")).into(),
+                        Subterm::Name(Name::from(["x".to_string()])).into(),
+                        Subterm::Atom(Atom::from("cold")).into(),
                     ],
                 })
                 .into(),
             })
+            .into()
         );
     }
 
@@ -1110,67 +1113,77 @@ mod tests {
             "match 'foo : k => '[foo] | 'foo => 'foo end"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Match(Match::Atom(AtomMatch {
-                head: Term::Atom(Atom::from("foo")).into(),
+            Subterm::Match(Match::Atom(AtomMatch {
+                head: Subterm::Atom(Atom::from("foo")).into(),
                 motive: Motive {
                     label: Some("k".to_string()),
-                    body: Term::AtomType(AtomType {
+                    body: Subterm::AtomType(AtomType {
                         atoms: [Atom::from("foo")].into_iter().collect(),
                     })
                     .into(),
                 },
-                cases: [(Atom::from("foo"), Term::Atom(Atom::from("foo")).into())]
+                cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
                     .into_iter()
                     .collect(),
             }))
+            .into()
         );
     }
 
     #[test]
     fn parse_int_literal_and_flt_literal_are_disambiguated() {
-        assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
+        assert_eq!(
+            "+42".parse::<Term>().unwrap(),
+            Term::from(Subterm::Prim(Prim::Int(42)))
+        );
         assert_eq!(
             "42".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Succ(
+            Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
                 NatLiteral::Number(42),
-                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-            )))
+                Subterm::Prim(Prim::Nat(Nat::Zero)).into()
+            ))))
         );
         assert_eq!(
             "+42.0".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Flt(42.0_f32))
+            Term::from(Subterm::Prim(Prim::Flt(42.0_f32)))
         );
     }
 
     #[test]
     fn parse_prim() {
-        assert_eq!("+42".parse::<Term>().unwrap(), Term::Prim(Prim::Int(42)));
+        assert_eq!(
+            "+42".parse::<Term>().unwrap(),
+            Term::from(Subterm::Prim(Prim::Int(42)))
+        );
         assert_eq!(
             "42".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Succ(
+            Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
                 NatLiteral::Number(42),
-                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-            )))
+                Subterm::Prim(Prim::Nat(Nat::Zero)).into()
+            ))))
         );
         assert_eq!(
             "+1.5".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Flt(1.5_f32))
+            Term::from(Subterm::Prim(Prim::Flt(1.5_f32)))
         );
         assert_eq!(
             "false".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Bln(false))
+            Term::from(Subterm::Prim(Prim::Bln(false)))
         );
-        assert_eq!("true".parse::<Term>().unwrap(), Term::Prim(Prim::Bln(true)));
+        assert_eq!(
+            "true".parse::<Term>().unwrap(),
+            Term::from(Subterm::Prim(Prim::Bln(true)))
+        );
     }
 
     #[test]
     fn parse_char_literal_ascii() {
         assert_eq!(
             "'a'".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Succ(
+            Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
                 NatLiteral::Char('a'),
-                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-            )))
+                Subterm::Prim(Prim::Nat(Nat::Zero)).into()
+            ))))
         );
     }
 
@@ -1178,10 +1191,10 @@ mod tests {
     fn parse_char_literal_escape() {
         assert_eq!(
             "'\\n'".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Nat(Nat::Succ(
+            Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
                 NatLiteral::Char('\n'),
-                Box::new(Term::Prim(Prim::Nat(Nat::Zero)))
-            )))
+                Subterm::Prim(Prim::Nat(Nat::Zero)).into()
+            ))))
         );
     }
 
@@ -1189,7 +1202,9 @@ mod tests {
     fn parse_char_literal_no_suffix_is_bin() {
         assert_eq!(
             "\"a\"".parse::<Term>().unwrap(),
-            Term::Prim(Prim::Bin(BinLiteral::String("a".to_string())))
+            Term::from(Subterm::Prim(Prim::Bin(BinLiteral::String(
+                "a".to_string()
+            ))))
         );
     }
 
@@ -1210,8 +1225,8 @@ mod tests {
             vec![TopItem::Let(TopLet {
                 is_pub: false,
                 label: "x".to_string(),
-                type_: Term::Type.into(),
-                body: Term::Type.into(),
+                type_: Subterm::Type.into(),
+                body: Subterm::Type.into(),
             })]
         );
     }
@@ -1223,8 +1238,8 @@ mod tests {
             vec![TopItem::Let(TopLet {
                 is_pub: true,
                 label: "x".to_string(),
-                type_: Term::Type.into(),
-                body: Term::Type.into(),
+                type_: Subterm::Type.into(),
+                body: Subterm::Type.into(),
             })]
         );
     }
@@ -1243,22 +1258,22 @@ mod tests {
                 TopLet {
                     is_pub: true,
                     label: "id".to_string(),
-                    type_: Term::FuncType(FuncType {
-                        params: vec![(Some("x".to_string()), Term::Type.into())],
-                        output: Term::Type.into(),
+                    type_: Subterm::FuncType(FuncType {
+                        params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                        output: Subterm::Type.into(),
                     })
                     .into(),
-                    body: Term::Func(Func {
+                    body: Subterm::Func(Func {
                         params: vec!["x".to_string()],
-                        body: Term::Name(Name::from(["x".to_string()])).into(),
+                        body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
                 },
                 TopLet {
                     is_pub: false,
                     label: "helper".to_string(),
-                    type_: Term::Type.into(),
-                    body: Term::Type.into(),
+                    type_: Subterm::Type.into(),
+                    body: Subterm::Type.into(),
                 },
             ])]
         );
@@ -1300,8 +1315,8 @@ mod tests {
                     items: vec![TopItem::Let(TopLet {
                         is_pub: true,
                         label: "x".to_string(),
-                        type_: Term::Type.into(),
-                        body: Term::Type.into(),
+                        type_: Subterm::Type.into(),
+                        body: Subterm::Type.into(),
                     })],
                 }),
             })]
@@ -1327,18 +1342,21 @@ mod tests {
             entrypoint.items[3],
             TopItem::Let(TopLet { is_pub: false, .. })
         ));
-        assert_eq!(entrypoint.tail, Term::Name(Name::from(["f".to_string()])));
+        assert_eq!(
+            entrypoint.tail,
+            Term::from(Subterm::Name(Name::from(["f".to_string()])))
+        );
     }
 
     #[test]
     fn parse_qualified_path() {
         assert_eq!(
             "Foo/bar/baz".parse::<Term>().unwrap(),
-            Term::Name(Name::from([
+            Term::from(Subterm::Name(Name::from([
                 "Foo".to_string(),
                 "bar".to_string(),
                 "baz".to_string()
-            ]))
+            ])))
         );
     }
 
@@ -1346,11 +1364,17 @@ mod tests {
     fn parse_type_name_as_path_segment() {
         assert_eq!(
             "Nat/double".parse::<Term>().unwrap(),
-            Term::Name(Name::from(["Nat".to_string(), "double".to_string()]))
+            Term::from(Subterm::Name(Name::from([
+                "Nat".to_string(),
+                "double".to_string()
+            ])))
         );
         assert_eq!(
             "Type/foo".parse::<Term>().unwrap(),
-            Term::Name(Name::from(["Type".to_string(), "foo".to_string()]))
+            Term::from(Subterm::Name(Name::from([
+                "Type".to_string(),
+                "foo".to_string()
+            ])))
         );
     }
 
@@ -1358,17 +1382,17 @@ mod tests {
     fn bare_type_names_parse_as_names() {
         assert_eq!(
             "Nat".parse::<Term>().unwrap(),
-            Term::Name(Name::from(["Nat".to_string()]))
+            Term::from(Subterm::Name(Name::from(["Nat".to_string()])))
         );
         assert_eq!(
             "Int".parse::<Term>().unwrap(),
-            Term::Name(Name::from(["Int".to_string()]))
+            Term::from(Subterm::Name(Name::from(["Int".to_string()])))
         );
         assert_eq!(
             "Flt".parse::<Term>().unwrap(),
-            Term::Name(Name::from(["Flt".to_string()]))
+            Term::from(Subterm::Name(Name::from(["Flt".to_string()])))
         );
-        assert_eq!("Type".parse::<Term>().unwrap(), Term::Type);
+        assert_eq!("Type".parse::<Term>().unwrap(), Term::from(Subterm::Type));
     }
 
     #[test]
@@ -1433,10 +1457,10 @@ mod tests {
     fn parse_proj_numeric_suffix() {
         assert_eq!(
             "(r).0".parse::<Term>().unwrap(),
-            Term::Proj(Proj {
-                head: Term::Name(Name::from(["r".to_string()])).into(),
+            Term::from(Subterm::Proj(Proj {
+                head: Subterm::Name(Name::from(["r".to_string()])).into(),
                 index: 0,
-            })
+            }))
         );
     }
 
@@ -1444,14 +1468,14 @@ mod tests {
     fn parse_proj_chained_suffixes() {
         assert_eq!(
             "(r).1.0".parse::<Term>().unwrap(),
-            Term::Proj(Proj {
-                head: Term::Proj(Proj {
-                    head: Term::Name(Name::from(["r".to_string()])).into(),
+            Term::from(Subterm::Proj(Proj {
+                head: Subterm::Proj(Proj {
+                    head: Subterm::Name(Name::from(["r".to_string()])).into(),
                     index: 1,
                 })
                 .into(),
                 index: 0,
-            })
+            }))
         );
     }
 
@@ -1459,10 +1483,10 @@ mod tests {
     fn parse_proj_on_name_directly() {
         assert_eq!(
             "r.2".parse::<Term>().unwrap(),
-            Term::Proj(Proj {
-                head: Term::Name(Name::from(["r".to_string()])).into(),
+            Term::from(Subterm::Proj(Proj {
+                head: Subterm::Name(Name::from(["r".to_string()])).into(),
                 index: 2,
-            })
+            }))
         );
     }
 
@@ -1470,7 +1494,7 @@ mod tests {
     fn parse_empty_tuple_type() {
         assert_eq!(
             "{}".parse::<Term>().unwrap(),
-            Term::TupleType(TupleType { fields: vec![] })
+            Term::from(Subterm::TupleType(TupleType { fields: vec![] }))
         );
     }
 
@@ -1478,7 +1502,7 @@ mod tests {
     fn parse_empty_tuple() {
         assert_eq!(
             "()".parse::<Term>().unwrap(),
-            Term::Tuple(Tuple { fields: vec![] })
+            Term::from(Subterm::Tuple(Tuple { fields: vec![] }))
         );
     }
 
@@ -1486,9 +1510,9 @@ mod tests {
     fn parse_one_tuple() {
         assert_eq!(
             "(x,)".parse::<Term>().unwrap(),
-            Term::Tuple(Tuple {
-                fields: vec![Term::Name(Name::from(["x".to_string()])).into()],
-            })
+            Term::from(Subterm::Tuple(Tuple {
+                fields: vec![Subterm::Name(Name::from(["x".to_string()])).into()],
+            }))
         );
     }
 
@@ -1548,34 +1572,33 @@ mod tests {
             "match v : Bin\n| null() => \"null\"\n| bln(b) => b\nend"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Match(Match::Union(UnionMatch {
-                head: Term::Name(Name::from(["v".to_string()])).into(),
+            Subterm::Match(Match::Union(UnionMatch {
+                head: Subterm::Name(Name::from(["v".to_string()])).into(),
                 motive: Motive {
                     label: None,
-                    body: Term::Name(Name::from(["Bin".to_string()])).into(),
+                    body: Subterm::Name(Name::from(["Bin".to_string()])).into(),
                 },
                 cases: [
                     (
                         "null".to_string(),
                         UnionCase {
                             binders: vec![],
-                            body: Term::Prim(Prim::Bin(BinLiteral::String(
-                                "null".to_string()
-                            )))
-                            .into(),
+                            body: Subterm::Prim(Prim::Bin(BinLiteral::String("null".to_string())))
+                                .into(),
                         },
                     ),
                     (
                         "bln".to_string(),
                         UnionCase {
                             binders: vec!["b".to_string()],
-                            body: Term::Name(Name::from(["b".to_string()])).into(),
+                            body: Subterm::Name(Name::from(["b".to_string()])).into(),
                         },
                     ),
                 ]
                 .into_iter()
                 .collect(),
             }))
+            .into()
         );
     }
 
@@ -1585,22 +1608,23 @@ mod tests {
             "match v : T\n| lit(a, b) => a\nend"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Match(Match::Union(UnionMatch {
-                head: Term::Name(Name::from(["v".to_string()])).into(),
+            Subterm::Match(Match::Union(UnionMatch {
+                head: Subterm::Name(Name::from(["v".to_string()])).into(),
                 motive: Motive {
                     label: None,
-                    body: Term::Name(Name::from(["T".to_string()])).into(),
+                    body: Subterm::Name(Name::from(["T".to_string()])).into(),
                 },
                 cases: [(
                     "lit".to_string(),
                     UnionCase {
                         binders: vec!["a".to_string(), "b".to_string()],
-                        body: Term::Name(Name::from(["a".to_string()])).into(),
+                        body: Subterm::Name(Name::from(["a".to_string()])).into(),
                     },
                 )]
                 .into_iter()
                 .collect(),
             }))
+            .into()
         );
     }
 
@@ -1610,19 +1634,20 @@ mod tests {
             "match x : '[foo] | 'foo => 'foo end"
                 .parse::<Term>()
                 .unwrap(),
-            Term::Match(Match::Atom(AtomMatch {
-                head: Term::Name(Name::from(["x".to_string()])).into(),
+            Subterm::Match(Match::Atom(AtomMatch {
+                head: Subterm::Name(Name::from(["x".to_string()])).into(),
                 motive: Motive {
                     label: None,
-                    body: Term::AtomType(AtomType {
+                    body: Subterm::AtomType(AtomType {
                         atoms: [Atom::from("foo")].into_iter().collect(),
                     })
                     .into(),
                 },
-                cases: [(Atom::from("foo"), Term::Atom(Atom::from("foo")).into())]
+                cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
                     .into_iter()
                     .collect(),
             }))
+            .into()
         );
     }
 }
