@@ -14,18 +14,15 @@ fn main() {
             "tuple_ty",
             core::Type,
             core::Term::tuple_type([
-                (
-                    "label",
-                    core::Term::from(core::Term::atom_type(["left", "right"])),
-                ),
+                ("label", core::Term::atom_type(["left", "right"])),
                 (
                     "value",
-                    core::Term::from(core::Term::match_(
+                    core::Term::match_(
                         core::Var::free("label"),
                         None,
                         core::Type,
                         [("left", core::Type), ("right", core::Type)],
-                    )),
+                    ),
                 ),
             ]),
             core::Term::let_(
@@ -50,10 +47,10 @@ fn main() {
                             [
                                 (
                                     "left",
-                                    core::Term::from(core::Term::apply(
+                                    core::Term::apply(
                                         core::Var::free("id"),
                                         [core::Var::free("value")],
-                                    )),
+                                    ),
                                 ),
                                 ("right", core::Type.into()),
                             ],
@@ -62,8 +59,7 @@ fn main() {
                 ),
             ),
         ),
-    )
-    .into();
+    );
 
     println!("=== core ===");
     println!("{core_term}");

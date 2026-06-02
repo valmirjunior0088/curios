@@ -383,7 +383,7 @@ mod tests {
                 let x : Type = Type;
                 x
             "#),
-            core::Term::let_("x", core::Type, core::Type, core::Var::free("x")).into(),
+            core::Term::let_("x", core::Type, core::Type, core::Var::free("x")),
         );
     }
 
@@ -396,7 +396,7 @@ mod tests {
                 end
                 Foo/f
             "#),
-            core::Term::let_("Foo/f", core::Type, core::Type, core::Var::free("Foo/f")).into(),
+            core::Term::let_("Foo/f", core::Type, core::Type, core::Var::free("Foo/f")),
         );
     }
 
@@ -414,8 +414,7 @@ mod tests {
                 core::Type,
                 core::Type,
                 core::Var::free("Nat/double")
-            )
-            .into(),
+            ),
         );
     }
 
@@ -436,8 +435,7 @@ mod tests {
                 core::Type,
                 core::Type,
                 core::Var::free("Foo/Bar/f")
-            )
-            .into(),
+            ),
         );
     }
 
@@ -548,8 +546,7 @@ mod tests {
                 core::Type,
                 core::Type,
                 core::Var::free("Foo/Bar/f")
-            )
-            .into(),
+            ),
         );
     }
 
@@ -589,8 +586,7 @@ mod tests {
                 core::Type,
                 core::Type,
                 core::Var::free("Foo/Bar/f")
-            )
-            .into(),
+            ),
         );
     }
 
@@ -611,7 +607,7 @@ mod tests {
                 end
                 C/X/f
             "#),
-            core::Term::let_("A/X/f", core::Type, core::Type, core::Var::free("A/X/f")).into(),
+            core::Term::let_("A/X/f", core::Type, core::Type, core::Var::free("A/X/f")),
         );
     }
 
@@ -925,8 +921,7 @@ mod tests {
                 core::Type,
                 core::Type,
                 core::Term::let_("Foo/y", core::Type, core::Type, core::Var::free("Foo/x"))
-            )
-            .into(),
+            ),
         );
     }
 

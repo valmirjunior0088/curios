@@ -979,7 +979,7 @@ mod tests {
     fn reduce_apply_beta_reduces() {
         let mut context = context();
 
-        let term: Term = Term::apply(Term::func(["x"], Var::free("x")), [Atom::from("ok")]).into();
+        let term: Term = Term::apply(Term::func(["x"], Var::free("x")), [Atom::from("ok")]);
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -996,8 +996,7 @@ mod tests {
             Some("m"),
             Type,
             vec![("a", Atom::from("yes")), ("b", Atom::from("no"))],
-        )
-        .into();
+        );
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1017,8 +1016,7 @@ mod tests {
             "pred",
             "ih",
             Atom::from("true"),
-        )
-        .into();
+        );
 
         assert_ne!(
             reduce(&mut context, term.clone()),
@@ -1032,7 +1030,7 @@ mod tests {
 
         context.define("y", &Atom::from("done").into());
 
-        let term: Term = Term::let_("x", Type, Var::free("y"), Var::free("x")).into();
+        let term: Term = Term::let_("x", Type, Var::free("y"), Var::free("x"));
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1217,7 +1215,7 @@ mod tests {
     fn reduce_proj_beta_reduces() {
         let mut context = context();
 
-        let term: Term = Term::proj(Term::tuple([Atom::from("a"), Atom::from("b")]), 1).into();
+        let term: Term = Term::proj(Term::tuple([Atom::from("a"), Atom::from("b")]), 1);
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1231,7 +1229,7 @@ mod tests {
 
         context.define_projection(Var::free("r").into(), 0, Atom::from("ok").into());
 
-        let term: Term = Term::proj(Var::free("r"), 0).into();
+        let term: Term = Term::proj(Var::free("r"), 0);
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1248,7 +1246,7 @@ mod tests {
         // `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more
         // fields than the tuple does.
         let term: Term =
-            Term::tuple([Term::proj(Var::free("r"), 0), Term::proj(Var::free("r"), 1)]).into();
+            Term::tuple([Term::proj(Var::free("r"), 0), Term::proj(Var::free("r"), 1)]);
 
         assert_eq!(reduce(&mut context, term.clone()), Ok(term));
     }
@@ -1257,7 +1255,7 @@ mod tests {
     fn eta_reduce_func_fires() {
         let mut context = context();
 
-        let term: Term = Term::func(["y"], Term::apply(Var::free("f"), [Var::free("y")])).into();
+        let term: Term = Term::func(["y"], Term::apply(Var::free("f"), [Var::free("y")]));
 
         assert_eq!(
             reduce(&mut context, term.clone()),
@@ -1281,7 +1279,7 @@ mod tests {
     #[test]
     fn define_projection_invalidates_cached_reduction() {
         let mut context = context();
-        let proj: Term = Term::proj(Var::free("r"), 0).into();
+        let proj: Term = Term::proj(Var::free("r"), 0);
 
         // No projection entry yet: proj reduces to itself and is cached.
         assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));

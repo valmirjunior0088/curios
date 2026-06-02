@@ -15,11 +15,11 @@ fn context() -> Context {
 fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
     let mut context = context();
 
-    let tuple_type = Term::from(Term::tuple_type([
-        ("x", Term::from(Term::atom_type(["left", "right"]))),
+    let tuple_type = Term::tuple_type([
+        ("x", Term::atom_type(["left", "right"])),
         (
             "y",
-            Term::from(Term::match_(
+            Term::match_(
                 Var::free("x"),
                 Some("m"),
                 Type,
@@ -27,17 +27,17 @@ fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
                     ("left", Term::atom_type(["hot"])),
                     ("right", Term::atom_type(["cold"])),
                 ],
-            )),
+            ),
         ),
-    ]));
+    ]);
 
     erase(&mut context, &tuple_type, &Type.into()).unwrap();
 
-    let tuple = Term::from(Term::tuple([Atom::from("left"), Atom::from("hot")]));
+    let tuple = Term::tuple([Atom::from("left"), Atom::from("hot")]);
 
     erase(&mut context, &tuple, &tuple_type).unwrap();
 
-    let tuple = Term::from(Term::tuple([Atom::from("right"), Atom::from("cold")]));
+    let tuple = Term::tuple([Atom::from("right"), Atom::from("cold")]);
 
     erase(&mut context, &tuple, &tuple_type).unwrap();
 }
@@ -46,11 +46,11 @@ fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
 fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
     let mut context = context();
 
-    let tuple_type = Term::from(Term::tuple_type([
-        ("x", Term::from(Term::atom_type(["left", "right"]))),
+    let tuple_type = Term::tuple_type([
+        ("x", Term::atom_type(["left", "right"])),
         (
             "y",
-            Term::from(Term::match_(
+            Term::match_(
                 Var::free("x"),
                 Some("m"),
                 Type,
@@ -58,11 +58,11 @@ fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
                     ("left", Term::atom_type(["hot"])),
                     ("right", Term::atom_type(["cold"])),
                 ],
-            )),
+            ),
         ),
-    ]));
+    ]);
 
-    let tuple = Term::from(Term::tuple([Atom::from("left"), Atom::from("cold")]));
+    let tuple = Term::tuple([Atom::from("left"), Atom::from("cold")]);
 
     assert!(matches!(
         erase(&mut context, &tuple, &tuple_type),
@@ -101,15 +101,12 @@ fn erase_match_singleton_lowers_to_match() {
 fn erase_rec_single_identity_function() {
     let mut context = context();
 
-    let func_type = Term::from(Term::func_type(
-        [("x", Term::atom_type(["a"]))],
-        Term::atom_type(["a"]),
-    ));
+    let func_type = Term::func_type([("x", Term::atom_type(["a"]))], Term::atom_type(["a"]));
 
-    let term = Term::from(Term::rec(
+    let term = Term::rec(
         vec![("f", func_type.clone(), Term::func(["x"], Var::free("x")))],
         Var::free("f"),
-    ));
+    );
 
     erase(&mut context, &term, &func_type).unwrap();
 }
@@ -130,12 +127,12 @@ fn erase_preempts_on_cyclic_expected_type() {
 fn erase_accepts_term_level_loop_with_stable_type() {
     let mut context = context();
 
-    let type_ = Term::from(Term::atom_type(["a"]));
+    let type_ = Term::atom_type(["a"]);
 
-    let term = Term::from(Term::rec(
+    let term = Term::rec(
         vec![("loop", type_.clone(), Var::free("loop"))],
         Var::free("loop"),
-    ));
+    );
 
     erase(&mut context, &term, &type_).unwrap();
 }
@@ -169,16 +166,13 @@ fn erase_prim_ops_typecheck() {
 
 #[test]
 fn erase_func_captures_free_variables_before_opening_body() {
-    let atom_type = Term::from(Term::atom_type(["a"]));
-    let tuple_type = Term::from(Term::tuple_type([
-        ("z", atom_type.clone()),
-        ("w", atom_type.clone()),
-    ]));
-    let type_ = Term::from(Term::func_type([("x", atom_type.clone())], tuple_type));
-    let term = Term::from(Term::func(
+    let atom_type = Term::atom_type(["a"]);
+    let tuple_type = Term::tuple_type([("z", atom_type.clone()), ("w", atom_type.clone())]);
+    let type_ = Term::func_type([("x", atom_type.clone())], tuple_type);
+    let term = Term::func(
         ["x"],
         Term::tuple([Term::from(Var::free("x")), Term::from(Var::free("y"))]),
-    ));
+    );
 
     let mut context = Context::new(Duration::from_secs(1));
     context.assume("y", &atom_type);
@@ -516,9 +510,9 @@ fn erase_nat_eql_returns_bool_atom() {
 fn erase_nat_fold_rejects_non_nat_head() {
     let mut context = context();
 
-    let bool_type = Term::from(Term::atom_type(["false", "true"]));
+    let bool_type = Term::atom_type(["false", "true"]);
 
-    let nat_fold = Term::from(Term::nat_induction(
+    let nat_fold = Term::nat_induction(
         Prim::Int(1),
         Some("m"),
         Term::atom_type(["false", "true"]),
@@ -526,7 +520,7 @@ fn erase_nat_fold_rejects_non_nat_head() {
         "pred",
         "ih",
         Atom::from("true"),
-    ));
+    );
 
     assert!(matches!(
         erase(&mut context, &nat_fold, &bool_type),
@@ -538,15 +532,15 @@ fn erase_nat_fold_rejects_non_nat_head() {
 fn erase_nat_match_dispatches_to_named_case() {
     let mut context = context();
 
-    let bool_type = Term::from(Term::atom_type(["false", "true"]));
+    let bool_type = Term::atom_type(["false", "true"]);
 
-    let nat_match = Term::from(Term::nat_dispatch(
+    let nat_match = Term::nat_dispatch(
         Prim::Nat(Nat::new(5)),
         Some("m"),
         Term::atom_type(["false", "true"]),
         [(5u32, Term::from(Atom::from("true")))],
         Atom::from("false"),
-    ));
+    );
 
     erase(&mut context, &nat_match, &bool_type).unwrap();
 }
@@ -555,15 +549,15 @@ fn erase_nat_match_dispatches_to_named_case() {
 fn erase_nat_match_rejects_non_nat_head() {
     let mut context = context();
 
-    let bool_type = Term::from(Term::atom_type(["false", "true"]));
+    let bool_type = Term::atom_type(["false", "true"]);
 
-    let nat_match = Term::from(Term::nat_dispatch(
+    let nat_match = Term::nat_dispatch(
         Prim::Int(0),
         Some("m"),
         Term::atom_type(["false", "true"]),
         [(0u32, Term::from(Atom::from("true")))],
         Atom::from("false"),
-    ));
+    );
 
     assert!(matches!(
         erase(&mut context, &nat_match, &bool_type),
@@ -593,19 +587,19 @@ fn erase_lst_append() {
 fn erase_three_field_tuple_type_and_value() {
     let mut context = context();
 
-    let tuple_type = Term::from(Term::tuple_type([
-        ("x", Term::from(Term::atom_type(["a"]))),
-        ("y", Term::from(Term::atom_type(["b"]))),
-        ("z", Term::from(Term::atom_type(["c"]))),
-    ]));
+    let tuple_type = Term::tuple_type([
+        ("x", Term::atom_type(["a"])),
+        ("y", Term::atom_type(["b"])),
+        ("z", Term::atom_type(["c"])),
+    ]);
 
     erase(&mut context, &tuple_type, &Type.into()).unwrap();
 
-    let tuple = Term::from(Term::tuple([
+    let tuple = Term::tuple([
         Term::from(Atom::from("a")),
         Term::from(Atom::from("b")),
         Term::from(Atom::from("c")),
-    ]));
+    ]);
 
     erase(&mut context, &tuple, &tuple_type).unwrap();
 }
