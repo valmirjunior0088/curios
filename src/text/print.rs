@@ -234,13 +234,23 @@ fn print_term(term: Term) -> Printer<'static> {
             });
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
-        Term::Tuple(Tuple { fields }) => flat([
-            pure("("),
-            sep_flat(fields.into_iter().map(|field| print_term(*field)), || {
-                pure(", ")
-            }),
-            pure(")"),
-        ]),
+        Term::Tuple(Tuple { fields }) => {
+            if fields.len() == 1 {
+                flat([
+                    pure("("),
+                    print_term(*fields.into_iter().next().unwrap()),
+                    pure(",)"),
+                ])
+            } else {
+                flat([
+                    pure("("),
+                    sep_flat(fields.into_iter().map(|field| print_term(*field)), || {
+                        pure(", ")
+                    }),
+                    pure(")"),
+                ])
+            }
+        }
         Term::Proj(Proj { head, index }) => {
             flat([pure("("), print_term(*head), pure(format!(").{index}"))])
         }

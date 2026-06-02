@@ -366,11 +366,12 @@ Boolean literals. Their type is `/sys/Bln`.
 
 ```
 ()
+(a,)
 (a, b)
 (a, b, c)
 ```
 
-Zero or more elements.
+Zero or more elements. A trailing comma is required for the one-element case to distinguish it from a parenthesized expression.
 
 ## Primitive operations
 

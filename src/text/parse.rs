@@ -353,7 +353,7 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
             .and_keep(lazy(parse_term))
             .and_drop(parse_literal(",")),
     )
-    .and(sep_by1(|| lazy(parse_term), || parse_literal(",")))
+    .and(sep_by0(|| lazy(parse_term), || parse_literal(",")))
     .and_drop(parse_literal(")"))
     .map(|(first, rest)| {
         Term::Tuple(Tuple {
@@ -1367,6 +1367,16 @@ mod tests {
         assert_eq!(
             "()".parse::<Term>().unwrap(),
             Term::Tuple(Tuple { fields: vec![] })
+        );
+    }
+
+    #[test]
+    fn parse_one_tuple() {
+        assert_eq!(
+            "(x,)".parse::<Term>().unwrap(),
+            Term::Tuple(Tuple {
+                fields: vec![Term::Name(Name::from(["x".to_string()])).into()],
+            })
         );
     }
 }
