@@ -171,9 +171,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&rec.tail)?,
             ),
-            Term::Spanned(span, inner) => {
-                core::Term::spanned(*span, self.term(inner).map_err(|error| error.at(*span))?)
-            }
+            Term::Spanned(span, inner) => core::Term::spanned(
+                span.clone(),
+                self.term(inner).map_err(|error| error.at(span.clone()))?,
+            ),
         })
     }
 

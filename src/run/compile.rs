@@ -1,5 +1,5 @@
 use {
-    crate::{cont, core, ersd, text, wasm},
+    crate::{Source, cont, core, ersd, text, wasm},
     std::time::Duration,
 };
 
@@ -22,32 +22,34 @@ where
     L: text::Loader,
     O: FnMut(Stage<'_>),
 {
-    let text_entrypoint = term
-        .parse::<text::Entrypoint>()
-        .map_err(|error| error.format(term))?
+    let term_source = Source::inline(term);
+
+    let text_entrypoint = text::Entrypoint::parse(&term_source)
+        .map_err(|error| error.format())?
         .with_prelude();
 
     observe(Stage::Text(&text_entrypoint));
 
-    let core_term = text::to_core(&text_entrypoint, loader).map_err(|error| error.format(term))?;
+    let core_term = text::to_core(&text_entrypoint, loader).map_err(|error| error.format())?;
 
     observe(Stage::Core(&core_term));
 
     let core_type = match type_ {
         Some(type_source) => {
-            let type_entrypoint = type_source
-                .parse::<text::Entrypoint>()
-                .map_err(|error| error.format(type_source))?
+            let type_source = Source::inline(type_source);
+
+            let type_entrypoint = text::Entrypoint::parse(&type_source)
+                .map_err(|error| error.format())?
                 .with_prelude();
 
-            text::to_core(&type_entrypoint, loader).map_err(|error| error.format(type_source))?
+            text::to_core(&type_entrypoint, loader).map_err(|error| error.format())?
         }
         None => core::infer(&mut core::Context::new(timeout), &core_term)
-            .map_err(|error| error.format(term))?,
+            .map_err(|error| error.format())?,
     };
 
     let ersd_term = core::erase(&mut core::Context::new(timeout), &core_term, &core_type)
-        .map_err(|error| error.format(term))?;
+        .map_err(|error| error.format())?;
 
     observe(Stage::Ersd(&ersd_term));
 

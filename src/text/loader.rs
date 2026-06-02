@@ -1,5 +1,6 @@
 use {
     super::{Module, Path},
+    crate::Source,
     std::{fs, path::PathBuf},
 };
 
@@ -24,12 +25,12 @@ impl Loader for FileLoader {
             .fold(self.base.clone(), |p, seg| p.join(seg))
             .join(format!("{label}.crs"));
 
-        let source = fs::read_to_string(&path)
+        let text = fs::read_to_string(&path)
             .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
 
-        source
-            .parse::<Module>()
-            .map_err(|e| format!("{}:\n{}", path.display(), e.format(&source)))
+        let source = Source::new(path.clone(), text);
+
+        Module::parse(&source).map_err(|e| format!("{}:\n{}", path.display(), e.format()))
     }
 }
 

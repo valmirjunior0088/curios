@@ -1,12 +1,19 @@
+use {crate::Source, std::rc::Rc};
+
 #[derive(Debug, Clone, Copy)]
 struct ParserState<'a> {
     offset: usize,
     string: &'a str,
+    source: &'a Rc<Source>,
 }
 
 impl<'a> ParserState<'a> {
-    fn new(string: &'a str) -> Self {
-        Self { offset: 0, string }
+    fn new(source: &'a Rc<Source>) -> Self {
+        Self {
+            offset: 0,
+            string: &source.text,
+            source,
+        }
     }
 
     fn take_exact(self, width: usize) -> Option<(&'a str, Self)> {
@@ -15,6 +22,7 @@ impl<'a> ParserState<'a> {
             Self {
                 offset: self.offset + width,
                 string: self.string.get(width..)?,
+                source: self.source,
             },
         ))
     }
@@ -33,6 +41,7 @@ impl<'a> ParserState<'a> {
             Self {
                 offset: self.offset + width,
                 string: &self.string[width..],
+                source: self.source,
             },
         ))
     }
@@ -53,6 +62,7 @@ impl<'a> ParserState<'a> {
             Self {
                 offset: self.offset + offset,
                 string,
+                source: self.source,
             },
         )
     }
@@ -67,6 +77,7 @@ pub struct ParserError {
     fatal: bool,
     offset: usize,
     message: String,
+    source: Rc<Source>,
 }
 
 impl ParserError {
@@ -78,6 +89,7 @@ impl ParserError {
             fatal: true,
             offset: state.offset,
             message: message.into(),
+            source: state.source.clone(),
         }
     }
 
@@ -99,11 +111,12 @@ impl ParserError {
         self.fatal && self.offset != state.offset
     }
 
-    pub fn format(&self, string: &str) -> String {
+    pub fn format(&self) -> String {
         format!(
             "{message}\n\n{snippet}",
             message = self.message,
-            snippet = crate::Span::new(self.offset, self.offset).render_snippet(string),
+            snippet = crate::Span::new(self.source.clone(), self.offset, self.offset)
+                .render_snippet(),
         )
     }
 }
@@ -219,11 +232,11 @@ where
     }
 }
 
-pub fn run_parser<'a, A>(parser: Parser<'a, A>, string: &'a str) -> Result<A, ParserError>
+pub fn run_parser<'a, A>(parser: Parser<'a, A>, source: &'a Rc<Source>) -> Result<A, ParserError>
 where
     A: 'a,
 {
-    parser.parse(ParserState::new(string)).map(|(item, _)| item)
+    parser.parse(ParserState::new(source)).map(|(item, _)| item)
 }
 
 pub fn pure<'a, A>(a: A) -> Parser<'a, A>
@@ -294,7 +307,13 @@ where
         let start = state.offset;
         let (item, state) = parser.parse(state)?;
 
-        Ok(((crate::Span::new(start, state.offset), item), state))
+        Ok((
+            (
+                crate::Span::new(state.source.clone(), start, state.offset),
+                item,
+            ),
+            state,
+        ))
     })
 }
 

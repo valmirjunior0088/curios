@@ -5,11 +5,14 @@ use {
         Rec, RecItem, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
         UnionCase, UnionMatch, UseGroup,
     },
-    crate::parser::{
-        Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
-        spanned, take_eof, take_exact, take_n, take_while,
+    crate::{
+        Source,
+        parser::{
+            Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0,
+            sep_by1, spanned, take_eof, take_exact, take_n, take_while,
+        },
     },
-    std::{iter, str::FromStr},
+    std::{iter, rc::Rc, str::FromStr},
 };
 
 const CHARACTERS: &[char] = &['_'];
@@ -774,16 +777,22 @@ fn parse_term<'a>() -> Parser<'a, Term> {
     )
 }
 
-impl FromStr for Term {
-    type Err = ParserError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
+impl Term {
+    pub fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         run_parser(
             parse_whitespace()
                 .and_keep(parse_term())
                 .and_drop(take_eof()),
-            input,
+            source,
         )
+    }
+}
+
+impl FromStr for Term {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Term::parse(&Source::inline(input))
     }
 }
 
@@ -997,16 +1006,35 @@ fn parse_top_item<'a>() -> Parser<'a, TopItem> {
         .or(parse_top_rec())
 }
 
-impl FromStr for Module {
-    type Err = ParserError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
+impl Module {
+    pub fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
                 .and_drop(take_eof())
                 .map(|items| Module { items }),
-            input,
+            source,
+        )
+    }
+}
+
+impl FromStr for Module {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Module::parse(&Source::inline(input))
+    }
+}
+
+impl Entrypoint {
+    pub fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(many0(parse_top_item))
+                .and(lazy(parse_term))
+                .and_drop(take_eof())
+                .map(|(items, tail)| Entrypoint::new(items, tail)),
+            source,
         )
     }
 }
@@ -1015,14 +1043,7 @@ impl FromStr for Entrypoint {
     type Err = ParserError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        run_parser(
-            parse_whitespace()
-                .and_keep(many0(parse_top_item))
-                .and(lazy(parse_term))
-                .and_drop(take_eof())
-                .map(|(items, tail)| Entrypoint::new(items, tail)),
-            input,
-        )
+        Entrypoint::parse(&Source::inline(input))
     }
 }
 

@@ -5,9 +5,12 @@ use {
         Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
         RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
-    crate::parser::{
-        Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,
-        take_while,
+    crate::{
+        Source,
+        parser::{
+            Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof,
+            take_exact, take_while,
+        },
     },
     std::str::FromStr,
 };
@@ -885,7 +888,7 @@ impl FromStr for Module {
             parse_whitespace()
                 .and_keep(parse_module())
                 .and_drop(take_eof()),
-            input,
+            &Source::inline(input),
         )
     }
 }

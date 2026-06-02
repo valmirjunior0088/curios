@@ -22,10 +22,10 @@ impl Error {
         }
     }
 
-    pub fn format(&self, source: &str) -> String {
+    pub fn format(&self) -> String {
         match self {
             Self::Located { span, error } => {
-                format!("{error}\n\n{}", span.render_snippet(source))
+                format!("{error}\n\n{}", span.render_snippet())
             }
             error => error.to_string(),
         }

@@ -1,21 +1,56 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use std::{path::PathBuf, rc::Rc};
+
+#[derive(Debug)]
+pub struct Source {
+    pub path: PathBuf,
+    pub text: String,
+}
+
+impl Source {
+    pub fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
+        Rc::new(Self {
+            path: path.into(),
+            text: text.into(),
+        })
+    }
+
+    pub fn inline(text: impl Into<String>) -> Rc<Self> {
+        Self::new("<input>", text)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Span {
+    pub source: Rc<Source>,
     pub start: usize,
     pub end: usize,
 }
 
+impl PartialEq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.source, &other.source) && self.start == other.start && self.end == other.end
+    }
+}
+
+impl Eq for Span {}
+
+impl std::hash::Hash for Span {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (Rc::as_ptr(&self.source) as usize).hash(state);
+        self.start.hash(state);
+        self.end.hash(state);
+    }
+}
+
 impl Span {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+    pub fn new(source: Rc<Source>, start: usize, end: usize) -> Self {
+        Self { source, start, end }
     }
 
-    pub fn render_snippet(&self, source: &str) -> String {
+    pub fn render_snippet(&self) -> String {
+        let source = &self.source.text;
         let start = self.start;
         let end = self.end;
-
-        if start > source.len() || end > source.len() {
-            return format!("<span {start}..{end} out of source bounds>");
-        }
 
         let line_start = source[..start]
             .rfind('\n')

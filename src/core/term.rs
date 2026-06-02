@@ -90,7 +90,7 @@ impl Term {
 
     /// Returns the span attached to this term, if any.
     pub fn span(&self) -> Option<Span> {
-        self.span
+        self.span.clone()
     }
 
     /// Attaches a span to this term. If the term already carries a span (the innermost
@@ -875,7 +875,7 @@ impl Bound for Term {
 
         // Preserve the span across traversal.
         Self {
-            span: self.span,
+            span: self.span.clone(),
             hash: OnceCell::new(),
             reach: OnceCell::new(),
             inner: Rc::new((**self).traverse(visit)),
