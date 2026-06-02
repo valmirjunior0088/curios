@@ -13,6 +13,10 @@ impl Span {
         let start = self.start;
         let end = self.end;
 
+        if start > source.len() || end > source.len() {
+            return format!("<span {start}..{end} out of source bounds>");
+        }
+
         let line_start = source[..start]
             .rfind('\n')
             .map(|index| 1 + index)

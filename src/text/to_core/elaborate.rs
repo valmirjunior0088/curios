@@ -117,6 +117,40 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                         .map(|(atom, body)| Ok((core::Atom::from(atom.as_str()), self.term(body)?)))
                         .collect::<Result<Vec<_>, Error>>()?,
                 ),
+                Match::Union(um) => {
+                    let head_core = self.term(&um.head)?;
+                    let motive_core = self.term(&um.motive.body)?;
+                    let tag = core::Term::proj(head_core.clone(), 0);
+
+                    let cases = um
+                        .cases
+                        .iter()
+                        .map(|(label, case)| {
+                            let k = case.binders.len();
+                            let body_core = self.term(&case.body)?;
+
+                            let result_body = if k == 0 {
+                                body_core
+                            } else {
+                                let payload = core::Term::proj(head_core.clone(), 1);
+                                let projections = (0..k)
+                                    .map(|i| core::Term::proj(payload.clone(), i))
+                                    .collect::<Vec<_>>();
+                                let binder_strs = case
+                                    .binders
+                                    .iter()
+                                    .map(String::as_str)
+                                    .collect::<Vec<_>>();
+                                core::Scope::close(core::Many(k), &binder_strs, body_core)
+                                    .open(&projections.iter().collect::<Vec<_>>())
+                            };
+
+                            Ok((core::Atom::from(label.as_str()), result_body))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?;
+
+                    core::Term::match_(tag, um.motive.label.as_deref(), motive_core, cases)
+                }
             },
             Term::Let(let_) => core::Term::let_(
                 let_.label.clone(),

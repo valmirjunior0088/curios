@@ -684,14 +684,6 @@ impl Convert {
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?
                 }
-                (Subterm::Spanned(_, this), that) => {
-                    self.enqueue(type_, this, that.into());
-                    true
-                }
-                (this, Subterm::Spanned(_, that)) => {
-                    self.enqueue(type_, this.into(), that);
-                    true
-                }
                 (this_n, that_n) => {
                     self.eta_expand_neutral(context, this_n.into(), that_n.into(), type_)?
                 }

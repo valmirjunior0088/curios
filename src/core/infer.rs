@@ -642,7 +642,7 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
 }
 
 pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    match &**term {
+    let result = match &**term {
         Subterm::Type => Ok(Type.into()),
         Subterm::Prim(prim) => infer_prim(context, prim),
         Subterm::BlnMatch(bm) => infer_bln_match(context, bm, term),
@@ -659,7 +659,11 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
             Some(type_) => Ok(type_.clone()),
             None => Err(Error::unbound_variable(var.clone())),
         },
-        Subterm::Spanned(span, inner) => infer(context, inner).map_err(|error| error.at(*span)),
         _ => Err(Error::cannot_infer(term.clone())),
+    };
+
+    match term.span() {
+        Some(span) => result.map_err(|error| error.at(span)),
+        None => result,
     }
 }

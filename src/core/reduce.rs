@@ -952,7 +952,6 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
                 Subterm::Match(m) => reduce_match(context, m)?,
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
-                Subterm::Spanned(_, inner) => Reduce::Continue(inner),
                 term => Reduce::Break(term.into()),
             };
 

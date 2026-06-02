@@ -1,8 +1,9 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopItem,
-        TopLet, TopMod, TopUse, Tuple, TupleType, UseGroup,
+        GroupItem, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Term, TopCase,
+        TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch,
+        UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -351,6 +352,29 @@ fn print_term(term: Term) -> Printer<'static> {
                 ),
                 pure("\nend"),
             ]),
+            Match::Union(UnionMatch { head, motive, cases }) => flat([
+                pure("match "),
+                print_term(*head),
+                pure(" : "),
+                match motive.label {
+                    Some(label) => flat([pure(label), pure(" => "), print_term(*motive.body)]),
+                    None => print_term(*motive.body),
+                },
+                flat(
+                    cases
+                        .into_iter()
+                        .map(|(label, UnionCase { binders, body })| {
+                            flat([
+                                pure(format!("\n| {label}(")),
+                                pure(binders.join(", ")),
+                                pure(") =>\n"),
+                                indent(print_term(*body)),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                pure("\nend"),
+            ]),
         },
         Term::Let(Let {
             label,
@@ -493,12 +517,53 @@ fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
     sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
 }
 
+fn print_top_union_case(case: TopCase) -> Printer<'static> {
+    flat([
+        pure(format!("\n| {}(", case.label)),
+        flat(
+            case.payload_types
+                .into_iter()
+                .map(|t| print_term(*t))
+                .collect::<Vec<_>>(),
+        ),
+        pure(")"),
+    ])
+}
+
+fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
+    let mut iter = unions.into_iter();
+    let first = iter.next().unwrap();
+    let rest = iter.collect::<Vec<_>>();
+
+    flat([
+        print_pub(first.is_pub),
+        pure("union "),
+        pure(first.label),
+        flat(first.cases.into_iter().map(print_top_union_case).collect::<Vec<_>>()),
+        flat(
+            rest.into_iter()
+                .map(|u| {
+                    flat([
+                        pure("\n"),
+                        print_pub(u.is_pub),
+                        pure("and "),
+                        pure(u.label),
+                        flat(u.cases.into_iter().map(print_top_union_case).collect::<Vec<_>>()),
+                    ])
+                })
+                .collect::<Vec<_>>(),
+        ),
+        pure("\nend"),
+    ])
+}
+
 fn print_top_item(item: TopItem) -> Printer<'static> {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),
         TopItem::Let(l) => print_top_let(l),
         TopItem::Rec(items) => print_top_rec(items),
+        TopItem::Union(unions) => print_top_union(unions),
     }
 }
 

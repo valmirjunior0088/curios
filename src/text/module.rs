@@ -47,11 +47,26 @@ pub struct TopLet {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TopCase {
+    pub label: String,
+    pub payload_types: Vec<Subterm>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopUnion {
+    pub is_pub: bool,
+    pub label: String,
+    pub params: Vec<(String, Subterm)>,
+    pub cases: Vec<TopCase>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
     Mod(TopMod),
     Use(TopUse),
     Let(TopLet),
     Rec(Vec<TopLet>),
+    Union(Vec<TopUnion>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

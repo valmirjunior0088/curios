@@ -384,14 +384,33 @@ pub fn expect(
 }
 
 pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+    // Register the refinement on the raw head when it's a Var or Proj. Without this,
+    // a scrutinee whose canonical form reduces past the projection (e.g. when the
+    // scrutinee is a literal tagged tuple) would record nothing, and the type checker
+    // would type dead-arm bodies against the actual variant's payload rather than the
+    // arm-assumed variant's payload. The frame containing this refinement is scoped to
+    // the arm, so the (possibly counterfactual) assumption does not leak.
+    match &**head {
+        Subterm::Var(var) => {
+            context.define(var.unwrap(), value);
+        }
+        Subterm::Proj(Proj { head, index }) => {
+            context.define_projection(head.clone(), *index, value.clone());
+        }
+        _ => {}
+    }
+
+    // Also register on the canonical form. Handles let-chain canonicalization where
+    // body references in the arm use the underlying base term rather than the raw
+    // expression appearing at the match site.
     let canonical = reduce_with(context, head)?;
 
     match &*canonical {
         Subterm::Var(var) => {
             context.define(var.unwrap(), value);
         }
-        Subterm::Proj(Proj { head: base, index }) => {
-            context.define_projection(base.clone(), *index, value.clone());
+        Subterm::Proj(Proj { head, index }) => {
+            context.define_projection(head.clone(), *index, value.clone());
         }
         _ => {}
     }

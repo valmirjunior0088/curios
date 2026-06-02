@@ -45,25 +45,29 @@ let take_literal(literal : Bin) -> Parse({}) =
                 end
             end;
         match r.1 : Parse/Result({ Nat, {} })
-        | true  => ('ok, (r.0, ()))
-        | false => ('err, "unexpected literal")
+        | true  => Parse/Result/ok({ Nat, {} }, (r.0, ()))
+        | false => Parse/Result/err({ Nat, {} }, "unexpected literal")
         end;
 
 let parse_null : Parse(Value) =
-    Parse/map({}, Value, _ => ('null, ()), take_literal("null"));
+    Parse/map({}, Value, _ => Value/null(), take_literal("null"));
 
 let parse_true_val : Parse(Value) =
-    Parse/map({}, Value, _ => ('bln, true), take_literal("true"));
+    Parse/map({}, Value, _ => Value/bln(true), take_literal("true"));
 
 let parse_false_val : Parse(Value) =
-    Parse/map({}, Value, _ => ('bln, false), take_literal("false"));
+    Parse/map({}, Value, _ => Value/bln(false), take_literal("false"));
 
 let parse_num : Parse(Value) = (input, pos) =>
     let r : Parse/Result({ Nat, Bin }) = Parse/take_while(is_num_byte)(input, pos);
-    let bytes : Bin = r.1.1;
-    match Nat/eql(Bin/len(bytes), 0) : Parse/Result({ Nat, Value })
-    | true  => ('err, "expected number")
-    | false => ('ok, (r.1.0, ('num, Str/from_flt(bytes))))
+    match r : Parse/Result({ Nat, Value })
+    | ok(pair) =>
+        let bytes : Bin = pair.1;
+        match Nat/eql(Bin/len(bytes), 0) : Parse/Result({ Nat, Value })
+        | true  => Parse/Result/err({ Nat, Value }, "expected number")
+        | false => Parse/Result/ok({ Nat, Value }, (pair.0, Value/num(Str/from_flt(bytes))))
+        end
+    | err(msg) => Parse/Result/err({ Nat, Value }, msg)
     end;
 
 let is_not_string_special(byte : Nat) -> Bln =
@@ -98,11 +102,11 @@ let parse_raw_str : Parse(Bin) =
         Parse/pure(Bin, Arr/fold(Bin, Bin, chunks, "", (chunk, acc) => Bin/concat(acc, chunk))))));
 
 let parse_str_value : Parse(Value) =
-    Parse/map(Bin, Value, s => ('str, s), parse_raw_str);
+    Parse/map(Bin, Value, s => Value/str(s), parse_raw_str);
 
 pub rec decode : Parse(Value) = (input, pos) =>
     match Nat/lt(pos, Bin/len(input)) : Parse/Result({ Nat, Value })
-    | false => ('err, "unexpected end of input")
+    | false => Parse/Result/err({ Nat, Value }, "unexpected end of input")
     | true  =>
         match Bin/get(input, pos) : Parse/Result({ Nat, Value })
         | ' '  => decode(input, Nat/add(pos, 1))
@@ -123,13 +127,13 @@ and parse_arr : Parse(Value) =
     Parse/bind(Arr(Value), Value,
         Parse/sep_by0(Value, Nat, decode, Parse/take_byte(',')), elems =>
     Parse/bind(Nat, Value, Parse/take_byte(']'), _ =>
-        Parse/pure(Value, ('arr, elems)))))
+        Parse/pure(Value, Value/arr(elems)))))
 and parse_obj : Parse(Value) =
     Parse/bind(Nat, Value, Parse/take_byte('{'), _ =>
     Parse/bind(Arr({ Bin, Value }), Value,
         Parse/sep_by0({ Bin, Value }, Nat, parse_pair, Parse/take_byte(',')), pairs =>
     Parse/bind(Nat, Value, Parse/take_byte('}'), _ =>
-        Parse/pure(Value, ('obj, pairs)))))
+        Parse/pure(Value, Value/obj(pairs)))))
 and parse_pair : Parse({ Bin, Value }) =
     Parse/bind(Bin, { Bin, Value }, parse_raw_str, key =>
     Parse/bind(Nat, { Bin, Value }, Parse/take_byte(':'), _ =>

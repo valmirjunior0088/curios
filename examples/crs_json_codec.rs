@@ -12,22 +12,23 @@ fn main() {
         use /std/{Parse, Io, Bin, Nat};
 
         pub mod json;
+        use json/{Value};
 
-        let value : json/Value = ('obj, [
-            ("name", ('str, "Alice")),
-            ("score", ('num, +9.5)),
-            ("active", ('bln, true)),
-            ("tags", ('arr, [('str, "x"), ('str, "y")])),
-            ("extra", ('null, ()))
+        let value : Value = Value/obj([
+            ("name", Value/str("Alice")),
+            ("score", Value/num(+9.5)),
+            ("active", Value/bln(true)),
+            ("tags", Value/arr([Value/str("x"), Value/str("y")])),
+            ("extra", Value/null())
         ]);
 
         let encoded : Bin = json/encode(value);
 
-        let decoded : Parse/Result({ Nat, json/Value }) = json/decode(encoded, 0);
+        let decoded : Parse/Result({ Nat, Value }) = json/decode(encoded, 0);
 
-        match decoded.0 : {}
-        | 'ok  => Io/print(json/encode(decoded.1.1))
-        | 'err => Io/print(decoded.1)
+        match decoded : {}
+        | ok(pair) => Io/print(json/encode(pair.1))
+        | err(msg) => Io/print(msg)
         end
         "#;
 

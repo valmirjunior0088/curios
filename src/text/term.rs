@@ -85,10 +85,24 @@ pub struct AtomMatch {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct UnionCase {
+    pub binders: Vec<String>,
+    pub body: Subterm,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionMatch {
+    pub head: Subterm,
+    pub motive: Motive,
+    pub cases: BTreeMap<String, UnionCase>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Match {
     Bln(BlnMatch),
     Nat(NatMatch),
     Atom(AtomMatch),
+    Union(UnionMatch),
 }
 
 #[derive(Debug, Clone, PartialEq)]

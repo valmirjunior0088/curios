@@ -59,6 +59,7 @@ impl Var {
 
 #[derive(Debug, Clone)]
 pub struct Term {
+    span: Option<Span>,
     hash: OnceCell<u64>,
     reach: OnceCell<usize>,
     inner: Rc<Subterm>,
@@ -67,6 +68,7 @@ pub struct Term {
 impl Term {
     pub fn new(term: Subterm) -> Self {
         Self {
+            span: None,
             hash: OnceCell::new(),
             reach: OnceCell::new(),
             inner: Rc::new(term),
@@ -84,6 +86,21 @@ impl Term {
 
     pub fn unwrap_or_clone(this: Self) -> Subterm {
         Rc::unwrap_or_clone(this.inner)
+    }
+
+    /// Returns the span attached to this term, if any.
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+
+    /// Attaches a span to this term. If the term already carries a span (the innermost
+    /// one), it is preserved — innermost wins, matching how `Error::at` keeps the first
+    /// span it sees as errors propagate up.
+    pub fn with_span(mut self, span: Span) -> Self {
+        if self.span.is_none() {
+            self.span = Some(span);
+        }
+        self
     }
 }
 
@@ -431,7 +448,7 @@ impl Term {
     }
 
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
-        Self::new(Subterm::Spanned(span, inner.into()))
+        inner.into().with_span(span)
     }
 
     pub fn atom_type<I, A>(atoms: I) -> Self
@@ -683,7 +700,7 @@ impl Term {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Subterm {
     Type,
     Prim(Prim),
@@ -701,68 +718,6 @@ pub enum Subterm {
     Let(Let),
     Rec(Rec),
     Var(Var),
-    Spanned(Span, Term),
-}
-
-impl PartialEq for Subterm {
-    fn eq(&self, other: &Self) -> bool {
-        let mut this = self;
-        let mut that = other;
-
-        loop {
-            match (this, that) {
-                (Subterm::Spanned(_, inner), _) => this = inner,
-                (_, Subterm::Spanned(_, inner)) => that = inner,
-                (Subterm::Type, Subterm::Type) => break true,
-                (Subterm::Prim(a), Subterm::Prim(b)) => break a == b,
-                (Subterm::BlnMatch(a), Subterm::BlnMatch(b)) => break a == b,
-                (Subterm::NatMatch(a), Subterm::NatMatch(b)) => break a == b,
-                (Subterm::FuncType(a), Subterm::FuncType(b)) => break a == b,
-                (Subterm::Func(a), Subterm::Func(b)) => break a == b,
-                (Subterm::Apply(a), Subterm::Apply(b)) => break a == b,
-                (Subterm::TupleType(a), Subterm::TupleType(b)) => break a == b,
-                (Subterm::Tuple(a), Subterm::Tuple(b)) => break a == b,
-                (Subterm::Proj(a), Subterm::Proj(b)) => break a == b,
-                (Subterm::AtomType(a), Subterm::AtomType(b)) => break a == b,
-                (Subterm::Atom(a), Subterm::Atom(b)) => break a == b,
-                (Subterm::Match(a), Subterm::Match(b)) => break a == b,
-                (Subterm::Let(a), Subterm::Let(b)) => break a == b,
-                (Subterm::Rec(a), Subterm::Rec(b)) => break a == b,
-                (Subterm::Var(a), Subterm::Var(b)) => break a == b,
-                _ => break false,
-            }
-        }
-    }
-}
-
-impl Eq for Subterm {}
-
-impl Hash for Subterm {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let mut term = self;
-
-        loop {
-            match term {
-                Subterm::Type => break,
-                Subterm::Prim(x) => break x.hash(state),
-                Subterm::BlnMatch(x) => break x.hash(state),
-                Subterm::NatMatch(x) => break x.hash(state),
-                Subterm::FuncType(x) => break x.hash(state),
-                Subterm::Func(x) => break x.hash(state),
-                Subterm::Apply(x) => break x.hash(state),
-                Subterm::TupleType(x) => break x.hash(state),
-                Subterm::Tuple(x) => break x.hash(state),
-                Subterm::Proj(x) => break x.hash(state),
-                Subterm::AtomType(x) => break x.hash(state),
-                Subterm::Atom(x) => break x.hash(state),
-                Subterm::Match(x) => break x.hash(state),
-                Subterm::Let(x) => break x.hash(state),
-                Subterm::Rec(x) => break x.hash(state),
-                Subterm::Var(x) => break x.hash(state),
-                Subterm::Spanned(_, inner) => term = inner,
-            }
-        }
-    }
 }
 
 impl Subterm {
@@ -918,7 +873,13 @@ impl Bound for Term {
             return self.clone();
         }
 
-        Term::new((**self).traverse(visit))
+        // Preserve the span across traversal.
+        Self {
+            span: self.span,
+            hash: OnceCell::new(),
+            reach: OnceCell::new(),
+            inner: Rc::new((**self).traverse(visit)),
+        }
     }
 
     fn reach(&self) -> usize {
@@ -1019,7 +980,6 @@ impl Bound for Subterm {
             Subterm::Var(var) => {
                 (visit.visit)(visit.depth, var).unwrap_or_else(|| Subterm::Var(var.clone()))
             }
-            Subterm::Spanned(span, inner) => Subterm::Spanned(*span, visit.visit_subterm(inner)),
         }
     }
 
@@ -1031,7 +991,6 @@ impl Bound for Subterm {
                 None => 0,
             },
             Subterm::Prim(prim) => prim_reach(prim),
-            Subterm::Spanned(_, inner) => inner.reach(),
             Subterm::Func(Func { body }) => body.reach(),
             Subterm::FuncType(FuncType { telescope }) => telescope.reach(),
             Subterm::Apply(Apply { head, params }) => head.reach().max(max_reach(params)),

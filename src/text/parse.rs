@@ -2,7 +2,8 @@ use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Path, Prim, Proj,
-        Rec, RecItem, Term, TopItem, TopLet, TopMod, TopUse, Tuple, TupleType, UseGroup,
+        Rec, RecItem, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
+        UnionCase, UnionMatch, UseGroup,
     },
     crate::parser::{
         Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0, sep_by1,
@@ -14,7 +15,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -572,10 +573,47 @@ fn parse_atom_match<'a>() -> Parser<'a, Term> {
         })
 }
 
+fn parse_union_match_branch<'a>() -> Parser<'a, (String, UnionCase)> {
+    catch(parse_literal("|").and_keep(parse_identifier()))
+        .and(
+            parse_literal("(")
+                .and_keep(sep_by0(
+                    || parse_identifier().map(|s: &str| s.to_string()),
+                    || parse_literal(","),
+                ))
+                .and_drop(parse_literal(")")),
+        )
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .map(|((label, binders), body): ((&str, Vec<String>), Term)| {
+            (
+                label.to_string(),
+                UnionCase {
+                    binders,
+                    body: body.into(),
+                },
+            )
+        })
+}
+
+fn parse_union_match<'a>() -> Parser<'a, Term> {
+    catch(parse_match_prefix())
+        .and(many1(parse_union_match_branch))
+        .and_drop(parse_keyword("end"))
+        .map(|((head, motive), branches)| {
+            Term::Match(Match::Union(UnionMatch {
+                head: head.into(),
+                motive,
+                cases: branches.into_iter().collect(),
+            }))
+        })
+}
+
 fn parse_match<'a>() -> Parser<'a, Term> {
     catch(parse_bln_match())
         .or(catch(parse_nat_fold_match()))
         .or(catch(parse_nat_match()))
+        .or(catch(parse_union_match()))
         .or(parse_atom_match())
 }
 
@@ -899,10 +937,63 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
+    parse_literal("|")
+        .and_keep(parse_identifier())
+        .and(
+            parse_literal("(")
+                .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                .and_drop(parse_literal(")")),
+        )
+        .map(|(label, payload_types): (&str, Vec<Term>)| TopCase {
+            label: label.to_string(),
+            payload_types: payload_types.into_iter().map(Into::into).collect(),
+        })
+}
+
+fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
+    parse_identifier()
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")")),
+            )
+            .or(pure(vec![])),
+        )
+        .and(many1(parse_top_union_case))
+        .map(
+            move |((label, params), cases): ((&str, Vec<(String, Term)>), Vec<TopCase>)| {
+                TopUnion {
+                    is_pub,
+                    label: label.to_string(),
+                    params: params.into_iter().map(|(n, t)| (n, t.into())).collect(),
+                    cases,
+                }
+            },
+        )
+}
+
+fn parse_top_union<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("union"))).flat_map(|(is_pub, ())| {
+        parse_top_union_body(is_pub)
+            .and(many0(|| {
+                catch(parse_pub().and(parse_keyword("and"))).flat_map(|(is_pub2, ())| {
+                    parse_top_union_body(is_pub2)
+                })
+            }))
+            .and_drop(parse_keyword("end"))
+            .map(|(first, rest)| {
+                TopItem::Union(iter::once(first).chain(rest).collect())
+            })
+    })
+}
+
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {
     parse_top_mod()
         .or(parse_top_use())
         .or(parse_top_let())
+        .or(parse_top_union())
         .or(parse_top_rec())
 }
 
@@ -1377,6 +1468,140 @@ mod tests {
             Term::Tuple(Tuple {
                 fields: vec![Term::Name(Name::from(["x".to_string()])).into()],
             })
+        );
+    }
+
+    #[test]
+    fn parse_top_union_single_variant() {
+        let m = "union Foo\n| bar()\nend".parse::<Module>().unwrap();
+        assert_eq!(
+            m.items,
+            vec![TopItem::Union(vec![TopUnion {
+                is_pub: false,
+                label: "Foo".to_string(),
+                params: vec![],
+                cases: vec![TopCase {
+                    label: "bar".to_string(),
+                    payload_types: vec![],
+                }],
+            }])]
+        );
+    }
+
+    #[test]
+    fn parse_top_union_multi_variant() {
+        let m = "pub union Color\n| red()\n| green()\n| blue()\nend"
+            .parse::<Module>()
+            .unwrap();
+        assert!(matches!(
+            &m.items[0],
+            TopItem::Union(unions) if unions[0].cases.len() == 3 && unions[0].is_pub
+        ));
+    }
+
+    #[test]
+    fn parse_top_union_parameterized() {
+        let m = "union Result(A : Type, B : Type)\n| ok(A)\n| err(B)\nend"
+            .parse::<Module>()
+            .unwrap();
+        assert!(matches!(
+            &m.items[0],
+            TopItem::Union(unions) if unions[0].params.len() == 2 && unions[0].cases.len() == 2
+        ));
+    }
+
+    #[test]
+    fn parse_top_union_and_chain() {
+        let m = "union Tree\n| node(Forest)\nand Forest\n| nil()\n| cons(Tree, Forest)\nend"
+            .parse::<Module>()
+            .unwrap();
+        assert!(matches!(
+            &m.items[0],
+            TopItem::Union(unions) if unions.len() == 2
+        ));
+    }
+
+    #[test]
+    fn parse_union_match_nullary_and_unary() {
+        assert_eq!(
+            "match v : Bin\n| null() => \"null\"\n| bln(b) => b\nend"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Match(Match::Union(UnionMatch {
+                head: Term::Name(Name::from(["v".to_string()])).into(),
+                motive: Motive {
+                    label: None,
+                    body: Term::Name(Name::from(["Bin".to_string()])).into(),
+                },
+                cases: [
+                    (
+                        "null".to_string(),
+                        UnionCase {
+                            binders: vec![],
+                            body: Term::Prim(Prim::Bin(BinLiteral::String(
+                                "null".to_string()
+                            )))
+                            .into(),
+                        },
+                    ),
+                    (
+                        "bln".to_string(),
+                        UnionCase {
+                            binders: vec!["b".to_string()],
+                            body: Term::Name(Name::from(["b".to_string()])).into(),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_union_match_multi_binder() {
+        assert_eq!(
+            "match v : T\n| lit(a, b) => a\nend"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Match(Match::Union(UnionMatch {
+                head: Term::Name(Name::from(["v".to_string()])).into(),
+                motive: Motive {
+                    label: None,
+                    body: Term::Name(Name::from(["T".to_string()])).into(),
+                },
+                cases: [(
+                    "lit".to_string(),
+                    UnionCase {
+                        binders: vec!["a".to_string(), "b".to_string()],
+                        body: Term::Name(Name::from(["a".to_string()])).into(),
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_atom_match_still_works() {
+        assert_eq!(
+            "match x : '[foo] | 'foo => 'foo end"
+                .parse::<Term>()
+                .unwrap(),
+            Term::Match(Match::Atom(AtomMatch {
+                head: Term::Name(Name::from(["x".to_string()])).into(),
+                motive: Motive {
+                    label: None,
+                    body: Term::AtomType(AtomType {
+                        atoms: [Atom::from("foo")].into_iter().collect(),
+                    })
+                    .into(),
+                },
+                cases: [(Atom::from("foo"), Term::Atom(Atom::from("foo")).into())]
+                    .into_iter()
+                    .collect(),
+            }))
         );
     }
 }

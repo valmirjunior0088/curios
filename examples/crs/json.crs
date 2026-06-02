@@ -1,5 +1,13 @@
-pub mod Value;
-pub use Value/{Value};
+use /std/{Bln, Flt, Bin, Arr};
+
+pub union Value
+| null()
+| bln(Bln)
+| num(Flt)
+| str(Bin)
+| arr(Arr(Value))
+| obj(Arr({ Bin, Value }))
+end
 
 pub mod encode;
 pub use encode/{encode};

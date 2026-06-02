@@ -4,7 +4,7 @@ use context::*;
 mod elaborate;
 use elaborate::*;
 
-use {super::*, crate::core, std::collections::HashMap};
+use {super::*, crate::core, std::collections::{BTreeMap, HashMap}};
 
 fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
     let mut info = ModuleInfo::new();
@@ -16,6 +16,12 @@ fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
             TopItem::Rec(ls) => {
                 for l in ls {
                     info.insert_binding(l.label.clone(), l.is_pub);
+                }
+            }
+            TopItem::Union(unions) => {
+                for u in unions {
+                    info.insert_child(u.label.clone(), u.is_pub);
+                    info.insert_binding(u.label.clone(), u.is_pub);
                 }
             }
             _ => {}
@@ -40,6 +46,12 @@ fn process_items(
             TopItem::Rec(labels) => {
                 for l in labels {
                     context.insert_binding(l.label.clone(), context.prefixed(&l.label));
+                }
+            }
+            TopItem::Union(unions) => {
+                for u in unions {
+                    context.insert_scope(u.label.clone(), context.prefixed(&u.label));
+                    context.insert_binding(u.label.clone(), context.prefixed(&u.label));
                 }
             }
             _ => {}
@@ -134,6 +146,161 @@ fn process_items(
                     .collect::<Result<Vec<_>, Error>>()?;
 
                 flat_items.push(FlatItem::Rec(items));
+            }
+            TopItem::Union(unions) => {
+                // Step 1: emit type bindings as a single rec group.
+                let type_flat_items = unions
+                    .iter()
+                    .map(|u| {
+                        let elab = Elaborate::new(context);
+
+                        // Build atom type '[c_1, ..., c_m]
+                        let atom_type = Term::AtomType(AtomType {
+                            atoms: u.cases.iter().map(|c| Atom::from(c.label.as_str())).collect(),
+                        });
+
+                        // For each case build payload tuple type.
+                        let match_cases = u
+                            .cases
+                            .iter()
+                            .map(|c| {
+                                let payload = Term::TupleType(TupleType {
+                                    fields: c
+                                        .payload_types
+                                        .iter()
+                                        .map(|t| (None, t.clone()))
+                                        .collect::<Vec<_>>(),
+                                });
+                                (Atom::from(c.label.as_str()), payload.into())
+                            })
+                            .collect::<BTreeMap<_, _>>();
+
+                        // match tag : Type | 'c_i => payload_i ...
+                        let tag_match = Term::Match(Match::Atom(AtomMatch {
+                            head: Term::Name(Name::from(vec!["tag".to_string()])).into(),
+                            motive: Motive {
+                                label: None,
+                                body: Term::Type.into(),
+                            },
+                            cases: match_cases,
+                        }));
+
+                        // { tag : '[...], <match> }
+                        let tagged_tuple = Term::TupleType(TupleType {
+                            fields: vec![
+                                (Some("tag".to_string()), atom_type.into()),
+                                (None, tag_match.into()),
+                            ],
+                        });
+
+                        // For parameterized unions wrap in a function.
+                        let (type_ann, type_body) = if u.params.is_empty() {
+                            (Term::Type, tagged_tuple)
+                        } else {
+                            let func_type = Term::FuncType(FuncType {
+                                params: u
+                                    .params
+                                    .iter()
+                                    .map(|(n, t)| (Some(n.clone()), t.clone()))
+                                    .collect(),
+                                output: Term::Type.into(),
+                            });
+                            let func_body = Term::Func(Func {
+                                params: u.params.iter().map(|(n, _)| n.clone()).collect(),
+                                body: tagged_tuple.into(),
+                            });
+                            (func_type, func_body)
+                        };
+
+                        Ok(FlatLet {
+                            name: context.prefixed(&u.label),
+                            type_: elab.term(&type_ann)?,
+                            body: elab.term(&type_body)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                flat_items.push(FlatItem::Rec(type_flat_items));
+
+                // Step 2 & 3: for each union register the constructor module and emit
+                // constructor bindings.
+                for u in unions {
+                    // Register the constructor module's ModuleInfo so that
+                    // `use Foo/T/{c}` and `use Foo/T/*` resolve correctly.
+                    let mut ctor_info = ModuleInfo::new();
+                    for c in &u.cases {
+                        ctor_info.insert_binding(c.label.clone(), u.is_pub);
+                    }
+                    context.nested(&u.label).finalize(ctor_info);
+
+                    // Build the output type term: T or T(A, B, ...).
+                    let output_type: Term = if u.params.is_empty() {
+                        Term::Name(Name::from(vec![u.label.clone()]))
+                    } else {
+                        Term::Apply(Apply {
+                            head: Term::Name(Name::from(vec![u.label.clone()])).into(),
+                            params: u
+                                .params
+                                .iter()
+                                .map(|(n, _)| Term::Name(Name::from(vec![n.clone()])).into())
+                                .collect(),
+                        })
+                    };
+
+                    for c in &u.cases {
+                        let k = c.payload_types.len();
+                        let elab = Elaborate::new(context);
+
+                        // Constructor type: (type_params..., _0 : T_0, ...) -> T
+                        let all_params: Vec<(Option<String>, Subterm)> = u
+                            .params
+                            .iter()
+                            .map(|(n, t)| (Some(n.clone()), t.clone()))
+                            .chain(c.payload_types.iter().enumerate().map(|(i, t)| {
+                                (Some(format!("_{i}")), t.clone())
+                            }))
+                            .collect();
+
+                        let ctor_type_term = Term::FuncType(FuncType {
+                            params: all_params,
+                            output: output_type.clone().into(),
+                        });
+
+                        // Constructor body: (type_params..., _0, ...) => ('c, (_0, ...))
+                        let all_param_names: Vec<String> = u
+                            .params
+                            .iter()
+                            .map(|(n, _)| n.clone())
+                            .chain((0..k).map(|i| format!("_{i}")))
+                            .collect();
+
+                        let payload_fields: Vec<Subterm> = (0..k)
+                            .map(|i| {
+                                Term::Name(Name::from(vec![format!("_{i}")])).into()
+                            })
+                            .collect();
+                        let payload_tuple = Term::Tuple(Tuple {
+                            fields: payload_fields,
+                        });
+
+                        let ctor_body_term = Term::Func(Func {
+                            params: all_param_names,
+                            body: Term::Tuple(Tuple {
+                                fields: vec![
+                                    Term::Atom(Atom::from(c.label.as_str())).into(),
+                                    payload_tuple.into(),
+                                ],
+                            })
+                            .into(),
+                        });
+
+                        flat_items.push(FlatItem::Let(FlatLet {
+                            name: context.prefixed(&u.label).with(&c.label),
+                            type_: elab.term(&ctor_type_term)?,
+                            body: elab.term(&ctor_body_term)?,
+                        }));
+                    }
+                }
             }
         }
     }

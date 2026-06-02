@@ -584,7 +584,7 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
 }
 
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
-    match &**term {
+    let result = match &**term {
         Subterm::Prim(prim) => erase_prim(context, term, prim, expected),
         Subterm::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
         Subterm::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
@@ -620,9 +620,11 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
             expect(context, term, &t, expected)?;
             Ok(ersd::Name::from(var.unwrap()).into())
         }
-        Subterm::Spanned(span, inner) => {
-            erase(context, inner, expected).map_err(|error| error.at(*span))
-        }
+    };
+
+    match term.span() {
+        Some(span) => result.map_err(|error| error.at(span)),
+        None => result,
     }
 }
 
