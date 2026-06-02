@@ -1,5 +1,7 @@
 use {
-    super::{encode_ieee754_double, encode_ieee754_single, encode_leb128_signed, encode_uleb128_unsigned},
+    super::{
+        encode_ieee754_double, encode_ieee754_single, encode_leb128_signed, encode_uleb128_unsigned,
+    },
     std::io::{Result, Write},
 };
 

@@ -274,11 +274,7 @@ fn parse_arr_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|elems| {
-            Subterm::Prim(Prim::Arr(
-                elems.into_iter().map(|elem| elem.into()).collect(),
-            ))
-        })
+        .map(|elems| Subterm::Prim(Prim::Arr(elems.into_iter().collect())))
         .map(Into::into)
 }
 
@@ -344,10 +340,7 @@ fn parse_tuple_type<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal("}"))
         .map(|fields| {
             Subterm::TupleType(TupleType {
-                fields: fields
-                    .into_iter()
-                    .map(|(label, term)| (label, term.into()))
-                    .collect(),
+                fields: fields.into_iter().collect(),
             })
         })
         .map(Into::into)
@@ -363,10 +356,7 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(")"))
     .map(|(first, rest)| {
         Subterm::Tuple(Tuple {
-            fields: iter::once(first)
-                .chain(rest)
-                .map(|term| term.into())
-                .collect(),
+            fields: iter::once(first).chain(rest).collect(),
         })
     })
     .map(Into::into)
@@ -389,8 +379,8 @@ fn parse_paren_func_type<'a>() -> Parser<'a, Term> {
     .and(lazy(parse_term))
     .map(|(params, output): (Vec<(Option<String>, Term)>, Term)| {
         Subterm::FuncType(FuncType {
-            params: params.into_iter().map(|(l, t)| (l, t.into())).collect(),
-            output: output.into(),
+            params: params.into_iter().collect(),
+            output,
         })
     })
     .map(Into::into)
@@ -401,8 +391,8 @@ fn parse_non_dependent_func_type<'a>() -> Parser<'a, Term> {
         .and(lazy(parse_term))
         .map(|(input, output)| {
             Subterm::FuncType(FuncType {
-                params: vec![(None, input.into())],
-                output: output.into(),
+                params: vec![(None, input)],
+                output,
             })
         })
         .map(Into::into)
@@ -423,19 +413,14 @@ fn parse_func<'a>() -> Parser<'a, Term> {
             .and_drop(parse_literal("=>")),
     )
     .and(lazy(parse_term))
-    .map(|(params, body)| {
-        Subterm::Func(Func {
-            params,
-            body: body.into(),
-        })
-    });
+    .map(|(params, body)| Subterm::Func(Func { params, body }));
 
     let single = catch(parse_identifier().and_drop(parse_literal("=>")))
         .and(lazy(parse_term))
         .map(|(label, body): (&str, Term)| {
             Subterm::Func(Func {
                 params: vec![label.to_string()],
-                body: body.into(),
+                body,
             })
         });
 
@@ -447,10 +432,7 @@ fn parse_motive<'a>() -> Parser<'a, Motive> {
         .map(|label| Some(label.to_string()))
         .or(pure(None))
         .and(lazy(parse_term))
-        .map(|(label, body)| Motive {
-            label,
-            body: body.into(),
-        })
+        .map(|(label, body)| Motive { label, body })
 }
 
 fn parse_match_prefix<'a>() -> Parser<'a, (Term, Motive)> {
@@ -486,10 +468,10 @@ fn parse_bln_match<'a>() -> Parser<'a, Term> {
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), (false_case, true_case))| {
             Subterm::Match(Match::Bln(BlnMatch {
-                head: head.into(),
+                head,
                 motive,
-                false_case: false_case.into(),
-                true_case: true_case.into(),
+                false_case,
+                true_case,
             }))
         })
         .map(Into::into)
@@ -520,12 +502,12 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
         .map(
             |((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
                 Subterm::Match(Match::Nat(NatMatch::Induction {
-                    head: head.into(),
+                    head,
                     motive,
-                    zero_case: zero_case.into(),
+                    zero_case,
                     pred_label: pred_label.to_string(),
                     ih_label: ih_label.to_string(),
-                    succ_case: succ_case.into(),
+                    succ_case,
                 }))
             },
         )
@@ -571,12 +553,9 @@ fn parse_atom_match<'a>() -> Parser<'a, Term> {
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), cases)| {
             Subterm::Match(Match::Atom(AtomMatch {
-                head: head.into(),
+                head,
                 motive,
-                cases: cases
-                    .into_iter()
-                    .map(|(atom, term)| (atom, term.into()))
-                    .collect(),
+                cases: cases.into_iter().collect(),
             }))
         })
         .map(Into::into)
@@ -595,13 +574,7 @@ fn parse_union_match_branch<'a>() -> Parser<'a, (String, UnionCase)> {
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .map(|((label, binders), body): ((&str, Vec<String>), Term)| {
-            (
-                label.to_string(),
-                UnionCase {
-                    binders,
-                    body: body.into(),
-                },
-            )
+            (label.to_string(), UnionCase { binders, body })
         })
 }
 
@@ -611,7 +584,7 @@ fn parse_union_match<'a>() -> Parser<'a, Term> {
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), branches)| {
             Subterm::Match(Match::Union(UnionMatch {
-                head: head.into(),
+                head,
                 motive,
                 cases: branches.into_iter().collect(),
             }))
@@ -632,8 +605,8 @@ fn parse_binding<'a>() -> Parser<'a, RecItem> {
         .and(parse_let_signature())
         .map(|(label, (type_, value))| RecItem {
             label: label.to_string(),
-            type_: type_.into(),
-            value: value.into(),
+            type_,
+            value,
         })
 }
 
@@ -642,12 +615,7 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .and_keep(sep_by1(parse_binding, || parse_keyword("and")))
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
-        .map(|(items, tail)| {
-            Subterm::Rec(Rec {
-                items,
-                tail: tail.into(),
-            })
-        })
+        .map(|(items, tail)| Subterm::Rec(Rec { items, tail }))
         .map(Into::into)
 }
 
@@ -704,9 +672,9 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         .map(|((label, (type_, body)), tail)| {
             Subterm::Let(Let {
                 label: label.to_string(),
-                type_: type_.into(),
-                body: body.into(),
-                tail: tail.into(),
+                type_,
+                body,
+                tail,
             })
         })
         .map(Into::into)
@@ -815,8 +783,8 @@ fn parse_top_let<'a>() -> Parser<'a, TopItem> {
                 TopItem::Let(TopLet {
                     is_pub,
                     label: label.to_string(),
-                    type_: type_.into(),
-                    body: body.into(),
+                    type_,
+                    body,
                 })
             })
     })
@@ -962,7 +930,7 @@ fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
         )
         .map(|(label, payload_types): (&str, Vec<Term>)| TopCase {
             label: label.to_string(),
-            payload_types: payload_types.into_iter().map(Into::into).collect(),
+            payload_types: payload_types.into_iter().collect(),
         })
 }
 
@@ -977,14 +945,12 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
             .or(pure(vec![])),
         )
         .and(many1(parse_top_union_case))
-        .map(
-            move |((label, params), cases): ((&str, Vec<(String, Term)>), Vec<TopCase>)| TopUnion {
-                is_pub,
-                label: label.to_string(),
-                params: params.into_iter().map(|(n, t)| (n, t.into())).collect(),
-                cases,
-            },
-        )
+        .map(move |((label, params), cases)| TopUnion {
+            is_pub,
+            label: label.to_string(),
+            params: params.into_iter().collect(),
+            cases,
+        })
 }
 
 fn parse_top_union<'a>() -> Parser<'a, TopItem> {

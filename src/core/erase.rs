@@ -394,7 +394,7 @@ fn erase_proj(
     }
 
     let field_type = telescope
-        .nth(*index, |j| Term::proj((**head).clone(), j).into())
+        .nth(*index, |j| Term::proj((**head).clone(), j))
         .expect("index in range");
 
     expect(context, term, &field_type, expected)?;
@@ -460,7 +460,7 @@ fn erase_match(
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()).into());
+        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()));
 
         erase(
             context,

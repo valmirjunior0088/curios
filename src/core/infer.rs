@@ -520,7 +520,7 @@ fn infer_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<Term, E
     }
 
     Ok(telescope
-        .nth(*index, |j| Term::proj((**head).clone(), j).into())
+        .nth(*index, |j| Term::proj((**head).clone(), j))
         .expect("index in range"))
 }
 
@@ -542,7 +542,7 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
     let head_label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
-        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()).into());
+        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()));
 
         erase(
             context,

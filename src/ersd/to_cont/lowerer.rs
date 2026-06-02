@@ -309,9 +309,7 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => self
                 .lower_pure_ternary_code(
-                    bin,
-                    start,
-                    end,
+                    (bin, start, end),
                     frame,
                     state,
                     builder,
@@ -342,9 +340,7 @@ impl<'a> Lowerer<'a> {
             }
             ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => self
                 .lower_pure_ternary_code(
-                    lst,
-                    start,
-                    end,
+                    (lst, start, end),
                     frame,
                     state,
                     builder,
@@ -470,14 +466,13 @@ impl<'a> Lowerer<'a> {
 
     fn lower_pure_ternary_code(
         &mut self,
-        first: &ersd::Term,
-        second: &ersd::Term,
-        third: &ersd::Term,
+        operands: (&ersd::Term, &ersd::Term, &ersd::Term),
         frame: &Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
         code: impl FnOnce(cont::ValueName, cont::ValueName, cont::ValueName) -> cont::Code,
     ) -> cont::ValueName {
+        let (first, second, third) = operands;
         let first = self.lower_pure_name(first, frame, state, builder);
         let second = self.lower_pure_name(second, frame, state, builder);
         let third = self.lower_pure_name(third, frame, state, builder);
@@ -525,14 +520,14 @@ impl<'a> Lowerer<'a> {
 
     fn lower_binary_code<'b>(
         &mut self,
-        left: &'b ersd::Term,
-        right: &'b ersd::Term,
+        operands: (&'b ersd::Term, &'b ersd::Term),
         frame: &'b Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
         cont: Cont<'b>,
         code: impl FnOnce(cont::ValueName, cont::ValueName) -> cont::Code + 'b,
     ) -> cont::Tail {
+        let (left, right) = operands;
         self.lower_value_name(
             left,
             frame,
@@ -557,15 +552,14 @@ impl<'a> Lowerer<'a> {
 
     fn lower_ternary_code<'b>(
         &mut self,
-        first: &'b ersd::Term,
-        second: &'b ersd::Term,
-        third: &'b ersd::Term,
+        operands: (&'b ersd::Term, &'b ersd::Term, &'b ersd::Term),
         frame: &'b Frame,
         state: &mut FrameEntropy,
         builder: &mut RegionBuilder,
         cont: Cont<'b>,
         code: impl FnOnce(cont::ValueName, cont::ValueName, cont::ValueName) -> cont::Code + 'b,
     ) -> cont::Tail {
+        let (first, second, third) = operands;
         self.lower_value_name(
             first,
             frame,
@@ -621,39 +615,94 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::NatEql(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatEql)
-            }
-            ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatAdd)
-            }
-            ersd::Term::Prim(ersd::Prim::NatSub(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatSub)
-            }
-            ersd::Term::Prim(ersd::Prim::NatMul(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatMul)
-            }
-            ersd::Term::Prim(ersd::Prim::NatLt(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatLt)
-            }
-            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatNeq)
-            }
-            ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatDiv)
-            }
-            ersd::Term::Prim(ersd::Prim::NatRem(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatRem)
-            }
-            ersd::Term::Prim(ersd::Prim::NatGt(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatGt)
-            }
-            ersd::Term::Prim(ersd::Prim::NatLte(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatLte)
-            }
-            ersd::Term::Prim(ersd::Prim::NatGte(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::NatGte)
-            }
+            ersd::Term::Prim(ersd::Prim::NatEql(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatEql,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatAdd(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatAdd,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatSub(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatSub,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatMul(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatMul,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatLt(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatLt,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatNeq(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatNeq,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatDiv(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatDiv,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatRem(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatRem,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatGt(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatGt,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatLte(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatLte,
+            ),
+            ersd::Term::Prim(ersd::Prim::NatGte(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::NatGte,
+            ),
             ersd::Term::Prim(ersd::Prim::Int(value)) => {
                 let value =
                     emit_fresh_value(state, builder, cont::Value::Pure(cont::Data::Int(*value)));
@@ -666,75 +715,190 @@ impl<'a> Lowerer<'a> {
 
                 cont(self, state, builder, value)
             }
-            ersd::Term::Prim(ersd::Prim::IntEql(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntEql)
-            }
-            ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntAdd)
-            }
-            ersd::Term::Prim(ersd::Prim::IntSub(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntSub)
-            }
-            ersd::Term::Prim(ersd::Prim::IntMul(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntMul)
-            }
-            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntNeq)
-            }
-            ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntDiv)
-            }
-            ersd::Term::Prim(ersd::Prim::IntRem(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntRem)
-            }
-            ersd::Term::Prim(ersd::Prim::IntLt(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntLt)
-            }
-            ersd::Term::Prim(ersd::Prim::IntGt(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntGt)
-            }
-            ersd::Term::Prim(ersd::Prim::IntLte(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntLte)
-            }
-            ersd::Term::Prim(ersd::Prim::IntGte(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::IntGte)
-            }
-            ersd::Term::Prim(ersd::Prim::FltAdd(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltAdd)
-            }
-            ersd::Term::Prim(ersd::Prim::FltSub(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltSub)
-            }
-            ersd::Term::Prim(ersd::Prim::FltMul(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltMul)
-            }
-            ersd::Term::Prim(ersd::Prim::FltDiv(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltDiv)
-            }
-            ersd::Term::Prim(ersd::Prim::FltEql(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltEql)
-            }
-            ersd::Term::Prim(ersd::Prim::FltNeq(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltNeq)
-            }
-            ersd::Term::Prim(ersd::Prim::FltLt(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltLt)
-            }
-            ersd::Term::Prim(ersd::Prim::FltGt(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltGt)
-            }
-            ersd::Term::Prim(ersd::Prim::FltLte(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltLte)
-            }
-            ersd::Term::Prim(ersd::Prim::FltGte(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltGte)
-            }
-            ersd::Term::Prim(ersd::Prim::FltMin(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltMin)
-            }
-            ersd::Term::Prim(ersd::Prim::FltMax(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::FltMax)
-            }
+            ersd::Term::Prim(ersd::Prim::IntEql(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntEql,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntAdd(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntAdd,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntSub(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntSub,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntMul(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntMul,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntNeq(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntNeq,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntDiv(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntDiv,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntRem(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntRem,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntLt(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntLt,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntGt(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntGt,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntLte(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntLte,
+            ),
+            ersd::Term::Prim(ersd::Prim::IntGte(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::IntGte,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltAdd(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltAdd,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltSub(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltSub,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltMul(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltMul,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltDiv(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltDiv,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltEql(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltEql,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltNeq(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltNeq,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltLt(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltLt,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltGt(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltGt,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltLte(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltLte,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltGte(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltGte,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltMin(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltMin,
+            ),
+            ersd::Term::Prim(ersd::Prim::FltMax(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::FltMax,
+            ),
             ersd::Term::Prim(ersd::Prim::FltNeg(operand)) => {
                 self.lower_unary_code(operand, frame, state, builder, cont, cont::Code::FltNeg)
             }
@@ -795,16 +959,19 @@ impl<'a> Lowerer<'a> {
             ersd::Term::Prim(ersd::Prim::BinLen(bin)) => {
                 self.lower_unary_code(bin, frame, state, builder, cont, cont::Code::BinLen)
             }
-            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => {
-                self.lower_binary_code(left, right, frame, state, builder, cont, cont::Code::BinEql)
-            }
+            ersd::Term::Prim(ersd::Prim::BinEql(left, right)) => self.lower_binary_code(
+                (left, right),
+                frame,
+                state,
+                builder,
+                cont,
+                cont::Code::BinEql,
+            ),
             ersd::Term::Prim(ersd::Prim::BinGet(bin, idx)) => {
-                self.lower_binary_code(bin, idx, frame, state, builder, cont, cont::Code::BinGet)
+                self.lower_binary_code((bin, idx), frame, state, builder, cont, cont::Code::BinGet)
             }
             ersd::Term::Prim(ersd::Prim::BinSlice(bin, start, end)) => self.lower_ternary_code(
-                bin,
-                start,
-                end,
+                (bin, start, end),
                 frame,
                 state,
                 builder,
@@ -812,8 +979,7 @@ impl<'a> Lowerer<'a> {
                 cont::Code::BinSlice,
             ),
             ersd::Term::Prim(ersd::Prim::BinAppend(bin, byte)) => self.lower_binary_code(
-                bin,
-                byte,
+                (bin, byte),
                 frame,
                 state,
                 builder,
@@ -830,12 +996,10 @@ impl<'a> Lowerer<'a> {
                 self.lower_unary_code(lst, frame, state, builder, cont, cont::Code::ArrLen)
             }
             ersd::Term::Prim(ersd::Prim::ArrGet(lst, idx)) => {
-                self.lower_binary_code(lst, idx, frame, state, builder, cont, cont::Code::ArrGet)
+                self.lower_binary_code((lst, idx), frame, state, builder, cont, cont::Code::ArrGet)
             }
             ersd::Term::Prim(ersd::Prim::ArrSlice(lst, start, end)) => self.lower_ternary_code(
-                lst,
-                start,
-                end,
+                (lst, start, end),
                 frame,
                 state,
                 builder,
@@ -843,8 +1007,7 @@ impl<'a> Lowerer<'a> {
                 cont::Code::ArrSlice,
             ),
             ersd::Term::Prim(ersd::Prim::ArrAppend(lst, elem)) => self.lower_binary_code(
-                lst,
-                elem,
+                (lst, elem),
                 frame,
                 state,
                 builder,

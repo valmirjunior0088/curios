@@ -167,10 +167,9 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
         Prim::Arr(elems) => flat([
             pure("["),
-            sep_flat(
-                elems.into_iter().map(|operand| print_term(operand)),
-                || pure(", "),
-            ),
+            sep_flat(elems.into_iter().map(|operand| print_term(operand)), || {
+                pure(", ")
+            }),
             pure("]"),
         ]),
         Prim::ArrLen(ty, operand) => print_prim_call("Arr.len", vec![ty, operand]),
@@ -352,7 +351,11 @@ fn print_term(term: Term) -> Printer<'static> {
                 ),
                 pure("\nend"),
             ]),
-            Match::Union(UnionMatch { head, motive, cases }) => flat([
+            Match::Union(UnionMatch {
+                head,
+                motive,
+                cases,
+            }) => flat([
                 pure("match "),
                 print_term(head),
                 pure(" : "),
@@ -538,7 +541,13 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
         print_pub(first.is_pub),
         pure("union "),
         pure(first.label),
-        flat(first.cases.into_iter().map(print_top_union_case).collect::<Vec<_>>()),
+        flat(
+            first
+                .cases
+                .into_iter()
+                .map(print_top_union_case)
+                .collect::<Vec<_>>(),
+        ),
         flat(
             rest.into_iter()
                 .map(|u| {
@@ -547,7 +556,12 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
                         print_pub(u.is_pub),
                         pure("and "),
                         pure(u.label),
-                        flat(u.cases.into_iter().map(print_top_union_case).collect::<Vec<_>>()),
+                        flat(
+                            u.cases
+                                .into_iter()
+                                .map(print_top_union_case)
+                                .collect::<Vec<_>>(),
+                        ),
                     ])
                 })
                 .collect::<Vec<_>>(),

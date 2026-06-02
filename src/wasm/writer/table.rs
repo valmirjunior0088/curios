@@ -1,7 +1,5 @@
 use {
-    crate::wasm::{
-        DataName, FieldName, FuncName, GlobalName, LocalName, Module, TypeName,
-    },
+    crate::wasm::{DataName, FieldName, FuncName, GlobalName, LocalName, Module, TypeName},
     std::collections::HashMap,
 };
 

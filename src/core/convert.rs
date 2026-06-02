@@ -552,11 +552,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Type.into(),
         };
-        self.enqueue(
-            output_type,
-            func.body.open(&y_refs),
-            Term::apply(other, ys).into(),
-        );
+        self.enqueue(output_type, func.body.open(&y_refs), Term::apply(other, ys));
         Ok(true)
     }
 
@@ -582,7 +578,7 @@ impl Convert {
                 }
                 _ => Type.into(),
             };
-            self.enqueue(ft, field.clone(), Term::proj(other.clone(), i).into());
+            self.enqueue(ft, field.clone(), Term::proj(other.clone(), i));
         }
 
         Ok(true)
@@ -605,8 +601,8 @@ impl Convert {
                 let output_type = telescope.open(&y_refs);
                 self.enqueue(
                     output_type,
-                    Term::apply(this, ys.clone()).into(),
-                    Term::apply(that, ys).into(),
+                    Term::apply(this, ys.clone()),
+                    Term::apply(that, ys),
                 );
                 Ok(true)
             }
@@ -614,8 +610,8 @@ impl Convert {
                 for i in 0..telescope.len() {
                     self.enqueue(
                         Type.into(),
-                        Term::proj(this.clone(), i).into(),
-                        Term::proj(that.clone(), i).into(),
+                        Term::proj(this.clone(), i),
+                        Term::proj(that.clone(), i),
                     );
                 }
                 Ok(true)
@@ -1100,14 +1096,8 @@ mod tests {
         let mut context = context();
 
         // p = (a, b), q = (a, c) — both 2-tuples agreeing on field 0, differing on field 1.
-        context.define(
-            "p",
-            &Term::tuple([Atom::from("a"), Atom::from("b")]).into(),
-        );
-        context.define(
-            "q",
-            &Term::tuple([Atom::from("a"), Atom::from("c")]).into(),
-        );
+        context.define("p", &Term::tuple([Atom::from("a"), Atom::from("b")]).into());
+        context.define("q", &Term::tuple([Atom::from("a"), Atom::from("c")]).into());
 
         // Type is a 1-field tuple type {A : {a}}.
         let type_: Term = Term::tuple_type([("x", Term::atom_type(["a"]))]).into();

@@ -101,16 +101,11 @@ fn compile_file(timeout: Duration, print: bool, input_path: &Path) -> Result<Mod
 }
 
 fn default_output_path(input_path: &Path) -> PathBuf {
-    PathBuf::from(
-        input_path
-            .file_stem()
-            .unwrap_or_else(|| input_path.as_os_str()),
-    )
-    .with_extension("wasm")
+    PathBuf::from(input_path.file_stem().unwrap_or(input_path.as_os_str())).with_extension("wasm")
 }
 
 fn emit_executable(module: &Module, output_path: &Path) -> Result<(), String> {
-    fs::write(output_path, &wasm::to_bytes(module))
+    fs::write(output_path, wasm::to_bytes(module))
         .map_err(|error| format!("failed to write {}: {error}", output_path.display()))
 }
 

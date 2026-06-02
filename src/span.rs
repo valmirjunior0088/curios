@@ -28,7 +28,9 @@ pub struct Span {
 
 impl PartialEq for Span {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.source, &other.source) && self.start == other.start && self.end == other.end
+        Rc::ptr_eq(&self.source, &other.source)
+            && self.start == other.start
+            && self.end == other.end
     }
 }
 

@@ -2,7 +2,9 @@ use {
     super::Context,
     crate::{
         core,
-        text::{BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Subterm, Term},
+        text::{
+            BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Subterm, Term,
+        },
     },
 };
 
@@ -48,9 +50,9 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 core::Var::free(resolved).into()
             }
             Subterm::Atom(atom) => core::Atom::from(atom.as_str()).into(),
-            Subterm::AtomType(at) => core::Term::atom_type(
-                at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())),
-            ),
+            Subterm::AtomType(at) => {
+                core::Term::atom_type(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
+            }
             Subterm::FuncType(ft) => core::Term::func_type(
                 ft.params
                     .iter()
@@ -150,11 +152,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                                 let projections = (0..k)
                                     .map(|i| core::Term::proj(payload.clone(), i))
                                     .collect::<Vec<_>>();
-                                let binder_strs = case
-                                    .binders
-                                    .iter()
-                                    .map(String::as_str)
-                                    .collect::<Vec<_>>();
+                                let binder_strs =
+                                    case.binders.iter().map(String::as_str).collect::<Vec<_>>();
                                 core::Scope::close(core::Many(k), &binder_strs, body_core)
                                     .open(&projections.iter().collect::<Vec<_>>())
                             };

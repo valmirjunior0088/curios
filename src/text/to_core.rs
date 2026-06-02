@@ -4,7 +4,11 @@ use context::*;
 mod elaborate;
 use elaborate::*;
 
-use {super::*, crate::core, std::collections::{BTreeMap, HashMap}};
+use {
+    super::*,
+    crate::core,
+    std::collections::{BTreeMap, HashMap},
+};
 
 fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
     let mut info = ModuleInfo::new();
@@ -156,7 +160,11 @@ fn process_items(
 
                         // Build atom type '[c_1, ..., c_m]
                         let atom_type: Term = Subterm::AtomType(AtomType {
-                            atoms: u.cases.iter().map(|c| Atom::from(c.label.as_str())).collect(),
+                            atoms: u
+                                .cases
+                                .iter()
+                                .map(|c| Atom::from(c.label.as_str()))
+                                .collect(),
                         })
                         .into();
 
@@ -190,10 +198,7 @@ fn process_items(
 
                         // { tag : '[...], <match> }
                         let tagged_tuple: Term = Subterm::TupleType(TupleType {
-                            fields: vec![
-                                (Some("tag".to_string()), atom_type),
-                                (None, tag_match),
-                            ],
+                            fields: vec![(Some("tag".to_string()), atom_type), (None, tag_match)],
                         })
                         .into();
 
@@ -263,9 +268,12 @@ fn process_items(
                             .params
                             .iter()
                             .map(|(n, t)| (Some(n.clone()), t.clone()))
-                            .chain(c.payload_types.iter().enumerate().map(|(i, t)| {
-                                (Some(format!("_{i}")), t.clone())
-                            }))
+                            .chain(
+                                c.payload_types
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, t)| (Some(format!("_{i}")), t.clone())),
+                            )
                             .collect();
 
                         let ctor_type_term: Term = Subterm::FuncType(FuncType {
@@ -283,9 +291,7 @@ fn process_items(
                             .collect();
 
                         let payload_fields: Vec<Term> = (0..k)
-                            .map(|i| {
-                                Subterm::Name(Name::from(vec![format!("_{i}")])).into()
-                            })
+                            .map(|i| Subterm::Name(Name::from(vec![format!("_{i}")])).into())
                             .collect();
                         let payload_tuple: Term = Subterm::Tuple(Tuple {
                             fields: payload_fields,

@@ -8,8 +8,8 @@ use {
     crate::{
         Source,
         parser::{
-            Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof,
-            take_exact, take_while,
+            Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,
+            take_while,
         },
     },
     std::str::FromStr,

@@ -115,8 +115,8 @@ impl ParserError {
         format!(
             "{message}\n\n{snippet}",
             message = self.message,
-            snippet = crate::Span::new(self.source.clone(), self.offset, self.offset)
-                .render_snippet(),
+            snippet =
+                crate::Span::new(self.source.clone(), self.offset, self.offset).render_snippet(),
         )
     }
 }

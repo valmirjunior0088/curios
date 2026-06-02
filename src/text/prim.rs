@@ -127,7 +127,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatEql(left.into().into(), right.into().into())
+        Self::NatEql(left.into(), right.into())
     }
 
     pub fn nat_neq<F, S>(left: F, right: S) -> Self
@@ -135,7 +135,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatNeq(left.into().into(), right.into().into())
+        Self::NatNeq(left.into(), right.into())
     }
 
     pub fn nat_add<F, S>(left: F, right: S) -> Self
@@ -143,7 +143,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatAdd(left.into().into(), right.into().into())
+        Self::NatAdd(left.into(), right.into())
     }
 
     pub fn nat_sub<F, S>(left: F, right: S) -> Self
@@ -151,7 +151,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatSub(left.into().into(), right.into().into())
+        Self::NatSub(left.into(), right.into())
     }
 
     pub fn nat_mul<F, S>(left: F, right: S) -> Self
@@ -159,7 +159,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatMul(left.into().into(), right.into().into())
+        Self::NatMul(left.into(), right.into())
     }
 
     pub fn nat_div<F, S>(left: F, right: S) -> Self
@@ -167,7 +167,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatDiv(left.into().into(), right.into().into())
+        Self::NatDiv(left.into(), right.into())
     }
 
     pub fn nat_rem<F, S>(left: F, right: S) -> Self
@@ -175,7 +175,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatRem(left.into().into(), right.into().into())
+        Self::NatRem(left.into(), right.into())
     }
 
     pub fn nat_lt<F, S>(left: F, right: S) -> Self
@@ -183,7 +183,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatLt(left.into().into(), right.into().into())
+        Self::NatLt(left.into(), right.into())
     }
 
     pub fn nat_gt<F, S>(left: F, right: S) -> Self
@@ -191,7 +191,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatGt(left.into().into(), right.into().into())
+        Self::NatGt(left.into(), right.into())
     }
 
     pub fn nat_lte<F, S>(left: F, right: S) -> Self
@@ -199,7 +199,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatLte(left.into().into(), right.into().into())
+        Self::NatLte(left.into(), right.into())
     }
 
     pub fn nat_gte<F, S>(left: F, right: S) -> Self
@@ -207,7 +207,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatGte(left.into().into(), right.into().into())
+        Self::NatGte(left.into(), right.into())
     }
 
     pub fn int_eql<F, S>(left: F, right: S) -> Self
@@ -215,7 +215,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntEql(left.into().into(), right.into().into())
+        Self::IntEql(left.into(), right.into())
     }
 
     pub fn int_add<F, S>(left: F, right: S) -> Self
@@ -223,7 +223,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntAdd(left.into().into(), right.into().into())
+        Self::IntAdd(left.into(), right.into())
     }
 
     pub fn int_sub<F, S>(left: F, right: S) -> Self
@@ -231,7 +231,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntSub(left.into().into(), right.into().into())
+        Self::IntSub(left.into(), right.into())
     }
 
     pub fn int_mul<F, S>(left: F, right: S) -> Self
@@ -239,7 +239,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntMul(left.into().into(), right.into().into())
+        Self::IntMul(left.into(), right.into())
     }
 
     pub fn int_neq<F, S>(left: F, right: S) -> Self
@@ -247,7 +247,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntNeq(left.into().into(), right.into().into())
+        Self::IntNeq(left.into(), right.into())
     }
 
     pub fn int_div<F, S>(left: F, right: S) -> Self
@@ -255,7 +255,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntDiv(left.into().into(), right.into().into())
+        Self::IntDiv(left.into(), right.into())
     }
 
     pub fn int_rem<F, S>(left: F, right: S) -> Self
@@ -263,7 +263,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntRem(left.into().into(), right.into().into())
+        Self::IntRem(left.into(), right.into())
     }
 
     pub fn int_lt<F, S>(left: F, right: S) -> Self
@@ -271,7 +271,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntLt(left.into().into(), right.into().into())
+        Self::IntLt(left.into(), right.into())
     }
 
     pub fn int_gt<F, S>(left: F, right: S) -> Self
@@ -279,7 +279,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntGt(left.into().into(), right.into().into())
+        Self::IntGt(left.into(), right.into())
     }
 
     pub fn int_lte<F, S>(left: F, right: S) -> Self
@@ -287,7 +287,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntLte(left.into().into(), right.into().into())
+        Self::IntLte(left.into(), right.into())
     }
 
     pub fn int_gte<F, S>(left: F, right: S) -> Self
@@ -295,7 +295,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntGte(left.into().into(), right.into().into())
+        Self::IntGte(left.into(), right.into())
     }
 
     pub fn flt_add<F, S>(left: F, right: S) -> Self
@@ -303,7 +303,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltAdd(left.into().into(), right.into().into())
+        Self::FltAdd(left.into(), right.into())
     }
 
     pub fn flt_sub<F, S>(left: F, right: S) -> Self
@@ -311,7 +311,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltSub(left.into().into(), right.into().into())
+        Self::FltSub(left.into(), right.into())
     }
 
     pub fn flt_mul<F, S>(left: F, right: S) -> Self
@@ -319,56 +319,56 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltMul(left.into().into(), right.into().into())
+        Self::FltMul(left.into(), right.into())
     }
 
     pub fn flt_neg<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltNeg(inner.into().into())
+        Self::FltNeg(inner.into())
     }
 
     pub fn flt_abs<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltAbs(inner.into().into())
+        Self::FltAbs(inner.into())
     }
 
     pub fn flt_sqrt<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltSqrt(inner.into().into())
+        Self::FltSqrt(inner.into())
     }
 
     pub fn flt_floor<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltFloor(inner.into().into())
+        Self::FltFloor(inner.into())
     }
 
     pub fn flt_ceil<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltCeil(inner.into().into())
+        Self::FltCeil(inner.into())
     }
 
     pub fn flt_trunc<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltTrunc(inner.into().into())
+        Self::FltTrunc(inner.into())
     }
 
     pub fn flt_nearest<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltNearest(inner.into().into())
+        Self::FltNearest(inner.into())
     }
 
     pub fn flt_div<F, S>(left: F, right: S) -> Self
@@ -376,7 +376,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltDiv(left.into().into(), right.into().into())
+        Self::FltDiv(left.into(), right.into())
     }
 
     pub fn flt_min<F, S>(left: F, right: S) -> Self
@@ -384,7 +384,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltMin(left.into().into(), right.into().into())
+        Self::FltMin(left.into(), right.into())
     }
 
     pub fn flt_max<F, S>(left: F, right: S) -> Self
@@ -392,7 +392,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltMax(left.into().into(), right.into().into())
+        Self::FltMax(left.into(), right.into())
     }
 
     pub fn flt_eql<F, S>(left: F, right: S) -> Self
@@ -400,7 +400,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltEql(left.into().into(), right.into().into())
+        Self::FltEql(left.into(), right.into())
     }
 
     pub fn flt_neq<F, S>(left: F, right: S) -> Self
@@ -408,7 +408,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltNeq(left.into().into(), right.into().into())
+        Self::FltNeq(left.into(), right.into())
     }
 
     pub fn flt_lt<F, S>(left: F, right: S) -> Self
@@ -416,7 +416,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltLt(left.into().into(), right.into().into())
+        Self::FltLt(left.into(), right.into())
     }
 
     pub fn flt_gt<F, S>(left: F, right: S) -> Self
@@ -424,7 +424,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltGt(left.into().into(), right.into().into())
+        Self::FltGt(left.into(), right.into())
     }
 
     pub fn flt_lte<F, S>(left: F, right: S) -> Self
@@ -432,7 +432,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltLte(left.into().into(), right.into().into())
+        Self::FltLte(left.into(), right.into())
     }
 
     pub fn flt_gte<F, S>(left: F, right: S) -> Self
@@ -440,77 +440,77 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltGte(left.into().into(), right.into().into())
+        Self::FltGte(left.into(), right.into())
     }
 
     pub fn nat_to_int<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::NatToInt(inner.into().into())
+        Self::NatToInt(inner.into())
     }
 
     pub fn nat_to_str<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::NatToStr(inner.into().into())
+        Self::NatToStr(inner.into())
     }
 
     pub fn int_to_nat<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::IntToNat(inner.into().into())
+        Self::IntToNat(inner.into())
     }
 
     pub fn int_to_flt<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::IntToFlt(inner.into().into())
+        Self::IntToFlt(inner.into())
     }
 
     pub fn int_to_str<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::IntToStr(inner.into().into())
+        Self::IntToStr(inner.into())
     }
 
     pub fn nat_to_flt<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::NatToFlt(inner.into().into())
+        Self::NatToFlt(inner.into())
     }
 
     pub fn flt_to_int<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltToInt(inner.into().into())
+        Self::FltToInt(inner.into())
     }
 
     pub fn flt_to_nat<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltToNat(inner.into().into())
+        Self::FltToNat(inner.into())
     }
 
     pub fn flt_to_str<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltToStr(inner.into().into())
+        Self::FltToStr(inner.into())
     }
 
     pub fn bin_len<B>(bin: B) -> Self
     where
         B: Into<Term>,
     {
-        Self::BinLen(bin.into().into())
+        Self::BinLen(bin.into())
     }
 
     pub fn bin_eql<F, S>(left: F, right: S) -> Self
@@ -518,7 +518,7 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::BinEql(left.into().into(), right.into().into())
+        Self::BinEql(left.into(), right.into())
     }
 
     pub fn bin_get<B, I>(bin: B, index: I) -> Self
@@ -526,7 +526,7 @@ impl Prim {
         B: Into<Term>,
         I: Into<Term>,
     {
-        Self::BinGet(bin.into().into(), index.into().into())
+        Self::BinGet(bin.into(), index.into())
     }
 
     pub fn bin_slice<B, S, E>(bin: B, start: S, end: E) -> Self
@@ -535,7 +535,7 @@ impl Prim {
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinSlice(bin.into().into(), start.into().into(), end.into().into())
+        Self::BinSlice(bin.into(), start.into(), end.into())
     }
 
     pub fn bin_append<B, E>(bin: B, byte: E) -> Self
@@ -543,7 +543,7 @@ impl Prim {
         B: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinAppend(bin.into().into(), byte.into().into())
+        Self::BinAppend(bin.into(), byte.into())
     }
 
     pub fn bin_concat<F, S>(left: F, right: S) -> Self
@@ -551,14 +551,14 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::BinConcat(left.into().into(), right.into().into())
+        Self::BinConcat(left.into(), right.into())
     }
 
     pub fn arr_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::ArrType(elem.into().into())
+        Self::ArrType(elem.into())
     }
 
     pub fn arr_len<T, L>(type_: T, list: L) -> Self
@@ -566,7 +566,7 @@ impl Prim {
         T: Into<Term>,
         L: Into<Term>,
     {
-        Self::ArrLen(type_.into().into(), list.into().into())
+        Self::ArrLen(type_.into(), list.into())
     }
 
     pub fn arr_get<T, L, I>(type_: T, list: L, index: I) -> Self
@@ -575,7 +575,7 @@ impl Prim {
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::ArrGet(type_.into().into(), list.into().into(), index.into().into())
+        Self::ArrGet(type_.into(), list.into(), index.into())
     }
 
     pub fn arr_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
@@ -585,12 +585,7 @@ impl Prim {
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrSlice(
-            type_.into().into(),
-            list.into().into(),
-            start.into().into(),
-            end.into().into(),
-        )
+        Self::ArrSlice(type_.into(), list.into(), start.into(), end.into())
     }
 
     pub fn arr_append<T, L, E>(type_: T, list: L, elem: E) -> Self
@@ -599,7 +594,7 @@ impl Prim {
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrAppend(type_.into().into(), list.into().into(), elem.into().into())
+        Self::ArrAppend(type_.into(), list.into(), elem.into())
     }
 
     pub fn arr_concat<T, F, S>(type_: T, left: F, right: S) -> Self
@@ -608,19 +603,19 @@ impl Prim {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::ArrConcat(type_.into().into(), left.into().into(), right.into().into())
+        Self::ArrConcat(type_.into(), left.into(), right.into())
     }
 
     pub fn io_print<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::IoPrint(inner.into().into())
+        Self::IoPrint(inner.into())
     }
 }
 
 impl<A: Into<Term>> From<Vec<A>> for Prim {
     fn from(items: Vec<A>) -> Self {
-        Self::Arr(items.into_iter().map(|item| item.into().into()).collect())
+        Self::Arr(items.into_iter().map(|item| item.into()).collect())
     }
 }
