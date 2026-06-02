@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two optional external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~31,300 lines in `src/`, ~2,350 in `examples/`.
+**Codebase size:** ~30,100 lines in `src/`, ~1,700 lines in top-level Rust examples, plus ~100 lines in `examples/crs/`.
 
 ---
 
@@ -37,13 +37,13 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                        | Lines  |
 | ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,365  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,164 |
-| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~3,422 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,443 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 3,412  |
+| Parsing                 | `text/parse.rs`                                    | 1,619  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,383 |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,756 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,451 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 1,726  |
 | WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,379 |
-| Binary serialization    | `wasm/writer.rs`                                   | 2,017  |
+| Binary serialization    | `wasm/writer.rs`                                   | 1,691  |
 
 ---
 
@@ -63,11 +63,11 @@ Transformation entry points (`src/text/to_core.rs`, `src/ersd/to_cont.rs`, `src/
 
 Three top-level modules fall outside this pattern:
 
-| Module        | Role                                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| `src/span.rs` | `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting) |
+| Module        | Role                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/span.rs` | `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)                                                 |
 | `src/run.rs`  | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature |
-| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                            |
+| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                                                                            |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
 
@@ -77,21 +77,21 @@ The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `ru
 
 **Key files:** `parse.rs`, `module.rs`, `term.rs`, `prim.rs`
 
-Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parser<'a, A>` supports `.or()`, `.and()`, `.flat_map()`, `.map()`, and `lazy` for recursive grammars. `ParserState` tracks the current byte offset; on failure `ParserError::format` renders the offending line via `Span::render_snippet` (see [Error reporting](#error-reporting)).
+Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parser<'a, A>` supports `.or()`, `.and()`, `.flat_map()`, `.map()`, and `lazy` for recursive grammars. `ParserState` tracks the current byte offset and source; on failure `ParserError::format` renders the offending line via `Span::render_snippet` (see [Error reporting](#error-reporting)).
 
 Line comments (`-- text`) are stripped inside `parse_whitespace`, which is called after every terminal token. Comments are discarded at parse time and do not appear in the AST.
 
-Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail: Term`. Top-level items are `Let`, `Rec` (mutual recursion), `Mod` (inline or file-backed module), and `Use` (import).
+Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail: Term`. Top-level items are `Let`, `Rec` (mutual recursion), `Union` (sum type sugar), `Mod` (inline or file-backed module), and `Use` (import).
 
 `text::Term` has no de Bruijn indices — all variables are `String` labels. The grammar covers:
 
 - Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
 - Application `f(a, b)`
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
-- Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
+- Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
 - Primitive literals plus the prelude-backed `/sys` module, which exposes `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)`, `Bln`, and their operations as ordinary paths
-- Module system: `mod Label ... end`, `mod Label;` (file-backed), `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
+- Module system: `mod Label ... end`, `mod Label;` (file-backed), `union Label ... end`, `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`
 
 `text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(u32) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.
@@ -104,11 +104,11 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 Two concerns, handled separately:
 
-**Module processing** (`to_core.rs`): walks `TopItem` list, resolves `use` declarations (enforcing visibility), qualifies names under `mod` blocks (e.g. `Foo/bar`), resolves file-backed `mod Label;` via the `Loader` trait, and folds `let`/`rec` items right-to-left into the tail.
+**Module processing** (`to_core.rs`): walks `TopItem` list, resolves `use` declarations (enforcing visibility), qualifies names under `mod` blocks (e.g. `Foo/bar`), resolves file-backed `mod Label;` via the `Loader` trait, elaborates `union` declarations into type bindings plus constructor modules, and folds generated `let`/`rec` items right-to-left into the tail.
 
 The `Loader` trait has two implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `PanicLoader` (used for inline programs and tests).
 
-**Term elaboration** (`to_core/elaborate.rs`): pure syntactic translation from `text::Term` to `core::Term`. The only binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices. No type-directed work — that happens in `core/typing.rs`.
+**Term elaboration** (`to_core/elaborate.rs`): pure syntactic translation from `text::Term` to `core::Term`. The only binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices. Union matches elaborate to ordinary atom matches over the generated tag field. No type-directed work — that happens in `core/typing.rs`.
 
 Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
@@ -126,8 +126,8 @@ The central `core::Term` enum:
 | `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application |
 | `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access   |
 | `BlnMatch`                     | Dependent elimination of `Bln` (false + true cases)          |
-| `NatFold`                      | Structural induction on `Nat` (zero + pred/IH cases)         |
-| `NatMatch`                     | Sparse dispatch on specific `Nat` values                     |
+| `NatMatch::Induction`          | Structural induction on `Nat` (zero + pred/IH cases)         |
+| `NatMatch::Dispatch`           | Sparse dispatch on specific `Nat` values                     |
 | `AtomType` / `Atom` / `Match`  | Labeled unions, tags, pattern matching                       |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                |
 | `Prim`                         | Built-in values and operations                               |
@@ -139,11 +139,11 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 `Scope<A: Arity, B: Bound = Term>` handles all binder arities and is generic over its body type. The body parameter `B` is what makes the cons-style telescope possible — see below.
 
-| `A`       | Used by                                                                                                       |
-| --------- | ------------------------------------------------------------------------------------------------------------- |
-| `One`     | `NatFold` (motive), `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail) |
-| `Two`     | `NatFold` (succ_case — binds `pred` and `ih`)                                                                 |
-| `Many(n)` | `Func` (parameters), `Rec` (items and tail)                                                                   |
+| `A`       | Used by                                                                  |
+| --------- | ------------------------------------------------------------------------ |
+| `One`     | `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail) |
+| `Two`     | `NatMatch::Induction` (succ_case — binds `pred` and `ih`)                |
+| `Many(n)` | `Func` (parameters), `Rec` (items and tail)                              |
 
 The `Bound` trait describes types that can sit under a `Scope` — its required method is `traverse(&self, visit: &mut Visit<F>) -> Self`, and it provides `shift`, `capture`, `release`, `free_vars` as default methods on top. `Term`, `()`, and `Telescope<B>` all implement `Bound`. A `Visit<F>` struct threads de Bruijn depth and a per-variable rewrite closure (`F: FnMut(depth, &Var) -> Option<Term>`, returning a replacement or `None`) through the whole tree.
 
@@ -184,10 +184,10 @@ Maintains separate stacks for **assumptions** (name → type) and **definitions*
 
 Erasure is performed inside `core::erase` (the `erase` function), interleaved with bidirectional type checking rather than as a standalone pass. The output is `ersd::Term`.
 
-| Removed                                                | Preserved                                                        |
-| ------------------------------------------------------ | ---------------------------------------------------------------- |
-| `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatFold`, `NatMatch`, `Match` |
-| Type annotations on binders                            | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`                       |
+| Removed                                                | Preserved                                             |
+| ------------------------------------------------------ | ----------------------------------------------------- |
+| `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
+| Type annotations on binders                            | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`            |
 
 `Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `BlnMatch` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
 
@@ -207,7 +207,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is the most complex transformation in the pipeline (3,413 lines).
+This is one of the more complex transformations in the pipeline: `lowerer.rs` is 1,726 lines, and the full `ersd/to_cont` implementation is roughly 2,400 lines.
 
 ### CPS IR structure
 
@@ -250,7 +250,7 @@ The defining property of this IR: continuations are **block labels** scoped to t
 
 When a call appears in value position, the lowerer creates a **join block** that receives the result as a block parameter, normalizing the CFG into SSA-like form.
 
-`Rec` groups support value-level mutual recursion, including through arbitrary calls (e.g. point-free parser combinators that reference one another). The lowerer reserves every binding name up front, then declares a **prealloc** — an empty shell with a stable heap identity, recorded in `Region::preallocs` — for each aggregate binding (`Func`/`Tuple`/`Arr`), so its identity exists before its fields are known. Call- and match-valued bindings are lowered in dependency order through resume blocks, and the shells are filled once the values they capture exist — possibly in a descendant region (the *cross-region* case), so a closure produced by a runtime call can still join the recursive knot. Two call-valued bindings that each need the other's *value* form a cycle that would require a runtime fixpoint cell, and are rejected. The fill is an emission-time detail (`struct.set`/`array.set` over the prealloc'd shell); no first-class mutation op enters the IR.
+`Rec` groups support value-level mutual recursion, including through arbitrary calls (e.g. point-free parser combinators that reference one another). The lowerer reserves every binding name up front, then declares a **prealloc** — an empty shell with a stable heap identity, recorded in `Region::preallocs` — for each aggregate binding (`Func`/`Tuple`/`Arr`), so its identity exists before its fields are known. Call- and match-valued bindings are lowered in dependency order through resume blocks, and the shells are filled once the values they capture exist — possibly in a descendant region (the _cross-region_ case), so a closure produced by a runtime call can still join the recursive knot. Two call-valued bindings that each need the other's _value_ form a cycle that would require a runtime fixpoint cell, and are rejected. The fill is an emission-time detail (`struct.set`/`array.set` over the prealloc'd shell); no first-class mutation op enters the IR.
 
 ### Frame and entropy
 
@@ -298,7 +298,7 @@ The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`,
 
 ### Binary serialization (`src/wasm/writer.rs`)
 
-The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. 2,017 lines.
+The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. `wasm/writer.rs` is 1,691 lines, with helper modules under `wasm/writer/`.
 
 ### WAT parser (`src/wasm/parse.rs`)
 
@@ -350,12 +350,13 @@ Wasmtime is configured with reference types, function references, GC, and tail c
 
 Every fallible stage reports through a uniform pattern built on two primitives in `src/span.rs`:
 
-- `Span { start, end }` — a byte range into the original source.
-- `Span::render_snippet(&self, source)` — formats the offending line with a line number and a `^` caret underline spanning the range.
+- `Source { path, text }` — the original file path and source text, reference-counted by spans.
+- `Span { source, start, end }` — a byte range into a specific source.
+- `Span::render_snippet(&self)` — formats the offending line with a line number and a `^` caret underline spanning the range.
 
-Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/error.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format(&source)` prints the message followed by the rendered snippet; an unlocated error prints the message alone. The parser's `ParserError::format` calls `Span::render_snippet` on a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
+Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/typing.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format()` prints the message followed by the rendered snippet; an unlocated error prints the message alone. The parser's `ParserError::format` calls `Span::render_snippet` on a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
 
-`cli()` threads the source string through every stage, mapping each failure with `.map_err(|error| error.format(&source))`. `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
+`cli()` constructs a `Source` for the entrypoint and each loaded module, so spans carry enough context for formatting. `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
 
 ---
 
@@ -378,7 +379,7 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 
 ## Testing
 
-206 tests across 12 files, covering every layer:
+215 tests across 12 files, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -387,7 +388,7 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 | Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                        |
 | Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
 | Erasure         | Primitive, tuple, array, binary type erasure                                                                                                                |
-| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection             |
+| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection            |
 | WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
 | Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths                                                                   |
 | Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |

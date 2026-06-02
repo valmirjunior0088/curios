@@ -4,7 +4,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
 
@@ -65,7 +65,36 @@ pub and parse_arr : Parse(Value) =
     Parse/bind(Nat, Value, Parse/take_byte('['), _ => -- … uses decode … );
 ```
 
-Members may refer to one another freely through such calls. The sole exception: two bindings whose values are *calls that each require the other's result* form a cycle with no way to tie the knot, and the group is rejected.
+Members may refer to one another freely through such calls. The sole exception: two bindings whose values are _calls that each require the other's result_ form a cycle with no way to tie the knot, and the group is rejected.
+
+### Union
+
+```
+pub union Result(A : Type, B : Type)
+| ok(A)
+| err(B)
+end
+```
+
+Declares a sum type and a constructor module with the same name. The type name is bound as `Result`; each constructor is bound under the constructor module, for example `Result/ok(A, B, value)` and `Result/err(A, B, value)`. A payload-less case uses empty parentheses:
+
+```
+pub union Option(A : Type)
+| none()
+| some(A)
+end
+```
+
+Mutually recursive unions are declared with `and` and are closed by a single `end`:
+
+```
+pub union Tree(A : Type)
+| node(A, Forest(A))
+pub and Forest(A : Type)
+| nil()
+| cons(Tree(A), Forest(A))
+end
+```
 
 ### Submodule
 
@@ -103,7 +132,7 @@ When using an absolute path, the first segment must refer to a `pub mod` at the 
 
 Each item inside the group may be:
 
-- `Name` — import both the module *and* the binding named `Name`, if either exists. Errors if neither exists publicly. This is the default.
+- `Name` — import both the module _and_ the binding named `Name`, if either exists. Errors if neither exists publicly. This is the default.
 - `mod Name` — import only the module named `Name`. Errors if there is no public module by that name.
 - `let Name` — import only the binding named `Name`. Errors if there is no public binding by that name.
 
@@ -195,7 +224,7 @@ end
 **Booleans** — both branches required, either order:
 
 ```
-match cond : /sys/Bin
+match cond : /sys/Bln
 | true  => true_body
 | false => false_body
 end
@@ -217,6 +246,15 @@ match n : /sys/Nat
 | 0 => body
 | 3 => body
 | _ => default
+end
+```
+
+**Unions** — one branch per constructor; each branch lists binders for that constructor's payload:
+
+```
+match r : A
+| ok(value) => value
+| err(_) => default
 end
 ```
 
@@ -283,8 +321,8 @@ A homogeneous array of elements of type `T`. Write `/sys/Arr(/sys/Arr(/sys/Nat))
 
 ### Primitive types
 
-| Type  | Description                  |
-| ----- | ---------------------------- |
+| Type       | Description                  |
+| ---------- | ---------------------------- |
 | `/sys/Bln` | Boolean                      |
 | `/sys/Nat` | Natural number (u32)         |
 | `/sys/Int` | Signed integer (i32)         |
@@ -386,91 +424,91 @@ These are normal path references. After `use /sys/{Nat, Bin};`, the same calls c
 
 ### Nat
 
-| Operation        | Arity | Description           | Returns |
-| ---------------- | ----- | --------------------- | ------- |
-| `/sys/Nat/add(a, b)`    | 2 | Addition              | `/sys/Nat` |
-| `/sys/Nat/sub(a, b)`    | 2 | Subtraction           | `/sys/Nat` |
-| `/sys/Nat/mul(a, b)`    | 2 | Multiplication        | `/sys/Nat` |
-| `/sys/Nat/div(a, b)`    | 2 | Division              | `/sys/Nat` |
-| `/sys/Nat/rem(a, b)`    | 2 | Remainder             | `/sys/Nat` |
-| `/sys/Nat/eql(a, b)`    | 2 | Equality              | `/sys/Bln` |
-| `/sys/Nat/neq(a, b)`    | 2 | Inequality            | `/sys/Bln` |
-| `/sys/Nat/lt(a, b)`     | 2 | Less than             | `/sys/Bln` |
-| `/sys/Nat/gt(a, b)`     | 2 | Greater than          | `/sys/Bln` |
-| `/sys/Nat/lte(a, b)`    | 2 | Less than or equal    | `/sys/Bln` |
-| `/sys/Nat/gte(a, b)`    | 2 | Greater than or equal | `/sys/Bln` |
-| `/sys/Nat/to_int(a)`    | 1 | Convert to Int        | `/sys/Int` |
-| `/sys/Nat/to_flt(a)`    | 1 | Convert to Flt        | `/sys/Flt` |
-| `/sys/Nat/to_str(a)`    | 1 | Convert to Bin        | `/sys/Bin` |
+| Operation            | Arity | Description           | Returns    |
+| -------------------- | ----- | --------------------- | ---------- |
+| `/sys/Nat/add(a, b)` | 2     | Addition              | `/sys/Nat` |
+| `/sys/Nat/sub(a, b)` | 2     | Subtraction           | `/sys/Nat` |
+| `/sys/Nat/mul(a, b)` | 2     | Multiplication        | `/sys/Nat` |
+| `/sys/Nat/div(a, b)` | 2     | Division              | `/sys/Nat` |
+| `/sys/Nat/rem(a, b)` | 2     | Remainder             | `/sys/Nat` |
+| `/sys/Nat/eql(a, b)` | 2     | Equality              | `/sys/Bln` |
+| `/sys/Nat/neq(a, b)` | 2     | Inequality            | `/sys/Bln` |
+| `/sys/Nat/lt(a, b)`  | 2     | Less than             | `/sys/Bln` |
+| `/sys/Nat/gt(a, b)`  | 2     | Greater than          | `/sys/Bln` |
+| `/sys/Nat/lte(a, b)` | 2     | Less than or equal    | `/sys/Bln` |
+| `/sys/Nat/gte(a, b)` | 2     | Greater than or equal | `/sys/Bln` |
+| `/sys/Nat/to_int(a)` | 1     | Convert to Int        | `/sys/Int` |
+| `/sys/Nat/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
+| `/sys/Nat/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
 
 Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively). Successor syntax is infix over a natural literal and a base term: `n + 1`, `2 + n`.
 
 ### Int
 
-| Operation       | Arity | Description           | Returns |
-| --------------- | ----- | --------------------- | ------- |
-| `/sys/Int/add(a, b)`    | 2 | Addition              | `/sys/Int` |
-| `/sys/Int/sub(a, b)`    | 2 | Subtraction           | `/sys/Int` |
-| `/sys/Int/mul(a, b)`    | 2 | Multiplication        | `/sys/Int` |
-| `/sys/Int/div(a, b)`    | 2 | Division              | `/sys/Int` |
-| `/sys/Int/rem(a, b)`    | 2 | Remainder             | `/sys/Int` |
-| `/sys/Int/eql(a, b)`    | 2 | Equality              | `/sys/Bln` |
-| `/sys/Int/neq(a, b)`    | 2 | Inequality            | `/sys/Bln` |
-| `/sys/Int/lt(a, b)`     | 2 | Less than             | `/sys/Bln` |
-| `/sys/Int/gt(a, b)`     | 2 | Greater than          | `/sys/Bln` |
-| `/sys/Int/lte(a, b)`    | 2 | Less than or equal    | `/sys/Bln` |
-| `/sys/Int/gte(a, b)`    | 2 | Greater than or equal | `/sys/Bln` |
-| `/sys/Int/to_nat(a)`    | 1 | Convert to Nat        | `/sys/Nat` |
-| `/sys/Int/to_flt(a)`    | 1 | Convert to Flt        | `/sys/Flt` |
-| `/sys/Int/to_str(a)`    | 1 | Convert to Bin        | `/sys/Bin` |
+| Operation            | Arity | Description           | Returns    |
+| -------------------- | ----- | --------------------- | ---------- |
+| `/sys/Int/add(a, b)` | 2     | Addition              | `/sys/Int` |
+| `/sys/Int/sub(a, b)` | 2     | Subtraction           | `/sys/Int` |
+| `/sys/Int/mul(a, b)` | 2     | Multiplication        | `/sys/Int` |
+| `/sys/Int/div(a, b)` | 2     | Division              | `/sys/Int` |
+| `/sys/Int/rem(a, b)` | 2     | Remainder             | `/sys/Int` |
+| `/sys/Int/eql(a, b)` | 2     | Equality              | `/sys/Bln` |
+| `/sys/Int/neq(a, b)` | 2     | Inequality            | `/sys/Bln` |
+| `/sys/Int/lt(a, b)`  | 2     | Less than             | `/sys/Bln` |
+| `/sys/Int/gt(a, b)`  | 2     | Greater than          | `/sys/Bln` |
+| `/sys/Int/lte(a, b)` | 2     | Less than or equal    | `/sys/Bln` |
+| `/sys/Int/gte(a, b)` | 2     | Greater than or equal | `/sys/Bln` |
+| `/sys/Int/to_nat(a)` | 1     | Convert to Nat        | `/sys/Nat` |
+| `/sys/Int/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
+| `/sys/Int/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
 
 ### Flt
 
-| Operation        | Arity | Description           | Returns |
-| ---------------- | ----- | --------------------- | ------- |
-| `/sys/Flt/add(a, b)`     | 2 | Addition              | `/sys/Flt` |
-| `/sys/Flt/sub(a, b)`     | 2 | Subtraction           | `/sys/Flt` |
-| `/sys/Flt/mul(a, b)`     | 2 | Multiplication        | `/sys/Flt` |
-| `/sys/Flt/div(a, b)`     | 2 | Division              | `/sys/Flt` |
-| `/sys/Flt/eql(a, b)`     | 2 | Equality              | `/sys/Bln` |
-| `/sys/Flt/neq(a, b)`     | 2 | Inequality            | `/sys/Bln` |
-| `/sys/Flt/lt(a, b)`      | 2 | Less than             | `/sys/Bln` |
-| `/sys/Flt/gt(a, b)`      | 2 | Greater than          | `/sys/Bln` |
-| `/sys/Flt/lte(a, b)`     | 2 | Less than or equal    | `/sys/Bln` |
-| `/sys/Flt/gte(a, b)`     | 2 | Greater than or equal | `/sys/Bln` |
-| `/sys/Flt/min(a, b)`     | 2 | Minimum               | `/sys/Flt` |
-| `/sys/Flt/max(a, b)`     | 2 | Maximum               | `/sys/Flt` |
-| `/sys/Flt/neg(a)`        | 1 | Negation              | `/sys/Flt` |
-| `/sys/Flt/abs(a)`        | 1 | Absolute value        | `/sys/Flt` |
-| `/sys/Flt/sqrt(a)`       | 1 | Square root           | `/sys/Flt` |
-| `/sys/Flt/floor(a)`      | 1 | Floor                 | `/sys/Flt` |
-| `/sys/Flt/ceil(a)`       | 1 | Ceiling               | `/sys/Flt` |
-| `/sys/Flt/trunc(a)`      | 1 | Truncate toward zero  | `/sys/Flt` |
-| `/sys/Flt/nearest(a)`    | 1 | Round to nearest      | `/sys/Flt` |
-| `/sys/Flt/to_nat(a)`     | 1 | Convert to Nat        | `/sys/Nat` |
-| `/sys/Flt/to_int(a)`     | 1 | Convert to Int        | `/sys/Int` |
-| `/sys/Flt/to_str(a)`     | 1 | Convert to Bin        | `/sys/Bin` |
+| Operation             | Arity | Description           | Returns    |
+| --------------------- | ----- | --------------------- | ---------- |
+| `/sys/Flt/add(a, b)`  | 2     | Addition              | `/sys/Flt` |
+| `/sys/Flt/sub(a, b)`  | 2     | Subtraction           | `/sys/Flt` |
+| `/sys/Flt/mul(a, b)`  | 2     | Multiplication        | `/sys/Flt` |
+| `/sys/Flt/div(a, b)`  | 2     | Division              | `/sys/Flt` |
+| `/sys/Flt/eql(a, b)`  | 2     | Equality              | `/sys/Bln` |
+| `/sys/Flt/neq(a, b)`  | 2     | Inequality            | `/sys/Bln` |
+| `/sys/Flt/lt(a, b)`   | 2     | Less than             | `/sys/Bln` |
+| `/sys/Flt/gt(a, b)`   | 2     | Greater than          | `/sys/Bln` |
+| `/sys/Flt/lte(a, b)`  | 2     | Less than or equal    | `/sys/Bln` |
+| `/sys/Flt/gte(a, b)`  | 2     | Greater than or equal | `/sys/Bln` |
+| `/sys/Flt/min(a, b)`  | 2     | Minimum               | `/sys/Flt` |
+| `/sys/Flt/max(a, b)`  | 2     | Maximum               | `/sys/Flt` |
+| `/sys/Flt/neg(a)`     | 1     | Negation              | `/sys/Flt` |
+| `/sys/Flt/abs(a)`     | 1     | Absolute value        | `/sys/Flt` |
+| `/sys/Flt/sqrt(a)`    | 1     | Square root           | `/sys/Flt` |
+| `/sys/Flt/floor(a)`   | 1     | Floor                 | `/sys/Flt` |
+| `/sys/Flt/ceil(a)`    | 1     | Ceiling               | `/sys/Flt` |
+| `/sys/Flt/trunc(a)`   | 1     | Truncate toward zero  | `/sys/Flt` |
+| `/sys/Flt/nearest(a)` | 1     | Round to nearest      | `/sys/Flt` |
+| `/sys/Flt/to_nat(a)`  | 1     | Convert to Nat        | `/sys/Nat` |
+| `/sys/Flt/to_int(a)`  | 1     | Convert to Int        | `/sys/Int` |
+| `/sys/Flt/to_str(a)`  | 1     | Convert to Bin        | `/sys/Bin` |
 
 ### Bin
 
-| Operation                  | Arity    | Description                         | Returns |
-| -------------------------- | -------- | ----------------------------------- | ------- |
-| `/sys/Bin/len(a)`               | 1 | Byte length                       | `/sys/Nat` |
-| `/sys/Bin/eql(a, b)`            | 2 | Equality                          | `/sys/Bln` |
-| `/sys/Bin/get(a, i)`            | 2 | Byte at index `i`                 | `/sys/Nat` |
-| `/sys/Bin/slice(a, start, end)` | 3 | Subsequence from `start` to `end` | `/sys/Bin` |
-| `/sys/Bin/append(a, byte)`      | 2 | Append a single byte              | `/sys/Bin` |
-| `/sys/Bin/concat(a, b)`         | 2 | Concatenate two sequences         | `/sys/Bin` |
+| Operation                       | Arity | Description                       | Returns    |
+| ------------------------------- | ----- | --------------------------------- | ---------- |
+| `/sys/Bin/len(a)`               | 1     | Byte length                       | `/sys/Nat` |
+| `/sys/Bin/eql(a, b)`            | 2     | Equality                          | `/sys/Bln` |
+| `/sys/Bin/get(a, i)`            | 2     | Byte at index `i`                 | `/sys/Nat` |
+| `/sys/Bin/slice(a, start, end)` | 3     | Subsequence from `start` to `end` | `/sys/Bin` |
+| `/sys/Bin/append(a, byte)`      | 2     | Append a single byte              | `/sys/Bin` |
+| `/sys/Bin/concat(a, b)`         | 2     | Concatenate two sequences         | `/sys/Bin` |
 
 ### Arr
 
-| Operation                  | Arity    | Description                      | Returns  |
-| -------------------------- | -------- | -------------------------------- | -------- |
-| `/sys/Arr/len(T, a)`               | 2 | Element count                  | `/sys/Nat`    |
-| `/sys/Arr/get(T, a, i)`            | 3 | Element at index `i`           | `T`           |
-| `/sys/Arr/slice(T, a, start, end)` | 4 | Subarray from `start` to `end` | `/sys/Arr(T)` |
-| `/sys/Arr/append(T, a, elem)`      | 3 | Append a single element        | `/sys/Arr(T)` |
-| `/sys/Arr/concat(T, a, b)`         | 3 | Concatenate two arrays         | `/sys/Arr(T)` |
+| Operation                          | Arity | Description                    | Returns       |
+| ---------------------------------- | ----- | ------------------------------ | ------------- |
+| `/sys/Arr/len(T, a)`               | 2     | Element count                  | `/sys/Nat`    |
+| `/sys/Arr/get(T, a, i)`            | 3     | Element at index `i`           | `T`           |
+| `/sys/Arr/slice(T, a, start, end)` | 4     | Subarray from `start` to `end` | `/sys/Arr(T)` |
+| `/sys/Arr/append(T, a, elem)`      | 3     | Append a single element        | `/sys/Arr(T)` |
+| `/sys/Arr/concat(T, a, b)`         | 3     | Concatenate two arrays         | `/sys/Arr(T)` |
 
 `Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more:
 
@@ -481,48 +519,46 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Io
 
-| Operation     | Arity | Description                                                   | Returns |
-| ------------- | ----- | ------------------------------------------------------------- | ------- |
-| `/sys/Io/print(a)` | 1 | Print `a : /sys/Bin` to stdout                               | `{}`       |
-| `/sys/Io/read()`   | 0 | Read a line from stdin (`\n` included); empty `/sys/Bin` means EOF | `/sys/Bin` |
+| Operation          | Arity | Description                                                        | Returns    |
+| ------------------ | ----- | ------------------------------------------------------------------ | ---------- |
+| `/sys/Io/print(a)` | 1     | Print `a : /sys/Bin` to stdout                                     | `{}`       |
+| `/sys/Io/read()`   | 0     | Read a line from stdin (`\n` included); empty `/sys/Bin` means EOF | `/sys/Bin` |
 
 ## Idioms
 
 ### Sum types
 
-Curios has no built-in sum type. The idiom is a dependent tuple whose second field's type is determined by the first field, an atom drawn from a finite set.
+Use `union` to declare a sum type. Under the surface syntax, a union elaborates to a dependent tuple whose first field is an atom tag and whose second field is the constructor payload.
 
 **Definition**
 
 ```
-let Result(A : Type, B : Type) -> Type = {
-    tag : '[ok, err],
-    match tag : Type
-    | 'ok  => A
-    | 'err => B
-    end };
+union Result(A : Type, B : Type)
+| ok(A)
+| err(B)
+end
 ```
 
-The first field `tag` is an atom type listing all variants. The second field is a `match` on `tag` that selects the payload type for each variant.
+The union binds the type name `Result` and a constructor module `Result` containing `ok` and `err`.
 
 **Construction**
 
 ```
-let good : Result(Nat, Bin) = ('ok,  42);
-let bad  : Result(Nat, Bin) = ('err, "something went wrong");
+let good : Result(Nat, Bin) = Result/ok(Nat, Bin, 42);
+let bad  : Result(Nat, Bin) = Result/err(Nat, Bin, "something went wrong");
 ```
 
-A value is a two-element tuple of the variant atom and its payload.
+Constructors take the union's type parameters first, followed by the case payload.
 
 **Elimination**
 
-Use `match` on the first field to dispatch on the tag, then access the second field for the payload:
+Use `match` on the union value. Constructor branches bind the payload fields directly:
 
 ```
 let unwrap_or(A : Type, r : Result(A, /sys/Bin), default : A) -> A =
-    match r.0 : A
-    | 'ok  => r.1
-    | 'err => default
+    match r : A
+    | ok(value) => value
+    | err(_) => default
     end;
 ```
 
@@ -530,27 +566,28 @@ let unwrap_or(A : Type, r : Result(A, /sys/Bin), default : A) -> A =
 
 ### Recursive types
 
-A recursive type uses a top-level `rec` binding that refers to itself in its own body. Combined with the sum type idiom, this gives linked lists, trees, and similar structures.
+Recursive types are written as recursive unions. A union case may refer back to the union being declared.
 
 **Definition**
 
 ```
-rec List : (A : Type) -> Type = A => {
-    tag : '[nil, cons],
-    match tag : Type
-    | 'nil  => {}
-    | 'cons => { A, List(A) }
-    end };
+union List(A : Type)
+| nil()
+| cons(A, List(A))
+end
 ```
 
-The empty tuple type `{}` serves as the placeholder for the empty payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
+The `nil` branch has no payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
 
 **Construction**
 
 ```
-let empty : List(Nat) = ('nil,  ());
-let one   : List(Nat) = ('cons, (1, ('nil, ())));
-let three : List(Nat) = ('cons, (1, ('cons, (2, ('cons, (3, ('nil, ())))))));
+let empty : List(Nat) = List/nil(Nat);
+let one   : List(Nat) = List/cons(Nat, 1, List/nil(Nat));
+let three : List(Nat) =
+    List/cons(Nat, 1,
+    List/cons(Nat, 2,
+    List/cons(Nat, 3, List/nil(Nat))));
 ```
 
 **Elimination**
@@ -559,9 +596,9 @@ A recursive function over the list is itself written with `rec`:
 
 ```
 rec length(A : Type, list : List(A)) -> /sys/Nat =
-    match list.0 : /sys/Nat
-    | 'nil  => 0
-    | 'cons => /sys/Nat/add(1, length(A, list.1.1))
+    match list : /sys/Nat
+    | nil() => 0
+    | cons(_, tail) => /sys/Nat/add(1, length(A, tail))
     end;
 ```
 

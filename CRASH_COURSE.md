@@ -114,7 +114,7 @@ Branches are introduced by `|` and the whole `match` is closed by `end`. The mot
 
 ## Sum types
 
-Rust encodes sum types with `enum`. Curios has no `enum` keyword. The idiom is a dependent tuple: the type of the second field is a `match` on the value of the first.
+Rust encodes sum types with `enum`. Curios uses `union` declarations with constructor functions and constructor-pattern matching.
 
 ```rust
 // Rust
@@ -126,32 +126,30 @@ enum Shape {
 
 ```
 -- Curios
-let Shape : Type = {
-    tag : '[circle, rectangle],
-    match tag : _ => Type
-    | 'circle    => Flt
-    | 'rectangle => { Flt, Flt }
-    end };
+union Shape
+| circle(Flt)
+| rectangle(Flt, Flt)
+end
 ```
 
-The first field selects the variant; the second field's type is determined by it. Construction is a plain tuple:
+The declaration binds the type `Shape` and a constructor module `Shape`:
 
 ```
-let c : Shape = ('circle, +3.0);
-let r : Shape = ('rectangle, (+2.0, +4.0));
+let c : Shape = Shape/circle(+3.0);
+let r : Shape = Shape/rectangle(+2.0, +4.0);
 ```
 
-Elimination matches on `s.0` to dispatch on the tag, then accesses `s.1` for the payload. Inside each branch the type checker knows the concrete type of `s.1`:
+Elimination matches on the value and binds each constructor's payload fields:
 
 ```
 let area(s : Shape) -> Flt =
-    match s.0 : Flt
-    | 'circle    => Flt/mul(s.1, s.1)
-    | 'rectangle => Flt/mul(s.1.0, s.1.1)
+    match s : Flt
+    | circle(radius) => Flt/mul(radius, radius)
+    | rectangle(width, height) => Flt/mul(width, height)
     end;
 ```
 
-In the `'circle` branch `s.1 : Flt`; in the `'rectangle` branch `s.1 : { Flt, Flt }`. No downcasting, no `unwrap`.
+In the `circle` branch `radius : Flt`; in the `rectangle` branch `width : Flt` and `height : Flt`. No downcasting, no `unwrap`.
 
 ## Dependent function types
 
@@ -238,4 +236,4 @@ fmt/printf("%d")("Alice")
 -- TypeMismatch: %d expects Nat, but "Alice" has type Bin
 ```
 
-The `examples/crs_printf.rs` program runs both cases and asserts the output and the error. `examples/crs_json_codec.rs` shows a larger program combining file-backed modules, dependent sum types, and arrays to encode and decode a `json/Value` tree.
+The `examples/crs_printf.rs` program runs both cases and asserts the output and the error. `examples/crs_json_codec.rs` shows a larger program combining file-backed modules, union values, and arrays to encode and decode a `json/Value` tree.

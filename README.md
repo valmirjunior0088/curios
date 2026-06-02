@@ -65,7 +65,7 @@ fmt/printf("%d")("Alice")
 -- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Bin
 ```
 
-**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `json/Value` tree using the dependent sum type idiom, encodes it to a `Bin` string with `json/encode`, parses it back with `json/decode`, and asserts the output is byte-identical to the original. It exercises file-backed modules (`std`, `parser`, `json`), arrays, and nested dependent sum types together.
+**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `json/Value` tree using `union` constructors such as `Value/obj` and `Value/str`, encodes it to a `Bin` string with `json/encode`, parses it back with `json/decode`, and asserts the output is byte-identical to the original. It exercises file-backed modules (`std`, `std/Parse`, `json`), arrays, and nested union values together.
 
 ## Documentation
 
