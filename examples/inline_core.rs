@@ -7,52 +7,52 @@ fn main() {
     let core_term: core::Term = core::Term::rec(
         vec![(
             "id",
-            core::Term::func_type([("_", core::Type)], core::Type),
-            core::Term::func(["x"], core::Var::free("x")),
+            core::Term::func_type([("_", core::Term::type_())], core::Term::type_()),
+            core::Term::func(["x"], core::Term::var(core::Var::free("x"))),
         )],
         core::Term::let_(
             "tuple_ty",
-            core::Type,
+            core::Term::type_(),
             core::Term::tuple_type([
                 ("label", core::Term::atom_type(["left", "right"])),
                 (
                     "value",
                     core::Term::match_(
-                        core::Var::free("label"),
+                        core::Term::var(core::Var::free("label")),
                         None,
-                        core::Type,
-                        [("left", core::Type), ("right", core::Type)],
+                        core::Term::type_(),
+                        [("left", core::Term::type_()), ("right", core::Term::type_())],
                     ),
                 ),
             ]),
             core::Term::let_(
                 "p",
-                core::Var::free("tuple_ty"),
+                core::Term::var(core::Var::free("tuple_ty")),
                 core::Term::tuple([
-                    core::Term::from(core::Atom::from("left")),
-                    core::Type.into(),
+                    core::Term::from(core::Term::atom(core::Atom::from("left"))),
+                    core::Term::type_().into(),
                 ]),
                 core::Term::let_(
                     "label",
                     core::Term::atom_type(["left", "right"]),
-                    core::Term::proj(core::Var::free("p"), 0),
+                    core::Term::proj(core::Term::var(core::Var::free("p")), 0),
                     core::Term::let_(
                         "value",
-                        core::Type,
-                        core::Term::proj(core::Var::free("p"), 1),
+                        core::Term::type_(),
+                        core::Term::proj(core::Term::var(core::Var::free("p")), 1),
                         core::Term::match_(
-                            core::Var::free("label"),
+                            core::Term::var(core::Var::free("label")),
                             None,
-                            core::Type,
+                            core::Term::type_(),
                             [
                                 (
                                     "left",
                                     core::Term::apply(
-                                        core::Var::free("id"),
-                                        [core::Var::free("value")],
+                                        core::Term::var(core::Var::free("id")),
+                                        [core::Term::var(core::Var::free("value"))],
                                     ),
                                 ),
-                                ("right", core::Type.into()),
+                                ("right", core::Term::type_().into()),
                             ],
                         ),
                     ),
@@ -67,7 +67,7 @@ fn main() {
     let ersd_term = core::erase(
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
-        &core::Type.into(),
+        &core::Term::type_().into(),
     )
     .expect("expected erased term");
 

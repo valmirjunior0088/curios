@@ -35,7 +35,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
     fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
         Ok(match term {
             Subterm::Type => core::Term::type_(),
-            Subterm::Prim(prim) => self.prim(prim)?.into(),
+            Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
             Subterm::Name(name) => {
                 let resolved = if name.is_abs() || !name.is_single() {
                     self.resolve_name(name)?.join()
@@ -48,9 +48,9 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     }
                 };
 
-                core::Var::free(resolved).into()
+                core::Term::var(core::Var::free(resolved))
             }
-            Subterm::Atom(atom) => core::Atom::from(atom.as_str()).into(),
+            Subterm::Atom(atom) => core::Term::atom(core::Atom::from(atom.as_str())),
             Subterm::AtomType(at) => {
                 core::Term::atom_type(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
             }
@@ -197,9 +197,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::Nat(Nat::Succ(NatLiteral::Number(spine), inner)) => {
                 core::Prim::Nat(core::Nat::Succ(spine.clone(), self.term(inner)?))
             }
-            Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => {
-                core::Prim::Nat(core::Nat::Succ(BigUint::from(*c as usize), self.term(inner)?))
-            }
+            Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => core::Prim::Nat(core::Nat::Succ(
+                BigUint::from(*c as usize),
+                self.term(inner)?,
+            )),
             Prim::NatEql(left, right) => core::Prim::nat_eql(self.term(left)?, self.term(right)?),
             Prim::NatNeq(left, right) => core::Prim::nat_neq(self.term(left)?, self.term(right)?),
             Prim::NatAdd(left, right) => core::Prim::nat_add(self.term(left)?, self.term(right)?),

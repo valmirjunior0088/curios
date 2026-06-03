@@ -4,20 +4,13 @@ use compare_prim::*;
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatMatch, Preempted, Proj,
-        Rec, Subterm, Telescope, Term, Tuple, TupleType, Type, Var, reduce,
+        Rec, Subterm, Telescope, Term, Tuple, TupleType, Var, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
         time::Instant,
     },
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Goal {
-    pub type_: Term,
-    pub this: Term,
-    pub that: Term,
-}
 
 pub fn convert(
     context: &mut Context,
@@ -26,6 +19,13 @@ pub fn convert(
     that: &Term,
 ) -> Result<bool, Preempted> {
     Convert::new(type_.clone(), this.clone(), that.clone()).convert(context)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct Goal {
+    pub type_: Term,
+    pub this: Term,
+    pub that: Term,
 }
 
 #[derive(Debug)]
@@ -72,14 +72,14 @@ impl Convert {
         ) -> Result<bool, Preempted> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    cmp.enqueue(Type.into(), ty_a.clone(), ty_b.clone());
-                    let v = Term::from(Var::free(context.fresh(rest_a.first_label())));
+                    cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
+                    let v = Term::var(Var::free(context.fresh(rest_a.first_label())));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
                 }
                 (Telescope::Done(out_a), Telescope::Done(out_b)) => {
-                    cmp.enqueue(Type.into(), (**out_a).clone(), (**out_b).clone());
+                    cmp.enqueue(Term::type_(), (**out_a).clone(), (**out_b).clone());
                     Ok(true)
                 }
                 _ => Ok(false),
@@ -97,12 +97,12 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         let n = this.body.arity();
         let ys: Vec<Term> = (0..n)
-            .map(|_| Var::free(context.fresh(None)).into())
+            .map(|_| Term::var(Var::free(context.fresh(None))))
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
-            _ => Type.into(),
+            _ => Term::type_(),
         };
         self.enqueue(
             output_type,
@@ -117,9 +117,9 @@ impl Convert {
         if this.params.len() != that.params.len() {
             return Ok(false);
         }
-        self.enqueue(Type.into(), this.head, that.head);
+        self.enqueue(Term::type_(), this.head, that.head);
         for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Type.into(), a, b);
+            self.enqueue(Term::type_(), a, b);
         }
         Ok(true)
     }
@@ -138,8 +138,8 @@ impl Convert {
         ) -> Result<bool, Preempted> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
-                    cmp.enqueue(Type.into(), ty_a.clone(), ty_b.clone());
-                    let v = Term::from(Var::free(context.fresh(rest_a.first_label())));
+                    cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
+                    let v = Term::var(Var::free(context.fresh(rest_a.first_label())));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -174,7 +174,7 @@ impl Convert {
                     cur = Some(rest.open(&[a]));
                     ty
                 }
-                _ => Type.into(),
+                _ => Term::type_(),
             };
             self.enqueue(ft, a.clone(), b.clone());
         }
@@ -186,7 +186,7 @@ impl Convert {
         if this.index != that.index {
             return Ok(false);
         }
-        self.enqueue(Type.into(), this.head, that.head);
+        self.enqueue(Term::type_(), this.head, that.head);
         Ok(true)
     }
 
@@ -204,17 +204,17 @@ impl Convert {
         this: BlnMatch,
         that: BlnMatch,
     ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), this.head, that.head);
+        self.enqueue(Term::type_(), this.head, that.head);
 
-        let label = Var::free(context.fresh(None)).into();
+        let label = Term::var(Var::free(context.fresh(None)));
         self.enqueue(
-            Type.into(),
+            Term::type_(),
             this.motive.open(&[&label]),
             that.motive.open(&[&label]),
         );
 
-        self.enqueue(Type.into(), this.false_case, that.false_case);
-        self.enqueue(Type.into(), this.true_case, that.true_case);
+        self.enqueue(Term::type_(), this.false_case, that.false_case);
+        self.enqueue(Term::type_(), this.true_case, that.true_case);
         Ok(true)
     }
 
@@ -239,21 +239,21 @@ impl Convert {
                     succ_case: that_succ,
                 },
             ) => {
-                self.enqueue(Type.into(), this_head, that_head);
+                self.enqueue(Term::type_(), this_head, that_head);
 
-                let motive_label = Var::free(context.fresh(None)).into();
+                let motive_label = Term::var(Var::free(context.fresh(None)));
                 self.enqueue(
-                    Type.into(),
+                    Term::type_(),
                     this_motive.open(&[&motive_label]),
                     that_motive.open(&[&motive_label]),
                 );
 
-                self.enqueue(Type.into(), this_zero, that_zero);
+                self.enqueue(Term::type_(), this_zero, that_zero);
 
-                let pred_label: Term = Var::free(context.fresh(None)).into();
-                let ih_label: Term = Var::free(context.fresh(None)).into();
+                let pred_label: Term = Term::var(Var::free(context.fresh(None)));
+                let ih_label: Term = Term::var(Var::free(context.fresh(None)));
                 self.enqueue(
-                    Type.into(),
+                    Term::type_(),
                     this_succ.open(&[&pred_label, &ih_label]),
                     that_succ.open(&[&pred_label, &ih_label]),
                 );
@@ -274,11 +274,11 @@ impl Convert {
                     default: that_default,
                 },
             ) => {
-                self.enqueue(Type.into(), this_head, that_head);
+                self.enqueue(Term::type_(), this_head, that_head);
 
-                let label = Var::free(context.fresh(None)).into();
+                let label = Term::var(Var::free(context.fresh(None)));
                 self.enqueue(
-                    Type.into(),
+                    Term::type_(),
                     this_motive.open(&[&label]),
                     that_motive.open(&[&label]),
                 );
@@ -291,10 +291,10 @@ impl Convert {
                     if kl != kr {
                         return Ok(false);
                     }
-                    self.enqueue(Type.into(), vl, vr);
+                    self.enqueue(Term::type_(), vl, vr);
                 }
 
-                self.enqueue(Type.into(), this_default, that_default);
+                self.enqueue(Term::type_(), this_default, that_default);
                 Ok(true)
             }
             _ => Ok(false),
@@ -307,11 +307,11 @@ impl Convert {
         this: Match,
         that: Match,
     ) -> Result<bool, Preempted> {
-        self.enqueue(Type.into(), this.head, that.head);
+        self.enqueue(Term::type_(), this.head, that.head);
 
-        let label = Var::free(context.fresh(None)).into();
+        let label = Term::var(Var::free(context.fresh(None)));
         self.enqueue(
-            Type.into(),
+            Term::type_(),
             this.motive.open(&[&label]),
             that.motive.open(&[&label]),
         );
@@ -327,7 +327,7 @@ impl Convert {
                 return Ok(false);
             }
 
-            self.enqueue(Type.into(), this_body, that_body);
+            self.enqueue(Term::type_(), this_body, that_body);
         }
 
         Ok(true)
@@ -344,7 +344,7 @@ impl Convert {
         }
 
         let labels = (0..this.items.len())
-            .map(|_| Var::free(context.fresh(None)).into())
+            .map(|_| Term::var(Var::free(context.fresh(None))))
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
@@ -353,19 +353,19 @@ impl Convert {
             this.items.into_iter().zip(that.items)
         {
             self.enqueue(
-                Type.into(),
+                Term::type_(),
                 this_type.open(&labels),
                 that_type.open(&labels),
             );
             self.enqueue(
-                Type.into(),
+                Term::type_(),
                 this_body.open(&labels),
                 that_body.open(&labels),
             );
         }
 
         self.enqueue(
-            Type.into(),
+            Term::type_(),
             this.tail.open(&labels),
             that.tail.open(&labels),
         );
@@ -382,12 +382,12 @@ impl Convert {
     ) -> Result<bool, Preempted> {
         let n = func.body.arity();
         let ys: Vec<Term> = (0..n)
-            .map(|_| Var::free(context.fresh(None)).into())
+            .map(|_| Term::var(Var::free(context.fresh(None))))
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
-            _ => Type.into(),
+            _ => Term::type_(),
         };
         self.enqueue(output_type, func.body.open(&y_refs), Term::apply(other, ys));
         Ok(true)
@@ -413,7 +413,7 @@ impl Convert {
                     cur = Some(rest.open(&[field]));
                     ty
                 }
-                _ => Type.into(),
+                _ => Term::type_(),
             };
             self.enqueue(ft, field.clone(), Term::proj(other.clone(), i));
         }
@@ -432,7 +432,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope }) => {
                 let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
-                    .map(|_| Var::free(context.fresh(None)).into())
+                    .map(|_| Term::var(Var::free(context.fresh(None))))
                     .collect();
                 let y_refs: Vec<&Term> = ys.iter().collect();
                 let output_type = telescope.open(&y_refs);
@@ -446,7 +446,7 @@ impl Convert {
             Subterm::TupleType(TupleType { telescope }) => {
                 for i in 0..telescope.len() {
                     self.enqueue(
-                        Type.into(),
+                        Term::type_(),
                         Term::proj(this.clone(), i),
                         Term::proj(that.clone(), i),
                     );

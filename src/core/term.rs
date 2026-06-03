@@ -66,15 +66,6 @@ pub struct Term {
 }
 
 impl Term {
-    pub fn new(term: Subterm) -> Self {
-        Self {
-            span: None,
-            hash: OnceCell::new(),
-            reach: OnceCell::new(),
-            inner: Rc::new(term),
-        }
-    }
-
     fn get_or_init_hash(&self) -> u64 {
         *self.hash.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -102,6 +93,274 @@ impl Term {
         }
         self
     }
+
+    pub fn type_() -> Self {
+        Self::from(Subterm::Type)
+    }
+
+    pub fn prim<P: Into<Prim>>(prim: P) -> Self {
+        Self::from(Subterm::Prim(prim.into()))
+    }
+
+    pub fn var(var: Var) -> Self {
+        Self::from(Subterm::Var(var))
+    }
+
+    pub fn atom<A: Into<Atom>>(atom: A) -> Self {
+        Self::from(Subterm::Atom(atom.into()))
+    }
+
+    pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
+        inner.into().with_span(span)
+    }
+
+    pub fn atom_type<I, A>(atoms: I) -> Self
+    where
+        I: IntoIterator<Item = A>,
+        A: Into<Atom>,
+    {
+        Self::from(Subterm::AtomType(AtomType {
+            atoms: atoms.into_iter().map(Into::into).collect(),
+        }))
+    }
+
+    pub fn func_type<I, L, T, O>(params: I, output: O) -> Self
+    where
+        I: IntoIterator<Item = (L, T)>,
+        L: Into<String>,
+        T: Into<Term>,
+        O: Into<Term>,
+    {
+        Self::from(Subterm::FuncType(FuncType {
+            telescope: Telescope::build(params, output.into()),
+        }))
+    }
+
+    pub fn func<I, L, B>(labels: I, body: B) -> Self
+    where
+        I: IntoIterator<Item = L>,
+        L: Into<String>,
+        B: Into<Term>,
+    {
+        let labels = labels
+            .into_iter()
+            .map(|l| l.into())
+            .collect::<Vec<String>>();
+
+        let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+
+        Self::from(Subterm::Func(Func {
+            body: Scope::close(Many(labels.len()), &label_strs, body.into()),
+        }))
+    }
+
+    pub fn apply<H, I, P>(head: H, params: I) -> Self
+    where
+        H: Into<Term>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+    {
+        Self::from(Subterm::Apply(Apply {
+            head: head.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+        }))
+    }
+
+    pub fn tuple_type_unit() -> Self {
+        Self::from(Subterm::TupleType(TupleType {
+            telescope: Telescope::done(()),
+        }))
+    }
+
+    pub fn tuple_type<I, L, T>(fields: I) -> Self
+    where
+        I: IntoIterator<Item = (L, T)>,
+        L: Into<String>,
+        T: Into<Term>,
+    {
+        Self::from(Subterm::TupleType(TupleType {
+            telescope: Telescope::build(fields, ()),
+        }))
+    }
+
+    pub fn tuple_unit() -> Self {
+        Self::from(Subterm::Tuple(Tuple { fields: vec![] }))
+    }
+
+    pub fn tuple<I, T>(fields: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<Term>,
+    {
+        Self::from(Subterm::Tuple(Tuple {
+            fields: fields.into_iter().map(|t| t.into()).collect(),
+        }))
+    }
+
+    pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
+        Self::from(Subterm::Proj(Proj {
+            head: head.into(),
+            index,
+        }))
+    }
+
+    pub fn match_<H, M, I, A, B>(head: H, motive_label: Option<&str>, motive: M, cases: I) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (A, B)>,
+        A: Into<Atom>,
+        B: Into<Term>,
+    {
+        Self::from(Subterm::Match(Match {
+            head: head.into(),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
+            },
+            cases: cases
+                .into_iter()
+                .map(|(atom, body)| (atom.into(), body.into()))
+                .collect(),
+        }))
+    }
+
+    pub fn bln_match<H, M, F, T>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        false_case: F,
+        true_case: T,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        F: Into<Term>,
+        T: Into<Term>,
+    {
+        Self::from(Subterm::BlnMatch(BlnMatch {
+            head: head.into(),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
+            },
+            false_case: false_case.into(),
+            true_case: true_case.into(),
+        }))
+    }
+
+    pub fn nat_induction<H, M, ZC, PL, IL, SC>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        zero_case: ZC,
+        pred_label: PL,
+        ih_label: IL,
+        succ_case: SC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        ZC: Into<Term>,
+        PL: Into<String>,
+        IL: Into<String>,
+        SC: Into<Term>,
+    {
+        let pred_label = pred_label.into();
+        let ih_label = ih_label.into();
+
+        Self::from(Subterm::NatMatch(NatMatch::Induction {
+            head: head.into(),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
+            },
+            zero_case: zero_case.into(),
+            succ_case: Scope::close(
+                Two,
+                &[pred_label.as_str(), ih_label.as_str()],
+                succ_case.into(),
+            ),
+        }))
+    }
+
+    pub fn nat_dispatch<H, M, I, B, D>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        cases: I,
+        default: D,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (usize, B)>,
+        B: Into<Term>,
+        D: Into<Term>,
+    {
+        Self::from(Subterm::NatMatch(NatMatch::Dispatch {
+            head: head.into(),
+            motive: match motive_label {
+                Some(l) => Scope::close(One, &[l], motive.into()),
+                None => Scope::constant(One, motive.into()),
+            },
+            cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
+            default: default.into(),
+        }))
+    }
+
+    pub fn let_<L, T, B, U>(label: L, type_: T, body: B, tail: U) -> Self
+    where
+        L: Into<String>,
+        T: Into<Term>,
+        B: Into<Term>,
+        U: Into<Term>,
+    {
+        let label = label.into();
+
+        Self::from(Subterm::Let(Let {
+            type_: type_.into(),
+            body: body.into(),
+            tail: Scope::close(One, &[label.as_str()], tail.into()),
+        }))
+    }
+
+    pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
+    where
+        I: IntoIterator<Item = (L, T, U)>,
+        L: Into<String>,
+        T: Into<Term>,
+        U: Into<Term>,
+        V: Into<Term>,
+    {
+        let items = items
+            .into_iter()
+            .map(|(label, type_, value)| (label.into(), type_.into(), value.into()))
+            .collect::<Vec<_>>();
+
+        let labels = items
+            .iter()
+            .map(|(label, _, _)| label.clone())
+            .collect::<Vec<_>>();
+
+        let labels = labels
+            .iter()
+            .map(|label| label.as_str())
+            .collect::<Vec<_>>();
+
+        Self::from(Subterm::Rec(Rec {
+            items: items
+                .into_iter()
+                .map(|(_, type_, value)| {
+                    (
+                        Scope::close(Many(labels.len()), &labels, type_),
+                        Scope::close(Many(labels.len()), &labels, value),
+                    )
+                })
+                .collect(),
+            tail: Scope::close(Many(labels.len()), &labels, tail.into()),
+        }))
+    }
 }
 
 impl Hash for Term {
@@ -126,8 +385,15 @@ impl PartialEq for Term {
 
 impl Eq for Term {}
 
+impl AsRef<Subterm> for Term {
+    fn as_ref(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
 impl Deref for Term {
     type Target = Subterm;
+
     fn deref(&self) -> &Subterm {
         &self.inner
     }
@@ -135,13 +401,12 @@ impl Deref for Term {
 
 impl From<Subterm> for Term {
     fn from(term: Subterm) -> Self {
-        Self::new(term)
-    }
-}
-
-impl AsRef<Subterm> for Term {
-    fn as_ref(&self) -> &Subterm {
-        &self.inner
+        Self {
+            span: None,
+            hash: OnceCell::new(),
+            reach: OnceCell::new(),
+            inner: Rc::new(term),
+        }
     }
 }
 
@@ -220,9 +485,6 @@ where
         self.body.free_vars()
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Type;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Telescope<B: Bound> {
@@ -430,276 +692,6 @@ pub struct Rec {
     pub tail: Scope<Many>,
 }
 
-impl Term {
-    pub fn type_() -> Self {
-        Self::new(Subterm::Type)
-    }
-
-    pub fn prim<P: Into<Prim>>(prim: P) -> Self {
-        Self::new(Subterm::Prim(prim.into()))
-    }
-
-    pub fn var(var: Var) -> Self {
-        Self::new(Subterm::Var(var))
-    }
-
-    pub fn atom<A: Into<Atom>>(atom: A) -> Self {
-        Self::new(Subterm::Atom(atom.into()))
-    }
-
-    pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
-        inner.into().with_span(span)
-    }
-
-    pub fn atom_type<I, A>(atoms: I) -> Self
-    where
-        I: IntoIterator<Item = A>,
-        A: Into<Atom>,
-    {
-        Self::new(Subterm::AtomType(AtomType {
-            atoms: atoms.into_iter().map(Into::into).collect(),
-        }))
-    }
-
-    pub fn func_type<I, L, T, O>(params: I, output: O) -> Self
-    where
-        I: IntoIterator<Item = (L, T)>,
-        L: Into<String>,
-        T: Into<Term>,
-        O: Into<Term>,
-    {
-        Self::new(Subterm::FuncType(FuncType {
-            telescope: Telescope::build(params, output.into()),
-        }))
-    }
-
-    pub fn func<I, L, B>(labels: I, body: B) -> Self
-    where
-        I: IntoIterator<Item = L>,
-        L: Into<String>,
-        B: Into<Term>,
-    {
-        let labels = labels
-            .into_iter()
-            .map(|l| l.into())
-            .collect::<Vec<String>>();
-
-        let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-
-        Self::new(Subterm::Func(Func {
-            body: Scope::close(Many(labels.len()), &label_strs, body.into()),
-        }))
-    }
-
-    pub fn apply<H, I, P>(head: H, params: I) -> Self
-    where
-        H: Into<Term>,
-        I: IntoIterator<Item = P>,
-        P: Into<Term>,
-    {
-        Self::new(Subterm::Apply(Apply {
-            head: head.into(),
-            params: params.into_iter().map(|p| p.into()).collect(),
-        }))
-    }
-
-    pub fn tuple_type_unit() -> Self {
-        Self::new(Subterm::TupleType(TupleType {
-            telescope: Telescope::done(()),
-        }))
-    }
-
-    pub fn tuple_type<I, L, T>(fields: I) -> Self
-    where
-        I: IntoIterator<Item = (L, T)>,
-        L: Into<String>,
-        T: Into<Term>,
-    {
-        Self::new(Subterm::TupleType(TupleType {
-            telescope: Telescope::build(fields, ()),
-        }))
-    }
-
-    pub fn tuple_unit() -> Self {
-        Self::new(Subterm::Tuple(Tuple { fields: vec![] }))
-    }
-
-    pub fn tuple<I, T>(fields: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<Term>,
-    {
-        Self::new(Subterm::Tuple(Tuple {
-            fields: fields.into_iter().map(|t| t.into()).collect(),
-        }))
-    }
-
-    pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
-        Self::new(Subterm::Proj(Proj {
-            head: head.into(),
-            index,
-        }))
-    }
-
-    pub fn match_<H, M, I, A, B>(head: H, motive_label: Option<&str>, motive: M, cases: I) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        I: IntoIterator<Item = (A, B)>,
-        A: Into<Atom>,
-        B: Into<Term>,
-    {
-        Self::new(Subterm::Match(Match {
-            head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
-            },
-            cases: cases
-                .into_iter()
-                .map(|(atom, body)| (atom.into(), body.into()))
-                .collect(),
-        }))
-    }
-
-    pub fn bln_match<H, M, F, T>(
-        head: H,
-        motive_label: Option<&str>,
-        motive: M,
-        false_case: F,
-        true_case: T,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        F: Into<Term>,
-        T: Into<Term>,
-    {
-        Self::new(Subterm::BlnMatch(BlnMatch {
-            head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
-            },
-            false_case: false_case.into(),
-            true_case: true_case.into(),
-        }))
-    }
-
-    pub fn nat_induction<H, M, ZC, PL, IL, SC>(
-        head: H,
-        motive_label: Option<&str>,
-        motive: M,
-        zero_case: ZC,
-        pred_label: PL,
-        ih_label: IL,
-        succ_case: SC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        ZC: Into<Term>,
-        PL: Into<String>,
-        IL: Into<String>,
-        SC: Into<Term>,
-    {
-        let pred_label = pred_label.into();
-        let ih_label = ih_label.into();
-
-        Self::new(Subterm::NatMatch(NatMatch::Induction {
-            head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
-            },
-            zero_case: zero_case.into(),
-            succ_case: Scope::close(
-                Two,
-                &[pred_label.as_str(), ih_label.as_str()],
-                succ_case.into(),
-            ),
-        }))
-    }
-
-    pub fn nat_dispatch<H, M, I, B, D>(
-        head: H,
-        motive_label: Option<&str>,
-        motive: M,
-        cases: I,
-        default: D,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        I: IntoIterator<Item = (usize, B)>,
-        B: Into<Term>,
-        D: Into<Term>,
-    {
-        Self::new(Subterm::NatMatch(NatMatch::Dispatch {
-            head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
-            },
-            cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
-            default: default.into(),
-        }))
-    }
-
-    pub fn let_<L, T, B, U>(label: L, type_: T, body: B, tail: U) -> Self
-    where
-        L: Into<String>,
-        T: Into<Term>,
-        B: Into<Term>,
-        U: Into<Term>,
-    {
-        let label = label.into();
-
-        Self::new(Subterm::Let(Let {
-            type_: type_.into(),
-            body: body.into(),
-            tail: Scope::close(One, &[label.as_str()], tail.into()),
-        }))
-    }
-
-    pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
-    where
-        I: IntoIterator<Item = (L, T, U)>,
-        L: Into<String>,
-        T: Into<Term>,
-        U: Into<Term>,
-        V: Into<Term>,
-    {
-        let items = items
-            .into_iter()
-            .map(|(label, type_, value)| (label.into(), type_.into(), value.into()))
-            .collect::<Vec<_>>();
-
-        let labels = items
-            .iter()
-            .map(|(label, _, _)| label.clone())
-            .collect::<Vec<_>>();
-
-        let labels = labels
-            .iter()
-            .map(|label| label.as_str())
-            .collect::<Vec<_>>();
-
-        Self::new(Subterm::Rec(Rec {
-            items: items
-                .into_iter()
-                .map(|(_, type_, value)| {
-                    (
-                        Scope::close(Many(labels.len()), &labels, type_),
-                        Scope::close(Many(labels.len()), &labels, value),
-                    )
-                })
-                .collect(),
-            tail: Scope::close(Many(labels.len()), &labels, tail.into()),
-        }))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Subterm {
     Type,
@@ -747,54 +739,6 @@ impl Subterm {
     }
 }
 
-impl From<Type> for Subterm {
-    fn from(Type: Type) -> Self {
-        Self::Type
-    }
-}
-
-impl From<Prim> for Subterm {
-    fn from(value: Prim) -> Self {
-        Self::Prim(value)
-    }
-}
-
-impl From<Atom> for Subterm {
-    fn from(value: Atom) -> Self {
-        Self::Atom(value)
-    }
-}
-
-impl From<Var> for Subterm {
-    fn from(value: Var) -> Self {
-        Self::Var(value)
-    }
-}
-
-impl From<Type> for Term {
-    fn from(_: Type) -> Self {
-        Self::new(Subterm::Type)
-    }
-}
-
-impl From<Prim> for Term {
-    fn from(value: Prim) -> Self {
-        Self::new(Subterm::Prim(value))
-    }
-}
-
-impl From<Atom> for Term {
-    fn from(value: Atom) -> Self {
-        Self::new(Subterm::Atom(value))
-    }
-}
-
-impl From<Var> for Term {
-    fn from(value: Var) -> Self {
-        Self::new(Subterm::Var(value))
-    }
-}
-
 pub trait Bound: Sized + Clone + Eq + Hash + Debug {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
@@ -816,7 +760,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound()
                 .filter(|&index| index >= depth)
-                .map(|index| Var::bound(index + amount).into())
+                .map(|index| Subterm::Var(Var::bound(index + amount)))
         }))
     }
 
@@ -827,12 +771,12 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
                     labels
                         .iter()
                         .position(|&candidate| label == candidate)
-                        .map(|index| Var::bound(depth + index).into())
+                        .map(|index| Subterm::Var(Var::bound(depth + index)))
                 })
                 .or_else(|| {
                     var.as_bound()
                         .filter(|&index| index >= depth)
-                        .map(|index| Var::bound(index + labels.len()).into())
+                        .map(|index| Subterm::Var(Var::bound(index + labels.len())))
                 })
         }))
     }
@@ -844,7 +788,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
                     .checked_sub(depth)
                     .map(|delta| match delta < terms.len() {
                         true => (**terms[delta]).shift(depth),
-                        false => Var::bound(index - terms.len()).into(),
+                        false => Subterm::Var(Var::bound(index - terms.len())),
                     })
             })
         }))
@@ -1400,7 +1344,7 @@ mod tests {
 
     #[test]
     fn close_open_preserves_nested_bind() {
-        let term = Scope::close(One, &["x"], Term::func(["y"], Var::free("x")))
+        let term = Scope::close(One, &["x"], Term::func(["y"], Term::var(Var::free("x"))))
             .open(&[&Term::var(Var::free("z"))]);
 
         let Subterm::Func(body) = &*term else {
@@ -1423,7 +1367,7 @@ mod tests {
                 Term::var(Var::free("x")),
                 Term::rec(
                     vec![("y", Term::type_(), Term::var(Var::free("z")))],
-                    Term::tuple([Var::free("y"), Var::free("w")]),
+                    Term::tuple([Term::var(Var::free("y")), Term::var(Var::free("w"))]),
                 ),
             ]),
         );
@@ -1441,18 +1385,18 @@ mod tests {
         assert_eq!(Term::var(Var::bound(0)).reach(), 1);
         assert_eq!(Term::var(Var::bound(3)).reach(), 4);
         // closed identity function λx.x
-        assert_eq!(Term::func(["x"], Var::free("x")).reach(), 0);
+        assert_eq!(Term::func(["x"], Term::var(Var::free("x"))).reach(), 0);
     }
 
     #[test]
     fn reach_scope_absorbs_arity() {
         // body references bound index 2 (reach 3); a scope absorbs its arity
-        let f1 = Term::new(Subterm::Func(Func {
+        let f1 = Term::from(Subterm::Func(Func {
             body: Scope::constant(Many(1), Term::var(Var::bound(2))),
         }));
         assert_eq!(f1.reach(), 2); // (2 + 1) - 1
 
-        let f2 = Term::new(Subterm::Func(Func {
+        let f2 = Term::from(Subterm::Func(Func {
             body: Scope::constant(Many(2), Term::var(Var::bound(2))),
         }));
         assert_eq!(f2.reach(), 1); // (2 + 1) - 2
@@ -1468,7 +1412,7 @@ mod tests {
 
     #[test]
     fn open_shares_closed_subterm_inside_substituted_body() {
-        let closed = Term::func(["a"], Var::free("a")); // λa.a, closed
+        let closed = Term::func(["a"], Term::var(Var::free("a"))); // λa.a, closed
         let scope = Scope::close(
             One,
             &["x"],

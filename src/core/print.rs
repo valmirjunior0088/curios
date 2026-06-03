@@ -12,7 +12,7 @@ fn label_at(depth: usize) -> String {
 }
 
 fn label_terms(labels: &[String]) -> Vec<Term> {
-    labels.iter().map(Var::free).map(Into::into).collect()
+    labels.iter().map(Var::free).map(Term::var).collect()
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
@@ -20,7 +20,7 @@ fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
         .first_label()
         .map(str::to_string)
         .unwrap_or_else(|| label_at(depth));
-    let body = scope.open(&[&Var::free(&label).into()]);
+    let body = scope.open(&[&Term::var(Var::free(&label))]);
 
     (label, body)
 }
@@ -40,7 +40,7 @@ fn open_scope_many(scope: Scope<Many>, depth: usize) -> (Vec<String>, Term) {
     let label_terms = labels
         .iter()
         .map(Var::free)
-        .map(Term::from)
+        .map(Term::var)
         .collect::<Vec<_>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
     let body = scope.open(&label_refs);
@@ -56,7 +56,7 @@ fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
         .second_label()
         .map(str::to_string)
         .unwrap_or_else(|| label_at(depth + 1));
-    let body = scope.open(&[&Var::free(&fst).into(), &Var::free(&snd).into()]);
+    let body = scope.open(&[&Term::var(Var::free(&fst)), &Term::var(Var::free(&snd))]);
 
     ((fst, snd), body)
 }
@@ -537,7 +537,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             None => print_term(ty, depth + total),
                         };
                         printers.push(printer);
-                        let next = rest.open(&[&Term::from(Var::free(&label))]);
+                        let next = rest.open(&[&Term::var(Var::free(&label))]);
                         walk(next, depth, total, idx + 1, printers)
                     }
                 }
@@ -598,7 +598,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             pure(" : "),
                             print_term(ty, depth + total),
                         ])));
-                        let next = rest.open(&[&Term::from(Var::free(&label))]);
+                        let next = rest.open(&[&Term::var(Var::free(&label))]);
                         walk(next, depth, total, idx + 1, items);
                     }
                 }

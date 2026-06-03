@@ -52,7 +52,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, Preempte
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
     let ys = freshs
         .iter()
-        .map(|f| Term::from(Var::free(f)))
+        .map(|f| Term::var(Var::free(f)))
         .collect::<Vec<_>>();
     let y_refs = ys.iter().collect::<Vec<_>>();
     match Term::unwrap_or_clone(func.body.open(&y_refs)) {
@@ -65,7 +65,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, Preempte
             {
                 Ok(Reduce::Continue(head))
             }
-            _ => Ok(Reduce::Break(Term::new(Subterm::Func(func)))),
+            _ => Ok(Reduce::Break(Term::from(Subterm::Func(func)))),
         }
 }
 
@@ -83,7 +83,7 @@ fn reduce_nat_induction(
             let pred = if spine == one {
                 inner
             } else {
-                Prim::Nat(Nat::Succ(spine - one, inner)).into()
+                Term::prim(Prim::Nat(Nat::Succ(spine - one, inner)))
             };
             let ih: Term = Subterm::NatMatch(NatMatch::Induction {
                 head: pred.clone(),
@@ -94,7 +94,7 @@ fn reduce_nat_induction(
             .into();
             Ok(Reduce::Continue(succ_case.open(&[&pred, &ih])))
         }
-        head => Ok(Reduce::Break(Term::new(Subterm::NatMatch(
+        head => Ok(Reduce::Break(Term::from(Subterm::NatMatch(
             NatMatch::Induction {
                 head: head.into(),
                 motive,
@@ -115,7 +115,7 @@ fn reduce_bln_match(context: &mut Context, bm: BlnMatch) -> Result<Reduce, Preem
     match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Prim(Prim::Bln(false)) => Ok(Reduce::Continue(false_case)),
         Subterm::Prim(Prim::Bln(true)) => Ok(Reduce::Continue(true_case)),
-        head => Ok(Reduce::Break(Term::new(Subterm::BlnMatch(BlnMatch {
+        head => Ok(Reduce::Break(Term::from(Subterm::BlnMatch(BlnMatch {
             head: head.into(),
             motive,
             false_case,
@@ -144,7 +144,7 @@ fn reduce_nat_dispatch(
                 None => Ok(Reduce::Continue(default.clone())),
             }
         }
-        head => Ok(Reduce::Break(Term::new(Subterm::NatMatch(
+        head => Ok(Reduce::Break(Term::from(Subterm::NatMatch(
             NatMatch::Dispatch {
                 head: head.into(),
                 motive,
@@ -187,7 +187,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, Preempted> {
     let atom = match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Atom(atom) => atom,
         head => {
-            return Ok(Reduce::Break(Term::new(Subterm::Match(Match {
+            return Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head.into(),
                 motive,
                 cases,
@@ -197,7 +197,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, Preempted> {
 
     match cases.get(&atom) {
         Some(body) => Ok(Reduce::Continue(body.clone())),
-        None => Ok(Reduce::Break(Term::new(Subterm::Match(Match {
+        None => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
             head: Term::atom(atom),
             motive,
             cases,
@@ -212,7 +212,7 @@ fn reduce_let(let_: Let) -> Reduce {
 fn reduce_var(context: &Context, var: Var) -> Reduce {
     match context.definition(var.unwrap()) {
         Some(next) => Reduce::Continue(next.clone()),
-        None => Reduce::Break(var.into()),
+        None => Reduce::Break(Term::var(var)),
     }
 }
 

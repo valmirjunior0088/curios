@@ -512,6 +512,14 @@ impl Prim {
         Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
     }
 
+    pub fn arr<I, A>(items: I) -> Self
+    where
+        I: IntoIterator<Item = A>,
+        A: Into<Term>,
+    {
+        Self::Arr(items.into_iter().map(Into::into).collect())
+    }
+
     pub fn arr_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
@@ -579,8 +587,3 @@ impl Prim {
     }
 }
 
-impl<A: Into<Term>> From<Vec<A>> for Prim {
-    fn from(items: Vec<A>) -> Self {
-        Self::Arr(items.into_iter().map(|a| a.into()).collect())
-    }
-}

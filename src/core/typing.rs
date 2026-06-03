@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Context, Proj, Subterm, Term, Type},
+    super::{Atom, Context, Proj, Subterm, Term},
     crate::Span,
     num_bigint::BigUint,
     std::fmt,
@@ -374,7 +374,7 @@ pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
 }
 
 pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
-    super::convert(context, &Type.into(), this, that)
+    super::convert(context, &Term::type_(), this, that)
         .map_err(|Preempted| Error::convert_preempted(this.clone(), that.clone()))
 }
 

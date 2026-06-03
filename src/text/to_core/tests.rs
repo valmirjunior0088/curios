@@ -29,7 +29,12 @@ fn single_let_binding() {
             let x : Type = Type;
             x
         "#),
-        core::Term::let_("x", core::Type, core::Type, core::Var::free("x")),
+        core::Term::let_(
+            "x",
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("x"))
+        ),
     );
 }
 
@@ -42,7 +47,12 @@ fn nested_module_binding_reference() {
             end
             Foo/f
         "#),
-        core::Term::let_("Foo/f", core::Type, core::Type, core::Var::free("Foo/f")),
+        core::Term::let_(
+            "Foo/f",
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("Foo/f"))
+        ),
     );
 }
 
@@ -57,9 +67,9 @@ fn module_named_after_type_resolves_by_qualified_path() {
         "#),
         core::Term::let_(
             "Nat/double",
-            core::Type,
-            core::Type,
-            core::Var::free("Nat/double")
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("Nat/double"))
         ),
     );
 }
@@ -78,9 +88,9 @@ fn use_shorthand_resolves_qualifier() {
         "#),
         core::Term::let_(
             "Foo/Bar/f",
-            core::Type,
-            core::Type,
-            core::Var::free("Foo/Bar/f")
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("Foo/Bar/f"))
         ),
     );
 }
@@ -189,9 +199,9 @@ fn pub_use_exposes_qualifier() {
         "#),
         core::Term::let_(
             "Foo/Bar/f",
-            core::Type,
-            core::Type,
-            core::Var::free("Foo/Bar/f")
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("Foo/Bar/f"))
         ),
     );
 }
@@ -229,9 +239,9 @@ fn use_of_pub_use_path_resolves_through_alias() {
         "#),
         core::Term::let_(
             "Foo/Bar/f",
-            core::Type,
-            core::Type,
-            core::Var::free("Foo/Bar/f")
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("Foo/Bar/f"))
         ),
     );
 }
@@ -253,7 +263,12 @@ fn chained_pub_use_re_exports_transitively() {
             end
             C/X/f
         "#),
-        core::Term::let_("A/X/f", core::Type, core::Type, core::Var::free("A/X/f")),
+        core::Term::let_(
+            "A/X/f",
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("A/X/f"))
+        ),
     );
 }
 
@@ -564,9 +579,14 @@ fn use_glob_imports_all_public_bindings() {
         "#),
         core::Term::let_(
             "Foo/x",
-            core::Type,
-            core::Type,
-            core::Term::let_("Foo/y", core::Type, core::Type, core::Var::free("Foo/x"))
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::let_(
+                "Foo/y",
+                core::Term::type_(),
+                core::Term::type_(),
+                core::Term::var(core::Var::free("Foo/x"))
+            )
         ),
     );
 }

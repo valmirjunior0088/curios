@@ -4,7 +4,7 @@ use self::erase_prim::erase_prim;
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Type, Var, expect,
+        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, expect,
         infer, reduce_with, refine_head,
     },
     crate::ersd,
@@ -32,7 +32,7 @@ fn erase_func(
         .collect::<Vec<_>>();
     let param_terms = param_names
         .iter()
-        .map(|p| Term::from(Var::free(p)))
+        .map(|p| Term::var(Var::free(p)))
         .collect::<Vec<_>>();
     let param_refs = param_terms.iter().collect::<Vec<_>>();
     let body_opened = body.open(&param_refs);
@@ -125,7 +125,7 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
         Subterm::TupleType(TupleType { telescope }) => telescope,
         _ => {
             return Err(Error::not_a_tuple_type(
-                Term::new(Subterm::Tuple(tuple.clone())),
+                Term::from(Subterm::Tuple(tuple.clone())),
                 expected.clone(),
             ));
         }
@@ -133,7 +133,7 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
 
     if fields.len() != type_telescope.len() {
         return Err(Error::tuple_arity_mismatch(
-            Term::new(Subterm::Tuple(tuple.clone())),
+            Term::from(Subterm::Tuple(tuple.clone())),
             type_telescope.len(),
             fields.len(),
         ));
@@ -187,8 +187,8 @@ fn erase_nat_induction(
 
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
     })?;
 
@@ -203,13 +203,19 @@ fn erase_nat_induction(
 
     let erased_succ_case = context.with_frame(|context| {
         context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
-        context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
+        context.assume(
+            &ih_label,
+            &motive.open(&[&Term::var(Var::free(&pred_label))]),
+        );
 
         erase(
             context,
-            &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
+            &succ_case.open(&[
+                &Term::var(Var::free(&pred_label)),
+                &Term::var(Var::free(&ih_label)),
+            ]),
             &motive.open(&[&Subterm::Prim(Prim::nat_add(
-                Var::free(&pred_label),
+                Term::var(Var::free(&pred_label)),
                 Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into()]),
@@ -252,16 +258,15 @@ fn erase_nat_dispatch(
         context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
     })?;
 
     let erased_cases = cases
         .iter()
         .map(|(n, body)| {
-            let case_expected =
-                motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]);
+            let case_expected = motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]);
             context.with_frame(|context| {
                 refine_head(
                     context,
@@ -335,8 +340,8 @@ fn erase_bln_match(
         context.assume(&head_label, &Subterm::Prim(Prim::BlnType).into());
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
     })?;
 
@@ -465,8 +470,8 @@ fn erase_match(
 
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
     })?;
 
@@ -487,10 +492,10 @@ fn erase_match(
                 return Err(Error::match_case_missing(term.clone(), atom.clone()));
             };
 
-            let expected = motive.open(&[&atom.clone().into()]);
+            let expected = motive.open(&[&Term::atom(atom.clone())]);
 
             context.with_frame(|context| {
-                refine_head(context, head, &atom.clone().into())?;
+                refine_head(context, head, &Term::atom(atom.clone()))?;
                 erase(context, body, &expected).map(Into::into)
             })
         })
@@ -512,11 +517,11 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
         tail,
     } = let_;
 
-    erase(context, body_type, &Type.into())?;
+    erase(context, body_type, &Term::type_())?;
 
     let name = context.fresh(tail.first_label());
     let erased_body = erase(context, body, body_type)?;
-    let var_term = Var::free(&name).into();
+    let var_term = Term::var(Var::free(&name));
     let tail = tail.open(&[&var_term]);
 
     let tail = context.with_frame(|context| {
@@ -544,7 +549,7 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
     let label_terms = names
         .iter()
         .map(Var::free)
-        .map(Into::into)
+        .map(Term::var)
         .collect::<Vec<_>>();
 
     let label_terms = label_terms.iter().collect::<Vec<_>>();
@@ -562,7 +567,7 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
         }
 
         for (type_, _) in &items {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
         }
 
         for (name, (_, body)) in names.iter().zip(items.iter()) {
@@ -590,7 +595,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         Subterm::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
         Subterm::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
         Subterm::Type => {
-            expect(context, term, &Type.into(), expected)?;
+            expect(context, term, &Term::type_(), expected)?;
             Ok(ersd::Term::Erased)
         }
         Subterm::FuncType(_) => {

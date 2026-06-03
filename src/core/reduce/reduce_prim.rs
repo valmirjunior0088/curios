@@ -118,9 +118,9 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
 
             Ok(match Term::unwrap_or_clone(inner) {
                 Subterm::Prim(Prim::Nat(Nat::Succ(j, tail))) => {
-                    Prim::Nat(Nat::Succ(spine.clone() + j, tail)).into()
+                    Subterm::Prim(Prim::Nat(Nat::Succ(spine.clone() + j, tail)))
                 }
-                inner => Prim::Nat(Nat::Succ(spine.clone(), Term::new(inner))).into(),
+                inner => Subterm::Prim(Prim::Nat(Nat::Succ(spine.clone(), Term::from(inner)))),
             })
         }
         Prim::NatEql(left, right) => reduce_nat_binary(

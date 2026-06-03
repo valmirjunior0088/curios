@@ -1,6 +1,6 @@
 use {
     super::Convert,
-    crate::core::{Nat, Preempted, Prim, Type},
+    crate::core::{Nat, Preempted, Prim, Term},
 };
 
 pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, Preempted> {
@@ -14,14 +14,14 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             if spine_l != spine_r {
                 return Ok(false);
             }
-            cmp.enqueue(Type.into(), il, ir);
+            cmp.enqueue(Term::type_(), il, ir);
             Ok(true)
         }
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
         (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
         (Prim::ArrType(this), Prim::ArrType(that)) => {
-            cmp.enqueue(Type.into(), this, that);
+            cmp.enqueue(Term::type_(), this, that);
 
             Ok(true)
         }
@@ -62,8 +62,8 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
         | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
         | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
         | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
-            cmp.enqueue(Type.into(), this_left, that_left);
-            cmp.enqueue(Type.into(), this_right, that_right);
+            cmp.enqueue(Term::type_(), this_left, that_left);
+            cmp.enqueue(Term::type_(), this_right, that_right);
 
             Ok(true)
         }
@@ -84,7 +84,7 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
         | (Prim::BinLen(this), Prim::BinLen(that)) => {
-            cmp.enqueue(Type.into(), this, that);
+            cmp.enqueue(Term::type_(), this, that);
 
             Ok(true)
         }
@@ -92,9 +92,9 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             Prim::BinSlice(this_bin, this_start, this_end),
             Prim::BinSlice(that_bin, that_start, that_end),
         ) => {
-            cmp.enqueue(Type.into(), this_bin, that_bin);
-            cmp.enqueue(Type.into(), this_start, that_start);
-            cmp.enqueue(Type.into(), this_end, that_end);
+            cmp.enqueue(Term::type_(), this_bin, that_bin);
+            cmp.enqueue(Term::type_(), this_start, that_start);
+            cmp.enqueue(Term::type_(), this_end, that_end);
 
             Ok(true)
         }
@@ -102,10 +102,10 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             Prim::ArrSlice(this_ty, this_list, this_start, this_end),
             Prim::ArrSlice(that_ty, that_list, that_start, that_end),
         ) => {
-            cmp.enqueue(Type.into(), this_ty, that_ty);
-            cmp.enqueue(Type.into(), this_list, that_list);
-            cmp.enqueue(Type.into(), this_start, that_start);
-            cmp.enqueue(Type.into(), this_end, that_end);
+            cmp.enqueue(Term::type_(), this_ty, that_ty);
+            cmp.enqueue(Term::type_(), this_list, that_list);
+            cmp.enqueue(Term::type_(), this_start, that_start);
+            cmp.enqueue(Term::type_(), this_end, that_end);
 
             Ok(true)
         }
@@ -113,15 +113,15 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             Prim::ArrGet(this_ty, this_list, this_index),
             Prim::ArrGet(that_ty, that_list, that_index),
         ) => {
-            cmp.enqueue(Type.into(), this_ty, that_ty);
-            cmp.enqueue(Type.into(), this_list, that_list);
-            cmp.enqueue(Type.into(), this_index, that_index);
+            cmp.enqueue(Term::type_(), this_ty, that_ty);
+            cmp.enqueue(Term::type_(), this_list, that_list);
+            cmp.enqueue(Term::type_(), this_index, that_index);
 
             Ok(true)
         }
         (Prim::ArrLen(this_ty, this_list), Prim::ArrLen(that_ty, that_list)) => {
-            cmp.enqueue(Type.into(), this_ty, that_ty);
-            cmp.enqueue(Type.into(), this_list, that_list);
+            cmp.enqueue(Term::type_(), this_ty, that_ty);
+            cmp.enqueue(Term::type_(), this_list, that_list);
 
             Ok(true)
         }
@@ -129,9 +129,9 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             Prim::ArrAppend(this_ty, this_list, this_elem),
             Prim::ArrAppend(that_ty, that_list, that_elem),
         ) => {
-            cmp.enqueue(Type.into(), this_ty, that_ty);
-            cmp.enqueue(Type.into(), this_list, that_list);
-            cmp.enqueue(Type.into(), this_elem, that_elem);
+            cmp.enqueue(Term::type_(), this_ty, that_ty);
+            cmp.enqueue(Term::type_(), this_list, that_list);
+            cmp.enqueue(Term::type_(), this_elem, that_elem);
 
             Ok(true)
         }
@@ -141,7 +141,7 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             }
 
             for (this, that) in this_elems.into_iter().zip(that_elems) {
-                cmp.enqueue(Type.into(), this, that);
+                cmp.enqueue(Term::type_(), this, that);
             }
 
             Ok(true)
@@ -151,7 +151,7 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
                 return Ok(false);
             }
             for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Type.into(), this, that);
+                cmp.enqueue(Term::type_(), this, that);
             }
             Ok(true)
         }
@@ -159,9 +159,9 @@ pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, P
             if this_ops.len() != that_ops.len() {
                 return Ok(false);
             }
-            cmp.enqueue(Type.into(), this_ty, that_ty);
+            cmp.enqueue(Term::type_(), this_ty, that_ty);
             for (this, that) in this_ops.into_iter().zip(that_ops) {
-                cmp.enqueue(Type.into(), this, that);
+                cmp.enqueue(Term::type_(), this, that);
             }
             Ok(true)
         }

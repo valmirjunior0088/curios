@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, AtomType, BlnMatch, Context, Error, FuncType, Let, Match, Nat, NatMatch, One, Prim,
-        Proj, Rec, Scope, Subterm, Telescope, Term, TupleType, Two, Type, Var, erase, reduce_with,
+        Proj, Rec, Scope, Subterm, Telescope, Term, TupleType, Two, Var, erase, reduce_with,
         refine_head,
     },
     std::collections::BTreeMap,
@@ -9,9 +9,9 @@ use {
 
 fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
     match prim {
-        Prim::BlnType => Ok(Type.into()),
+        Prim::BlnType => Ok(Term::type_()),
         Prim::Bln(_) => Ok(Subterm::Prim(Prim::BlnType).into()),
-        Prim::NatType => Ok(Type.into()),
+        Prim::NatType => Ok(Term::type_()),
         Prim::Nat(_) => Ok(Subterm::Prim(Prim::NatType).into()),
         Prim::NatEql(left, right)
         | Prim::NatNeq(left, right)
@@ -34,7 +34,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Subterm::Prim(Prim::NatType).into())
         }
-        Prim::IntType => Ok(Type.into()),
+        Prim::IntType => Ok(Term::type_()),
         Prim::Int(_) => Ok(Subterm::Prim(Prim::IntType).into()),
         Prim::IntEql(left, right)
         | Prim::IntNeq(left, right)
@@ -57,7 +57,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Subterm::Prim(Prim::IntType).into())
         }
-        Prim::FltType => Ok(Type.into()),
+        Prim::FltType => Ok(Term::type_()),
         Prim::Flt(_) => Ok(Subterm::Prim(Prim::FltType).into()),
         Prim::FltAdd(left, right)
         | Prim::FltSub(left, right)
@@ -137,7 +137,7 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 
             Ok(Subterm::Prim(Prim::IntType).into())
         }
-        Prim::BinType => Ok(Type.into()),
+        Prim::BinType => Ok(Term::type_()),
         Prim::Bin(_) => Ok(Subterm::Prim(Prim::BinType).into()),
         Prim::BinLen(bin) => {
             let bin_type = infer(context, bin)?;
@@ -210,25 +210,25 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             Ok(Subterm::Prim(Prim::BinType).into())
         }
         Prim::ArrType(elem) => {
-            erase(context, elem, &Type.into())?;
-            Ok(Type.into())
+            erase(context, elem, &Term::type_())?;
+            Ok(Term::type_())
         }
         Prim::Arr(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
         Prim::ArrLen(type_, list) => {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             erase(context, list, &expected_list_type)?;
             Ok(Subterm::Prim(Prim::NatType).into())
         }
         Prim::ArrGet(type_, list, index) => {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             erase(context, list, &expected_list_type)?;
             erase(context, index, &Subterm::Prim(Prim::NatType).into())?;
             Ok(type_.clone())
         }
         Prim::ArrSlice(type_, list, start, end) => {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             erase(context, list, &expected_list_type)?;
             erase(context, start, &Subterm::Prim(Prim::NatType).into())?;
@@ -236,14 +236,14 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
             Ok(expected_list_type)
         }
         Prim::ArrAppend(type_, list, elem) => {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             erase(context, list, &expected_list_type)?;
             erase(context, elem, type_)?;
             Ok(expected_list_type)
         }
         Prim::ArrConcat(type_, operands) => {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             for operand in operands {
                 erase(context, operand, &expected_list_type)?;
@@ -261,11 +261,11 @@ fn infer_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
 fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> {
     fn walk(context: &mut Context, tele: Telescope<Term>) -> Result<(), Error> {
         match tele {
-            Telescope::Done(body) => erase(context, &body, &Type.into()).map(|_| ()),
+            Telescope::Done(body) => erase(context, &body, &Term::type_()).map(|_| ()),
             Telescope::Cons(ty, rest) => {
-                erase(context, &ty, &Type.into())?;
+                erase(context, &ty, &Term::type_())?;
                 let name = context.fresh(rest.first_label());
-                let x = Term::from(Var::free(&name));
+                let x = Term::var(Var::free(&name));
                 context.assume(&name, &ty);
                 walk(context, rest.open(&[&x]))
             }
@@ -274,7 +274,7 @@ fn infer_func_type(context: &mut Context, ft: &FuncType) -> Result<Term, Error> 
 
     context.with_frame(|context| walk(context, ft.telescope.clone()))?;
 
-    Ok(Type.into())
+    Ok(Term::type_())
 }
 
 fn infer_apply(context: &mut Context, apply: &Apply, term: &Term) -> Result<Term, Error> {
@@ -315,9 +315,9 @@ fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error
         match tele {
             Telescope::Done(_) => Ok(()),
             Telescope::Cons(ty, rest) => {
-                erase(context, &ty, &Type.into())?;
+                erase(context, &ty, &Term::type_())?;
                 let name = context.fresh(rest.first_label());
-                let x = Term::from(Var::free(&name));
+                let x = Term::var(Var::free(&name));
                 context.assume(&name, &ty);
                 walk(context, rest.open(&[&x]))
             }
@@ -326,7 +326,7 @@ fn infer_tuple_type(context: &mut Context, tt: &TupleType) -> Result<Term, Error
 
     context.with_frame(|context| walk(context, tt.telescope.clone()))?;
 
-    Ok(Type.into())
+    Ok(Term::type_())
 }
 
 fn infer_nat_induction(
@@ -351,8 +351,8 @@ fn infer_nat_induction(
 
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
         .map(|_| ())
     })?;
@@ -368,13 +368,19 @@ fn infer_nat_induction(
 
     context.with_frame(|context| {
         context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
-        context.assume(&ih_label, &motive.open(&[&Var::free(&pred_label).into()]));
+        context.assume(
+            &ih_label,
+            &motive.open(&[&Term::var(Var::free(&pred_label))]),
+        );
 
         erase(
             context,
-            &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
+            &succ_case.open(&[
+                &Term::var(Var::free(&pred_label)),
+                &Term::var(Var::free(&ih_label)),
+            ]),
             &motive.open(&[&Subterm::Prim(Prim::nat_add(
-                Var::free(&pred_label),
+                Term::var(Var::free(&pred_label)),
                 Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into()]),
@@ -406,8 +412,8 @@ fn infer_nat_dispatch(
         context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
         .map(|_| ())
     })?;
@@ -471,8 +477,8 @@ fn infer_bln_match(context: &mut Context, bm: &BlnMatch, term: &Term) -> Result<
         context.assume(&head_label, &Subterm::Prim(Prim::BlnType).into());
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
         .map(|_| ())
     })?;
@@ -546,8 +552,8 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
 
         erase(
             context,
-            &motive.open(&[&Var::free(head_label).into()]),
-            &Type.into(),
+            &motive.open(&[&Term::var(Var::free(head_label))]),
+            &Term::type_(),
         )
         .map(|_| ())
     })?;
@@ -567,10 +573,10 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
             return Err(Error::match_case_missing(term.clone(), atom.clone()));
         };
 
-        let expected = motive.open(&[&atom.clone().into()]);
+        let expected = motive.open(&[&Term::atom(atom.clone())]);
 
         context.with_frame(|context| {
-            refine_head(context, head, &atom.clone().into())?;
+            refine_head(context, head, &Term::atom(atom.clone()))?;
             erase(context, body, &expected)
         })?;
     }
@@ -581,7 +587,7 @@ fn infer_match(context: &mut Context, m: &Match, term: &Term) -> Result<Term, Er
 fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     let Let { type_, body, tail } = let_;
 
-    erase(context, type_, &Type.into())?;
+    erase(context, type_, &Term::type_())?;
     erase(context, body, type_)?;
 
     let label = context.fresh(tail.first_label());
@@ -589,7 +595,7 @@ fn infer_let(context: &mut Context, let_: &Let) -> Result<Term, Error> {
     context.with_frame(|context| {
         context.define_assuming(&label, type_, body);
 
-        let tail_type = infer(context, &tail.open(&[&Var::free(label).into()]))?;
+        let tail_type = infer(context, &tail.open(&[&Term::var(Var::free(label))]))?;
 
         reduce_with(context, &tail_type)
     })
@@ -606,7 +612,7 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
     let label_terms = labels
         .iter()
         .map(Var::free)
-        .map(Into::into)
+        .map(Term::var)
         .collect::<Vec<_>>();
 
     let label_terms = label_terms.iter().collect::<Vec<_>>();
@@ -624,7 +630,7 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
         }
 
         for (type_, _) in &items {
-            erase(context, type_, &Type.into())?;
+            erase(context, type_, &Term::type_())?;
         }
 
         for (label, (_, body)) in labels.iter().zip(items.iter()) {
@@ -643,7 +649,7 @@ fn infer_rec(context: &mut Context, rec: &Rec) -> Result<Term, Error> {
 
 pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     let result = match &**term {
-        Subterm::Type => Ok(Type.into()),
+        Subterm::Type => Ok(Term::type_()),
         Subterm::Prim(prim) => infer_prim(context, prim),
         Subterm::BlnMatch(bm) => infer_bln_match(context, bm, term),
         Subterm::NatMatch(nm) => infer_nat_match(context, nm, term),
@@ -651,13 +657,13 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
         Subterm::Apply(apply) => infer_apply(context, apply, term),
         Subterm::TupleType(tt) => infer_tuple_type(context, tt),
         Subterm::Proj(proj) => infer_proj(context, proj, term),
-        Subterm::AtomType(_) => Ok(Type.into()),
+        Subterm::AtomType(_) => Ok(Term::type_()),
         Subterm::Match(m) => infer_match(context, m, term),
         Subterm::Let(let_) => infer_let(context, let_),
         Subterm::Rec(rec) => infer_rec(context, rec),
         Subterm::Var(var) => match context.assumption(var.unwrap()) {
             Some(type_) => Ok(type_.clone()),
-            None => Err(Error::unbound_variable(var.clone())),
+            None => Err(Error::unbound_variable(Term::var(var.clone()))),
         },
         _ => Err(Error::cannot_infer(term.clone())),
     };

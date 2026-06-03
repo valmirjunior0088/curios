@@ -1,7 +1,7 @@
 use {
     super::erase,
     crate::{
-        core::{Context, Error, Nat, Prim, Subterm, Term, Type, expect, infer, reduce_with},
+        core::{Context, Error, Nat, Prim, Subterm, Term, expect, infer, reduce_with},
         ersd,
     },
     num_bigint::BigUint,
@@ -13,7 +13,7 @@ fn narrow_nat(k: &BigUint) -> Result<u32, Error> {
 }
 
 fn type_type() -> Term {
-    Type.into()
+    Term::type_()
 }
 
 fn prim_type(prim: Prim) -> Term {
