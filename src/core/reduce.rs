@@ -128,7 +128,7 @@ fn reduce_nat_dispatch(
     context: &mut Context,
     head: Subterm,
     motive: Scope<One>,
-    cases: BTreeMap<usize, Term>,
+    cases: BTreeMap<u32, Term>,
     default: Term,
 ) -> Result<Reduce, Preempted> {
     match Term::unwrap_or_clone(reduce(context, head.into())?) {
@@ -139,7 +139,7 @@ fn reduce_nat_dispatch(
         Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
             if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
         {
-            match spine.to_usize().and_then(|k| cases.get(&k)) {
+            match spine.to_u32().and_then(|k| cases.get(&k)) {
                 Some(body) => Ok(Reduce::Continue(body.clone())),
                 None => Ok(Reduce::Continue(default.clone())),
             }

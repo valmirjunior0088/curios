@@ -294,7 +294,7 @@ impl Term {
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (usize, B)>,
+        I: IntoIterator<Item = (u32, B)>,
         B: Into<Term>,
         D: Into<Term>,
     {
@@ -654,7 +654,7 @@ pub enum NatMatch {
     Dispatch {
         head: Term,
         motive: Scope<One>,
-        cases: BTreeMap<usize, Term>,
+        cases: BTreeMap<u32, Term>,
         default: Term,
     },
 }

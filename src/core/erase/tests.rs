@@ -538,7 +538,7 @@ fn erase_nat_match_dispatches_to_named_case() {
         Term::prim(Prim::Nat(Nat::new(5usize))),
         Some("m"),
         Term::atom_type(["false", "true"]),
-        [(5usize, Term::from(Term::atom(Atom::from("true"))))],
+        [(5u32, Term::from(Term::atom(Atom::from("true"))))],
         Term::atom(Atom::from("false")),
     );
 
@@ -555,7 +555,7 @@ fn erase_nat_match_rejects_non_nat_head() {
         Term::prim(Prim::Int(Int::new(0))),
         Some("m"),
         Term::atom_type(["false", "true"]),
-        [(0usize, Term::from(Term::atom(Atom::from("true"))))],
+        [(0u32, Term::from(Term::atom(Atom::from("true"))))],
         Term::atom(Atom::from("false")),
     );
 

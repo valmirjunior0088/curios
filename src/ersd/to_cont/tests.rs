@@ -4,6 +4,7 @@ use {
         cont,
         ersd::{Apply, Func, Let, Name, NatMatch, Prim, Rec, Term, Tuple},
     },
+    std::collections::BTreeMap,
 };
 
 #[test]
@@ -11,14 +12,14 @@ fn lowers_recursive_pairs_into_main_region_values() {
     let term = Term::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![
-            Term::from(Tuple {
+            Term::Tuple(Tuple {
                 fields: vec![
                     Term::Name(Name::from("y")).into(),
                     Term::Prim(Prim::Int(1)).into(),
                 ],
             })
             .into(),
-            Term::from(Tuple {
+            Term::Tuple(Tuple {
                 fields: vec![
                     Term::Prim(Prim::Int(2)).into(),
                     Term::Name(Name::from("x")).into(),
@@ -197,10 +198,10 @@ fn lowers_apply_in_value_position_through_join_block() {
 fn lowers_nat_match_as_sparse_match() {
     let term = Term::NatMatch(NatMatch::Dispatch {
         head: Term::Prim(Prim::Nat(7)).into(),
-        cases: vec![
+        cases: BTreeMap::from([
             (2, Term::Prim(Prim::Nat(10)).into()),
             (7, Term::Prim(Prim::Nat(20)).into()),
-        ],
+        ]),
         default: Term::Prim(Prim::Nat(0)).into(),
     });
 
@@ -234,14 +235,14 @@ fn recursive_pairs_declare_preallocs() {
     let term = Term::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![
-            Term::from(Tuple {
+            Term::Tuple(Tuple {
                 fields: vec![
                     Term::Name(Name::from("y")).into(),
                     Term::Prim(Prim::Int(1)).into(),
                 ],
             })
             .into(),
-            Term::from(Tuple {
+            Term::Tuple(Tuple {
                 fields: vec![
                     Term::Prim(Prim::Int(2)).into(),
                     Term::Name(Name::from("x")).into(),
@@ -279,14 +280,14 @@ fn lowers_cross_region_rec_through_resume_block() {
     let term = Term::Rec(Rec {
         names: vec!["f".into(), "g".into()],
         items: vec![
-            Term::from(Func {
+            Term::Func(Func {
                 captures: vec!["g".into()],
                 params: vec!["x".into()],
                 body: Term::Name(Name::from("g")).into(),
             })
             .into(),
-            Term::from(Apply {
-                head: Term::from(id()).into(),
+            Term::Apply(Apply {
+                head: Term::Func(id()).into(),
                 params: vec![Term::Name(Name::from("f")).into()],
             })
             .into(),
@@ -322,13 +323,13 @@ fn rejects_apply_apply_cycle() {
     let term = Term::Rec(Rec {
         names: vec!["a".into(), "b".into()],
         items: vec![
-            Term::from(Apply {
-                head: Term::from(id()).into(),
+            Term::Apply(Apply {
+                head: Term::Func(id()).into(),
                 params: vec![Term::Name(Name::from("b")).into()],
             })
             .into(),
-            Term::from(Apply {
-                head: Term::from(id()).into(),
+            Term::Apply(Apply {
+                head: Term::Func(id()).into(),
                 params: vec![Term::Name(Name::from("a")).into()],
             })
             .into(),

@@ -108,7 +108,7 @@ pub enum NatMatch {
     Dispatch {
         head: Term,
         motive: Motive,
-        cases: BTreeMap<usize, Term>,
+        cases: BTreeMap<u32, Term>,
         default: Term,
     },
 }

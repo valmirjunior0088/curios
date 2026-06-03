@@ -162,24 +162,37 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
 fn parse_nat_succ<'a>() -> Parser<'a, Term> {
     let lit_first = catch(parse_nat_literal().and_drop(parse_literal("+")))
         .and(parse_atomic_term())
-        .map(|(spine, base)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::number(spine), base))));
+        .map(|(spine, base)| Subterm::Prim(Prim::Nat(Nat::Succ(spine, base))));
 
     let base_first = catch(parse_atomic_term().and_drop(parse_literal("+")))
         .and(parse_nat_literal())
-        .map(|(base, spine)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::number(spine), base))));
+        .map(|(base, spine)| Subterm::Prim(Prim::Nat(Nat::Succ(spine, base))));
 
     lit_first.or(base_first).map(Into::into)
 }
 
-fn parse_nat_literal<'a>() -> Parser<'a, BigUint> {
+fn parse_nat_literal<'a>() -> Parser<'a, NatLiteral> {
     catch(
         take_exact("'")
             .and_keep(parse_char_value())
             .and_drop(take_exact("'"))
             .and_drop(parse_whitespace()),
     )
-    .map(|c| BigUint::from(c as usize))
-    .or(catch(parse_nat_digits()))
+    .map(NatLiteral::Char)
+    .or(catch(parse_nat_digits()).map(NatLiteral::number))
+}
+
+fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
+    parse_nat_literal().flat_map(|lit| {
+        let n = match lit {
+            NatLiteral::Number(n) => n,
+            NatLiteral::Char(c) => BigUint::from(c as u32),
+        };
+        match n.to_u32() {
+            Some(k) => pure(k),
+            None => fail("nat literal too large for u32"),
+        }
+    })
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -494,12 +507,9 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
             catch(
                 parse_literal("|")
                     .and_keep(parse_nat_literal())
-                    .flat_map(|n| {
-                        if n.is_zero() {
-                            pure(())
-                        } else {
-                            fail("expected 0 as NatFold zero case")
-                        }
+                    .flat_map(|lit| match lit {
+                        NatLiteral::Number(n) if n.is_zero() => pure(()),
+                        _ => fail("expected 0 as NatFold zero case"),
                     })
                     .and_drop(parse_literal("=>"))
                     .and_keep(lazy(parse_term)),
@@ -528,12 +538,8 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_nat_case<'a>() -> Parser<'a, (usize, Term)> {
-    catch(parse_literal("|").and_keep(parse_nat_literal()))
-        .flat_map(|n| match n.to_usize() {
-            Some(k) => pure(k),
-            None => fail("nat case label too large"),
-        })
+fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {
+    catch(parse_literal("|").and_keep(parse_nat_literal_u32()))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
 }

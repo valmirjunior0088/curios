@@ -57,12 +57,11 @@ fn erase_func(
         erase(context, &body_opened, &output_type)
     })?;
 
-    Ok(ersd::Func {
+    Ok(ersd::Term::Func(ersd::Func {
         captures,
         params: param_names,
         body: erased_body.into(),
-    }
-    .into())
+    }))
 }
 
 fn erase_apply(
@@ -111,11 +110,10 @@ fn erase_apply(
 
     expect(context, term, &result_type, expected)?;
 
-    Ok(ersd::Apply {
+    Ok(ersd::Term::Apply(ersd::Apply {
         head: erased_head.into(),
         params: erased_params.into_iter().map(|p| p.into()).collect(),
-    }
-    .into())
+    }))
 }
 
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
@@ -158,10 +156,9 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
     let mut erased_fields = Vec::<ersd::Subterm>::new();
     walk(context, type_telescope, fields, &mut erased_fields)?;
 
-    Ok(ersd::Tuple {
+    Ok(ersd::Term::Tuple(ersd::Tuple {
         fields: erased_fields,
-    }
-    .into())
+    }))
 }
 
 fn erase_nat_induction(
@@ -226,21 +223,20 @@ fn erase_nat_induction(
 
     expect(context, term, &motive.open(&[head]), expected)?;
 
-    Ok(ersd::NatMatch::Induction {
+    Ok(ersd::Term::NatMatch(ersd::NatMatch::Induction {
         head: erased_head.into(),
         zero_case: erased_zero_case.into(),
         pred: pred_label,
         ih: ih_label,
         succ_case: erased_succ_case.into(),
-    }
-    .into())
+    }))
 }
 
 fn erase_nat_dispatch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<One>,
-    cases: &BTreeMap<usize, Term>,
+    cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
     expected: &Term,
@@ -273,10 +269,10 @@ fn erase_nat_dispatch(
                     head,
                     &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
                 )?;
-                erase(context, body, &case_expected).map(|e| (*n as u32, e.into()))
+                erase(context, body, &case_expected).map(|e| (*n, e.into()))
             })
         })
-        .collect::<Result<Vec<_>, Error>>()?;
+        .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
     let erased_default = erase(context, default, &motive.open(&[head]))?;
 
@@ -284,12 +280,11 @@ fn erase_nat_dispatch(
 
     expect(context, term, &motive.open(&[head]), expected)?;
 
-    Ok(ersd::NatMatch::Dispatch {
+    Ok(ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
         head: erased_head.into(),
         cases: erased_cases,
         default: erased_default.into(),
-    }
-    .into())
+    }))
 }
 
 fn erase_nat_match(
@@ -367,12 +362,11 @@ fn erase_bln_match(
 
     expect(context, term, &motive.open(&[head]), expected)?;
 
-    Ok(ersd::NatMatch::Dispatch {
+    Ok(ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
         head: erased_head.into(),
-        cases: vec![(0, erased_false.into())],
+        cases: BTreeMap::from([(0, erased_false.into())]),
         default: erased_true.into(),
-    }
-    .into())
+    }))
 }
 
 fn erase_proj(
@@ -405,11 +399,10 @@ fn erase_proj(
 
     expect(context, term, &field_type, expected)?;
 
-    Ok(ersd::Proj {
+    Ok(ersd::Term::Proj(ersd::Proj {
         head: erase(context, head, &head_type)?.into(),
         index: *index,
-    }
-    .into())
+    }))
 }
 
 fn erase_atom(
@@ -440,7 +433,7 @@ fn erase_atom(
             )
         })?;
 
-    Ok(ersd::Atom { index }.into())
+    Ok(ersd::Term::Atom(ersd::Atom { index }))
 }
 
 fn erase_match(
@@ -503,11 +496,10 @@ fn erase_match(
 
     expect(context, term, &motive.open(&[head]), expected)?;
 
-    Ok(ersd::Match {
+    Ok(ersd::Term::Match(ersd::Match {
         head: erase(context, head, &head_type)?.into(),
         cases,
-    }
-    .into())
+    }))
 }
 
 fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd::Term, Error> {
@@ -530,12 +522,11 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
         erase(context, &tail, expected)
     })?;
 
-    Ok(ersd::Let {
+    Ok(ersd::Term::Let(ersd::Let {
         name,
         body: erased_body.into(),
         tail: tail.into(),
-    }
-    .into())
+    }))
 }
 
 fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::Term, Error> {
@@ -586,7 +577,7 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
         })
     })?;
 
-    Ok(erased.into())
+    Ok(ersd::Term::Rec(erased))
 }
 
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
@@ -624,7 +615,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         Subterm::Var(var) => {
             let t = infer(context, term)?;
             expect(context, term, &t, expected)?;
-            Ok(ersd::Name::from(var.unwrap()).into())
+            Ok(ersd::Term::Name(ersd::Name::from(var.unwrap())))
         }
     };
 

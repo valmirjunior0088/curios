@@ -1,6 +1,6 @@
 use {
     super::{Name, Prim},
-    std::collections::BTreeSet,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 pub type Subterm = Box<Term>;
@@ -16,7 +16,7 @@ pub enum NatMatch {
     },
     Dispatch {
         head: Subterm,
-        cases: Vec<(u32, Subterm)>,
+        cases: BTreeMap<u32, Subterm>,
         default: Subterm,
     },
 }
@@ -167,68 +167,3 @@ impl Term {
     }
 }
 
-impl From<Prim> for Term {
-    fn from(value: Prim) -> Self {
-        Self::Prim(value)
-    }
-}
-
-impl From<NatMatch> for Term {
-    fn from(value: NatMatch) -> Self {
-        Self::NatMatch(value)
-    }
-}
-
-impl From<Func> for Term {
-    fn from(value: Func) -> Self {
-        Self::Func(value)
-    }
-}
-
-impl From<Apply> for Term {
-    fn from(value: Apply) -> Self {
-        Self::Apply(value)
-    }
-}
-
-impl From<Tuple> for Term {
-    fn from(value: Tuple) -> Self {
-        Self::Tuple(value)
-    }
-}
-
-impl From<Proj> for Term {
-    fn from(value: Proj) -> Self {
-        Self::Proj(value)
-    }
-}
-
-impl From<Atom> for Term {
-    fn from(value: Atom) -> Self {
-        Self::Atom(value)
-    }
-}
-
-impl From<Match> for Term {
-    fn from(value: Match) -> Self {
-        Self::Match(value)
-    }
-}
-
-impl From<Let> for Term {
-    fn from(value: Let) -> Self {
-        Self::Let(value)
-    }
-}
-
-impl From<Rec> for Term {
-    fn from(value: Rec) -> Self {
-        Self::Rec(value)
-    }
-}
-
-impl From<Name> for Term {
-    fn from(value: Name) -> Self {
-        Self::Name(value)
-    }
-}

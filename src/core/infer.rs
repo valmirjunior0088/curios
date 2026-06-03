@@ -395,7 +395,7 @@ fn infer_nat_dispatch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<One>,
-    cases: &BTreeMap<usize, Term>,
+    cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
 ) -> Result<Term, Error> {
