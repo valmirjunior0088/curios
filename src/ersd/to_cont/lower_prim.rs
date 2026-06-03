@@ -60,10 +60,10 @@ fn lower_unary_code<'b>(
     work.lower_value_name(
         operand,
         frame,
-        Box::new(move |work, operand| {
+        Cont::new(move |work, operand| {
             let value = work.fresh(cont::Value::Eval(code(operand)));
 
-            cont(work, value)
+            cont.call(work, value)
         }),
     )
 }
@@ -79,14 +79,14 @@ fn lower_binary_code<'b>(
     work.lower_value_name(
         left,
         frame,
-        Box::new(move |work, left| {
+        Cont::new(move |work, left| {
             work.lower_value_name(
                 right,
                 frame,
-                Box::new(move |work, right| {
+                Cont::new(move |work, right| {
                     let value = work.fresh(cont::Value::Eval(code(left, right)));
 
-                    cont(work, value)
+                    cont.call(work, value)
                 }),
             )
         }),
@@ -105,18 +105,18 @@ fn lower_ternary_code<'b>(
     work.lower_value_name(
         first,
         frame,
-        Box::new(move |work, first| {
+        Cont::new(move |work, first| {
             work.lower_value_name(
                 second,
                 frame,
-                Box::new(move |work, second| {
+                Cont::new(move |work, second| {
                     work.lower_value_name(
                         third,
                         frame,
-                        Box::new(move |work, third| {
+                        Cont::new(move |work, third| {
                             let value = work.fresh(cont::Value::Eval(code(first, second, third)));
 
-                            cont(work, value)
+                            cont.call(work, value)
                         }),
                     )
                 }),
@@ -136,12 +136,12 @@ fn lower_lst<'b>(
         [] => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Arr(names)));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         [head, tail @ ..] => work.lower_value_name(
             head,
             frame,
-            Box::new(move |work, name| {
+            Cont::new(move |work, name| {
                 names.push(name);
                 lower_lst(work, tail, frame, names, cont)
             }),
@@ -160,12 +160,12 @@ fn lower_bin_concat<'b>(
         [] => {
             let value = work.fresh(cont::Value::Eval(cont::Code::BinConcat(names)));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         [head, tail @ ..] => work.lower_value_name(
             head,
             frame,
-            Box::new(move |work, name| {
+            Cont::new(move |work, name| {
                 names.push(name);
                 lower_bin_concat(work, tail, frame, names, cont)
             }),
@@ -184,12 +184,12 @@ fn lower_arr_concat<'b>(
         [] => {
             let value = work.fresh(cont::Value::Eval(cont::Code::ArrConcat(names)));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         [head, tail @ ..] => work.lower_value_name(
             head,
             frame,
-            Box::new(move |work, name| {
+            Cont::new(move |work, name| {
                 names.push(name);
                 lower_arr_concat(work, tail, frame, names, cont)
             }),
@@ -409,7 +409,7 @@ pub fn lower_value_prim<'b>(
         ersd::Prim::Nat(value) => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Nat(*value)));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         ersd::Prim::NatEql(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::NatEql)
@@ -447,12 +447,12 @@ pub fn lower_value_prim<'b>(
         ersd::Prim::Int(value) => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Int(*value)));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         ersd::Prim::Flt(value) => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Flt(*value)));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         ersd::Prim::IntEql(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::IntEql)
@@ -574,7 +574,7 @@ pub fn lower_value_prim<'b>(
         ersd::Prim::Bin(bytes) => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Bin(bytes.clone())));
 
-            cont(work, value)
+            cont.call(work, value)
         }
         ersd::Prim::BinLen(bin) => lower_unary_code(work, bin, frame, cont, cont::Code::BinLen),
         ersd::Prim::BinEql(left, right) => {
@@ -604,14 +604,14 @@ pub fn lower_value_prim<'b>(
         ersd::Prim::ArrConcat(operands) => lower_arr_concat(work, operands, frame, vec![], cont),
         ersd::Prim::Unit => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
-            cont(work, value)
+            cont.call(work, value)
         }
         ersd::Prim::IoPrint(operand) => {
             lower_unary_code(work, operand, frame, cont, cont::Code::IoPrint)
         }
         ersd::Prim::IoRead => {
             let value = work.fresh(cont::Value::Eval(cont::Code::IoRead));
-            cont(work, value)
+            cont.call(work, value)
         }
     }
 }

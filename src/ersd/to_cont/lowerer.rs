@@ -220,11 +220,11 @@ impl Work<'_, '_, '_> {
         cont: Cont<'_>,
     ) -> cont::Tail {
         match term {
-            ersd::Term::Name(name) => cont(self, frame.find(name.as_str())),
+            ersd::Term::Name(name) => cont.call(self, frame.find(name.as_str())),
             ersd::Term::Erased => {
                 let value = self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
 
-                cont(self, value)
+                cont.call(self, value)
             }
             ersd::Term::Prim(prim) => lower_value_prim(self, prim, frame, cont),
             ersd::Term::Func(func) => {
@@ -234,7 +234,7 @@ impl Work<'_, '_, '_> {
                     captured_values,
                 )));
 
-                cont(self, value)
+                cont.call(self, value)
             }
             ersd::Term::Tuple(s) => self.lower_struct(&s.fields, frame, vec![], cont),
             ersd::Term::Atom(atom) => {
@@ -242,7 +242,7 @@ impl Work<'_, '_, '_> {
                     .emit
                     .fresh(cont::Value::Pure(cont::Data::Nat(atom.index as u32)));
 
-                cont(self, value)
+                cont.call(self, value)
             }
             ersd::Term::Let(let_) => {
                 let name = let_.name.clone();
@@ -250,7 +250,7 @@ impl Work<'_, '_, '_> {
                 self.lower_value_name(
                     &let_.body,
                     frame,
-                    Box::new(move |work, body| {
+                    Cont::new(move |work, body| {
                         let frame = frame.extended([(name, body)]);
 
                         work.lower_value_name(&let_.tail, &frame, cont)
@@ -260,7 +260,7 @@ impl Work<'_, '_, '_> {
             ersd::Term::Rec(letrec) => self.lower_rec(
                 letrec,
                 frame,
-                Box::new(move |work, frame| work.lower_value_name(&letrec.tail, frame, cont)),
+                RecBody::new(move |work, frame| work.lower_value_name(&letrec.tail, frame, cont)),
             ),
             ersd::Term::Proj(proj) => {
                 let index = proj.index;
@@ -268,19 +268,19 @@ impl Work<'_, '_, '_> {
                 self.lower_value_name(
                     &proj.head,
                     frame,
-                    Box::new(move |work, head| {
+                    Cont::new(move |work, head| {
                         let v = work
                             .emit
                             .fresh(cont::Value::Eval(cont::Code::TplGet(head, index)));
 
-                        cont(work, v)
+                        cont.call(work, v)
                     }),
                 )
             }
             ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
                 let block = self.emit.fresh_block();
                 let param = self.emit.fresh_value();
-                let region = self.in_subregion(|work| cont(work, param.clone()));
+                let region = self.in_subregion(|work| cont.call(work, param.clone()));
 
                 self.emit.add_block(
                     block.clone(),
@@ -303,11 +303,11 @@ impl Work<'_, '_, '_> {
         cont: ContMany<'b>,
     ) -> cont::Tail {
         match params {
-            [] => cont(self, names),
+            [] => cont.call(self, names),
             [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
-                Box::new(move |work, name| {
+                Cont::new(move |work, name| {
                     names.push(name);
                     work.lower_names(tail, frame, names, cont)
                 }),
@@ -326,12 +326,12 @@ impl Work<'_, '_, '_> {
             [] => {
                 let value = self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(names)));
 
-                cont(self, value)
+                cont.call(self, value)
             }
             [head, tail @ ..] => self.lower_value_name(
                 head,
                 frame,
-                Box::new(move |work, name| {
+                Cont::new(move |work, name| {
                     names.push(name);
                     work.lower_struct(tail, frame, names, cont)
                 }),
@@ -457,12 +457,12 @@ impl Work<'_, '_, '_> {
             })
             .collect::<Vec<_>>();
 
-        let backpatch_body: RecBody<'b> = Box::new(move |work, frame| {
+        let backpatch_body: RecBody<'b> = RecBody::new(move |work, frame| {
             for (target, backpatch) in &backpatches {
                 work.emit_backpatch(target.clone(), backpatch, frame);
             }
 
-            body(work, frame)
+            body.call(work, frame)
         });
 
         self.lower_rec_computed(&sorted, &frame, backpatch_body)
@@ -475,14 +475,14 @@ impl Work<'_, '_, '_> {
         body: RecBody<'b>,
     ) -> cont::Tail {
         match computed {
-            [] => body(self, frame),
+            [] => body.call(self, frame),
             [(target, rhs), rest @ ..] => {
                 let target = target.clone();
 
                 self.lower_value_name(
                     rhs,
                     frame,
-                    Box::new(move |work, result| {
+                    Cont::new(move |work, result| {
                         work.emit.add_value(target, cont::Value::Alias(result));
                         work.lower_rec_computed(rest, frame, body)
                     }),
@@ -501,25 +501,19 @@ impl Work<'_, '_, '_> {
             ersd::Term::Apply(apply) => self.lower_value_name(
                 &apply.head,
                 frame,
-                Box::new(move |work, head| {
+                Cont::new(move |work, head| {
                     work.lower_names(
                         &apply.params,
                         frame,
                         vec![],
-                        Box::new(move |_, params| {
-                            cont::Tail::Call(cont::CallTarget::Indirect {
-                                target: head,
-                                params,
-                                resume: resume.clone(),
-                            })
-                        }),
+                        ContMany::call_indirect(head, resume.clone()),
                     )
                 }),
             ),
             ersd::Term::Match(m) => self.lower_value_name(
                 &m.head,
                 frame,
-                Box::new(move |work, head| {
+                Cont::new(move |work, head| {
                     let mut cases = BTreeMap::new();
 
                     for (i, branch) in m.cases.iter().enumerate() {
@@ -559,7 +553,7 @@ impl Work<'_, '_, '_> {
             }) => self.lower_value_name(
                 nat_head,
                 frame,
-                Box::new(move |work, head| {
+                Cont::new(move |work, head| {
                     // Constants shared across the loop.
                     let zero_nat = work.emit.fresh(cont::Value::Pure(cont::Data::Nat(0)));
                     let one_nat = work.emit.fresh(cont::Value::Pure(cont::Data::Nat(1)));
@@ -697,7 +691,7 @@ impl Work<'_, '_, '_> {
             }) => self.lower_value_name(
                 nm_head,
                 frame,
-                Box::new(move |work, head| {
+                Cont::new(move |work, head| {
                     let mut cases = BTreeMap::new();
 
                     for (val, branch) in nm_cases.iter() {
@@ -744,7 +738,7 @@ impl Work<'_, '_, '_> {
                 self.lower_value_name(
                     &let_.body,
                     frame,
-                    Box::new(move |work, body| {
+                    Cont::new(move |work, body| {
                         let frame = frame.extended([(name, body)]);
                         work.lower_tail(&let_.tail, &frame, resume)
                     }),
@@ -753,18 +747,9 @@ impl Work<'_, '_, '_> {
             ersd::Term::Rec(letrec) => self.lower_rec(
                 letrec,
                 frame,
-                Box::new(move |work, frame| work.lower_tail(&letrec.tail, frame, resume)),
+                RecBody::new(move |work, frame| work.lower_tail(&letrec.tail, frame, resume)),
             ),
-            _ => self.lower_value_name(
-                term,
-                frame,
-                Box::new(move |_, value| {
-                    cont::Tail::Jump(cont::JumpTarget {
-                        target: resume.clone(),
-                        params: vec![value],
-                    })
-                }),
-            ),
+            _ => self.lower_value_name(term, frame, Cont::jump_to(resume.clone())),
         }
     }
 }
