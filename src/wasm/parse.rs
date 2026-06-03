@@ -235,7 +235,7 @@ fn parse_array_type<'a>() -> Parser<'a, ArrayType> {
     catch(parse_literal("(").and_drop(parse_literal("array")))
         .and_keep(parse_field_type())
         .and_drop(parse_literal(")"))
-        .map(ArrayType::from)
+        .map(|field_type| ArrayType { field_type })
 }
 
 fn parse_field<'a>() -> Parser<'a, (FieldName, FieldType)> {

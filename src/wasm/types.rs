@@ -107,12 +107,6 @@ pub struct ArrayType {
     pub field_type: FieldType,
 }
 
-impl From<FieldType> for ArrayType {
-    fn from(field_type: FieldType) -> Self {
-        Self { field_type }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct StructType {
     pub fields: Vec<(FieldName, FieldType)>,

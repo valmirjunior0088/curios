@@ -48,10 +48,12 @@ fn main() {
         wasm::SubType {
             is_final: true,
             super_types: vec![],
-            comp_type: wasm::CompType::Array(wasm::ArrayType::from(wasm::FieldType {
-                storage_type: wasm::StorageType::Packed(wasm::PackedType::I8),
-                mutability: wasm::Mutability::Var,
-            })),
+            comp_type: wasm::CompType::Array(wasm::ArrayType {
+                field_type: wasm::FieldType {
+                    storage_type: wasm::StorageType::Packed(wasm::PackedType::I8),
+                    mutability: wasm::Mutability::Var,
+                },
+            }),
         },
     );
 

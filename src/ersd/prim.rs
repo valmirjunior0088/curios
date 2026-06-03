@@ -133,20 +133,3 @@ impl Prim {
     }
 }
 
-impl From<u32> for Prim {
-    fn from(value: u32) -> Self {
-        Self::Nat(value)
-    }
-}
-
-impl From<i32> for Prim {
-    fn from(value: i32) -> Self {
-        Self::Int(value)
-    }
-}
-
-impl From<f32> for Prim {
-    fn from(value: f32) -> Self {
-        Self::Flt(value)
-    }
-}
