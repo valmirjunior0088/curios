@@ -571,9 +571,3 @@ impl Prim {
         Self::IoPrint(inner.into())
     }
 }
-
-impl<A: Into<Term>> From<Vec<A>> for Prim {
-    fn from(items: Vec<A>) -> Self {
-        Self::Arr(items.into_iter().map(|item| item.into()).collect())
-    }
-}

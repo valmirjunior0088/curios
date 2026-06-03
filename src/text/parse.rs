@@ -140,7 +140,7 @@ fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
             .and_drop(take_exact("'"))
             .and_drop(parse_whitespace()),
     )
-    .map(NatLiteral::from)
+    .map(NatLiteral::Char)
     .or(catch(parse_nat_digits()).map(NatLiteral::number))
 }
 
@@ -1180,9 +1180,7 @@ mod tests {
     fn parse_char_literal_no_suffix_is_bin() {
         assert_eq!(
             "\"a\"".parse::<Term>().unwrap(),
-            Term::from(Subterm::Prim(Prim::Bin(BinLiteral::String(
-                "a".to_string()
-            ))))
+            Term::from(Subterm::Prim(Prim::Bin(BinLiteral::string("a"))))
         );
     }
 
@@ -1561,8 +1559,7 @@ mod tests {
                         "null".to_string(),
                         UnionCase {
                             binders: vec![],
-                            body: Subterm::Prim(Prim::Bin(BinLiteral::String("null".to_string())))
-                                .into(),
+                            body: Subterm::Prim(Prim::Bin(BinLiteral::string("null"))).into(),
                         },
                     ),
                     (

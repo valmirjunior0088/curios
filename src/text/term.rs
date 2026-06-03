@@ -14,13 +14,6 @@ pub struct Term {
 }
 
 impl Term {
-    pub fn new(subterm: Subterm) -> Self {
-        Self {
-            span: None,
-            inner: Box::new(subterm),
-        }
-    }
-
     /// Attaches a span to this term. If the term already carries a span (the
     /// innermost one), it is preserved — innermost wins, matching how
     /// `Error::at` keeps the first span it sees as errors propagate up.
@@ -53,15 +46,18 @@ impl Deref for Term {
     }
 }
 
-impl From<Subterm> for Term {
-    fn from(subterm: Subterm) -> Self {
-        Term::new(subterm)
-    }
-}
-
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
+    }
+}
+
+impl From<Subterm> for Term {
+    fn from(subterm: Subterm) -> Self {
+        Self {
+            span: None,
+            inner: Box::new(subterm),
+        }
     }
 }
 
