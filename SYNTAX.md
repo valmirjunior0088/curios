@@ -324,10 +324,12 @@ A homogeneous array of elements of type `T`. Write `/sys/Arr(/sys/Arr(/sys/Nat))
 | Type       | Description                  |
 | ---------- | ---------------------------- |
 | `/sys/Bln` | Boolean                      |
-| `/sys/Nat` | Natural number (u32)         |
+| `/sys/Nat` | Natural number               |
 | `/sys/Int` | Signed integer (i32)         |
 | `/sys/Flt` | Single-precision float (f32) |
 | `/sys/Bin` | Byte sequence                |
+
+`Nat` literals are arbitrary precision while parsing and type-level reduction are in progress. Erasure narrows runtime `Nat` values to `u32`; WebAssembly code generation then represents them as packed `i31ref`, so emitted literals must fit in the signed 31-bit range.
 
 ## Literals
 

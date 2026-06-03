@@ -1,8 +1,8 @@
 # Curios — Architecture
 
-Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with two optional external dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
+Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~30,100 lines in `src/`, ~1,700 lines in top-level Rust examples, plus ~100 lines in `examples/crs/`.
+**Codebase size:** ~30,400 lines in `src/`, ~1,700 lines in top-level Rust examples, plus ~600 lines in `examples/crs/`.
 
 ---
 
@@ -37,12 +37,12 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                        | Lines  |
 | ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,619  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~1,383 |
-| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,756 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~2,451 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 1,726  |
-| WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,379 |
+| Parsing                 | `text/parse.rs`                                    | 1,626  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~732   |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,770 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~785   |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 755    |
+| WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,635 |
 | Binary serialization    | `wasm/writer.rs`                                   | 1,691  |
 
 ---
@@ -94,7 +94,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `union Label ... end`, `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`
 
-`text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(u32) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.
+`text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(BigUint) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.
 
 ---
 
@@ -199,7 +199,7 @@ Key differences from `core`:
 - `ersd::Func` carries `captures: Vec<String>` explicitly
 - Atom labels → numeric indices (`ersd::Atom { index: usize }`)
 - `ersd::Match` cases are `Vec<Subterm>` indexed by atom order (no label keys)
-- `ersd::NatMatch` cases are `Vec<(u32, Subterm)>` (not a `BTreeMap`)
+- `ersd::NatMatch` dispatch cases are stored as `BTreeMap<u32, Subterm>`
 
 ---
 
@@ -207,7 +207,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is one of the more complex transformations in the pipeline: `lowerer.rs` is 1,726 lines, and the full `ersd/to_cont` implementation is roughly 2,400 lines.
+This is one of the more complex transformations in the pipeline: `lowerer.rs` is 755 lines, and the full `ersd/to_cont` implementation is roughly 1,800 lines.
 
 ### CPS IR structure
 
@@ -308,13 +308,13 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 
 ## Execution (`src/run.rs` and `src/run/`)
 
-`src/run.rs` re-exports everything from `src/run/{host,engine,compile,lift,lower}.rs` and defines the top-level entry points. All public entry points are generic over a host `H: Host + Send + Sync + 'static`:
+`src/run.rs` re-exports everything from `src/run/{host,engine,compile,lift,lower}.rs` and defines the top-level entry points. The execution entry points are generic over a host `H: Host + Send + Sync + 'static`:
 
 - `run_text(timeout, source, host)` — inline source with `PanicLoader`
 - `run_file(timeout, path, host)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
 - `run(timeout, source, loader, host)` — shared core: full pipeline → `run_wasm`
 - `run_wasm(wasm_module, host)` — executes a `wasm::Module` directly via Wasmtime (`src/run/engine.rs`)
-- `compile(timeout, loader, base, source, observe)` — runs the full pipeline from text to `wasm::Module` without execution; the `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
+- `compile(timeout, loader, type_, source, observe)` — runs the full pipeline from text to `wasm::Module` without execution; `type_: Option<&str>` supplies an explicit expected type when present, otherwise the type is inferred. The `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
 
 The `Host` trait (`src/run/host.rs`) abstracts all program IO:
 
@@ -369,17 +369,17 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--print` prints every intermediate representation — core, ersd, cont, and wasm — to stderr (default: off)
+- `--print` prints every intermediate representation — text, core, ersd, cont, and wasm — to stderr (default: off)
 - `run` compiles and executes the entrypoint
 - `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
-- `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path
+- `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
 - `<input-path>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
 
 ---
 
 ## Testing
 
-215 tests across 12 files, covering every layer:
+229 tests across the library crate, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
