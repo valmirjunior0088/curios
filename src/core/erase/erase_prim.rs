@@ -79,7 +79,10 @@ pub fn erase_prim(
             } else {
                 let inner_ersd = erase(context, inner, &nat_type())?;
                 let spine_term = ersd::Term::Prim(ersd::Prim::Nat(narrow_nat(spine)?));
-                Ok(ersd::Term::Prim(ersd::Prim::NatAdd(spine_term.into(), inner_ersd.into())))
+                Ok(ersd::Term::Prim(ersd::Prim::NatAdd(
+                    spine_term.into(),
+                    inner_ersd.into(),
+                )))
             }
         }
         Prim::NatEql(left, right) => {
@@ -305,37 +308,51 @@ pub fn erase_prim(
         Prim::FltNeg(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltNeg(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltNeg(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltAbs(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltAbs(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltAbs(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltSqrt(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltSqrt(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltSqrt(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltFloor(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltFloor(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltFloor(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltCeil(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltCeil(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltCeil(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltTrunc(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltTrunc(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltTrunc(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltNearest(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltNearest(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltNearest(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltDiv(left, right) => {
             expect(context, term, &flt_type(), expected)?;
@@ -412,47 +429,65 @@ pub fn erase_prim(
         Prim::NatToStr(inner) => {
             expect(context, term, &bin_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::NatToStr(erase(context, inner, &nat_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::NatToStr(
+                erase(context, inner, &nat_type())?.into(),
+            )))
         }
         Prim::IntToStr(inner) => {
             expect(context, term, &bin_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::IntToStr(erase(context, inner, &int_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::IntToStr(
+                erase(context, inner, &int_type())?.into(),
+            )))
         }
         Prim::FltToStr(inner) => {
             expect(context, term, &bin_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltToStr(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltToStr(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::NatToInt(inner) => {
             expect(context, term, &int_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::NatToInt(erase(context, inner, &nat_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::NatToInt(
+                erase(context, inner, &nat_type())?.into(),
+            )))
         }
         Prim::IntToNat(inner) => {
             expect(context, term, &nat_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::IntToNat(erase(context, inner, &int_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::IntToNat(
+                erase(context, inner, &int_type())?.into(),
+            )))
         }
         Prim::IntToFlt(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::IntToFlt(erase(context, inner, &int_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::IntToFlt(
+                erase(context, inner, &int_type())?.into(),
+            )))
         }
         Prim::NatToFlt(inner) => {
             expect(context, term, &flt_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::NatToFlt(erase(context, inner, &nat_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::NatToFlt(
+                erase(context, inner, &nat_type())?.into(),
+            )))
         }
         Prim::FltToInt(inner) => {
             expect(context, term, &int_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltToInt(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltToInt(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::FltToNat(inner) => {
             expect(context, term, &nat_type(), expected)?;
 
-            Ok(ersd::Term::Prim(ersd::Prim::FltToNat(erase(context, inner, &flt_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::FltToNat(
+                erase(context, inner, &flt_type())?.into(),
+            )))
         }
         Prim::BinType => {
             expect(context, term, &type_type(), expected)?;
@@ -476,7 +511,9 @@ pub fn erase_prim(
                     ));
                 }
             }
-            Ok(ersd::Term::Prim(ersd::Prim::BinLen(erase(context, bin, &bin_type_reduced)?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::BinLen(
+                erase(context, bin, &bin_type_reduced)?.into(),
+            )))
         }
         Prim::BinEql(left, right) => {
             expect(context, term, &bln_type(), expected)?;
@@ -581,7 +618,10 @@ pub fn erase_prim(
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             let list_erased = erase(context, list, &expected_list_type)?;
             let index_erased = erase(context, index, &nat_type())?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrGet(list_erased.into(), index_erased.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::ArrGet(
+                list_erased.into(),
+                index_erased.into(),
+            )))
         }
         Prim::ArrSlice(type_, list, start, end) => {
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
@@ -602,7 +642,10 @@ pub fn erase_prim(
             erase(context, type_, &type_type())?;
             let list_erased = erase(context, list, &expected_list_type)?;
             let elem_erased = erase(context, elem, type_)?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrAppend(list_erased.into(), elem_erased.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::ArrAppend(
+                list_erased.into(),
+                elem_erased.into(),
+            )))
         }
         Prim::ArrConcat(type_, operands) => {
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
@@ -616,7 +659,9 @@ pub fn erase_prim(
         }
         Prim::IoPrint(inner) => {
             expect(context, term, &unit_type(), expected)?;
-            Ok(ersd::Term::Prim(ersd::Prim::IoPrint(erase(context, inner, &bin_type())?.into())))
+            Ok(ersd::Term::Prim(ersd::Prim::IoPrint(
+                erase(context, inner, &bin_type())?.into(),
+            )))
         }
         Prim::IoRead => {
             expect(context, term, &bin_type(), expected)?;

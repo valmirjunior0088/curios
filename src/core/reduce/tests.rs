@@ -12,11 +12,14 @@ fn context() -> Context {
 fn reduce_apply_beta_reduces() {
     let mut context = context();
 
-    let term: Term = Term::apply(Term::func(["x"], Term::var(Var::free("x"))), [Term::atom(Atom::from("ok"))]);
+    let term: Term = Term::apply(
+        Term::func(["x"], Term::var(Var::free("x"))),
+        [Term::atom(Atom::from("ok"))],
+    );
 
     assert_eq!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("ok")).into())
+        Ok(Term::atom(Atom::from("ok")))
     );
 }
 
@@ -28,12 +31,15 @@ fn reduce_match_selects_match() {
         Term::atom(Atom::from("a")),
         Some("m"),
         Term::type_(),
-        vec![("a", Term::atom(Atom::from("yes"))), ("b", Term::atom(Atom::from("no")))],
+        vec![
+            ("a", Term::atom(Atom::from("yes"))),
+            ("b", Term::atom(Atom::from("no"))),
+        ],
     );
 
     assert_eq!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("yes")).into())
+        Ok(Term::atom(Atom::from("yes")))
     );
 }
 
@@ -53,7 +59,7 @@ fn reduce_nat_fold_zero_is_not_true() {
 
     assert_ne!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("true")).into())
+        Ok(Term::atom(Atom::from("true")))
     );
 }
 
@@ -61,13 +67,18 @@ fn reduce_nat_fold_zero_is_not_true() {
 fn reduce_let_then_var_unfolds_definition() {
     let mut context = context();
 
-    context.define("y", &Term::atom(Atom::from("done")).into());
+    context.define("y", &Term::atom(Atom::from("done")));
 
-    let term: Term = Term::let_("x", Term::type_(), Term::var(Var::free("y")), Term::var(Var::free("x")));
+    let term: Term = Term::let_(
+        "x",
+        Term::type_(),
+        Term::var(Var::free("y")),
+        Term::var(Var::free("x")),
+    );
 
     assert_eq!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("done")).into())
+        Ok(Term::atom(Atom::from("done")))
     );
 }
 
@@ -248,11 +259,14 @@ fn reduce_lst_append_adds_element() {
 fn reduce_proj_beta_reduces() {
     let mut context = context();
 
-    let term: Term = Term::proj(Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("b"))]), 1);
+    let term: Term = Term::proj(
+        Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("b"))]),
+        1,
+    );
 
     assert_eq!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("b")).into())
+        Ok(Term::atom(Atom::from("b")))
     );
 }
 
@@ -260,13 +274,13 @@ fn reduce_proj_beta_reduces() {
 fn reduce_proj_table_lookup() {
     let mut context = context();
 
-    context.define_projection(Term::var(Var::free("r")), 0, Term::atom(Atom::from("ok")).into());
+    context.define_projection(Term::var(Var::free("r")), 0, Term::atom(Atom::from("ok")));
 
     let term: Term = Term::proj(Term::var(Var::free("r")), 0);
 
     assert_eq!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("ok")).into())
+        Ok(Term::atom(Atom::from("ok")))
     );
 }
 
@@ -278,7 +292,10 @@ fn reduce_does_not_eta_reduce_tuple() {
     // `reduce` cannot verify `r`'s arity without type info, so collapsing
     // `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more
     // fields than the tuple does.
-    let term: Term = Term::tuple([Term::proj(Term::var(Var::free("r")), 0), Term::proj(Term::var(Var::free("r")), 1)]);
+    let term: Term = Term::tuple([
+        Term::proj(Term::var(Var::free("r")), 0),
+        Term::proj(Term::var(Var::free("r")), 1),
+    ]);
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(term));
 }
@@ -287,7 +304,10 @@ fn reduce_does_not_eta_reduce_tuple() {
 fn eta_reduce_func_fires() {
     let mut context = context();
 
-    let term: Term = Term::func(["y"], Term::apply(Term::var(Var::free("f")), [Term::var(Var::free("y"))]));
+    let term: Term = Term::func(
+        ["y"],
+        Term::apply(Term::var(Var::free("f")), [Term::var(Var::free("y"))]),
+    );
 
     assert_eq!(
         reduce(&mut context, term.clone()),
@@ -304,8 +324,8 @@ fn define_invalidates_cached_reduction() {
     assert_eq!(reduce(&mut context, x.clone()), Ok(x.clone()));
 
     // Defining x must clear the cache so the next reduce unfolds.
-    context.define("x", &Term::atom(Atom::from("hi")).into());
-    assert_eq!(reduce(&mut context, x), Ok(Term::atom(Atom::from("hi")).into()));
+    context.define("x", &Term::atom(Atom::from("hi")));
+    assert_eq!(reduce(&mut context, x), Ok(Term::atom(Atom::from("hi"))));
 }
 
 #[test]
@@ -317,8 +337,8 @@ fn define_projection_invalidates_cached_reduction() {
     assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));
 
     // Refining the projection must clear the cache.
-    context.define_projection(Term::var(Var::free("r")), 0, Term::atom(Atom::from("ok")).into());
-    assert_eq!(reduce(&mut context, proj), Ok(Term::atom(Atom::from("ok")).into()));
+    context.define_projection(Term::var(Var::free("r")), 0, Term::atom(Atom::from("ok")));
+    assert_eq!(reduce(&mut context, proj), Ok(Term::atom(Atom::from("ok"))));
 }
 
 #[test]
@@ -328,8 +348,11 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
 
     // Inside a frame, define x and reduce — the cache will hold x → "inner".
     context.with_frame(|context| {
-        context.define("x", &Term::atom(Atom::from("inner")).into());
-        assert_eq!(reduce(context, x.clone()), Ok(Term::atom(Atom::from("inner")).into()));
+        context.define("x", &Term::atom(Atom::from("inner")));
+        assert_eq!(
+            reduce(context, x.clone()),
+            Ok(Term::atom(Atom::from("inner")))
+        );
     });
 
     // After the frame pops, x has no definition again. A stale cache entry

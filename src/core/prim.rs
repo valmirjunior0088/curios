@@ -586,4 +586,3 @@ impl Prim {
         Self::IoRead
     }
 }
-

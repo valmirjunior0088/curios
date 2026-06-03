@@ -141,21 +141,21 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             context,
             left,
             right,
-            |l, r| l.add(r).map(Prim::Nat),
+            |l, r| l.checked_add(r).map(Prim::Nat),
             Prim::NatAdd,
         ),
         Prim::NatSub(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| l.sub(r).map(Prim::Nat),
+            |l, r| l.checked_sub(r).map(Prim::Nat),
             Prim::NatSub,
         ),
         Prim::NatMul(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| l.mul(r).map(Prim::Nat),
+            |l, r| l.checked_mul(r).map(Prim::Nat),
             Prim::NatMul,
         ),
         Prim::NatLt(left, right) => reduce_nat_binary(
@@ -169,14 +169,14 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             context,
             left,
             right,
-            |l, r| l.div(r).map(Prim::Nat),
+            |l, r| l.checked_div(r).map(Prim::Nat),
             Prim::NatDiv,
         ),
         Prim::NatRem(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| l.rem(r).map(Prim::Nat),
+            |l, r| l.checked_rem(r).map(Prim::Nat),
             Prim::NatRem,
         ),
         Prim::NatGt(left, right) => reduce_nat_binary(
@@ -220,35 +220,35 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             context,
             left,
             right,
-            |left, right| Prim::Int(left.add(right)),
+            |left, right| Prim::Int(left + right),
             Prim::IntAdd,
         ),
         Prim::IntSub(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.sub(right)),
+            |left, right| Prim::Int(left - right),
             Prim::IntSub,
         ),
         Prim::IntMul(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.mul(right)),
+            |left, right| Prim::Int(left * right),
             Prim::IntMul,
         ),
         Prim::IntDiv(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.div(right)),
+            |left, right| Prim::Int(left / right),
             Prim::IntDiv,
         ),
         Prim::IntRem(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.rem(right)),
+            |left, right| Prim::Int(left % right),
             Prim::IntRem,
         ),
         Prim::IntLt(left, right) => reduce_int_binary(
@@ -285,28 +285,28 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             context,
             left,
             right,
-            |left, right| Prim::Flt(left.add(right)),
+            |left, right| Prim::Flt(left + right),
             Prim::FltAdd,
         ),
         Prim::FltSub(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Flt(left.sub(right)),
+            |left, right| Prim::Flt(left - right),
             Prim::FltSub,
         ),
         Prim::FltMul(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Flt(left.mul(right)),
+            |left, right| Prim::Flt(left * right),
             Prim::FltMul,
         ),
         Prim::FltDiv(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Flt(left.div(right)),
+            |left, right| Prim::Flt(left / right),
             Prim::FltDiv,
         ),
         Prim::FltMin(left, right) => reduce_flt_binary(
@@ -366,7 +366,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             Prim::FltGte,
         ),
         Prim::FltNeg(inner) => {
-            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.neg()), Prim::FltNeg)
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(-flt), Prim::FltNeg)
         }
         Prim::FltAbs(inner) => {
             reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.abs()), Prim::FltAbs)

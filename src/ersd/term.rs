@@ -166,4 +166,3 @@ impl Term {
         names
     }
 }
-

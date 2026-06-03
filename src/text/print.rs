@@ -387,9 +387,9 @@ fn print_term(term: Term) -> Printer<'static> {
             print_term(tail),
         ]),
         Subterm::Rec(Rec { items, tail }) => {
-            let bindings = items.into_iter().map(|item| {
-                flat([pure(item.label), print_let_signature(item.signature)])
-            });
+            let bindings = items
+                .into_iter()
+                .map(|item| flat([pure(item.label), print_let_signature(item.signature)]));
             flat([
                 pure("rec "),
                 sep_flat(bindings, || pure("\nand ")),
@@ -415,9 +415,9 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
         } => flat([
             pure("("),
             sep_flat(
-                params.into_iter().map(|(name, ty)| {
-                    flat([pure(name), pure(" : "), print_term(ty)])
-                }),
+                params
+                    .into_iter()
+                    .map(|(name, ty)| flat([pure(name), pure(" : "), print_term(ty)])),
                 || pure(", "),
             ),
             pure(") -> "),

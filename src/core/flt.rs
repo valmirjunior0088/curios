@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::{Add, Div, Mul, Neg, Sub},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Flt {
@@ -69,24 +72,44 @@ impl Flt {
     pub fn gte(self, other: Self) -> bool {
         self.to_f32() >= other.to_f32()
     }
+}
 
-    pub fn add(self, other: Self) -> Self {
+impl Add for Flt {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
         Self::from_f32(self.to_f32() + other.to_f32())
     }
+}
 
-    pub fn sub(self, other: Self) -> Self {
+impl Sub for Flt {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
         Self::from_f32(self.to_f32() - other.to_f32())
     }
+}
 
-    pub fn mul(self, other: Self) -> Self {
+impl Mul for Flt {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
         Self::from_f32(self.to_f32() * other.to_f32())
     }
+}
 
-    pub fn div(self, other: Self) -> Self {
+impl Div for Flt {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
         Self::from_f32(self.to_f32() / other.to_f32())
     }
+}
 
-    pub fn neg(self) -> Self {
+impl Neg for Flt {
+    type Output = Self;
+
+    fn neg(self) -> Self {
         Self::from_f32(-self.to_f32())
     }
 }

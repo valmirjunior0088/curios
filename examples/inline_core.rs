@@ -21,7 +21,10 @@ fn main() {
                         core::Term::var(core::Var::free("label")),
                         None,
                         core::Term::type_(),
-                        [("left", core::Term::type_()), ("right", core::Term::type_())],
+                        [
+                            ("left", core::Term::type_()),
+                            ("right", core::Term::type_()),
+                        ],
                     ),
                 ),
             ]),
@@ -29,8 +32,8 @@ fn main() {
                 "p",
                 core::Term::var(core::Var::free("tuple_ty")),
                 core::Term::tuple([
-                    core::Term::from(core::Term::atom(core::Atom::from("left"))),
-                    core::Term::type_().into(),
+                    core::Term::atom(core::Atom::from("left")),
+                    core::Term::type_(),
                 ]),
                 core::Term::let_(
                     "label",
@@ -52,7 +55,7 @@ fn main() {
                                         [core::Term::var(core::Var::free("value"))],
                                     ),
                                 ),
-                                ("right", core::Term::type_().into()),
+                                ("right", core::Term::type_()),
                             ],
                         ),
                     ),
@@ -67,7 +70,7 @@ fn main() {
     let ersd_term = core::erase(
         &mut core::Context::new(Duration::from_secs(5)),
         &core_term,
-        &core::Term::type_().into(),
+        &core::Term::type_(),
     )
     .expect("expected erased term");
 

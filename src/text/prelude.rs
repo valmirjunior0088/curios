@@ -1,6 +1,4 @@
-use super::{
-    LetSignature, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
-};
+use super::{LetSignature, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TupleType};
 
 // The `sys` module is the home of every primitive type and operation. It is
 // built directly as `text` AST (never parsed) and prepended to every parsed

@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::{Add, Div, Mul, Rem, Sub},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Int {
@@ -11,7 +14,7 @@ impl Int {
 
     pub fn new(value: i64) -> Self {
         assert!(
-            value >= Self::MIN && value <= Self::MAX,
+            (Self::MIN..=Self::MAX).contains(&value),
             "Int arithmetic overflow"
         );
         Self {
@@ -22,24 +25,44 @@ impl Int {
     pub fn to_i32(self) -> i32 {
         self.value
     }
+}
 
-    pub fn add(self, other: Self) -> Self {
+impl Add for Int {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
         Self::new(self.value as i64 + other.value as i64)
     }
+}
 
-    pub fn sub(self, other: Self) -> Self {
+impl Sub for Int {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
         Self::new(self.value as i64 - other.value as i64)
     }
+}
 
-    pub fn mul(self, other: Self) -> Self {
+impl Mul for Int {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
         Self::new(self.value as i64 * other.value as i64)
     }
+}
 
-    pub fn div(self, other: Self) -> Self {
+impl Div for Int {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
         Self::new(self.value as i64 / other.value as i64)
     }
+}
 
-    pub fn rem(self, other: Self) -> Self {
+impl Rem for Int {
+    type Output = Self;
+
+    fn rem(self, other: Self) -> Self {
         Self::new(self.value as i64 % other.value as i64)
     }
 }

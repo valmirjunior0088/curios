@@ -42,14 +42,20 @@ fn convert_match_compares_matches_and_motive() {
         Term::atom(Atom::from("a")),
         Some("m"),
         Term::type_(),
-        vec![("a", Term::atom(Atom::from("yes"))), ("b", Term::atom(Atom::from("no")))],
+        vec![
+            ("a", Term::atom(Atom::from("yes"))),
+            ("b", Term::atom(Atom::from("no"))),
+        ],
     );
 
     let that = Term::match_(
         Term::atom(Atom::from("a")),
         Some("n"),
         Term::type_(),
-        vec![("a", Term::atom(Atom::from("yes"))), ("b", Term::atom(Atom::from("no")))],
+        vec![
+            ("a", Term::atom(Atom::from("yes"))),
+            ("b", Term::atom(Atom::from("no"))),
+        ],
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -61,12 +67,18 @@ fn convert_prim_recurses_into_operands() {
 
     let this = Term::func(
         ["x"],
-        Subterm::Prim(Prim::int_add(Term::var(Var::free("x")), Subterm::Prim(Prim::Int(Int::new(1))))),
+        Subterm::Prim(Prim::int_add(
+            Term::var(Var::free("x")),
+            Subterm::Prim(Prim::Int(Int::new(1))),
+        )),
     );
 
     let that = Term::func(
         ["y"],
-        Subterm::Prim(Prim::int_add(Term::var(Var::free("y")), Subterm::Prim(Prim::Int(Int::new(1))))),
+        Subterm::Prim(Prim::int_add(
+            Term::var(Var::free("y")),
+            Subterm::Prim(Prim::Int(Int::new(1))),
+        )),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -78,12 +90,18 @@ fn convert_prim_distinguishes_operator_kind() {
 
     let this = Term::func(
         ["x"],
-        Subterm::Prim(Prim::int_add(Term::var(Var::free("x")), Subterm::Prim(Prim::Int(Int::new(1))))),
+        Subterm::Prim(Prim::int_add(
+            Term::var(Var::free("x")),
+            Subterm::Prim(Prim::Int(Int::new(1))),
+        )),
     );
 
     let that = Term::func(
         ["x"],
-        Subterm::Prim(Prim::int_sub(Term::var(Var::free("x")), Subterm::Prim(Prim::Int(Int::new(1))))),
+        Subterm::Prim(Prim::int_sub(
+            Term::var(Var::free("x")),
+            Subterm::Prim(Prim::Int(Int::new(1))),
+        )),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
@@ -93,9 +111,15 @@ fn convert_prim_distinguishes_operator_kind() {
 fn convert_rec_is_alpha_equivalent() {
     let mut context = context();
 
-    let this = Term::rec(vec![("x", Term::type_(), Term::var(Var::free("x")))], Term::var(Var::free("x")));
+    let this = Term::rec(
+        vec![("x", Term::type_(), Term::var(Var::free("x")))],
+        Term::var(Var::free("x")),
+    );
 
-    let that = Term::rec(vec![("y", Term::type_(), Term::var(Var::free("y")))], Term::var(Var::free("y")));
+    let that = Term::rec(
+        vec![("y", Term::type_(), Term::var(Var::free("y")))],
+        Term::var(Var::free("y")),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -127,9 +151,15 @@ fn convert_prim_nat_add_recurses_into_operands() {
 fn convert_prim_flt_neg_recurses_into_operand() {
     let mut context = context();
 
-    let this = Term::func(["x"], Subterm::Prim(Prim::flt_neg(Term::var(Var::free("x")))));
+    let this = Term::func(
+        ["x"],
+        Subterm::Prim(Prim::flt_neg(Term::var(Var::free("x")))),
+    );
 
-    let that = Term::func(["y"], Subterm::Prim(Prim::flt_neg(Term::var(Var::free("y")))));
+    let that = Term::func(
+        ["y"],
+        Subterm::Prim(Prim::flt_neg(Term::var(Var::free("y")))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -138,9 +168,15 @@ fn convert_prim_flt_neg_recurses_into_operand() {
 fn convert_prim_nat_to_int_recurses_into_operand() {
     let mut context = context();
 
-    let this = Term::func(["x"], Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("x")))));
+    let this = Term::func(
+        ["x"],
+        Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("x")))),
+    );
 
-    let that = Term::func(["y"], Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("y")))));
+    let that = Term::func(
+        ["y"],
+        Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("y")))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -216,8 +252,14 @@ fn convert_prim_bin_literal_compares_bytes() {
 fn convert_prim_bin_len_recurses_into_operand() {
     let mut context = context();
 
-    let this = Term::func(["x"], Subterm::Prim(Prim::bin_len(Term::var(Var::free("x")))));
-    let that = Term::func(["y"], Subterm::Prim(Prim::bin_len(Term::var(Var::free("y")))));
+    let this = Term::func(
+        ["x"],
+        Subterm::Prim(Prim::bin_len(Term::var(Var::free("x")))),
+    );
+    let that = Term::func(
+        ["y"],
+        Subterm::Prim(Prim::bin_len(Term::var(Var::free("y")))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -230,7 +272,10 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ["x"],
         Term::func(
             ["a"],
-            Subterm::Prim(Prim::bin_get(Term::var(Var::free("x")), Term::var(Var::free("a")))),
+            Subterm::Prim(Prim::bin_get(
+                Term::var(Var::free("x")),
+                Term::var(Var::free("a")),
+            )),
         ),
     );
 
@@ -238,7 +283,10 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ["y"],
         Term::func(
             ["b"],
-            Subterm::Prim(Prim::bin_get(Term::var(Var::free("y")), Term::var(Var::free("b")))),
+            Subterm::Prim(Prim::bin_get(
+                Term::var(Var::free("y")),
+                Term::var(Var::free("b")),
+            )),
         ),
     );
 
@@ -253,7 +301,10 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ["x"],
         Term::func(
             ["a"],
-            Subterm::Prim(Prim::bin_concat([Term::var(Var::free("x")), Term::var(Var::free("a"))])),
+            Subterm::Prim(Prim::bin_concat([
+                Term::var(Var::free("x")),
+                Term::var(Var::free("a")),
+            ])),
         ),
     );
 
@@ -261,7 +312,10 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ["y"],
         Term::func(
             ["b"],
-            Subterm::Prim(Prim::bin_concat([Term::var(Var::free("y")), Term::var(Var::free("b"))])),
+            Subterm::Prim(Prim::bin_concat([
+                Term::var(Var::free("y")),
+                Term::var(Var::free("b")),
+            ])),
         ),
     );
 
@@ -309,8 +363,8 @@ fn convert_prim_bin_slice_recurses_into_operands() {
 fn convert_tuple_equal() {
     let mut context = context();
 
-    let this = Term::tuple([Term::from(Term::atom(Atom::from("x"))), Term::from(Term::atom(Atom::from("y")))]);
-    let that = Term::tuple([Term::from(Term::atom(Atom::from("x"))), Term::from(Term::atom(Atom::from("y")))]);
+    let this = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("y"))]);
+    let that = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("y"))]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -319,8 +373,8 @@ fn convert_tuple_equal() {
 fn convert_tuple_unequal_field() {
     let mut context = context();
 
-    let this = Term::tuple([Term::from(Term::atom(Atom::from("x"))), Term::from(Term::atom(Atom::from("y")))]);
-    let that = Term::tuple([Term::from(Term::atom(Atom::from("x"))), Term::from(Term::atom(Atom::from("z")))]);
+    let this = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("y"))]);
+    let that = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("z"))]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
@@ -367,8 +421,14 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     let mut context = context();
 
     // p = (a, b), q = (a, c) — both 2-tuples agreeing on field 0, differing on field 1.
-    context.define("p", &Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("b"))]));
-    context.define("q", &Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("c"))]));
+    context.define(
+        "p",
+        &Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("b"))]),
+    );
+    context.define(
+        "q",
+        &Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("c"))]),
+    );
 
     // Term::type_() is a 1-field tuple type {A : {a}}.
     let type_: Term = Term::tuple_type([("x", Term::atom_type(["a"]))]);
@@ -395,12 +455,18 @@ fn convert_times_out_on_pathological_inputs() {
     let this = Term::tuple_type([
         (
             "x",
-            Term::apply(Term::func(["z"], Term::var(Var::free("z"))), [Term::var(Var::free("loop"))]),
+            Term::apply(
+                Term::func(["z"], Term::var(Var::free("z"))),
+                [Term::var(Var::free("loop"))],
+            ),
         ),
         ("y", Term::var(Var::free("x"))),
     ]);
 
-    let that = Term::tuple_type([("x", Term::var(Var::free("loop"))), ("y", Term::var(Var::free("x")))]);
+    let that = Term::tuple_type([
+        ("x", Term::var(Var::free("loop"))),
+        ("y", Term::var(Var::free("x"))),
+    ]);
 
     assert_eq!(conv(&mut context, &this, &that), Err(Preempted));
 }

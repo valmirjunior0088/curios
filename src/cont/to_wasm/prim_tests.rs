@@ -1485,10 +1485,7 @@ fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
             region: cont::Region {
                 preallocs: vec![],
                 values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(op),
-                    ),
+                    (cont::ValueName::from("result"), cont::Value::Eval(op)),
                     (
                         cont::ValueName::from("str"),
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
@@ -1514,7 +1511,10 @@ const MAX_I31: u32 = i32::MAX as u32;
 #[test]
 fn lowers_and_runs_nat_mul() {
     let module = nat_op_module(
-        cont::Code::NatMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatMul(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         6,
         7,
     );
@@ -1524,7 +1524,10 @@ fn lowers_and_runs_nat_mul() {
 #[test]
 fn lowers_and_runs_nat_sub_monus() {
     let module = nat_op_module(
-        cont::Code::NatSub(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatSub(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         3,
         7,
     );
@@ -1534,7 +1537,10 @@ fn lowers_and_runs_nat_sub_monus() {
 #[test]
 fn lowers_and_runs_nat_sub() {
     let module = nat_op_module(
-        cont::Code::NatSub(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatSub(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         10,
         3,
     );
@@ -1544,7 +1550,10 @@ fn lowers_and_runs_nat_sub() {
 #[test]
 fn lowers_and_runs_nat_add_at_boundary() {
     let module = nat_op_module(
-        cont::Code::NatAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatAdd(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_I31 - 1,
         1,
     );
@@ -1554,7 +1563,10 @@ fn lowers_and_runs_nat_add_at_boundary() {
 #[test]
 fn lowers_and_runs_nat_mul_at_boundary() {
     let module = nat_op_module(
-        cont::Code::NatMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatMul(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_I31,
         1,
     );
@@ -1564,7 +1576,10 @@ fn lowers_and_runs_nat_mul_at_boundary() {
 #[test]
 fn nat_add_overflow_traps() {
     let module = nat_op_module(
-        cont::Code::NatAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatAdd(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_I31,
         1,
     );
@@ -1574,7 +1589,10 @@ fn nat_add_overflow_traps() {
 #[test]
 fn nat_mul_overflow_traps() {
     let module = nat_op_module(
-        cont::Code::NatMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::NatMul(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_I31,
         2,
     );
@@ -1620,7 +1638,10 @@ const MIN_INT: i32 = -(1 << 30);
 #[test]
 fn lowers_and_runs_int_add_at_boundary() {
     let module = int_op_module(
-        cont::Code::IntAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::IntAdd(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_INT - 1,
         1,
     );
@@ -1630,7 +1651,10 @@ fn lowers_and_runs_int_add_at_boundary() {
 #[test]
 fn int_add_overflow_traps() {
     let module = int_op_module(
-        cont::Code::IntAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::IntAdd(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_INT,
         1,
     );
@@ -1640,7 +1664,10 @@ fn int_add_overflow_traps() {
 #[test]
 fn int_sub_overflow_traps() {
     let module = int_op_module(
-        cont::Code::IntSub(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::IntSub(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MIN_INT,
         1,
     );
@@ -1650,7 +1677,10 @@ fn int_sub_overflow_traps() {
 #[test]
 fn lowers_and_runs_int_mul_at_boundary() {
     let module = int_op_module(
-        cont::Code::IntMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::IntMul(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_INT,
         1,
     );
@@ -1660,7 +1690,10 @@ fn lowers_and_runs_int_mul_at_boundary() {
 #[test]
 fn int_mul_overflow_traps() {
     let module = int_op_module(
-        cont::Code::IntMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::IntMul(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MAX_INT,
         2,
     );
@@ -1671,7 +1704,10 @@ fn int_mul_overflow_traps() {
 fn int_div_overflow_traps() {
     // MIN_INT / -1 = 2^30, which exceeds the 31-bit signed maximum.
     let module = int_op_module(
-        cont::Code::IntDiv(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        cont::Code::IntDiv(
+            cont::ValueName::from("LEFT"),
+            cont::ValueName::from("RIGHT"),
+        ),
         MIN_INT,
         -1,
     );
@@ -1716,4 +1752,3 @@ fn flt_to_int_overflow_traps() {
     );
     assert!(traps(&module));
 }
-

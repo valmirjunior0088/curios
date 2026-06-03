@@ -1,6 +1,7 @@
 use {super::Work, crate::cont};
 
 pub struct Cont<'a> {
+    #[allow(clippy::type_complexity)]
     func: Box<dyn FnOnce(&mut Work<'_, '_, '_>, cont::ValueName) -> cont::Tail + 'a>,
 }
 
@@ -28,6 +29,7 @@ impl<'a> Cont<'a> {
 }
 
 pub struct ContMany<'a> {
+    #[allow(clippy::type_complexity)]
     func: Box<dyn FnOnce(&mut Work<'_, '_, '_>, Vec<cont::ValueName>) -> cont::Tail + 'a>,
 }
 
@@ -56,13 +58,12 @@ impl<'a> ContMany<'a> {
 }
 
 pub struct RecBody<'a> {
+    #[allow(clippy::type_complexity)]
     func: Box<dyn FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> cont::Tail + 'a>,
 }
 
 impl<'a> RecBody<'a> {
-    pub fn new(
-        func: impl FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> cont::Tail + 'a,
-    ) -> Self {
+    pub fn new(func: impl FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> cont::Tail + 'a) -> Self {
         Self {
             func: Box::new(func),
         }

@@ -32,11 +32,11 @@ impl Nat {
         }
     }
 
-    pub fn add(self, other: Self) -> Option<Self> {
+    pub fn checked_add(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? + other.to_big_uint()?))
     }
 
-    pub fn sub(self, other: Self) -> Option<Self> {
+    pub fn checked_sub(self, other: Self) -> Option<Self> {
         let left = self.to_big_uint()?;
         let right = other.to_big_uint()?;
 
@@ -47,15 +47,15 @@ impl Nat {
         }))
     }
 
-    pub fn mul(self, other: Self) -> Option<Self> {
+    pub fn checked_mul(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? * other.to_big_uint()?))
     }
 
-    pub fn div(self, other: Self) -> Option<Self> {
+    pub fn checked_div(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? / other.to_big_uint()?))
     }
 
-    pub fn rem(self, other: Self) -> Option<Self> {
+    pub fn checked_rem(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? % other.to_big_uint()?))
     }
 
@@ -88,4 +88,3 @@ impl fmt::Display for Nat {
         }
     }
 }
-
