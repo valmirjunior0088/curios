@@ -131,8 +131,8 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
-                    type_: elab.term(&let_item.type_)?,
-                    body: elab.term(&let_item.body)?,
+                    type_: elab.term(&let_item.signature.type_())?,
+                    body: elab.term(&let_item.signature.body())?,
                 }));
             }
             TopItem::Rec(ls) => {
@@ -143,8 +143,8 @@ fn process_items(
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
-                            type_: elaborate.term(&let_item.type_)?,
-                            body: elaborate.term(&let_item.body)?,
+                            type_: elaborate.term(&let_item.signature.type_())?,
+                            body: elaborate.term(&let_item.signature.body())?,
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;

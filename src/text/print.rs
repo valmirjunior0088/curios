@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec, Subterm, Term,
-        TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase,
-        UnionMatch, UseGroup,
+        GroupItem, Let, LetSignature, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec,
+        Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
+        UnionCase, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -382,28 +382,19 @@ fn print_term(term: Term) -> Printer<'static> {
         },
         Subterm::Let(Let {
             label,
-            type_,
-            body,
+            signature,
             tail,
         }) => flat([
             pure("let "),
             pure(label),
-            pure(" : "),
-            print_term(type_),
-            pure(" =\n"),
-            indent(flat([print_term(body), pure(";")])),
+            print_let_signature(signature),
+            pure(";"),
             pure("\n"),
             print_term(tail),
         ]),
         Subterm::Rec(Rec { items, tail }) => {
             let bindings = items.into_iter().map(|item| {
-                flat([
-                    pure(item.label),
-                    pure(" : "),
-                    print_term(item.type_),
-                    pure(" =\n"),
-                    indent(print_term(item.value)),
-                ])
+                flat([pure(item.label), print_let_signature(item.signature)])
             });
             flat([
                 pure("rec "),
@@ -412,6 +403,34 @@ fn print_term(term: Term) -> Printer<'static> {
                 print_term(tail),
             ])
         }
+    }
+}
+
+fn print_let_signature(signature: LetSignature) -> Printer<'static> {
+    match signature {
+        LetSignature::Name { type_, body } => flat([
+            pure(" : "),
+            print_term(type_),
+            pure(" =\n"),
+            indent(print_term(body)),
+        ]),
+        LetSignature::Func {
+            params,
+            output,
+            body,
+        } => flat([
+            pure("("),
+            sep_flat(
+                params.into_iter().map(|(name, ty)| {
+                    flat([pure(name), pure(" : "), print_term(ty)])
+                }),
+                || pure(", "),
+            ),
+            pure(") -> "),
+            print_term(output),
+            pure(" =\n"),
+            indent(print_term(body)),
+        ]),
     }
 }
 
@@ -458,10 +477,8 @@ fn print_top_let(item: TopLet) -> Printer<'static> {
         print_pub(item.is_pub),
         pure("let "),
         pure(item.label),
-        pure(" : "),
-        print_term(item.type_),
-        pure(" =\n"),
-        indent(flat([print_term(item.body), pure(";")])),
+        print_let_signature(item.signature),
+        pure(";"),
     ])
 }
 
@@ -474,10 +491,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
         print_pub(first.is_pub),
         pure("rec "),
         pure(first.label),
-        pure(" : "),
-        print_term(first.type_),
-        pure(" =\n"),
-        indent(print_term(first.body)),
+        print_let_signature(first.signature),
         flat(
             rest.into_iter()
                 .map(|item| {
@@ -485,10 +499,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
                         pure("\nand "),
                         print_pub(item.is_pub),
                         pure(item.label),
-                        pure(" : "),
-                        print_term(item.type_),
-                        pure(" =\n"),
-                        indent(print_term(item.body)),
+                        print_let_signature(item.signature),
                     ])
                 })
                 .collect::<Vec<_>>(),

@@ -161,18 +161,56 @@ pub enum Match {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum LetSignature {
+    Name {
+        type_: Term,
+        body: Term,
+    },
+    Func {
+        params: Vec<(String, Term)>,
+        output: Term,
+        body: Term,
+    },
+}
+
+impl LetSignature {
+    pub fn type_(&self) -> Term {
+        match self {
+            LetSignature::Name { type_, .. } => type_.clone(),
+            LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
+                params: params
+                    .iter()
+                    .map(|(n, t)| (Some(n.clone()), t.clone()))
+                    .collect(),
+                output: output.clone(),
+            })
+            .into(),
+        }
+    }
+
+    pub fn body(&self) -> Term {
+        match self {
+            LetSignature::Name { body, .. } => body.clone(),
+            LetSignature::Func { params, body, .. } => Subterm::Func(Func {
+                params: params.iter().map(|(n, _)| n.clone()).collect(),
+                body: body.clone(),
+            })
+            .into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     pub label: String,
-    pub type_: Term,
-    pub body: Term,
+    pub signature: LetSignature,
     pub tail: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecItem {
     pub label: String,
-    pub type_: Term,
-    pub value: Term,
+    pub signature: LetSignature,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -168,8 +168,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             },
             Subterm::Let(let_) => core::Term::let_(
                 let_.label.clone(),
-                self.term(&let_.type_)?,
-                self.term(&let_.body)?,
+                self.term(&let_.signature.type_())?,
+                self.term(&let_.signature.body())?,
                 self.term(&let_.tail)?,
             ),
             Subterm::Rec(rec) => core::Term::rec(
@@ -178,8 +178,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .map(|it| {
                         Ok((
                             it.label.clone(),
-                            self.term(&it.type_)?,
-                            self.term(&it.value)?,
+                            self.term(&it.signature.type_())?,
+                            self.term(&it.signature.body())?,
                         ))
                     })
                     .collect::<Result<Vec<_>, Error>>()?,

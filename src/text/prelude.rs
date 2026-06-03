@@ -1,5 +1,5 @@
 use super::{
-    Func, FuncType, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
+    LetSignature, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -52,8 +52,7 @@ fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     TopItem::Let(TopLet {
         is_pub: true,
         label: label.to_string(),
-        type_,
-        body,
+        signature: LetSignature::Name { type_, body },
     })
 }
 
@@ -66,24 +65,18 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
 }
 
 fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
-    let param_names = params.iter().map(|(n, _)| n.to_string()).collect();
-
-    let type_: Term = Subterm::FuncType(FuncType {
-        params: params
-            .into_iter()
-            .map(|(n, t)| (Some(n.to_string()), t))
-            .collect(),
-        output,
+    TopItem::Let(TopLet {
+        is_pub: true,
+        label: label.to_string(),
+        signature: LetSignature::Func {
+            params: params
+                .into_iter()
+                .map(|(n, t)| (n.to_string(), t))
+                .collect(),
+            output,
+            body,
+        },
     })
-    .into();
-
-    let value: Term = Subterm::Func(Func {
-        params: param_names,
-        body,
-    })
-    .into();
-
-    pub_let(label, type_, value)
 }
 
 fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {

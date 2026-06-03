@@ -1,5 +1,5 @@
 use {
-    super::{Name, Term},
+    super::{LetSignature, Name, Term},
     std::iter,
 };
 
@@ -42,8 +42,7 @@ pub struct TopUse {
 pub struct TopLet {
     pub is_pub: bool,
     pub label: String,
-    pub type_: Term,
-    pub body: Term,
+    pub signature: LetSignature,
 }
 
 #[derive(Debug, Clone, PartialEq)]

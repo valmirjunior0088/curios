@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Path, Prim, Proj,
-        Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple,
-        TupleType, UnionCase, UnionMatch, UseGroup,
+        GroupItem, Let, LetSignature, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Path,
+        Prim, Proj, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion,
+        TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
     },
     crate::{
         Source,
@@ -627,10 +627,9 @@ fn parse_match<'a>() -> Parser<'a, Term> {
 fn parse_binding<'a>() -> Parser<'a, RecItem> {
     parse_identifier()
         .and(parse_let_signature())
-        .map(|(label, (type_, value))| RecItem {
+        .map(|(label, signature)| RecItem {
             label: label.to_string(),
-            type_,
-            value,
+            signature,
         })
 }
 
@@ -650,11 +649,12 @@ fn parse_func_sugar_param<'a>() -> Parser<'a, (String, Term)> {
         .map(|(name, ty): (&str, Term)| (name.to_string(), ty))
 }
 
-// Parses the part of a `let` binding after its name, yielding `(type, body)`.
-// Supports the function-definition sugar `(p : T, ...) -> R = body`, which
-// desugars to type `(p : T, ...) -> R` and body `(p, ...) => body`.
-fn parse_let_signature<'a>() -> Parser<'a, (Term, Term)> {
-    catch(
+// Parses the part of a `let` binding after its name. Yields either
+// `LetSignature::Func` for the function-definition sugar
+// `(p : T, ...) -> R = body`, or `LetSignature::Name` for the plain
+// `: T = body` form.
+fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
+    let func = catch(
         parse_literal("(")
             .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
             .and_drop(parse_literal(")"))
@@ -664,27 +664,20 @@ fn parse_let_signature<'a>() -> Parser<'a, (Term, Term)> {
     .and_drop(parse_literal("="))
     .and(lazy(parse_term))
     .map(
-        |((params, output), body): ((Vec<(String, Term)>, Term), Term)| {
-            let type_: Term = Subterm::FuncType(FuncType {
-                params: params
-                    .iter()
-                    .map(|(name, ty)| (Some(name.clone()), ty.clone()))
-                    .collect(),
-                output,
-            })
-            .into();
-            let value: Term = Subterm::Func(Func {
-                params: params.into_iter().map(|(name, _)| name).collect(),
-                body,
-            })
-            .into();
-            (type_, value)
+        |((params, output), body): ((Vec<(String, Term)>, Term), Term)| LetSignature::Func {
+            params,
+            output,
+            body,
         },
-    )
-    .or(catch(parse_literal(":"))
+    );
+
+    let name = catch(parse_literal(":"))
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal("="))
-        .and(lazy(parse_term)))
+        .and(lazy(parse_term))
+        .map(|(type_, body)| LetSignature::Name { type_, body });
+
+    func.or(name)
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
@@ -693,11 +686,10 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         .and(parse_let_signature())
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
-        .map(|((label, (type_, body)), tail)| {
+        .map(|((label, signature), tail)| {
             Subterm::Let(Let {
                 label: label.to_string(),
-                type_,
-                body,
+                signature,
                 tail,
             })
         })
@@ -797,12 +789,11 @@ fn parse_top_let<'a>() -> Parser<'a, TopItem> {
         parse_identifier()
             .and(parse_let_signature())
             .and_drop(parse_literal(";"))
-            .map(move |(label, (type_, body))| {
+            .map(move |(label, signature)| {
                 TopItem::Let(TopLet {
                     is_pub,
                     label: label.to_string(),
-                    type_,
-                    body,
+                    signature,
                 })
             })
     })
@@ -814,8 +805,7 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
             parse_binding().map(move |item| TopLet {
                 is_pub,
                 label: item.label,
-                type_: item.type_,
-                body: item.value,
+                signature: item.signature,
             })
         })
         .and(many0(|| {
@@ -823,8 +813,7 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
                 parse_binding().map(move |item| TopLet {
                     is_pub,
                     label: item.label,
-                    type_: item.type_,
-                    body: item.value,
+                    signature: item.signature,
                 })
             })
         }))
@@ -1045,16 +1034,18 @@ mod tests {
             Subterm::Rec(Rec {
                 items: vec![RecItem {
                     label: "id".to_string(),
-                    type_: Subterm::FuncType(FuncType {
-                        params: vec![(Some("x".to_string()), Subterm::Type.into())],
-                        output: Subterm::Type.into(),
-                    })
-                    .into(),
-                    value: Subterm::Func(Func {
-                        params: vec!["x".to_string()],
-                        body: Subterm::Name(Name::from(["x".to_string()])).into(),
-                    })
-                    .into(),
+                    signature: LetSignature::Name {
+                        type_: Subterm::FuncType(FuncType {
+                            params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                            output: Subterm::Type.into(),
+                        })
+                        .into(),
+                        body: Subterm::Func(Func {
+                            params: vec!["x".to_string()],
+                            body: Subterm::Name(Name::from(["x".to_string()])).into(),
+                        })
+                        .into(),
+                    },
                 }],
                 tail: Subterm::Apply(Apply {
                     head: Subterm::Name(Name::from(["id".to_string()])).into(),
@@ -1074,11 +1065,13 @@ mod tests {
                 .unwrap(),
             Subterm::Let(Let {
                 label: "x".to_string(),
-                type_: Subterm::AtomType(AtomType {
-                    atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
-                })
-                .into(),
-                body: Subterm::Atom(Atom::from("hot")).into(),
+                signature: LetSignature::Name {
+                    type_: Subterm::AtomType(AtomType {
+                        atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
+                    })
+                    .into(),
+                    body: Subterm::Atom(Atom::from("hot")).into(),
+                },
                 tail: Subterm::Tuple(Tuple {
                     fields: vec![
                         Subterm::Name(Name::from(["x".to_string()])).into(),
@@ -1207,8 +1200,10 @@ mod tests {
             vec![TopItem::Let(TopLet {
                 is_pub: false,
                 label: "x".to_string(),
-                type_: Subterm::Type.into(),
-                body: Subterm::Type.into(),
+                signature: LetSignature::Name {
+                    type_: Subterm::Type.into(),
+                    body: Subterm::Type.into(),
+                },
             })]
         );
     }
@@ -1220,8 +1215,10 @@ mod tests {
             vec![TopItem::Let(TopLet {
                 is_pub: true,
                 label: "x".to_string(),
-                type_: Subterm::Type.into(),
-                body: Subterm::Type.into(),
+                signature: LetSignature::Name {
+                    type_: Subterm::Type.into(),
+                    body: Subterm::Type.into(),
+                },
             })]
         );
     }
@@ -1240,22 +1237,26 @@ mod tests {
                 TopLet {
                     is_pub: true,
                     label: "id".to_string(),
-                    type_: Subterm::FuncType(FuncType {
-                        params: vec![(Some("x".to_string()), Subterm::Type.into())],
-                        output: Subterm::Type.into(),
-                    })
-                    .into(),
-                    body: Subterm::Func(Func {
-                        params: vec!["x".to_string()],
-                        body: Subterm::Name(Name::from(["x".to_string()])).into(),
-                    })
-                    .into(),
+                    signature: LetSignature::Name {
+                        type_: Subterm::FuncType(FuncType {
+                            params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                            output: Subterm::Type.into(),
+                        })
+                        .into(),
+                        body: Subterm::Func(Func {
+                            params: vec!["x".to_string()],
+                            body: Subterm::Name(Name::from(["x".to_string()])).into(),
+                        })
+                        .into(),
+                    },
                 },
                 TopLet {
                     is_pub: false,
                     label: "helper".to_string(),
-                    type_: Subterm::Type.into(),
-                    body: Subterm::Type.into(),
+                    signature: LetSignature::Name {
+                        type_: Subterm::Type.into(),
+                        body: Subterm::Type.into(),
+                    },
                 },
             ])]
         );
@@ -1297,8 +1298,10 @@ mod tests {
                     items: vec![TopItem::Let(TopLet {
                         is_pub: true,
                         label: "x".to_string(),
-                        type_: Subterm::Type.into(),
-                        body: Subterm::Type.into(),
+                        signature: LetSignature::Name {
+                            type_: Subterm::Type.into(),
+                            body: Subterm::Type.into(),
+                        },
                     })],
                 }),
             })]
