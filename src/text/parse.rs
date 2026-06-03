@@ -12,6 +12,8 @@ use {
             sep_by1, spanned, take_eof, take_exact, take_n, take_while,
         },
     },
+    num_bigint::BigUint,
+    num_traits::{ToPrimitive, Zero},
     std::{iter, rc::Rc, str::FromStr},
 };
 
@@ -113,11 +115,20 @@ fn parse_int_value<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-fn parse_u32<'a>() -> Parser<'a, u32> {
+fn parse_usize<'a>() -> Parser<'a, usize> {
     take_while(|char: char| char.is_ascii_digit())
-        .flat_map(|digits| match digits.parse::<u32>() {
+        .flat_map(|digits| match digits.parse::<usize>() {
             Ok(value) => pure(value),
-            Err(_) => fail("expected u32"),
+            Err(_) => fail("expected usize"),
+        })
+        .and_drop(parse_whitespace())
+}
+
+fn parse_nat_digits<'a>() -> Parser<'a, BigUint> {
+    take_while(|char: char| char.is_ascii_digit())
+        .flat_map(|digits| match digits.parse::<BigUint>() {
+            Ok(value) => pure(value),
+            Err(_) => fail("expected nat"),
         })
         .and_drop(parse_whitespace())
 }
@@ -130,13 +141,13 @@ fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
             .and_drop(parse_whitespace()),
     )
     .map(NatLiteral::from)
-    .or(catch(parse_u32()).map(NatLiteral::from))
+    .or(catch(parse_nat_digits()).map(NatLiteral::number))
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
     parse_nat()
         .map(|nat| match nat {
-            NatLiteral::Number(0) => Subterm::Prim(Prim::Nat(Nat::Zero)),
+            NatLiteral::Number(n) if n.is_zero() => Subterm::Prim(Prim::Nat(Nat::Zero)),
             nat => Subterm::Prim(Prim::Nat(Nat::Succ(
                 nat,
                 Subterm::Prim(Prim::Nat(Nat::Zero)).into(),
@@ -151,24 +162,24 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
 fn parse_nat_succ<'a>() -> Parser<'a, Term> {
     let lit_first = catch(parse_nat_literal().and_drop(parse_literal("+")))
         .and(parse_atomic_term())
-        .map(|(spine, base)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::Number(spine), base))));
+        .map(|(spine, base)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::number(spine), base))));
 
     let base_first = catch(parse_atomic_term().and_drop(parse_literal("+")))
         .and(parse_nat_literal())
-        .map(|(base, spine)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::Number(spine), base))));
+        .map(|(base, spine)| Subterm::Prim(Prim::Nat(Nat::Succ(NatLiteral::number(spine), base))));
 
     lit_first.or(base_first).map(Into::into)
 }
 
-fn parse_nat_literal<'a>() -> Parser<'a, u32> {
+fn parse_nat_literal<'a>() -> Parser<'a, BigUint> {
     catch(
         take_exact("'")
             .and_keep(parse_char_value())
             .and_drop(take_exact("'"))
             .and_drop(parse_whitespace()),
     )
-    .map(|c| c as u32)
-    .or(catch(parse_u32()))
+    .map(|c| BigUint::from(c as usize))
+    .or(catch(parse_nat_digits()))
 }
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
@@ -483,9 +494,12 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
             catch(
                 parse_literal("|")
                     .and_keep(parse_nat_literal())
-                    .flat_map(|n| match n {
-                        0 => pure(()),
-                        _ => fail("expected 0 as NatFold zero case"),
+                    .flat_map(|n| {
+                        if n.is_zero() {
+                            pure(())
+                        } else {
+                            fail("expected 0 as NatFold zero case")
+                        }
                     })
                     .and_drop(parse_literal("=>"))
                     .and_keep(lazy(parse_term)),
@@ -514,8 +528,12 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {
+fn parse_nat_case<'a>() -> Parser<'a, (usize, Term)> {
     catch(parse_literal("|").and_keep(parse_nat_literal()))
+        .flat_map(|n| match n.to_usize() {
+            Some(k) => pure(k),
+            None => fail("nat case label too large"),
+        })
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
 }
@@ -681,13 +699,7 @@ fn parse_let<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
-    catch(
-        take_exact(".").and_keep(
-            parse_u32()
-                .map_err("Expected numeric index after '.'")
-                .map(|n| n as usize),
-        ),
-    )
+    catch(take_exact(".").and_keep(parse_usize().map_err("Expected numeric index after '.'")))
 }
 
 enum Suffix {
@@ -1105,7 +1117,7 @@ mod tests {
         assert_eq!(
             "42".parse::<Term>().unwrap(),
             Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-                NatLiteral::Number(42),
+                NatLiteral::number(42usize),
                 Subterm::Prim(Prim::Nat(Nat::Zero)).into()
             ))))
         );
@@ -1124,7 +1136,7 @@ mod tests {
         assert_eq!(
             "42".parse::<Term>().unwrap(),
             Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-                NatLiteral::Number(42),
+                NatLiteral::number(42usize),
                 Subterm::Prim(Prim::Nat(Nat::Zero)).into()
             ))))
         );

@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Flt, Nat, Prim, Type, Var},
+    crate::core::{Atom, Flt, Int, Nat, Prim, Type, Var},
     std::time::Duration,
 };
 
@@ -42,7 +42,7 @@ fn reduce_nat_fold_zero_is_not_true() {
     let mut context = context();
 
     let term: Term = Term::nat_induction(
-        Subterm::Prim(Prim::Nat(Nat::new(0))),
+        Subterm::Prim(Prim::Nat(Nat::new(0usize))),
         Some("m"),
         Term::atom_type(["false", "true"]),
         Atom::from("false"),
@@ -91,12 +91,12 @@ fn reduce_int_add_computes() {
         reduce(
             &mut context,
             Subterm::Prim(Prim::int_add(
-                Subterm::Prim(Prim::Int(1)),
-                Subterm::Prim(Prim::Int(2))
+                Subterm::Prim(Prim::Int(Int::new(1))),
+                Subterm::Prim(Prim::Int(Int::new(2)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Int(3)).into())
+        Ok(Subterm::Prim(Prim::Int(Int::new(3))).into())
     );
 }
 
@@ -108,8 +108,8 @@ fn reduce_int_eql_returns_true_or_false_atom() {
         reduce(
             &mut context,
             Subterm::Prim(Prim::int_eql(
-                Subterm::Prim(Prim::Int(4)),
-                Subterm::Prim(Prim::Int(4))
+                Subterm::Prim(Prim::Int(Int::new(4))),
+                Subterm::Prim(Prim::Int(Int::new(4)))
             ))
             .into()
         ),
@@ -119,8 +119,8 @@ fn reduce_int_eql_returns_true_or_false_atom() {
         reduce(
             &mut context,
             Subterm::Prim(Prim::int_eql(
-                Subterm::Prim(Prim::Int(4)),
-                Subterm::Prim(Prim::Int(5))
+                Subterm::Prim(Prim::Int(Int::new(4))),
+                Subterm::Prim(Prim::Int(Int::new(5)))
             ))
             .into()
         ),
@@ -150,9 +150,9 @@ fn reduce_lst_get_returns_element_at_index() {
     let mut context = context();
 
     let list = Subterm::Prim(Prim::from(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(10))),
-        Subterm::Prim(Prim::Nat(Nat::new(20))),
-        Subterm::Prim(Prim::Nat(Nat::new(30))),
+        Subterm::Prim(Prim::Nat(Nat::new(10usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(20usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(30usize))),
     ]));
 
     assert_eq!(
@@ -161,11 +161,11 @@ fn reduce_lst_get_returns_element_at_index() {
             Subterm::Prim(Prim::arr_get(
                 Subterm::Prim(Prim::NatType),
                 list.clone(),
-                Subterm::Prim(Prim::Nat(Nat::new(0)))
+                Subterm::Prim(Prim::Nat(Nat::new(0usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Nat(Nat::new(10))).into())
+        Ok(Subterm::Prim(Prim::Nat(Nat::new(10usize))).into())
     );
     assert_eq!(
         reduce(
@@ -173,11 +173,11 @@ fn reduce_lst_get_returns_element_at_index() {
             Subterm::Prim(Prim::arr_get(
                 Subterm::Prim(Prim::NatType),
                 list,
-                Subterm::Prim(Prim::Nat(Nat::new(2)))
+                Subterm::Prim(Prim::Nat(Nat::new(2usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Nat(Nat::new(30))).into())
+        Ok(Subterm::Prim(Prim::Nat(Nat::new(30usize))).into())
     );
 }
 
@@ -186,14 +186,14 @@ fn reduce_lst_get_returns_element_at_index() {
 fn reduce_lst_get_panics_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::from(vec![Subterm::Prim(Prim::Nat(Nat::new(1)))]));
+    let list = Subterm::Prim(Prim::from(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))]));
 
     reduce(
         &mut context,
         Subterm::Prim(Prim::arr_get(
             Subterm::Prim(Prim::NatType),
             list,
-            Subterm::Prim(Prim::Nat(Nat::new(1))),
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         ))
         .into(),
     )
@@ -205,7 +205,7 @@ fn reduce_bin_append_adds_byte() {
     let mut context = context();
 
     let bin = Subterm::Prim(Prim::Bin(vec![1, 2]));
-    let byte: Subterm = Subterm::Prim(Prim::Nat(Nat::new(3)));
+    let byte: Subterm = Subterm::Prim(Prim::Nat(Nat::new(3usize)));
 
     assert_eq!(
         reduce(
@@ -221,8 +221,8 @@ fn reduce_lst_append_adds_element() {
     let mut context = context();
 
     let list = Subterm::Prim(Prim::from(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(10))),
-        Subterm::Prim(Prim::Nat(Nat::new(20))),
+        Subterm::Prim(Prim::Nat(Nat::new(10usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(20usize))),
     ]));
 
     assert_eq!(
@@ -231,14 +231,14 @@ fn reduce_lst_append_adds_element() {
             Subterm::Prim(Prim::arr_append(
                 Subterm::Prim(Prim::NatType),
                 list,
-                Subterm::Prim(Prim::Nat(Nat::new(30)))
+                Subterm::Prim(Prim::Nat(Nat::new(30usize)))
             ))
             .into()
         ),
         Ok(Subterm::Prim(Prim::from(vec![
-            Subterm::Prim(Prim::Nat(Nat::new(10))),
-            Subterm::Prim(Prim::Nat(Nat::new(20))),
-            Subterm::Prim(Prim::Nat(Nat::new(30))),
+            Subterm::Prim(Prim::Nat(Nat::new(10usize))),
+            Subterm::Prim(Prim::Nat(Nat::new(20usize))),
+            Subterm::Prim(Prim::Nat(Nat::new(30usize))),
         ]))
         .into())
     );

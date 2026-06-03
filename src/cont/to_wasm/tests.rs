@@ -13,3 +13,9 @@ pub fn i32_result(module: &cont::Module) -> i32 {
 pub fn f32_result(module: &cont::Module) -> f32 {
     printed(module).parse().unwrap()
 }
+
+pub fn traps(module: &cont::Module) -> bool {
+    let (system, _receiver) = crate::ChannelHost::out();
+
+    crate::run_wasm(&to_wasm(module), system).is_err()
+}

@@ -1,20 +1,4 @@
-use super::{Flt, Subterm, Term};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Nat {
-    Zero,
-    Succ(u32, Term),
-}
-
-impl Nat {
-    pub fn new(n: u32) -> Self {
-        if n == 0 {
-            Nat::Zero
-        } else {
-            Nat::Succ(n, Subterm::Prim(Prim::Nat(Nat::Zero)).into())
-        }
-    }
-}
+use super::{Flt, Int, Nat, Term};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
@@ -35,7 +19,7 @@ pub enum Prim {
     NatGte(Term, Term),
     NatToStr(Term),
     IntType,
-    Int(i32),
+    Int(Int),
     IntEql(Term, Term),
     IntNeq(Term, Term),
     IntAdd(Term, Term),

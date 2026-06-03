@@ -6,6 +6,8 @@ use {
         Apply, BlnMatch, Context, Func, Let, Match, Nat, NatMatch, One, Preempted, Prim, Proj,
         Scope, Subterm, Term, Tuple, Two, Var,
     },
+    num_bigint::BigUint,
+    num_traits::ToPrimitive,
     std::{collections::BTreeMap, time::Instant},
 };
 
@@ -77,10 +79,11 @@ fn reduce_nat_induction(
     match Term::unwrap_or_clone(reduce(context, head.into())?) {
         Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
         Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
-            let pred = if spine == 1 {
+            let one = BigUint::from(1usize);
+            let pred = if spine == one {
                 inner
             } else {
-                Prim::Nat(Nat::Succ(spine - 1, inner)).into()
+                Prim::Nat(Nat::Succ(spine - one, inner)).into()
             };
             let ih: Term = Subterm::NatMatch(NatMatch::Induction {
                 head: pred.clone(),
@@ -125,7 +128,7 @@ fn reduce_nat_dispatch(
     context: &mut Context,
     head: Subterm,
     motive: Scope<One>,
-    cases: BTreeMap<u32, Term>,
+    cases: BTreeMap<usize, Term>,
     default: Term,
 ) -> Result<Reduce, Preempted> {
     match Term::unwrap_or_clone(reduce(context, head.into())?) {
@@ -136,7 +139,7 @@ fn reduce_nat_dispatch(
         Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
             if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
         {
-            match cases.get(&spine) {
+            match spine.to_usize().and_then(|k| cases.get(&k)) {
                 Some(body) => Ok(Reduce::Continue(body.clone())),
                 None => Ok(Reduce::Continue(default.clone())),
             }

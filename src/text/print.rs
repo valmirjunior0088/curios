@@ -6,6 +6,7 @@ use {
         UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    num_traits::One,
     std::fmt::{Display, Formatter, Result},
 };
 
@@ -65,7 +66,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                 }
             } else {
                 match nat {
-                    NatLiteral::Number(1) => {
+                    NatLiteral::Number(n) if n.is_one() => {
                         flat([pure("Nat.succ("), print_term(inner), pure(")")])
                     }
                     NatLiteral::Number(n) => flat([
@@ -74,7 +75,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                         pure(")"),
                     ]),
                     NatLiteral::Char(c) => flat([
-                        pure(format!("Nat.succ({}, ", c as u32)),
+                        pure(format!("Nat.succ({}, ", c as usize)),
                         print_term(inner),
                         pure(")"),
                     ]),

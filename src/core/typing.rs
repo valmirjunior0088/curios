@@ -1,6 +1,7 @@
 use {
     super::{Atom, Context, Proj, Subterm, Term, Type},
     crate::Span,
+    num_bigint::BigUint,
     std::fmt,
 };
 
@@ -89,6 +90,9 @@ pub enum Error {
     },
     CannotInfer {
         term: Box<Term>,
+    },
+    NatOverflow {
+        value: BigUint,
     },
     Located {
         span: Span,
@@ -242,6 +246,10 @@ impl Error {
         }
     }
 
+    pub fn nat_overflow(value: BigUint) -> Self {
+        Self::NatOverflow { value }
+    }
+
     pub fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } => self,
@@ -351,6 +359,9 @@ impl fmt::Display for Error {
             Error::CannotInfer { .. } => {
                 write!(f, "cannot infer type of expression")
             }
+            Error::NatOverflow { value } => {
+                write!(f, "Nat literal {value} overflows u32 at the erase boundary")
+            }
             Error::Located { error, .. } => {
                 write!(f, "{error}")
             }
@@ -432,7 +443,7 @@ mod tests {
     #[test]
     fn display_not_a_function() {
         let err = Error::not_a_function(
-            Subterm::Prim(Prim::Nat(Nat::new(0))),
+            Subterm::Prim(Prim::Nat(Nat::new(0usize))),
             Subterm::Prim(Prim::NatType),
         );
         assert_eq!(
@@ -444,7 +455,7 @@ mod tests {
     #[test]
     fn display_type_mismatch_shows_both_types() {
         let err = Error::type_mismatch(
-            Subterm::Prim(Prim::Nat(Nat::new(5))),
+            Subterm::Prim(Prim::Nat(Nat::new(5usize))),
             Subterm::Prim(Prim::NatType),
             Subterm::Prim(Prim::BlnType),
         );

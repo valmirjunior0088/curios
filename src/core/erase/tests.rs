@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{
-        core::{Atom, Flt, Nat, Prim, Term, Type, Var},
+        core::{Atom, Flt, Int, Nat, Prim, Term, Type, Var},
         ersd, text,
     },
     std::time::Duration,
@@ -144,8 +144,8 @@ fn erase_prim_ops_typecheck() {
     erase(
         &mut context,
         &Subterm::Prim(Prim::int_eql(
-            Subterm::Prim(Prim::Int(1)),
-            Subterm::Prim(Prim::Int(1)),
+            Subterm::Prim(Prim::Int(Int::new(1))),
+            Subterm::Prim(Prim::Int(Int::new(1))),
         ))
         .into(),
         &Subterm::Prim(Prim::BlnType).into(),
@@ -193,7 +193,7 @@ fn erase_rejects_wrong_prim_operand_types() {
         erase(
             &mut Context::new(Duration::from_secs(1)),
             &Subterm::Prim(Prim::int_add(
-                Subterm::Prim(Prim::Int(1)),
+                Subterm::Prim(Prim::Int(Int::new(1))),
                 Subterm::Prim(Prim::Flt(Flt::from_f32(2.0)))
             ))
             .into(),
@@ -409,8 +409,8 @@ fn erase_arr_nat_type_literal_len_and_get() {
     erase(&mut context, &arr_nat, &Type.into()).unwrap();
 
     let literal = Subterm::Prim(Prim::from(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1))),
-        Subterm::Prim(Prim::Nat(Nat::new(2))),
+        Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
     .into();
     erase(&mut context, &literal, &arr_nat).unwrap();
@@ -425,7 +425,7 @@ fn erase_arr_nat_type_literal_len_and_get() {
     let get = Subterm::Prim(Prim::arr_get(
         Subterm::Prim(Prim::NatType),
         Var::free("xs"),
-        Subterm::Prim(Prim::Nat(Nat::new(0))),
+        Subterm::Prim(Prim::Nat(Nat::new(0usize))),
     ))
     .into();
     assert_eq!(
@@ -454,7 +454,7 @@ fn erase_bin_type_literal_len_and_get() {
 
     let get = Subterm::Prim(Prim::bin_get(
         Var::free("b"),
-        Subterm::Prim(Prim::Nat(Nat::new(0))),
+        Subterm::Prim(Prim::Nat(Nat::new(0usize))),
     ))
     .into();
     assert_eq!(
@@ -497,8 +497,8 @@ fn erase_nat_eql_returns_bool_atom() {
     let bool_type = Subterm::Prim(Prim::BlnType).into();
 
     let eql = Subterm::Prim(Prim::nat_eql(
-        Subterm::Prim(Prim::Nat(Nat::new(0))),
-        Subterm::Prim(Prim::Nat(Nat::new(0))),
+        Subterm::Prim(Prim::Nat(Nat::new(0usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(0usize))),
     ))
     .into();
 
@@ -513,7 +513,7 @@ fn erase_nat_fold_rejects_non_nat_head() {
     let bool_type = Term::atom_type(["false", "true"]);
 
     let nat_fold = Term::nat_induction(
-        Prim::Int(1),
+        Prim::Int(Int::new(1)),
         Some("m"),
         Term::atom_type(["false", "true"]),
         Atom::from("false"),
@@ -535,10 +535,10 @@ fn erase_nat_match_dispatches_to_named_case() {
     let bool_type = Term::atom_type(["false", "true"]);
 
     let nat_match = Term::nat_dispatch(
-        Prim::Nat(Nat::new(5)),
+        Prim::Nat(Nat::new(5usize)),
         Some("m"),
         Term::atom_type(["false", "true"]),
-        [(5u32, Term::from(Atom::from("true")))],
+        [(5usize, Term::from(Atom::from("true")))],
         Atom::from("false"),
     );
 
@@ -552,10 +552,10 @@ fn erase_nat_match_rejects_non_nat_head() {
     let bool_type = Term::atom_type(["false", "true"]);
 
     let nat_match = Term::nat_dispatch(
-        Prim::Int(0),
+        Prim::Int(Int::new(0)),
         Some("m"),
         Term::atom_type(["false", "true"]),
-        [(0u32, Term::from(Atom::from("true")))],
+        [(0usize, Term::from(Atom::from("true")))],
         Atom::from("false"),
     );
 

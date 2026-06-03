@@ -1473,3 +1473,247 @@ fn lowers_and_runs_arr_append() {
     assert_eq!(i32_result(&module), 9);
 }
 
+fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
+    let mut module = cont::Module::new();
+    module.add_const(cont::ValueName::from("LEFT"), cont::Data::Nat(left));
+    module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Nat(right));
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![
+                    (
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(op),
+                    ),
+                    (
+                        cont::ValueName::from("str"),
+                        cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
+                    ),
+                    (
+                        cont::ValueName::from("unit"),
+                        cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
+                    ),
+                ],
+                blocks: vec![],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("r"),
+                    params: vec![cont::ValueName::from("unit")],
+                }),
+            },
+        },
+    );
+    module
+}
+
+const MAX_I31: u32 = i32::MAX as u32;
+
+#[test]
+fn lowers_and_runs_nat_mul() {
+    let module = nat_op_module(
+        cont::Code::NatMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        6,
+        7,
+    );
+    assert_eq!(i32_result(&module), 42);
+}
+
+#[test]
+fn lowers_and_runs_nat_sub_monus() {
+    let module = nat_op_module(
+        cont::Code::NatSub(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        3,
+        7,
+    );
+    assert_eq!(i32_result(&module), 0);
+}
+
+#[test]
+fn lowers_and_runs_nat_sub() {
+    let module = nat_op_module(
+        cont::Code::NatSub(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        10,
+        3,
+    );
+    assert_eq!(i32_result(&module), 7);
+}
+
+#[test]
+fn lowers_and_runs_nat_add_at_boundary() {
+    let module = nat_op_module(
+        cont::Code::NatAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_I31 - 1,
+        1,
+    );
+    assert_eq!(i32_result(&module), MAX_I31 as i32);
+}
+
+#[test]
+fn lowers_and_runs_nat_mul_at_boundary() {
+    let module = nat_op_module(
+        cont::Code::NatMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_I31,
+        1,
+    );
+    assert_eq!(i32_result(&module), MAX_I31 as i32);
+}
+
+#[test]
+fn nat_add_overflow_traps() {
+    let module = nat_op_module(
+        cont::Code::NatAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_I31,
+        1,
+    );
+    assert!(traps(&module));
+}
+
+#[test]
+fn nat_mul_overflow_traps() {
+    let module = nat_op_module(
+        cont::Code::NatMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_I31,
+        2,
+    );
+    assert!(traps(&module));
+}
+
+fn int_op_module(op: cont::Code, left: i32, right: i32) -> cont::Module {
+    let mut module = cont::Module::new();
+    module.add_const(cont::ValueName::from("LEFT"), cont::Data::Int(left));
+    module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Int(right));
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![
+                    (cont::ValueName::from("result"), cont::Value::Eval(op)),
+                    (
+                        cont::ValueName::from("str"),
+                        cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
+                    ),
+                    (
+                        cont::ValueName::from("unit"),
+                        cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
+                    ),
+                ],
+                blocks: vec![],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("r"),
+                    params: vec![cont::ValueName::from("unit")],
+                }),
+            },
+        },
+    );
+    module
+}
+
+const MAX_INT: i32 = (1 << 30) - 1;
+const MIN_INT: i32 = -(1 << 30);
+
+#[test]
+fn lowers_and_runs_int_add_at_boundary() {
+    let module = int_op_module(
+        cont::Code::IntAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_INT - 1,
+        1,
+    );
+    assert_eq!(i32_result(&module), MAX_INT);
+}
+
+#[test]
+fn int_add_overflow_traps() {
+    let module = int_op_module(
+        cont::Code::IntAdd(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_INT,
+        1,
+    );
+    assert!(traps(&module));
+}
+
+#[test]
+fn int_sub_overflow_traps() {
+    let module = int_op_module(
+        cont::Code::IntSub(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MIN_INT,
+        1,
+    );
+    assert!(traps(&module));
+}
+
+#[test]
+fn lowers_and_runs_int_mul_at_boundary() {
+    let module = int_op_module(
+        cont::Code::IntMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_INT,
+        1,
+    );
+    assert_eq!(i32_result(&module), MAX_INT);
+}
+
+#[test]
+fn int_mul_overflow_traps() {
+    let module = int_op_module(
+        cont::Code::IntMul(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MAX_INT,
+        2,
+    );
+    assert!(traps(&module));
+}
+
+#[test]
+fn int_div_overflow_traps() {
+    // MIN_INT / -1 = 2^30, which exceeds the 31-bit signed maximum.
+    let module = int_op_module(
+        cont::Code::IntDiv(cont::ValueName::from("LEFT"), cont::ValueName::from("RIGHT")),
+        MIN_INT,
+        -1,
+    );
+    assert!(traps(&module));
+}
+
+#[test]
+fn flt_to_int_overflow_traps() {
+    let mut module = cont::Module::new();
+    module.add_const(
+        cont::ValueName::from("TOO_BIG"),
+        cont::Data::Flt((MAX_INT as f32) + 1.0),
+    );
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![
+                    (
+                        cont::ValueName::from("result"),
+                        cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("TOO_BIG"))),
+                    ),
+                    (
+                        cont::ValueName::from("str"),
+                        cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
+                    ),
+                    (
+                        cont::ValueName::from("unit"),
+                        cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
+                    ),
+                ],
+                blocks: vec![],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("r"),
+                    params: vec![cont::ValueName::from("unit")],
+                }),
+            },
+        },
+    );
+    assert!(traps(&module));
+}
+

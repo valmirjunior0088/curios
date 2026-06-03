@@ -4,7 +4,13 @@ use {
         core::{Context, Error, Nat, Prim, Subterm, Term, Type, expect, infer, reduce_with},
         ersd,
     },
+    num_bigint::BigUint,
+    num_traits::ToPrimitive,
 };
+
+fn narrow_nat(k: &BigUint) -> Result<u32, Error> {
+    k.to_u32().ok_or_else(|| Error::nat_overflow(k.clone()))
+}
 
 fn type_type() -> Term {
     Type.into()
@@ -69,10 +75,10 @@ pub fn erase_prim(
             expect(context, term, &nat_type(), expected)?;
 
             if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) {
-                Ok(ersd::Prim::Nat(*spine).into())
+                Ok(ersd::Prim::Nat(narrow_nat(spine)?).into())
             } else {
                 let inner_ersd = erase(context, inner, &nat_type())?;
-                let spine_term: ersd::Term = ersd::Prim::Nat(*spine).into();
+                let spine_term: ersd::Term = ersd::Prim::Nat(narrow_nat(spine)?).into();
                 Ok(ersd::Prim::NatAdd(spine_term.into(), inner_ersd.into()).into())
             }
         }
@@ -183,7 +189,7 @@ pub fn erase_prim(
         &Prim::Int(value) => {
             expect(context, term, &int_type(), expected)?;
 
-            Ok(ersd::Prim::Int(value).into())
+            Ok(ersd::Prim::Int(value.to_i32()).into())
         }
         Prim::IntEql(left, right) => {
             expect(context, term, &bln_type(), expected)?;

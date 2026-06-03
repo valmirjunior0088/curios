@@ -1,5 +1,5 @@
 use {
-    super::{Arity, Atom, Flt, Many, Nat, One, Prim, Two},
+    super::{Arity, Atom, Flt, Int, Many, Nat, One, Prim, Two},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -392,7 +392,7 @@ pub enum NatMatch {
     Dispatch {
         head: Term,
         motive: Scope<One>,
-        cases: BTreeMap<u32, Term>,
+        cases: BTreeMap<usize, Term>,
         default: Term,
     },
 }
@@ -631,7 +631,7 @@ impl Term {
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (u32, B)>,
+        I: IntoIterator<Item = (usize, B)>,
         B: Into<Term>,
         D: Into<Term>,
     {
@@ -721,18 +721,14 @@ pub enum Subterm {
 }
 
 impl Subterm {
-    pub fn as_nat(&self) -> Option<u32> {
+    pub fn as_nat(&self) -> Option<Nat> {
         match self {
-            Subterm::Prim(Prim::Nat(Nat::Zero)) => Some(0),
-            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => match inner.as_ref() {
-                Subterm::Prim(Prim::Nat(Nat::Zero)) => Some(*spine),
-                _ => None,
-            },
+            Subterm::Prim(Prim::Nat(nat)) => Some(nat.clone()),
             _ => None,
         }
     }
 
-    pub fn as_int(&self) -> Option<i32> {
+    pub fn as_int(&self) -> Option<Int> {
         match self {
             Subterm::Prim(Prim::Int(value)) => Some(*value),
             _ => None,
@@ -1199,7 +1195,7 @@ where
             Prim::NatType => Prim::NatType,
             Prim::Nat(Nat::Zero) => Prim::Nat(Nat::Zero),
             Prim::Nat(Nat::Succ(spine, inner)) => {
-                Prim::Nat(Nat::Succ(*spine, self.visit_subterm(inner)))
+                Prim::Nat(Nat::Succ(spine.clone(), self.visit_subterm(inner)))
             }
             Prim::NatEql(left, right) => {
                 Prim::NatEql(self.visit_subterm(left), self.visit_subterm(right))

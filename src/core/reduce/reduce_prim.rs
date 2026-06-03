@@ -1,6 +1,7 @@
 use {
     super::reduce,
-    crate::core::{Context, Flt, Nat, Preempted, Prim, Subterm, Term},
+    crate::core::{Context, Flt, Int, Nat, Preempted, Prim, Subterm, Term},
+    num_traits::ToPrimitive,
 };
 
 /// Reduce both operands of a `Nat` binary primitive, then either `fold` the two literals or
@@ -9,15 +10,20 @@ fn reduce_nat_binary(
     context: &mut Context,
     left: &Term,
     right: &Term,
-    fold: impl FnOnce(u32, u32) -> Prim,
+    fold: impl FnOnce(Nat, Nat) -> Option<Prim>,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, Preempted> {
     let left = reduce(context, left.clone())?;
     let right = reduce(context, right.clone())?;
 
-    Ok(Subterm::Prim(match (left.as_nat(), right.as_nat()) {
+    let folded = match (left.as_nat(), right.as_nat()) {
         (Some(l), Some(r)) => fold(l, r),
-        _ => rebuild(left, right),
+        _ => None,
+    };
+
+    Ok(Subterm::Prim(match folded {
+        Some(prim) => prim,
+        None => rebuild(left, right),
     }))
 }
 
@@ -26,7 +32,7 @@ fn reduce_int_binary(
     context: &mut Context,
     left: &Term,
     right: &Term,
-    fold: impl FnOnce(i32, i32) -> Prim,
+    fold: impl FnOnce(Int, Int) -> Prim,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, Preempted> {
     let left = reduce(context, left.clone())?;
@@ -60,13 +66,13 @@ fn reduce_flt_binary(
 fn reduce_nat_unary(
     context: &mut Context,
     inner: &Term,
-    fold: impl FnOnce(u32) -> Prim,
+    fold: impl FnOnce(Nat) -> Option<Prim>,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, Preempted> {
     let inner = reduce(context, inner.clone())?;
 
-    Ok(Subterm::Prim(match inner.as_nat() {
-        Some(value) => fold(value),
+    Ok(Subterm::Prim(match inner.as_nat().and_then(fold) {
+        Some(prim) => prim,
         None => rebuild(inner),
     }))
 }
@@ -75,7 +81,7 @@ fn reduce_nat_unary(
 fn reduce_int_unary(
     context: &mut Context,
     inner: &Term,
-    fold: impl FnOnce(i32) -> Prim,
+    fold: impl FnOnce(Int) -> Prim,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, Preempted> {
     let inner = reduce(context, inner.clone())?;
@@ -109,66 +115,91 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
             let inner = reduce(context, inner.clone())?;
+
             Ok(match Term::unwrap_or_clone(inner) {
                 Subterm::Prim(Prim::Nat(Nat::Succ(j, tail))) => {
-                    Prim::Nat(Nat::Succ(spine + j, tail)).into()
+                    Prim::Nat(Nat::Succ(spine.clone() + j, tail)).into()
                 }
-                inner => Prim::Nat(Nat::Succ(*spine, Term::new(inner))).into(),
+                inner => Prim::Nat(Nat::Succ(spine.clone(), Term::new(inner))).into(),
             })
         }
-        Prim::NatEql(left, right) => {
-            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l == r), Prim::NatEql)
-        }
-        Prim::NatNeq(left, right) => {
-            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l != r), Prim::NatNeq)
-        }
+        Prim::NatEql(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| l.eql(&r).map(Prim::Bln),
+            Prim::NatEql,
+        ),
+        Prim::NatNeq(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| l.eql(&r).map(|b| Prim::Bln(!b)),
+            Prim::NatNeq,
+        ),
         Prim::NatAdd(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Prim::Nat(Nat::new(l.wrapping_add(r))),
+            |l, r| l.add(r).map(Prim::Nat),
             Prim::NatAdd,
         ),
         Prim::NatSub(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Prim::Nat(Nat::new(l.wrapping_sub(r))),
+            |l, r| l.sub(r).map(Prim::Nat),
             Prim::NatSub,
         ),
         Prim::NatMul(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Prim::Nat(Nat::new(l.wrapping_mul(r))),
+            |l, r| l.mul(r).map(Prim::Nat),
             Prim::NatMul,
         ),
-        Prim::NatLt(left, right) => {
-            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l < r), Prim::NatLt)
-        }
+        Prim::NatLt(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| l.lt(&r).map(Prim::Bln),
+            Prim::NatLt,
+        ),
         Prim::NatDiv(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Prim::Nat(Nat::new(l.wrapping_div(r))),
+            |l, r| l.div(r).map(Prim::Nat),
             Prim::NatDiv,
         ),
         Prim::NatRem(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Prim::Nat(Nat::new(l.wrapping_rem(r))),
+            |l, r| l.rem(r).map(Prim::Nat),
             Prim::NatRem,
         ),
-        Prim::NatGt(left, right) => {
-            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l > r), Prim::NatGt)
-        }
-        Prim::NatLte(left, right) => {
-            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l <= r), Prim::NatLte)
-        }
-        Prim::NatGte(left, right) => {
-            reduce_nat_binary(context, left, right, |l, r| Prim::Bln(l >= r), Prim::NatGte)
-        }
+        Prim::NatGt(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| l.gt(&r).map(Prim::Bln),
+            Prim::NatGt,
+        ),
+        Prim::NatLte(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| l.lte(&r).map(Prim::Bln),
+            Prim::NatLte,
+        ),
+        Prim::NatGte(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| l.gte(&r).map(Prim::Bln),
+            Prim::NatGte,
+        ),
         Prim::IntType => Ok(Subterm::Prim(Prim::IntType)),
         Prim::Int(value) => Ok(Subterm::Prim(Prim::Int(*value))),
         Prim::IntEql(left, right) => reduce_int_binary(
@@ -189,35 +220,35 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             context,
             left,
             right,
-            |left, right| Prim::Int(left.wrapping_add(right)),
+            |left, right| Prim::Int(left.add(right)),
             Prim::IntAdd,
         ),
         Prim::IntSub(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.wrapping_sub(right)),
+            |left, right| Prim::Int(left.sub(right)),
             Prim::IntSub,
         ),
         Prim::IntMul(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.wrapping_mul(right)),
+            |left, right| Prim::Int(left.mul(right)),
             Prim::IntMul,
         ),
         Prim::IntDiv(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.wrapping_div(right)),
+            |left, right| Prim::Int(left.div(right)),
             Prim::IntDiv,
         ),
         Prim::IntRem(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left.wrapping_rem(right)),
+            |left, right| Prim::Int(left.rem(right)),
             Prim::IntRem,
         ),
         Prim::IntLt(left, right) => reduce_int_binary(
@@ -254,28 +285,28 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             context,
             left,
             right,
-            |left, right| Prim::Flt(left + right),
+            |left, right| Prim::Flt(left.add(right)),
             Prim::FltAdd,
         ),
         Prim::FltSub(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Flt(left - right),
+            |left, right| Prim::Flt(left.sub(right)),
             Prim::FltSub,
         ),
         Prim::FltMul(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Flt(left * right),
+            |left, right| Prim::Flt(left.mul(right)),
             Prim::FltMul,
         ),
         Prim::FltDiv(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Flt(left / right),
+            |left, right| Prim::Flt(left.div(right)),
             Prim::FltDiv,
         ),
         Prim::FltMin(left, right) => reduce_flt_binary(
@@ -335,7 +366,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             Prim::FltGte,
         ),
         Prim::FltNeg(inner) => {
-            reduce_flt_unary(context, inner, |flt| Prim::Flt(-flt), Prim::FltNeg)
+            reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.neg()), Prim::FltNeg)
         }
         Prim::FltAbs(inner) => {
             reduce_flt_unary(context, inner, |flt| Prim::Flt(flt.abs()), Prim::FltAbs)
@@ -361,7 +392,10 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::NatToStr(inner) => reduce_nat_unary(
             context,
             inner,
-            |v| Prim::Bin(format!("{v}").into_bytes()),
+            |v| {
+                v.to_big_uint()
+                    .map(|b| Prim::Bin(format!("{b}").into_bytes()))
+            },
             Prim::NatToStr,
         ),
         Prim::IntToStr(inner) => reduce_int_unary(
@@ -373,28 +407,43 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::FltToStr(inner) => reduce_flt_unary(
             context,
             inner,
-            |v| Prim::Bin(format!("{}", v.to_f32()).into_bytes()),
+            |v| Prim::Bin(format!("{v}").into_bytes()),
             Prim::FltToStr,
         ),
-        Prim::NatToInt(inner) => {
-            reduce_nat_unary(context, inner, |v| Prim::Int(v as i32), Prim::NatToInt)
-        }
+        Prim::NatToInt(inner) => reduce_nat_unary(
+            context,
+            inner,
+            |v| {
+                let bits = v.to_big_uint()?.to_u32().unwrap_or(0) & 0x7FFF_FFFF;
+                let signed = if bits >= 0x4000_0000 {
+                    bits as i64 - (1i64 << 31)
+                } else {
+                    bits as i64
+                };
+                Some(Prim::Int(Int::new(signed)))
+            },
+            Prim::NatToInt,
+        ),
         Prim::NatToFlt(inner) => reduce_nat_unary(
             context,
             inner,
-            |v| Prim::Flt(Flt::from_f32(v as f32)),
+            |v| {
+                Some(Prim::Flt(Flt::from_f32(
+                    v.to_big_uint()?.to_f64().unwrap_or(0.0) as f32,
+                )))
+            },
             Prim::NatToFlt,
         ),
         Prim::IntToNat(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Prim::Nat(Nat::new(v as u32)),
+            |v| Prim::Nat(Nat::new(v.to_i32() as u32)),
             Prim::IntToNat,
         ),
         Prim::IntToFlt(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Prim::Flt(Flt::from_f32(v as f32)),
+            |v| Prim::Flt(Flt::from_f32(v.to_i32() as f32)),
             Prim::IntToFlt,
         ),
         Prim::FltToNat(inner) => reduce_flt_unary(
@@ -406,7 +455,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::FltToInt(inner) => reduce_flt_unary(
             context,
             inner,
-            |flt| Prim::Int(flt.to_f32() as i32),
+            |flt| Prim::Int(Int::new(flt.to_f32() as i64)),
             Prim::FltToInt,
         ),
         Prim::BinType => Ok(Subterm::Prim(Prim::BinType)),
@@ -414,9 +463,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::BinLen(bin) => {
             let bin = reduce(context, bin.clone())?;
             Ok(match Term::unwrap_or_clone(bin) {
-                Subterm::Prim(Prim::Bin(bytes)) => {
-                    Subterm::Prim(Prim::Nat(Nat::new(bytes.len() as u32)))
-                }
+                Subterm::Prim(Prim::Bin(bytes)) => Subterm::Prim(Prim::Nat(Nat::new(bytes.len()))),
                 bin => Subterm::Prim(Prim::bin_len(bin)),
             })
         }
@@ -436,13 +483,10 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::BinGet(bin, index) => {
             let bin = reduce(context, bin.clone())?;
             let index = reduce(context, index.clone())?;
-            let i = index.as_nat();
+            let i = index.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(bin), i) {
                 (Subterm::Prim(Prim::Bin(bytes)), Some(i)) => Subterm::Prim(Prim::Nat(Nat::new(
-                    bytes
-                        .get(i as usize)
-                        .copied()
-                        .expect("Bin.get: index out of bounds") as u32,
+                    bytes.get(i).copied().expect("Bin.get: index out of bounds"),
                 ))),
                 (bin, _) => Subterm::Prim(Prim::bin_get(bin, index)),
             })
@@ -451,12 +495,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             let bin = reduce(context, bin.clone())?;
             let start = reduce(context, start.clone())?;
             let end = reduce(context, end.clone())?;
-            let s = start.as_nat();
-            let e = end.as_nat();
+            let s = start.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
+            let e = end.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(bin), s, e) {
                 (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) => Subterm::Prim(Prim::Bin(
                     bytes
-                        .get(s as usize..e as usize)
+                        .get(s..e)
                         .expect("Bin.slice: range out of bounds")
                         .to_vec(),
                 )),
@@ -466,10 +510,10 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::BinAppend(bin, byte) => {
             let bin = reduce(context, bin.clone())?;
             let byte = reduce(context, byte.clone())?;
-            let n = byte.as_nat();
+            let n = byte.as_nat().and_then(|n| n.to_big_uint()?.to_u8());
             Ok(match (Term::unwrap_or_clone(bin), n) {
                 (Subterm::Prim(Prim::Bin(mut bytes)), Some(n)) => {
-                    bytes.push(n as u8);
+                    bytes.push(n);
                     Subterm::Prim(Prim::Bin(bytes))
                 }
                 (bin, _) => Subterm::Prim(Prim::bin_append(bin, byte)),
@@ -508,9 +552,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
-                Subterm::Prim(Prim::Arr(elems)) => {
-                    Subterm::Prim(Prim::Nat(Nat::new(elems.len() as u32)))
-                }
+                Subterm::Prim(Prim::Arr(elems)) => Subterm::Prim(Prim::Nat(Nat::new(elems.len()))),
                 list => Subterm::Prim(Prim::arr_len(type_, list)),
             })
         }
@@ -518,11 +560,11 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let index = reduce(context, index.clone())?;
-            let i = index.as_nat();
+            let i = index.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(list), i) {
                 (Subterm::Prim(Prim::Arr(elems)), Some(i)) => elems
                     .into_iter()
-                    .nth(i as usize)
+                    .nth(i)
                     .map(Term::unwrap_or_clone)
                     .expect("Arr.get: index out of bounds"),
                 (list, _) => Subterm::Prim(Prim::arr_get(type_, list, index)),
@@ -533,12 +575,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
             let list = reduce(context, list.clone())?;
             let start = reduce(context, start.clone())?;
             let end = reduce(context, end.clone())?;
-            let s = start.as_nat();
-            let e = end.as_nat();
+            let s = start.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
+            let e = end.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(list), s, e) {
                 (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) => Subterm::Prim(Prim::Arr(
                     elems
-                        .get(s as usize..e as usize)
+                        .get(s..e)
                         .expect("Arr.slice: range out of bounds")
                         .to_vec(),
                 )),

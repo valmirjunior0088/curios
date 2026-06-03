@@ -96,7 +96,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
             Subterm::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
             inner => {
-                if spine == 1 {
+                if spine == num_bigint::BigUint::from(1usize) {
                     flat([
                         pure("Nat.succ("),
                         print_term(inner.clone().into(), depth),
@@ -179,7 +179,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::NatToStr(inner) => flat([pure("Nat.to_str "), print_term(inner, depth)]),
         Prim::IntType => pure("Int"),
-        Prim::Int(value) => pure(format!("{:+}", value)),
+        Prim::Int(value) => pure(format!("{:+}", value.to_i32())),
         Prim::IntEql(left, right) => flat([
             pure("Int.eql "),
             print_term(left, depth),

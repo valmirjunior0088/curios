@@ -1,4 +1,5 @@
 use /std/{Arr, Str, Parse, Nat, Bin, Bln};
+use /std/Parse/{Result};
 use /json/{Value};
 
 let is_ws(byte : Nat) -> Bln =
@@ -44,9 +45,9 @@ let take_literal(literal : Bin) -> Parse({}) =
                     end
                 end
             end;
-        match r.1 : Parse/Result({ Nat, {} })
-        | true  => Parse/Result/ok({ Nat, {} }, (r.0, ()))
-        | false => Parse/Result/err({ Nat, {} }, "unexpected literal")
+        match r.1 : Result({ Nat, {} })
+        | true  => Result/ok({ Nat, {} }, (r.0, ()))
+        | false => Result/err({ Nat, {} }, "unexpected literal")
         end;
 
 let parse_null : Parse(Value) =
@@ -59,15 +60,15 @@ let parse_false_val : Parse(Value) =
     Parse/map({}, Value, _ => Value/bln(false), take_literal("false"));
 
 let parse_num : Parse(Value) = (input, pos) =>
-    let r : Parse/Result({ Nat, Bin }) = Parse/take_while(is_num_byte)(input, pos);
-    match r : Parse/Result({ Nat, Value })
+    let r : Result({ Nat, Bin }) = Parse/take_while(is_num_byte)(input, pos);
+    match r : Result({ Nat, Value })
     | ok(pair) =>
         let bytes : Bin = pair.1;
-        match Nat/eql(Bin/len(bytes), 0) : Parse/Result({ Nat, Value })
-        | true  => Parse/Result/err({ Nat, Value }, "expected number")
-        | false => Parse/Result/ok({ Nat, Value }, (pair.0, Value/num(Str/from_flt(bytes))))
+        match Nat/eql(Bin/len(bytes), 0) : Result({ Nat, Value })
+        | true  => Result/err({ Nat, Value }, "expected number")
+        | false => Result/ok({ Nat, Value }, (pair.0, Value/num(Str/from_flt(bytes))))
         end
-    | err(msg) => Parse/Result/err({ Nat, Value }, msg)
+    | err(msg) => Result/err({ Nat, Value }, msg)
     end;
 
 let is_not_string_special(byte : Nat) -> Bln =
@@ -105,10 +106,10 @@ let parse_str_value : Parse(Value) =
     Parse/map(Bin, Value, s => Value/str(s), parse_raw_str);
 
 pub rec decode : Parse(Value) = (input, pos) =>
-    match Nat/lt(pos, Bin/len(input)) : Parse/Result({ Nat, Value })
-    | false => Parse/Result/err({ Nat, Value }, "unexpected end of input")
+    match Nat/lt(pos, Bin/len(input)) : Result({ Nat, Value })
+    | false => Result/err({ Nat, Value }, "unexpected end of input")
     | true  =>
-        match Bin/get(input, pos) : Parse/Result({ Nat, Value })
+        match Bin/get(input, pos) : Result({ Nat, Value })
         | ' '  => decode(input, Nat/add(pos, 1))
         | '\t' => decode(input, Nat/add(pos, 1))
         | '\n' => decode(input, Nat/add(pos, 1))

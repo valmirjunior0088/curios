@@ -6,6 +6,7 @@ use {
             BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Subterm, Term,
         },
     },
+    num_bigint::BigUint,
 };
 
 pub struct Elaborate<'a, 'b> {
@@ -194,10 +195,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
             Prim::Nat(Nat::Succ(NatLiteral::Number(spine), inner)) => {
-                core::Prim::Nat(core::Nat::Succ(*spine, self.term(inner)?))
+                core::Prim::Nat(core::Nat::Succ(spine.clone(), self.term(inner)?))
             }
             Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => {
-                core::Prim::Nat(core::Nat::Succ(*c as u32, self.term(inner)?))
+                core::Prim::Nat(core::Nat::Succ(BigUint::from(*c as usize), self.term(inner)?))
             }
             Prim::NatEql(left, right) => core::Prim::nat_eql(self.term(left)?, self.term(right)?),
             Prim::NatNeq(left, right) => core::Prim::nat_neq(self.term(left)?, self.term(right)?),
@@ -211,7 +212,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::NatLte(left, right) => core::Prim::nat_lte(self.term(left)?, self.term(right)?),
             Prim::NatGte(left, right) => core::Prim::nat_gte(self.term(left)?, self.term(right)?),
             Prim::IntType => core::Prim::IntType,
-            Prim::Int(value) => core::Prim::Int(*value),
+            Prim::Int(value) => core::Prim::Int(core::Int::new(*value as i64)),
             Prim::IntEql(left, right) => core::Prim::int_eql(self.term(left)?, self.term(right)?),
             Prim::IntNeq(left, right) => core::Prim::int_neq(self.term(left)?, self.term(right)?),
             Prim::IntAdd(left, right) => core::Prim::int_add(self.term(left)?, self.term(right)?),

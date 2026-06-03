@@ -62,12 +62,18 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     pub fn emit_data(&mut self, value_name: &'a cont::ValueName, value: &'a cont::Data) {
         match value {
-            &cont::Data::Nat(value) => self.emit_instrs([
-                wasm::Instr::I32Const {
-                    value: value as i32,
-                },
-                wasm::Instr::RefI31,
-            ]),
+            &cont::Data::Nat(value) => {
+                if value >> 31 != 0 {
+                    panic!("Nat literal {value} exceeds i31ref range");
+                }
+
+                self.emit_instrs([
+                    wasm::Instr::I32Const {
+                        value: value as i32,
+                    },
+                    wasm::Instr::RefI31,
+                ])
+            }
             &cont::Data::Int(value) => {
                 self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
             }
@@ -201,7 +207,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Eq,
                 WrapAs::I31,
             ),
@@ -209,39 +215,83 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Ne,
                 WrapAs::I31,
             ),
-            cont::Code::NatAdd(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Add,
-                WrapAs::I31,
-            ),
-            cont::Code::NatSub(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Sub,
-                WrapAs::I31,
-            ),
-            cont::Code::NatMul(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Mul,
-                WrapAs::I31,
-            ),
+            cont::Code::NatAdd(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("nat_add", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::NatSub(left, right) => {
+                // Monus: 0 if left < right, else left - right.
+                // select [val1=0, val2=left-right, cond=left<right] returns val1 when cond != 0.
+                self.emit_instr(wasm::Instr::I32Const { value: 0 });
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I32LtU);
+                self.emit_instr(wasm::Instr::Select { val_types: vec![] });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::NatMul(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("nat_mul", wasm::ValType::Num(wasm::NumType::I64));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I64ExtendI32U);
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I64ExtendI32U);
+                self.emit_instr(wasm::Instr::I64Mul);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I64Const { value: 31 });
+                self.emit_instr(wasm::Instr::I64ShrU);
+                self.emit_instr(wasm::Instr::I32WrapI64);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::I32WrapI64);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::NatLt(left, right) => self.emit_binary_op(
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32LtU,
                 WrapAs::I31,
             ),
@@ -249,7 +299,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32DivU,
                 WrapAs::I31,
             ),
@@ -257,7 +307,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32RemU,
                 WrapAs::I31,
             ),
@@ -265,7 +315,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32GtU,
                 WrapAs::I31,
             ),
@@ -273,7 +323,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32LeU,
                 WrapAs::I31,
             ),
@@ -281,7 +331,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32GeU,
                 WrapAs::I31,
             ),
@@ -301,38 +351,129 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 wasm::Instr::I32Ne,
                 WrapAs::I31,
             ),
-            cont::Code::IntAdd(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Add,
-                WrapAs::I31,
-            ),
-            cont::Code::IntSub(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Sub,
-                WrapAs::I31,
-            ),
-            cont::Code::IntMul(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Mul,
-                WrapAs::I31,
-            ),
-            cont::Code::IntDiv(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32DivS,
-                WrapAs::I31,
-            ),
+            cont::Code::IntAdd(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_add", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Add);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntSub(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_sub", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Sub);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntMul(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_mul", wasm::ValType::Num(wasm::NumType::I64));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I64ExtendI32S);
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I64ExtendI32S);
+                self.emit_instr(wasm::Instr::I64Mul);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I64Const { value: 30 });
+                self.emit_instr(wasm::Instr::I64ShrS);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I64Const { value: 63 });
+                self.emit_instr(wasm::Instr::I64ShrS);
+                self.emit_instr(wasm::Instr::I64Ne);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::I32WrapI64);
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntDiv(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_div", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32DivS);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::IntRem(left, right) => self.emit_binary_op(
                 &result_local,
                 left,
@@ -377,7 +518,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32And,
                 WrapAs::I31,
             ),
@@ -385,7 +526,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Or,
                 WrapAs::I31,
             ),
@@ -393,67 +534,115 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            cont::Code::NatShl(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Shl,
-                WrapAs::I31,
-            ),
+            cont::Code::NatShl(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("nat_shl", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::NatShr(left, right) => self.emit_binary_op(
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32ShrU,
                 WrapAs::I31,
             ),
-            cont::Code::NatRotl(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Rotl,
-                WrapAs::I31,
-            ),
-            cont::Code::NatRotr(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Rotr,
-                WrapAs::I31,
-            ),
+            cont::Code::NatRotl(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("nat_rotl", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I32Rotl);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::NatRotr(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("nat_rotr", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Nat));
+                self.emit_instr(wasm::Instr::I32Rotr);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::NatClz(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Clz,
                 WrapAs::I31,
             ),
             cont::Code::NatCtz(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Ctz,
                 WrapAs::I31,
             ),
             cont::Code::NatPopcnt(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Popcnt,
                 WrapAs::I31,
             ),
             cont::Code::NatEqz(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::I32Eqz,
                 WrapAs::I31,
             ),
@@ -481,14 +670,36 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            cont::Code::IntShl(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Shl,
-                WrapAs::I31,
-            ),
+            cont::Code::IntShl(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_shl", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::IntShr(left, right) => self.emit_binary_op(
                 &result_local,
                 left,
@@ -497,22 +708,66 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 wasm::Instr::I32ShrS,
                 WrapAs::I31,
             ),
-            cont::Code::IntRotl(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Rotl,
-                WrapAs::I31,
-            ),
-            cont::Code::IntRotr(left, right) => self.emit_binary_op(
-                &result_local,
-                left,
-                right,
-                LoadAs::Int,
-                wasm::Instr::I32Rotr,
-                WrapAs::I31,
-            ),
+            cont::Code::IntRotl(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_rotl", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Rotl);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::IntRotr(left, right) => {
+                let local_name = self
+                    .context
+                    .push_local("int_rotr", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+                self.emit_instr(wasm::Instr::I32Rotr);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::IntClz(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
@@ -695,7 +950,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 WrapAs::Flt,
             ),
             cont::Code::NatToStr(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::Call {
                     func_name: self.context.table().nat_to_str_func().clone(),
                 });
@@ -704,7 +959,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
             }
             cont::Code::NatToInt(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::RefI31);
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
@@ -713,7 +968,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             cont::Code::NatToFlt(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
-                LoadAs::Int,
+                LoadAs::Nat,
                 wasm::Instr::F32ConvertI32U,
                 WrapAs::Flt,
             ),
@@ -749,20 +1004,58 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::FltToNat(operand) => self.emit_unary_op(
-                &result_local,
-                operand,
-                LoadAs::Flt,
-                wasm::Instr::I32TruncF32U,
-                WrapAs::I31,
-            ),
-            cont::Code::FltToInt(operand) => self.emit_unary_op(
-                &result_local,
-                operand,
-                LoadAs::Flt,
-                wasm::Instr::I32TruncF32S,
-                WrapAs::I31,
-            ),
+            cont::Code::FltToNat(operand) => {
+                let local_name = self
+                    .context
+                    .push_local("flt_to_nat", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::I32TruncF32U);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            cont::Code::FltToInt(operand) => {
+                let local_name = self
+                    .context
+                    .push_local("flt_to_int", wasm::ValType::Num(wasm::NumType::I32));
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::I32TruncF32S);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Const { value: 1 });
+                self.emit_instr(wasm::Instr::I32Shl);
+                self.emit_instr(wasm::Instr::LocalGet {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(wasm::Instr::I32Xor);
+                self.emit_instr(wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(wasm::Instr::I32ShrU);
+                self.emit_instr(wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: vec![wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(wasm::Instr::LocalGet { local_name });
+                self.emit_instr(wasm::Instr::RefI31);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::BinLen(bin) => self.emit_unary_op(
                 &result_local,
                 bin,
@@ -887,7 +1180,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             cont::Code::BinGet(bin, idx) => {
                 let bin_type = self.context.table().bin_type();
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
-                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::ArrayGetU {
                     type_name: bin_type,
                 });
@@ -898,8 +1191,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             }
             cont::Code::BinSlice(bin, start, end) => {
                 let bin_type = self.context.table().bin_type();
-                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::ArrayNewDefault {
                     type_name: bin_type.clone(),
@@ -911,9 +1204,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
                 self.emit_instr(wasm::Instr::I32Const { value: 0 });
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
-                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::ArrayCopy {
                     source_name: bin_type.clone(),
@@ -947,7 +1240,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instr(wasm::Instr::ArrayLen);
-                self.emit_instrs(self.context.load_value_instrs(byte, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(byte, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::ArraySet {
                     type_name: bin_type,
                 });
@@ -1064,7 +1357,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             cont::Code::ArrGet(lst, idx) => {
                 let arr_type = self.context.table().arr_type();
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
-                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::ArrayGet {
                     type_name: arr_type,
                 });
@@ -1075,8 +1368,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             cont::Code::ArrSlice(lst, start, end) => {
                 let arr_type = self.context.table().arr_type();
 
-                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::ArrayNewDefault {
                     type_name: arr_type.clone(),
@@ -1088,9 +1381,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
                 self.emit_instr(wasm::Instr::I32Const { value: 0 });
                 self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
-                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Int));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::I32Sub);
                 self.emit_instr(wasm::Instr::ArrayCopy {
                     source_name: arr_type.clone(),

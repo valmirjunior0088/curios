@@ -360,7 +360,7 @@ fn infer_nat_induction(
     erase(
         context,
         zero_case,
-        &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0))).into()]),
+        &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0usize))).into()]),
     )?;
 
     let pred_label = context.fresh(succ_case.first_label());
@@ -375,7 +375,7 @@ fn infer_nat_induction(
             &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
             &motive.open(&[&Subterm::Prim(Prim::nat_add(
                 Var::free(&pred_label),
-                Subterm::Prim(Prim::Nat(Nat::new(1))),
+                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into()]),
         )
@@ -389,7 +389,7 @@ fn infer_nat_dispatch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<One>,
-    cases: &BTreeMap<u32, Term>,
+    cases: &BTreeMap<usize, Term>,
     default: &Term,
     term: &Term,
 ) -> Result<Term, Error> {

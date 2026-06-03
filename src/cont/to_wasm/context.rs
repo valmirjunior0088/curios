@@ -37,6 +37,7 @@ pub enum LoadAs {
     Null,
     NonNull,
     Concrete(wasm::TypeName),
+    Nat,
     Int,
     Flt,
     Bin,
@@ -216,6 +217,14 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 }]
             }
+            LoadAs::Nat => {
+                vec![
+                    wasm::Instr::RefCast {
+                        ref_type: self.table().int_type(false),
+                    },
+                    wasm::Instr::I31GetU,
+                ]
+            }
             LoadAs::Int => {
                 vec![
                     wasm::Instr::RefCast {
@@ -365,7 +374,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
         if is_sequential_from_zero(&target.cases) {
             if let [(_, jump_target)] = sorted.as_slice() {
-                self.load_value_instrs(&target.operand, LoadAs::Int)
+                self.load_value_instrs(&target.operand, LoadAs::Nat)
                     .into_iter()
                     .chain([
                         wasm::Instr::I32Eqz,
@@ -392,7 +401,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 let label_name = wasm::LabelName::from("tail");
 
                 let instructions = self
-                    .load_value_instrs(&target.operand, LoadAs::Int)
+                    .load_value_instrs(&target.operand, LoadAs::Nat)
                     .into_iter()
                     .chain([wasm::Instr::BrTable {
                         label_names: label_names
@@ -431,7 +440,7 @@ impl<'a, 'b> Context<'a, 'b> {
         match cases {
             [] => default_instructions,
             [(value, jump_target)] => self
-                .load_value_instrs(operand, LoadAs::Int)
+                .load_value_instrs(operand, LoadAs::Nat)
                 .into_iter()
                 .chain([
                     wasm::Instr::I32Const {
@@ -452,7 +461,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 let left =
                     self.binary_search_instrs(operand, &cases[..mid], default_instructions.clone());
                 let right = self.binary_search_instrs(operand, &cases[mid..], default_instructions);
-                self.load_value_instrs(operand, LoadAs::Int)
+                self.load_value_instrs(operand, LoadAs::Nat)
                     .into_iter()
                     .chain([
                         wasm::Instr::I32Const {

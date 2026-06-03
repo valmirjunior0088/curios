@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Nat, Prim, Type, Var},
+    crate::core::{Atom, Int, Nat, Prim, Type, Var},
     std::time::Duration,
 };
 
@@ -61,12 +61,12 @@ fn convert_prim_recurses_into_operands() {
 
     let this = Term::func(
         ["x"],
-        Subterm::Prim(Prim::int_add(Var::free("x"), Subterm::Prim(Prim::Int(1)))),
+        Subterm::Prim(Prim::int_add(Var::free("x"), Subterm::Prim(Prim::Int(Int::new(1))))),
     );
 
     let that = Term::func(
         ["y"],
-        Subterm::Prim(Prim::int_add(Var::free("y"), Subterm::Prim(Prim::Int(1)))),
+        Subterm::Prim(Prim::int_add(Var::free("y"), Subterm::Prim(Prim::Int(Int::new(1))))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -78,12 +78,12 @@ fn convert_prim_distinguishes_operator_kind() {
 
     let this = Term::func(
         ["x"],
-        Subterm::Prim(Prim::int_add(Var::free("x"), Subterm::Prim(Prim::Int(1)))),
+        Subterm::Prim(Prim::int_add(Var::free("x"), Subterm::Prim(Prim::Int(Int::new(1))))),
     );
 
     let that = Term::func(
         ["x"],
-        Subterm::Prim(Prim::int_sub(Var::free("x"), Subterm::Prim(Prim::Int(1)))),
+        Subterm::Prim(Prim::int_sub(Var::free("x"), Subterm::Prim(Prim::Int(Int::new(1))))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
@@ -108,7 +108,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
         ["x"],
         Subterm::Prim(Prim::nat_add(
             Var::free("x"),
-            Subterm::Prim(Prim::Nat(Nat::new(1))),
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         )),
     );
 
@@ -116,7 +116,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
         ["y"],
         Subterm::Prim(Prim::nat_add(
             Var::free("y"),
-            Subterm::Prim(Prim::Nat(Nat::new(1))),
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         )),
     );
 
@@ -150,14 +150,14 @@ fn convert_prim_arr_compares_element_wise() {
     let mut context = context();
 
     let this = Subterm::Prim(Prim::from(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1))),
-        Subterm::Prim(Prim::Nat(Nat::new(2))),
+        Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
     .into();
 
     let that = Subterm::Prim(Prim::from(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1))),
-        Subterm::Prim(Prim::Nat(Nat::new(2))),
+        Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
     .into();
 
@@ -168,11 +168,11 @@ fn convert_prim_arr_compares_element_wise() {
 fn convert_prim_arr_rejects_different_lengths() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::from(vec![Subterm::Prim(Prim::Nat(Nat::new(1)))])).into();
+    let this = Subterm::Prim(Prim::from(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))])).into();
 
     let that = Subterm::Prim(Prim::from(vec![
-        Subterm::Prim(Prim::Nat(Nat::new(1))),
-        Subterm::Prim(Prim::Nat(Nat::new(2))),
+        Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+        Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
     .into();
 

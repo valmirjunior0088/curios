@@ -195,7 +195,7 @@ fn erase_nat_induction(
     let erased_zero_case = erase(
         context,
         zero_case,
-        &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0))).into()]),
+        &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0usize))).into()]),
     )?;
 
     let pred_label = context.fresh(succ_case.first_label());
@@ -210,7 +210,7 @@ fn erase_nat_induction(
             &succ_case.open(&[&Var::free(&pred_label).into(), &Var::free(&ih_label).into()]),
             &motive.open(&[&Subterm::Prim(Prim::nat_add(
                 Var::free(&pred_label),
-                Subterm::Prim(Prim::Nat(Nat::new(1))),
+                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into()]),
         )
@@ -234,7 +234,7 @@ fn erase_nat_dispatch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<One>,
-    cases: &BTreeMap<u32, Term>,
+    cases: &BTreeMap<usize, Term>,
     default: &Term,
     term: &Term,
     expected: &Term,
@@ -260,14 +260,15 @@ fn erase_nat_dispatch(
     let erased_cases = cases
         .iter()
         .map(|(n, body)| {
-            let case_expected = motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]);
+            let case_expected =
+                motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]);
             context.with_frame(|context| {
                 refine_head(
                     context,
                     head,
                     &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
                 )?;
-                erase(context, body, &case_expected).map(|e| (*n, e.into()))
+                erase(context, body, &case_expected).map(|e| (*n as u32, e.into()))
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;

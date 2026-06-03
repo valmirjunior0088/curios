@@ -4,6 +4,12 @@ pub use arity::*;
 mod flt;
 pub use flt::*;
 
+mod int;
+pub use int::*;
+
+mod nat;
+pub use nat::*;
+
 mod prim;
 pub use prim::*;
 
