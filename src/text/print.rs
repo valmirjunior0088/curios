@@ -211,15 +211,9 @@ fn print_term(term: Term) -> Printer<'static> {
             print_term(output),
         ]),
         Subterm::Func(Func { params, body }) => flat([
-            match params.as_slice() {
-                [single] => flat([pure(single.clone())]),
-                _ => flat([
-                    pure("("),
-                    sep_flat(params.into_iter().map(pure), || pure(", ")),
-                    pure(")"),
-                ]),
-            },
-            pure(" =>\n"),
+            pure("("),
+            sep_flat(params.into_iter().map(pure), || pure(", ")),
+            pure(") =>\n"),
             indent(print_term(body)),
         ]),
         Subterm::Apply(Apply { head, params }) => flat([

@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /sys/{Int, Flt};
-        rec id : Type -> Type = x => x;
+        rec id : Type -> Type = (x) => x;
         let witness : Type = id(Int);
         let pair_ty : Type = {
             label : '[left, right],

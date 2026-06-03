@@ -57,8 +57,8 @@ rec go_with(result : Type, finish : Bin -> result, f : Fmt, acc : Bin) -> format
     match f : format_type_with(result, f)
     | nil()            => finish(acc)
     | lit(bytes, rest) => go_with(result, finish, rest, Bin/concat(acc, bytes))
-    | str(rest)        => s => go_with(result, finish, rest, Bin/concat(acc, s))
-    | nat(rest)        => n => go_with(result, finish, rest, Bin/concat(acc, Nat/to_str(n)))
+    | str(rest)        => (s) => go_with(result, finish, rest, Bin/concat(acc, s))
+    | nat(rest)        => (n) => go_with(result, finish, rest, Bin/concat(acc, Nat/to_str(n)))
     end;
 
 pub let format(s : Bin) -> format_type_with(Bin, parse(s)) =

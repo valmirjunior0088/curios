@@ -10,7 +10,7 @@ fn end_to_end() {
             | 'right => sys/Flt
             end };
         let pair : pair_ty = ('left, +42);
-        let score : (_ : pair_ty) -> sys/Int = p =>
+        let score : (_ : pair_ty) -> sys/Int = (p) =>
             match p.0 : _ => sys/Int
             | 'left => +42
             | 'right => +7
@@ -89,7 +89,7 @@ fn multi_arg_function() {
 #[test]
 fn curried_function() {
     let source = r#"
-        let add : sys/Int -> sys/Int -> sys/Int = x => y => sys/Int/add(x, y);
+        let add : sys/Int -> sys/Int -> sys/Int = (x) => (y) => sys/Int/add(x, y);
         sys/Io/print(sys/Int/to_str(add(+3)(+4)))
         "#;
 

@@ -427,7 +427,7 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_func<'a>() -> Parser<'a, Term> {
-    let multi = catch(
+    catch(
         parse_literal("(")
             .and_keep(sep_by0(
                 || parse_identifier().map(|s: &str| s.to_string()),
@@ -437,18 +437,7 @@ fn parse_func<'a>() -> Parser<'a, Term> {
             .and_drop(parse_literal("=>")),
     )
     .and(lazy(parse_term))
-    .map(|(params, body)| Subterm::Func(Func { params, body }));
-
-    let single = catch(parse_identifier().and_drop(parse_literal("=>")))
-        .and(lazy(parse_term))
-        .map(|(label, body): (&str, Term)| {
-            Subterm::Func(Func {
-                params: vec![label.to_string()],
-                body,
-            })
-        });
-
-    multi.or(single).map(Into::into)
+    .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }
 
 fn parse_motive<'a>() -> Parser<'a, Motive> {
@@ -1028,7 +1017,7 @@ mod tests {
     #[test]
     fn parse_rec_func_and_apply() {
         assert_eq!(
-            "rec id : (x : Type) -> Type = x => x; id(a)"
+            "rec id : (x : Type) -> Type = (x) => x; id(a)"
                 .parse::<Term>()
                 .unwrap(),
             Subterm::Rec(Rec {
@@ -1227,7 +1216,7 @@ mod tests {
     fn parse_top_rec_mixed_pub() {
         assert_eq!(
             r#"
-                pub rec id : (x : Type) -> Type = x => x
+                pub rec id : (x : Type) -> Type = (x) => x
                 and helper : Type = Type;
             "#
             .parse::<Module>()
