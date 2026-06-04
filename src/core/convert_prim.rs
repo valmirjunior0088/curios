@@ -3,7 +3,7 @@ use {
     crate::core::{Nat, Preempted, Prim, Term},
 };
 
-pub fn compare_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, Preempted> {
+pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, Preempted> {
     match (this, that) {
         (Prim::NatType, Prim::NatType)
         | (Prim::IntType, Prim::IntType)

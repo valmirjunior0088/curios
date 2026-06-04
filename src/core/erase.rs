@@ -1,11 +1,8 @@
-mod erase_prim;
-use self::erase_prim::erase_prim;
-
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, expect,
-        infer, reduce_with, refine_head,
+        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, erase_prim,
+        expect, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -625,5 +622,3 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
     }
 }
 
-#[cfg(test)]
-mod tests;

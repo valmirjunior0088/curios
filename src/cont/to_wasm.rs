@@ -7,6 +7,9 @@ use frame::*;
 mod context;
 use context::*;
 
+mod code_emitter;
+use code_emitter::*;
+
 mod expr_emitter;
 use expr_emitter::*;
 
@@ -30,7 +33,7 @@ mod tests;
 use tests::*;
 
 #[cfg(test)]
-mod lowering_tests;
+mod module_tests;
 
 #[cfg(test)]
-mod prim_tests;
+mod code_tests;

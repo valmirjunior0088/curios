@@ -1,10 +1,7 @@
-mod compare_prim;
-use compare_prim::*;
-
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatMatch, Preempted, Proj,
-        Rec, Subterm, Telescope, Term, Tuple, TupleType, Var, reduce,
+        Rec, Subterm, Telescope, Term, Tuple, TupleType, Var, convert_prim, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -29,7 +26,7 @@ struct Goal {
 }
 
 #[derive(Debug)]
-struct Convert {
+pub struct Convert {
     history: HashSet<Goal>,
     pending: VecDeque<Goal>,
 }
@@ -46,7 +43,7 @@ impl Convert {
         !self.history.insert(goal.clone())
     }
 
-    fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
+    pub fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
         self.pending.push_back(Goal { type_, this, that });
     }
 
@@ -474,7 +471,7 @@ impl Convert {
             }
 
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
-                (Subterm::Prim(this), Subterm::Prim(that)) => compare_prim(self, this, that)?,
+                (Subterm::Prim(this), Subterm::Prim(that)) => convert_prim(self, this, that)?,
                 (Subterm::BlnMatch(this), Subterm::BlnMatch(that)) => {
                     self.compare_bln_match(context, this, that)?
                 }
@@ -531,5 +528,3 @@ impl Convert {
     }
 }
 
-#[cfg(test)]
-mod tests;

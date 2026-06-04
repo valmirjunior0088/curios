@@ -1,10 +1,7 @@
-mod reduce_prim;
-use reduce_prim::*;
-
 use {
     super::{
         Apply, BlnMatch, Context, Func, Let, Match, Nat, NatMatch, One, Preempted, Prim, Proj,
-        Scope, Subterm, Term, Tuple, Two, Var,
+        Scope, Subterm, Term, Tuple, Two, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -246,5 +243,3 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
     })
 }
 
-#[cfg(test)]
-mod tests;
