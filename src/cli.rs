@@ -1,7 +1,6 @@
 use {
     super::{
-        Stage, StdioHost, compile, run_wasm,
-        text::FileLoader,
+        Source, Stage, StdioHost, compile_entrypoint, run_wasm, text,
         wasm::{self, Module},
     },
     clap::{Parser, Subcommand},
@@ -70,11 +69,15 @@ fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<Mod
     let source = fs::read_to_string(input_path)
         .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
 
-    let loader = FileLoader::new(input_path.parent().unwrap_or(Path::new(".")).to_path_buf());
+    let entrypoint = text::Entrypoint::parse(&Source::new(input_path, source))
+        .map_err(|error| error.format())?
+        .with_prelude();
+    let store = text::FileStore::new(input_path.parent().unwrap_or(Path::new(".")), &entrypoint)
+        .map_err(|error| error.format())?;
 
     let stages = print.split(',').collect::<Vec<_>>();
 
-    compile(timeout, &loader, None, &source, |stage| match stage {
+    compile_entrypoint(timeout, &entrypoint, &store, |stage| match stage {
         Stage::Text(text) if stages.contains(&"text") => eprintln!("\n=== text ===\n{text}"),
         Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
         Stage::Ersd(ersd) if stages.contains(&"ersd") => eprintln!("\n=== ersd ===\n{ersd}"),

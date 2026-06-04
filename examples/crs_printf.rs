@@ -1,5 +1,5 @@
 use {
-    curios::{Stage, compile, core, text},
+    curios::{Stage, compile_entrypoint, core, text},
     std::{
         path::Path,
         time::{Duration, Instant},
@@ -8,7 +8,6 @@ use {
 
 fn main() {
     let base = Path::new(file!()).parent().unwrap().join("crs");
-    let loader = text::FileLoader::new(&base);
     let timeout = Duration::from_secs(15);
 
     let source = r#"
@@ -23,7 +22,14 @@ fn main() {
 
     let mut last = Instant::now();
 
-    let wasm_module = compile(timeout, &loader, Some("()"), source, |stage| {
+    let entrypoint = source
+        .parse::<text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_type("()".parse().unwrap())
+        .with_prelude();
+    let store = text::FileStore::new(&base, &entrypoint).expect("expected file store");
+
+    let wasm_module = compile_entrypoint(timeout, &entrypoint, &store, |stage| {
         let now = Instant::now();
         let elapsed = now - last;
         last = now;
@@ -62,8 +68,9 @@ fn main() {
         .parse::<text::Entrypoint>()
         .expect("failed to parse ill-typed source")
         .with_prelude();
+    let store = text::FileStore::new(&base, &entrypoint).expect("expected file store");
 
-    let core_term = text::to_core(&entrypoint, &loader).expect("expected core term");
+    let core_term = text::to_core(&entrypoint, &store).expect("expected core term");
     let core_type = core::infer(&mut core::Context::new(timeout), &core_term);
 
     assert!(matches!(

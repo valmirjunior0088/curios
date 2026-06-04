@@ -110,10 +110,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn prefix(&self) -> &Path {
-        &self.prefix
-    }
-
     pub fn prefixed(&self, label: &str) -> Path {
         self.prefix.with(label)
     }

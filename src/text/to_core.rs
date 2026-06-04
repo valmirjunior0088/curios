@@ -39,7 +39,7 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    loader: &dyn Loader,
+    store: &dyn Store,
 ) -> Result<(), Error> {
     context.finalize(scan_module_info(top_items));
 
@@ -72,29 +72,24 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        loader,
+                        store,
                     )?;
                 }
                 None => {
-                    let module =
-                        loader
-                            .load(context.prefix(), &mod_item.label)
-                            .map_err(|reason| {
-                                let error = Error::ModuleLoadFailed {
-                                    label: mod_item.label.clone(),
-                                    reason,
-                                };
-                                match &mod_item.span {
-                                    Some(span) => error.at(span.clone()),
-                                    None => error,
-                                }
-                            })?;
+                    let path = context.prefixed(&mod_item.label);
+                    let module = store.get(&path).ok_or_else(|| {
+                        let error = Error::ModuleNotFound { path: path.join() };
+                        match &mod_item.span {
+                            Some(span) => error.at(span.clone()),
+                            None => error,
+                        }
+                    })?;
 
                     process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        loader,
+                        store,
                     )?;
                 }
             },
@@ -336,6 +331,35 @@ fn process_items(
     Ok(())
 }
 
+fn prepare_module_infos(
+    items: &[TopItem],
+    prefix: &Path,
+    table: &mut HashMap<Path, ModuleInfo>,
+    store: &dyn Store,
+) -> Result<(), Error> {
+    table.insert(prefix.clone(), scan_module_info(items));
+
+    for item in items {
+        if let TopItem::Mod(module_item) = item {
+            let path = prefix.with(&module_item.label);
+            let module = match &module_item.module {
+                Some(module) => module,
+                None => store.get(&path).ok_or_else(|| {
+                    let error = Error::ModuleNotFound { path: path.join() };
+                    match &module_item.span {
+                        Some(span) => error.at(span.clone()),
+                        None => error,
+                    }
+                })?,
+            };
+
+            prepare_module_infos(&module.items, &path, table, store)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     match item {
         FlatItem::Let(let_) => core::Term::let_(let_.name.join(), let_.type_, let_.body, acc),
@@ -348,18 +372,39 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     }
 }
 
-pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Term, Error> {
+pub fn to_core(entrypoint: &Entrypoint, store: &dyn Store) -> Result<core::Term, Error> {
     let mut table = HashMap::new();
     let mut module_aliases = HashMap::new();
     let mut binding_aliases = HashMap::new();
+    prepare_module_infos(&entrypoint.items, &Path::empty(), &mut table, store)?;
     let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
     let mut flat_items = Vec::new();
 
-    process_items(&entrypoint.items, &mut context, &mut flat_items, loader)?;
+    process_items(&entrypoint.items, &mut context, &mut flat_items, store)?;
 
     let tail = Elaborate::new(&context).term(&entrypoint.tail)?;
 
     Ok(flat_items.into_iter().rev().fold(tail, fold_flat_item))
+}
+
+pub fn type_to_core(
+    entrypoint: &Entrypoint,
+    store: &dyn Store,
+) -> Result<Option<core::Term>, Error> {
+    let Some(type_) = &entrypoint.type_ else {
+        return Ok(None);
+    };
+
+    let mut table = HashMap::new();
+    let mut module_aliases = HashMap::new();
+    let mut binding_aliases = HashMap::new();
+    prepare_module_infos(&entrypoint.items, &Path::empty(), &mut table, store)?;
+    let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
+    let mut flat_items = Vec::new();
+
+    process_items(&entrypoint.items, &mut context, &mut flat_items, store)?;
+
+    Ok(Some(Elaborate::new(&context).term(type_)?))
 }
 
 #[cfg(test)]

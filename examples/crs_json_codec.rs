@@ -1,5 +1,5 @@
 use {
-    curios::{Stage, compile, text},
+    curios::{Stage, compile_entrypoint, text},
     std::{
         path::Path,
         time::{Duration, Instant},
@@ -32,10 +32,15 @@ fn main() {
         end
         "#;
 
-    let loader = text::FileLoader::new(Path::new(file!()).parent().unwrap().join("crs"));
+    let base = Path::new(file!()).parent().unwrap().join("crs");
+    let entrypoint = source
+        .parse::<text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_prelude();
+    let store = text::FileStore::new(&base, &entrypoint).expect("expected file store");
     let mut last = Instant::now();
 
-    let wasm_module = compile(Duration::from_secs(10), &loader, None, source, |stage| {
+    let wasm_module = compile_entrypoint(Duration::from_secs(10), &entrypoint, &store, |stage| {
         let now = Instant::now();
         let elapsed = now - last;
         last = now;

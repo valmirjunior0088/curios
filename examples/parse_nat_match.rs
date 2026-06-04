@@ -1,5 +1,5 @@
 use {
-    curios::{Stage, compile},
+    curios::{Stage, compile_entrypoint},
     std::time::Duration,
 };
 
@@ -17,11 +17,16 @@ fn main() {
         end
         "#;
 
-    let wasm_module = compile(
+    let entrypoint = source
+        .parse::<curios::text::Entrypoint>()
+        .unwrap()
+        .with_type("'[quote, lbracket, lbrace, other]".parse().unwrap())
+        .with_prelude();
+
+    let wasm_module = compile_entrypoint(
         Duration::from_secs(5),
-        &curios::text::PanicLoader,
-        Some("'[quote, lbracket, lbrace, other]"),
-        source,
+        &entrypoint,
+        &curios::text::EmptyStore,
         |stage| match stage {
             Stage::Text(entrypoint) => {
                 println!("=== text ===");

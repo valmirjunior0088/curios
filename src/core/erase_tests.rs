@@ -81,7 +81,7 @@ fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
 
 #[test]
 fn erase_match_singleton_lowers_to_match() {
-    let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::PanicLoader).unwrap();
+    let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::EmptyStore).unwrap();
 
     let term = text::to_core(
         &r#"
@@ -92,7 +92,7 @@ fn erase_match_singleton_lowers_to_match() {
             "#
         .parse()
         .unwrap(),
-        &text::PanicLoader,
+        &text::EmptyStore,
     )
     .unwrap();
 
@@ -218,7 +218,7 @@ fn erase_rejects_wrong_prim_operand_types() {
 
 #[test]
 fn erase_match_and_atom_stress_test() {
-    let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::PanicLoader).unwrap();
+    let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::EmptyStore).unwrap();
 
     let term = text::to_core(
         &r#"
@@ -249,7 +249,7 @@ fn erase_match_and_atom_stress_test() {
             "#
         .parse()
         .unwrap(),
-        &text::PanicLoader,
+        &text::EmptyStore,
     )
     .unwrap();
 

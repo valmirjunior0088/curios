@@ -1,5 +1,5 @@
 use {
-    curios::{Stage, compile},
+    curios::{Stage, compile_entrypoint},
     std::time::Duration,
 };
 
@@ -14,11 +14,16 @@ fn main() {
         Arr/len(Nat, doubled)
         "#;
 
-    let wasm_module = compile(
+    let entrypoint = source
+        .parse::<curios::text::Entrypoint>()
+        .unwrap()
+        .with_type("/sys/Nat".parse().unwrap())
+        .with_prelude();
+
+    let wasm_module = compile_entrypoint(
         Duration::from_secs(1),
-        &curios::text::PanicLoader,
-        Some("/sys/Nat"),
-        source,
+        &entrypoint,
+        &curios::text::EmptyStore,
         |stage| match stage {
             Stage::Text(entrypoint) => {
                 println!("=== text ===");

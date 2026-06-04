@@ -1,5 +1,5 @@
 use {
-    crate::{Source, cont, core, ersd, text, wasm},
+    crate::{cont, core, ersd, text, wasm},
     std::time::Duration,
 };
 
@@ -11,39 +11,23 @@ pub enum Stage<'a> {
     Wasm(&'a wasm::Module),
 }
 
-pub fn compile<L, O>(
+pub fn compile_entrypoint<O>(
     timeout: Duration,
-    loader: &L,
-    type_: Option<&str>,
-    term: &str,
+    entrypoint: &text::Entrypoint,
+    store: &dyn text::Store,
     mut observe: O,
 ) -> Result<wasm::Module, String>
 where
-    L: text::Loader,
     O: FnMut(Stage<'_>),
 {
-    let term_source = Source::inline(term);
+    observe(Stage::Text(entrypoint));
 
-    let text_entrypoint = text::Entrypoint::parse(&term_source)
-        .map_err(|error| error.format())?
-        .with_prelude();
-
-    observe(Stage::Text(&text_entrypoint));
-
-    let core_term = text::to_core(&text_entrypoint, loader).map_err(|error| error.format())?;
+    let core_term = text::to_core(entrypoint, store).map_err(|error| error.format())?;
 
     observe(Stage::Core(&core_term));
 
-    let core_type = match type_ {
-        Some(type_source) => {
-            let type_source = Source::inline(type_source);
-
-            let type_entrypoint = text::Entrypoint::parse(&type_source)
-                .map_err(|error| error.format())?
-                .with_prelude();
-
-            text::to_core(&type_entrypoint, loader).map_err(|error| error.format())?
-        }
+    let core_type = match text::type_to_core(entrypoint, store).map_err(|error| error.format())? {
+        Some(type_) => type_,
         None => core::infer(&mut core::Context::new(timeout), &core_term)
             .map_err(|error| error.format())?,
     };
@@ -62,4 +46,28 @@ where
     observe(Stage::Wasm(&wasm_module));
 
     Ok(wasm_module)
+}
+
+#[cfg(test)]
+mod tests {
+    use {super::*, std::time::Duration};
+
+    #[test]
+    fn entrypoint_type_is_used_as_expected_type() {
+        let entrypoint = "0"
+            .parse::<text::Entrypoint>()
+            .unwrap()
+            .with_type("/sys/Bln".parse().unwrap())
+            .with_prelude();
+
+        let error = compile_entrypoint(
+            Duration::from_secs(1),
+            &entrypoint,
+            &text::EmptyStore,
+            |_| {},
+        )
+        .unwrap_err();
+
+        assert!(error.contains("type mismatch"));
+    }
 }

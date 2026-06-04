@@ -83,19 +83,31 @@ pub struct Module {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
+    pub type_: Option<Term>,
     pub items: Vec<TopItem>,
     pub tail: Term,
 }
 
 impl Entrypoint {
     pub fn new(items: Vec<TopItem>, tail: Term) -> Self {
-        Self { items, tail }
+        Self {
+            type_: None,
+            items,
+            tail,
+        }
+    }
+
+    pub fn with_type(self, type_: Term) -> Self {
+        Self {
+            type_: Some(type_),
+            ..self
+        }
     }
 
     pub fn with_prelude(self) -> Self {
         Self {
             items: iter::once(super::prelude()).chain(self.items).collect(),
-            tail: self.tail,
+            ..self
         }
     }
 }

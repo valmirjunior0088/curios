@@ -1,20 +1,34 @@
-use crate::{core, text};
+use {
+    crate::{Source, core, text},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    },
+};
 
 fn run(src: &str) -> core::Term {
-    super::to_core(
-        &src.parse::<text::Entrypoint>().unwrap(),
-        &text::PanicLoader,
-    )
-    .unwrap()
+    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::EmptyStore).unwrap()
 }
 
 fn run_err(src: &str) -> String {
-    super::to_core(
-        &src.parse::<text::Entrypoint>().unwrap(),
-        &text::PanicLoader,
-    )
-    .unwrap_err()
-    .to_string()
+    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::EmptyStore)
+        .unwrap_err()
+        .to_string()
+}
+
+fn temp_dir(name: &str) -> PathBuf {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()))
+}
+
+fn write_module(base: &Path, path: &str, source: &str) {
+    let path = base.join(path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, source).unwrap();
 }
 
 #[test]
@@ -704,4 +718,49 @@ fn use_glob_on_dual_existence_imports_once() {
         use /Foo/*;
         X/q
     "#);
+}
+
+#[test]
+fn file_store_prepares_sibling_modules_before_to_core() {
+    let base = temp_dir("sibling-order");
+    write_module(
+        &base,
+        "A.crs",
+        r#"
+            use /B/{x};
+            pub let y : Type = x;
+        "#,
+    );
+    write_module(&base, "B.crs", "pub let x : Type = Type;");
+
+    let entrypoint = text::Entrypoint::parse(&Source::inline(
+        r#"
+            pub mod A;
+            pub mod B;
+            A/y
+        "#,
+    ))
+    .unwrap();
+    let store = text::FileStore::new(&base, &entrypoint).unwrap();
+
+    super::to_core(&entrypoint, &store).unwrap();
+
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn file_backed_module_missing_from_store_is_module_not_found() {
+    let entrypoint = text::Entrypoint::parse(&Source::inline(
+        r#"
+            pub mod A;
+            Type
+        "#,
+    ))
+    .unwrap();
+
+    assert!(matches!(
+        super::to_core(&entrypoint, &text::EmptyStore).unwrap_err(),
+        text::Error::Located { error, .. }
+            if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "A")
+    ));
 }
