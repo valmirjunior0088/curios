@@ -52,8 +52,8 @@ result                    printed by src/run.rs
 The stages share a common pattern of a small facade module that re-exports the stage's public surface, but the exact internal files differ by stage.
 
 ```
-src/text.rs          facade; re-exports names, term, prim, module, parse, loader, prelude, to_core, error
-src/core.rs          facade; re-exports names, term, prim, arity, context, infer, erase, typing, reduce, convert
+src/text.rs          facade; re-exports error, names, loader, nat, bin, prim, term, to_core, prelude, module
+src/core.rs          facade; re-exports arity, flt, int, nat, prim, names, term, reduce, context, convert, typing, infer, erase
 src/ersd.rs          facade; re-exports names, prim, term, to_cont
 src/cont.rs          facade; re-exports names, module, to_wasm
 src/wasm.rs          facade; re-exports names, types, expr, module, writer; exposes parse and print

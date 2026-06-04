@@ -1,4 +1,4 @@
-use /std/{Arr, Char, Flt, Parse, Nat, Bin, Bln, Result};
+use /std/{Arr, Char, Flt, Parse, Nat, Bin, Bln, Result, Str};
 use /json/{Value};
 
 let is_num_byte(byte : Nat) -> Bln =
@@ -17,9 +17,8 @@ let is_num_byte(byte : Nat) -> Bln =
 
 let take_literal(literal : Bin) -> Parse({}) =
     (input, pos) =>
-        let max : Nat = Bin/len(literal);
         let r : { Nat, Bln } =
-            match max : { Nat, Bln }
+            match Bin/len(literal) : { Nat, Bln }
             | 0 => (pos, true)
             | step ih =>
                 match ih.1 : { Nat, Bln }
@@ -49,17 +48,16 @@ let parse_true_val : Parse(Value) =
 let parse_false_val : Parse(Value) =
     Parse/map({}, Value, (_) => Value/bln(false), take_literal("false"));
 
-let parse_num : Parse(Value) = (input, pos) =>
-    let r : Result({ Nat, Bin }, Bin) = Parse/take_while(is_num_byte)(input, pos);
-    match r : Result({ Nat, Value }, Bin)
-    | success(pair) =>
-        let bytes : Bin = pair.1;
-        match Nat/eql(Bin/len(bytes), 0) : Result({ Nat, Value }, Bin)
-        | true => Result/failure({ Nat, Value }, Bin, "expected number")
-        | false => Result/success({ Nat, Value }, Bin, (pair.0, Value/num(Flt/from_str(bytes))))
-        end
-    | failure(msg) => Result/failure({ Nat, Value }, Bin, msg)
-    end;
+let parse_num : Parse(Value) =
+    (input, pos) =>
+        match Parse/take_while(is_num_byte)(input, pos) : Result({ Nat, Value }, Bin)
+        | success(pair) =>
+            match Nat/eql(Bin/len(pair.1), 0) : Result({ Nat, Value }, Bin)
+            | true => Result/failure({ Nat, Value }, Bin, "expected number")
+            | false => Result/success({ Nat, Value }, Bin, (pair.0, Value/num(Str/from_flt(bytes))))
+            end
+        | failure(msg) => Result/failure({ Nat, Value }, Bin, msg)
+        end;
 
 let is_not_string_special(byte : Nat) -> Bln =
     match byte : Bln
