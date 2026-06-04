@@ -267,6 +267,7 @@ fn parse_nested_module() {
     assert_eq!(
         m.items,
         vec![TopItem::Mod(TopMod {
+            span: None,
             is_pub: false,
             label: "Inner".to_string(),
             module: Some(Module {

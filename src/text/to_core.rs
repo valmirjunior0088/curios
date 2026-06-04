@@ -45,17 +45,21 @@ fn process_items(
 
     for top_item in top_items {
         match top_item {
-            TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label)),
-            TopItem::Let(l) => context.insert_binding(l.label.clone(), context.prefixed(&l.label)),
+            TopItem::Mod(m) => {
+                context.insert_scope(m.label.clone(), context.prefixed(&m.label))?
+            }
+            TopItem::Let(l) => {
+                context.insert_binding(l.label.clone(), context.prefixed(&l.label))?
+            }
             TopItem::Rec(labels) => {
                 for l in labels {
-                    context.insert_binding(l.label.clone(), context.prefixed(&l.label));
+                    context.insert_binding(l.label.clone(), context.prefixed(&l.label))?;
                 }
             }
             TopItem::Union(unions) => {
                 for u in unions {
-                    context.insert_scope(u.label.clone(), context.prefixed(&u.label));
-                    context.insert_binding(u.label.clone(), context.prefixed(&u.label));
+                    context.insert_scope(u.label.clone(), context.prefixed(&u.label))?;
+                    context.insert_binding(u.label.clone(), context.prefixed(&u.label))?;
                 }
             }
             _ => {}
@@ -74,9 +78,18 @@ fn process_items(
                     )?;
                 }
                 None => {
-                    let module = loader
-                        .load(context.prefix(), &mod_item.label)
-                        .unwrap_or_else(|e| panic!("{e}"));
+                    let module = loader.load(context.prefix(), &mod_item.label).map_err(
+                        |reason| {
+                            let error = Error::ModuleLoadFailed {
+                                label: mod_item.label.clone(),
+                                reason,
+                            };
+                            match &mod_item.span {
+                                Some(span) => error.at(span.clone()),
+                                None => error,
+                            }
+                        },
+                    )?;
 
                     process_items(
                         &module.items,
@@ -96,20 +109,20 @@ fn process_items(
 
                             let resolved = match item {
                                 GroupItem::Mod(_) => UseResolved {
-                                    module: Some(context.resolve_module_use(&full)),
+                                    module: Some(context.resolve_module_use(&full)?),
                                     binding: None,
                                 },
                                 GroupItem::Let(_) => UseResolved {
                                     module: None,
-                                    binding: Some(context.resolve_binding_use(&full)),
+                                    binding: Some(context.resolve_binding_use(&full)?),
                                 },
-                                GroupItem::Both(_) => context.resolve_both_use(&full),
+                                GroupItem::Both(_) => context.resolve_both_use(&full)?,
                             };
 
-                            (label, resolved)
+                            Ok((label, resolved))
                         })
-                        .collect(),
-                    UseGroup::Glob => context.resolve_glob(&use_item.name),
+                        .collect::<Result<Vec<_>, Error>>()?,
+                    UseGroup::Glob => context.resolve_glob(&use_item.name)?,
                 };
 
                 if use_item.is_pub {

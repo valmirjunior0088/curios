@@ -50,29 +50,32 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 }
 
 fn parse_name<'a>() -> Parser<'a, Name> {
-    catch(take_exact("/"))
-        .map(|()| true)
-        .or(pure(false))
-        .and(parse_identifier().and(many0(|| {
-            catch(take_exact("/").and_keep(parse_identifier()))
-        })))
-        .flat_map(|(is_abs, (first, rest))| {
-            let segments = iter::once(first)
-                .chain(rest)
-                .map(str::to_string)
-                .collect::<Vec<_>>();
+    spanned(
+        catch(take_exact("/"))
+            .map(|()| true)
+            .or(pure(false))
+            .and(parse_identifier().and(many0(|| {
+                catch(take_exact("/").and_keep(parse_identifier()))
+            })))
+            .flat_map(|(is_abs, (first, rest))| {
+                let segments = iter::once(first)
+                    .chain(rest)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>();
 
-            match segments
-                .iter()
-                .any(|segment| KEYWORDS.contains(&segment.as_str()))
-            {
-                true => fail(format!(
-                    "path '{}' contains a reserved keyword",
-                    segments.join("/")
-                )),
-                false => pure(Name::new(is_abs, Path::from(segments))),
-            }
-        })
+                match segments
+                    .iter()
+                    .any(|segment| KEYWORDS.contains(&segment.as_str()))
+                {
+                    true => fail(format!(
+                        "path '{}' contains a reserved keyword",
+                        segments.join("/")
+                    )),
+                    false => pure(Name::new(is_abs, Path::from(segments))),
+                }
+            }),
+    )
+    .map(|(span, name)| name.with_span(span))
 }
 
 fn parse_qualified_name<'a>() -> Parser<'a, Name> {
@@ -812,7 +815,7 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
+    spanned(catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
         parse_identifier().flat_map(move |name| {
             catch(
                 many0(parse_top_item)
@@ -820,13 +823,15 @@ fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
                     .map(|items| Some(Module { items })),
             )
             .or(parse_literal(";").map(|()| None))
-            .map(move |module| {
-                TopItem::Mod(TopMod {
-                    is_pub,
-                    label: name.to_string(),
-                    module,
-                })
-            })
+            .map(move |module| (is_pub, name.to_string(), module))
+        })
+    }))
+    .map(|(span, (is_pub, label, module))| {
+        TopItem::Mod(TopMod {
+            span: Some(span),
+            is_pub,
+            label,
+            module,
         })
     })
 }
@@ -836,49 +841,52 @@ fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
 // `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for
 // `parse_use_group` to consume as its separator.
 fn parse_use_path<'a>() -> Parser<'a, Name> {
-    catch(take_exact("/").and_keep(parse_identifier()).and(many0(|| {
-        catch(take_exact("/").and_keep(parse_identifier()))
-    })))
-    .map(|(first, rest)| {
-        Name::new(
-            true,
-            Path::from(
-                iter::once(first)
-                    .chain(rest)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>(),
-            ),
-        )
-    })
-    .or(catch(parse_identifier().and(many0(|| {
-        catch(take_exact("/").and_keep(parse_identifier()))
-    })))
-    .map(|(first, rest)| {
-        Name::new(
-            false,
-            Path::from(
-                iter::once(first)
-                    .chain(rest)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>(),
-            ),
-        )
-    }))
-    .or(pure(Name::new(true, Path::empty())))
-    .flat_map(|name| {
-        match name
-            .path()
-            .segments()
-            .iter()
-            .any(|segment| KEYWORDS.contains(&segment.as_str()))
-        {
-            true => fail(format!(
-                "path '{}' contains a reserved keyword",
-                name.path().join()
-            )),
-            false => pure(name),
-        }
-    })
+    spanned(
+        catch(take_exact("/").and_keep(parse_identifier()).and(many0(|| {
+            catch(take_exact("/").and_keep(parse_identifier()))
+        })))
+        .map(|(first, rest)| {
+            Name::new(
+                true,
+                Path::from(
+                    iter::once(first)
+                        .chain(rest)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>(),
+                ),
+            )
+        })
+        .or(catch(parse_identifier().and(many0(|| {
+            catch(take_exact("/").and_keep(parse_identifier()))
+        })))
+        .map(|(first, rest)| {
+            Name::new(
+                false,
+                Path::from(
+                    iter::once(first)
+                        .chain(rest)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>(),
+                ),
+            )
+        }))
+        .or(pure(Name::new(true, Path::empty())))
+        .flat_map(|name| {
+            match name
+                .path()
+                .segments()
+                .iter()
+                .any(|segment| KEYWORDS.contains(&segment.as_str()))
+            {
+                true => fail(format!(
+                    "path '{}' contains a reserved keyword",
+                    name.path().join()
+                )),
+                false => pure(name),
+            }
+        }),
+    )
+    .map(|(span, name)| name.with_span(span))
 }
 
 fn parse_group_item<'a>() -> Parser<'a, GroupItem> {

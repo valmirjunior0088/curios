@@ -1,5 +1,5 @@
 pub use /sys/Int/*;
-use /sys/{Int};
+pub use /sys/{Int};
 use /std/{Nat};
 
 pub let abs(n : Int) -> Nat =

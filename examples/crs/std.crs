@@ -1,36 +1,32 @@
 pub mod Nat;
-pub use /sys/{let Nat};
+pub use Nat/{let Nat};
 
 pub mod Int;
-pub use /sys/{let Int};
+pub use Int/{let Int};
 
 pub mod Arr;
-pub use /sys/{let Arr};
+pub use Arr/{let Arr};
 
 pub mod Bin;
-pub use /sys/{let Bin};
+pub use Bin/{let Bin};
 
 pub mod Bln;
-pub use /sys/{let Bln};
+pub use Bln/{let Bln};
 
 pub mod Io;
 
 pub mod Char;
 
-pub union Result(A : Type, E : Type)
-| success(A)
-| failure(E)
-end
+pub mod Result;
+pub use Result/{let Result};
 
-pub union Option(A : Type)
-| some(A)
-| none()
-end
+pub mod Option;
+pub use Option/{let Option};
 
 pub mod Str;
 
 pub mod Flt;
-pub use /sys/{let Flt};
+pub use Flt/{let Flt};
 
 pub mod Parse;
 pub use Parse/{Parse};

@@ -1,5 +1,5 @@
 pub use /sys/Nat/*;
-use /sys/{Nat};
+pub use /sys/{Nat};
 
 pub let min(a : Nat, b : Nat) -> Nat =
     match lt(a, b) : Nat

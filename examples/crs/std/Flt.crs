@@ -1,5 +1,5 @@
 pub use /sys/Flt/*;
-use /sys/{Flt};
+pub use /sys/{Flt};
 use /std/{Str, Int, Nat, Bin, Bln};
 
 let pow10(n : Nat) -> Flt =

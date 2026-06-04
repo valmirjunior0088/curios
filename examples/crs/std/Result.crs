@@ -1,0 +1,6 @@
+pub union Result(A : Type, E : Type)
+| success(A)
+| failure(E)
+end
+
+pub use Result/*;

@@ -1,13 +1,23 @@
 use {
     super::{LetSignature, Name, Term},
+    crate::Span,
     std::iter,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TopMod {
+    pub span: Option<Span>,
     pub is_pub: bool,
     pub label: String,
     pub module: Option<Module>,
+}
+
+impl PartialEq for TopMod {
+    fn eq(&self, other: &Self) -> bool {
+        self.is_pub == other.is_pub
+            && self.label == other.label
+            && self.module == other.module
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

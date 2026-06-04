@@ -1,4 +1,4 @@
-use /sys/{Bln};
+pub use /sys/{Bln};
 use /std/{Bin};
 
 pub let to_str(b : Bln) -> Bin =

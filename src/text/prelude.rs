@@ -56,6 +56,7 @@ fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
 
 fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     TopItem::Mod(TopMod {
+        span: None,
         is_pub: true,
         label: label.to_string(),
         module: Some(Module { items }),
@@ -254,6 +255,7 @@ pub fn prelude() -> TopItem {
     ];
 
     TopItem::Mod(TopMod {
+        span: None,
         is_pub: true,
         label: "sys".to_string(),
         module: Some(Module { items }),

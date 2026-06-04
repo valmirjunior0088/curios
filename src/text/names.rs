@@ -1,4 +1,4 @@
-use crate::macros::name;
+use crate::{Span, macros::name};
 
 name!(Atom);
 
@@ -73,15 +73,44 @@ where
 // `Name` is a surface reference, exactly as written in source: a `Path` plus an
 // `is_abs` flag marking a leading `/` (an absolute, root-anchored reference).
 // Resolution turns a `Name` into a canonical `Path`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Name {
+    span: Option<Span>,
     is_abs: bool,
     path: Path,
 }
 
+impl PartialEq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        self.is_abs == other.is_abs && self.path == other.path
+    }
+}
+
+impl Eq for Name {}
+
+impl std::hash::Hash for Name {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.is_abs.hash(state);
+        self.path.hash(state);
+    }
+}
+
 impl Name {
     pub fn new(is_abs: bool, path: Path) -> Self {
-        Self { is_abs, path }
+        Self {
+            span: None,
+            is_abs,
+            path,
+        }
+    }
+
+    pub fn with_span(mut self, span: Span) -> Self {
+        self.span = Some(span);
+        self
+    }
+
+    pub fn span(&self) -> Option<&Span> {
+        self.span.as_ref()
     }
 
     pub fn is_abs(&self) -> bool {
@@ -94,6 +123,7 @@ impl Name {
 
     pub fn with(&self, segment: &str) -> Self {
         Self {
+            span: self.span.clone(),
             is_abs: self.is_abs,
             path: self.path.with(segment),
         }
@@ -130,6 +160,7 @@ where
 {
     fn from(iter: I) -> Self {
         Self {
+            span: None,
             is_abs: false,
             path: Path::from(iter),
         }

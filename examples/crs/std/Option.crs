@@ -1,0 +1,6 @@
+pub union Option(A : Type)
+| some(A)
+| none()
+end
+
+pub use Option/*;
