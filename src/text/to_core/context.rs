@@ -245,11 +245,7 @@ impl<'a> Context<'a> {
     // Import both module and binding slots — used by glob and by the `Both`
     // group item. Either or both may be absent: callers that require at least
     // one (e.g. an explicit `Both` import) should check `result` afterwards.
-    fn import_dual_label(
-        &mut self,
-        parent_path: &Path,
-        label: &str,
-    ) -> Result<UseResolved, Error> {
+    fn import_dual_label(&mut self, parent_path: &Path, label: &str) -> Result<UseResolved, Error> {
         let (child, binding) = {
             let parent_info = self
                 .table
@@ -336,18 +332,18 @@ impl<'a> Context<'a> {
                 }
 
                 for seg in name.interior() {
-                    let info =
-                        self.table
-                            .get(&current)
-                            .ok_or_else(|| Error::ModuleNotFound {
-                                path: current.join(),
-                            })?;
+                    let info = self
+                        .table
+                        .get(&current)
+                        .ok_or_else(|| Error::ModuleNotFound {
+                            path: current.join(),
+                        })?;
 
-                    let is_pub =
-                        info.get_child(seg)
-                            .ok_or_else(|| Error::ChildModuleNotFound {
-                                segment: seg.to_string(),
-                            })?;
+                    let is_pub = info
+                        .get_child(seg)
+                        .ok_or_else(|| Error::ChildModuleNotFound {
+                            segment: seg.to_string(),
+                        })?;
 
                     if !is_pub {
                         return Err(Error::PrivateChildModule {
@@ -441,12 +437,12 @@ impl<'a> Context<'a> {
             let (parent_path, label) = self.resolve_parent_path(name)?;
 
             let (child, binding) = {
-                let parent_info = self
-                    .table
-                    .get(&parent_path)
-                    .ok_or_else(|| Error::ModuleNotFound {
-                        path: parent_path.join(),
-                    })?;
+                let parent_info =
+                    self.table
+                        .get(&parent_path)
+                        .ok_or_else(|| Error::ModuleNotFound {
+                            path: parent_path.join(),
+                        })?;
 
                 (
                     parent_info.get_child(&label),

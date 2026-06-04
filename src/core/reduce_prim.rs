@@ -1,6 +1,6 @@
 use {
     super::reduce,
-    crate::core::{Context, Flt, Int, Nat, Preempted, Prim, Subterm, Term},
+    crate::core::{Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term},
     num_traits::ToPrimitive,
 };
 
@@ -12,7 +12,7 @@ fn reduce_nat_binary(
     right: &Term,
     fold: impl FnOnce(Nat, Nat) -> Option<Prim>,
     rebuild: impl FnOnce(Term, Term) -> Prim,
-) -> Result<Subterm, Preempted> {
+) -> Result<Subterm, ReduceError> {
     let left = reduce(context, left.clone())?;
     let right = reduce(context, right.clone())?;
 
@@ -34,7 +34,7 @@ fn reduce_int_binary(
     right: &Term,
     fold: impl FnOnce(Int, Int) -> Prim,
     rebuild: impl FnOnce(Term, Term) -> Prim,
-) -> Result<Subterm, Preempted> {
+) -> Result<Subterm, ReduceError> {
     let left = reduce(context, left.clone())?;
     let right = reduce(context, right.clone())?;
 
@@ -51,7 +51,7 @@ fn reduce_flt_binary(
     right: &Term,
     fold: impl FnOnce(Flt, Flt) -> Prim,
     rebuild: impl FnOnce(Term, Term) -> Prim,
-) -> Result<Subterm, Preempted> {
+) -> Result<Subterm, ReduceError> {
     let left = reduce(context, left.clone())?;
     let right = reduce(context, right.clone())?;
 
@@ -68,7 +68,7 @@ fn reduce_nat_unary(
     inner: &Term,
     fold: impl FnOnce(Nat) -> Option<Prim>,
     rebuild: impl FnOnce(Term) -> Prim,
-) -> Result<Subterm, Preempted> {
+) -> Result<Subterm, ReduceError> {
     let inner = reduce(context, inner.clone())?;
 
     Ok(Subterm::Prim(match inner.as_nat().and_then(fold) {
@@ -83,7 +83,7 @@ fn reduce_int_unary(
     inner: &Term,
     fold: impl FnOnce(Int) -> Prim,
     rebuild: impl FnOnce(Term) -> Prim,
-) -> Result<Subterm, Preempted> {
+) -> Result<Subterm, ReduceError> {
     let inner = reduce(context, inner.clone())?;
 
     Ok(Subterm::Prim(match inner.as_int() {
@@ -98,7 +98,7 @@ fn reduce_flt_unary(
     inner: &Term,
     fold: impl FnOnce(Flt) -> Prim,
     rebuild: impl FnOnce(Term) -> Prim,
-) -> Result<Subterm, Preempted> {
+) -> Result<Subterm, ReduceError> {
     let inner = reduce(context, inner.clone())?;
 
     Ok(Subterm::Prim(match inner.as_flt() {
@@ -107,7 +107,7 @@ fn reduce_flt_unary(
     }))
 }
 
-pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preempted> {
+pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
     match prim {
         Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
         Prim::Bln(value) => Ok(Subterm::Prim(Prim::Bln(*value))),
@@ -482,29 +482,47 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         }
         Prim::BinGet(bin, index) => {
             let bin = reduce(context, bin.clone())?;
-            let index = reduce(context, index.clone())?;
-            let i = index.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
+            let index_reduced = reduce(context, index.clone())?;
+            let i = index_reduced
+                .as_nat()
+                .and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(bin), i) {
-                (Subterm::Prim(Prim::Bin(bytes)), Some(i)) => Subterm::Prim(Prim::Nat(Nat::new(
-                    bytes.get(i).copied().expect("Bin.get: index out of bounds"),
-                ))),
-                (bin, _) => Subterm::Prim(Prim::bin_get(bin, index)),
+                (Subterm::Prim(Prim::Bin(bytes)), Some(i)) => match bytes.get(i).copied() {
+                    Some(byte) => Subterm::Prim(Prim::Nat(Nat::new(byte))),
+                    None => {
+                        return Err(ReduceError::BinGetOutOfBounds {
+                            len: bytes.len(),
+                            index: i,
+                            span: index.span(),
+                        });
+                    }
+                },
+                (bin, _) => Subterm::Prim(Prim::bin_get(bin, index_reduced)),
             })
         }
         Prim::BinSlice(bin, start, end) => {
             let bin = reduce(context, bin.clone())?;
-            let start = reduce(context, start.clone())?;
-            let end = reduce(context, end.clone())?;
-            let s = start.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
-            let e = end.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
+            let start_reduced = reduce(context, start.clone())?;
+            let end_reduced = reduce(context, end.clone())?;
+            let s = start_reduced
+                .as_nat()
+                .and_then(|n| n.to_big_uint()?.to_usize());
+            let e = end_reduced
+                .as_nat()
+                .and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(bin), s, e) {
-                (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) => Subterm::Prim(Prim::Bin(
-                    bytes
-                        .get(s..e)
-                        .expect("Bin.slice: range out of bounds")
-                        .to_vec(),
-                )),
-                (bin, _, _) => Subterm::Prim(Prim::bin_slice(bin, start, end)),
+                (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) => match bytes.get(s..e) {
+                    Some(slice) => Subterm::Prim(Prim::Bin(slice.to_vec())),
+                    None => {
+                        return Err(ReduceError::BinSliceOutOfRange {
+                            len: bytes.len(),
+                            start: s,
+                            end: e,
+                            span: start.span().or_else(|| end.span()),
+                        });
+                    }
+                },
+                (bin, _, _) => Subterm::Prim(Prim::bin_slice(bin, start_reduced, end_reduced)),
             })
         }
         Prim::BinAppend(bin, byte) => {
@@ -559,32 +577,53 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
         Prim::ArrGet(type_, list, index) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
-            let index = reduce(context, index.clone())?;
-            let i = index.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
+            let index_reduced = reduce(context, index.clone())?;
+            let i = index_reduced
+                .as_nat()
+                .and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(list), i) {
-                (Subterm::Prim(Prim::Arr(elems)), Some(i)) => elems
-                    .into_iter()
-                    .nth(i)
-                    .map(Term::unwrap_or_clone)
-                    .expect("Arr.get: index out of bounds"),
-                (list, _) => Subterm::Prim(Prim::arr_get(type_, list, index)),
+                (Subterm::Prim(Prim::Arr(elems)), Some(i)) => {
+                    let len = elems.len();
+                    match elems.into_iter().nth(i).map(Term::unwrap_or_clone) {
+                        Some(elem) => elem,
+                        None => {
+                            return Err(ReduceError::ArrGetOutOfBounds {
+                                len,
+                                index: i,
+                                span: index.span(),
+                            });
+                        }
+                    }
+                }
+                (list, _) => Subterm::Prim(Prim::arr_get(type_, list, index_reduced)),
             })
         }
         Prim::ArrSlice(type_, list, start, end) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
-            let start = reduce(context, start.clone())?;
-            let end = reduce(context, end.clone())?;
-            let s = start.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
-            let e = end.as_nat().and_then(|n| n.to_big_uint()?.to_usize());
+            let start_reduced = reduce(context, start.clone())?;
+            let end_reduced = reduce(context, end.clone())?;
+            let s = start_reduced
+                .as_nat()
+                .and_then(|n| n.to_big_uint()?.to_usize());
+            let e = end_reduced
+                .as_nat()
+                .and_then(|n| n.to_big_uint()?.to_usize());
             Ok(match (Term::unwrap_or_clone(list), s, e) {
-                (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) => Subterm::Prim(Prim::Arr(
-                    elems
-                        .get(s..e)
-                        .expect("Arr.slice: range out of bounds")
-                        .to_vec(),
-                )),
-                (list, _, _) => Subterm::Prim(Prim::arr_slice(type_, list, start, end)),
+                (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) => match elems.get(s..e) {
+                    Some(slice) => Subterm::Prim(Prim::Arr(slice.to_vec())),
+                    None => {
+                        return Err(ReduceError::ArrSliceOutOfRange {
+                            len: elems.len(),
+                            start: s,
+                            end: e,
+                            span: start.span().or_else(|| end.span()),
+                        });
+                    }
+                },
+                (list, _, _) => {
+                    Subterm::Prim(Prim::arr_slice(type_, list, start_reduced, end_reduced))
+                }
             })
         }
         Prim::ArrAppend(type_, list, elem) => {
@@ -618,7 +657,13 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Preemp
                 None => Subterm::Prim(Prim::arr_concat(type_, reduced)),
             })
         }
-        Prim::IoPrint(_) => panic!("IoPrint cannot appear at the type level"),
-        Prim::IoRead => panic!("IoRead cannot appear at the type level"),
+        Prim::IoPrint(inner) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoPrint",
+            span: inner.span(),
+        }),
+        Prim::IoRead => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoRead",
+            span: None,
+        }),
     }
 }

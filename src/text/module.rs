@@ -14,9 +14,7 @@ pub struct TopMod {
 
 impl PartialEq for TopMod {
     fn eq(&self, other: &Self) -> bool {
-        self.is_pub == other.is_pub
-            && self.label == other.label
-            && self.module == other.module
+        self.is_pub == other.is_pub && self.label == other.label && self.module == other.module
     }
 }
 

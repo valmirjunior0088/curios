@@ -1,9 +1,9 @@
 use {
     super::Convert,
-    crate::core::{Nat, Preempted, Prim, Term},
+    crate::core::{Nat, Prim, ReduceError, Term},
 };
 
-pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, Preempted> {
+pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
     match (this, that) {
         (Prim::NatType, Prim::NatType)
         | (Prim::IntType, Prim::IntType)

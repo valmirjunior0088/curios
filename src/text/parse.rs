@@ -815,17 +815,19 @@ fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
-    spanned(catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
-        parse_identifier().flat_map(move |name| {
-            catch(
-                many0(parse_top_item)
-                    .and_drop(parse_keyword("end"))
-                    .map(|items| Some(Module { items })),
-            )
-            .or(parse_literal(";").map(|()| None))
-            .map(move |module| (is_pub, name.to_string(), module))
-        })
-    }))
+    spanned(
+        catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
+            parse_identifier().flat_map(move |name| {
+                catch(
+                    many0(parse_top_item)
+                        .and_drop(parse_keyword("end"))
+                        .map(|items| Some(Module { items })),
+                )
+                .or(parse_literal(";").map(|()| None))
+                .map(move |module| (is_pub, name.to_string(), module))
+            })
+        }),
+    )
     .map(|(span, (is_pub, label, module))| {
         TopItem::Mod(TopMod {
             span: Some(span),
@@ -1017,4 +1019,3 @@ impl FromStr for Entrypoint {
         Entrypoint::parse(&Source::inline(input))
     }
 }
-

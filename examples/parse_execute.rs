@@ -20,7 +20,7 @@ fn main() {
             | 'left => Int/add(+40, +2)
             | 'right => +7
             end;
-        let make : Int -> {witness, Flt} = x =>
+        let make : Int -> {witness, Flt} = (x) =>
             (x, Flt/add(+0.25, +0.5));
         make(decoded)
         "#;

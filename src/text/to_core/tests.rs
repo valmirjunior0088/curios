@@ -145,7 +145,9 @@ fn rejects_private_module_in_path() {
 
 #[test]
 fn rejects_conflicting_use_qualifiers() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         mod Foo
             pub mod Baz
                 pub let f : Type = Type;
@@ -159,25 +161,38 @@ fn rejects_conflicting_use_qualifiers() {
         use Foo/{Baz};
         use Bar/{Baz};
         Type
-    "#).contains("qualifier conflicts with existing scope entry"));
+    "#
+        )
+        .contains("qualifier conflicts with existing scope entry")
+    );
 }
 
 #[test]
 fn rejects_use_of_nonexistent_child() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         mod Foo
         end
         use Foo/{Nonexistent};
         Type
-    "#).contains("no module or binding named Nonexistent"));
+    "#
+        )
+        .contains("no module or binding named Nonexistent")
+    );
 }
 
 #[test]
 fn rejects_absolute_use_of_nonexistent_module() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         use /{Nonexistent};
         Type
-    "#).contains("no module or binding named Nonexistent"));
+    "#
+        )
+        .contains("no module or binding named Nonexistent")
+    );
 }
 
 #[test]
@@ -205,7 +220,9 @@ fn pub_use_exposes_qualifier() {
 
 #[test]
 fn rejects_mod_that_overwrites_prior_use() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         mod Foo
             pub mod Bar
                 pub let f : Type = Type;
@@ -215,7 +232,10 @@ fn rejects_mod_that_overwrites_prior_use() {
         mod Bar
         end
         Type
-    "#).contains("qualifier conflicts with existing scope entry: Bar"));
+    "#
+        )
+        .contains("qualifier conflicts with existing scope entry: Bar")
+    );
 }
 
 #[test]
@@ -270,7 +290,9 @@ fn chained_pub_use_re_exports_transitively() {
 
 #[test]
 fn rejects_private_root_module_via_absolute_path() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         mod Foo
             pub let f : Type = Type;
         end
@@ -278,7 +300,10 @@ fn rejects_private_root_module_via_absolute_path() {
             use /{Foo};
         end
         Type
-    "#).contains("private child module"));
+    "#
+        )
+        .contains("private child module")
+    );
 }
 
 #[test]
@@ -327,13 +352,18 @@ fn use_imports_binding_by_path() {
 
 #[test]
 fn rejects_use_of_private_binding() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         pub mod Foo
             let x : Type = Type;
         end
         use /Foo/{x};
         x
-    "#).contains("private binding: x"));
+    "#
+        )
+        .contains("private binding: x")
+    );
 }
 
 #[test]
@@ -365,19 +395,26 @@ fn pub_use_binding_aliases_to_canonical_path() {
 
 #[test]
 fn rejects_use_followed_by_local_let_of_same_name() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         pub mod Foo
             pub let x : Type = Type;
         end
         use /Foo/{x};
         let x : Type = Type;
         x
-    "#).contains("binding conflicts with existing scope entry: x"));
+    "#
+        )
+        .contains("binding conflicts with existing scope entry: x")
+    );
 }
 
 #[test]
 fn rejects_two_imports_of_same_name() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         pub mod Foo
             pub let x : Type = Type;
         end
@@ -387,7 +424,10 @@ fn rejects_two_imports_of_same_name() {
         use /Foo/{x};
         use /Bar/{x};
         x
-    "#).contains("binding conflicts with existing scope entry: x"));
+    "#
+        )
+        .contains("binding conflicts with existing scope entry: x")
+    );
 }
 
 #[test]
@@ -407,13 +447,18 @@ fn relative_use_imports_binding() {
 
 #[test]
 fn rejects_use_of_unknown_item() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         pub mod Foo
             pub let x : Type = Type;
         end
         use /Foo/{nope};
         Type
-    "#).contains("no module or binding named nope"));
+    "#
+        )
+        .contains("no module or binding named nope")
+    );
 }
 
 #[test]
@@ -543,7 +588,9 @@ fn use_brace_group_imports_all_labels() {
 
 #[test]
 fn rejects_use_when_both_sides_private() {
-    assert!(run_err(r#"
+    assert!(
+        run_err(
+            r#"
         pub mod Foo
             mod X
                 pub let z : Type = Type;
@@ -553,7 +600,10 @@ fn rejects_use_when_both_sides_private() {
         end
         use /Foo/{X};
         Type
-    "#).contains("private child module: X"));
+    "#
+        )
+        .contains("private child module: X")
+    );
 }
 
 #[test]

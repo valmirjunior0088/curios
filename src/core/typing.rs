@@ -5,8 +5,36 @@ use {
     std::fmt,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Preempted;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReduceError {
+    Preempted,
+    BinGetOutOfBounds {
+        len: usize,
+        index: usize,
+        span: Option<Span>,
+    },
+    BinSliceOutOfRange {
+        len: usize,
+        start: usize,
+        end: usize,
+        span: Option<Span>,
+    },
+    ArrGetOutOfBounds {
+        len: usize,
+        index: usize,
+        span: Option<Span>,
+    },
+    ArrSliceOutOfRange {
+        len: usize,
+        start: usize,
+        end: usize,
+        span: Option<Span>,
+    },
+    IoAtTypeLevel {
+        kind: &'static str,
+        span: Option<Span>,
+    },
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -16,6 +44,27 @@ pub enum Error {
     ConvertPreempted {
         this: Box<Term>,
         that: Box<Term>,
+    },
+    BinGetOutOfBounds {
+        len: usize,
+        index: usize,
+    },
+    BinSliceOutOfRange {
+        len: usize,
+        start: usize,
+        end: usize,
+    },
+    ArrGetOutOfBounds {
+        len: usize,
+        index: usize,
+    },
+    ArrSliceOutOfRange {
+        len: usize,
+        start: usize,
+        end: usize,
+    },
+    IoAtTypeLevel {
+        kind: &'static str,
     },
     TypeMismatch {
         term: Box<Term>,
@@ -260,6 +309,13 @@ impl Error {
         }
     }
 
+    pub fn at_opt(self, span: Option<Span>) -> Self {
+        match span {
+            Some(span) => self.at(span),
+            None => self,
+        }
+    }
+
     pub fn format(&self) -> String {
         match self {
             Self::Located { span, error } => {
@@ -362,6 +418,27 @@ impl fmt::Display for Error {
             Error::NatOverflow { value } => {
                 write!(f, "Nat literal {value} overflows u32 at the erase boundary")
             }
+            Error::BinGetOutOfBounds { len, index } => {
+                write!(f, "Bin.get index {index} out of bounds (length {len})")
+            }
+            Error::BinSliceOutOfRange { len, start, end } => {
+                write!(
+                    f,
+                    "Bin.slice range {start}..{end} out of range (length {len})"
+                )
+            }
+            Error::ArrGetOutOfBounds { len, index } => {
+                write!(f, "Arr.get index {index} out of bounds (length {len})")
+            }
+            Error::ArrSliceOutOfRange { len, start, end } => {
+                write!(
+                    f,
+                    "Arr.slice range {start}..{end} out of range (length {len})"
+                )
+            }
+            Error::IoAtTypeLevel { kind } => {
+                write!(f, "{kind} cannot appear at the type level")
+            }
             Error::Located { error, .. } => {
                 write!(f, "{error}")
             }
@@ -369,13 +446,41 @@ impl fmt::Display for Error {
     }
 }
 
+impl ReduceError {
+    fn into_error(self, preempted: impl FnOnce() -> Error) -> Error {
+        match self {
+            Self::Preempted => preempted(),
+            Self::BinGetOutOfBounds { len, index, span } => {
+                Error::BinGetOutOfBounds { len, index }.at_opt(span)
+            }
+            Self::BinSliceOutOfRange {
+                len,
+                start,
+                end,
+                span,
+            } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
+            Self::ArrGetOutOfBounds { len, index, span } => {
+                Error::ArrGetOutOfBounds { len, index }.at_opt(span)
+            }
+            Self::ArrSliceOutOfRange {
+                len,
+                start,
+                end,
+                span,
+            } => Error::ArrSliceOutOfRange { len, start, end }.at_opt(span),
+            Self::IoAtTypeLevel { kind, span } => Error::IoAtTypeLevel { kind }.at_opt(span),
+        }
+    }
+}
+
 pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    super::reduce(context, term.clone()).map_err(|Preempted| Error::reduce_preempted(term.clone()))
+    super::reduce(context, term.clone())
+        .map_err(|error| error.into_error(|| Error::reduce_preempted(term.clone())))
 }
 
 pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
     super::convert(context, &Term::type_(), this, that)
-        .map_err(|Preempted| Error::convert_preempted(this.clone(), that.clone()))
+        .map_err(|error| error.into_error(|| Error::convert_preempted(this.clone(), that.clone())))
 }
 
 pub fn expect(
@@ -428,4 +533,3 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
 
     Ok(())
 }
-

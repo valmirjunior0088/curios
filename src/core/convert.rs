@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatMatch, Preempted, Proj,
-        Rec, Subterm, Telescope, Term, Tuple, TupleType, Var, convert_prim, reduce,
+        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatMatch, Proj, Rec,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, Var, convert_prim, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -14,7 +14,7 @@ pub fn convert(
     type_: &Term,
     this: &Term,
     that: &Term,
-) -> Result<bool, Preempted> {
+) -> Result<bool, ReduceError> {
     Convert::new(type_.clone(), this.clone(), that.clone()).convert(context)
 }
 
@@ -47,9 +47,9 @@ impl Convert {
         self.pending.push_back(Goal { type_, this, that });
     }
 
-    fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, Preempted> {
+    fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, ReduceError> {
         if Instant::now() > context.deadline() {
-            return Err(Preempted);
+            return Err(ReduceError::Preempted);
         }
 
         Ok(self.pending.pop_front())
@@ -60,13 +60,13 @@ impl Convert {
         context: &mut Context,
         this: FuncType,
         that: FuncType,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         fn walk(
             cmp: &mut Convert,
             context: &mut Context,
             this: &Telescope<Term>,
             that: &Telescope<Term>,
-        ) -> Result<bool, Preempted> {
+        ) -> Result<bool, ReduceError> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
@@ -91,7 +91,7 @@ impl Convert {
         this: Func,
         that: Func,
         type_: Term,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         let n = this.body.arity();
         let ys: Vec<Term> = (0..n)
             .map(|_| Term::var(Var::free(context.fresh(None))))
@@ -110,7 +110,7 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, Preempted> {
+    fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, ReduceError> {
         if this.params.len() != that.params.len() {
             return Ok(false);
         }
@@ -126,13 +126,13 @@ impl Convert {
         context: &mut Context,
         this: TupleType,
         that: TupleType,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         fn walk(
             cmp: &mut Convert,
             context: &mut Context,
             this: &Telescope<()>,
             that: &Telescope<()>,
-        ) -> Result<bool, Preempted> {
+        ) -> Result<bool, ReduceError> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
@@ -154,7 +154,7 @@ impl Convert {
         this: Tuple,
         that: Tuple,
         type_: Term,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         let n = this.fields.len();
         if n != that.fields.len() {
             return Ok(false);
@@ -179,7 +179,7 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_proj(&mut self, this: Proj, that: Proj) -> Result<bool, Preempted> {
+    fn compare_proj(&mut self, this: Proj, that: Proj) -> Result<bool, ReduceError> {
         if this.index != that.index {
             return Ok(false);
         }
@@ -187,11 +187,11 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_atom_type(&mut self, this: AtomType, that: AtomType) -> Result<bool, Preempted> {
+    fn compare_atom_type(&mut self, this: AtomType, that: AtomType) -> Result<bool, ReduceError> {
         Ok(this == that)
     }
 
-    fn compare_atom(&mut self, this: Atom, that: Atom) -> Result<bool, Preempted> {
+    fn compare_atom(&mut self, this: Atom, that: Atom) -> Result<bool, ReduceError> {
         Ok(this == that)
     }
 
@@ -200,7 +200,7 @@ impl Convert {
         context: &mut Context,
         this: BlnMatch,
         that: BlnMatch,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_(), this.head, that.head);
 
         let label = Term::var(Var::free(context.fresh(None)));
@@ -220,7 +220,7 @@ impl Convert {
         context: &mut Context,
         this: NatMatch,
         that: NatMatch,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         match (this, that) {
             (
                 NatMatch::Induction {
@@ -303,7 +303,7 @@ impl Convert {
         context: &mut Context,
         this: Match,
         that: Match,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_(), this.head, that.head);
 
         let label = Term::var(Var::free(context.fresh(None)));
@@ -335,7 +335,7 @@ impl Convert {
         context: &mut Context,
         this: Rec,
         that: Rec,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         if this.items.len() != that.items.len() {
             return Ok(false);
         }
@@ -376,7 +376,7 @@ impl Convert {
         func: Func,
         other: Term,
         type_: Term,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         let n = func.body.arity();
         let ys: Vec<Term> = (0..n)
             .map(|_| Term::var(Var::free(context.fresh(None))))
@@ -396,7 +396,7 @@ impl Convert {
         tuple: Tuple,
         other: Term,
         type_: Term,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         let n = tuple.fields.len();
 
         let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
@@ -424,7 +424,7 @@ impl Convert {
         this: Term,
         that: Term,
         type_: Term,
-    ) -> Result<bool, Preempted> {
+    ) -> Result<bool, ReduceError> {
         match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::FuncType(FuncType { telescope }) => {
                 let n = telescope.len();
@@ -454,7 +454,7 @@ impl Convert {
         }
     }
 
-    fn convert(&mut self, context: &mut Context) -> Result<bool, Preempted> {
+    fn convert(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
@@ -527,4 +527,3 @@ impl Convert {
         Ok(true)
     }
 }
-

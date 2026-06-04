@@ -13,7 +13,7 @@ fn main() {
             | 'right => Flt
             end };
         let pair : pair_ty = ('left, +42);
-        let score : pair_ty -> Int = p =>
+        let score : pair_ty -> Int = (p) =>
             match p.0 : _ => Int
             | 'left => +42
             | 'right => +7

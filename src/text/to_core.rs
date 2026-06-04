@@ -45,9 +45,7 @@ fn process_items(
 
     for top_item in top_items {
         match top_item {
-            TopItem::Mod(m) => {
-                context.insert_scope(m.label.clone(), context.prefixed(&m.label))?
-            }
+            TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label))?,
             TopItem::Let(l) => {
                 context.insert_binding(l.label.clone(), context.prefixed(&l.label))?
             }
@@ -78,18 +76,19 @@ fn process_items(
                     )?;
                 }
                 None => {
-                    let module = loader.load(context.prefix(), &mod_item.label).map_err(
-                        |reason| {
-                            let error = Error::ModuleLoadFailed {
-                                label: mod_item.label.clone(),
-                                reason,
-                            };
-                            match &mod_item.span {
-                                Some(span) => error.at(span.clone()),
-                                None => error,
-                            }
-                        },
-                    )?;
+                    let module =
+                        loader
+                            .load(context.prefix(), &mod_item.label)
+                            .map_err(|reason| {
+                                let error = Error::ModuleLoadFailed {
+                                    label: mod_item.label.clone(),
+                                    reason,
+                                };
+                                match &mod_item.span {
+                                    Some(span) => error.at(span.clone()),
+                                    None => error,
+                                }
+                            })?;
 
                     process_items(
                         &module.items,

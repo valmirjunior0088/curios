@@ -12,7 +12,7 @@ fn main() {
             | 'nil => Int
             | 'cons => {Int, IntList}
             end };
-        rec sum : IntList -> Int = list =>
+        rec sum : IntList -> Int = (list) =>
             match list.0 : _ => Int
             | 'nil => +0
             | 'cons =>

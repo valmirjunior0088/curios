@@ -52,7 +52,10 @@ impl fmt::Display for Error {
             Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
             Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),
             Error::QualifierConflict { qualifier } => {
-                write!(f, "qualifier conflicts with existing scope entry: {qualifier}")
+                write!(
+                    f,
+                    "qualifier conflicts with existing scope entry: {qualifier}"
+                )
             }
             Error::BindingConflict { label } => {
                 write!(f, "binding conflicts with existing scope entry: {label}")

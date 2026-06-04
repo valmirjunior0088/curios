@@ -90,7 +90,7 @@ fn reduce_var_cycle_times_out() {
 
     assert_eq!(
         reduce(&mut context, Term::var(Var::free("loop"))),
-        Err(Preempted)
+        Err(ReduceError::Preempted)
     );
 }
 
@@ -193,22 +193,27 @@ fn reduce_lst_get_returns_element_at_index() {
 }
 
 #[test]
-#[should_panic(expected = "Arr.get: index out of bounds")]
-fn reduce_lst_get_panics_on_out_of_bounds() {
+fn reduce_lst_get_errors_on_out_of_bounds() {
     let mut context = context();
 
     let list = Subterm::Prim(Prim::arr(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))]));
 
-    reduce(
-        &mut context,
-        Subterm::Prim(Prim::arr_get(
-            Subterm::Prim(Prim::NatType),
-            list,
-            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
-        ))
-        .into(),
-    )
-    .ok();
+    assert!(matches!(
+        reduce(
+            &mut context,
+            Subterm::Prim(Prim::arr_get(
+                Subterm::Prim(Prim::NatType),
+                list,
+                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+            ))
+            .into(),
+        ),
+        Err(ReduceError::ArrGetOutOfBounds {
+            len: 1,
+            index: 1,
+            ..
+        })
+    ));
 }
 
 #[test]

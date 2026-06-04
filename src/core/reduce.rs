@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Func, Let, Match, Nat, NatMatch, One, Preempted, Prim, Proj,
+        Apply, BlnMatch, Context, Func, Let, Match, Nat, NatMatch, One, Prim, Proj, ReduceError,
         Scope, Subterm, Term, Tuple, Two, Var, reduce_prim,
     },
     num_bigint::BigUint,
@@ -13,7 +13,7 @@ enum Reduce {
     Break(Term),
 }
 
-fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, Preempted> {
+fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
     let Apply { head, params } = apply;
     let param_refs = params.iter().collect::<Vec<_>>();
     match Term::unwrap_or_clone(reduce(context, head)?) {
@@ -22,7 +22,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, Preempted
     }
 }
 
-fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, Preempted> {
+fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError> {
     let Proj { head, index } = proj;
     if let Some(v) = context.projection(&head, index) {
         return Ok(Reduce::Continue(v.clone()));
@@ -44,7 +44,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, Preempted> {
     }
 }
 
-fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, Preempted> {
+fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceError> {
     let n = func.body.arity();
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
     let ys = freshs
@@ -72,7 +72,7 @@ fn reduce_nat_induction(
     motive: Scope<One>,
     zero_case: Term,
     succ_case: Scope<Two>,
-) -> Result<Reduce, Preempted> {
+) -> Result<Reduce, ReduceError> {
     match Term::unwrap_or_clone(reduce(context, head.into())?) {
         Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
         Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
@@ -102,7 +102,7 @@ fn reduce_nat_induction(
     }
 }
 
-fn reduce_bln_match(context: &mut Context, bm: BlnMatch) -> Result<Reduce, Preempted> {
+fn reduce_bln_match(context: &mut Context, bm: BlnMatch) -> Result<Reduce, ReduceError> {
     let BlnMatch {
         head,
         motive,
@@ -127,7 +127,7 @@ fn reduce_nat_dispatch(
     motive: Scope<One>,
     cases: BTreeMap<u32, Term>,
     default: Term,
-) -> Result<Reduce, Preempted> {
+) -> Result<Reduce, ReduceError> {
     match Term::unwrap_or_clone(reduce(context, head.into())?) {
         Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
             Some(body) => Ok(Reduce::Continue(body.clone())),
@@ -152,7 +152,7 @@ fn reduce_nat_dispatch(
     }
 }
 
-fn reduce_nat_match(context: &mut Context, nm: NatMatch) -> Result<Reduce, Preempted> {
+fn reduce_nat_match(context: &mut Context, nm: NatMatch) -> Result<Reduce, ReduceError> {
     match nm {
         NatMatch::Induction {
             head,
@@ -175,7 +175,7 @@ fn reduce_nat_match(context: &mut Context, nm: NatMatch) -> Result<Reduce, Preem
     }
 }
 
-fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, Preempted> {
+fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> {
     let Match {
         head,
         motive,
@@ -213,13 +213,13 @@ fn reduce_var(context: &Context, var: Var) -> Reduce {
     }
 }
 
-pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
+pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     context.get_or_init_reduced(term, |context, term| {
         let mut term = term;
 
         loop {
             if Instant::now() > context.deadline() {
-                break Err(Preempted);
+                break Err(ReduceError::Preempted);
             }
 
             let step = match Term::unwrap_or_clone(term) {
@@ -242,4 +242,3 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, Preempted> {
         }
     })
 }
-

@@ -621,4 +621,3 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
         None => result,
     }
 }
-

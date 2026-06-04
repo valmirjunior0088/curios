@@ -12,7 +12,7 @@ fn main() {
             | 'leaf => Int
             | 'node => {Int, Tree, Tree}
             end };
-        rec sum : Tree -> Int = t =>
+        rec sum : Tree -> Int = (t) =>
             match t.0 : _ => Int
             | 'leaf => t.1
             | 'node =>

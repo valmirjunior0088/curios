@@ -8,7 +8,7 @@ fn context() -> Context {
     Context::new(Duration::from_millis(10))
 }
 
-fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Preempted> {
+fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
     convert(context, &Term::type_(), this, that)
 }
 
@@ -468,5 +468,8 @@ fn convert_times_out_on_pathological_inputs() {
         ("y", Term::var(Var::free("x"))),
     ]);
 
-    assert_eq!(conv(&mut context, &this, &that), Err(Preempted));
+    assert_eq!(
+        conv(&mut context, &this, &that),
+        Err(ReduceError::Preempted)
+    );
 }

@@ -2,8 +2,8 @@ use {super::*, std::collections::BTreeSet};
 
 #[test]
 fn close_open_substitutes_label_name() {
-    let term = Scope::close(One, &["x"], Term::var(Var::free("x")))
-        .open(&[&Term::var(Var::free("y"))]);
+    let term =
+        Scope::close(One, &["x"], Term::var(Var::free("x"))).open(&[&Term::var(Var::free("y"))]);
 
     let Subterm::Var(var) = &*term else {
         panic!("unexpected `{term:?}`")
