@@ -1,14 +1,14 @@
-pub mod Nat;
-pub use Nat/{let Nat};
-
-pub mod Int;
-pub use Int/{let Int};
-
 pub mod Arr;
 pub use Arr/{let Arr};
 
 pub mod Bin;
 pub use Bin/{let Bin};
+
+pub mod Nat;
+pub use Nat/{let Nat};
+
+pub mod Int;
+pub use Int/{let Int};
 
 pub mod Bln;
 pub use Bln/{let Bln};
@@ -29,4 +29,4 @@ pub use Flt/{let Flt};
 pub mod Str;
 
 pub mod Parse;
-pub use Parse/{Parse};
+pub use Parse/{let Parse};
