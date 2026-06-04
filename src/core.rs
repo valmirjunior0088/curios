@@ -19,6 +19,9 @@ pub use names::*;
 mod term;
 pub use term::*;
 
+#[cfg(test)]
+mod term_tests;
+
 mod print;
 
 mod reduce_prim;
@@ -26,6 +29,9 @@ use reduce_prim::*;
 
 mod reduce;
 pub use reduce::*;
+
+#[cfg(test)]
+mod reduce_tests;
 
 mod context;
 pub use context::*;
@@ -36,8 +42,14 @@ use convert_prim::*;
 mod convert;
 pub use convert::*;
 
+#[cfg(test)]
+mod convert_tests;
+
 mod typing;
 pub use typing::*;
+
+#[cfg(test)]
+mod typing_tests;
 
 mod infer;
 pub use infer::*;
@@ -47,12 +59,6 @@ use erase_prim::*;
 
 mod erase;
 pub use erase::*;
-
-#[cfg(test)]
-mod reduce_tests;
-
-#[cfg(test)]
-mod convert_tests;
 
 #[cfg(test)]
 mod erase_tests;
