@@ -54,7 +54,7 @@ let parse_num : Parse(Value) =
         | success(pair) =>
             match Nat/eql(Bin/len(pair.1), 0) : Result({ Nat, Value }, Bin)
             | true => Result/failure({ Nat, Value }, Bin, "expected number")
-            | false => Result/success({ Nat, Value }, Bin, (pair.0, Value/num(Str/from_flt(bytes))))
+            | false => Result/success({ Nat, Value }, Bin, (pair.0, Value/num(Str/from_flt(pair.1))))
             end
         | failure(msg) => Result/failure({ Nat, Value }, Bin, msg)
         end;
