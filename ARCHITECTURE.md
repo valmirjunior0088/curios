@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~30,400 lines in `src/`, ~1,700 lines in top-level Rust examples, plus ~600 lines in `examples/crs/`.
+**Codebase size:** ~30,840 lines in `src/`, ~1,660 lines in top-level Rust examples, plus ~640 lines in `examples/crs/`.
 
 ---
 
@@ -37,12 +37,12 @@ result                    printed by src/run.rs
 
 | Stage                   | Key file(s)                                        | Lines  |
 | ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,626  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~732   |
-| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,770 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~785   |
+| Parsing                 | `text/parse.rs`                                    | 1,021  |
+| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~744   |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,833 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~773   |
 | CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 755    |
-| WASM codegen            | `cont/to_wasm/` (5 files)                          | ~3,635 |
+| WASM codegen            | `cont/to_wasm/` (6 files)                          | ~3,665 |
 | Binary serialization    | `wasm/writer.rs`                                   | 1,691  |
 
 ---
@@ -369,7 +369,7 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--print` prints every intermediate representation — text, core, ersd, cont, and wasm — to stderr (default: off)
+- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,wasm`. Bare `--print` selects all; omitting the flag prints none.
 - `run` compiles and executes the entrypoint
 - `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
 - `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`

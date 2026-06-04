@@ -27,7 +27,7 @@ curios [--timeout MILLIS] [--print] <run|check|compile> <input-path> [--output-p
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--print` prints every intermediate representation — text, core, ersd, cont, and wasm — to stderr (default: off)
+- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,wasm`. Bare `--print` selects all; omitting the flag prints none.
 - `run` compiles and executes the entrypoint
 - `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
 - `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
