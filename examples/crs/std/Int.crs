@@ -1,6 +1,14 @@
 pub use /sys/Int/*;
 pub use /sys/{Int};
+use /sys/{Bin};
 use /std/{Nat};
+
+pub let from_str(str : Bin) -> Int =
+    match Bin/get(str, 0) : Int
+    | '+' => Nat/to_int(Nat/from_str(Bin/slice(str, 1, Bin/len(str))))
+    | '-' => Int/sub(+0, Nat/to_int(Nat/from_str(Bin/slice(str, 1, Bin/len(str)))))
+    | _ => Nat/to_int(Nat/from_str(str))
+    end;
 
 pub let abs(n : Int) -> Nat =
     match gte(n, +0) : Nat

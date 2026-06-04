@@ -1,4 +1,4 @@
-use /std/{Nat, Bln};
+use /sys/{Nat, Bln};
 
 pub let is_whitespace(byte : Nat) -> Bln =
     match Nat/eql(byte, 32) : Bln

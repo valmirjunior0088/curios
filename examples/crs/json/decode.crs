@@ -1,4 +1,4 @@
-use /std/{Arr, Char, Flt, Parse, Nat, Bin, Bln, Result, Str};
+use /std/{Arr, Char, Flt, Parse, Nat, Bin, Bln, Result};
 use /json/{Value};
 
 let is_num_byte(byte : Nat) -> Bln =
@@ -54,7 +54,7 @@ let parse_num : Parse(Value) =
         | success(pair) =>
             match Nat/eql(Bin/len(pair.1), 0) : Result({ Nat, Value }, Bin)
             | true => Result/failure({ Nat, Value }, Bin, "expected number")
-            | false => Result/success({ Nat, Value }, Bin, (pair.0, Value/num(Str/from_flt(pair.1))))
+            | false => Result/success({ Nat, Value }, Bin, (pair.0, Value/num(Flt/from_str(pair.1))))
             end
         | failure(msg) => Result/failure({ Nat, Value }, Bin, msg)
         end;
