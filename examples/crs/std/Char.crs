@@ -1,0 +1,41 @@
+use /std/{Nat, Bln};
+
+pub let is_whitespace(byte : Nat) -> Bln =
+    match Nat/eql(byte, 32) : Bln
+    | true => true
+    | false =>
+        match Nat/gte(byte, 9) : Bln
+        | true => Nat/lte(byte, 13)
+        | false => false
+        end
+    end;
+
+pub let is_digit(byte : Nat) -> Bln =
+    match Nat/lte('0', byte) : Bln
+    | true => Nat/lte(byte, '9')
+    | false => false
+    end;
+
+pub let is_lower(byte : Nat) -> Bln =
+    match Nat/lte('a', byte) : Bln
+    | true => Nat/lte(byte, 'z')
+    | false => false
+    end;
+
+pub let is_upper(byte : Nat) -> Bln =
+    match Nat/lte('A', byte) : Bln
+    | true => Nat/lte(byte, 'Z')
+    | false => false
+    end;
+
+pub let is_alpha(byte : Nat) -> Bln =
+    match is_lower(byte) : Bln
+    | true => true
+    | false => is_upper(byte)
+    end;
+
+pub let is_alphanumeric(byte : Nat) -> Bln =
+    match is_alpha(byte) : Bln
+    | true => true
+    | false => is_digit(byte)
+    end;

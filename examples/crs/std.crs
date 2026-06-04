@@ -4,8 +4,8 @@ pub use /sys/{let Nat};
 pub mod Int;
 pub use /sys/{let Int};
 
-pub mod Flt;
-pub use /sys/{let Flt};
+pub mod Arr;
+pub use /sys/{let Arr};
 
 pub mod Bin;
 pub use /sys/{let Bin};
@@ -13,12 +13,24 @@ pub use /sys/{let Bin};
 pub mod Bln;
 pub use /sys/{let Bln};
 
-pub mod Arr;
-pub use /sys/{let Arr};
-
 pub mod Io;
 
+pub mod Char;
+
+pub union Result(A : Type, E : Type)
+| success(A)
+| failure(E)
+end
+
+pub union Option(A : Type)
+| some(A)
+| none()
+end
+
 pub mod Str;
+
+pub mod Flt;
+pub use /sys/{let Flt};
 
 pub mod Parse;
 pub use Parse/{Parse};

@@ -1,8 +1,9 @@
 pub use /sys/Int/*;
-use /sys/{Int, Nat};
+use /sys/{Int};
+use /std/{Nat};
 
 pub let abs(n : Int) -> Nat =
     match gte(n, +0) : Nat
-    | true  => to_nat(n)
+    | true => to_nat(n)
     | false => to_nat(sub(+0, n))
     end;

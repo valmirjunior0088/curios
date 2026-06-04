@@ -1,1 +1,51 @@
 pub use /sys/Flt/*;
+use /sys/{Flt};
+use /std/{Str, Int, Nat, Bin, Bln};
+
+let pow10(n : Nat) -> Flt =
+    match n : Flt
+    | 0 => +1.0
+    | pred ih => mul(ih, +10.0)
+    end;
+
+pub let from_str(str : Bin) -> Flt =
+    let is_neg : Bln = Nat/eql(Bin/get(str, 0), '-');
+
+    let start : Nat =
+        match Bin/get(str, 0) : Nat
+        | '+' => 1
+        | '-' => 1
+        | _ => 0
+        end;
+
+    let len : Nat = Bin/len(str);
+    let dot_pos : Nat = Str/find_byte('.', str);
+    let e_pos : Nat = Nat/min(Str/find_byte('e', str), Str/find_byte('E', str));
+    let int_end : Nat = Nat/min(dot_pos, e_pos);
+    let int_flt : Flt = Nat/to_flt(Str/from_nat(Bin/slice(str, start, int_end)));
+
+    let frac_flt : Flt =
+        match Nat/lt(dot_pos, e_pos) : Flt
+        | true =>
+            let frac_slice : Bin = Bin/slice(str, Nat/add(dot_pos, 1), e_pos);
+            div(Nat/to_flt(Str/from_nat(frac_slice)), pow10(Bin/len(frac_slice)))
+        | false => +0.0
+        end;
+
+    let exp_flt : Flt =
+        match Nat/lt(e_pos, len) : Flt
+        | true =>
+            let exp_int : Int = Str/from_int(Bin/slice(str, Nat/add(e_pos, 1), len));
+            match Int/gte(exp_int, +0) : Flt
+            | true => pow10(Int/to_nat(exp_int))
+            | false => div(+1.0, pow10(Int/abs(exp_int)))
+            end
+        | false => +1.0
+        end;
+
+    let result : Flt = mul(add(int_flt, frac_flt), exp_flt);
+
+    match is_neg : Flt
+    | true => neg(result)
+    | false => result
+    end;

@@ -23,25 +23,17 @@ let encode_str(s : Bin) -> Bin =
 
 pub rec encode(v: Value) -> Bin =
     match v : Bin
-    | null()  => "null"
-    | bln(b)  => Bln/to_str(b)
-    | num(n)  => encode_num(n)
-    | str(s)  => encode_str(s)
+    | null() => "null"
+    | bln(b) => Bln/to_str(b)
+    | num(n) => encode_num(n)
+    | str(s) => encode_str(s)
     | arr(xs) =>
         Bin/concat(Bin/concat("[",
-            Arr/fold(Value, Bin, xs, "", (elem, acc) =>
-                match Nat/eql(Bin/len(acc), 0) : Bin
-                | true => encode(elem)
-                | false => Bin/concat(Bin/concat(acc, ","), encode(elem))
-                end)),
-            "]")
+            Bin/join(",", Arr/map(Value, Bin, encode, xs))), "]")
     | obj(ps) =>
         Bin/concat(Bin/concat("{",
-            Arr/fold({ Bin, Value }, Bin, ps, "", (pair, acc) =>
-                let entry : Bin = Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1));
-                match Nat/eql(Bin/len(acc), 0) : Bin
-                | true => entry
-                | false => Bin/concat(Bin/concat(acc, ","), entry)
-                end)),
+            Bin/join(",", Arr/map({ Bin, Value }, Bin,
+                (pair) => Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1)),
+                ps))),
             "}")
     end;

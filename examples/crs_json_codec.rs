@@ -9,7 +9,7 @@ use {
 fn main() {
     let source = r#"
         pub mod std;
-        use /std/{Parse, Io, Bin, Nat};
+        use /std/{Parse, Io, Bin, Nat, Result};
 
         pub mod json;
         use json/{Value};
@@ -24,11 +24,11 @@ fn main() {
 
         let encoded : Bin = json/encode(value);
 
-        let decoded : Parse/Result({ Nat, Value }) = json/decode(encoded, 0);
+        let decoded : Result({ Nat, Value }, Bin) = json/decode(encoded, 0);
 
         match decoded : {}
-        | ok(pair) => Io/print(json/encode(pair.1))
-        | err(msg) => Io/print(msg)
+        | success(pair) => Io/print(json/encode(pair.1))
+        | failure(msg) => Io/print(msg)
         end
         "#;
 

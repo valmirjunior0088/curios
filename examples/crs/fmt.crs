@@ -1,4 +1,4 @@
-use /std/{Bin, Nat, Parse, Io, Bln};
+use /std/{Bin, Nat, Parse, Io, Bln, Result};
 
 pub union Fmt
 | nil()
@@ -9,60 +9,59 @@ end
 
 pub rec format_type_with(result: Type, f: Fmt) -> Type =
     match f : Type
-    | nil()        => result
+    | nil() => result
     | lit(_, rest) => format_type_with(result, rest)
-    | str(rest)    => Bin -> format_type_with(result, rest)
-    | nat(rest)    => Nat -> format_type_with(result, rest)
+    | str(rest) => Bin -> format_type_with(result, rest)
+    | nat(rest) => Nat -> format_type_with(result, rest)
     end;
 
 let is_not_pct(byte : Nat) -> Bln =
     match byte : Bln
     | '%' => false
-    | _   => true
+    | _ => true
     end;
 
 rec parse_fmt : Parse(Fmt) = (input, pos) =>
-    match Nat/lt(pos, Bin/len(input)) : Parse/Result({ Nat, Fmt })
-    | false => Parse/Result/ok({ Nat, Fmt }, (pos, Fmt/nil()))
-    | true  =>
-        match Nat/eql(Bin/get(input, pos), '%') : Parse/Result({ Nat, Fmt })
+    match Nat/lt(pos, Bin/len(input)) : Result({ Nat, Fmt }, Bin)
+    | false => Result/success({ Nat, Fmt }, Bin, (pos, Fmt/nil()))
+    | true =>
+        match Nat/eql(Bin/get(input, pos), '%') : Result({ Nat, Fmt }, Bin)
         | false => parse_lit(input, pos)
-        | true  => parse_spec(input, pos)
+        | true => parse_spec(input, pos)
         end
     end
 and parse_spec : Parse(Fmt) =
     Parse/or(Fmt,
-        Parse/bind(Nat, Fmt, Parse/take_byte('%'), _ =>
-        Parse/bind(Nat, Fmt, Parse/any_byte, byte =>
-        Parse/bind(Fmt, Fmt, parse_fmt, rest =>
+        Parse/bind(Nat, Fmt, Parse/take_byte('%'), (_) =>
+        Parse/bind(Nat, Fmt, Parse/any_byte, (byte) =>
+        Parse/bind(Fmt, Fmt, parse_fmt, (rest) =>
             match byte : Parse(Fmt)
             | 's' => Parse/pure(Fmt, Fmt/str(rest))
             | 'd' => Parse/pure(Fmt, Fmt/nat(rest))
-            | _   => Parse/pure(Fmt, rest)
+            | _ => Parse/pure(Fmt, rest)
             end))),
-        Parse/map(Nat, Fmt, _ => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
+        Parse/map(Nat, Fmt, (_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
 and parse_lit : Parse(Fmt) =
-    Parse/bind(Bin, Fmt, Parse/take_while(is_not_pct), bytes =>
-    Parse/bind(Fmt, Fmt, parse_fmt, rest =>
+    Parse/bind(Bin, Fmt, Parse/take_while(is_not_pct), (bytes) =>
+    Parse/bind(Fmt, Fmt, parse_fmt, (rest) =>
         Parse/pure(Fmt, Fmt/lit(bytes, rest))));
 
 pub let parse(input : Bin) -> Fmt =
-    let r : Parse/Result(Fmt) = Parse/run(Fmt, parse_fmt, input);
-    match r : Fmt
-    | ok(value) => value
-    | err(_)    => Fmt/nil()
+    match Parse/run(Fmt, parse_fmt, input) : Fmt
+    | success(value) => value
+    | failure(_) => Fmt/nil()
     end;
 
 rec go_with(result : Type, finish : Bin -> result, f : Fmt, acc : Bin) -> format_type_with(result, f) =
     match f : format_type_with(result, f)
-    | nil()            => finish(acc)
+    | nil() => finish(acc)
     | lit(bytes, rest) => go_with(result, finish, rest, Bin/concat(acc, bytes))
-    | str(rest)        => (s) => go_with(result, finish, rest, Bin/concat(acc, s))
-    | nat(rest)        => (n) => go_with(result, finish, rest, Bin/concat(acc, Nat/to_str(n)))
+    | str(rest) => (s) => go_with(result, finish, rest, Bin/concat(acc, s))
+    | nat(rest) => (n) => go_with(result, finish, rest, Bin/concat(acc, Nat/to_str(n)))
     end;
 
 pub let format(s : Bin) -> format_type_with(Bin, parse(s)) =
-    go_with(Bin, x => x, parse(s), "");
+    go_with(Bin, (x) => x, parse(s), "");
 
 pub let printf(s : Bin) -> format_type_with({}, parse(s)) =
-    go_with({}, x => Io/print(x), parse(s), "");
+    go_with({}, (x) => Io/print(x), parse(s), "");

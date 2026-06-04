@@ -53,50 +53,34 @@ struct Cli {
     #[arg(long, default_value = "1000", value_name = "MILLIS", value_parser = parse_timeout, help = "Type-checker reduction timeout in milliseconds")]
     timeout: Duration,
 
-    #[arg(long, help = "Print each intermediate representation to stderr")]
-    print: bool,
+    #[arg(
+        long,
+        value_name = "STAGES",
+        num_args = 0..=1,
+        default_missing_value = "text,core,ersd,cont,wasm",
+        help = "Print selected IRs to stderr (comma-separated: text,core,ersd,cont,wasm; bare --print prints all)"
+    )]
+    print: Option<String>,
 
     #[command(subcommand)]
     mode: Mode,
 }
 
-fn compile_file(timeout: Duration, print: bool, input_path: &Path) -> Result<Module, String> {
+fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<Module, String> {
     let source = fs::read_to_string(input_path)
         .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
 
     let loader = FileLoader::new(input_path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
-    compile(timeout, &loader, None, &source, |stage| {
-        if !print {
-            return;
-        }
+    let stages = print.split(',').collect::<Vec<_>>();
 
-        match stage {
-            Stage::Text(entrypoint) => {
-                eprintln!("=== text ===");
-                eprintln!("{entrypoint}");
-            }
-            Stage::Core(term) => {
-                eprintln!();
-                eprintln!("=== core ===");
-                eprintln!("{term}");
-            }
-            Stage::Ersd(term) => {
-                eprintln!();
-                eprintln!("=== ersd ===");
-                eprintln!("{term}");
-            }
-            Stage::Cont(cont_module) => {
-                eprintln!();
-                eprintln!("=== cont ===");
-                eprintln!("{cont_module}");
-            }
-            Stage::Wasm(wasm_module) => {
-                eprintln!();
-                eprintln!("=== wasm ===");
-                eprintln!("{wasm_module}");
-            }
-        }
+    compile(timeout, &loader, None, &source, |stage| match stage {
+        Stage::Text(text) if stages.contains(&"text") => eprintln!("\n=== text ===\n{text}"),
+        Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
+        Stage::Ersd(ersd) if stages.contains(&"ersd") => eprintln!("\n=== ersd ===\n{ersd}"),
+        Stage::Cont(cont) if stages.contains(&"cont") => eprintln!("\n=== cont ===\n{cont}"),
+        Stage::Wasm(wasm) if stages.contains(&"wasm") => eprintln!("\n=== wasm ===\n{wasm}"),
+        _ => {}
     })
 }
 
@@ -116,19 +100,21 @@ pub fn cli() -> Result<(), String> {
         mode,
     } = Cli::parse();
 
+    let print = print.unwrap_or_default();
+
     match mode {
         Mode::Run { input_path } => {
-            run_wasm(&compile_file(timeout, print, &input_path)?, StdioHost)?;
+            run_wasm(&compile_file(timeout, &print, &input_path)?, StdioHost)?;
         }
         Mode::Check { input_path } => {
-            compile_file(timeout, print, &input_path)?;
+            compile_file(timeout, &print, &input_path)?;
         }
         Mode::Compile {
             input_path,
             output_path,
         } => {
             emit_executable(
-                &compile_file(timeout, print, &input_path)?,
+                &compile_file(timeout, &print, &input_path)?,
                 &output_path.unwrap_or_else(|| default_output_path(&input_path)),
             )?;
         }
