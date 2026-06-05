@@ -36,6 +36,22 @@ use {
 /// it cannot otherwise see — the cases [`inline_calls`] gives up on, namely
 /// multi-call-site and recursive higher-order combinators (`map`, `fold`).
 ///
+/// # Two sites: parameters at calls, captures at allocations
+///
+/// The same monomorphization runs at two sites. The first (above) keys a *function*
+/// on its candidate **parameters** at a `Direct` **call**. The second keys a
+/// *closure* on its candidate **captures** at its **allocation** — a closure that
+/// dispatches on a captured combinator (`c{*p, ..}(..)` whose body does `p(..)`)
+/// is abstract in `p` inside its own body, but its allocation `let v = c{q, ..}`
+/// names the captured closure `q` right there. Cloning `c` per the shapes of its
+/// known candidate captures bakes them in exactly as for parameters, so the inner
+/// indirect calls become known-closure calls for [`lift_closures`] to devirtualize.
+/// Allocations are plain `Data::Clsr` constructions — never hidden behind dispatch —
+/// so this needs no control-flow analysis to find them. Both sites share the clone
+/// builder ([`specialize_arguments`]): "drop each resolved candidate argument,
+/// thread the baked closure's own captures through as leading args, rebind the
+/// dropped name to its baked shape at the body top."
+///
 /// # Threading captures instead of baking them
 ///
 /// A closure's captured environment lives in the *caller's* scope, so it cannot be
@@ -68,26 +84,50 @@ use {
 pub fn specialize_calls(module: &mut Module) {
     loop {
         let candidates = candidate_positions(module);
+        let capture_candidates = candidate_capture_positions(module);
         let fields = closure_fields(module);
-        let bodies = func_bodies(module);
+        let func_bodies = func_bodies(module);
+        let clsr_bodies = clsr_bodies(module);
 
-        let mut needed: HashMap<FuncName, SpecPlan> = HashMap::new();
-        let mut changed = false;
+        let mut spec = Specializer {
+            candidates: &candidates,
+            capture_candidates: &capture_candidates,
+            needed_funcs: HashMap::new(),
+            needed_clsrs: HashMap::new(),
+            changed: false,
+        };
 
         for (_, func) in module.funcs_mut() {
-            changed |= specialize_body(&mut func.region, &candidates, &mut needed);
+            spec.specialize_body(&mut func.region);
         }
         for (_, clsr) in module.clsrs_mut() {
-            changed |= specialize_body(&mut clsr.region, &candidates, &mut needed);
+            spec.specialize_body(&mut clsr.region);
         }
 
-        for (name, plan) in needed {
+        let Specializer {
+            needed_funcs,
+            needed_clsrs,
+            mut changed,
+            ..
+        } = spec;
+
+        for (name, plan) in needed_funcs {
             if module.funcs().iter().any(|(present, _)| present == &name) {
                 continue;
             }
 
-            let base = bodies.get(&plan.base).expect("base function present");
+            let base = func_bodies.get(&plan.base).expect("base function present");
             module.add_func(name, build_specialized(base, &plan, &fields));
+            changed = true;
+        }
+
+        for (name, plan) in needed_clsrs {
+            if module.clsrs().iter().any(|(present, _)| present == &name) {
+                continue;
+            }
+
+            let base = clsr_bodies.get(&plan.base).expect("base closure present");
+            module.add_clsr(name, build_specialized_clsr(base, &plan, &fields));
             changed = true;
         }
 
@@ -95,6 +135,17 @@ pub fn specialize_calls(module: &mut Module) {
             return;
         }
     }
+}
+
+/// The driver for one fixed-point round: the read-only snapshots both rewrite sites
+/// consult, plus the clones each site discovered (minted by the caller) and whether
+/// anything changed this round.
+struct Specializer<'a> {
+    candidates: &'a HashMap<FuncName, Vec<usize>>,
+    capture_candidates: &'a HashMap<ClsrName, Vec<usize>>,
+    needed_funcs: HashMap<FuncName, SpecPlan>,
+    needed_clsrs: HashMap<ClsrName, ClsrSpecPlan>,
+    changed: bool,
 }
 
 /// The compile-time value a candidate position resolved to — the two shapes erasure
@@ -124,6 +175,13 @@ struct SpecPlan {
     resolved: Vec<(usize, Shape)>,
 }
 
+/// The same plan for a specialized *closure* clone, keyed on candidate *capture*
+/// positions instead of parameter positions.
+struct ClsrSpecPlan {
+    base: ClsrName,
+    resolved: Vec<(usize, Shape)>,
+}
+
 // --- Read-only snapshots ----------------------------------------------------
 
 /// The candidate parameter positions of every function — the only positions worth
@@ -135,6 +193,27 @@ fn candidate_positions(module: &Module) -> HashMap<FuncName, Vec<usize>> {
         .map(|(name, func)| {
             let positions = func
                 .params
+                .iter()
+                .enumerate()
+                .filter(|(_, arg)| arg.candidate)
+                .map(|(index, _)| index)
+                .collect();
+
+            (name.clone(), positions)
+        })
+        .collect()
+}
+
+/// The candidate capture positions of every closure — the field positions worth
+/// keying a closure specialization on, the allocation-site mirror of
+/// [`candidate_positions`].
+fn candidate_capture_positions(module: &Module) -> HashMap<ClsrName, Vec<usize>> {
+    module
+        .clsrs()
+        .iter()
+        .map(|(name, clsr)| {
+            let positions = clsr
+                .fields
                 .iter()
                 .enumerate()
                 .filter(|(_, arg)| arg.candidate)
@@ -166,6 +245,15 @@ fn func_bodies(module: &Module) -> HashMap<FuncName, Func> {
         .collect()
 }
 
+/// A snapshot of every closure body, the allocation-site mirror of [`func_bodies`].
+fn clsr_bodies(module: &Module) -> HashMap<ClsrName, Clsr> {
+    module
+        .clsrs()
+        .iter()
+        .map(|(name, clsr)| (name.clone(), clsr.clone()))
+        .collect()
+}
+
 // --- Site rewriting ---------------------------------------------------------
 
 /// The statically-known value a name is bound to. A closure carries the captures to
@@ -178,18 +266,180 @@ enum KnownValue {
 /// Maps a value name to the compile-time value it is statically bound to.
 type Known = HashMap<ValueName, KnownValue>;
 
-fn specialize_body(
-    region: &mut Region,
-    candidates: &HashMap<FuncName, Vec<usize>>,
-    needed: &mut HashMap<FuncName, SpecPlan>,
-) -> bool {
-    let known = known_values(region);
+impl Specializer<'_> {
+    /// Rewrite both sites in one body against a single tree-wide snapshot of its
+    /// statically-known values. The snapshot is owned (it clones the data it
+    /// records), so the in-place rewrites below never invalidate it; transitive and
+    /// nested specialization is resolved across outer fixed-point rounds, which
+    /// rebuild every snapshot.
+    fn specialize_body(&mut self, region: &mut Region) {
+        let known = known_values(region);
 
-    if known.is_empty() {
-        return false;
+        if known.is_empty() {
+            return;
+        }
+
+        // A recursive closure is built as a `prealloc` reserving its shape, then a
+        // fill binding writing its captures — and the fill can sit in a descendant
+        // region of its prealloc. Both name the same value, so specializing the fill
+        // means re-pointing its prealloc to the same clone, or the reserved slot and
+        // the written value disagree on layout. Record every fill we respecialize
+        // across the whole body, then sync the preallocs tree-wide.
+        let mut respecialized: HashMap<ValueName, ClsrName> = HashMap::new();
+        self.rewrite_region(region, &known, &mut respecialized);
+
+        if !respecialized.is_empty() {
+            sync_preallocs(region, &respecialized);
+        }
     }
 
-    rewrite_region(region, &known, candidates, needed)
+    fn rewrite_region(
+        &mut self,
+        region: &mut Region,
+        known: &Known,
+        respecialized: &mut HashMap<ValueName, ClsrName>,
+    ) {
+        for (name, value) in &mut region.values {
+            if let Some(specialized) = self.rewrite_value(value, known) {
+                respecialized.insert(name.clone(), specialized);
+            }
+        }
+
+        self.rewrite_tail(&mut region.tail, known);
+
+        for (_, block) in &mut region.blocks {
+            self.rewrite_region(&mut block.region, known, respecialized);
+        }
+    }
+
+    /// Retarget a closure *allocation* whose candidate captures carry known shapes to
+    /// the matching specialized closure clone — the allocation-site mirror of
+    /// [`Self::rewrite_tail`]. Each known-closure capture is expanded into its own
+    /// captures and each unit capture is dropped, exactly as a call's arguments are.
+    fn rewrite_value(&mut self, value: &mut Value, known: &Known) -> Option<ClsrName> {
+        let Value::Pure(Data::Clsr(clsr, captures)) = value else {
+            return None;
+        };
+
+        let positions = self.capture_candidates.get(clsr)?;
+
+        let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
+            .iter()
+            .filter_map(|&index| match known.get(captures.get(index)?)? {
+                KnownValue::Clsr(inner, inner_captures) => {
+                    Some((index, Shape::Clsr(inner.clone()), inner_captures.clone()))
+                }
+                KnownValue::Unit => Some((index, Shape::Unit, vec![])),
+            })
+            .collect();
+
+        if resolved.is_empty() {
+            return None;
+        }
+
+        let key: Vec<(usize, Shape)> = resolved
+            .iter()
+            .map(|(index, shape, _)| (*index, shape.clone()))
+            .collect();
+        let name = specialized_clsr_name(clsr, &key);
+
+        let new_captures = splice(captures, &resolved);
+
+        self.needed_clsrs.entry(name.clone()).or_insert(ClsrSpecPlan {
+            base: clsr.clone(),
+            resolved: key,
+        });
+
+        *value = Value::Pure(Data::Clsr(name.clone(), new_captures));
+        self.changed = true;
+
+        Some(name)
+    }
+
+    /// Retarget a `Direct` call whose candidate positions carry known shapes to the
+    /// matching specialized clone, expanding each known-closure argument into its
+    /// captures and dropping each unit argument.
+    fn rewrite_tail(&mut self, tail: &mut Tail, known: &Known) {
+        let Tail::Call(CallTarget::Direct { target, params, resume }) = tail else {
+            return;
+        };
+
+        let Some(positions) = self.candidates.get(target) else {
+            return;
+        };
+
+        // Resolve the candidate positions that carry a statically-known shape, pairing
+        // each with the arguments to splice in its place (a closure's captures, or
+        // nothing for unit).
+        let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
+            .iter()
+            .filter_map(|&index| match known.get(&params[index])? {
+                KnownValue::Clsr(clsr, captures) => {
+                    Some((index, Shape::Clsr(clsr.clone()), captures.clone()))
+                }
+                KnownValue::Unit => Some((index, Shape::Unit, vec![])),
+            })
+            .collect();
+
+        if resolved.is_empty() {
+            return;
+        }
+
+        let key: Vec<(usize, Shape)> = resolved
+            .iter()
+            .map(|(index, shape, _)| (*index, shape.clone()))
+            .collect();
+        let name = specialized_func_name(target, &key);
+
+        let args = splice(params, &resolved);
+
+        self.needed_funcs.entry(name.clone()).or_insert(SpecPlan {
+            base: target.clone(),
+            resolved: key,
+        });
+
+        *tail = Tail::Call(CallTarget::Direct {
+            target: name,
+            params: args,
+            resume: resume.clone(),
+        });
+
+        self.changed = true;
+    }
+}
+
+/// Splice each resolved position's replacement arguments (a known closure's captures,
+/// or nothing for unit) in place, keeping every other argument verbatim. Mirrors the
+/// clone's argument-list construction in [`specialize_arguments`].
+fn splice(args: &[ValueName], resolved: &[(usize, Shape, Vec<ValueName>)]) -> Vec<ValueName> {
+    let expansions: HashMap<usize, &Vec<ValueName>> =
+        resolved.iter().map(|(index, _, args)| (*index, args)).collect();
+
+    let mut spliced = Vec::new();
+    for (index, arg) in args.iter().enumerate() {
+        match expansions.get(&index) {
+            Some(replacement) => spliced.extend(replacement.iter().cloned()),
+            None => spliced.push(arg.clone()),
+        }
+    }
+
+    spliced
+}
+
+/// Re-point every recursive-closure `prealloc` whose fill was respecialized to the
+/// fill's clone, so the reserved shell and its backpatch agree on closure shape.
+fn sync_preallocs(region: &mut Region, respecialized: &HashMap<ValueName, ClsrName>) {
+    for (name, prealloc) in &mut region.preallocs {
+        if let Prealloc::Clsr(clsr) = prealloc
+            && let Some(specialized) = respecialized.get(name)
+        {
+            *clsr = specialized.clone();
+        }
+    }
+
+    for (_, block) in &mut region.blocks {
+        sync_preallocs(&mut block.region, respecialized);
+    }
 }
 
 /// Collect every binding to a bakeable compile-time value — a `let v = c{captures}`
@@ -220,147 +470,114 @@ fn collect_known(region: &Region, known: &mut Known) {
     }
 }
 
-fn rewrite_region(
-    region: &mut Region,
-    known: &Known,
-    candidates: &HashMap<FuncName, Vec<usize>>,
-    needed: &mut HashMap<FuncName, SpecPlan>,
-) -> bool {
-    let mut changed = rewrite_tail(&mut region.tail, known, candidates, needed);
-
-    for (_, block) in &mut region.blocks {
-        changed |= rewrite_region(&mut block.region, known, candidates, needed);
-    }
-
-    changed
-}
-
-/// Retarget a `Direct` call whose candidate positions carry known shapes to the
-/// matching specialized clone, expanding each known-closure argument into its
-/// captures and dropping each unit argument.
-fn rewrite_tail(
-    tail: &mut Tail,
-    known: &Known,
-    candidates: &HashMap<FuncName, Vec<usize>>,
-    needed: &mut HashMap<FuncName, SpecPlan>,
-) -> bool {
-    let Tail::Call(CallTarget::Direct { target, params, resume }) = tail else {
-        return false;
-    };
-
-    let Some(positions) = candidates.get(target) else {
-        return false;
-    };
-
-    // Resolve the candidate positions that carry a statically-known shape, pairing
-    // each with the arguments to splice in its place (a closure's captures, or
-    // nothing for unit).
-    let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
-        .iter()
-        .filter_map(|&index| match known.get(&params[index])? {
-            KnownValue::Clsr(clsr, captures) => {
-                Some((index, Shape::Clsr(clsr.clone()), captures.clone()))
-            }
-            KnownValue::Unit => Some((index, Shape::Unit, vec![])),
-        })
-        .collect();
-
-    if resolved.is_empty() {
-        return false;
-    }
-
-    let key: Vec<(usize, Shape)> = resolved
-        .iter()
-        .map(|(index, shape, _)| (*index, shape.clone()))
-        .collect();
-    let name = specialized_name(target, &key);
-
-    // Splice each resolved argument's replacement in place; keep every other
-    // argument verbatim. Mirrors the clone's parameter construction.
-    let expansions: HashMap<usize, &Vec<ValueName>> =
-        resolved.iter().map(|(index, _, args)| (*index, args)).collect();
-
-    let mut args = Vec::new();
-    for (index, arg) in params.iter().enumerate() {
-        match expansions.get(&index) {
-            Some(spliced) => args.extend(spliced.iter().cloned()),
-            None => args.push(arg.clone()),
-        }
-    }
-
-    needed.entry(name.clone()).or_insert(SpecPlan {
-        base: target.clone(),
-        resolved: key,
-    });
-
-    *tail = Tail::Call(CallTarget::Direct {
-        target: name,
-        params: args,
-        resume: resume.clone(),
-    });
-
-    true
-}
-
 /// A clone's name is a pure function of its base and shape key, so equal keys map
-/// to one clone (the memo) and a self-call's key resolves back to its own clone.
-fn specialized_name(base: &FuncName, resolved: &[(usize, Shape)]) -> FuncName {
+/// to one clone (the memo) and a self-reference's key resolves back to its own clone.
+fn specialized_func_name(base: &FuncName, resolved: &[(usize, Shape)]) -> FuncName {
+    FuncName::from(specialized_label(base, resolved))
+}
+
+/// The closure-clone mirror of [`specialized_func_name`].
+fn specialized_clsr_name(base: &ClsrName, resolved: &[(usize, Shape)]) -> ClsrName {
+    ClsrName::from(specialized_label(base, resolved))
+}
+
+fn specialized_label(base: impl std::fmt::Display, resolved: &[(usize, Shape)]) -> String {
     let mut name = format!("{base}@spec");
 
     for (position, shape) in resolved {
         name.push_str(&format!("__{position}_{shape}"));
     }
 
-    FuncName::from(name)
+    name
 }
 
 // --- Clone construction -----------------------------------------------------
 
-/// Build the specialized clone: drop each resolved candidate parameter and prepend
-/// a binding that rebuilds its shape, so the formerly-abstract parameter is now a
-/// statically-known value. A known closure threads its captures through as leading
-/// non-candidate parameters; unit needs nothing threaded.
+/// Build the specialized *function* clone: specialize on its parameters, prepend the
+/// rebinds so each formerly-abstract candidate parameter is now a statically-known
+/// value, and keep the resume verbatim.
 fn build_specialized(
     base: &Func,
     plan: &SpecPlan,
     fields: &HashMap<ClsrName, Vec<Argument>>,
 ) -> Func {
-    let resolved: HashMap<usize, &Shape> =
-        plan.resolved.iter().map(|(index, shape)| (*index, shape)).collect();
+    let resolved = resolved_map(&plan.resolved);
+    let (params, rebinds) = specialize_arguments(&base.params, &resolved, fields);
 
-    let mut params = Vec::new();
+    Func {
+        params,
+        resume: base.resume.clone(),
+        region: rebound_region(&base.region, rebinds),
+    }
+}
+
+/// Build the specialized *closure* clone — the allocation-site mirror of
+/// [`build_specialized`]. Specialize on its captured `fields`, leaving `params` and
+/// `resume` untouched.
+fn build_specialized_clsr(
+    base: &Clsr,
+    plan: &ClsrSpecPlan,
+    fields: &HashMap<ClsrName, Vec<Argument>>,
+) -> Clsr {
+    let resolved = resolved_map(&plan.resolved);
+    let (new_fields, rebinds) = specialize_arguments(&base.fields, &resolved, fields);
+
+    Clsr {
+        fields: new_fields,
+        params: base.params.clone(),
+        resume: base.resume.clone(),
+        region: rebound_region(&base.region, rebinds),
+    }
+}
+
+fn resolved_map(resolved: &[(usize, Shape)]) -> HashMap<usize, &Shape> {
+    resolved.iter().map(|(index, shape)| (*index, shape)).collect()
+}
+
+/// The shared core of both clone builders, agnostic to function-vs-closure and
+/// parameter-vs-capture: drop each resolved candidate argument and rebind its name
+/// to its baked shape — a known closure threaded through its captures as leading
+/// non-candidate arguments, or unit baked as the constant `{}`. Returns the rewritten
+/// argument list and the rebinds to prepend to the clone's body.
+fn specialize_arguments(
+    base_args: &[Argument],
+    resolved: &HashMap<usize, &Shape>,
+    fields: &HashMap<ClsrName, Vec<Argument>>,
+) -> (Vec<Argument>, Vec<(ValueName, Value)>) {
+    let mut args = Vec::new();
     let mut rebinds = Vec::new();
 
-    for (index, param) in base.params.iter().enumerate() {
+    for (index, arg) in base_args.iter().enumerate() {
         let rebind = match resolved.get(&index) {
             None => {
-                params.push(param.clone());
+                args.push(arg.clone());
                 continue;
             }
             Some(Shape::Clsr(clsr)) => {
                 let arity = fields.get(clsr).expect("specialized closure present").len();
                 let captures: Vec<ValueName> =
-                    (0..arity).map(|field| capture_param(&param.name, field)).collect();
+                    (0..arity).map(|field| capture_param(&arg.name, field)).collect();
 
-                // The threaded captures are plain non-candidate parameters.
-                params.extend(captures.iter().cloned().map(Argument::from));
+                // The threaded captures are plain non-candidate arguments.
+                args.extend(captures.iter().cloned().map(Argument::from));
                 Value::Pure(Data::Clsr((*clsr).clone(), captures))
             }
             Some(Shape::Unit) => Value::Pure(Data::Tpl(vec![])),
         };
 
-        rebinds.push((param.name.clone(), rebind));
+        rebinds.push((arg.name.clone(), rebind));
     }
 
-    let mut region = base.region.clone();
+    (args, rebinds)
+}
+
+/// Prepend the rebinds to a clone of the base region's values, so each dropped
+/// candidate name is rebound to its baked shape ahead of its first use.
+fn rebound_region(base: &Region, mut rebinds: Vec<(ValueName, Value)>) -> Region {
+    let mut region = base.clone();
     rebinds.extend(std::mem::take(&mut region.values));
     region.values = rebinds;
-
-    Func {
-        params,
-        resume: base.resume.clone(),
-        region,
-    }
+    region
 }
 
 fn capture_param(param: &ValueName, index: usize) -> ValueName {
@@ -413,6 +630,14 @@ mod tests {
             .iter()
             .find(|(n, _)| n.as_str() == name)
             .map(|(_, func)| func)
+    }
+
+    fn clsr_named<'a>(module: &'a Module, name: &str) -> Option<&'a Clsr> {
+        module
+            .clsrs()
+            .iter()
+            .find(|(n, _)| n.as_str() == name)
+            .map(|(_, clsr)| clsr)
     }
 
     #[test]
@@ -608,5 +833,234 @@ mod tests {
             }
             other => panic!("expected specialized self-call, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn specializes_closure_on_known_captured_closure_and_threads_nested_captures() {
+        // outer{*p, q}(m) = p(q): dispatches on the captured combinator `p`. main
+        // allocates it with a known closure `inner{env}` for that capture.
+        let inner = Clsr {
+            fields: vec![v("e").into()],
+            params: vec![v("x").into()],
+            resume: BlockName::from("r"),
+            region: region(vec![], Tail::Jump(JumpTarget {
+                target: BlockName::from("r"),
+                params: vec![v("x")],
+            })),
+        };
+        let outer = Clsr {
+            fields: vec![candidate("p"), v("q").into()],
+            params: vec![v("m").into()],
+            resume: BlockName::from("r"),
+            region: region(vec![], indirect("p", vec![v("q")])),
+        };
+        let main = Func {
+            params: vec![],
+            resume: BlockName::from("r"),
+            region: region(
+                vec![
+                    (v("env"), Value::Pure(Data::Nat(7))),
+                    (v("k"), Value::Pure(Data::Nat(1))),
+                    (v("pclo"), Value::Pure(Data::Clsr(ClsrName::from("inner"), vec![v("env")]))),
+                    (v("oclo"), Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("pclo"), v("k")]))),
+                ],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("oclo")],
+                }),
+            ),
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_clsr(ClsrName::from("inner"), inner);
+        module.add_clsr(ClsrName::from("outer"), outer);
+
+        specialize_calls(&mut module);
+
+        // The allocation is retargeted to the clone, with `pclo` expanded into its
+        // captured `env`; `k` is kept verbatim.
+        let oclo = &func_named(&module, "main").unwrap().region.values[3];
+        assert!(matches!(
+            oclo,
+            (name, Value::Pure(Data::Clsr(c, caps)))
+                if name == &v("oclo") && c.as_str() == "outer@spec__0_inner"
+                    && caps == &vec![v("env"), v("k")]
+        ));
+
+        // The clone drops `p`, takes its threaded capture as a leading field, keeps
+        // `q`, and rebuilds the closure so `p` is a known `Data::Clsr`.
+        let clone = clsr_named(&module, "outer@spec__0_inner").expect("clone present");
+        assert_eq!(clone.fields, vec![v("p@cap0"), v("q")]);
+        assert_eq!(clone.params, vec![v("m")]);
+        assert!(matches!(
+            &clone.region.values[0],
+            (name, Value::Pure(Data::Clsr(c, caps)))
+                if name == &v("p") && c.as_str() == "inner" && caps == &vec![v("p@cap0")]
+        ));
+    }
+
+    #[test]
+    fn specializes_closure_on_unit_capture() {
+        // outer{*u, q} captures a unit `{}` at a candidate position; the clone drops
+        // it with nothing threaded and rebinds it to the unit constant.
+        let outer = Clsr {
+            fields: vec![candidate("u"), v("q").into()],
+            params: vec![v("m").into()],
+            resume: BlockName::from("r"),
+            region: region(vec![], indirect("q", vec![v("m")])),
+        };
+        let main = Func {
+            params: vec![],
+            resume: BlockName::from("r"),
+            region: region(
+                vec![
+                    (v("k"), Value::Pure(Data::Nat(1))),
+                    (v("unit"), Value::Pure(Data::Tpl(vec![]))),
+                    (v("oclo"), Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("unit"), v("k")]))),
+                ],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("oclo")],
+                }),
+            ),
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_clsr(ClsrName::from("outer"), outer);
+
+        specialize_calls(&mut module);
+
+        // The allocation drops the unit capture entirely, keeping `k`.
+        let oclo = &func_named(&module, "main").unwrap().region.values[2];
+        assert!(matches!(
+            oclo,
+            (name, Value::Pure(Data::Clsr(c, caps)))
+                if name == &v("oclo") && c.as_str() == "outer@spec__0_unit" && caps == &vec![v("k")]
+        ));
+
+        // The clone takes only `q`, and rebinds `u` to the unit constant.
+        let clone = clsr_named(&module, "outer@spec__0_unit").expect("clone present");
+        assert_eq!(clone.fields, vec![v("q")]);
+        assert!(matches!(
+            &clone.region.values[0],
+            (name, Value::Pure(Data::Tpl(fields))) if name == &v("u") && fields.is_empty()
+        ));
+    }
+
+    #[test]
+    fn leaves_unknown_capture_alone() {
+        // main allocates `outer` with its own abstract parameter `g`, not a known
+        // closure, so there is nothing to bake.
+        let outer = Clsr {
+            fields: vec![candidate("p")],
+            params: vec![],
+            resume: BlockName::from("r"),
+            region: region(vec![], indirect("p", vec![])),
+        };
+        let main = Func {
+            params: vec![candidate("g")],
+            resume: BlockName::from("r"),
+            region: region(
+                vec![(v("oclo"), Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("g")])))],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("oclo")],
+                }),
+            ),
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_clsr(ClsrName::from("outer"), outer);
+
+        specialize_calls(&mut module);
+
+        assert_eq!(module.clsrs().len(), 1);
+        assert!(matches!(
+            &func_named(&module, "main").unwrap().region.values[0],
+            (_, Value::Pure(Data::Clsr(c, _))) if c.as_str() == "outer",
+        ));
+    }
+
+    #[test]
+    fn terminates_on_self_capturing_closure() {
+        // `let v = c{v}` — a recursive closure capturing itself at a candidate
+        // position. The name-as-key memo builds one clone and converges.
+        let c = Clsr {
+            fields: vec![candidate("f")],
+            params: vec![v("x").into()],
+            resume: BlockName::from("r"),
+            region: region(vec![], indirect("f", vec![v("x")])),
+        };
+        let main = Func {
+            params: vec![],
+            resume: BlockName::from("r"),
+            region: region(
+                vec![(v("v"), Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("v")])))],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("v")],
+                }),
+            ),
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_clsr(ClsrName::from("c"), c);
+
+        specialize_calls(&mut module);
+
+        // One clone, its self-capture threaded; the allocation retargets to it.
+        let clone = clsr_named(&module, "c@spec__0_c").expect("clone present");
+        assert_eq!(clone.fields, vec![v("f@cap0")]);
+        assert!(matches!(
+            &func_named(&module, "main").unwrap().region.values[0],
+            (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec__0_c",
+        ));
+    }
+
+    #[test]
+    fn syncs_a_specialized_fills_prealloc_shell() {
+        // A recursive closure is a `prealloc` shell plus a self-capturing fill that
+        // names the same value. Specializing the fill must re-point the shell to the
+        // same clone, or the reserved slot and the written value disagree on shape.
+        let c = Clsr {
+            fields: vec![candidate("f")],
+            params: vec![v("x").into()],
+            resume: BlockName::from("r"),
+            region: region(vec![], indirect("f", vec![v("x")])),
+        };
+        let main = Func {
+            params: vec![],
+            resume: BlockName::from("r"),
+            region: Region {
+                preallocs: vec![(v("rec"), Prealloc::Clsr(ClsrName::from("c")))],
+                values: vec![(v("rec"), Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("rec")])))],
+                blocks: vec![],
+                tail: Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("rec")],
+                }),
+            },
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_clsr(ClsrName::from("c"), c);
+
+        specialize_calls(&mut module);
+
+        // Both the fill and its shell now name the clone.
+        let region = &func_named(&module, "main").unwrap().region;
+        assert!(matches!(
+            &region.values[0],
+            (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec__0_c",
+        ));
+        assert!(matches!(
+            &region.preallocs[0],
+            (_, Prealloc::Clsr(name)) if name.as_str() == "c@spec__0_c",
+        ));
     }
 }
