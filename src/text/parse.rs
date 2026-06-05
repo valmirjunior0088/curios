@@ -509,6 +509,9 @@ fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
             .and(
                 parse_literal("|")
                     .and_keep(parse_identifier())
+                    .and_drop(parse_literal("+"))
+                    .and_drop(parse_literal("1"))
+                    .and_drop(parse_literal(","))
                     .and(parse_identifier())
                     .and_drop(parse_literal("=>"))
                     .and(lazy(parse_term)),

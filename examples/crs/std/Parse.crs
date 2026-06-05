@@ -98,7 +98,7 @@ pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
         let r : { Nat, Bin, Bln } =
             match Nat/sub(Bin/len(input), pos) : { Nat, Bin, Bln }
             | 0 => (pos, "", false)
-            | step ih =>
+            | step + 1, ih =>
                 match ih.2 : { Nat, Bin, Bln }
                 | true => ih
                 | false =>

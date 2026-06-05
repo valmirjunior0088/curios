@@ -5,7 +5,7 @@ use /std/{Arr, Nat};
 pub let fold(A : Type, str : Bin, init : A, f : (Nat, A) -> A) -> A =
     match len(str) : A
     | 0 => init
-    | pred ih => f(get(str, pred), ih)
+    | pred + 1, ih => f(get(str, pred), ih)
     end;
 
 pub let join(sep : Bin, parts : Arr(Bin)) -> Bin =

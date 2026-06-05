@@ -5,7 +5,7 @@ use /std/{Nat};
 pub let fold(T : Type, A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     match len(T, arr) : A
     | 0 => init
-    | pred ih => f(get(T, arr, pred), ih)
+    | pred + 1, ih => f(get(T, arr, pred), ih)
     end;
 
 pub let map(A : Type, B : Type, f : A -> B, arr : Arr(A)) -> Arr(B) =

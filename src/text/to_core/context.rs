@@ -7,12 +7,14 @@ use {
     std::collections::HashMap,
 };
 
+#[derive(Clone)]
 pub struct FlatLet {
     pub name: Qualifier,
     pub type_: core::Term,
     pub body: core::Term,
 }
 
+#[derive(Clone)]
 pub enum FlatItem {
     Let(FlatLet),
     Rec(Vec<FlatLet>),

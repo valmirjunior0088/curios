@@ -51,7 +51,7 @@ Declares a group of mutually recursive bindings. Each binding in the group indep
 pub rec fact(n : /sys/Nat) -> /sys/Nat =
     match n : /sys/Nat
     | 0 => 1
-    | pred ih => /sys/Nat/mul(pred + 1, ih)
+    | pred + 1, ih => /sys/Nat/mul(pred + 1, ih)
     end;
 ```
 
@@ -230,12 +230,12 @@ match cond : /sys/Bln
 end
 ```
 
-**Structural induction over `Nat`** — `| 0` is the base case; `| pred ih` binds the predecessor and the result already computed for it (`ih`, the induction hypothesis):
+**Structural induction over `Nat`** — `| 0` is the base case; `| pred + 1, ih` binds the predecessor and the result already computed for it (`ih`, the induction hypothesis):
 
 ```
 match n : /sys/Nat
 | 0 => zero_case
-| pred ih => succ_case
+| pred + 1, ih => succ_case
 end
 ```
 
@@ -443,7 +443,7 @@ These are normal path references. After `use /sys/{Nat, Bin};`, the same calls c
 | `/sys/Nat/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
 | `/sys/Nat/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
 
-Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred ih` and `| n` / `| _` branch shapes, respectively). Successor syntax is infix over a natural literal and a base term: `n + 1`, `2 + n`.
+Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively). Successor syntax is infix over a natural literal and a base term: `n + 1`, `2 + n`.
 
 ### Int
 

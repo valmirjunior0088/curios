@@ -288,7 +288,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 indent(print_term(zero_case)),
                 pure("\n| "),
                 pure(pred_label),
-                pure(" "),
+                pure(" + 1, "),
                 pure(ih_label),
                 pure(" =>\n"),
                 indent(print_term(succ_case)),

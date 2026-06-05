@@ -58,7 +58,7 @@ fn triangular_sum() {
         let result : sys/Nat =
             match 5 : _ => sys/Nat
             | 0 => 0
-            | pred ih => sys/Nat/add(ih, pred)
+            | pred + 1, ih => sys/Nat/add(ih, pred)
             end;
         sys/Io/print(sys/Nat/to_str(result))
         "#;
@@ -107,7 +107,7 @@ fn vec_cons_with_nat_succ() {
         rec Vec(T : Type, n : sys/Nat) -> Type =
             match n : Type
             | 0 => '[nil]
-            | pred ih => { T, ih }
+            | pred + 1, ih => { T, ih }
             end;
 
         let cons(T : Type, n : sys/Nat, x : T, xs : Vec(T, n)) -> Vec(T, n + 1) =

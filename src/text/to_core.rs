@@ -476,10 +476,16 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, 
         .map(|type_| elaborate.term(type_))
         .transpose()?;
     let tail = elaborate.term(&entrypoint.tail)?;
-    let term = order_flat_items(flat_items)
-        .into_iter()
-        .rev()
-        .fold(tail, fold_flat_item);
+
+    // Wrap the body and the type annotation in the same item scope. The
+    // annotation references the prelude (and any entrypoint bindings) exactly as
+    // the body does, so it must be bound by the same `let`/`rec` group — otherwise
+    // a name like `/sys/Int` stays a free variable in the type with no definition
+    // to follow, while the body's inferred type reduces to the primitive. Bound by
+    // the same items, both sides reduce through those definitions and agree.
+    let ordered = order_flat_items(flat_items);
+    let term = ordered.iter().cloned().rev().fold(tail, fold_flat_item);
+    let type_ = type_.map(|type_| ordered.into_iter().rev().fold(type_, fold_flat_item));
 
     Ok(Lowered { term, type_ })
 }

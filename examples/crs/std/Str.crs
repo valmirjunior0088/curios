@@ -3,7 +3,7 @@ use /std/{Char, Nat, Bin};
 pub let trim_start(str : Bin) -> Nat =
     match Bin/len(str) : Nat
     | 0 => Bin/len(str)
-    | pred ih =>
+    | pred + 1, ih =>
         match Nat/lt(pred, ih) : Nat
         | true =>
             match Char/is_whitespace(Bin/get(str, pred)) : Nat
@@ -17,7 +17,7 @@ pub let trim_start(str : Bin) -> Nat =
 pub let trim_stop(str : Bin) -> Nat =
     match Bin/len(str) : Nat
     | 0 => 0
-    | pred ih =>
+    | pred + 1, ih =>
         match Char/is_whitespace(Bin/get(str, pred)) : Nat
         | true => ih
         | false => Nat/add(pred, 1)

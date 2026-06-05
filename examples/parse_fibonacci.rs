@@ -9,7 +9,7 @@ fn main() {
         rec fib_pair : Nat -> {Int, Int} = (n) =>
             match n : _ => {Int, Int}
             | 0 => (+0, +1)
-            | pred ih =>
+            | pred + 1, ih =>
                 (ih.1, Int/add(ih.0, ih.1))
             end;
         fib_pair(10).0

@@ -5,7 +5,7 @@ use /std/{Nat, Int, Bin, Bln};
 let find_byte(target : Nat, str : Bin) -> Nat =
     match Bin/len(str) : Nat
     | 0 => Bin/len(str)
-    | pred ih =>
+    | pred + 1, ih =>
         match Nat/lt(pred, ih) : Nat
         | true =>
             match Nat/eql(Bin/get(str, pred), target) : Nat
@@ -19,7 +19,7 @@ let find_byte(target : Nat, str : Bin) -> Nat =
 let pow10(n : Nat) -> Flt =
     match n : Flt
     | 0 => +1.0
-    | pred ih => Flt/mul(ih, +10.0)
+    | pred + 1, ih => Flt/mul(ih, +10.0)
     end;
 
 pub let from_str(str : Bin) -> Flt =

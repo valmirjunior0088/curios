@@ -20,7 +20,7 @@ let take_literal(literal : Bin) -> Parse({}) =
         let r : { Nat, Bln } =
             match Bin/len(literal) : { Nat, Bln }
             | 0 => (pos, true)
-            | step ih =>
+            | step + 1, ih =>
                 match ih.1 : { Nat, Bln }
                 | false => ih
                 | true =>

@@ -82,6 +82,33 @@ fn apply_param_types(
     Ok(Some(types))
 }
 
+/// Enter a `rec` group: register its bindings as definitions and return the opened tail.
+/// Used when a `rec` meets a non-`rec` on the other side of a goal — the group is a scope
+/// wrapping the value we actually need to compare (e.g. the prelude/items folded around an
+/// entrypoint type), so its bindings must become reachable definitions before continuing.
+/// Two `rec`s meeting each other are compared structurally instead (see `compare_rec`), so
+/// a non-normalizing group like `x = x` never reaches this unfolding.
+fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
+    let labels = rec
+        .tail
+        .label_iter()
+        .map(|label| context.fresh(label))
+        .collect::<Vec<_>>();
+
+    let label_terms = labels
+        .iter()
+        .map(Var::free)
+        .map(Term::var)
+        .collect::<Vec<_>>();
+    let label_refs = label_terms.iter().collect::<Vec<_>>();
+
+    for (label, (_, body)) in labels.iter().zip(rec.items.iter()) {
+        context.define(label, &body.open(&label_refs));
+    }
+
+    rec.tail.open(&label_refs)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Goal {
     pub type_: Term,
@@ -597,6 +624,16 @@ impl Convert {
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?
+                }
+                (Subterm::Rec(rec), other) => {
+                    let tail = unfold_rec(context, rec);
+                    self.enqueue(type_, tail, other.into());
+                    true
+                }
+                (other, Subterm::Rec(rec)) => {
+                    let tail = unfold_rec(context, rec);
+                    self.enqueue(type_, other.into(), tail);
+                    true
                 }
                 (this_n, that_n) => {
                     self.eta_expand_neutral(context, this_n.into(), that_n.into(), type_)?

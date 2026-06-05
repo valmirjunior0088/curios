@@ -30,17 +30,17 @@ let add(a : Nat, b : Nat) -> Nat =
 
 When a function's result is itself a function, calls chain: `f(a)(b)`.
 
-A `match` over `Nat` uses the `| 0` / `| pred ih` pattern to recurse through its cases:
+A `match` over `Nat` uses the `| 0` / `| pred + 1, ih` pattern to recurse through its cases:
 
 ```
 let fact(n : Nat) -> Nat =
     match n : Nat
     | 0 => 1
-    | pred ih => Nat/mul(pred + 1, ih)
+    | pred + 1, ih => Nat/mul(pred + 1, ih)
     end;
 ```
 
-`| 0 =>` is the base case; `| pred ih =>` receives the predecessor and the result already computed for it (`ih`, short for induction hypothesis).
+`| 0 =>` is the base case; `| pred + 1, ih =>` receives the predecessor and the result already computed for it (`ih`, short for induction hypothesis).
 
 `rec` introduces a self-referential binding — the function can call itself by name:
 
@@ -48,7 +48,7 @@ let fact(n : Nat) -> Nat =
 rec gcd(a : Nat, b : Nat) -> Nat =
     match b : Nat
     | 0 => a
-    | pred _ => gcd(b, Nat/rem(a, b))
+    | pred + 1, _ => gcd(b, Nat/rem(a, b))
     end;
 ```
 
@@ -189,7 +189,7 @@ Rust's `Vec<T>` does not track length in the type. `[T; N]` does, but `N` must b
 rec Vec(T : Type, n : Nat) -> Type =
     match n : Type
     | 0 => {}
-    | pred ih => { T, ih }
+    | pred + 1, ih => { T, ih }
     end;
 ```
 
