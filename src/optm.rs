@@ -7,6 +7,8 @@
 //!   read-only walker.
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
+//! - [`specialize_calls`] — clones a function per closure shape passed into a
+//!   candidate parameter, so closure lifting can devirtualize through it.
 //! - [`closure_lifting`] — turns known closures into functions and devirtualizes
 //!   their call sites.
 //! - [`function_inlining`] — splices single-call-site functions into their call site.
@@ -27,6 +29,9 @@ pub use copy_propagation::*;
 
 mod constant_folding;
 pub use constant_folding::*;
+
+mod specialize_calls;
+pub use specialize_calls::*;
 
 mod closure_lifting;
 pub use closure_lifting::*;
@@ -49,7 +54,11 @@ use super::cont::*;
 ///
 /// Copy propagation runs first so that constant folding and closure lifting see
 /// real value identities. Closure lifting then turns known closures into direct
-/// calls, and inlining splices those callees into their one call site — which,
+/// calls — which exposes higher-order callees as direct calls carrying known
+/// closures in their candidate parameters, so specialization can clone them per
+/// closure shape; a second lift devirtualizes the calls those clones expose. With
+/// the higher-order layer flattened, inlining splices the resulting callees into
+/// their one call site — which,
 /// together with jump threading dissolving the leftover continuation blocks,
 /// finally brings literal arguments next to the primitive ops the prelude wraps,
 /// so a second copy-propagation and folding pass can collapse them. Folding also
@@ -62,6 +71,8 @@ use super::cont::*;
 pub fn optimize(mut module: Module) -> Module {
     propagate_copies(&mut module);
     fold_constants(&mut module);
+    lift_closures(&mut module);
+    specialize_calls(&mut module);
     lift_closures(&mut module);
     inline_calls(&mut module);
     thread_jumps(&mut module);
