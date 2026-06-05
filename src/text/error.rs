@@ -41,6 +41,15 @@ pub enum Error {
         label: String,
         parent: String,
     },
+    DuplicatePublicDeclaration {
+        label: String,
+    },
+    ExportConflict {
+        label: String,
+    },
+    CyclicReExport {
+        label: String,
+    },
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -102,6 +111,15 @@ impl fmt::Display for Error {
             }
             Error::NoSuchUseTarget { label, parent } => {
                 write!(f, "no module or binding named {label} in {parent}")
+            }
+            Error::DuplicatePublicDeclaration { label } => {
+                write!(f, "duplicate public declaration: {label}")
+            }
+            Error::ExportConflict { label } => {
+                write!(f, "export conflict for label: {label}")
+            }
+            Error::CyclicReExport { label } => {
+                write!(f, "cyclic re-export with no concrete target: {label}")
             }
             Error::ModuleLoadFailed { label, cause } => {
                 write!(f, "failed to load module {label}:\n{}", cause.format())

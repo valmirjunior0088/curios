@@ -1,4 +1,5 @@
 use {
+    super::interface::PublicInterface,
     crate::{
         core,
         text::{Error, Name, Qualifier},
@@ -17,6 +18,10 @@ pub enum FlatItem {
     Rec(Vec<FlatLet>),
 }
 
+// The direct interface of a module: every declared label (public *and* private)
+// in each namespace, with its visibility. This is the per-module body view used
+// for lexical scope during elaboration, and to tell private from absent when a
+// public lookup misses.
 pub struct ModuleInfo {
     children: HashMap<String, bool>,
     bindings: HashMap<String, bool>,
@@ -30,12 +35,22 @@ impl ModuleInfo {
         }
     }
 
-    pub fn insert_child(&mut self, label: String, is_pub: bool) {
+    pub fn insert_child(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
+        if is_pub && matches!(self.children.get(&label), Some(true)) {
+            return Err(Error::DuplicatePublicDeclaration { label });
+        }
+
         self.children.insert(label, is_pub);
+        Ok(())
     }
 
-    pub fn insert_binding(&mut self, label: String, is_pub: bool) {
+    pub fn insert_binding(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
+        if is_pub && matches!(self.bindings.get(&label), Some(true)) {
+            return Err(Error::DuplicatePublicDeclaration { label });
+        }
+
         self.bindings.insert(label, is_pub);
+        Ok(())
     }
 
     pub fn get_child(&self, label: &str) -> Option<bool> {
@@ -46,18 +61,20 @@ impl ModuleInfo {
         self.bindings.get(label).copied()
     }
 
-    pub fn public_labels(&self) -> Vec<String> {
-        let mut labels = self
-            .children
+    pub fn public_children(&self) -> Vec<String> {
+        self.children
             .iter()
-            .chain(self.bindings.iter())
             .filter(|(_, is_pub)| **is_pub)
             .map(|(label, _)| label.clone())
-            .collect::<Vec<_>>();
+            .collect()
+    }
 
-        labels.sort();
-        labels.dedup();
-        labels
+    pub fn public_bindings(&self) -> Vec<String> {
+        self.bindings
+            .iter()
+            .filter(|(_, is_pub)| **is_pub)
+            .map(|(label, _)| label.clone())
+            .collect()
     }
 }
 
@@ -67,11 +84,14 @@ pub struct UseResolved {
     pub binding: Option<Qualifier>,
 }
 
+// The per-body elaboration context. `table`/`public` are frozen interface views,
+// shared read-only across all nested contexts. `qualifiers`/`bindings` are the
+// lexical scope of the module body being elaborated, populated source-ordered by
+// declarations and `use` imports.
 pub struct Context<'a> {
     prefix: Qualifier,
-    table: &'a mut HashMap<Qualifier, ModuleInfo>,
-    module_aliases: &'a mut HashMap<Qualifier, Qualifier>,
-    binding_aliases: &'a mut HashMap<Qualifier, Qualifier>,
+    table: &'a HashMap<Qualifier, ModuleInfo>,
+    public: &'a HashMap<Qualifier, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
 }
@@ -85,26 +105,23 @@ fn attach(error: Error, name: &Name) -> Error {
 
 impl<'a> Context<'a> {
     pub fn new(
-        table: &'a mut HashMap<Qualifier, ModuleInfo>,
-        module_aliases: &'a mut HashMap<Qualifier, Qualifier>,
-        binding_aliases: &'a mut HashMap<Qualifier, Qualifier>,
+        table: &'a HashMap<Qualifier, ModuleInfo>,
+        public: &'a HashMap<Qualifier, PublicInterface>,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
             table,
-            module_aliases,
-            binding_aliases,
+            public,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
         }
     }
 
-    pub fn nested(&mut self, label: &str) -> Context<'_> {
+    pub fn nested(&self, label: &str) -> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
-            table: &mut *self.table,
-            module_aliases: &mut *self.module_aliases,
-            binding_aliases: &mut *self.binding_aliases,
+            table: self.table,
+            public: self.public,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
         }
@@ -114,40 +131,8 @@ impl<'a> Context<'a> {
         self.prefix.with(label)
     }
 
-    pub fn qualifiers(&self) -> &HashMap<String, Qualifier> {
-        &self.qualifiers
-    }
-
     pub fn bindings(&self) -> &HashMap<String, Qualifier> {
         &self.bindings
-    }
-
-    pub fn table(&self) -> &HashMap<Qualifier, ModuleInfo> {
-        &*self.table
-    }
-
-    pub fn module_aliases(&self) -> &HashMap<Qualifier, Qualifier> {
-        &*self.module_aliases
-    }
-
-    pub fn binding_aliases(&self) -> &HashMap<Qualifier, Qualifier> {
-        &*self.binding_aliases
-    }
-
-    pub fn register_alias(&mut self, qualifier: &str) {
-        self.module_aliases.insert(
-            self.prefix.with(qualifier),
-            self.qualifiers[qualifier].clone(),
-        );
-    }
-
-    pub fn register_binding_alias(&mut self, label: &str) {
-        self.binding_aliases
-            .insert(self.prefix.with(label), self.bindings[label].clone());
-    }
-
-    pub fn finalize(&mut self, info: ModuleInfo) {
-        self.table.insert(self.prefix.clone(), info);
     }
 
     pub fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
@@ -168,297 +153,171 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    // Import the module child `label` out of the module at `parent_path`, registering
-    // it as a qualifier in the current scope.
-    fn import_module_label(
-        &mut self,
-        parent_path: &Qualifier,
-        label: &str,
-    ) -> Result<Qualifier, Error> {
-        let child = self
-            .table
-            .get(parent_path)
-            .ok_or_else(|| Error::ModuleNotFound {
-                path: parent_path.join(),
-            })?
-            .get_child(label);
+    // Walk from `start` through `segments` as public child modules, following
+    // each entry's re-export target. A failing segment is classified against the
+    // direct table: present-but-private vs. absent.
+    fn walk_children(&self, start: Qualifier, segments: &[String]) -> Result<Qualifier, Error> {
+        let mut current = start;
 
-        match child {
-            Some(true) => {
-                let mut resolved = parent_path.with(label);
-
-                if let Some(canonical) = self.module_aliases.get(&resolved) {
-                    resolved = canonical.clone();
-                }
-
-                if !self.table.contains_key(&resolved) {
-                    return Err(Error::ModuleNotFound {
-                        path: resolved.join(),
-                    });
-                }
-
-                self.insert_scope(label.to_string(), resolved.clone())?;
-                Ok(resolved)
+        for segment in segments {
+            match self.public.get(&current).and_then(|i| i.children.get(segment)) {
+                Some(entry) => current = entry.target.clone(),
+                None => return Err(self.child_error(&current, segment)),
             }
-            Some(false) => Err(Error::PrivateChildModule {
-                segment: label.to_string(),
-            }),
-            None => Err(Error::NotAModule {
-                label: label.to_string(),
-                parent: parent_path.join(),
+        }
+
+        Ok(current)
+    }
+
+    fn child_error(&self, module: &Qualifier, segment: &str) -> Error {
+        match self.table.get(module).and_then(|info| info.get_child(segment)) {
+            Some(false) => Error::PrivateChildModule {
+                segment: segment.to_string(),
+            },
+            _ => Error::ChildModuleNotFound {
+                segment: segment.to_string(),
+            },
+        }
+    }
+
+    // The module that should contain `name`'s final segment, plus that segment.
+    // Absolute names walk from the root; relative names from the lexically-bound
+    // head qualifier.
+    fn resolve_parent_path(&self, name: &Name) -> Result<(Qualifier, String), Error> {
+        let label = name.last().to_string();
+        let segments = name.qualifier().segments();
+        let last = segments.len() - 1;
+
+        let parent = if name.is_abs() {
+            self.walk_children(Qualifier::empty(), &segments[..last])?
+        } else {
+            let head = name.head();
+            let start = self
+                .qualifiers
+                .get(head)
+                .ok_or_else(|| Error::UnresolvedQualifier {
+                    qualifier: head.to_string(),
+                })?
+                .clone();
+
+            self.walk_children(start, &segments[1..last])?
+        };
+
+        Ok((parent, label))
+    }
+
+    // Import the module child `label` out of `parent`, registering it as a
+    // qualifier in the current lexical scope.
+    fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
+        match self.public.get(parent).and_then(|i| i.children.get(label)) {
+            Some(entry) => {
+                let target = entry.target.clone();
+                self.insert_scope(label.to_string(), target.clone())?;
+                Ok(target)
+            }
+            None => Err(match self.table.get(parent).and_then(|i| i.get_child(label)) {
+                Some(false) => Error::PrivateChildModule {
+                    segment: label.to_string(),
+                },
+                _ => Error::NotAModule {
+                    label: label.to_string(),
+                    parent: parent.join(),
+                },
             }),
         }
     }
 
-    // Import the binding `label` out of the module at `parent_path`, registering it
-    // as a binding in the current scope.
+    // Import the binding `label` out of `parent`, registering it in the current
+    // lexical scope.
     fn import_binding_label(
         &mut self,
-        parent_path: &Qualifier,
+        parent: &Qualifier,
         label: &str,
     ) -> Result<Qualifier, Error> {
-        let binding = self
-            .table
-            .get(parent_path)
-            .ok_or_else(|| Error::ModuleNotFound {
-                path: parent_path.join(),
-            })?
-            .get_binding(label);
-
-        match binding {
-            Some(true) => {
-                let mut resolved = parent_path.with(label);
-
-                if let Some(canonical) = self.binding_aliases.get(&resolved) {
-                    resolved = canonical.clone();
-                }
-
-                self.insert_binding(label.to_string(), resolved.clone())?;
-                Ok(resolved)
+        match self.public.get(parent).and_then(|i| i.bindings.get(label)) {
+            Some(entry) => {
+                let target = entry.target.clone();
+                self.insert_binding(label.to_string(), target.clone())?;
+                Ok(target)
             }
-            Some(false) => Err(Error::PrivateBinding {
-                binding: label.to_string(),
-            }),
-            None => Err(Error::NotABinding {
-                label: label.to_string(),
-                parent: parent_path.join(),
+            None => Err(match self.table.get(parent).and_then(|i| i.get_binding(label)) {
+                Some(false) => Error::PrivateBinding {
+                    binding: label.to_string(),
+                },
+                _ => Error::NotABinding {
+                    label: label.to_string(),
+                    parent: parent.join(),
+                },
             }),
         }
     }
 
-    // Import both module and binding slots — used by glob and by the `Both`
-    // group item. Either or both may be absent: callers that require at least
-    // one (e.g. an explicit `Both` import) should check `result` afterwards.
-    fn import_dual_label(
-        &mut self,
-        parent_path: &Qualifier,
-        label: &str,
-    ) -> Result<UseResolved, Error> {
-        let (child, binding) = {
-            let parent_info = self
-                .table
-                .get(parent_path)
-                .ok_or_else(|| Error::ModuleNotFound {
-                    path: parent_path.join(),
-                })?;
+    // Import both the module and binding slots of `label` — used by glob and the
+    // `Both` group item. Either or both may be absent.
+    fn import_dual_label(&mut self, parent: &Qualifier, label: &str) -> Result<UseResolved, Error> {
+        let module = self
+            .public
+            .get(parent)
+            .and_then(|i| i.children.get(label))
+            .map(|entry| entry.target.clone());
 
-            (parent_info.get_child(label), parent_info.get_binding(label))
-        };
+        let binding = self
+            .public
+            .get(parent)
+            .and_then(|i| i.bindings.get(label))
+            .map(|entry| entry.target.clone());
 
         let mut result = UseResolved {
             module: None,
             binding: None,
         };
 
-        if let Some(true) = child {
-            let mut resolved = parent_path.with(label);
-
-            if let Some(canonical) = self.module_aliases.get(&resolved) {
-                resolved = canonical.clone();
-            }
-
-            if !self.table.contains_key(&resolved) {
-                return Err(Error::ModuleNotFound {
-                    path: resolved.join(),
-                });
-            }
-
-            self.insert_scope(label.to_string(), resolved.clone())?;
-            result.module = Some(resolved);
+        if let Some(target) = module {
+            self.insert_scope(label.to_string(), target.clone())?;
+            result.module = Some(target);
         }
 
-        if let Some(true) = binding {
-            let mut resolved = parent_path.with(label);
-
-            if let Some(canonical) = self.binding_aliases.get(&resolved) {
-                resolved = canonical.clone();
-            }
-
-            self.insert_binding(label.to_string(), resolved.clone())?;
-            result.binding = Some(resolved);
+        if let Some(target) = binding {
+            self.insert_binding(label.to_string(), target.clone())?;
+            result.binding = Some(target);
         }
 
         Ok(result)
     }
 
-    fn resolve_parent_path(&self, name: &Name) -> Result<(Qualifier, String), Error> {
-        let is_abs = name.is_abs();
-        let label = name.last().to_string();
-
-        let parent_path = if is_abs {
-            let mut current = Qualifier::empty();
-
-            if name.is_single() {
-                current
-            } else {
-                let head = name.head();
-
-                let root_info = self
-                    .table
-                    .get(&Qualifier::empty())
-                    .expect("root module info not present");
-
-                let is_pub =
-                    root_info
-                        .get_child(head)
-                        .ok_or_else(|| Error::ChildModuleNotFound {
-                            segment: head.to_string(),
-                        })?;
-
-                if !is_pub {
-                    return Err(Error::PrivateChildModule {
-                        segment: head.to_string(),
-                    });
-                }
-
-                current = Qualifier::from([head]);
-
-                if !self.table.contains_key(&current) {
-                    return Err(Error::ModuleNotFound {
-                        path: head.to_string(),
-                    });
-                }
-
-                for seg in name.interior() {
-                    let info = self
-                        .table
-                        .get(&current)
-                        .ok_or_else(|| Error::ModuleNotFound {
-                            path: current.join(),
-                        })?;
-
-                    let is_pub = info
-                        .get_child(seg)
-                        .ok_or_else(|| Error::ChildModuleNotFound {
-                            segment: seg.to_string(),
-                        })?;
-
-                    if !is_pub {
-                        return Err(Error::PrivateChildModule {
-                            segment: seg.to_string(),
-                        });
-                    }
-
-                    current = current.with(seg);
-
-                    if let Some(canonical) = self.module_aliases.get(&current) {
-                        current = canonical.clone();
-                    }
-
-                    if !self.table.contains_key(&current) {
-                        return Err(Error::ModuleNotFound {
-                            path: current.join(),
-                        });
-                    }
-                }
-
-                current
-            }
-        } else {
-            let first = name.head();
-
-            let mut current = self
-                .qualifiers
-                .get(first)
-                .ok_or_else(|| Error::UnresolvedQualifier {
-                    qualifier: first.to_string(),
-                })?
-                .clone();
-
-            for seg in name.interior() {
-                let info = self
-                    .table
-                    .get(&current)
-                    .ok_or_else(|| Error::ModuleNotFound {
-                        path: current.join(),
-                    })?;
-
-                let is_pub = info
-                    .get_child(seg)
-                    .ok_or_else(|| Error::ChildModuleNotFound {
-                        segment: seg.to_string(),
-                    })?;
-
-                if !is_pub {
-                    return Err(Error::PrivateChildModule {
-                        segment: seg.to_string(),
-                    });
-                }
-
-                current = current.with(seg);
-
-                if let Some(canonical) = self.module_aliases.get(&current) {
-                    current = canonical.clone();
-                }
-            }
-
-            if !self.table.contains_key(&current) {
-                return Err(Error::ModuleNotFound {
-                    path: current.join(),
-                });
-            }
-
-            current
-        };
-
-        Ok((parent_path, label))
-    }
-
     pub fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
-            let (parent_path, label) = self.resolve_parent_path(name)?;
-            self.import_module_label(&parent_path, &label)
+            let (parent, label) = self.resolve_parent_path(name)?;
+            self.import_module_label(&parent, &label)
         })();
         result.map_err(|e| attach(e, name))
     }
 
     pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
-            let (parent_path, label) = self.resolve_parent_path(name)?;
-            self.import_binding_label(&parent_path, &label)
+            let (parent, label) = self.resolve_parent_path(name)?;
+            self.import_binding_label(&parent, &label)
         })();
         result.map_err(|e| attach(e, name))
     }
 
     pub fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
         let result = (|| {
-            let (parent_path, label) = self.resolve_parent_path(name)?;
+            let (parent, label) = self.resolve_parent_path(name)?;
 
-            let (child, binding) = {
-                let parent_info =
-                    self.table
-                        .get(&parent_path)
-                        .ok_or_else(|| Error::ModuleNotFound {
-                            path: parent_path.join(),
-                        })?;
+            let has_module = self
+                .public
+                .get(&parent)
+                .is_some_and(|i| i.children.contains_key(&label));
+            let has_binding = self
+                .public
+                .get(&parent)
+                .is_some_and(|i| i.bindings.contains_key(&label));
 
-                (
-                    parent_info.get_child(&label),
-                    parent_info.get_binding(&label),
-                )
-            };
+            if !has_module && !has_binding {
+                let child = self.table.get(&parent).and_then(|i| i.get_child(&label));
+                let binding = self.table.get(&parent).and_then(|i| i.get_binding(&label));
 
-            if !matches!(child, Some(true)) && !matches!(binding, Some(true)) {
                 return Err(match (child, binding) {
                     (Some(false), _) => Error::PrivateChildModule {
                         segment: label.clone(),
@@ -468,85 +327,57 @@ impl<'a> Context<'a> {
                     },
                     _ => Error::NoSuchUseTarget {
                         label: label.clone(),
-                        parent: parent_path.join(),
+                        parent: parent.join(),
                     },
                 });
             }
 
-            self.import_dual_label(&parent_path, &label)
+            self.import_dual_label(&parent, &label)
         })();
         result.map_err(|e| attach(e, name))
     }
 
     // A glob `use a/b/*` names a module directly and imports every public child
-    // and binding it exposes, each under its own label. Walks the full path to
-    // the named module, then defers each label to `import_dual_label`.
+    // and binding it exposes (including its re-exports), each under its own label.
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
-            let mut current = if name.is_abs() {
-                Qualifier::empty()
-            } else {
-                let first = name.head();
+            let segments = name.qualifier().segments();
 
-                self.qualifiers
-                    .get(first)
+            let module = if name.is_abs() {
+                self.walk_children(Qualifier::empty(), segments)?
+            } else {
+                let head = name.head();
+                let start = self
+                    .qualifiers
+                    .get(head)
                     .ok_or_else(|| Error::UnresolvedQualifier {
-                        qualifier: first.to_string(),
+                        qualifier: head.to_string(),
                     })?
-                    .clone()
+                    .clone();
+
+                self.walk_children(start, &segments[1..])?
             };
 
-            let walk = if name.is_abs() {
-                name.qualifier().segments()
-            } else {
-                &name.qualifier().segments()[1..]
-            };
-
-            for seg in walk {
-                let info = self
-                    .table
-                    .get(&current)
-                    .ok_or_else(|| Error::ModuleNotFound {
-                        path: current.join(),
-                    })?;
-
-                let is_pub = info
-                    .get_child(seg)
-                    .ok_or_else(|| Error::ChildModuleNotFound {
-                        segment: seg.to_string(),
-                    })?;
-
-                if !is_pub {
-                    return Err(Error::PrivateChildModule {
-                        segment: seg.to_string(),
-                    });
-                }
-
-                current = current.with(seg);
-
-                if let Some(canonical) = self.module_aliases.get(&current) {
-                    current = canonical.clone();
-                }
-
-                if !self.table.contains_key(&current) {
-                    return Err(Error::ModuleNotFound {
-                        path: current.join(),
-                    });
-                }
-            }
-
-            let labels = self
-                .table
-                .get(&current)
+            let interface = self
+                .public
+                .get(&module)
                 .ok_or_else(|| Error::ModuleNotFound {
-                    path: current.join(),
-                })?
-                .public_labels();
+                    path: module.join(),
+                })?;
+
+            let mut labels = interface
+                .children
+                .keys()
+                .chain(interface.bindings.keys())
+                .cloned()
+                .collect::<Vec<_>>();
+            labels.sort();
+            labels.dedup();
 
             labels
                 .into_iter()
                 .map(|label| {
-                    let resolved = self.import_dual_label(&current, &label)?;
+                    let resolved = self.import_dual_label(&module, &label)?;
                     Ok((label, resolved))
                 })
                 .collect::<Result<Vec<_>, Error>>()
@@ -554,17 +385,20 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    pub fn export_child(&mut self, label: String) {
-        self.table
-            .get_mut(&self.prefix)
-            .expect("module info not present for current prefix")
-            .insert_child(label, true);
-    }
+    // Resolve a qualified/absolute term reference to its canonical binding
+    // target, reading the frozen public interfaces.
+    pub fn resolve_term_name(&self, name: &Name) -> Result<Qualifier, Error> {
+        let result = (|| {
+            let (parent, label) = self.resolve_parent_path(name)?;
 
-    pub fn export_binding(&mut self, label: String) {
-        self.table
-            .get_mut(&self.prefix)
-            .expect("module info not present for current prefix")
-            .insert_binding(label, true);
+            match self.public.get(&parent).and_then(|i| i.bindings.get(&label)) {
+                Some(entry) => Ok(entry.target.clone()),
+                None => Err(match self.table.get(&parent).and_then(|i| i.get_binding(&label)) {
+                    Some(false) => Error::PrivateBinding { binding: label },
+                    _ => Error::BindingNotFound { binding: label },
+                }),
+            }
+        })();
+        result.map_err(|e| attach(e, name))
     }
 }

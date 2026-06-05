@@ -304,6 +304,286 @@ fn chained_pub_use_re_exports_transitively() {
     );
 }
 
+// --- Module-interface redesign (SPEC.md) acceptance cases ---
+
+// A re-exports x from B; B re-exports x from C; C declares x. A is declared
+// before its providers. The phase-3 fixed point must resolve A/x to /C/x
+// regardless of declaration order.
+#[test]
+fn chained_re_export_resolves_out_of_order() {
+    assert_eq!(
+        run(r#"
+            pub mod A
+                pub use /B/{x};
+            end
+            pub mod B
+                pub use /C/{x};
+            end
+            pub mod C
+                pub let x : Type = Type;
+            end
+            A/x
+        "#),
+        core::Term::let_(
+            "C/x",
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("C/x"))
+        ),
+    );
+}
+
+// A direct `pub let x` and a `pub use` that also yields x are two distinct
+// sources for the same export slot: a conflict, even though one of them is the
+// module's own declaration.
+#[test]
+fn rejects_direct_and_re_export_of_same_label() {
+    assert!(
+        run_err(
+            r#"
+        pub mod B
+            pub let x : Type = Type;
+        end
+        pub mod A
+            pub let x : Type = Type;
+            pub use /B/{x};
+        end
+        Type
+    "#
+        )
+        .contains("export conflict")
+    );
+}
+
+// Two globs each exposing x are two sources for the same slot → conflict.
+#[test]
+fn rejects_two_globs_exposing_same_label() {
+    assert!(
+        run_err(
+            r#"
+        pub mod B
+            pub let x : Type = Type;
+        end
+        pub mod C
+            pub let x : Type = Type;
+        end
+        pub mod A
+            pub use /B/*;
+            pub use /C/*;
+        end
+        Type
+    "#
+        )
+        .contains("export conflict")
+    );
+}
+
+// A re-exports module M from B; a later path /A/M/x must traverse A's
+// re-exported M into /B/M and resolve x there.
+#[test]
+fn deep_facade_traversal_through_re_exported_module() {
+    assert_eq!(
+        run(r#"
+            pub mod B
+                pub mod M
+                    pub let x : Type = Type;
+                end
+            end
+            pub mod A
+                pub use /B/{M};
+            end
+            use /A/M/{x};
+            x
+        "#),
+        core::Term::let_(
+            "B/M/x",
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("B/M/x"))
+        ),
+    );
+}
+
+// A module may re-export names out of its own private child via a relative path:
+// being inside the module, its privacy does not apply to itself. This is the
+// facade-over-private-impl pattern.
+#[test]
+fn re_exports_from_own_private_child() {
+    assert_eq!(
+        run(r#"
+            pub mod Facade
+                mod Impl
+                    pub let helper : Type = Type;
+                end
+                pub use Impl/{helper};
+            end
+            use /Facade/{helper};
+            helper
+        "#),
+        core::Term::let_(
+            "Facade/Impl/helper",
+            core::Term::type_(),
+            core::Term::type_(),
+            core::Term::var(core::Var::free("Facade/Impl/helper"))
+        ),
+    );
+}
+
+// The relaxation is scoped to a module's *own* child: re-exporting through
+// another module's private child is still forbidden.
+#[test]
+fn rejects_re_export_through_other_modules_private_child() {
+    assert!(
+        run_err(
+            r#"
+        pub mod Other
+            mod Impl
+                pub let helper : Type = Type;
+            end
+        end
+        pub mod Facade
+            pub use /Other/Impl/{helper};
+        end
+        Type
+    "#
+        )
+        .contains("private child module")
+    );
+}
+
+// A union's constructor module is a first-class interface member built in phase
+// 2, so its cases re-export by name and by glob through the fixed point.
+#[test]
+fn re_exports_union_constructor_by_name() {
+    let term = run(r#"
+        pub mod Foo
+            pub union U
+            | A()
+            | B()
+            end
+        end
+        pub mod Bar
+            pub use /Foo/U/{A};
+        end
+        use /Bar/{A};
+        A
+    "#);
+
+    assert!(format!("{term:?}").contains("Foo/U/A"));
+}
+
+#[test]
+fn re_exports_union_constructors_by_glob() {
+    let term = run(r#"
+        pub mod Foo
+            pub union U
+            | A()
+            | B()
+            end
+        end
+        pub mod Bar
+            pub use /Foo/U/*;
+        end
+        use /Bar/{A};
+        A
+    "#);
+
+    assert!(format!("{term:?}").contains("Foo/U/A"));
+}
+
+// A re-exports x from B; B re-exports x from A; nobody declares x. Following the
+// chain returns to the start without a concrete target → cyclic, not missing.
+#[test]
+fn rejects_cyclic_re_export_with_no_concrete_target() {
+    assert!(
+        run_err(
+            r#"
+        pub mod A
+            pub use /B/{x};
+        end
+        pub mod B
+            pub use /A/{x};
+        end
+        Type
+    "#
+        )
+        .contains("cyclic re-export")
+    );
+}
+
+// Two public declarations of the same label in the same namespace conflict at
+// phase 2, before any elaboration.
+#[test]
+fn rejects_duplicate_public_declaration() {
+    assert!(
+        run_err(
+            r#"
+        pub let x : Type = Type;
+        pub let x : Type = Type;
+        Type
+    "#
+        )
+        .contains("duplicate public declaration")
+    );
+}
+
+// Phase 5: A.f references B.g and B.h references A.e, with e and g independent —
+// no cycle, but no contiguous source order binds both references. The reorder
+// must produce a valid binding order, leaving the lowered term with no free name.
+#[test]
+fn orders_acyclic_bidirectional_value_graph() {
+    assert!(
+        run(r#"
+            pub mod A
+                pub let e : Type = Type;
+                pub let f : Type = /B/g;
+            end
+            pub mod B
+                pub let g : Type = Type;
+                pub let h : Type = /A/e;
+            end
+            Type
+        "#)
+        .free_vars()
+        .is_empty()
+    );
+}
+
+// A dependency through a type annotation is as much a binding-order constraint as
+// one through a value: `f : T` declared before `T` must still order `T` first.
+#[test]
+fn orders_dependency_through_type_annotation() {
+    assert!(
+        run(r#"
+            let f : T = Type;
+            let T : Type = Type;
+            f
+        "#)
+        .free_vars()
+        .is_empty()
+    );
+}
+
+// A genuine non-atomic value cycle cannot be ordered; phase 5 emits it anyway and
+// leaves one reference as a free name, which core rejects as unbound. There is
+// nothing to repair — cross-declaration value recursion is unexpressible.
+#[test]
+fn genuine_value_cycle_leaves_unbound_name() {
+    assert!(
+        !run(r#"
+            pub mod A
+                pub let f : Type = /B/g;
+            end
+            pub mod B
+                pub let g : Type = /A/f;
+            end
+            Type
+        "#)
+        .free_vars()
+        .is_empty()
+    );
+}
+
 #[test]
 fn rejects_private_root_module_via_absolute_path() {
     assert!(
@@ -764,3 +1044,4 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
             if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "A")
     ));
 }
+

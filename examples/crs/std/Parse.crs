@@ -1,5 +1,4 @@
-use /sys/{Nat, Bin, Bln, Arr};
-use /std/{Result};
+use /std/{Result, Nat, Bin, Bln, Arr};
 
 pub let Parse(A : Type) -> Type =
     (Bin, Nat) -> Result({ Nat, A }, Bin);

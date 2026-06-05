@@ -4,11 +4,13 @@ use context::*;
 mod elaborate;
 use elaborate::*;
 
+mod interface;
+
 use {
     super::*,
     crate::core,
     std::{
-        collections::{BTreeMap, HashMap},
+        collections::{BTreeMap, HashMap, HashSet},
         rc::Rc,
     },
 };
@@ -47,7 +49,7 @@ impl Resolved {
         prefix: &Qualifier,
         loader: &dyn Loader,
     ) -> Result<(), Error> {
-        self.table.insert(prefix.clone(), scan_module_info(items));
+        self.table.insert(prefix.clone(), scan_module_info(items)?);
 
         for item in items {
             if let TopItem::Mod(module_item) = item {
@@ -75,29 +77,29 @@ impl Resolved {
     }
 }
 
-fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
+fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     let mut info = ModuleInfo::new();
 
     for item in items {
         match item {
-            TopItem::Mod(m) => info.insert_child(m.label.clone(), m.is_pub),
-            TopItem::Let(l) => info.insert_binding(l.label.clone(), l.is_pub),
+            TopItem::Mod(m) => info.insert_child(m.label.clone(), m.is_pub)?,
+            TopItem::Let(l) => info.insert_binding(l.label.clone(), l.is_pub)?,
             TopItem::Rec(ls) => {
                 for l in ls {
-                    info.insert_binding(l.label.clone(), l.is_pub);
+                    info.insert_binding(l.label.clone(), l.is_pub)?;
                 }
             }
             TopItem::Union(unions) => {
                 for u in unions {
-                    info.insert_child(u.label.clone(), u.is_pub);
-                    info.insert_binding(u.label.clone(), u.is_pub);
+                    info.insert_child(u.label.clone(), u.is_pub)?;
+                    info.insert_binding(u.label.clone(), u.is_pub)?;
                 }
             }
             _ => {}
         }
     }
 
-    info
+    Ok(info)
 }
 
 fn process_items(
@@ -106,8 +108,6 @@ fn process_items(
     flat_items: &mut Vec<FlatItem>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
-    context.finalize(scan_module_info(top_items));
-
     for top_item in top_items {
         match top_item {
             TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label))?,
@@ -155,42 +155,29 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
-                let imports: Vec<(String, UseResolved)> = match &use_item.group {
-                    UseGroup::Named(items) => items
-                        .iter()
-                        .map(|item| {
-                            let label = item.label().to_string();
-                            let full = use_item.name.with(&label);
+                // The lexical import effect of `use`/`pub use`: source-ordered,
+                // point-of-use scoping. The interface (export) effect of `pub use`
+                // is precomputed in the phase-3 fixed point, not here.
+                match &use_item.group {
+                    UseGroup::Named(items) => {
+                        for item in items {
+                            let full = use_item.name.with(item.label());
 
-                            let resolved = match item {
-                                GroupItem::Mod(_) => UseResolved {
-                                    module: Some(context.resolve_module_use(&full)?),
-                                    binding: None,
-                                },
-                                GroupItem::Let(_) => UseResolved {
-                                    module: None,
-                                    binding: Some(context.resolve_binding_use(&full)?),
-                                },
-                                GroupItem::Both(_) => context.resolve_both_use(&full)?,
-                            };
-
-                            Ok((label, resolved))
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?,
-                    UseGroup::Glob => context.resolve_glob(&use_item.name)?,
-                };
-
-                if use_item.is_pub {
-                    for (label, resolved) in &imports {
-                        if resolved.module.is_some() {
-                            context.register_alias(label);
-                            context.export_child(label.clone());
+                            match item {
+                                GroupItem::Mod(_) => {
+                                    context.resolve_module_use(&full)?;
+                                }
+                                GroupItem::Let(_) => {
+                                    context.resolve_binding_use(&full)?;
+                                }
+                                GroupItem::Both(_) => {
+                                    context.resolve_both_use(&full)?;
+                                }
+                            }
                         }
-
-                        if resolved.binding.is_some() {
-                            context.register_binding_alias(label);
-                            context.export_binding(label.clone());
-                        }
+                    }
+                    UseGroup::Glob => {
+                        context.resolve_glob(&use_item.name)?;
                     }
                 }
             }
@@ -301,17 +288,9 @@ fn process_items(
 
                 flat_items.push(FlatItem::Rec(type_flat_items));
 
-                // Step 2 & 3: for each union register the constructor module and emit
-                // constructor bindings.
+                // Step 2 & 3: for each union emit constructor bindings. The
+                // constructor module's interface is materialized in phase 2.
                 for u in unions {
-                    // Register the constructor module's ModuleInfo so that
-                    // `use Foo/T/{c}` and `use Foo/T/*` resolve correctly.
-                    let mut ctor_info = ModuleInfo::new();
-                    for c in &u.cases {
-                        ctor_info.insert_binding(c.label.clone(), u.is_pub);
-                    }
-                    context.nested(&u.label).finalize(ctor_info);
-
                     // Build the output type term: T or T(A, B, ...).
                     let output_type: Term = if u.params.is_empty() {
                         Subterm::Name(Name::from(vec![u.label.clone()])).into()
@@ -392,6 +371,73 @@ fn process_items(
     Ok(())
 }
 
+// Phase 5: reorder declarations so each one's value dependencies come before it
+// (outer in the fold), since a cyclic name graph means source order is no longer
+// a valid binding order. A stable Kahn pass keeps independent declarations in
+// source order; a genuine value cycle leaves nodes unorderable, which are emitted
+// in source order and rejected downstream as unbound names — there is nothing to
+// repair, as cross-declaration value recursion is unexpressible by construction.
+fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
+    let names = |item: &FlatItem| -> Vec<String> {
+        match item {
+            FlatItem::Let(let_) => vec![let_.name.join()],
+            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.join()).collect(),
+        }
+    };
+
+    let free_vars = |item: &FlatItem| -> HashSet<String> {
+        let lets = match item {
+            FlatItem::Let(let_) => std::slice::from_ref(let_),
+            FlatItem::Rec(lets) => lets.as_slice(),
+        };
+
+        lets.iter()
+            .flat_map(|let_| let_.type_.free_vars().into_iter().chain(let_.body.free_vars()))
+            .collect()
+    };
+
+    // Index every declared qualifier to the node that owns it (a rec group owns
+    // all its members).
+    let owner: HashMap<String, usize> = items
+        .iter()
+        .enumerate()
+        .flat_map(|(node, item)| names(item).into_iter().map(move |name| (name, node)))
+        .collect();
+
+    // A node depends on the nodes declaring its free vars; self-edges and free
+    // vars naming no local declaration (primitives, externals) contribute none.
+    let deps: Vec<HashSet<usize>> = items
+        .iter()
+        .enumerate()
+        .map(|(node, item)| {
+            free_vars(item)
+                .iter()
+                .filter_map(|name| owner.get(name).copied())
+                .filter(|&dep| dep != node)
+                .collect()
+        })
+        .collect();
+
+    let count = items.len();
+    let mut emitted = vec![false; count];
+    let mut order = Vec::with_capacity(count);
+
+    while order.len() < count {
+        // Lowest-index node whose dependencies are all emitted; on a cycle no
+        // such node exists, so break the deadlock with the lowest remaining one.
+        let ready = (0..count)
+            .find(|&node| !emitted[node] && deps[node].iter().all(|dep| emitted[*dep]))
+            .or_else(|| (0..count).find(|&node| !emitted[node]))
+            .expect("a node remains while order is incomplete");
+
+        emitted[ready] = true;
+        order.push(ready);
+    }
+
+    let mut slots: Vec<Option<FlatItem>> = items.into_iter().map(Some).collect();
+    order.into_iter().map(|node| slots[node].take().unwrap()).collect()
+}
+
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     match item {
         FlatItem::Let(let_) => core::Term::let_(let_.name.join(), let_.type_, let_.body, acc),
@@ -412,9 +458,8 @@ pub struct Lowered {
 
 pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, Error> {
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
-    let mut module_aliases = HashMap::new();
-    let mut binding_aliases = HashMap::new();
-    let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
+    let public = interface::resolve(entrypoint, &modules, &mut table)?;
+    let mut context = Context::new(&table, &public);
     let mut flat_items = Vec::new();
 
     process_items(
@@ -431,7 +476,10 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, 
         .map(|type_| elaborate.term(type_))
         .transpose()?;
     let tail = elaborate.term(&entrypoint.tail)?;
-    let term = flat_items.into_iter().rev().fold(tail, fold_flat_item);
+    let term = order_flat_items(flat_items)
+        .into_iter()
+        .rev()
+        .fold(tail, fold_flat_item);
 
     Ok(Lowered { term, type_ })
 }

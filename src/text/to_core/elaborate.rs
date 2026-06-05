@@ -3,8 +3,7 @@ use {
     crate::{
         core,
         text::{
-            BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Prim, Qualifier, Subterm,
-            Term,
+            BinLiteral, Error, Match, Nat, NatLiteral, NatMatch, Prim, Subterm, Term,
         },
     },
     num_bigint::BigUint,
@@ -39,7 +38,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
             Subterm::Name(name) => {
                 let resolved = if name.is_abs() || !name.is_single() {
-                    self.resolve_name(name)?.join()
+                    self.context.resolve_term_name(name)?.join()
                 } else {
                     let label = name.head();
 
@@ -295,85 +294,5 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
             }
         })
-    }
-
-    fn resolve_name(&self, name: &Name) -> Result<Qualifier, Error> {
-        // Walk to the module that should contain the final segment. An absolute
-        // reference starts at the root and walks every segment but the last; a
-        // relative one starts at the resolved head qualifier and walks the interior.
-        let (mut current, walk): (Qualifier, &[String]) = if name.is_abs() {
-            (Qualifier::empty(), name.qualifier().init())
-        } else {
-            let qualifier = name.head();
-
-            let start = self
-                .context
-                .qualifiers()
-                .get(qualifier)
-                .ok_or_else(|| Error::UnresolvedQualifier {
-                    qualifier: qualifier.to_string(),
-                })?
-                .clone();
-
-            (start, name.interior())
-        };
-
-        for segment in walk {
-            let info = self
-                .context
-                .table()
-                .get(&current)
-                .ok_or_else(|| Error::ModuleNotFound {
-                    path: current.join(),
-                })?;
-
-            let is_pub = info
-                .get_child(segment)
-                .ok_or_else(|| Error::ChildModuleNotFound {
-                    segment: segment.to_string(),
-                })?;
-
-            if !is_pub {
-                return Err(Error::PrivateChildModule {
-                    segment: segment.to_string(),
-                });
-            }
-
-            current = current.with(segment);
-
-            if let Some(canonical) = self.context.module_aliases().get(&current) {
-                current = canonical.clone();
-            }
-        }
-
-        let last = name.last();
-
-        let info = self
-            .context
-            .table()
-            .get(&current)
-            .ok_or_else(|| Error::ModuleNotFound {
-                path: current.join(),
-            })?;
-
-        let is_pub = info
-            .get_binding(last)
-            .ok_or_else(|| Error::BindingNotFound {
-                binding: last.to_string(),
-            })?;
-
-        if !is_pub {
-            return Err(Error::PrivateBinding {
-                binding: last.to_string(),
-            });
-        }
-
-        let mut resolved = current.with(last);
-
-        if let Some(canonical) = self.context.binding_aliases().get(&resolved) {
-            resolved = canonical.clone();
-        }
-
-        Ok(resolved)
     }
 }

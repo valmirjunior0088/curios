@@ -1,7 +1,6 @@
 pub use /sys/Int/*;
 pub use /sys/{Int};
-use /sys/{Bin};
-use /std/{Nat};
+use /std/{Nat, Bin};
 
 pub let from_str(str : Bin) -> Int =
     match Bin/get(str, 0) : Int

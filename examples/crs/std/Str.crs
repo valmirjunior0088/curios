@@ -1,5 +1,4 @@
-use /sys/{Bin};
-use /std/{Char, Nat};
+use /std/{Char, Nat, Bin};
 
 pub let trim_start(str : Bin) -> Nat =
     match Bin/len(str) : Nat
