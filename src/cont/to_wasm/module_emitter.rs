@@ -429,11 +429,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             wasm::Func {
                 type_name: self.table.find_clsr(name).clsr_type(),
                 params: iter::once(self.table.special_local())
-                    .chain(clsr.params.iter().map(|value_name| {
+                    .chain(clsr.params.iter().map(|param| {
                         self.table
                             .find_clsr(name)
-                            .find_param(value_name)
-                            .unwrap_or_else(|| panic!("`ClsrData` lacks param `{}`", value_name))
+                            .find_param(&param.name)
+                            .unwrap_or_else(|| panic!("`ClsrData` lacks param `{}`", param.name))
                     }))
                     .collect(),
                 locals,
@@ -465,11 +465,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 params: func
                     .params
                     .iter()
-                    .map(|value_name| {
+                    .map(|param| {
                         self.table
                             .find_func(name)
-                            .find_param(value_name)
-                            .unwrap_or_else(|| panic!("`FuncData` lacks param `{}`", value_name))
+                            .find_param(&param.name)
+                            .unwrap_or_else(|| panic!("`FuncData` lacks param `{}`", param.name))
                     })
                     .collect(),
                 locals,

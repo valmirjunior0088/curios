@@ -75,8 +75,8 @@ fn lowers_and_runs_mutually_recursive_closures() {
     module.add_clsr(
         cont::ClsrName::from("even"),
         cont::Clsr {
-            fields: vec![cont::ValueName::from("odd")],
-            params: vec![cont::ValueName::from("n")],
+            fields: vec![cont::ValueName::from("odd").into()],
+            params: vec![cont::ValueName::from("n").into()],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
@@ -147,8 +147,8 @@ fn lowers_and_runs_mutually_recursive_closures() {
     module.add_clsr(
         cont::ClsrName::from("odd"),
         cont::Clsr {
-            fields: vec![cont::ValueName::from("even")],
-            params: vec![cont::ValueName::from("n")],
+            fields: vec![cont::ValueName::from("even").into()],
+            params: vec![cont::ValueName::from("n").into()],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
@@ -299,7 +299,7 @@ fn lowers_and_runs_direct_call() {
     module.add_func(
         cont::FuncName::from("add_one"),
         cont::Func {
-            params: vec![cont::ValueName::from("x")],
+            params: vec![cont::ValueName::from("x").into()],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
@@ -499,8 +499,8 @@ fn lowers_and_runs_global_closure() {
     module.add_clsr(
         cont::ClsrName::from("add_bias"),
         cont::Clsr {
-            fields: vec![cont::ValueName::from("bias")],
-            params: vec![cont::ValueName::from("x")],
+            fields: vec![cont::ValueName::from("bias").into()],
+            params: vec![cont::ValueName::from("x").into()],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],

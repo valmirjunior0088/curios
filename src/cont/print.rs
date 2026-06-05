@@ -1,7 +1,7 @@
 use {
     super::{
-        Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName, JumpTarget,
-        Module, Prealloc, Region, Tail, Value, ValueName,
+        Argument, Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
+        JumpTarget, Module, Prealloc, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -13,6 +13,20 @@ fn print_value_name<'a>(name: &'a ValueName) -> Printer<'a> {
 
 fn print_value_names<'a>(names: &'a [ValueName]) -> Printer<'a> {
     sep_flat(names.iter().map(print_value_name), || pure(", "))
+}
+
+/// A function/closure argument, prefixed with `*` when it is a specialization
+/// candidate (its erased type was a function, a `Type`, or unit).
+fn print_argument<'a>(arg: &'a Argument) -> Printer<'a> {
+    if arg.candidate {
+        flat([pure("*"), print_value_name(&arg.name)])
+    } else {
+        print_value_name(&arg.name)
+    }
+}
+
+fn print_arguments<'a>(args: &'a [Argument]) -> Printer<'a> {
+    sep_flat(args.iter().map(print_argument), || pure(", "))
 }
 
 fn print_block_name<'a>(name: &'a BlockName) -> Printer<'a> {
@@ -630,9 +644,9 @@ fn print_let_clsr<'a>(name: &'a ClsrName, clsr: &'a Clsr) -> Printer<'a> {
         pure("let "),
         print_clsr_name(name),
         pure("{"),
-        print_value_names(&clsr.fields),
+        print_arguments(&clsr.fields),
         pure("}("),
-        print_value_names(&clsr.params),
+        print_arguments(&clsr.params),
         pure(") "),
         print_block_name(&clsr.resume),
         pure(" =\n"),
@@ -645,7 +659,7 @@ fn print_let_func<'a>(name: &'a FuncName, func: &'a Func) -> Printer<'a> {
         pure("let "),
         print_func_name(name),
         pure("("),
-        print_value_names(&func.params),
+        print_arguments(&func.params),
         pure(") "),
         print_block_name(&func.resume),
         pure(" =\n"),

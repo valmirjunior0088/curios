@@ -220,7 +220,7 @@ mod tests {
         module.add_func(
             FuncName::from("main"),
             Func {
-                params: vec![v("a"), v("b")],
+                params: vec![v("a").into(), v("b").into()],
                 resume: BlockName::from("b0"),
                 region: region(
                     vec![(v("v0"), Value::Eval(Code::NatDiv(v("a"), v("b"))))],
@@ -263,7 +263,7 @@ mod tests {
 
         let trivial_clsr = || Clsr {
             fields: vec![],
-            params: vec![v("x")],
+            params: vec![v("x").into()],
             resume: BlockName::from("b0"),
             region: region(vec![], vec![v("x")]),
         };

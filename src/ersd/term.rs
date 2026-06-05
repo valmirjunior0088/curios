@@ -21,10 +21,36 @@ pub enum NatMatch {
     },
 }
 
+/// A captured or parameter binder, plus its specialization-*candidate* flag: true
+/// when its (pre-erasure) type was a function, a `Type`, or unit. Computed during
+/// type-directed erasure (the last point types are available) and carried to
+/// `cont`, glued to the name so the two can never desync. Defaults to
+/// non-candidate, so a binder built from a bare name (`"x".into()`) is not one.
+#[derive(Debug)]
+pub struct Argument {
+    pub name: String,
+    pub candidate: bool,
+}
+
+impl<S: Into<String>> From<S> for Argument {
+    fn from(name: S) -> Self {
+        Self {
+            name: name.into(),
+            candidate: false,
+        }
+    }
+}
+
+impl Argument {
+    pub fn as_str(&self) -> &str {
+        &self.name
+    }
+}
+
 #[derive(Debug)]
 pub struct Func {
-    pub captures: Vec<String>,
-    pub params: Vec<String>,
+    pub captures: Vec<Argument>,
+    pub params: Vec<Argument>,
     pub body: Subterm,
 }
 
@@ -97,7 +123,7 @@ impl Term {
             Term::Name(name) => {
                 names.insert(name.as_str().to_owned());
             }
-            Term::Func(func) => names.extend(func.captures.iter().cloned()),
+            Term::Func(func) => names.extend(func.captures.iter().map(|c| c.name.clone())),
             Term::Apply(apply) => {
                 names.extend(apply.head.free_names());
                 apply

@@ -196,6 +196,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             captures,
             params,
             body,
+            ..
         }) => {
             let params_str = params
                 .iter()

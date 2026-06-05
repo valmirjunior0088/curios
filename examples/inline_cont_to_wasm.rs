@@ -18,7 +18,7 @@ fn main() {
         cont::ClsrName::from("RouteByZero"),
         cont::Clsr {
             fields: vec![],
-            params: vec![cont::ValueName::from("x")],
+            params: vec![cont::ValueName::from("x").into()],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],

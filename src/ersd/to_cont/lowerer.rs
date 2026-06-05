@@ -73,24 +73,33 @@ impl Work<'_, '_, '_> {
         let (mut entry, resume) = FrameEntropy::new();
         let mut clsr_frame = Frame::new();
 
+        // The candidate flag rides from the `ersd::Argument` straight into the
+        // `cont::Argument`, glued to the freshly-bound name.
         let fields = func
             .captures
             .iter()
             .map(|capture| {
-                let field = entry.fresh_value();
-                clsr_frame.push(capture.clone(), field.clone());
+                let name = entry.fresh_value();
+                clsr_frame.push(capture.name.clone(), name.clone());
 
-                field
+                cont::Argument {
+                    name,
+                    candidate: capture.candidate,
+                }
             })
             .collect::<Vec<_>>();
 
         let params = func
             .params
             .iter()
-            .map(|name| {
-                let val = entry.fresh_value();
-                clsr_frame.push(name.clone(), val.clone());
-                val
+            .map(|param| {
+                let name = entry.fresh_value();
+                clsr_frame.push(param.name.clone(), name.clone());
+
+                cont::Argument {
+                    name,
+                    candidate: param.candidate,
+                }
             })
             .collect::<Vec<_>>();
 
@@ -105,7 +114,7 @@ impl Work<'_, '_, '_> {
         self.lowerer.module.add_clsr(
             clsr_name.clone(),
             cont::Clsr {
-                fields: fields.clone(),
+                fields,
                 params,
                 resume,
                 region,
@@ -115,7 +124,7 @@ impl Work<'_, '_, '_> {
         let captured_values = func
             .captures
             .iter()
-            .map(|capture| frame.find(capture))
+            .map(|capture| frame.find(&capture.name))
             .collect();
 
         (clsr_name, captured_values)

@@ -168,12 +168,12 @@ fn trim_clsr_data(data: &mut Data, drops: &HashMap<ClsrName, HashSet<usize>>) {
 
 // --- Shared helpers ---------------------------------------------------------
 
-/// The positions of `names` that do not appear in `used`.
-fn dead_positions(names: &[ValueName], used: &HashSet<ValueName>) -> HashSet<usize> {
-    names
+/// The positions of `args` whose name does not appear in `used`.
+fn dead_positions(args: &[Argument], used: &HashSet<ValueName>) -> HashSet<usize> {
+    args
         .iter()
         .enumerate()
-        .filter(|(_, name)| !used.contains(*name))
+        .filter(|(_, arg)| !used.contains(&arg.name))
         .map(|(index, _)| index)
         .collect()
 }
@@ -207,7 +207,7 @@ mod tests {
 
     fn func(params: Vec<ValueName>, resume: &str, region: Region) -> Func {
         Func {
-            params,
+            params: params.into_iter().map(Into::into).collect(),
             resume: BlockName::from(resume),
             region,
         }
@@ -319,7 +319,7 @@ mod tests {
     fn drops_unused_capture_and_trims_its_construction() {
         // c captures [f0, f1] but its body uses only f1.
         let c = Clsr {
-            fields: vec![v("f0"), v("f1")],
+            fields: vec![v("f0").into(), v("f1").into()],
             params: vec![],
             resume: BlockName::from("rc"),
             region: region(vec![], ret("rc", v("f1"))),

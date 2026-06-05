@@ -48,20 +48,20 @@ impl<'a> ClsrData<'a> {
             fields: clsr
                 .fields
                 .iter()
-                .map(|field_name| {
+                .map(|field| {
                     (
-                        field_name,
-                        wasm::FieldName::from(format!("${}", field_name)),
+                        &field.name,
+                        wasm::FieldName::from(format!("${}", field.name)),
                     )
                 })
                 .collect(),
             params: clsr
                 .params
                 .iter()
-                .map(|param_name| {
+                .map(|param| {
                     (
-                        param_name,
-                        wasm::LocalName::from(format!("${}", param_name)),
+                        &param.name,
+                        wasm::LocalName::from(format!("${}", param.name)),
                     )
                 })
                 .collect(),
@@ -126,10 +126,10 @@ impl<'a> FuncData<'a> {
             params: func
                 .params
                 .iter()
-                .map(|param_name| {
+                .map(|param| {
                     (
-                        param_name,
-                        wasm::LocalName::from(format!("${}", param_name)),
+                        &param.name,
+                        wasm::LocalName::from(format!("${}", param.name)),
                     )
                 })
                 .collect(),

@@ -167,10 +167,45 @@ pub struct Region {
     pub tail: Tail,
 }
 
+/// A function or closure argument: its bound name, plus whether it is a
+/// specialization *candidate* — i.e. its erased type was a function (a first-class
+/// closure value), a `Type`, or unit, each a compile-time constant the specializer
+/// can bake in. The flag is computed once by type-directed erasure and glued to
+/// the name here, so it can never desync from it and rides along for free on every
+/// `.clone()`, `retain`, and capture-to-parameter move.
+#[derive(Debug, Clone)]
+pub struct Argument {
+    pub name: ValueName,
+    pub candidate: bool,
+}
+
+impl From<ValueName> for Argument {
+    fn from(name: ValueName) -> Self {
+        Self {
+            name,
+            candidate: false,
+        }
+    }
+}
+
+impl Argument {
+    pub fn as_str(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+/// Compare an argument to a bare name (candidate-agnostic) — handy in tests that
+/// assert on parameter lists without caring about the flag.
+impl PartialEq<ValueName> for Argument {
+    fn eq(&self, other: &ValueName) -> bool {
+        &self.name == other
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Clsr {
-    pub fields: Vec<ValueName>,
-    pub params: Vec<ValueName>,
+    pub fields: Vec<Argument>,
+    pub params: Vec<Argument>,
     pub resume: BlockName,
     pub region: Region,
 }
@@ -183,7 +218,7 @@ impl Clsr {
 
 #[derive(Debug, Clone)]
 pub struct Func {
-    pub params: Vec<ValueName>,
+    pub params: Vec<Argument>,
     pub resume: BlockName,
     pub region: Region,
 }

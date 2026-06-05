@@ -10,8 +10,8 @@ fn main() {
     cont_module.add_clsr(
         cont::ClsrName::from("AddBias"),
         cont::Clsr {
-            fields: vec![cont::ValueName::from("bias")],
-            params: vec![cont::ValueName::from("x")],
+            fields: vec![cont::ValueName::from("bias").into()],
+            params: vec![cont::ValueName::from("x").into()],
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],

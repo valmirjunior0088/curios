@@ -131,6 +131,8 @@ fn lift_funcs(module: &Module, to_lift: &HashSet<ClsrName>) -> Vec<(FuncName, Fu
         .iter()
         .filter(|(name, _)| to_lift.contains(name))
         .map(|(name, clsr)| {
+            // Captures become leading parameters — as `Argument`s, their
+            // candidate flags ride along with the names for free.
             let mut params = clsr.fields.clone();
             params.extend(clsr.params.iter().cloned());
 
@@ -159,8 +161,8 @@ mod tests {
             params: params.clone(),
         });
         Clsr {
-            fields,
-            params,
+            fields: fields.into_iter().map(Into::into).collect(),
+            params: params.into_iter().map(Into::into).collect(),
             resume: BlockName::from("b0"),
             region: Region {
                 preallocs: vec![],
@@ -257,7 +259,7 @@ mod tests {
         module.add_func(
             FuncName::from("main"),
             Func {
-                params: vec![v("g")],
+                params: vec![v("g").into()],
                 resume: BlockName::from("b0"),
                 region: Region {
                     preallocs: vec![],

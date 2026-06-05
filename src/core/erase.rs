@@ -22,7 +22,18 @@ fn erase_func(
     };
 
     let n = ft.telescope.len();
-    let captures = body.free_vars().into_iter().collect::<Vec<_>>();
+
+    // The candidate flag rides from here — the last point a binder's type is known
+    // — down to `cont`, where the optimizer specializes function-typed arguments.
+    let captures = body
+        .free_vars()
+        .into_iter()
+        .map(|name| {
+            let type_ = infer(context, &Term::var(Var::free(&name)))?;
+            let candidate = is_candidate(context, &type_)?;
+            Ok(ersd::Argument { name, candidate })
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
 
     let param_names = (0..n)
         .map(|i| context.fresh(body.label_iter().nth(i).flatten()))
@@ -39,26 +50,61 @@ fn erase_func(
         tele: Telescope<Term>,
         names: &[String],
         terms: &[Term],
-    ) -> Term {
+        candidates: &mut Vec<bool>,
+    ) -> Result<Term, Error> {
         match tele {
-            Telescope::Done(body) => *body,
-            Telescope::Cons(ty, rest) => {
-                context.assume(&names[0], &ty);
-                output_type(context, rest.open(&[&terms[0]]), &names[1..], &terms[1..])
+            Telescope::Done(body) => Ok(*body),
+            Telescope::Cons(type_, rest) => {
+                // The flag is read before the binder is assumed: a parameter's type
+                // never depends on the parameter itself.
+                candidates.push(is_candidate(context, &type_)?);
+                context.assume(&names[0], &type_);
+                output_type(context, rest.open(&[&terms[0]]), &names[1..], &terms[1..], candidates)
             }
         }
     }
 
+    let mut candidates = Vec::with_capacity(n);
     let erased_body = context.with_frame(|context| {
-        let output_type = output_type(context, ft.telescope, &param_names, &param_terms);
+        let output_type = output_type(
+            context,
+            ft.telescope,
+            &param_names,
+            &param_terms,
+            &mut candidates,
+        )?;
         erase(context, &body_opened, &output_type)
     })?;
 
+    let params = param_names
+        .into_iter()
+        .zip(candidates)
+        .map(|(name, candidate)| ersd::Argument { name, candidate })
+        .collect();
+
     Ok(ersd::Term::Func(ersd::Func {
         captures,
-        params: param_names,
+        params,
         body: erased_body.into(),
     }))
+}
+
+/// Whether an argument of type `type_` is a specialization candidate, after
+/// reduction. Three erased-to-trivial shapes qualify, each a compile-time constant
+/// the specializer can bake in:
+///
+/// - a **function type** — a first-class closure value, devirtualizable;
+/// - **`Type`** — an erased type argument (a unit at runtime);
+/// - the **empty tuple type `{}`** — an erased unit argument.
+///
+/// Reduction matters: an aliased or computed type only exposes its head in
+/// weak-head normal form.
+fn is_candidate(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+    Ok(match &*reduce_with(context, type_)? {
+        Subterm::FuncType(_) | Subterm::Type => true,
+        Subterm::TupleType(tuple_type) => tuple_type.telescope.is_empty(),
+        _ => false,
+    })
 }
 
 fn erase_apply(

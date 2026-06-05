@@ -171,7 +171,7 @@ fn inline_at(host: &mut Region, callee_name: &FuncName, callee: &Func) {
     // Bind each (freshened) parameter to its argument; copy propagation collapses
     // these aliases on its next run.
     let param_aliases = callee.params.iter().zip(&args).map(|(param, arg)| {
-        (suffixed_value(param, &suffix), Value::Alias(arg.clone()))
+        (suffixed_value(&param.name, &suffix), Value::Alias(arg.clone()))
     });
 
     host.preallocs.extend(body.preallocs);
@@ -185,7 +185,7 @@ fn inline_at(host: &mut Region, callee_name: &FuncName, callee: &Func) {
 /// prealloc, value, and block-parameter binder in the tree. A name not in this
 /// set is free — a module const — and must not be renamed.
 fn bound_values(func: &Func) -> HashSet<ValueName> {
-    let mut bound: HashSet<ValueName> = func.params.iter().cloned().collect();
+    let mut bound: HashSet<ValueName> = func.params.iter().map(|p| p.name.clone()).collect();
     collect_bound(&func.region, &mut bound);
     bound
 }
@@ -306,7 +306,7 @@ mod tests {
 
     fn func(params: Vec<ValueName>, resume: &str, region: Region) -> Func {
         Func {
-            params,
+            params: params.into_iter().map(Into::into).collect(),
             resume: b(resume),
             region,
         }

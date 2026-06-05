@@ -217,7 +217,7 @@ fn erase_func_captures_free_variables_before_opening_body() {
     };
 
     assert_eq!(captures.len(), 1);
-    assert!(captures.contains(&"y".to_string()));
+    assert!(captures.iter().any(|c| c.name == "y"));
 }
 
 #[test]
