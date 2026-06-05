@@ -9,7 +9,10 @@
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
 //! - [`closure_lifting`] — turns known closures into functions and devirtualizes
 //!   their call sites.
-//! - [`inlining`] — splices single-call-site functions into their call site.
+//! - [`function_inlining`] — splices single-call-site functions into their call site.
+//! - [`jump_threading`] — merges single-predecessor blocks into their predecessor.
+//! - [`dead_argument_elimination`] — drops unused function parameters and closure
+//!   captures, finishing type erasure.
 //! - [`dead_code_elimination`] — drops unused bindings and unreachable
 //!   functions, closures, and consts.
 
@@ -28,8 +31,14 @@ pub use constant_folding::*;
 mod closure_lifting;
 pub use closure_lifting::*;
 
-mod inlining;
-pub use inlining::*;
+mod function_inlining;
+pub use function_inlining::*;
+
+mod jump_threading;
+pub use jump_threading::*;
+
+mod dead_argument_elimination;
+pub use dead_argument_elimination::*;
 
 mod dead_code_elimination;
 pub use dead_code_elimination::*;
@@ -40,18 +49,27 @@ use super::cont::*;
 ///
 /// Copy propagation runs first so that constant folding and closure lifting see
 /// real value identities. Closure lifting then turns known closures into direct
-/// calls, and inlining splices those callees into their one call site — which
+/// calls, and inlining splices those callees into their one call site — which,
+/// together with jump threading dissolving the leftover continuation blocks,
 /// finally brings literal arguments next to the primitive ops the prelude wraps,
-/// so a second copy-propagation and folding pass can collapse them. Dead-code
-/// elimination runs last to sweep the alias, literal, and closure bindings the
-/// earlier passes leave behind, plus anything they kept alive.
+/// so a second copy-propagation and folding pass can collapse them. Folding also
+/// forwards aggregate projections and decides matches on known tags, which leaves
+/// alias bindings and freshly single-predecessor arms behind; a second jump
+/// threading and a final copy propagation collapse those, so dead-code
+/// elimination — running last to sweep the alias, literal, and closure bindings
+/// the earlier passes leave behind — can reclaim the now-unreferenced aggregates
+/// and untaken arms along with everything else dead.
 pub fn optimize(mut module: Module) -> Module {
     propagate_copies(&mut module);
     fold_constants(&mut module);
     lift_closures(&mut module);
     inline_calls(&mut module);
+    thread_jumps(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+    thread_jumps(&mut module);
+    propagate_copies(&mut module);
+    eliminate_dead_arguments(&mut module);
     eliminate_dead_code(&mut module);
     module
 }
