@@ -585,6 +585,35 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
+    /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder before
+    /// substituting that arg into the rest, and return the final `Done` body. The walk is
+    /// infallible; the error type `E` belongs to the callback, so callers in different
+    /// error worlds (`Error` for infer/erase, `ReduceError` for convert) can all reuse it.
+    pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
+    where
+        F: FnMut(&Term, &Term) -> Result<(), E>,
+    {
+        assert!(
+            self.len() == args.len(),
+            "telescope arity mismatch in `walk`: expected {}, got {}",
+            self.len(),
+            args.len()
+        );
+
+        let mut tele = self;
+        let mut i = 0;
+        loop {
+            match tele {
+                Telescope::Done(body) => return Ok(*body),
+                Telescope::Cons(ty, rest) => {
+                    f(&args[i], &ty)?;
+                    tele = rest.open(&[&args[i]]);
+                    i += 1;
+                }
+            }
+        }
+    }
+
     pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
     where
         F: FnMut(usize) -> Term,

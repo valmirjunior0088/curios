@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
         Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, erase_prim,
-        expect, infer, reduce_with, refine_head,
+        check_motive, expect, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -85,24 +85,11 @@ fn erase_apply(
         ));
     }
 
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<Term>,
-        params: &[Term],
-        erased: &mut Vec<ersd::Term>,
-    ) -> Result<Term, Error> {
-        match tele {
-            Telescope::Done(body) => Ok(*body),
-            Telescope::Cons(ty, rest) => {
-                let head = &params[0];
-                erased.push(erase(context, head, &ty)?);
-                walk(context, rest.open(&[head]), &params[1..], erased)
-            }
-        }
-    }
-
     let mut erased_params = Vec::with_capacity(params.len());
-    let result_type = walk(context, ft.telescope.clone(), params, &mut erased_params)?;
+    let result_type = ft.telescope.clone().walk(params, |arg, ty| {
+        erased_params.push(erase(context, arg, ty)?);
+        Ok(())
+    })?;
     let erased_head = erase(context, head, &head_type)?;
 
     expect(context, term, &result_type, expected)?;
@@ -167,24 +154,9 @@ fn erase_nat_induction(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let head_type = infer(context, head)?;
-    let head_type = reduce_with(context, &head_type)?;
+    let head_type = expect_prim_head(context, head, term, Prim::NatType)?;
 
-    if !matches!(&*head_type, Subterm::Prim(Prim::NatType)) {
-        return Err(Error::not_nat_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
-
-        erase(
-            context,
-            &motive.open(&[&Term::var(Var::free(head_label))]),
-            &Term::type_(),
-        )
-    })?;
+    check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
     let erased_zero_case = erase(
         context,
@@ -238,23 +210,9 @@ fn erase_nat_dispatch(
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let head_type = infer(context, head)?;
-    let head_type = reduce_with(context, &head_type)?;
+    let head_type = expect_prim_head(context, head, term, Prim::NatType)?;
 
-    if !matches!(&*head_type, Subterm::Prim(Prim::NatType)) {
-        return Err(Error::not_nat_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
-        erase(
-            context,
-            &motive.open(&[&Term::var(Var::free(head_label))]),
-            &Term::type_(),
-        )
-    })?;
+    check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
     let erased_cases = cases
         .iter()
@@ -319,23 +277,9 @@ fn erase_bln_match(
         true_case,
     } = bm;
 
-    let head_type = infer(context, head)?;
-    let head_type = reduce_with(context, &head_type)?;
+    let head_type = expect_prim_head(context, head, term, Prim::BlnType)?;
 
-    if !matches!(&*head_type, Subterm::Prim(Prim::BlnType)) {
-        return Err(Error::not_bln_type(term.clone(), head_type));
-    }
-
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Subterm::Prim(Prim::BlnType).into());
-        erase(
-            context,
-            &motive.open(&[&Term::var(Var::free(head_label))]),
-            &Term::type_(),
-        )
-    })?;
+    check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
 
     let erased_false = context.with_frame(|context| {
         refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into())?;
@@ -453,17 +397,7 @@ fn erase_match(
         other => return Err(Error::not_an_atom_type(term.clone(), other)),
     };
 
-    let head_label = context.fresh(motive.first_label());
-
-    context.with_frame(|context| {
-        context.assume(&head_label, &Term::atom_type(atoms.iter().cloned()));
-
-        erase(
-            context,
-            &motive.open(&[&Term::var(Var::free(head_label))]),
-            &Term::type_(),
-        )
-    })?;
+    check_motive(context, &Term::atom_type(atoms.iter().cloned()), motive)?;
 
     if cases.len() != atoms.len() {
         return Err(Error::match_arity_mismatch(

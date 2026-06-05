@@ -45,11 +45,17 @@ pub use convert::*;
 #[cfg(test)]
 mod convert_tests;
 
+mod error;
+pub use error::*;
+
 mod typing;
 pub use typing::*;
 
 #[cfg(test)]
 mod typing_tests;
+
+mod infer_prim;
+use infer_prim::*;
 
 mod infer;
 pub use infer::*;

@@ -473,3 +473,27 @@ fn convert_times_out_on_pathological_inputs() {
         Err(ReduceError::Preempted)
     );
 }
+
+#[test]
+fn convert_unit_typed_neutrals_in_type_argument() {
+    let mut context = context();
+
+    // F : (()) -> Type ; r, s : ()   (all neutral assumptions).
+    // r ≡ s by η for the empty tuple (unit / proof irrelevance), so F r ≡ F s.
+    // `conv` compares at `Type`, exactly as the pipeline does via `expect`.
+    context.assume(
+        "F",
+        &Term::func_type([("_", Term::tuple_type_unit())], Term::type_()),
+    );
+    context.assume("r", &Term::tuple_type_unit());
+    context.assume("s", &Term::tuple_type_unit());
+
+    let f = Term::var(Var::free("F"));
+    let r = Term::var(Var::free("r"));
+    let s = Term::var(Var::free("s"));
+
+    let this = Term::apply(f.clone(), [r]); // F r
+    let that = Term::apply(f, [s]); // F s
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}

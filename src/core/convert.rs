@@ -18,6 +18,70 @@ pub fn convert(
     Convert::new(type_.clone(), this.clone(), that.clone()).convert(context)
 }
 
+/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating
+/// its subterms. Returns `None` when the head is out of scope or the spine is not a
+/// typeable neutral — callers fall back conservatively. Built only from the same
+/// primitives `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so
+/// there is no duplicated typing judgment to drift from `infer`.
+fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, ReduceError> {
+    match &**term {
+        Subterm::Var(var) => Ok(context.assumption(var.unwrap()).cloned()),
+        Subterm::Apply(Apply { head, params }) => {
+            let Some(head_type) = synth_neutral(context, head)? else {
+                return Ok(None);
+            };
+
+            match Term::unwrap_or_clone(reduce(context, head_type)?) {
+                Subterm::FuncType(FuncType { telescope }) if telescope.len() == params.len() => {
+                    let refs = params.iter().collect::<Vec<_>>();
+                    Ok(Some(telescope.open(&refs)))
+                }
+                _ => Ok(None),
+            }
+        }
+        Subterm::Proj(Proj { head, index }) => {
+            let Some(head_type) = synth_neutral(context, head)? else {
+                return Ok(None);
+            };
+
+            match Term::unwrap_or_clone(reduce(context, head_type)?) {
+                Subterm::TupleType(TupleType { telescope }) => {
+                    Ok(telescope.nth(*index, |j| Term::proj(head.clone(), j)))
+                }
+                _ => Ok(None),
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Recover the parameter types of an application from the head's function type, opening
+/// each successive entry with the actual arguments (dependency). `None` when the head's
+/// type is unavailable or not a `FuncType` of matching arity — callers fall back to
+/// comparing arguments at `Term::type_()`.
+fn apply_param_types(
+    context: &mut Context,
+    head: &Term,
+    params: &[Term],
+) -> Result<Option<Vec<Term>>, ReduceError> {
+    let Some(head_type) = synth_neutral(context, head)? else {
+        return Ok(None);
+    };
+
+    let telescope = match Term::unwrap_or_clone(reduce(context, head_type)?) {
+        Subterm::FuncType(FuncType { telescope }) if telescope.len() == params.len() => telescope,
+        _ => return Ok(None),
+    };
+
+    let mut types = Vec::with_capacity(params.len());
+    telescope.walk(params, |_, ty| {
+        types.push(ty.clone());
+        Ok(())
+    })?;
+
+    Ok(Some(types))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Goal {
     pub type_: Term,
@@ -110,14 +174,32 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_apply(&mut self, this: Apply, that: Apply) -> Result<bool, ReduceError> {
+    fn compare_apply(
+        &mut self,
+        context: &mut Context,
+        this: Apply,
+        that: Apply,
+    ) -> Result<bool, ReduceError> {
         if this.params.len() != that.params.len() {
             return Ok(false);
         }
+
+        // Recover the real argument types from the head's function type so η fires at the
+        // correct type (e.g. a unit-typed argument is compared at `()`, where proof
+        // irrelevance makes distinct neutrals equal). Falls back to `Term::type_()` when
+        // the head's type is unavailable.
+        let param_types = apply_param_types(context, &this.head, &this.params)?;
+
         self.enqueue(Term::type_(), this.head, that.head);
-        for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Term::type_(), a, b);
+
+        for (i, (a, b)) in this.params.into_iter().zip(that.params).enumerate() {
+            let type_ = param_types
+                .as_ref()
+                .and_then(|types| types.get(i).cloned())
+                .unwrap_or_else(Term::type_);
+            self.enqueue(type_, a, b);
         }
+
         Ok(true)
     }
 
@@ -490,7 +572,9 @@ impl Convert {
                 (other, Subterm::Func(func)) => {
                     self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                (Subterm::Apply(this), Subterm::Apply(that)) => self.compare_apply(this, that)?,
+                (Subterm::Apply(this), Subterm::Apply(that)) => {
+                    self.compare_apply(context, this, that)?
+                }
                 (Subterm::TupleType(this), Subterm::TupleType(that)) => {
                     self.compare_tuple_type(context, this, that)?
                 }
