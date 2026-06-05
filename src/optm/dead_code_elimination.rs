@@ -82,9 +82,9 @@ fn retain_live(region: &mut Region, used: &HashSet<ValueName>) -> bool {
 
 // --- Layer 2: inter-module reachability -------------------------------------
 
-/// Drop functions, closures, and consts unreachable from `main`.
+/// Drop functions, closures, and consts unreachable from the entrypoint.
 fn dce_module(module: &mut Module) {
-    let entry = FuncName::from("main");
+    let entry = module.entry().expect("module has an entrypoint").clone();
 
     let mut keep_funcs: HashSet<FuncName> = HashSet::new();
     let mut keep_clsrs: HashSet<ClsrName> = HashSet::new();
@@ -168,6 +168,7 @@ mod tests {
                 region,
             },
         );
+        module.set_entry(FuncName::from("main"));
         module
     }
 
@@ -227,6 +228,7 @@ mod tests {
                 ),
             },
         );
+        module.set_entry(FuncName::from("main"));
 
         eliminate_dead_code(&mut module);
 
@@ -267,6 +269,7 @@ mod tests {
         };
         module.add_clsr(ClsrName::from("c_used"), trivial_clsr());
         module.add_clsr(ClsrName::from("c_dead"), trivial_clsr());
+        module.set_entry(FuncName::from("main"));
 
         eliminate_dead_code(&mut module);
 

@@ -199,6 +199,7 @@ pub struct Module {
     consts: Vec<(ValueName, Data)>,
     clsrs: Vec<(ClsrName, Clsr)>,
     funcs: Vec<(FuncName, Func)>,
+    entry: Option<FuncName>,
 }
 
 impl Module {
@@ -240,5 +241,16 @@ impl Module {
 
     pub fn add_func(&mut self, func_name: FuncName, func: Func) {
         self.funcs.push((func_name, func));
+    }
+
+    /// The entrypoint function — the program's sole root: the value the host
+    /// invokes, the only export, and the seed of dead-code reachability. Recorded
+    /// here so passes consult the module instead of re-deriving a blessed name.
+    pub fn entry(&self) -> Option<&FuncName> {
+        self.entry.as_ref()
+    }
+
+    pub fn set_entry(&mut self, func_name: FuncName) {
+        self.entry = Some(func_name);
     }
 }

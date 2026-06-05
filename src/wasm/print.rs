@@ -815,7 +815,16 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
                 module
                     .start()
                     .map(|start| flat([pure("\n(start "), print_func_name(start), pure(")")])),
-            ),
+            )
+            .chain((!module.elems().is_empty()).then(|| {
+                let mut parts = vec![pure("\n(elem declare func")];
+                for func_name in module.elems() {
+                    parts.push(pure(" "));
+                    parts.push(print_func_name(func_name));
+                }
+                parts.push(pure(")"));
+                flat(parts)
+            })),
         )),
         pure(")"),
     ])

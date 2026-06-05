@@ -411,11 +411,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 expr,
             },
         );
-
-        self.module.add_export(
-            self.table.find_const(name).as_string(),
-            wasm::Export::Global(self.table.find_const(name)),
-        );
     }
 
     fn emit_let_clsr(&mut self, name: &'a cont::ClsrName, clsr: &'a cont::Clsr) {
@@ -446,10 +441,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             },
         );
 
-        self.module.add_export(
-            self.table.find_clsr(name).func_name().as_string(),
-            wasm::Export::Func(self.table.find_clsr(name).func_name()),
-        );
+        // Closures are referenced by `ref.func` when their values are built, so
+        // they must be declared even though they are not exported.
+        self.module
+            .declare_func(self.table.find_clsr(name).func_name());
     }
 
     fn emit_let_func(&mut self, name: &'a cont::FuncName, func: &'a cont::Func) {
@@ -481,11 +476,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 expr,
             },
         );
-
-        self.module.add_export(
-            self.table.find_func(name).func_name().as_string(),
-            wasm::Export::Func(self.table.find_func(name).func_name()),
-        );
     }
 
     pub fn emit_module(&mut self, module: &'a cont::Module) {
@@ -509,6 +499,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);
+        }
+
+        // The entrypoint is the module's sole export — the value the host invokes.
+        // Every other function, closure, and const is reached only internally.
+        if let Some(name) = module.entry() {
+            let func_name = self.table.find_func(name).func_name();
+            self.module
+                .add_export(func_name.as_string(), wasm::Export::Func(func_name));
         }
 
         self.emit_to_str_imports();

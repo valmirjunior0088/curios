@@ -67,13 +67,13 @@ fn drop_dead_func_params(module: &mut Module) -> bool {
     true
 }
 
-/// The unused parameter positions of every function but `main`, whose signature
-/// is the host's entry contract.
+/// The unused parameter positions of every function but the entrypoint, whose
+/// signature is the host's entry contract.
 fn dead_func_params(module: &Module) -> HashMap<FuncName, HashSet<usize>> {
     let mut drops = HashMap::new();
 
     for (name, func) in module.funcs() {
-        if name.as_str() == "main" {
+        if Some(name) == module.entry() {
             continue;
         }
 
@@ -298,12 +298,17 @@ mod tests {
     }
 
     #[test]
-    fn never_trims_main_signature() {
-        // `main` keeps its parameters even when unused: the host calls it.
-        let main = func(vec![v("unused")], "rm", region(vec![], ret("rm", v("unused"))));
+    fn never_trims_the_entry_signature() {
+        // The entry keeps a genuinely unused parameter: the host calls it.
+        let main = func(
+            vec![v("unused")],
+            "rm",
+            region(vec![(v("r"), Value::Pure(Data::Nat(0)))], ret("rm", v("r"))),
+        );
 
         let mut module = Module::new();
         module.add_func(FuncName::from("main"), main);
+        module.set_entry(FuncName::from("main"));
 
         eliminate_dead_arguments(&mut module);
 

@@ -828,6 +828,15 @@ fn parse_start<'a>() -> Parser<'a, FuncName> {
         .and_drop(parse_literal(")"))
 }
 
+/// A declarative element segment: `(elem declare func $a $b ...)`.
+fn parse_elem<'a>() -> Parser<'a, Vec<FuncName>> {
+    catch(parse_literal("(").and_drop(parse_literal("elem")))
+        .and_drop(parse_literal("declare"))
+        .and_drop(parse_literal("func"))
+        .and_keep(many0(parse_func_name))
+        .and_drop(parse_literal(")"))
+}
+
 enum ModuleItem {
     RecType(RecType),
     Import(String, String, Import),
@@ -836,6 +845,7 @@ enum ModuleItem {
     DataSegment(DataName, DataSegment),
     Export(String, Export),
     Start(FuncName),
+    Elem(Vec<FuncName>),
 }
 
 fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
@@ -849,6 +859,7 @@ fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
             .map(|(data_name, data_segment)| ModuleItem::DataSegment(data_name, data_segment)))
         .or(parse_export().map(|(name, export)| ModuleItem::Export(name, export)))
         .or(parse_start().map(ModuleItem::Start))
+        .or(parse_elem().map(ModuleItem::Elem))
 }
 
 fn parse_module<'a>() -> Parser<'a, Module> {
@@ -872,6 +883,11 @@ fn parse_module<'a>() -> Parser<'a, Module> {
                     }
                     ModuleItem::Export(name, export) => module.add_export(name, export),
                     ModuleItem::Start(func_name) => module.set_start(func_name),
+                    ModuleItem::Elem(func_names) => {
+                        for func_name in func_names {
+                            module.declare_func(func_name);
+                        }
+                    }
                 }
             }
 

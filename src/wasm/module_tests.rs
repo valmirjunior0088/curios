@@ -30,7 +30,8 @@ fn round_trip() {
                 i32.const 41)
             (data $greeting "\68\65\6c\6c\6f")
             (export "demo" (func $demo))
-            (export "answer" (global $answer)))
+            (export "answer" (global $answer))
+            (elem declare func $demo))
 "#;
 
     let first = source

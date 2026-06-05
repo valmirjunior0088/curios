@@ -1450,6 +1450,30 @@ where
         Ok(())
     }
 
+    /// A single declarative element segment listing the funcs eligible for
+    /// `ref.func`. Flags `0x03` selects "declarative, element kind + func
+    /// indices"; element kind `0x00` is `funcref`.
+    fn write_element_section(&mut self, elems: &[FuncName]) -> Result<()> {
+        if elems.is_empty() {
+            return Ok(());
+        }
+
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = self.fork(&mut bytes);
+
+            writer.buffer.push_leb128_unsigned(1)?;
+            writer.buffer.push_byte(0x03)?;
+            writer.buffer.push_byte(0x00)?;
+            writer.write_vec(elems, |writer, func_name| writer.write_func_name(func_name))?;
+        }
+
+        self.write_section(9, bytes)?;
+
+        Ok(())
+    }
+
     fn write_code_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
         let mut bytes = Vec::new();
 
@@ -1671,6 +1695,7 @@ where
         if let Some(start) = module.start() {
             self.write_start_section(start)?;
         }
+        self.write_element_section(module.elems())?;
         self.write_data_count_section(module.datas())?;
         self.write_code_section(module.funcs())?;
         self.write_data_section(module.datas())?;

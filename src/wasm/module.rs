@@ -74,6 +74,9 @@ pub struct Module {
     datas: Vec<(DataName, DataSegment)>,
     exports: Vec<(String, Export)>,
     start: Option<FuncName>,
+    // Functions made eligible for `ref.func` by a declarative element segment,
+    // without exporting them. `ref.func $f` validates only if `$f` is declared.
+    elems: Vec<FuncName>,
 }
 
 impl Module {
@@ -90,6 +93,7 @@ impl Module {
             datas: Default::default(),
             exports: Default::default(),
             start: None,
+            elems: Default::default(),
         }
     }
 
@@ -169,5 +173,14 @@ impl Module {
 
     pub fn set_start(&mut self, func_name: FuncName) {
         self.start = Some(func_name);
+    }
+
+    pub fn elems(&self) -> &[FuncName] {
+        &self.elems
+    }
+
+    /// Declare a function for `ref.func` use via the declarative element segment.
+    pub fn declare_func(&mut self, func_name: FuncName) {
+        self.elems.push(func_name);
     }
 }

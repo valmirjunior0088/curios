@@ -26,14 +26,17 @@ pub fn to_cont(erased_term: &ersd::Term) -> cont::Module {
 
     let (resume, region) = Lowerer::new(&mut cont_module).lower_entry(erased_term, &Frame::new());
 
+    let entry = cont::FuncName::from("main");
+
     cont_module.add_func(
-        cont::FuncName::from("main"),
+        entry.clone(),
         cont::Func {
             params: vec![],
             resume,
             region,
         },
     );
+    cont_module.set_entry(entry);
 
     cont_module
 }
