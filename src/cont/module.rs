@@ -3,7 +3,7 @@ use {
     std::collections::BTreeMap,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Data {
     Nat(u32),
     Int(i32),
@@ -14,7 +14,7 @@ pub enum Data {
     Clsr(ClsrName, Vec<ValueName>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Code {
     NatEql(ValueName, ValueName),
     NatNeq(ValueName, ValueName),
@@ -105,40 +105,40 @@ pub enum Code {
     IoRead,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Pure(Data),
     Eval(Code),
     Alias(ValueName),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Prealloc {
     Tpl(usize),
     Arr(usize),
     Clsr(ClsrName),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub params: Vec<ValueName>,
     pub region: Region,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JumpTarget {
     pub target: BlockName,
     pub params: Vec<ValueName>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MatchTarget {
     pub operand: ValueName,
     pub cases: BTreeMap<u32, JumpTarget>,
     pub default: Option<JumpTarget>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CallTarget {
     Direct {
         target: FuncName,
@@ -152,14 +152,14 @@ pub enum CallTarget {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Tail {
     Jump(JumpTarget),
     Match(MatchTarget),
     Call(CallTarget),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Region {
     pub preallocs: Vec<(ValueName, Prealloc)>,
     pub values: Vec<(ValueName, Value)>,
@@ -167,7 +167,7 @@ pub struct Region {
     pub tail: Tail,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Clsr {
     pub fields: Vec<ValueName>,
     pub params: Vec<ValueName>,
@@ -181,7 +181,7 @@ impl Clsr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Func {
     pub params: Vec<ValueName>,
     pub resume: BlockName,
@@ -210,6 +210,10 @@ impl Module {
         &self.consts
     }
 
+    pub fn consts_mut(&mut self) -> &mut Vec<(ValueName, Data)> {
+        &mut self.consts
+    }
+
     pub fn add_const(&mut self, value_name: ValueName, value: Data) {
         self.consts.push((value_name, value));
     }
@@ -218,12 +222,20 @@ impl Module {
         &self.clsrs
     }
 
+    pub fn clsrs_mut(&mut self) -> &mut Vec<(ClsrName, Clsr)> {
+        &mut self.clsrs
+    }
+
     pub fn add_clsr(&mut self, clsr_name: ClsrName, clsr: Clsr) {
         self.clsrs.push((clsr_name, clsr));
     }
 
     pub fn funcs(&self) -> &[(FuncName, Func)] {
         &self.funcs
+    }
+
+    pub fn funcs_mut(&mut self) -> &mut Vec<(FuncName, Func)> {
+        &mut self.funcs
     }
 
     pub fn add_func(&mut self, func_name: FuncName, func: Func) {

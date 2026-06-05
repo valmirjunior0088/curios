@@ -39,6 +39,11 @@ fn main() {
                 println!("=== cont ===");
                 println!("{module}");
             }
+            Stage::Optm(module) => {
+                println!();
+                println!("=== optm ===");
+                println!("{module}");
+            }
             Stage::Wasm(module) => {
                 println!();
                 println!("=== wasm ===");

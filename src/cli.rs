@@ -53,8 +53,8 @@ struct Cli {
         long,
         value_name = "STAGES",
         num_args = 0..=1,
-        default_missing_value = "text,core,ersd,cont,wasm",
-        help = "Print selected IRs to stderr (comma-separated: text,core,ersd,cont,wasm; bare --print prints all)"
+        default_missing_value = "text,core,ersd,cont,optm,wasm",
+        help = "Print selected IRs to stderr (comma-separated: text,core,ersd,cont,optm,wasm; bare --print prints all)"
     )]
     print: Option<String>,
 
@@ -76,6 +76,7 @@ fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<was
         Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
         Stage::Ersd(ersd) if stages.contains(&"ersd") => eprintln!("\n=== ersd ===\n{ersd}"),
         Stage::Cont(cont) if stages.contains(&"cont") => eprintln!("\n=== cont ===\n{cont}"),
+        Stage::Optm(optm) if stages.contains(&"optm") => eprintln!("\n=== optm ===\n{optm}"),
         Stage::Wasm(wasm) if stages.contains(&"wasm") => eprintln!("\n=== wasm ===\n{wasm}"),
         _ => {}
     })

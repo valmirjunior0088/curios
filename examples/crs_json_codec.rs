@@ -49,6 +49,7 @@ fn main() {
             Stage::Core(_) => "core",
             Stage::Ersd(_) => "ersd",
             Stage::Cont(_) => "cont",
+            Stage::Optm(_) => "optm",
             Stage::Wasm(_) => "wasm",
         };
         println!("{name}: {elapsed:?}");

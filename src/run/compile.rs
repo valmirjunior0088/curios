@@ -1,5 +1,5 @@
 use {
-    crate::{cont, core, ersd, text, wasm},
+    crate::{cont, core, ersd, optm, text, wasm},
     std::time::Duration,
 };
 
@@ -8,6 +8,7 @@ pub enum Stage<'a> {
     Core(&'a core::Term),
     Ersd(&'a ersd::Term),
     Cont(&'a cont::Module),
+    Optm(&'a cont::Module),
     Wasm(&'a wasm::Module),
 }
 
@@ -43,7 +44,11 @@ where
 
     observe(Stage::Cont(&cont_module));
 
-    let wasm_module = cont::to_wasm(&cont_module);
+    let optm_module = optm::optimize(cont_module);
+
+    observe(Stage::Optm(&optm_module));
+
+    let wasm_module = cont::to_wasm(&optm_module);
 
     observe(Stage::Wasm(&wasm_module));
 
