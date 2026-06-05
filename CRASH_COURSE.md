@@ -236,4 +236,4 @@ fmt/printf("%d")("Alice")
 -- TypeMismatch: %d expects Nat, but "Alice" has type Bin
 ```
 
-The `examples/crs_printf.rs` program runs both cases and asserts the output and the error. `examples/crs_json_codec.rs` shows a larger program combining file-backed modules, union values, and arrays to encode and decode a `json/Value` tree.
+The `examples/crs_printf.rs` program runs both cases and asserts the output and the error. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, union values, and arrays to encode and decode a `Json` tree.

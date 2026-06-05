@@ -9,7 +9,7 @@ Consult these on demand when a specific question arises about the language, type
 - **`CRASH_COURSE.md`** — Rust-programmer's introduction: bindings, lambdas, `match` over `Nat`, primitives, tuples, atoms, union sum types, Π-types, length-indexed vectors, with Rust and Curios side by side.
 - **`ARCHITECTURE.md`** — compiler pipeline across six stages: parsing (`text`), elaboration (`text/to_core`), type checking and erasure (`core/typing.rs`), CPS lowering (`ersd/to_cont`), WASM codegen (`cont/to_wasm`), and binary serialization (`wasm/writer.rs`); also module conventions, WASM value representation, the `Loader` trait, the test suite, and a recommended reading order.
 - **`examples/`** — runnable Rust programs that drive the full pipeline end-to-end (parse → typecheck → erase → CPS → WASM → Wasmtime). Two worth knowing:
-  - `crs_json_codec.rs` — encodes a `json/Value` tree to a `Bin`, round-trips through a parser, asserts byte-identical output; exercises file-backed modules (`std`, `std/Parse`, `json`), union values, and arrays.
+  - `crs_json_codec.rs` — encodes a `Json` tree to a `Bin`, round-trips through a parser, asserts byte-identical output; exercises the standard library (`std/Json`, `std/Parse`), union values, and arrays.
   - `crs_printf.rs` — `fmt/printf("%s is %d")("Alice")(30)`; also demonstrates the type-safety guarantee — passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`.
 
 # Project management

@@ -263,6 +263,7 @@ const STD_MODULES: &[(&str, &str, bool)] = &[
     ("Flt", include_str!("../../std/Flt.crs"), true),
     ("Str", include_str!("../../std/Str.crs"), false),
     ("Parse", include_str!("../../std/Parse.crs"), true),
+    ("Json", include_str!("../../std/Json.crs"), true),
 ];
 
 fn std_submodule(label: &str, source: &str) -> Module {

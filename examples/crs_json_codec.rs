@@ -8,25 +8,22 @@ use {
 
 fn main() {
     let source = r#"
-        use /std/{Parse, Io, Bin, Nat, Result};
+        use /std/{Json, Io, Bin, Nat, Result};
 
-        pub mod json;
-        use json/{Value};
-
-        let value : Value = Value/obj([
-            ("name", Value/str("Alice")),
-            ("score", Value/num(+9.5)),
-            ("active", Value/bln(true)),
-            ("tags", Value/arr([Value/str("x"), Value/str("y")])),
-            ("extra", Value/null())
+        let value : Json = Json/obj([
+            ("name", Json/str("Alice")),
+            ("score", Json/num(+9.5)),
+            ("active", Json/bln(true)),
+            ("tags", Json/arr([Json/str("x"), Json/str("y")])),
+            ("extra", Json/null())
         ]);
 
-        let encoded : Bin = json/encode(value);
+        let encoded : Bin = Json/encode(value);
 
-        let decoded : Result({ Nat, Value }, Bin) = json/decode(encoded, 0);
+        let decoded : Result({ Nat, Json }, Bin) = Json/decode(encoded, 0);
 
         match decoded : {}
-        | success(pair) => Io/print(json/encode(pair.1))
+        | success(pair) => Io/print(Json/encode(pair.1))
         | failure(msg) => Io/print(msg)
         end
         "#;

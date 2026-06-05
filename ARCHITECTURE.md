@@ -398,7 +398,7 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 
 ## Reading order
 
-1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (multi-module program, JSON encode/decode round-trip, full pipeline with output assertions). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
+1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
 2. **`src/text/term.rs`** — the surface AST; variants mirror the language syntax with all variables as plain strings.
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
 4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes `core::Term`; how `Scope::close` turns string labels into de Bruijn indices.

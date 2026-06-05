@@ -1,0 +1,177 @@
+use /std/{Arr, Bin, Bln, Char, Flt, Nat, Parse, Result};
+
+pub union Json
+| null()
+| bln(Bln)
+| num(Flt)
+| str(Bin)
+| arr(Arr(Json))
+| obj(Arr({ Bin, Json }))
+end
+
+pub use Json/*;
+
+let encode_num(n : Flt) -> Bin =
+    let raw : Bin = Flt/to_str(n);
+    match Nat/eql(Bin/get(raw, 0), '+') : Bin
+    | true => Bin/slice(raw, 1, Bin/len(raw))
+    | false => raw
+    end;
+
+let encode_str(s : Bin) -> Bin =
+    Bin/concat(Bin/concat("\"",
+        Bin/fold(Bin, s, "", (byte, acc) =>
+            match byte : Bin
+            | '"' => Bin/concat(acc, "\\\"")
+            | '\\' => Bin/concat(acc, "\\\\")
+            | '\n' => Bin/concat(acc, "\\n")
+            | '\r' => Bin/concat(acc, "\\r")
+            | '\t' => Bin/concat(acc, "\\t")
+            | _ => Bin/append(acc, byte)
+            end)),
+        "\"");
+
+pub rec encode(v : Json) -> Bin =
+    match v : Bin
+    | null() => "null"
+    | bln(b) => Bln/to_str(b)
+    | num(n) => encode_num(n)
+    | str(s) => encode_str(s)
+    | arr(xs) =>
+        Bin/concat(Bin/concat("[",
+            Bin/join(",", Arr/map(Json, Bin, encode, xs))), "]")
+    | obj(ps) =>
+        Bin/concat(Bin/concat("{",
+            Bin/join(",", Arr/map({ Bin, Json }, Bin,
+                (pair) => Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1)),
+                ps))),
+            "}")
+    end;
+
+let is_num_byte(byte : Nat) -> Bln =
+    match Char/is_digit(byte) : Bln
+    | true => true
+    | false =>
+        match byte : Bln
+        | '-' => true
+        | '+' => true
+        | '.' => true
+        | 'e' => true
+        | 'E' => true
+        | _ => false
+        end
+    end;
+
+let take_literal(literal : Bin) -> Parse({}) =
+    (input, pos) =>
+        let r : { Nat, Bln } =
+            match Bin/len(literal) : { Nat, Bln }
+            | 0 => (pos, true)
+            | step + 1, ih =>
+                match ih.1 : { Nat, Bln }
+                | false => ih
+                | true =>
+                    match Nat/lt(ih.0, Bin/len(input)) : { Nat, Bln }
+                    | false => (ih.0, false)
+                    | true =>
+                        match Nat/eql(Bin/get(literal, step), Bin/get(input, ih.0)) : { Nat, Bln }
+                        | true => (Nat/add(ih.0, 1), true)
+                        | false => (ih.0, false)
+                        end
+                    end
+                end
+            end;
+        match r.1 : Result({ Nat, {} }, Bin)
+        | true => Result/success({ Nat, {} }, Bin, (r.0, ()))
+        | false => Result/failure({ Nat, {} }, Bin, "unexpected literal")
+        end;
+
+let parse_null : Parse(Json) =
+    Parse/map({}, Json, (_) => Json/null(), take_literal("null"));
+
+let parse_true_val : Parse(Json) =
+    Parse/map({}, Json, (_) => Json/bln(true), take_literal("true"));
+
+let parse_false_val : Parse(Json) =
+    Parse/map({}, Json, (_) => Json/bln(false), take_literal("false"));
+
+let parse_num : Parse(Json) =
+    (input, pos) =>
+        match Parse/take_while(is_num_byte)(input, pos) : Result({ Nat, Json }, Bin)
+        | success(pair) =>
+            match Nat/eql(Bin/len(pair.1), 0) : Result({ Nat, Json }, Bin)
+            | true => Result/failure({ Nat, Json }, Bin, "expected number")
+            | false => Result/success({ Nat, Json }, Bin, (pair.0, Json/num(Flt/from_str(pair.1))))
+            end
+        | failure(msg) => Result/failure({ Nat, Json }, Bin, msg)
+        end;
+
+let is_not_string_special(byte : Nat) -> Bln =
+    match byte : Bln
+    | '"' => false
+    | '\\' => false
+    | _ => true
+    end;
+
+let parse_str_escape : Parse(Bin) =
+    Parse/bind(Nat, Bin, Parse/take_byte('\\'), (_) =>
+    Parse/bind(Nat, Bin, Parse/any_byte, (byte) =>
+        match byte : Parse(Bin)
+        | '"' => Parse/pure(Bin, "\"")
+        | '\\' => Parse/pure(Bin, "\\")
+        | 'n' => Parse/pure(Bin, "\n")
+        | 'r' => Parse/pure(Bin, "\r")
+        | 't' => Parse/pure(Bin, "\t")
+        | _ => Parse/fail(Bin, "unknown escape")
+        end));
+
+let parse_str_segment : Parse(Bin) =
+    Parse/take_while(is_not_string_special);
+
+let parse_str_body : Parse(Arr(Bin)) =
+    Parse/many0(Bin, Parse/or(Bin, parse_str_escape, parse_str_segment));
+
+let parse_raw_str : Parse(Bin) =
+    Parse/bind(Nat, Bin, Parse/take_byte('"'), (_) =>
+    Parse/bind(Arr(Bin), Bin, parse_str_body, (chunks) =>
+    Parse/bind(Nat, Bin, Parse/take_byte('"'), (_) =>
+        Parse/pure(Bin, Arr/fold(Bin, Bin, chunks, "", (chunk, acc) => Bin/concat(acc, chunk))))));
+
+let parse_str_value : Parse(Json) =
+    Parse/map(Bin, Json, (s) => Json/str(s), parse_raw_str);
+
+pub rec decode : Parse(Json) = (input, pos) =>
+    match Nat/lt(pos, Bin/len(input)) : Result({ Nat, Json }, Bin)
+    | false => Result/failure({ Nat, Json }, Bin, "unexpected end of input")
+    | true =>
+        match Bin/get(input, pos) : Result({ Nat, Json }, Bin)
+        | ' ' => decode(input, Nat/add(pos, 1))
+        | '\t' => decode(input, Nat/add(pos, 1))
+        | '\n' => decode(input, Nat/add(pos, 1))
+        | '\r' => decode(input, Nat/add(pos, 1))
+        | 'n' => parse_null(input, pos)
+        | 't' => parse_true_val(input, pos)
+        | 'f' => parse_false_val(input, pos)
+        | '"' => parse_str_value(input, pos)
+        | '[' => parse_arr(input, pos)
+        | '{' => parse_obj(input, pos)
+        | _ => parse_num(input, pos)
+        end
+    end
+and parse_arr : Parse(Json) =
+    Parse/bind(Nat, Json, Parse/take_byte('['), (_) =>
+    Parse/bind(Arr(Json), Json,
+        Parse/sep_by0(Json, Nat, decode, Parse/take_byte(',')), (elems) =>
+    Parse/bind(Nat, Json, Parse/take_byte(']'), (_) =>
+        Parse/pure(Json, Json/arr(elems)))))
+and parse_obj : Parse(Json) =
+    Parse/bind(Nat, Json, Parse/take_byte('{'), (_) =>
+    Parse/bind(Arr({ Bin, Json }), Json,
+        Parse/sep_by0({ Bin, Json }, Nat, parse_pair, Parse/take_byte(',')), (pairs) =>
+    Parse/bind(Nat, Json, Parse/take_byte('}'), (_) =>
+        Parse/pure(Json, Json/obj(pairs)))))
+and parse_pair : Parse({ Bin, Json }) =
+    Parse/bind(Bin, { Bin, Json }, parse_raw_str, (key) =>
+    Parse/bind(Nat, { Bin, Json }, Parse/take_byte(':'), (_) =>
+    Parse/bind(Json, { Bin, Json }, decode, (val) =>
+        Parse/pure({ Bin, Json }, (key, val)))));
