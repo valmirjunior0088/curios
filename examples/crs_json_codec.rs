@@ -8,7 +8,6 @@ use {
 
 fn main() {
     let source = r#"
-        pub mod std;
         use /std/{Parse, Io, Bin, Nat, Result};
 
         pub mod json;

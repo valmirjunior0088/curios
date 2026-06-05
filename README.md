@@ -52,7 +52,6 @@ The `examples/` directory contains end-to-end Rust programs that drive the full 
 **Typed format strings** (`examples/crs_printf.rs`) — calls `fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
 
 ```
-pub mod std;
 pub mod fmt;
 fmt/printf("%s is %d")("Alice")(30)
 -- output: "Alice is 30"
@@ -61,13 +60,12 @@ fmt/printf("%s is %d")("Alice")(30)
 Passing the wrong type is a compile-time error, not a runtime failure:
 
 ```
-pub mod std;
 pub mod fmt;
 fmt/printf("%d")("Alice")
 -- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Bin
 ```
 
-**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `json/Value` tree using `union` constructors such as `Value/obj` and `Value/str`, encodes it to a `Bin` string with `json/encode`, parses it back with `json/decode`, and asserts the output is byte-identical to the original. It exercises file-backed modules (`std`, `std/Parse`, `json`), arrays, and nested union values together.
+**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `json/Value` tree using `union` constructors such as `Value/obj` and `Value/str`, encodes it to a `Bin` string with `json/encode`, parses it back with `json/decode`, and asserts the output is byte-identical to the original. It exercises the prepended standard library (`std`, `std/Parse`), file-backed modules (`json`), arrays, and nested union values together.
 
 ## Documentation
 

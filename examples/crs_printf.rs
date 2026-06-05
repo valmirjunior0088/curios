@@ -11,7 +11,6 @@ fn main() {
     let timeout = Duration::from_secs(15);
 
     let source = r#"
-        pub mod std;
         use /std/{Str, Io, Bin};
 
         pub mod fmt;
@@ -58,8 +57,6 @@ fn main() {
     );
 
     let ill_typed = r#"
-        pub mod std;
-
         pub mod fmt;
 
         fmt/printf("%d")("Alice")

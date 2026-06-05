@@ -121,6 +121,8 @@ fn main() {
         },
     );
 
+    module.set_entry(cont::FuncName::from("main"));
+
     println!("=== cont ===");
     println!("{module}");
 

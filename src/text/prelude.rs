@@ -1,4 +1,7 @@
-use super::{LetSignature, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TupleType};
+use super::{
+    GroupItem, LetSignature, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TopUse,
+    TupleType, UseGroup,
+};
 
 // The `sys` module is the home of every primitive type and operation. It is
 // built directly as `text` AST (never parsed) and prepended to every parsed
@@ -236,6 +239,68 @@ fn io_ops() -> Vec<TopItem> {
         ),
         pub_fn("read", vec![], bin(), prim(Prim::IoRead)),
     ]
+}
+
+// The `std` module is the canonical standard library. Unlike `sys`, its bodies
+// are real Curios source kept alongside the compiler (`std/*.crs`), embedded here
+// with `include_str!`. The former `std.crs` manifest — the `pub mod`/`pub use`
+// declarations that stitched the submodules together — is reconstructed in Rust
+// below. `std` being well-formed is a compiler invariant, so a parse failure is a
+// `panic!`, not a recoverable error.
+//
+// Each entry is `(label, source, reexport)`: `reexport` mirrors the
+// `pub use <label>/{let <label>};` re-export of a submodule's headline binding.
+const STD_MODULES: &[(&str, &str, bool)] = &[
+    ("Arr", include_str!("../../std/Arr.crs"), true),
+    ("Bin", include_str!("../../std/Bin.crs"), true),
+    ("Nat", include_str!("../../std/Nat.crs"), true),
+    ("Int", include_str!("../../std/Int.crs"), true),
+    ("Bln", include_str!("../../std/Bln.crs"), true),
+    ("Io", include_str!("../../std/Io.crs"), false),
+    ("Char", include_str!("../../std/Char.crs"), false),
+    ("Result", include_str!("../../std/Result.crs"), true),
+    ("Option", include_str!("../../std/Option.crs"), true),
+    ("Flt", include_str!("../../std/Flt.crs"), true),
+    ("Str", include_str!("../../std/Str.crs"), false),
+    ("Parse", include_str!("../../std/Parse.crs"), true),
+];
+
+fn std_submodule(label: &str, source: &str) -> Module {
+    source
+        .parse::<Module>()
+        .unwrap_or_else(|error| panic!("std/{label}.crs is malformed: {error:?}"))
+}
+
+fn std_reexport(label: &str) -> TopItem {
+    TopItem::Use(TopUse {
+        is_pub: true,
+        name: Name::from([label.to_string()]),
+        group: UseGroup::Named(vec![GroupItem::Let(label.to_string())]),
+    })
+}
+
+pub fn std() -> TopItem {
+    let mut items = Vec::new();
+
+    for &(label, source, reexport) in STD_MODULES {
+        items.push(TopItem::Mod(TopMod {
+            span: None,
+            is_pub: true,
+            label: label.to_string(),
+            module: Some(std_submodule(label, source)),
+        }));
+
+        if reexport {
+            items.push(std_reexport(label));
+        }
+    }
+
+    TopItem::Mod(TopMod {
+        span: None,
+        is_pub: true,
+        label: "std".to_string(),
+        module: Some(Module { items }),
+    })
 }
 
 pub fn prelude() -> TopItem {

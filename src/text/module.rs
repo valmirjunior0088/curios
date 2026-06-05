@@ -1,7 +1,6 @@
 use {
     super::{LetSignature, Name, Term},
     crate::Span,
-    std::iter,
 };
 
 #[derive(Debug, Clone)]
@@ -105,7 +104,8 @@ impl Entrypoint {
     }
 
     pub fn with_prelude(self) -> Self {
-        let items = iter::once(super::prelude())
+        let items = [super::prelude(), super::std()]
+            .into_iter()
             .chain(self.module.items)
             .collect();
 
