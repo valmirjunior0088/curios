@@ -2,14 +2,14 @@ use crate::{Span, macros::name};
 
 name!(Atom);
 
-// `Path` is a canonical, resolved identity: a sequence of module segments
+// `Qualifier` is a canonical, resolved identity: a sequence of module segments
 // rooted at the module root. It is what the resolution tables key on.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Path {
+pub struct Qualifier {
     segments: Vec<String>,
 }
 
-impl Path {
+impl Qualifier {
     pub fn empty() -> Self {
         Self { segments: vec![] }
     }
@@ -58,7 +58,7 @@ impl Path {
     }
 }
 
-impl<S, I> From<I> for Path
+impl<S, I> From<I> for Qualifier
 where
     S: Into<String>,
     I: IntoIterator<Item = S>,
@@ -70,19 +70,19 @@ where
     }
 }
 
-// `Name` is a surface reference, exactly as written in source: a `Path` plus an
+// `Name` is a surface reference, exactly as written in source: a `Qualifier` plus an
 // `is_abs` flag marking a leading `/` (an absolute, root-anchored reference).
-// Resolution turns a `Name` into a canonical `Path`.
+// Resolution turns a `Name` into a canonical `Qualifier`.
 #[derive(Debug, Clone)]
 pub struct Name {
     span: Option<Span>,
     is_abs: bool,
-    path: Path,
+    qualifier: Qualifier,
 }
 
 impl PartialEq for Name {
     fn eq(&self, other: &Self) -> bool {
-        self.is_abs == other.is_abs && self.path == other.path
+        self.is_abs == other.is_abs && self.qualifier == other.qualifier
     }
 }
 
@@ -91,16 +91,16 @@ impl Eq for Name {}
 impl std::hash::Hash for Name {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.is_abs.hash(state);
-        self.path.hash(state);
+        self.qualifier.hash(state);
     }
 }
 
 impl Name {
-    pub fn new(is_abs: bool, path: Path) -> Self {
+    pub fn new(is_abs: bool, qualifier: Qualifier) -> Self {
         Self {
             span: None,
             is_abs,
-            path,
+            qualifier,
         }
     }
 
@@ -117,39 +117,39 @@ impl Name {
         self.is_abs
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn qualifier(&self) -> &Qualifier {
+        &self.qualifier
     }
 
     pub fn with(&self, segment: &str) -> Self {
         Self {
             span: self.span.clone(),
             is_abs: self.is_abs,
-            path: self.path.with(segment),
+            qualifier: self.qualifier.with(segment),
         }
     }
 
     pub fn join(&self) -> String {
         match self.is_abs {
-            true => format!("/{}", self.path.join()),
-            false => self.path.join(),
+            true => format!("/{}", self.qualifier.join()),
+            false => self.qualifier.join(),
         }
     }
 
     pub fn is_single(&self) -> bool {
-        self.path.is_single()
+        self.qualifier.is_single()
     }
 
     pub fn head(&self) -> &str {
-        self.path.head()
+        self.qualifier.head()
     }
 
     pub fn last(&self) -> &str {
-        self.path.last()
+        self.qualifier.last()
     }
 
     pub fn interior(&self) -> &[String] {
-        self.path.interior()
+        self.qualifier.interior()
     }
 }
 
@@ -162,7 +162,7 @@ where
         Self {
             span: None,
             is_abs: false,
-            path: Path::from(iter),
+            qualifier: Qualifier::from(iter),
         }
     }
 }

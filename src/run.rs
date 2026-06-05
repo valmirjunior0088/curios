@@ -14,18 +14,18 @@ mod compile;
 pub use compile::*;
 
 use {
-    crate::{Source, text},
-    std::{fs, path::Path, time::Duration},
+    crate::text,
+    std::{path::Path, time::Duration},
 };
 
 pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
-    store: &dyn text::Store,
+    loader: &dyn text::Loader,
     host: H,
 ) -> Result<(), String> {
     run_wasm(
-        &compile_entrypoint(timeout, entrypoint, store, |_| {})?,
+        &compile_entrypoint(timeout, entrypoint, loader, |_| {})?,
         host,
     )
 }
@@ -35,11 +35,12 @@ pub fn run<H: Host + Send + Sync + 'static>(
     source: &str,
     host: H,
 ) -> Result<(), String> {
-    let entrypoint = text::Entrypoint::parse(&Source::inline(source))
+    let entrypoint = source
+        .parse::<text::Entrypoint>()
         .map_err(|error| error.format())?
         .with_prelude();
 
-    run_entrypoint(timeout, &entrypoint, &text::EmptyStore, host)
+    run_entrypoint(timeout, &entrypoint, &text::NullLoader, host)
 }
 
 pub fn run_text<H: Host + Send + Sync + 'static>(
@@ -55,14 +56,10 @@ pub fn run_file<H: Host + Send + Sync + 'static>(
     path: &Path,
     host: H,
 ) -> Result<(), String> {
-    let source = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-
-    let entrypoint = text::Entrypoint::parse(&Source::new(path, source))
+    let entrypoint = text::Entrypoint::from_path(path)
         .map_err(|error| error.format())?
         .with_prelude();
-    let store = text::FileStore::new(path.parent().unwrap_or(Path::new(".")), &entrypoint)
-        .map_err(|error| error.format())?;
+    let loader = text::FileLoader::new(path.parent().unwrap_or(Path::new(".")));
 
-    run_entrypoint(timeout, &entrypoint, &store, host)
+    run_entrypoint(timeout, &entrypoint, &loader, host)
 }

@@ -1,21 +1,31 @@
-use std::{path::PathBuf, rc::Rc};
+use std::{fs, io, path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
 pub struct Source {
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
     pub text: String,
 }
 
 impl Source {
     pub fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
         Rc::new(Self {
-            path: path.into(),
+            path: Some(path.into()),
             text: text.into(),
         })
     }
 
     pub fn inline(text: impl Into<String>) -> Rc<Self> {
-        Self::new("<input>", text)
+        Rc::new(Self {
+            path: None,
+            text: text.into(),
+        })
+    }
+
+    pub fn read(path: impl Into<PathBuf>) -> io::Result<Rc<Self>> {
+        let path = path.into();
+        let text = fs::read_to_string(&path)?;
+
+        Ok(Self::new(path, text))
     }
 }
 
@@ -76,11 +86,16 @@ impl Span {
             "^".repeat(width.max(1))
         );
 
-        format!(
+        let snippet = format!(
             "{number:>5} | {line}\n{padding:>5} | {caret}",
             number = number,
             line = &source[line_start..line_end],
             padding = "",
-        )
+        );
+
+        match &self.source.path {
+            Some(path) => format!("   --> {}:{number}\n{snippet}", path.display()),
+            None => snippet,
+        }
     }
 }

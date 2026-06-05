@@ -578,7 +578,20 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
 }
 
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
-    let result = match &**term {
+    // Attach this term's span to *any* error from erasing it. The dispatch lives
+    // in `erase_subterm` so that its `?` short-circuits (e.g. a conversion
+    // mismatch from `expect`) still flow through this wrapper rather than
+    // escaping `erase` unspanned.
+    let result = erase_subterm(context, term, expected);
+
+    match term.span() {
+        Some(span) => result.map_err(|error| error.at(span)),
+        None => result,
+    }
+}
+
+fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
+    match &**term {
         Subterm::Prim(prim) => erase_prim(context, term, prim, expected),
         Subterm::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
         Subterm::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
@@ -614,10 +627,5 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
             expect(context, term, &t, expected)?;
             Ok(ersd::Term::Name(ersd::Name::from(var.unwrap())))
         }
-    };
-
-    match term.span() {
-        Some(span) => result.map_err(|error| error.at(span)),
-        None => result,
     }
 }

@@ -7,8 +7,73 @@ use elaborate::*;
 use {
     super::*,
     crate::core,
-    std::collections::{BTreeMap, HashMap},
+    std::{
+        collections::{BTreeMap, HashMap},
+        rc::Rc,
+    },
 };
+
+struct Resolved {
+    modules: HashMap<Qualifier, Rc<Module>>,
+    table: HashMap<Qualifier, ModuleInfo>,
+}
+
+impl Resolved {
+    fn new() -> Self {
+        Self {
+            modules: HashMap::new(),
+            table: HashMap::new(),
+        }
+    }
+
+    fn for_entrypoint(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Self, Error> {
+        let mut resolved = Self::new();
+        resolved.resolve(entrypoint, loader)?;
+
+        Ok(resolved)
+    }
+
+    fn resolve(&mut self, entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<(), Error> {
+        self.discover(&entrypoint.module.items, &Qualifier::empty(), loader)
+    }
+
+    // `mod` declarations only name children, so the module graph is a tree: every
+    // qualifier is reached exactly once and no cycles are possible. Hence the walk
+    // needs neither a visited-set nor a cache hit-check — just load each file
+    // module once and recurse.
+    fn discover(
+        &mut self,
+        items: &[TopItem],
+        prefix: &Qualifier,
+        loader: &dyn Loader,
+    ) -> Result<(), Error> {
+        self.table.insert(prefix.clone(), scan_module_info(items));
+
+        for item in items {
+            if let TopItem::Mod(module_item) = item {
+                let path = prefix.with(&module_item.label);
+
+                match &module_item.module {
+                    Some(module) => self.discover(&module.items, &path, loader)?,
+                    None => {
+                        let module =
+                            Rc::new(loader.load(&path).map_err(
+                                |error| match &module_item.span {
+                                    Some(span) => error.at(span.clone()),
+                                    None => error,
+                                },
+                            )?);
+
+                        self.modules.insert(path.clone(), Rc::clone(&module));
+                        self.discover(&module.items, &path, loader)?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
 
 fn scan_module_info(items: &[TopItem]) -> ModuleInfo {
     let mut info = ModuleInfo::new();
@@ -39,7 +104,7 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    store: &dyn Store,
+    modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     context.finalize(scan_module_info(top_items));
 
@@ -72,24 +137,20 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        store,
+                        modules,
                     )?;
                 }
                 None => {
                     let path = context.prefixed(&mod_item.label);
-                    let module = store.get(&path).ok_or_else(|| {
-                        let error = Error::ModuleNotFound { path: path.join() };
-                        match &mod_item.span {
-                            Some(span) => error.at(span.clone()),
-                            None => error,
-                        }
-                    })?;
+                    // Discovery is exhaustive over this same tree, so every
+                    // file-backed module is already cached under this qualifier.
+                    let module = modules.get(&path).expect("module loaded during discovery");
 
                     process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        store,
+                        modules,
                     )?;
                 }
             },
@@ -331,35 +392,6 @@ fn process_items(
     Ok(())
 }
 
-fn prepare_module_infos(
-    items: &[TopItem],
-    prefix: &Path,
-    table: &mut HashMap<Path, ModuleInfo>,
-    store: &dyn Store,
-) -> Result<(), Error> {
-    table.insert(prefix.clone(), scan_module_info(items));
-
-    for item in items {
-        if let TopItem::Mod(module_item) = item {
-            let path = prefix.with(&module_item.label);
-            let module = match &module_item.module {
-                Some(module) => module,
-                None => store.get(&path).ok_or_else(|| {
-                    let error = Error::ModuleNotFound { path: path.join() };
-                    match &module_item.span {
-                        Some(span) => error.at(span.clone()),
-                        None => error,
-                    }
-                })?,
-            };
-
-            prepare_module_infos(&module.items, &path, table, store)?;
-        }
-    }
-
-    Ok(())
-}
-
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     match item {
         FlatItem::Let(let_) => core::Term::let_(let_.name.join(), let_.type_, let_.body, acc),
@@ -372,39 +404,36 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     }
 }
 
-pub fn to_core(entrypoint: &Entrypoint, store: &dyn Store) -> Result<core::Term, Error> {
-    let mut table = HashMap::new();
-    let mut module_aliases = HashMap::new();
-    let mut binding_aliases = HashMap::new();
-    prepare_module_infos(&entrypoint.items, &Path::empty(), &mut table, store)?;
-    let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
-    let mut flat_items = Vec::new();
-
-    process_items(&entrypoint.items, &mut context, &mut flat_items, store)?;
-
-    let tail = Elaborate::new(&context).term(&entrypoint.tail)?;
-
-    Ok(flat_items.into_iter().rev().fold(tail, fold_flat_item))
+#[derive(Debug)]
+pub struct Lowered {
+    pub term: core::Term,
+    pub type_: Option<core::Term>,
 }
 
-pub fn type_to_core(
-    entrypoint: &Entrypoint,
-    store: &dyn Store,
-) -> Result<Option<core::Term>, Error> {
-    let Some(type_) = &entrypoint.type_ else {
-        return Ok(None);
-    };
-
-    let mut table = HashMap::new();
+pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, Error> {
+    let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let mut module_aliases = HashMap::new();
     let mut binding_aliases = HashMap::new();
-    prepare_module_infos(&entrypoint.items, &Path::empty(), &mut table, store)?;
     let mut context = Context::new(&mut table, &mut module_aliases, &mut binding_aliases);
     let mut flat_items = Vec::new();
 
-    process_items(&entrypoint.items, &mut context, &mut flat_items, store)?;
+    process_items(
+        &entrypoint.module.items,
+        &mut context,
+        &mut flat_items,
+        &modules,
+    )?;
 
-    Ok(Some(Elaborate::new(&context).term(type_)?))
+    let elaborate = Elaborate::new(&context);
+    let type_ = entrypoint
+        .type_
+        .as_ref()
+        .map(|type_| elaborate.term(type_))
+        .transpose()?;
+    let tail = elaborate.term(&entrypoint.tail)?;
+    let term = flat_items.into_iter().rev().fold(tail, fold_flat_item);
+
+    Ok(Lowered { term, type_ })
 }
 
 #[cfg(test)]

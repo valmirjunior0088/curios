@@ -24,7 +24,7 @@ fn main() {
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),
         &entrypoint,
-        &curios::text::EmptyStore,
+        &curios::text::NullLoader,
         |stage| match stage {
             Stage::Text(entrypoint) => {
                 println!("=== text ===");

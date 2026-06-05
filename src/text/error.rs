@@ -1,20 +1,54 @@
-use {crate::Span, std::fmt};
+use {
+    crate::{Span, parser::ParserError},
+    std::{fmt, io, path::PathBuf},
+};
 
 #[derive(Debug)]
 pub enum Error {
-    UnresolvedQualifier { qualifier: String },
-    ModuleNotFound { path: String },
-    ChildModuleNotFound { segment: String },
-    PrivateChildModule { segment: String },
-    BindingNotFound { binding: String },
-    PrivateBinding { binding: String },
-    QualifierConflict { qualifier: String },
-    BindingConflict { label: String },
-    NotAModule { label: String, parent: String },
-    NotABinding { label: String, parent: String },
-    NoSuchUseTarget { label: String, parent: String },
-    ModuleLoadFailed { label: String, reason: String },
-    Located { span: Span, error: Box<Error> },
+    UnresolvedQualifier {
+        qualifier: String,
+    },
+    ModuleNotFound {
+        path: String,
+    },
+    ChildModuleNotFound {
+        segment: String,
+    },
+    PrivateChildModule {
+        segment: String,
+    },
+    BindingNotFound {
+        binding: String,
+    },
+    PrivateBinding {
+        binding: String,
+    },
+    QualifierConflict {
+        qualifier: String,
+    },
+    BindingConflict {
+        label: String,
+    },
+    NotAModule {
+        label: String,
+        parent: String,
+    },
+    NotABinding {
+        label: String,
+        parent: String,
+    },
+    NoSuchUseTarget {
+        label: String,
+        parent: String,
+    },
+    ModuleLoadFailed {
+        label: String,
+        cause: Box<LoadError>,
+    },
+    Located {
+        span: Span,
+        error: Box<Error>,
+    },
 }
 
 impl Error {
@@ -69,10 +103,27 @@ impl fmt::Display for Error {
             Error::NoSuchUseTarget { label, parent } => {
                 write!(f, "no module or binding named {label} in {parent}")
             }
-            Error::ModuleLoadFailed { label, reason } => {
-                write!(f, "failed to load module {label}: {reason}")
+            Error::ModuleLoadFailed { label, cause } => {
+                write!(f, "failed to load module {label}:\n{}", cause.format())
             }
             Error::Located { error, .. } => write!(f, "{error}"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LoadError {
+    Read { path: PathBuf, error: io::Error },
+    Parse(ParserError),
+}
+
+impl LoadError {
+    pub fn format(&self) -> String {
+        match self {
+            LoadError::Read { path, error } => {
+                format!("failed to read {}: {error}", path.display())
+            }
+            LoadError::Parse(error) => error.format(),
         }
     }
 }

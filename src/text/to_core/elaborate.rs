@@ -3,7 +3,8 @@ use {
     crate::{
         core,
         text::{
-            BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Path, Prim, Subterm, Term,
+            BinLiteral, Error, Match, Name, Nat, NatLiteral, NatMatch, Prim, Qualifier, Subterm,
+            Term,
         },
     },
     num_bigint::BigUint,
@@ -296,12 +297,12 @@ impl<'a, 'b> Elaborate<'a, 'b> {
         })
     }
 
-    fn resolve_name(&self, name: &Name) -> Result<Path, Error> {
+    fn resolve_name(&self, name: &Name) -> Result<Qualifier, Error> {
         // Walk to the module that should contain the final segment. An absolute
         // reference starts at the root and walks every segment but the last; a
         // relative one starts at the resolved head qualifier and walks the interior.
-        let (mut current, walk): (Path, &[String]) = if name.is_abs() {
-            (Path::empty(), name.path().init())
+        let (mut current, walk): (Qualifier, &[String]) = if name.is_abs() {
+            (Qualifier::empty(), name.qualifier().init())
         } else {
             let qualifier = name.head();
 

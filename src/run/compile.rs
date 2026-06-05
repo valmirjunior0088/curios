@@ -14,7 +14,7 @@ pub enum Stage<'a> {
 pub fn compile_entrypoint<O>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
-    store: &dyn text::Store,
+    loader: &dyn text::Loader,
     mut observe: O,
 ) -> Result<wasm::Module, String>
 where
@@ -22,17 +22,19 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let core_term = text::to_core(entrypoint, store).map_err(|error| error.format())?;
+    let text::Lowered { term, type_ } =
+        text::to_core(entrypoint, loader).map_err(|error| error.format())?;
 
-    observe(Stage::Core(&core_term));
+    observe(Stage::Core(&term));
 
-    let core_type = match text::type_to_core(entrypoint, store).map_err(|error| error.format())? {
+    let core_type = match type_ {
         Some(type_) => type_,
-        None => core::infer(&mut core::Context::new(timeout), &core_term)
-            .map_err(|error| error.format())?,
+        None => {
+            core::infer(&mut core::Context::new(timeout), &term).map_err(|error| error.format())?
+        }
     };
 
-    let ersd_term = core::erase(&mut core::Context::new(timeout), &core_term, &core_type)
+    let ersd_term = core::erase(&mut core::Context::new(timeout), &term, &core_type)
         .map_err(|error| error.format())?;
 
     observe(Stage::Ersd(&ersd_term));
@@ -63,7 +65,7 @@ mod tests {
         let error = compile_entrypoint(
             Duration::from_secs(1),
             &entrypoint,
-            &text::EmptyStore,
+            &text::NullLoader,
             |_| {},
         )
         .unwrap_err();

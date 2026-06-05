@@ -595,11 +595,11 @@ impl Display for Module {
 impl Display for Entrypoint {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         let entrypoint = self.clone();
-        let printer = if entrypoint.items.is_empty() {
+        let printer = if entrypoint.module.items.is_empty() {
             print_term(entrypoint.tail)
         } else {
             flat([
-                print_module_items(entrypoint.items),
+                print_module_items(entrypoint.module.items),
                 pure("\n"),
                 print_term(entrypoint.tail),
             ])

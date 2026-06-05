@@ -295,12 +295,12 @@ fn parse_entrypoint_roundtrip() {
     "#
     .parse::<Entrypoint>()
     .unwrap();
-    assert_eq!(entrypoint.items.len(), 4);
-    assert!(matches!(entrypoint.items[0], TopItem::Use(_)));
-    assert!(matches!(entrypoint.items[1], TopItem::Use(_)));
-    assert!(matches!(entrypoint.items[2], TopItem::Rec(_)));
+    assert_eq!(entrypoint.module.items.len(), 4);
+    assert!(matches!(entrypoint.module.items[0], TopItem::Use(_)));
+    assert!(matches!(entrypoint.module.items[1], TopItem::Use(_)));
+    assert!(matches!(entrypoint.module.items[2], TopItem::Rec(_)));
     assert!(matches!(
-        entrypoint.items[3],
+        entrypoint.module.items[3],
         TopItem::Let(TopLet { is_pub: false, .. })
     ));
     assert_eq!(
@@ -362,7 +362,7 @@ fn parse_use_brace_group() {
         "use /std/{Bin, Arr};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
             is_pub: false,
-            name: Name::new(true, Path::from(["std".to_string()])),
+            name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
                 GroupItem::Both("Bin".to_string()),
                 GroupItem::Both("Arr".to_string()),
@@ -380,7 +380,7 @@ fn parse_use_brace_group_kinds() {
             .items,
         vec![TopItem::Use(TopUse {
             is_pub: false,
-            name: Name::new(true, Path::from(["std".to_string()])),
+            name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
                 GroupItem::Mod("Bin".to_string()),
                 GroupItem::Let("Nat".to_string()),
@@ -396,7 +396,7 @@ fn parse_use_brace_group_empty() {
         "use /std/{};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
             is_pub: false,
-            name: Name::new(true, Path::from(["std".to_string()])),
+            name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![]),
         })]
     );
@@ -408,7 +408,10 @@ fn parse_use_glob() {
         "use /sys/Nat/*;".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
             is_pub: false,
-            name: Name::new(true, Path::from(["sys".to_string(), "Nat".to_string()])),
+            name: Name::new(
+                true,
+                Qualifier::from(["sys".to_string(), "Nat".to_string()])
+            ),
             group: UseGroup::Glob,
         })]
     );

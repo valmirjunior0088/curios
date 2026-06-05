@@ -37,10 +37,10 @@ fn main() {
         .parse::<text::Entrypoint>()
         .expect("failed to parse source")
         .with_prelude();
-    let store = text::FileStore::new(&base, &entrypoint).expect("expected file store");
+    let loader = text::FileLoader::new(&base);
     let mut last = Instant::now();
 
-    let wasm_module = compile_entrypoint(Duration::from_secs(10), &entrypoint, &store, |stage| {
+    let wasm_module = compile_entrypoint(Duration::from_secs(10), &entrypoint, &loader, |stage| {
         let now = Instant::now();
         let elapsed = now - last;
         last = now;

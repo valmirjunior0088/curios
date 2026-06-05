@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, LetSignature, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Path,
-        Prim, Proj, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion,
-        TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
+        GroupItem, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
+        NatMatch, Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet,
+        TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
     },
     crate::{
         Source,
@@ -14,7 +14,7 @@ use {
     },
     num_bigint::BigUint,
     num_traits::{ToPrimitive, Zero},
-    std::{iter, rc::Rc, str::FromStr},
+    std::{iter, path::Path, rc::Rc, str::FromStr},
 };
 
 const CHARACTERS: &[char] = &['_'];
@@ -71,7 +71,7 @@ fn parse_name<'a>() -> Parser<'a, Name> {
                         "path '{}' contains a reserved keyword",
                         segments.join("/")
                     )),
-                    false => pure(Name::new(is_abs, Path::from(segments))),
+                    false => pure(Name::new(is_abs, Qualifier::from(segments))),
                 }
             }),
     )
@@ -754,7 +754,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
 }
 
 impl Term {
-    pub fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         run_parser(
             parse_whitespace()
                 .and_keep(parse_term())
@@ -850,7 +850,7 @@ fn parse_use_path<'a>() -> Parser<'a, Name> {
         .map(|(first, rest)| {
             Name::new(
                 true,
-                Path::from(
+                Qualifier::from(
                     iter::once(first)
                         .chain(rest)
                         .map(str::to_string)
@@ -864,7 +864,7 @@ fn parse_use_path<'a>() -> Parser<'a, Name> {
         .map(|(first, rest)| {
             Name::new(
                 false,
-                Path::from(
+                Qualifier::from(
                     iter::once(first)
                         .chain(rest)
                         .map(str::to_string)
@@ -872,17 +872,17 @@ fn parse_use_path<'a>() -> Parser<'a, Name> {
                 ),
             )
         }))
-        .or(pure(Name::new(true, Path::empty())))
+        .or(pure(Name::new(true, Qualifier::empty())))
         .flat_map(|name| {
             match name
-                .path()
+                .qualifier()
                 .segments()
                 .iter()
                 .any(|segment| KEYWORDS.contains(&segment.as_str()))
             {
                 true => fail(format!(
                     "path '{}' contains a reserved keyword",
-                    name.path().join()
+                    name.qualifier().join()
                 )),
                 false => pure(name),
             }
@@ -980,7 +980,7 @@ fn parse_top_item<'a>() -> Parser<'a, TopItem> {
 }
 
 impl Module {
-    pub fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
@@ -988,6 +988,16 @@ impl Module {
                 .map(|items| Module { items }),
             source,
         )
+    }
+
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+        let path = path.as_ref();
+        let source = Source::read(path).map_err(|error| LoadError::Read {
+            path: path.into(),
+            error,
+        })?;
+
+        Module::parse(&source).map_err(LoadError::Parse)
     }
 }
 
@@ -1000,7 +1010,7 @@ impl FromStr for Module {
 }
 
 impl Entrypoint {
-    pub fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
@@ -1009,6 +1019,16 @@ impl Entrypoint {
                 .map(|(items, tail)| Entrypoint::new(items, tail)),
             source,
         )
+    }
+
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+        let path = path.as_ref();
+        let source = Source::read(path).map_err(|error| LoadError::Read {
+            path: path.into(),
+            error,
+        })?;
+
+        Entrypoint::parse(&source).map_err(LoadError::Parse)
     }
 }
 

@@ -65,7 +65,7 @@ Three top-level modules fall outside this pattern:
 
 | Module        | Role                                                                                                                                                       |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/span.rs` | `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)                                                 |
+| `src/span.rs` | `Source` (text + optional path) and `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)              |
 | `src/run.rs`  | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature |
 | `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                                                                            |
 
@@ -106,11 +106,11 @@ Two concerns, handled separately:
 
 **Module processing** (`to_core.rs`): walks `TopItem` list, resolves `use` declarations (enforcing visibility), qualifies names under `mod` blocks (e.g. `Foo/bar`), resolves file-backed `mod Label;` via the `Loader` trait, elaborates `union` declarations into type bindings plus constructor modules, and folds generated `let`/`rec` items right-to-left into the tail.
 
-The `Loader` trait has two implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `PanicLoader` (used for inline programs and tests).
+The `Loader` trait (`src/text/loader.rs`) has two implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `NullLoader` (for inline programs and tests, which have no file-backed modules — any `load` is a `ModuleNotFound`). A single discovery pass (`Resolved::for_entrypoint`) walks the `mod` tree once, loading each file-backed module through the `Loader` into a cache **and** building the global module-info table in the same traversal; because the whole table exists before elaboration, cross-module name references may be cyclic (value-level recursion still needs `rec`). Elaboration then reads modules from the cache.
 
 **Term elaboration** (`to_core/elaborate.rs`): pure syntactic translation from `text::Term` to `core::Term`. The only binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices. Union matches elaborate to ordinary atom matches over the generated tag field. No type-directed work — that happens in `core/typing.rs`.
 
-Both concerns are fallible: `to_core` returns `Result<core::Term, text::Error>`. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+Both concerns are fallible: `to_core` returns `Result<Lowered, text::Error>`, where `Lowered { term, type_ }` carries the elaborated entrypoint term plus the optional elaborated type annotation (both produced from one discovery + elaboration). `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
 ---
 
@@ -310,7 +310,7 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 
 `src/run.rs` re-exports everything from `src/run/{host,engine,compile,lift,lower}.rs` and defines the top-level entry points. The execution entry points are generic over a host `H: Host + Send + Sync + 'static`:
 
-- `run_text(timeout, source, host)` — inline source with `PanicLoader`
+- `run_text(timeout, source, host)` — inline source with `NullLoader`
 - `run_file(timeout, path, host)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
 - `run(timeout, source, loader, host)` — shared core: full pipeline → `run_wasm`
 - `run_wasm(wasm_module, host)` — executes a `wasm::Module` directly via Wasmtime (`src/run/engine.rs`)
@@ -350,13 +350,13 @@ Wasmtime is configured with reference types, function references, GC, and tail c
 
 Every fallible stage reports through a uniform pattern built on two primitives in `src/span.rs`:
 
-- `Source { path, text }` — the original file path and source text, reference-counted by spans.
-- `Span { source, start, end }` — a byte range into a specific source.
-- `Span::render_snippet(&self)` — formats the offending line with a line number and a `^` caret underline spanning the range.
+- `Source { path: Option<PathBuf>, text }` — the source text plus an optional file path (`None` for inline/REPL sources). Reference-counted (`Rc`) and shared by every span cut from it.
+- `Span { source, start, end }` — a byte range into a specific source; carries its `Rc<Source>`, so the originating file travels with the span even after modules are merged into one core term.
+- `Span::render_snippet(&self)` — formats the offending line with a line number and a `^` caret underline, prefixed with a `--> path:line` header when the source has a path.
 
-Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/typing.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format()` prints the message followed by the rendered snippet; an unlocated error prints the message alone. The parser's `ParserError::format` calls `Span::render_snippet` on a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
+Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/typing.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format()` prints the message followed by the rendered snippet; an unlocated error prints the message alone. Because the source rides on the span, type-checking and erasure errors in file-backed modules name their file too. The parser's `ParserError::format` renders a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
 
-`cli()` constructs a `Source` for the entrypoint and each loaded module, so spans carry enough context for formatting. `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
+Sources are built at the parse entry points: `FromStr` (`"...".parse()`) builds a pathless `Source`, while `Entrypoint::from_path`/`Module::from_path` read a file and build a path-bearing one (`src/text/parse.rs`, error type `LoadError`). `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
 
 ---
 

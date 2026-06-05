@@ -27,9 +27,9 @@ fn main() {
         .expect("failed to parse source")
         .with_type("()".parse().unwrap())
         .with_prelude();
-    let store = text::FileStore::new(&base, &entrypoint).expect("expected file store");
+    let loader = text::FileLoader::new(&base);
 
-    let wasm_module = compile_entrypoint(timeout, &entrypoint, &store, |stage| {
+    let wasm_module = compile_entrypoint(timeout, &entrypoint, &loader, |stage| {
         let now = Instant::now();
         let elapsed = now - last;
         last = now;
@@ -68,9 +68,11 @@ fn main() {
         .parse::<text::Entrypoint>()
         .expect("failed to parse ill-typed source")
         .with_prelude();
-    let store = text::FileStore::new(&base, &entrypoint).expect("expected file store");
+    let loader = text::FileLoader::new(&base);
 
-    let core_term = text::to_core(&entrypoint, &store).expect("expected core term");
+    let core_term = text::to_core(&entrypoint, &loader)
+        .expect("expected core term")
+        .term;
     let core_type = core::infer(&mut core::Context::new(timeout), &core_term);
 
     assert!(matches!(

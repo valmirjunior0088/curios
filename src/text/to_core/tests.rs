@@ -1,5 +1,5 @@
 use {
-    crate::{Source, core, text},
+    crate::{core, text},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -8,11 +8,13 @@ use {
 };
 
 fn run(src: &str) -> core::Term {
-    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::EmptyStore).unwrap()
+    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader)
+        .unwrap()
+        .term
 }
 
 fn run_err(src: &str) -> String {
-    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::EmptyStore)
+    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader)
         .unwrap_err()
         .to_string()
 }
@@ -721,7 +723,7 @@ fn use_glob_on_dual_existence_imports_once() {
 }
 
 #[test]
-fn file_store_prepares_sibling_modules_before_to_core() {
+fn file_loader_prepares_sibling_modules_before_to_core() {
     let base = temp_dir("sibling-order");
     write_module(
         &base,
@@ -733,33 +735,31 @@ fn file_store_prepares_sibling_modules_before_to_core() {
     );
     write_module(&base, "B.crs", "pub let x : Type = Type;");
 
-    let entrypoint = text::Entrypoint::parse(&Source::inline(
-        r#"
+    let entrypoint = r#"
             pub mod A;
             pub mod B;
             A/y
-        "#,
-    ))
+        "#
+    .parse::<text::Entrypoint>()
     .unwrap();
-    let store = text::FileStore::new(&base, &entrypoint).unwrap();
+    let loader = text::FileLoader::new(&base);
 
-    super::to_core(&entrypoint, &store).unwrap();
+    super::to_core(&entrypoint, &loader).unwrap();
 
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn file_backed_module_missing_from_store_is_module_not_found() {
-    let entrypoint = text::Entrypoint::parse(&Source::inline(
-        r#"
+fn file_backed_module_missing_from_loader_is_module_not_found() {
+    let entrypoint = r#"
             pub mod A;
             Type
-        "#,
-    ))
+        "#
+    .parse::<text::Entrypoint>()
     .unwrap();
 
     assert!(matches!(
-        super::to_core(&entrypoint, &text::EmptyStore).unwrap_err(),
+        super::to_core(&entrypoint, &text::NullLoader).unwrap_err(),
         text::Error::Located { error, .. }
             if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "A")
     ));

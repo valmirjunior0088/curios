@@ -1,13 +1,13 @@
 use {
     crate::{
         core,
-        text::{Error, Name, Path},
+        text::{Error, Name, Qualifier},
     },
     std::collections::HashMap,
 };
 
 pub struct FlatLet {
-    pub name: Path,
+    pub name: Qualifier,
     pub type_: core::Term,
     pub body: core::Term,
 }
@@ -63,17 +63,17 @@ impl ModuleInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UseResolved {
-    pub module: Option<Path>,
-    pub binding: Option<Path>,
+    pub module: Option<Qualifier>,
+    pub binding: Option<Qualifier>,
 }
 
 pub struct Context<'a> {
-    prefix: Path,
-    table: &'a mut HashMap<Path, ModuleInfo>,
-    module_aliases: &'a mut HashMap<Path, Path>,
-    binding_aliases: &'a mut HashMap<Path, Path>,
-    qualifiers: HashMap<String, Path>,
-    bindings: HashMap<String, Path>,
+    prefix: Qualifier,
+    table: &'a mut HashMap<Qualifier, ModuleInfo>,
+    module_aliases: &'a mut HashMap<Qualifier, Qualifier>,
+    binding_aliases: &'a mut HashMap<Qualifier, Qualifier>,
+    qualifiers: HashMap<String, Qualifier>,
+    bindings: HashMap<String, Qualifier>,
 }
 
 fn attach(error: Error, name: &Name) -> Error {
@@ -85,12 +85,12 @@ fn attach(error: Error, name: &Name) -> Error {
 
 impl<'a> Context<'a> {
     pub fn new(
-        table: &'a mut HashMap<Path, ModuleInfo>,
-        module_aliases: &'a mut HashMap<Path, Path>,
-        binding_aliases: &'a mut HashMap<Path, Path>,
+        table: &'a mut HashMap<Qualifier, ModuleInfo>,
+        module_aliases: &'a mut HashMap<Qualifier, Qualifier>,
+        binding_aliases: &'a mut HashMap<Qualifier, Qualifier>,
     ) -> Context<'a> {
         Context {
-            prefix: Path::empty(),
+            prefix: Qualifier::empty(),
             table,
             module_aliases,
             binding_aliases,
@@ -110,27 +110,27 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn prefixed(&self, label: &str) -> Path {
+    pub fn prefixed(&self, label: &str) -> Qualifier {
         self.prefix.with(label)
     }
 
-    pub fn qualifiers(&self) -> &HashMap<String, Path> {
+    pub fn qualifiers(&self) -> &HashMap<String, Qualifier> {
         &self.qualifiers
     }
 
-    pub fn bindings(&self) -> &HashMap<String, Path> {
+    pub fn bindings(&self) -> &HashMap<String, Qualifier> {
         &self.bindings
     }
 
-    pub fn table(&self) -> &HashMap<Path, ModuleInfo> {
+    pub fn table(&self) -> &HashMap<Qualifier, ModuleInfo> {
         &*self.table
     }
 
-    pub fn module_aliases(&self) -> &HashMap<Path, Path> {
+    pub fn module_aliases(&self) -> &HashMap<Qualifier, Qualifier> {
         &*self.module_aliases
     }
 
-    pub fn binding_aliases(&self) -> &HashMap<Path, Path> {
+    pub fn binding_aliases(&self) -> &HashMap<Qualifier, Qualifier> {
         &*self.binding_aliases
     }
 
@@ -150,7 +150,7 @@ impl<'a> Context<'a> {
         self.table.insert(self.prefix.clone(), info);
     }
 
-    pub fn insert_scope(&mut self, qualifier: String, name: Path) -> Result<(), Error> {
+    pub fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
         if self.qualifiers.contains_key(&qualifier) {
             return Err(Error::QualifierConflict { qualifier });
         }
@@ -159,7 +159,7 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    pub fn insert_binding(&mut self, label: String, name: Path) -> Result<(), Error> {
+    pub fn insert_binding(&mut self, label: String, name: Qualifier) -> Result<(), Error> {
         if self.bindings.contains_key(&label) {
             return Err(Error::BindingConflict { label });
         }
@@ -170,7 +170,11 @@ impl<'a> Context<'a> {
 
     // Import the module child `label` out of the module at `parent_path`, registering
     // it as a qualifier in the current scope.
-    fn import_module_label(&mut self, parent_path: &Path, label: &str) -> Result<Path, Error> {
+    fn import_module_label(
+        &mut self,
+        parent_path: &Qualifier,
+        label: &str,
+    ) -> Result<Qualifier, Error> {
         let child = self
             .table
             .get(parent_path)
@@ -208,7 +212,11 @@ impl<'a> Context<'a> {
 
     // Import the binding `label` out of the module at `parent_path`, registering it
     // as a binding in the current scope.
-    fn import_binding_label(&mut self, parent_path: &Path, label: &str) -> Result<Path, Error> {
+    fn import_binding_label(
+        &mut self,
+        parent_path: &Qualifier,
+        label: &str,
+    ) -> Result<Qualifier, Error> {
         let binding = self
             .table
             .get(parent_path)
@@ -241,7 +249,11 @@ impl<'a> Context<'a> {
     // Import both module and binding slots — used by glob and by the `Both`
     // group item. Either or both may be absent: callers that require at least
     // one (e.g. an explicit `Both` import) should check `result` afterwards.
-    fn import_dual_label(&mut self, parent_path: &Path, label: &str) -> Result<UseResolved, Error> {
+    fn import_dual_label(
+        &mut self,
+        parent_path: &Qualifier,
+        label: &str,
+    ) -> Result<UseResolved, Error> {
         let (child, binding) = {
             let parent_info = self
                 .table
@@ -289,12 +301,12 @@ impl<'a> Context<'a> {
         Ok(result)
     }
 
-    fn resolve_parent_path(&self, name: &Name) -> Result<(Path, String), Error> {
+    fn resolve_parent_path(&self, name: &Name) -> Result<(Qualifier, String), Error> {
         let is_abs = name.is_abs();
         let label = name.last().to_string();
 
         let parent_path = if is_abs {
-            let mut current = Path::empty();
+            let mut current = Qualifier::empty();
 
             if name.is_single() {
                 current
@@ -303,7 +315,7 @@ impl<'a> Context<'a> {
 
                 let root_info = self
                     .table
-                    .get(&Path::empty())
+                    .get(&Qualifier::empty())
                     .expect("root module info not present");
 
                 let is_pub =
@@ -319,7 +331,7 @@ impl<'a> Context<'a> {
                     });
                 }
 
-                current = Path::from([head]);
+                current = Qualifier::from([head]);
 
                 if !self.table.contains_key(&current) {
                     return Err(Error::ModuleNotFound {
@@ -412,7 +424,7 @@ impl<'a> Context<'a> {
         Ok((parent_path, label))
     }
 
-    pub fn resolve_module_use(&mut self, name: &Name) -> Result<Path, Error> {
+    pub fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent_path, label) = self.resolve_parent_path(name)?;
             self.import_module_label(&parent_path, &label)
@@ -420,7 +432,7 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Path, Error> {
+    pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent_path, label) = self.resolve_parent_path(name)?;
             self.import_binding_label(&parent_path, &label)
@@ -472,7 +484,7 @@ impl<'a> Context<'a> {
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
             let mut current = if name.is_abs() {
-                Path::empty()
+                Qualifier::empty()
             } else {
                 let first = name.head();
 
@@ -485,9 +497,9 @@ impl<'a> Context<'a> {
             };
 
             let walk = if name.is_abs() {
-                name.path().segments()
+                name.qualifier().segments()
             } else {
-                &name.path().segments()[1..]
+                &name.qualifier().segments()[1..]
             };
 
             for seg in walk {

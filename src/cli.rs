@@ -1,8 +1,5 @@
 use {
-    super::{
-        Source, Stage, StdioHost, compile_entrypoint, run_wasm, text,
-        wasm::{self, Module},
-    },
+    super::{Stage, StdioHost, compile_entrypoint, run_wasm, text, wasm},
     clap::{Parser, Subcommand},
     std::{
         fs,
@@ -65,19 +62,16 @@ struct Cli {
     mode: Mode,
 }
 
-fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<Module, String> {
-    let source = fs::read_to_string(input_path)
-        .map_err(|error| format!("failed to read {}: {error}", input_path.display()))?;
-
-    let entrypoint = text::Entrypoint::parse(&Source::new(input_path, source))
+fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<wasm::Module, String> {
+    let entrypoint = text::Entrypoint::from_path(input_path)
         .map_err(|error| error.format())?
         .with_prelude();
-    let store = text::FileStore::new(input_path.parent().unwrap_or(Path::new(".")), &entrypoint)
-        .map_err(|error| error.format())?;
+
+    let loader = text::FileLoader::new(input_path.parent().unwrap_or(Path::new(".")));
 
     let stages = print.split(',').collect::<Vec<_>>();
 
-    compile_entrypoint(timeout, &entrypoint, &store, |stage| match stage {
+    compile_entrypoint(timeout, &entrypoint, &loader, |stage| match stage {
         Stage::Text(text) if stages.contains(&"text") => eprintln!("\n=== text ===\n{text}"),
         Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
         Stage::Ersd(ersd) if stages.contains(&"ersd") => eprintln!("\n=== ersd ===\n{ersd}"),
@@ -91,7 +85,7 @@ fn default_output_path(input_path: &Path) -> PathBuf {
     PathBuf::from(input_path.file_stem().unwrap_or(input_path.as_os_str())).with_extension("wasm")
 }
 
-fn emit_executable(module: &Module, output_path: &Path) -> Result<(), String> {
+fn emit_executable(module: &wasm::Module, output_path: &Path) -> Result<(), String> {
     fs::write(output_path, wasm::to_bytes(module))
         .map_err(|error| format!("failed to write {}: {error}", output_path.display()))
 }
