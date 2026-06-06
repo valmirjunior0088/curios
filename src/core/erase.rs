@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, erase_prim,
-        expect_prim_head, infer, reduce_with, refine_head,
+        Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Item, Let, Match, Module, Nat,
+        NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var,
+        erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -515,6 +515,60 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
     })?;
 
     Ok(ersd::Term::Rec(erased))
+}
+
+/// Erase a whole meta-free [`Module`] to an [`ersd::Module`] (§9). Each top-level
+/// item is erased and `define`d *cumulatively in the persistent base frame* (no
+/// `with_frame`), so later items, the entrypoint body, and the type annotations
+/// all reduce through the accumulated definitions; then the entrypoint `body` is
+/// erased against `expected`. The flat analogue of `erase_let`/`erase_rec`, minus
+/// the de Bruijn open/close — top-level cross-references are already free `Var`s,
+/// which erase to `ersd::Name`.
+pub fn erase_module(
+    context: &mut Context,
+    module: &Module,
+    expected: &Term,
+) -> Result<ersd::Module, Error> {
+    let mut items = Vec::with_capacity(module.items.len());
+
+    for item in &module.items {
+        match item {
+            Item::Let(def) => {
+                let body = erase(context, &def.body, &def.type_)?;
+                context.define_assuming(&def.name, &def.type_, &def.body);
+
+                items.push(ersd::Item::Let {
+                    name: def.name.clone(),
+                    body,
+                });
+            }
+            Item::Rec(defs) => {
+                for def in defs {
+                    context.assume(&def.name, &def.type_);
+                }
+
+                for def in defs {
+                    context.define(&def.name, &def.body);
+                }
+
+                let names: Vec<String> = defs.iter().map(|def| def.name.clone()).collect();
+
+                let erased = defs
+                    .iter()
+                    .map(|def| erase(context, &def.body, &def.type_))
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                items.push(ersd::Item::Rec {
+                    names,
+                    items: erased,
+                });
+            }
+        }
+    }
+
+    let body = erase(context, &module.body, expected)?;
+
+    Ok(ersd::Module { items, body })
 }
 
 pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {

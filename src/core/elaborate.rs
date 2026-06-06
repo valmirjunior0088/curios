@@ -1,8 +1,9 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Error, Func, FuncType, Let, Match, Metavar, Nat,
-        NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var,
-        check_motive, elaborate_prim, expect, expect_prim_head, reduce_with, refine_head,
+        Apply, Atom, AtomType, BlnMatch, Context, Definition, Error, Func, FuncType, Item, Let,
+        Match, Metavar, Module, Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope,
+        Term, Tuple, TupleType, Two, Var, check_motive, elaborate_prim, expect, expect_prim_head,
+        reduce_with, refine_head,
     },
     std::collections::BTreeMap,
 };
@@ -518,6 +519,64 @@ fn elaborate_metavar(
             None => Err(Error::cannot_infer(term.clone())),
         },
     }
+}
+
+/// Type-check a single non-recursive top-level definition and `define` it into
+/// the *current* (persistent base) frame. The flat analogue of `elaborate_let`'s
+/// per-binding work, minus the `with_frame`/tail recursion: the binding must stay
+/// in scope for every later item and the entrypoint body.
+fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(), Error> {
+    check(context, &def.type_, Term::type_())?;
+    check(context, &def.body, def.type_.clone())?;
+    context.define_assuming(&def.name, &def.type_, &def.body);
+
+    Ok(())
+}
+
+/// Type-check a top-level `rec` group and `define` every member into the current
+/// frame. The flat analogue of `elaborate_rec` — assume all signatures, check the
+/// types, define all bodies, then check the bodies — but with no de Bruijn
+/// open/close: members already reference each other by free name.
+fn elaborate_module_rec(context: &mut Context, defs: &[Definition]) -> Result<(), Error> {
+    for def in defs {
+        context.assume(&def.name, &def.type_);
+    }
+
+    for def in defs {
+        check(context, &def.type_, Term::type_())?;
+    }
+
+    for def in defs {
+        context.define(&def.name, &def.body);
+    }
+
+    for def in defs {
+        check(context, &def.body, def.type_.clone())?;
+    }
+
+    Ok(())
+}
+
+/// Elaborate a whole [`Module`] (§9). Each top-level item is checked and `define`d
+/// *cumulatively in the persistent base frame* — never a popped `with_frame` —
+/// so every definition stays in scope for later items, the entrypoint `body`, and
+/// (through `mode`) its type annotation. Returns the body's type, reduced through
+/// the accumulated definitions.
+///
+/// Elaboration is structure-preserving (it only type-checks and births/solves
+/// metavariables in `context`), so the module itself is unchanged; `zonk_module`
+/// later substitutes the solutions left here.
+pub fn elaborate_module(context: &mut Context, module: &Module, mode: Mode) -> Result<Term, Error> {
+    for item in &module.items {
+        match item {
+            Item::Let(def) => elaborate_module_let(context, def)?,
+            Item::Rec(defs) => elaborate_module_rec(context, defs)?,
+        }
+    }
+
+    let body_type = elaborate(context, &module.body, mode)?.1;
+
+    reduce_with(context, &body_type)
 }
 
 pub fn elaborate(

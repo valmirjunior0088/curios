@@ -612,3 +612,56 @@ fn revalidation_rejects_ill_typed_solution() {
     assert_eq!(conv(&mut context, &Term::metavar(0), &bln), Ok(false));
     assert_eq!(context.metavar_solution(0), None);
 }
+
+#[test]
+fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
+    // The §12 regression. Γ = (t : Type) with a counterfactual match-arm
+    // refinement `t := Nat` in force (as inside `bln_match b { true => ... }`,
+    // where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen*
+    // Γ = (t : Type) — its result type depends on the refined head, mirroring
+    // `m : T(b)`.
+    let mut context = context();
+    context.assume("t", &Term::type_());
+    context.refine("t", &Term::prim(Prim::NatType));
+    context.birth_metavar(
+        0,
+        vec![("t".to_string(), Term::type_())],
+        Term::var(Var::free("t")),
+        None,
+    );
+
+    // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds,
+    // but re-validation suppresses refinements, leaving `t` abstract, so `5 : t`
+    // fails and the solution is rejected — the program is unsound otherwise.
+    let t = Term::var(Var::free("t"));
+    let five = Term::prim(Prim::Nat(Nat::new(5usize)));
+    assert_eq!(
+        convert(&mut context, &t, &Term::metavar(0), &five),
+        Ok(false)
+    );
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn revalidation_accepts_a_refinement_independent_solution() {
+    // The §12 twin. The same refinement `t := Nat` is in force, but `?0`'s result
+    // type is `Nat` directly — it does not depend on the refined head. Re-validation
+    // checks `5 : Nat` with refinements suppressed (none are needed) and commits.
+    let mut context = context();
+    context.assume("t", &Term::type_());
+    context.refine("t", &Term::prim(Prim::NatType));
+    context.birth_metavar(
+        0,
+        vec![("t".to_string(), Term::type_())],
+        Term::prim(Prim::NatType),
+        None,
+    );
+
+    let nat = Term::prim(Prim::NatType);
+    let five = Term::prim(Prim::Nat(Nat::new(5usize)));
+    assert_eq!(
+        convert(&mut context, &nat, &Term::metavar(0), &five),
+        Ok(true)
+    );
+    assert_eq!(context.metavar_solution(0), Some(&five));
+}

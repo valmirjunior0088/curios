@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Flt, Func, FuncType, Let, Many, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var,
+        Apply, Atom, AtomType, BlnMatch, Definition, Flt, Func, FuncType, Item, Let, Many, Match,
+        Module, Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
+        TupleType, Two, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -727,5 +728,45 @@ impl Display for Term {
 impl Display for Subterm {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         run_printer(print_term(self.clone().into(), 0), formatter, 2)
+    }
+}
+
+fn print_definition(formatter: &mut Formatter<'_>, def: &Definition) -> Result {
+    write!(formatter, "{} : {} = {}", def.name, def.type_, def.body)
+}
+
+impl Display for Module {
+    // Printed by *iterating* the flat items (never re-folding into a nested term),
+    // so `--print core` stays O(N) and cannot re-trigger the prelude-depth
+    // overflow this representation removed.
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
+        for item in &self.items {
+            match item {
+                Item::Let(def) => {
+                    write!(formatter, "let ")?;
+                    print_definition(formatter, def)?;
+                    writeln!(formatter, ";")?;
+                }
+                Item::Rec(defs) => {
+                    write!(formatter, "rec ")?;
+                    for (index, def) in defs.iter().enumerate() {
+                        if index > 0 {
+                            write!(formatter, "and ")?;
+                        }
+                        print_definition(formatter, def)?;
+                        write!(formatter, " ")?;
+                    }
+                    writeln!(formatter, ";")?;
+                }
+            }
+        }
+
+        write!(formatter, "{}", self.body)?;
+
+        if let Some(type_) = &self.type_ {
+            write!(formatter, "\n: {type_}")?;
+        }
+
+        Ok(())
     }
 }

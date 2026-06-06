@@ -5,8 +5,8 @@ use {
 
 pub enum Stage<'a> {
     Text(&'a text::Entrypoint),
-    Core(&'a core::Term),
-    Ersd(&'a ersd::Term),
+    Core(&'a core::Module),
+    Ersd(&'a ersd::Module),
     Cont(&'a cont::Module),
     Optm(&'a cont::Module),
     Wasm(&'a wasm::Module),
@@ -23,35 +23,36 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let text::Lowered { term, type_ } =
-        text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
+    let module = text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
 
-    observe(Stage::Core(&term));
+    observe(Stage::Core(&module));
 
     // Elaborate (checking against the entrypoint's type when it carries one, else
-    // synthesizing), then zonk metavariable solutions in so the term is meta-free,
-    // then erase the meta-free term to `ersd` — the `elaborate → zonk → erase`
-    // data flow (§9). Elaboration and zonking share one context (the solutions
-    // live in its `MetaStore`); erase runs over a fresh one.
+    // synthesizing), then zonk metavariable solutions in so the module is
+    // meta-free, then erase the meta-free module to `ersd` — the
+    // `elaborate → zonk → erase` data flow (§9). Elaboration and zonking share one
+    // context (the solutions live in its `MetaStore`); erase runs over a fresh one.
+    // Each pass iterates the flat top-level items rather than recursing a nested
+    // spine, so prelude depth no longer overflows the stack (BUG.md).
     let mut context = core::Context::new(timeout);
 
-    let core_mode = match &type_ {
+    let core_mode = match &module.type_ {
         Some(type_) => core::Mode::Check(type_.clone()),
         None => core::Mode::Infer,
     };
 
-    let (core_term, core_type) =
-        core::elaborate(&mut context, &term, core_mode).map_err(|error| error.format())?;
-
-    let elaborated = core::zonk(&context, &core_term).map_err(|error| error.format())?;
-    let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;
-
-    let ersd_term = core::erase(&mut core::Context::new(timeout), &elaborated, &core_type)
+    let core_type = core::elaborate_module(&mut context, &module, core_mode)
         .map_err(|error| error.format())?;
 
-    observe(Stage::Ersd(&ersd_term));
+    let module = core::zonk_module(&context, &module).map_err(|error| error.format())?;
+    let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;
 
-    let cont_module = ersd::to_cont(&ersd_term);
+    let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
+        .map_err(|error| error.format())?;
+
+    observe(Stage::Ersd(&ersd_module));
+
+    let cont_module = ersd::to_cont(&ersd_module);
 
     observe(Stage::Cont(&cont_module));
 
@@ -86,5 +87,76 @@ mod tests {
         .unwrap_err();
 
         assert!(error.contains("type mismatch"));
+    }
+
+    fn compile(source: &str, type_: Option<&str>) -> Result<wasm::Module, String> {
+        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+
+        let entrypoint = match type_ {
+            Some(type_) => entrypoint.with_type(type_.parse().unwrap()),
+            None => entrypoint,
+        };
+
+        compile_entrypoint(
+            Duration::from_secs(5),
+            &entrypoint,
+            &text::NullLoader,
+            |_| {},
+        )
+    }
+
+    #[test]
+    fn meta_free_prelude_program_compiles_without_overflow() {
+        // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
+        // still pulls in the whole sys/std prelude. Assembling and traversing the
+        // old N-deep nested term overflowed the stack during construction and in
+        // every pass; the flat `core::Module`/`ersd::Module` representation lowers
+        // it end-to-end to wasm without overflow.
+        let source = r#"
+            let id(A : Type, a : A) -> A = a;
+            id(/sys/Nat, 5)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn hole_in_a_type_argument_is_inferred_and_lowers() {
+        // `id _ 5`: the type argument `_` is solved to `Nat` from the value `5`,
+        // synthesizing the whole program end-to-end through to wasm (§14, `id _ x`).
+        let source = r#"
+            let id(A : Type, a : A) -> A = a;
+            id(_, 5)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn hole_pinned_through_the_expected_type_is_solved() {
+        // `id _ true` checked against `/sys/Bln`: the turnaround pins the type
+        // argument `_` to `Bln` through the expected type (§14, a type-level pin).
+        let source = r#"
+            use /sys/{Bln};
+            let id(A : Type, a : A) -> A = a;
+            id(_, true)
+        "#;
+
+        assert!(compile(source, Some("/sys/Bln")).is_ok());
+    }
+
+    #[test]
+    fn unconstrained_value_hole_cannot_be_inferred() {
+        // `let m : Nat = _ in m`: nothing constrains the value of `_`, so the
+        // metavariable is unsolved at zonk and compilation fails (§14).
+        let source = r#"
+            use /sys/{Nat};
+            let m : Nat = _;
+            m
+        "#;
+
+        let error = compile(source, Some("/sys/Nat")).unwrap_err();
+
+        assert!(error.contains("cannot"), "unexpected error: {error}");
     }
 }

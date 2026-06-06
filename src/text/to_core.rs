@@ -422,24 +422,19 @@ fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
         .collect()
 }
 
-fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
-    match item {
-        FlatItem::Let(let_) => core::Term::let_(let_.name.join(), let_.type_, let_.body, acc),
-        FlatItem::Rec(items) => core::Term::rec(
-            items
-                .into_iter()
-                .map(|item| (item.name.join(), item.type_, item.body)),
-            acc,
-        ),
+fn flat_let_to_core(let_: FlatLet) -> core::Definition {
+    core::Definition {
+        name: let_.name.join(),
+        type_: let_.type_,
+        body: let_.body,
     }
 }
 
-/// The result of `text → core`: the assembled program (and optional type
-/// annotation) as `core` terms.
-#[derive(Debug)]
-pub struct Lowered {
-    pub term: core::Term,
-    pub type_: Option<core::Term>,
+fn flat_item_to_core(item: FlatItem) -> core::Item {
+    match item {
+        FlatItem::Let(let_) => core::Item::Let(flat_let_to_core(let_)),
+        FlatItem::Rec(items) => core::Item::Rec(items.into_iter().map(flat_let_to_core).collect()),
+    }
 }
 
 // A bodyless `pub mod <label>;` declaration. We synthesize one per `Loader::roots`
@@ -455,7 +450,7 @@ fn declaration(label: &str) -> TopItem {
     })
 }
 
-pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, Error> {
+pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Module, Error> {
     let entrypoint = &Entrypoint {
         module: Module {
             items: loader
@@ -490,17 +485,22 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, 
         .transpose()?;
     let tail = elaborate.term(&entrypoint.tail)?;
 
-    // Wrap the body and the type annotation in the same item scope. The
-    // annotation references the prelude (and any entrypoint bindings) exactly as
-    // the body does, so it must be bound by the same `let`/`rec` group — otherwise
-    // a name like `/sys/Int` stays a free variable in the type with no definition
-    // to follow, while the body's inferred type reduces to the primitive. Bound by
-    // the same items, both sides reduce through those definitions and agree.
-    let ordered = order_flat_items(flat_items);
-    let term = ordered.iter().cloned().rev().fold(tail, fold_flat_item);
-    let type_ = type_.map(|type_| ordered.into_iter().rev().fold(type_, fold_flat_item));
+    // Emit the program as a flat list of named top-level definitions rather than
+    // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references
+    // (and the references in the entrypoint `body` and its `type_` annotation) stay
+    // free `Var`s keyed by the definition's joined name; the core passes `define`
+    // each one into the `Context`, so both the body and its annotation reduce
+    // through those definitions and agree — no shared binder scope required.
+    let items = order_flat_items(flat_items)
+        .into_iter()
+        .map(flat_item_to_core)
+        .collect();
 
-    Ok(Lowered { term, type_ })
+    Ok(core::Module {
+        items,
+        type_,
+        body: tail,
+    })
 }
 
 #[cfg(test)]

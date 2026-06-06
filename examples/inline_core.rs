@@ -78,7 +78,10 @@ fn main() {
     println!("=== ersd ===");
     println!("{ersd_term}");
 
-    let cont_module = ersd::to_cont(&ersd_term);
+    let cont_module = ersd::to_cont(&ersd::Module {
+        items: vec![],
+        body: ersd_term,
+    });
 
     println!();
     println!("=== cont ===");

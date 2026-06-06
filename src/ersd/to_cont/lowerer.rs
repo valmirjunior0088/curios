@@ -21,9 +21,9 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub fn lower_entry(
+    pub fn lower_module(
         &mut self,
-        term: &ersd::Term,
+        module: &ersd::Module,
         frame: &Frame,
     ) -> (cont::BlockName, cont::Region) {
         let (mut entry, resume) = FrameEntropy::new();
@@ -32,10 +32,27 @@ impl<'a> Lowerer<'a> {
             lowerer: self,
             emit: &mut emit,
         }
-        .lower_tail(term, frame, &resume);
+        .lower_module_items(&module.items, &module.body, frame.clone(), &resume);
 
         (resume, emit.finish(tail))
     }
+}
+
+/// Whether a top-level `let` body can be lowered *synchronously* by
+/// `lower_pure_name` — i.e. it produces a value with no resume block, so its
+/// continuation runs in the same stack frame. Conservatively limited to the forms
+/// that are pure at any depth (a `Func` always is: its body lowers into its own
+/// region). Everything else (prims, tuples, projections, and computational
+/// `Apply`/`Match`/`NatMatch`) takes the CPS path in `lower_module_items`.
+///
+/// This is what keeps the flat-module lowering off the native stack: the prelude
+/// is overwhelmingly functions and (erased) types, all synchronous, so they fold
+/// into a flat loop; only the rare non-synchronous top-level `let` recurses.
+fn is_synchronous(term: &ersd::Term) -> bool {
+    matches!(
+        term,
+        ersd::Term::Func(_) | ersd::Term::Erased | ersd::Term::Atom(_) | ersd::Term::Name(_)
+    )
 }
 
 /// A unit of lowering work: the shared [`Lowerer`] (module + closure names) paired with the
@@ -130,10 +147,18 @@ impl Work<'_, '_, '_> {
         (clsr_name, captured_values)
     }
 
-    pub fn lower_letrec_bindings(&mut self, letrec: &ersd::Rec, frame: &Frame) -> Frame {
+    /// Lower a `rec` group's bindings into `frame` synchronously (no resume blocks)
+    /// and return the extended frame. Shared by local `Subterm::Rec` lowering and
+    /// the flat top-level `ersd::Item::Rec`, so it takes the `names` and `items`
+    /// directly rather than an `ersd::Rec` (whose `tail` it never used).
+    pub fn lower_letrec_bindings<'x>(
+        &mut self,
+        names: &[String],
+        items: impl IntoIterator<Item = &'x ersd::Term>,
+        frame: &Frame,
+    ) -> Frame {
         let mut frame = frame.clone();
-        let reserved = letrec
-            .names
+        let reserved = names
             .iter()
             .map(|name| {
                 let reserved = self.emit.fresh_value();
@@ -143,13 +168,13 @@ impl Work<'_, '_, '_> {
             })
             .collect::<Vec<_>>();
 
-        for (item, target) in letrec.items.iter().zip(reserved) {
+        for (item, target) in items.into_iter().zip(reserved) {
             match self.plan_backpatch(item, &frame) {
                 Some(backpatch) => {
                     self.emit.add_prealloc(target.clone(), backpatch.prealloc());
                     self.emit_backpatch(target, &backpatch, &frame);
                 }
-                None => match item.as_ref() {
+                None => match item {
                     ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
                         unsupported_sync_rec_item(item)
                     }
@@ -194,7 +219,11 @@ impl Work<'_, '_, '_> {
                 self.lower_pure_name(&let_.tail, &frame)
             }
             ersd::Term::Rec(letrec) => {
-                let frame = self.lower_letrec_bindings(letrec, frame);
+                let frame = self.lower_letrec_bindings(
+                    &letrec.names,
+                    letrec.items.iter().map(Box::as_ref),
+                    frame,
+                );
 
                 self.lower_pure_name(&letrec.tail, &frame)
             }
@@ -267,7 +296,8 @@ impl Work<'_, '_, '_> {
                 )
             }
             ersd::Term::Rec(letrec) => self.lower_rec(
-                letrec,
+                &letrec.names,
+                letrec.items.iter().map(Box::as_ref),
                 frame,
                 RecBody::new(move |work, frame| work.lower_value_name(&letrec.tail, frame, cont)),
             ),
@@ -405,13 +435,13 @@ impl Work<'_, '_, '_> {
     /// (which may reference those results) run last, just before `body`.
     pub fn lower_rec<'b>(
         &mut self,
-        letrec: &'b ersd::Rec,
+        names: &'b [String],
+        items: impl IntoIterator<Item = &'b ersd::Term>,
         frame: &Frame,
         body: RecBody<'b>,
     ) -> cont::Tail {
         let mut frame = frame.clone();
-        let targets = letrec
-            .names
+        let targets = names
             .iter()
             .map(|name| {
                 let target = self.emit.fresh_value();
@@ -424,7 +454,7 @@ impl Work<'_, '_, '_> {
         let mut backpatches: Vec<(cont::ValueName, Backpatch<'b>)> = vec![];
         let mut computed: Vec<(usize, cont::ValueName, &'b ersd::Term)> = vec![];
 
-        for (index, (item, target)) in letrec.items.iter().zip(&targets).enumerate() {
+        for (index, (item, target)) in items.into_iter().zip(&targets).enumerate() {
             match self.plan_backpatch(item, &frame) {
                 Some(backpatch) => backpatches.push((target.clone(), backpatch)),
                 None => computed.push((index, target.clone(), item)),
@@ -433,7 +463,7 @@ impl Work<'_, '_, '_> {
 
         let computed_names = computed
             .iter()
-            .map(|(index, _, _)| letrec.names[*index].as_str())
+            .map(|(index, _, _)| names[*index].as_str())
             .collect::<Vec<_>>();
 
         let name_to_pos = computed_names
@@ -754,11 +784,79 @@ impl Work<'_, '_, '_> {
                 )
             }
             ersd::Term::Rec(letrec) => self.lower_rec(
-                letrec,
+                &letrec.names,
+                letrec.items.iter().map(Box::as_ref),
                 frame,
                 RecBody::new(move |work, frame| work.lower_tail(&letrec.tail, frame, resume)),
             ),
             _ => self.lower_value_name(term, frame, Cont::jump_to(resume.clone())),
         }
+    }
+
+    /// Lower the flat top-level `items`, then the entrypoint `body`, threading the
+    /// accumulating value frame. Synchronous items (`is_synchronous`) are lowered
+    /// in a flat loop via `lower_pure_name`; a non-synchronous top-level `let`
+    /// falls back to CPS, resuming this loop for the remaining items *inside* its
+    /// continuation. Native recursion is therefore bounded by the count of
+    /// non-synchronous items (≈0 for the prelude, which is functions and types) —
+    /// never the total — which is the whole point of the flat module (BUG.md).
+    fn lower_module_items<'b>(
+        &mut self,
+        items: &'b [ersd::Item],
+        body: &'b ersd::Term,
+        mut frame: Frame,
+        resume: &cont::BlockName,
+    ) -> cont::Tail {
+        let mut index = 0;
+
+        while index < items.len() {
+            match &items[index] {
+                // A `rec` group of only synchronous members (mutually-recursive
+                // functions — the common case) lowers in place, no recursion.
+                ersd::Item::Rec { names, items: defs } if defs.iter().all(is_synchronous) => {
+                    frame = self.lower_letrec_bindings(names, defs.iter(), &frame);
+                    index += 1;
+                }
+                // A `rec` group with a computational member needs the CPS `lower_rec`
+                // (resume blocks per computed item, dependency-ordered); resume this
+                // loop for the remaining items inside its `RecBody`.
+                ersd::Item::Rec { names, items: defs } => {
+                    let rest = &items[index + 1..];
+                    let resume = resume.clone();
+
+                    return self.lower_rec(
+                        names,
+                        defs.iter(),
+                        &frame,
+                        RecBody::new(move |work, frame| {
+                            work.lower_module_items(rest, body, frame.clone(), &resume)
+                        }),
+                    );
+                }
+                ersd::Item::Let { name, body: let_body } if is_synchronous(let_body) => {
+                    let value = self.lower_pure_name(let_body, &frame);
+                    frame.push(name.clone(), value);
+                    index += 1;
+                }
+                ersd::Item::Let { name, body: let_body } => {
+                    let name = name.clone();
+                    let rest = &items[index + 1..];
+                    let resume = resume.clone();
+                    let captured = frame.clone();
+
+                    return self.lower_value_name(
+                        let_body,
+                        &frame,
+                        Cont::new(move |work, value| {
+                            let frame = captured.extended([(name, value)]);
+
+                            work.lower_module_items(rest, body, frame, &resume)
+                        }),
+                    );
+                }
+            }
+        }
+
+        self.lower_tail(body, &frame, resume)
     }
 }

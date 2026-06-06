@@ -1,6 +1,6 @@
 use super::{
-    Apply, BlnMatch, Bound, Context, Error, Func, FuncType, Let, Match, Metavar, Nat,
-    NatMatch, Prim, Proj, Rec, Subterm, Telescope, Term, Tuple, TupleType,
+    Apply, BlnMatch, Bound, Context, Definition, Error, Func, FuncType, Item, Let, Match, Metavar,
+    Module, Nat, NatMatch, Prim, Proj, Rec, Subterm, Telescope, Term, Tuple, TupleType,
 };
 
 /// Substitute every solved metavariable in `term` by its (recursively zonked)
@@ -14,6 +14,46 @@ use super::{
 /// closed term, so no de Bruijn realignment is needed.
 pub fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
     zonk_term(context, term)
+}
+
+/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every
+/// top-level item plus the entrypoint body and annotation, yielding a meta-free
+/// module for `erase` (§9).
+pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
+    let items = module
+        .items
+        .iter()
+        .map(|item| zonk_item(context, item))
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    let body = zonk_term(context, &module.body)?;
+
+    let type_ = module
+        .type_
+        .as_ref()
+        .map(|type_| zonk_term(context, type_))
+        .transpose()?;
+
+    Ok(Module { items, type_, body })
+}
+
+fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
+    match item {
+        Item::Let(def) => Ok(Item::Let(zonk_definition(context, def)?)),
+        Item::Rec(defs) => Ok(Item::Rec(
+            defs.iter()
+                .map(|def| zonk_definition(context, def))
+                .collect::<Result<Vec<_>, Error>>()?,
+        )),
+    }
+}
+
+fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Error> {
+    Ok(Definition {
+        name: def.name.clone(),
+        type_: zonk_term(context, &def.type_)?,
+        body: zonk_term(context, &def.body)?,
+    })
 }
 
 fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {

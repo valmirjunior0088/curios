@@ -21,6 +21,9 @@ pub use term::*;
 #[cfg(test)]
 mod term_tests;
 
+mod module;
+pub use module::*;
+
 mod print;
 
 mod reduce_prim;

@@ -21,10 +21,10 @@ use rec::*;
 
 use crate::{cont, ersd};
 
-pub fn to_cont(erased_term: &ersd::Term) -> cont::Module {
+pub fn to_cont(erased: &ersd::Module) -> cont::Module {
     let mut cont_module = cont::Module::new();
 
-    let (resume, region) = Lowerer::new(&mut cont_module).lower_entry(erased_term, &Frame::new());
+    let (resume, region) = Lowerer::new(&mut cont_module).lower_module(erased, &Frame::new());
 
     let entry = cont::FuncName::from("main");
 

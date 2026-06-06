@@ -2,10 +2,19 @@ use {
     super::to_cont,
     crate::{
         cont,
-        ersd::{Apply, Func, Let, Name, NatMatch, Prim, Rec, Term, Tuple},
+        ersd::{Apply, Func, Let, Module, Name, NatMatch, Prim, Rec, Term, Tuple},
     },
     std::collections::BTreeMap,
 };
+
+// These tests exercise the lowerer on whole erased *terms*; wrap each as the
+// entrypoint `body` of an item-less `Module` (the shape `to_cont` now takes).
+fn lower(term: Term) -> cont::Module {
+    to_cont(&Module {
+        items: vec![],
+        body: term,
+    })
+}
 
 #[test]
 fn lowers_recursive_pairs_into_main_region_values() {
@@ -30,7 +39,7 @@ fn lowers_recursive_pairs_into_main_region_values() {
         tail: Term::Name(Name::from("x")).into(),
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
 
     assert!(module.consts().is_empty());
     assert!(module.clsrs().is_empty());
@@ -86,7 +95,7 @@ fn lowers_tail_apply_as_indirect_call_to_resume() {
         params: vec![Term::Prim(Prim::Int(7)).into()],
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
 
     assert_eq!(module.clsrs().len(), 1);
 
@@ -117,7 +126,7 @@ fn lowers_arr_into_main_region_value() {
         .into(),
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
     let func = &module.funcs()[0].1;
 
     assert!(func.region.values.iter().any(|(_, value)| matches!(
@@ -142,7 +151,7 @@ fn lowers_arr_with_apply_element_through_join_block() {
         Term::Prim(Prim::Nat(2)).into(),
     ]));
 
-    let module = to_cont(&term);
+    let module = lower(term);
     let func = &module.funcs()[0].1;
 
     assert_eq!(func.region.blocks.len(), 1);
@@ -173,7 +182,7 @@ fn lowers_apply_in_value_position_through_join_block() {
         ],
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
     let func = &module.funcs()[0].1;
 
     assert_eq!(func.region.blocks.len(), 1);
@@ -205,7 +214,7 @@ fn lowers_nat_match_as_sparse_match() {
         default: Term::Prim(Prim::Nat(0)).into(),
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
     let func = &module.funcs()[0].1;
 
     let cont::Tail::Match(cont::MatchTarget { cases, default, .. }) = &func.region.tail else {
@@ -220,7 +229,7 @@ fn lowers_nat_match_as_sparse_match() {
 #[test]
 fn lowers_bin_literal() {
     let term = Term::Prim(Prim::Bin(vec![1, 2, 3]));
-    let module = to_cont(&term);
+    let module = lower(term);
 
     let func = &module.funcs()[0].1;
     let has_bin = func.region.values.iter().any(|(_, value)| {
@@ -253,7 +262,7 @@ fn recursive_pairs_declare_preallocs() {
         tail: Term::Name(Name::from("x")).into(),
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
     let func = &module.funcs()[0].1;
 
     // Both mutually-referential tuples are prealloc'd so their shells exist before fill.
@@ -295,7 +304,7 @@ fn lowers_cross_region_rec_through_resume_block() {
         tail: Term::Name(Name::from("f")).into(),
     });
 
-    let module = to_cont(&term);
+    let module = lower(term);
     let func = &module.funcs()[0].1;
 
     // `f`'s closure shell is declared at region entry.
@@ -337,5 +346,5 @@ fn rejects_apply_apply_cycle() {
         tail: Term::Name(Name::from("a")).into(),
     });
 
-    to_cont(&term);
+    lower(term);
 }

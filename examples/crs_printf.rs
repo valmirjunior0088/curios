@@ -56,13 +56,18 @@ fn main() {
         .parse::<text::Entrypoint>()
         .expect("failed to parse ill-typed source");
 
-    let core_term = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
-        .expect("expected lowered term")
-        .term;
-    let core_type = core::infer(&mut core::Context::new(timeout), &core_term);
+    let module = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
+        .expect("expected lowered module");
+    // Elaborating the module type-checks every top-level item, then the body
+    // `printf("%d")("Alice")` — where the mismatch surfaces.
+    let result = core::elaborate_module(
+        &mut core::Context::new(timeout),
+        &module,
+        core::Mode::Infer,
+    );
 
     assert!(matches!(
-        &core_type,
+        &result,
         Err(core::Error::Located { error, .. })
             if matches!(error.as_ref(), core::Error::TypeMismatch { .. })
     ));

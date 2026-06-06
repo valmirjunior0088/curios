@@ -12,7 +12,7 @@ fn context() -> Context {
 }
 
 fn lower(entrypoint: &text::Entrypoint, loader: &dyn text::Loader) -> Term {
-    text::to_core(entrypoint, loader).unwrap().term
+    text::to_core(entrypoint, loader).unwrap().into_nested_term()
 }
 
 #[test]

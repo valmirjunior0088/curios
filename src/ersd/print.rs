@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Func, Let, Match, NatMatch, Prim, Proj, Rec, Term, Tuple},
+    super::{Atom, Func, Item, Let, Match, Module, NatMatch, Prim, Proj, Rec, Term, Tuple},
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
@@ -287,5 +287,34 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
 impl Display for Term {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         run_printer(print_term(self), formatter, 2)
+    }
+}
+
+impl Display for Module {
+    // Iterates the flat items (each body printed via `Term`'s `Display`) — O(N),
+    // so `--print ersd` cannot re-trigger the prelude-depth overflow.
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
+        for item in &self.items {
+            match item {
+                Item::Let { name, body } => {
+                    writeln!(formatter, "let #{name} =\n{body};\n")?;
+                }
+                Item::Rec { names, items } => {
+                    write!(formatter, "rec ")?;
+
+                    for (index, (name, body)) in names.iter().zip(items).enumerate() {
+                        if index > 0 {
+                            write!(formatter, "and ")?;
+                        }
+
+                        write!(formatter, "#{name} =\n{body} ")?;
+                    }
+
+                    writeln!(formatter, ";")?;
+                }
+            }
+        }
+
+        write!(formatter, "{}", self.body)
     }
 }

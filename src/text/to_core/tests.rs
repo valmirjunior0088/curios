@@ -10,7 +10,7 @@ use {
 fn run(src: &str) -> core::Term {
     super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader)
         .unwrap()
-        .term
+        .into_nested_term()
 }
 
 fn run_err(src: &str) -> String {
