@@ -170,8 +170,7 @@ fn trim_clsr_data(data: &mut Data, drops: &HashMap<ClsrName, HashSet<usize>>) {
 
 /// The positions of `args` whose name does not appear in `used`.
 fn dead_positions(args: &[Argument], used: &HashSet<ValueName>) -> HashSet<usize> {
-    args
-        .iter()
+    args.iter()
         .enumerate()
         .filter(|(_, arg)| !used.contains(&arg.name))
         .map(|(index, _)| index)
@@ -249,7 +248,11 @@ mod tests {
     #[test]
     fn drops_unused_param_and_trims_its_direct_calls() {
         // f(a, b) = b; the unused `a` and the matching call argument are dropped.
-        let f = func(vec![v("a"), v("b")], "rf", region(vec![], ret("rf", v("b"))));
+        let f = func(
+            vec![v("a"), v("b")],
+            "rf",
+            region(vec![], ret("rf", v("b"))),
+        );
 
         let caller = func(
             vec![],
@@ -364,7 +367,11 @@ mod tests {
             "rf",
             region(vec![(v("r"), Value::Pure(Data::Nat(0)))], ret("rf", v("r"))),
         );
-        let g = func(vec![v("x")], "rg", region(vec![], direct("f", vec![v("x")], "rg")));
+        let g = func(
+            vec![v("x")],
+            "rg",
+            region(vec![], direct("f", vec![v("x")], "rg")),
+        );
         let main = func(
             vec![],
             "rm",

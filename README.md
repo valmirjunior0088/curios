@@ -27,7 +27,7 @@ curios [--timeout MILLIS] [--print] <run|check|compile> <input-path> [--output-p
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,wasm`. Bare `--print` selects all; omitting the flag prints none.
+- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,optm,wasm`. Bare `--print` selects all; omitting the flag prints none.
 - `run` compiles and executes the entrypoint
 - `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
 - `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
@@ -49,19 +49,17 @@ curios run hello.crs
 
 The `examples/` directory contains end-to-end Rust programs that drive the full compiler pipeline. Two are particularly instructive:
 
-**Typed format strings** (`examples/crs_printf.rs`) — calls `fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
+**Typed format strings** (`examples/crs_printf.rs`) — calls `/std/Fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
 
 ```
-pub mod fmt;
-fmt/printf("%s is %d")("Alice")(30)
+/std/Fmt/printf("%s is %d")("Alice")(30)
 -- output: "Alice is 30"
 ```
 
 Passing the wrong type is a compile-time error, not a runtime failure:
 
 ```
-pub mod fmt;
-fmt/printf("%d")("Alice")
+/std/Fmt/printf("%d")("Alice")
 -- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Bin
 ```
 

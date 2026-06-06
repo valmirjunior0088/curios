@@ -37,8 +37,7 @@ pub fn run<H: Host + Send + Sync + 'static>(
 ) -> Result<(), String> {
     let entrypoint = source
         .parse::<text::Entrypoint>()
-        .map_err(|error| error.format())?
-        .with_prelude();
+        .map_err(|error| error.format())?;
 
     run_entrypoint(timeout, &entrypoint, &text::NullLoader, host)
 }
@@ -56,9 +55,7 @@ pub fn run_file<H: Host + Send + Sync + 'static>(
     path: &Path,
     host: H,
 ) -> Result<(), String> {
-    let entrypoint = text::Entrypoint::from_path(path)
-        .map_err(|error| error.format())?
-        .with_prelude();
+    let entrypoint = text::Entrypoint::from_path(path).map_err(|error| error.format())?;
     let loader = text::FileLoader::new(path.parent().unwrap_or(Path::new(".")));
 
     run_entrypoint(timeout, &entrypoint, &loader, host)

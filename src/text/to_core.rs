@@ -182,12 +182,12 @@ fn process_items(
                 }
             }
             TopItem::Let(let_item) => {
-                let elab = Elaborate::new(context);
+                let elaborate = Elaborate::new(context);
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
-                    type_: elab.term(&let_item.signature.type_())?,
-                    body: elab.term(&let_item.signature.body())?,
+                    type_: elaborate.term(&let_item.signature.type_())?,
+                    body: elaborate.term(&let_item.signature.body())?,
                 }));
             }
             TopItem::Rec(ls) => {
@@ -207,91 +207,82 @@ fn process_items(
                 flat_items.push(FlatItem::Rec(items));
             }
             TopItem::Union(unions) => {
-                // Step 1: emit type bindings as a single rec group.
+                // Step 1: type bindings as one rec group. Each union desugars to a
+                // tagged-tuple type, wrapped in a `Func` over its type parameters
+                // when present — the capture binds the parameter names referenced
+                // in the variant payload telescopes.
                 let type_flat_items = unions
                     .iter()
                     .map(|u| {
-                        let elab = Elaborate::new(context);
+                        let elaborate = Elaborate::new(context);
 
-                        // Build atom type '[c_1, ..., c_m]
-                        let atom_type: Term = Subterm::AtomType(AtomType {
-                            atoms: u
-                                .cases
-                                .iter()
-                                .map(|c| Atom::from(c.label.as_str()))
-                                .collect(),
-                        })
-                        .into();
-
-                        // For each case build payload tuple type.
-                        let match_cases = u
+                        let variants = u
                             .cases
                             .iter()
                             .map(|c| {
-                                let payload: Term = Subterm::TupleType(TupleType {
-                                    fields: c
-                                        .payload_types
-                                        .iter()
-                                        .map(|t| (None, t.clone()))
-                                        .collect::<Vec<_>>(),
-                                })
-                                .into();
-                                (Atom::from(c.label.as_str()), payload)
+                                let fields = c
+                                    .payload_types
+                                    .iter()
+                                    .map(|t| Ok((String::new(), elaborate.term(t)?)))
+                                    .collect::<Result<Vec<(String, core::Term)>, Error>>()?;
+                                Ok((
+                                    core::Atom::from(c.label.as_str()),
+                                    core::Telescope::build(fields, ()),
+                                ))
                             })
-                            .collect::<BTreeMap<_, _>>();
+                            .collect::<Result<BTreeMap<core::Atom, core::Telescope<()>>, Error>>()?;
 
-                        // match tag : Type | 'c_i => payload_i ...
-                        let tag_match: Term = Subterm::Match(Match::Atom(AtomMatch {
-                            head: Subterm::Name(Name::from(vec!["tag".to_string()])).into(),
-                            motive: Motive {
-                                label: None,
-                                body: Subterm::Type.into(),
-                            },
-                            cases: match_cases,
-                        }))
-                        .into();
-
-                        // { tag : '[...], <match> }
-                        let tagged_tuple: Term = Subterm::TupleType(TupleType {
-                            fields: vec![(Some("tag".to_string()), atom_type), (None, tag_match)],
+                        // Desugar the union type to a tagged-tuple type
+                        // `{ tag : '[c_1, ...], match tag { 'c_i => (payload_i...) } }`.
+                        // `tuple_type` captures the `tag` binder, shifting any escaping
+                        // union-parameter indices in the payload telescopes by one.
+                        let atom_type = core::Term::atom_type(variants.keys().cloned());
+                        let tag_match: core::Term = core::Subterm::Match(core::Match {
+                            head: core::Term::var(core::Var::free("tag")),
+                            motive: core::Scope::constant(core::One, core::Term::type_()),
+                            cases: variants
+                                .into_iter()
+                                .map(|(a, telescope)| {
+                                    let payload =
+                                        core::Subterm::TupleType(core::TupleType { telescope })
+                                            .into();
+                                    (a, payload)
+                                })
+                                .collect(),
                         })
                         .into();
+                        let union: core::Term =
+                            core::Term::tuple_type([("tag", atom_type), ("", tag_match)]);
 
-                        // For parameterized unions wrap in a function.
-                        let (type_ann, type_body): (Term, Term) = if u.params.is_empty() {
-                            (Subterm::Type.into(), tagged_tuple)
+                        let (type_, body) = if u.params.is_empty() {
+                            (core::Term::type_(), union)
                         } else {
-                            let func_type: Term = Subterm::FuncType(FuncType {
-                                params: u
-                                    .params
-                                    .iter()
-                                    .map(|(n, t)| (Some(n.clone()), t.clone()))
-                                    .collect(),
-                                output: Subterm::Type.into(),
-                            })
-                            .into();
-                            let func_body: Term = Subterm::Func(Func {
-                                params: u.params.iter().map(|(n, _)| n.clone()).collect(),
-                                body: tagged_tuple,
-                            })
-                            .into();
-                            (func_type, func_body)
+                            let param_tys = u
+                                .params
+                                .iter()
+                                .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
+                                .collect::<Result<Vec<_>, Error>>()?;
+                            let labels = u.params.iter().map(|(n, _)| n.clone());
+                            (
+                                core::Term::func_type(param_tys, core::Term::type_()),
+                                core::Term::func(labels, union),
+                            )
                         };
 
                         Ok(FlatLet {
                             name: context.prefixed(&u.label),
-                            type_: elab.term(&type_ann)?,
-                            body: elab.term(&type_body)?,
+                            type_,
+                            body,
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
                 flat_items.push(FlatItem::Rec(type_flat_items));
 
-                // Step 2 & 3: for each union emit constructor bindings. The
-                // constructor module's interface is materialized in phase 2.
+                // Step 2: constructor bindings. Each is a function whose body
+                // injects the variant as a tagged tuple.
                 for u in unions {
-                    // Build the output type term: T or T(A, B, ...).
+                    // Output type term `T` or `T(A, ...)`, elaborated as a name ref.
                     let output_type: Term = if u.params.is_empty() {
                         Subterm::Name(Name::from(vec![u.label.clone()])).into()
                     } else {
@@ -308,59 +299,44 @@ fn process_items(
 
                     for c in &u.cases {
                         let k = c.payload_types.len();
-                        let elab = Elaborate::new(context);
+                        let elaborate = Elaborate::new(context);
 
-                        // Constructor type: (type_params..., _0 : T_0, ...) -> T
-                        let all_params: Vec<(Option<String>, Term)> = u
+                        // Constructor type: (params..., _0 : T_0, ...) -> T
+                        let param_tys = u
                             .params
                             .iter()
-                            .map(|(n, t)| (Some(n.clone()), t.clone()))
+                            .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
                             .chain(
                                 c.payload_types
                                     .iter()
                                     .enumerate()
-                                    .map(|(i, t)| (Some(format!("_{i}")), t.clone())),
+                                    .map(|(i, t)| Ok((format!("_{i}"), elaborate.term(t)?))),
                             )
-                            .collect();
+                            .collect::<Result<Vec<_>, Error>>()?;
+                        let ctor_type =
+                            core::Term::func_type(param_tys, elaborate.term(&output_type)?);
 
-                        let ctor_type_term: Term = Subterm::FuncType(FuncType {
-                            params: all_params,
-                            output: output_type.clone(),
-                        })
-                        .into();
-
-                        // Constructor body: (type_params..., _0, ...) => ('c, (_0, ...))
-                        let all_param_names: Vec<String> = u
+                        // Constructor body: (params..., _0, ...) => inject 'c (_0, ...)
+                        let labels: Vec<String> = u
                             .params
                             .iter()
                             .map(|(n, _)| n.clone())
                             .chain((0..k).map(|i| format!("_{i}")))
                             .collect();
-
-                        let payload_fields: Vec<Term> = (0..k)
-                            .map(|i| Subterm::Name(Name::from(vec![format!("_{i}")])).into())
+                        let args: Vec<core::Term> = (0..k)
+                            .map(|i| core::Term::var(core::Var::free(format!("_{i}"))))
                             .collect();
-                        let payload_tuple: Term = Subterm::Tuple(Tuple {
-                            fields: payload_fields,
-                        })
-                        .into();
-
-                        let ctor_body_term: Term = Subterm::Func(Func {
-                            params: all_param_names,
-                            body: Subterm::Tuple(Tuple {
-                                fields: vec![
-                                    Subterm::Atom(Atom::from(c.label.as_str())).into(),
-                                    payload_tuple,
-                                ],
-                            })
-                            .into(),
-                        })
-                        .into();
+                        // Desugar the injection to a tagged tuple `('c, (args...))`.
+                        let inject: core::Term = core::Term::tuple([
+                            core::Term::atom(core::Atom::from(c.label.as_str())),
+                            core::Term::tuple(args),
+                        ]);
+                        let ctor_body = core::Term::func(labels, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
-                            type_: elab.term(&ctor_type_term)?,
-                            body: elab.term(&ctor_body_term)?,
+                            type_: ctor_type,
+                            body: ctor_body,
                         }));
                     }
                 }
@@ -392,7 +368,12 @@ fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
         };
 
         lets.iter()
-            .flat_map(|let_| let_.type_.free_vars().into_iter().chain(let_.body.free_vars()))
+            .flat_map(|let_| {
+                let_.type_
+                    .free_vars()
+                    .into_iter()
+                    .chain(let_.body.free_vars())
+            })
             .collect()
     };
 
@@ -435,7 +416,10 @@ fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
     }
 
     let mut slots: Vec<Option<FlatItem>> = items.into_iter().map(Some).collect();
-    order.into_iter().map(|node| slots[node].take().unwrap()).collect()
+    order
+        .into_iter()
+        .map(|node| slots[node].take().unwrap())
+        .collect()
 }
 
 fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
@@ -450,13 +434,41 @@ fn fold_flat_item(acc: core::Term, item: FlatItem) -> core::Term {
     }
 }
 
+/// The result of `text → core`: the assembled program (and optional type
+/// annotation) as `core` terms.
 #[derive(Debug)]
 pub struct Lowered {
     pub term: core::Term,
     pub type_: Option<core::Term>,
 }
 
+// A bodyless `pub mod <label>;` declaration. We synthesize one per `Loader::roots`
+// entry and prepend it to the entrypoint, so a loader's root modules (`sys`, `std`)
+// are discovered, interfaced, and resolvable exactly as if the entrypoint declared
+// them — without every entrypoint having to.
+fn declaration(label: &str) -> TopItem {
+    TopItem::Mod(TopMod {
+        span: None,
+        is_pub: true,
+        label: label.to_string(),
+        module: None,
+    })
+}
+
 pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Lowered, Error> {
+    let entrypoint = &Entrypoint {
+        module: Module {
+            items: loader
+                .roots()
+                .iter()
+                .map(|label| declaration(label))
+                .chain(entrypoint.module.items.iter().cloned())
+                .collect(),
+        },
+        type_: entrypoint.type_.clone(),
+        tail: entrypoint.tail.clone(),
+    };
+
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let mut context = Context::new(&table, &public);

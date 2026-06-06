@@ -1,6 +1,6 @@
 use super::{
-    GroupItem, LetSignature, Module, Name, Prim, Subterm, Term, TopItem, TopLet, TopMod, TopUse,
-    TupleType, UseGroup,
+    Error, LetSignature, Loader, Module, Name, Prim, Qualifier, Subterm, Term, TopItem, TopLet,
+    TopMod, TupleType,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -241,89 +241,121 @@ fn io_ops() -> Vec<TopItem> {
     ]
 }
 
-// The `std` module is the canonical standard library. Unlike `sys`, its bodies
-// are real Curios source kept alongside the compiler (`std/*.crs`), embedded here
-// with `include_str!`. The former `std.crs` manifest — the `pub mod`/`pub use`
-// declarations that stitched the submodules together — is reconstructed in Rust
-// below. `std` being well-formed is a compiler invariant, so a parse failure is a
-// `panic!`, not a recoverable error.
-//
-// Each entry is `(label, source, reexport)`: `reexport` mirrors the
-// `pub use <label>/{let <label>};` re-export of a submodule's headline binding.
-const STD_MODULES: &[(&str, &str, bool)] = &[
-    ("Arr", include_str!("../../std/Arr.crs"), true),
-    ("Bin", include_str!("../../std/Bin.crs"), true),
-    ("Nat", include_str!("../../std/Nat.crs"), true),
-    ("Int", include_str!("../../std/Int.crs"), true),
-    ("Bln", include_str!("../../std/Bln.crs"), true),
-    ("Io", include_str!("../../std/Io.crs"), false),
-    ("Char", include_str!("../../std/Char.crs"), false),
-    ("Result", include_str!("../../std/Result.crs"), true),
-    ("Option", include_str!("../../std/Option.crs"), true),
-    ("Flt", include_str!("../../std/Flt.crs"), true),
-    ("Str", include_str!("../../std/Str.crs"), false),
-    ("Parse", include_str!("../../std/Parse.crs"), true),
-    ("Json", include_str!("../../std/Json.crs"), true),
-];
-
-fn std_submodule(label: &str, source: &str) -> Module {
-    source
-        .parse::<Module>()
-        .unwrap_or_else(|error| panic!("std/{label}.crs is malformed: {error:?}"))
+// The `sys` module body of primitive types and operations, served to discovery by
+// `SysLoader` like any other loaded module.
+fn sys_module() -> Module {
+    Module {
+        items: vec![
+            pub_let("Nat", type_(), nat()),
+            pub_let("Int", type_(), int()),
+            pub_let("Flt", type_(), flt()),
+            pub_let("Bin", type_(), bin()),
+            pub_let("Bln", type_(), bln()),
+            pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
+            pub_mod("Nat", nat_ops()),
+            pub_mod("Int", int_ops()),
+            pub_mod("Flt", flt_ops()),
+            pub_mod("Bin", bin_ops()),
+            pub_mod("Arr", arr_ops()),
+            pub_mod("Io", io_ops()),
+        ],
+    }
 }
 
-fn std_reexport(label: &str) -> TopItem {
-    TopItem::Use(TopUse {
-        is_pub: true,
-        name: Name::from([label.to_string()]),
-        group: UseGroup::Named(vec![GroupItem::Let(label.to_string())]),
-    })
-}
-
-pub fn std() -> TopItem {
-    let mut items = Vec::new();
-
-    for &(label, source, reexport) in STD_MODULES {
-        items.push(TopItem::Mod(TopMod {
-            span: None,
-            is_pub: true,
-            label: label.to_string(),
-            module: Some(std_submodule(label, source)),
-        }));
-
-        if reexport {
-            items.push(std_reexport(label));
-        }
+// A `&L` is itself a `Loader`, so a `&dyn Loader` can be nested inside the prelude
+// decorators (which take their inner loader by value) without lifetime gymnastics.
+impl<L: Loader + ?Sized> Loader for &L {
+    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
+        (**self).load(qualifier)
     }
 
-    TopItem::Mod(TopMod {
-        span: None,
-        is_pub: true,
-        label: "std".to_string(),
-        module: Some(Module { items }),
-    })
+    fn roots(&self) -> Vec<String> {
+        (**self).roots()
+    }
 }
 
-pub fn prelude() -> TopItem {
-    let items = vec![
-        pub_let("Nat", type_(), nat()),
-        pub_let("Int", type_(), int()),
-        pub_let("Flt", type_(), flt()),
-        pub_let("Bin", type_(), bin()),
-        pub_let("Bln", type_(), bln()),
-        pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
-        pub_mod("Nat", nat_ops()),
-        pub_mod("Int", int_ops()),
-        pub_mod("Flt", flt_ops()),
-        pub_mod("Bin", bin_ops()),
-        pub_mod("Arr", arr_ops()),
-        pub_mod("Io", io_ops()),
-    ];
+// Serves the `sys` module of primitives, delegating everything else to `inner`. `sys`
+// is built directly as `text` AST (never parsed); only `["sys"]` is ever asked for it.
+pub struct SysLoader<L> {
+    inner: L,
+}
 
-    TopItem::Mod(TopMod {
-        span: None,
-        is_pub: true,
-        label: "sys".to_string(),
-        module: Some(Module { items }),
-    })
+impl<L: Loader> Loader for SysLoader<L> {
+    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
+        if qualifier.iter().eq(["sys"]) {
+            return Ok(sys_module());
+        }
+
+        self.inner.load(qualifier)
+    }
+
+    fn roots(&self) -> Vec<String> {
+        self.inner
+            .roots()
+            .into_iter()
+            .chain(["sys".to_string()])
+            .collect()
+    }
+}
+
+// The `std` standard library, authored as real Curios source kept alongside the
+// compiler (`std/*.crs`) and embedded in the binary. The `["std"]` entry is the
+// manifest of `pub mod`/`pub use` declarations; each leaf is its own module. `std`
+// being well-formed is a compiler invariant, so a parse failure is a `panic!`.
+const STD: &[(&[&str], &str)] = &[
+    (&["std"], include_str!("../../std.crs")),
+    (&["std", "Arr"], include_str!("../../std/Arr.crs")),
+    (&["std", "Bin"], include_str!("../../std/Bin.crs")),
+    (&["std", "Nat"], include_str!("../../std/Nat.crs")),
+    (&["std", "Int"], include_str!("../../std/Int.crs")),
+    (&["std", "Bln"], include_str!("../../std/Bln.crs")),
+    (&["std", "Io"], include_str!("../../std/Io.crs")),
+    (&["std", "Char"], include_str!("../../std/Char.crs")),
+    (&["std", "Result"], include_str!("../../std/Result.crs")),
+    (&["std", "Option"], include_str!("../../std/Option.crs")),
+    (&["std", "Lst"], include_str!("../../std/Lst.crs")),
+    (&["std", "Flt"], include_str!("../../std/Flt.crs")),
+    (&["std", "Str"], include_str!("../../std/Str.crs")),
+    (&["std", "Parse"], include_str!("../../std/Parse.crs")),
+    (&["std", "Json"], include_str!("../../std/Json.crs")),
+    (&["std", "Fmt"], include_str!("../../std/Fmt.crs")),
+];
+
+// Serves the embedded `std` modules, delegating everything else to `inner`.
+pub struct StdLoader<L> {
+    inner: L,
+}
+
+impl<L: Loader> Loader for StdLoader<L> {
+    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
+        let path = qualifier.iter().collect::<Vec<_>>();
+
+        if let Some((_, source)) = STD.iter().find(|(segments, _)| path == **segments) {
+            return Ok(source.parse::<Module>().unwrap_or_else(|error| {
+                panic!(
+                    "embedded std module {} is malformed: {error:?}",
+                    qualifier.join()
+                )
+            }));
+        }
+
+        self.inner.load(qualifier)
+    }
+
+    fn roots(&self) -> Vec<String> {
+        self.inner
+            .roots()
+            .into_iter()
+            .chain(["std".to_string()])
+            .collect()
+    }
+}
+
+/// Wrap a loader so `sys` and `std` resolve from the binary and everything else falls
+/// through to `inner`. The wrapped loader also reports `sys` and `std` from
+/// [`Loader::roots`], so `to_core` declares them at the entrypoint root automatically.
+pub fn prelude<L: Loader>(inner: L) -> impl Loader {
+    SysLoader {
+        inner: StdLoader { inner },
+    }
 }

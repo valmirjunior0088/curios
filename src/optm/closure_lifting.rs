@@ -222,7 +222,10 @@ mod tests {
                 vec![
                     (v("a"), Value::Pure(Data::Nat(1))),
                     (v("arg"), Value::Pure(Data::Nat(2))),
-                    (v("clo"), Value::Pure(Data::Clsr(ClsrName::from("c0"), vec![v("a")]))),
+                    (
+                        v("clo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("c0"), vec![v("a")])),
+                    ),
                 ],
                 indirect("clo", vec![v("arg")]),
             ),

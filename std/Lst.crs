@@ -1,0 +1,55 @@
+use /std/{Arr, Nat};
+
+-- A cons-list: a persistent sequence with O(1) prepend, meant for the
+-- accumulate-then-materialize pattern. Building an `Arr(A)` by repeated
+-- `Arr/append` is O(n^2) — each append copies the whole array — so a parser that
+-- collects n elements pays O(n^2). Collect into a `Lst` instead (O(1) per element)
+-- and convert once with `to_arr`, whose balanced divide-and-conquer concat is
+-- O(n log n): the pure-std optimum given only a binary `Arr/concat`.
+pub union Lst(A : Type)
+| nil()
+| cons(A, Lst(A))
+end
+
+pub use Lst/*;
+
+pub let len(A : Type, l : Lst(A)) -> Nat =
+    rec go(rest : Lst(A), acc : Nat) -> Nat =
+        match rest : Nat
+        | nil() => acc
+        | cons(_, tail) => go(tail, Nat/add(acc, 1))
+        end;
+    go(l, 0);
+
+-- Reverse the list (O(n)). Collecting with `cons` yields elements in reverse
+-- parse order, so callers `rev` before `to_arr` to restore order.
+pub let rev(A : Type, l : Lst(A)) -> Lst(A) =
+    rec go(rest : Lst(A), acc : Lst(A)) -> Lst(A) =
+        match rest : Lst(A)
+        | nil() => acc
+        | cons(x, tail) => go(tail, Lst/cons(A, x, acc))
+        end;
+    go(l, Lst/nil(A));
+
+-- Materialize to `Arr(A)` in O(n log n). `go(rest, k)` peels the first `k` elements
+-- of `rest` into an array, splitting in half so each of the log n levels concats a
+-- total of n elements once — versus the O(n^2) of folding with `Arr/append`.
+pub let to_arr(A : Type, l : Lst(A)) -> Arr(A) =
+    rec go(rest : Lst(A), n : Nat) -> { Arr(A), Lst(A) } =
+        match Nat/lt(n, 2) : { Arr(A), Lst(A) }
+        | true =>
+            match rest : { Arr(A), Lst(A) }
+            | nil() => ([], rest)
+            | cons(x, tail) =>
+                match Nat/eql(n, 0) : { Arr(A), Lst(A) }
+                | true => ([], rest)
+                | false => ([x], tail)
+                end
+            end
+        | false =>
+            let half : Nat = Nat/div(n, 2);
+            let left : { Arr(A), Lst(A) } = go(rest, half);
+            let right : { Arr(A), Lst(A) } = go(left.1, Nat/sub(n, half));
+            (Arr/concat(A, left.0, right.0), right.1)
+        end;
+    (go(l, len(A, l))).0;

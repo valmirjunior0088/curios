@@ -165,13 +165,22 @@ fn inline_at(host: &mut Region, callee_name: &FuncName, callee: &Func) {
     // covers the big `Code` operand match), then binders, block names, and the
     // resume sentinel.
     let mut body = callee.region.clone();
-    walk_region_mut(&mut body, &mut Freshen { bound: &bound, suffix: &suffix });
+    walk_region_mut(
+        &mut body,
+        &mut Freshen {
+            bound: &bound,
+            suffix: &suffix,
+        },
+    );
     freshen_structure(&mut body, &bound, &suffix, &callee.resume, &resume);
 
     // Bind each (freshened) parameter to its argument; copy propagation collapses
     // these aliases on its next run.
     let param_aliases = callee.params.iter().zip(&args).map(|(param, arg)| {
-        (suffixed_value(&param.name, &suffix), Value::Alias(arg.clone()))
+        (
+            suffixed_value(&param.name, &suffix),
+            Value::Alias(arg.clone()),
+        )
     });
 
     host.preallocs.extend(body.preallocs);
@@ -295,7 +304,11 @@ mod tests {
         BlockName::from(name)
     }
 
-    fn region(values: Vec<(ValueName, Value)>, blocks: Vec<(BlockName, Block)>, tail: Tail) -> Region {
+    fn region(
+        values: Vec<(ValueName, Value)>,
+        blocks: Vec<(BlockName, Block)>,
+        tail: Tail,
+    ) -> Region {
         Region {
             preallocs: vec![],
             values,
@@ -378,10 +391,12 @@ mod tests {
         let region = main_region(&module);
 
         // The parameter is bound to the argument as a fresh alias.
-        assert!(region
-            .values
-            .iter()
-            .any(|(n, val)| n == &v("p@f") && matches!(val, Value::Alias(a) if a == &v("a"))));
+        assert!(
+            region
+                .values
+                .iter()
+                .any(|(n, val)| n == &v("p@f") && matches!(val, Value::Alias(a) if a == &v("a")))
+        );
 
         // The body's compute is freshened and its operands point at the bound param.
         assert!(region.values.iter().any(|(n, val)| n == &v("v0@f")
@@ -488,7 +503,11 @@ mod tests {
     fn leaves_self_recursive_callee_alone() {
         // f's single call site is its own recursive tail; inlining would not
         // terminate, so it is skipped.
-        let f = func(vec![], "r", region(vec![], vec![], direct("f", vec![], "r")));
+        let f = func(
+            vec![],
+            "r",
+            region(vec![], vec![], direct("f", vec![], "r")),
+        );
 
         let mut module = Module::new();
         module.add_func(FuncName::from("f"), f);

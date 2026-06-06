@@ -228,7 +228,11 @@ mod tests {
         // The block is gone; its param is bound to the argument and its body and
         // tail are spliced in.
         assert!(result.blocks.is_empty());
-        let names = result.values.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
+        let names = result
+            .values
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect::<Vec<_>>();
         assert_eq!(names, vec![v("a"), v("p"), v("r")]);
         assert!(matches!(&result.values[0].1, Value::Pure(Data::Nat(1))));
         assert!(matches!(&result.values[1].1, Value::Alias(a) if a == &v("a")));
@@ -248,7 +252,10 @@ mod tests {
         let result = run(region(
             vec![],
             vec![
-                (b("b1"), block(vec![], region(vec![], vec![], jump("b2", vec![])))),
+                (
+                    b("b1"),
+                    block(vec![], region(vec![], vec![], jump("b2", vec![]))),
+                ),
                 (
                     b("b2"),
                     block(
@@ -265,7 +272,11 @@ mod tests {
         ));
 
         assert!(result.blocks.is_empty());
-        let names = result.values.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
+        let names = result
+            .values
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect::<Vec<_>>();
         assert_eq!(names, vec![v("r")]);
         assert!(matches!(&result.values[0].1, Value::Pure(Data::Nat(0))));
         assert!(matches!(&result.tail, Tail::Jump(j) if j.target == b("rm")));
@@ -281,7 +292,10 @@ mod tests {
                     b("j"),
                     block(vec![], region(vec![], vec![], jump("rm", vec![]))),
                 ),
-                (b("d"), block(vec![], region(vec![], vec![], jump("j", vec![])))),
+                (
+                    b("d"),
+                    block(vec![], region(vec![], vec![], jump("j", vec![]))),
+                ),
             ],
             jump("j", vec![]),
         ));

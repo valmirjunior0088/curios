@@ -162,7 +162,11 @@ impl<'a> Context<'a> {
         let mut current = start;
 
         for segment in segments {
-            match self.public.get(&current).and_then(|i| i.children.get(segment)) {
+            match self
+                .public
+                .get(&current)
+                .and_then(|i| i.children.get(segment))
+            {
                 Some(entry) => current = entry.target.clone(),
                 None => return Err(self.child_error(&current, segment)),
             }
@@ -172,7 +176,11 @@ impl<'a> Context<'a> {
     }
 
     fn child_error(&self, module: &Qualifier, segment: &str) -> Error {
-        match self.table.get(module).and_then(|info| info.get_child(segment)) {
+        match self
+            .table
+            .get(module)
+            .and_then(|info| info.get_child(segment))
+        {
             Some(false) => Error::PrivateChildModule {
                 segment: segment.to_string(),
             },
@@ -217,15 +225,17 @@ impl<'a> Context<'a> {
                 self.insert_scope(label.to_string(), target.clone())?;
                 Ok(target)
             }
-            None => Err(match self.table.get(parent).and_then(|i| i.get_child(label)) {
-                Some(false) => Error::PrivateChildModule {
-                    segment: label.to_string(),
+            None => Err(
+                match self.table.get(parent).and_then(|i| i.get_child(label)) {
+                    Some(false) => Error::PrivateChildModule {
+                        segment: label.to_string(),
+                    },
+                    _ => Error::NotAModule {
+                        label: label.to_string(),
+                        parent: parent.join(),
+                    },
                 },
-                _ => Error::NotAModule {
-                    label: label.to_string(),
-                    parent: parent.join(),
-                },
-            }),
+            ),
         }
     }
 
@@ -242,15 +252,17 @@ impl<'a> Context<'a> {
                 self.insert_binding(label.to_string(), target.clone())?;
                 Ok(target)
             }
-            None => Err(match self.table.get(parent).and_then(|i| i.get_binding(label)) {
-                Some(false) => Error::PrivateBinding {
-                    binding: label.to_string(),
+            None => Err(
+                match self.table.get(parent).and_then(|i| i.get_binding(label)) {
+                    Some(false) => Error::PrivateBinding {
+                        binding: label.to_string(),
+                    },
+                    _ => Error::NotABinding {
+                        label: label.to_string(),
+                        parent: parent.join(),
+                    },
                 },
-                _ => Error::NotABinding {
-                    label: label.to_string(),
-                    parent: parent.join(),
-                },
-            }),
+            ),
         }
     }
 
@@ -393,12 +405,18 @@ impl<'a> Context<'a> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 
-            match self.public.get(&parent).and_then(|i| i.bindings.get(&label)) {
+            match self
+                .public
+                .get(&parent)
+                .and_then(|i| i.bindings.get(&label))
+            {
                 Some(entry) => Ok(entry.target.clone()),
-                None => Err(match self.table.get(&parent).and_then(|i| i.get_binding(&label)) {
-                    Some(false) => Error::PrivateBinding { binding: label },
-                    _ => Error::BindingNotFound { binding: label },
-                }),
+                None => Err(
+                    match self.table.get(&parent).and_then(|i| i.get_binding(&label)) {
+                        Some(false) => Error::PrivateBinding { binding: label },
+                        _ => Error::BindingNotFound { binding: label },
+                    },
+                ),
             }
         })();
         result.map_err(|e| attach(e, name))

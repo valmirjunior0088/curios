@@ -5,6 +5,13 @@ use {
 
 pub trait Loader {
     fn load(&self, qualifier: &Qualifier) -> Result<Module, Error>;
+
+    /// Labels of modules this loader always serves at the entrypoint root. Discovery
+    /// synthesizes a `pub mod <label>;` declaration for each, so they are loaded and
+    /// resolvable without the entrypoint declaring them. Defaults to none.
+    fn roots(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 pub struct FileLoader {

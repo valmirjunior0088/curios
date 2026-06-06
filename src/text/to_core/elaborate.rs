@@ -2,11 +2,10 @@ use {
     super::Context,
     crate::{
         core,
-        text::{
-            BinLiteral, Error, Match, Nat, NatLiteral, NatMatch, Prim, Subterm, Term,
-        },
+        text::{BinLiteral, Error, Match, Nat, NatLiteral, NatMatch, Prim, Subterm, Term},
     },
     num_bigint::BigUint,
+    std::collections::BTreeMap,
 };
 
 pub struct Elaborate<'a, 'b> {
@@ -20,15 +19,15 @@ impl<'a, 'b> Elaborate<'a, 'b> {
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
         let span = term.span().cloned();
-        let core = match span.as_ref() {
+        let elaborated = match span.as_ref() {
             Some(s) => self
                 .subterm(term.as_subterm())
                 .map_err(|error| error.at(s.clone()))?,
             None => self.subterm(term.as_subterm())?,
         };
         Ok(match span {
-            Some(s) => core::Term::spanned(s, core),
-            None => core,
+            Some(s) => core::Term::spanned(s, elaborated),
+            None => elaborated,
         })
     }
 
@@ -135,35 +134,45 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                         .collect::<Result<Vec<_>, Error>>()?,
                 ),
                 Match::Union(um) => {
-                    let head_core = self.term(&um.head)?;
-                    let motive_core = self.term(&um.motive.body)?;
-                    let tag = core::Term::proj(head_core.clone(), 0);
+                    // A union match desugars to an atom match on the projected tag:
+                    // the scrutinee's tag (field 0) selects the arm, and each arm's
+                    // binders are bound to the payload's (field 1) projections.
+                    let head = self.term(&um.head)?;
+                    let tag = core::Term::proj(head.clone(), 0);
+                    let payload = core::Term::proj(head, 1);
+
+                    let motive_body = self.term(&um.motive.body)?;
+                    let motive = match um.motive.label.as_deref() {
+                        Some(label) => core::Scope::close(core::One, &[label], motive_body),
+                        None => core::Scope::constant(core::One, motive_body),
+                    };
 
                     let cases = um
                         .cases
                         .iter()
                         .map(|(label, case)| {
-                            let k = case.binders.len();
-                            let body_core = self.term(&case.body)?;
-
-                            let result_body = if k == 0 {
-                                body_core
-                            } else {
-                                let payload = core::Term::proj(head_core.clone(), 1);
-                                let projections = (0..k)
-                                    .map(|i| core::Term::proj(payload.clone(), i))
-                                    .collect::<Vec<_>>();
-                                let binder_strs =
-                                    case.binders.iter().map(String::as_str).collect::<Vec<_>>();
-                                core::Scope::close(core::Many(k), &binder_strs, body_core)
-                                    .open(&projections.iter().collect::<Vec<_>>())
-                            };
-
-                            Ok((core::Atom::from(label.as_str()), result_body))
+                            let body = self.term(&case.body)?;
+                            let binder_strs =
+                                case.binders.iter().map(String::as_str).collect::<Vec<_>>();
+                            let scope = core::Scope::close(
+                                core::Many(case.binders.len()),
+                                &binder_strs,
+                                body,
+                            );
+                            let projections = (0..case.binders.len())
+                                .map(|i| core::Term::proj(payload.clone(), i))
+                                .collect::<Vec<_>>();
+                            let refs = projections.iter().collect::<Vec<_>>();
+                            Ok((core::Atom::from(label.as_str()), scope.open(&refs)))
                         })
-                        .collect::<Result<Vec<_>, Error>>()?;
+                        .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
-                    core::Term::match_(tag, um.motive.label.as_deref(), motive_core, cases)
+                    core::Subterm::Match(core::Match {
+                        head: tag,
+                        motive,
+                        cases,
+                    })
+                    .into()
                 }
             },
             Subterm::Let(let_) => core::Term::let_(

@@ -1,4 +1,7 @@
-use {super::*, std::collections::{HashMap, HashSet}};
+use {
+    super::*,
+    std::collections::{HashMap, HashSet},
+};
 
 /// Copy propagation: eliminate `let x = y` renames.
 ///

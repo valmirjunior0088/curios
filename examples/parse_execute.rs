@@ -25,10 +25,7 @@ fn main() {
         make(decoded)
         "#;
 
-    let entrypoint = source
-        .parse::<curios::text::Entrypoint>()
-        .unwrap()
-        .with_prelude();
+    let entrypoint = source.parse::<curios::text::Entrypoint>().unwrap();
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

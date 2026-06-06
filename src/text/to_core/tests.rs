@@ -1044,4 +1044,3 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
             if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "A")
     ));
 }
-

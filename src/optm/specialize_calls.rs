@@ -1,7 +1,4 @@
-use {
-    super::*,
-    std::collections::HashMap,
-};
+use {super::*, std::collections::HashMap};
 
 /// Closure specialization — monomorphization on first-class-function arguments.
 ///
@@ -345,10 +342,12 @@ impl Specializer<'_> {
 
         let new_captures = splice(captures, &resolved);
 
-        self.needed_clsrs.entry(name.clone()).or_insert(ClsrSpecPlan {
-            base: clsr.clone(),
-            resolved: key,
-        });
+        self.needed_clsrs
+            .entry(name.clone())
+            .or_insert(ClsrSpecPlan {
+                base: clsr.clone(),
+                resolved: key,
+            });
 
         *value = Value::Pure(Data::Clsr(name.clone(), new_captures));
         self.changed = true;
@@ -360,7 +359,12 @@ impl Specializer<'_> {
     /// matching specialized clone, expanding each known-closure argument into its
     /// captures and dropping each unit argument.
     fn rewrite_tail(&mut self, tail: &mut Tail, known: &Known) {
-        let Tail::Call(CallTarget::Direct { target, params, resume }) = tail else {
+        let Tail::Call(CallTarget::Direct {
+            target,
+            params,
+            resume,
+        }) = tail
+        else {
             return;
         };
 
@@ -412,8 +416,10 @@ impl Specializer<'_> {
 /// or nothing for unit) in place, keeping every other argument verbatim. Mirrors the
 /// clone's argument-list construction in [`specialize_arguments`].
 fn splice(args: &[ValueName], resolved: &[(usize, Shape, Vec<ValueName>)]) -> Vec<ValueName> {
-    let expansions: HashMap<usize, &Vec<ValueName>> =
-        resolved.iter().map(|(index, _, args)| (*index, args)).collect();
+    let expansions: HashMap<usize, &Vec<ValueName>> = resolved
+        .iter()
+        .map(|(index, _, args)| (*index, args))
+        .collect();
 
     let mut spliced = Vec::new();
     for (index, arg) in args.iter().enumerate() {
@@ -456,7 +462,10 @@ fn collect_known(region: &Region, known: &mut Known) {
     for (name, value) in &region.values {
         match value {
             Value::Pure(Data::Clsr(clsr, captures)) => {
-                known.insert(name.clone(), KnownValue::Clsr(clsr.clone(), captures.clone()));
+                known.insert(
+                    name.clone(),
+                    KnownValue::Clsr(clsr.clone(), captures.clone()),
+                );
             }
             Value::Pure(Data::Tpl(fields)) if fields.is_empty() => {
                 known.insert(name.clone(), KnownValue::Unit);
@@ -531,7 +540,10 @@ fn build_specialized_clsr(
 }
 
 fn resolved_map(resolved: &[(usize, Shape)]) -> HashMap<usize, &Shape> {
-    resolved.iter().map(|(index, shape)| (*index, shape)).collect()
+    resolved
+        .iter()
+        .map(|(index, shape)| (*index, shape))
+        .collect()
 }
 
 /// The shared core of both clone builders, agnostic to function-vs-closure and
@@ -555,8 +567,9 @@ fn specialize_arguments(
             }
             Some(Shape::Clsr(clsr)) => {
                 let arity = fields.get(clsr).expect("specialized closure present").len();
-                let captures: Vec<ValueName> =
-                    (0..arity).map(|field| capture_param(&arg.name, field)).collect();
+                let captures: Vec<ValueName> = (0..arity)
+                    .map(|field| capture_param(&arg.name, field))
+                    .collect();
 
                 // The threaded captures are plain non-candidate arguments.
                 args.extend(captures.iter().cloned().map(Argument::from));
@@ -652,10 +665,13 @@ mod tests {
             fields: vec![v("e").into()],
             params: vec![v("x").into()],
             resume: BlockName::from("r"),
-            region: region(vec![], Tail::Jump(JumpTarget {
-                target: BlockName::from("r"),
-                params: vec![v("x")],
-            })),
+            region: region(
+                vec![],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("x")],
+                }),
+            ),
         };
         let main = Func {
             params: vec![],
@@ -664,7 +680,10 @@ mod tests {
                 vec![
                     (v("env"), Value::Pure(Data::Nat(7))),
                     (v("k"), Value::Pure(Data::Nat(1))),
-                    (v("clo"), Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("env")]))),
+                    (
+                        v("clo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("env")])),
+                    ),
                 ],
                 direct("f", vec![v("clo"), v("k")]),
             ),
@@ -704,10 +723,13 @@ mod tests {
         let f = Func {
             params: vec![candidate("u"), v("n").into()],
             resume: BlockName::from("r"),
-            region: region(vec![], Tail::Jump(JumpTarget {
-                target: BlockName::from("r"),
-                params: vec![v("n")],
-            })),
+            region: region(
+                vec![],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("n")],
+                }),
+            ),
         };
         let main = Func {
             params: vec![],
@@ -798,10 +820,13 @@ mod tests {
             fields: vec![v("e").into()],
             params: vec![v("x").into()],
             resume: BlockName::from("r"),
-            region: region(vec![], Tail::Jump(JumpTarget {
-                target: BlockName::from("r"),
-                params: vec![v("x")],
-            })),
+            region: region(
+                vec![],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("x")],
+                }),
+            ),
         };
         let main = Func {
             params: vec![],
@@ -810,7 +835,10 @@ mod tests {
                 vec![
                     (v("env"), Value::Pure(Data::Nat(0))),
                     (v("k"), Value::Pure(Data::Nat(1))),
-                    (v("clo"), Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("env")]))),
+                    (
+                        v("clo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("env")])),
+                    ),
                 ],
                 direct("f", vec![v("clo"), v("k")]),
             ),
@@ -843,10 +871,13 @@ mod tests {
             fields: vec![v("e").into()],
             params: vec![v("x").into()],
             resume: BlockName::from("r"),
-            region: region(vec![], Tail::Jump(JumpTarget {
-                target: BlockName::from("r"),
-                params: vec![v("x")],
-            })),
+            region: region(
+                vec![],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("x")],
+                }),
+            ),
         };
         let outer = Clsr {
             fields: vec![candidate("p"), v("q").into()],
@@ -861,8 +892,14 @@ mod tests {
                 vec![
                     (v("env"), Value::Pure(Data::Nat(7))),
                     (v("k"), Value::Pure(Data::Nat(1))),
-                    (v("pclo"), Value::Pure(Data::Clsr(ClsrName::from("inner"), vec![v("env")]))),
-                    (v("oclo"), Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("pclo"), v("k")]))),
+                    (
+                        v("pclo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("inner"), vec![v("env")])),
+                    ),
+                    (
+                        v("oclo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("pclo"), v("k")])),
+                    ),
                 ],
                 Tail::Jump(JumpTarget {
                     target: BlockName::from("r"),
@@ -917,7 +954,10 @@ mod tests {
                 vec![
                     (v("k"), Value::Pure(Data::Nat(1))),
                     (v("unit"), Value::Pure(Data::Tpl(vec![]))),
-                    (v("oclo"), Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("unit"), v("k")]))),
+                    (
+                        v("oclo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("unit"), v("k")])),
+                    ),
                 ],
                 Tail::Jump(JumpTarget {
                     target: BlockName::from("r"),
@@ -963,7 +1003,10 @@ mod tests {
             params: vec![candidate("g")],
             resume: BlockName::from("r"),
             region: region(
-                vec![(v("oclo"), Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("g")])))],
+                vec![(
+                    v("oclo"),
+                    Value::Pure(Data::Clsr(ClsrName::from("outer"), vec![v("g")])),
+                )],
                 Tail::Jump(JumpTarget {
                     target: BlockName::from("r"),
                     params: vec![v("oclo")],
@@ -998,7 +1041,10 @@ mod tests {
             params: vec![],
             resume: BlockName::from("r"),
             region: region(
-                vec![(v("v"), Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("v")])))],
+                vec![(
+                    v("v"),
+                    Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("v")])),
+                )],
                 Tail::Jump(JumpTarget {
                     target: BlockName::from("r"),
                     params: vec![v("v")],
@@ -1037,7 +1083,10 @@ mod tests {
             resume: BlockName::from("r"),
             region: Region {
                 preallocs: vec![(v("rec"), Prealloc::Clsr(ClsrName::from("c")))],
-                values: vec![(v("rec"), Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("rec")])))],
+                values: vec![(
+                    v("rec"),
+                    Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("rec")])),
+                )],
                 blocks: vec![],
                 tail: Tail::Jump(JumpTarget {
                     target: BlockName::from("r"),

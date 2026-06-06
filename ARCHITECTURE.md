@@ -2,13 +2,13 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~30,840 lines in `src/`, ~1,660 lines in top-level Rust examples, plus ~640 lines in `examples/crs/`.
+**Codebase size:** ~37,250 lines in `src/`, ~1,890 lines in top-level Rust examples, plus ~700 lines of Curios standard library in `std/`.
 
 ---
 
 ## Pipeline
 
-Source text flows through six stages, each represented by its own module with a clean handoff:
+Source text flows through seven stages, each represented by its own module with a clean handoff:
 
 ```
 Source Text
@@ -17,13 +17,16 @@ Source Text
 text::Entrypoint          surface AST; all variables are plain String labels
     │
     ▼  src/text/to_core/
-core::Term                de Bruijn AST; Scope<A: Arity, B: Bound> binders
+core::Term                de Bruijn AST; names/modules resolved, unions desugared to tagged tuples
     │
     ▼  src/core/infer.rs + src/core/erase.rs
 ersd::Term                type-erased; closures carry explicit capture lists
     │
     ▼  src/ersd/to_cont/
 cont::Module              CPS IR; second-class continuations as block labels
+    │
+    ▼  src/optm/
+cont::Module              optimized CPS IR; monomorphized, devirtualized, DCE'd
     │
     ▼  src/cont/to_wasm/
 wasm::Module              WebAssembly AST; GC structs, typed funcrefs, tail calls
@@ -35,15 +38,18 @@ Vec<u8>                   raw WASM binary
 result                    printed by src/run.rs
 ```
 
+The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trait) lives in `src/core/scope.rs` — see [Stage 3](#stage-3--core-type-system-srccore).
+
 | Stage                   | Key file(s)                                        | Lines  |
 | ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,021  |
-| Elaboration             | `text/to_core.rs`, `text/to_core/elaborate.rs`     | ~744   |
-| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,833 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~773   |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 755    |
-| WASM codegen            | `cont/to_wasm/` (6 files)                          | ~3,665 |
-| Binary serialization    | `wasm/writer.rs`                                   | 1,691  |
+| Parsing                 | `text/parse.rs`                                    | 1,044  |
+| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)       | ~2,790 |
+| Type checking + erasure | `core/infer.rs`, `core/erase.rs`, `core/typing.rs` | ~1,080 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`                | ~894   |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 764    |
+| CPS optimization        | `optm.rs` + `optm/` (10 files)                     | ~4,850 |
+| WASM codegen            | `cont/to_wasm/` (9 files)                          | ~3,800 |
+| Binary serialization    | `wasm/writer.rs`                                   | 1,716  |
 
 ---
 
@@ -53,21 +59,22 @@ The stages share a common pattern of a small facade module that re-exports the s
 
 ```
 src/text.rs          facade; re-exports error, names, loader, nat, bin, prim, term, to_core, prelude, module
-src/core.rs          facade; re-exports arity, flt, int, nat, prim, names, term, reduce, context, convert, typing, infer, erase
+src/core.rs          facade; re-exports scope, flt, int, nat, prim, names, term, reduce, context, convert, typing, infer, erase
 src/ersd.rs          facade; re-exports names, prim, term, to_cont
 src/cont.rs          facade; re-exports names, module, to_wasm
+src/optm.rs          facade; re-exports walk, harvest, and each optimization pass
 src/wasm.rs          facade; re-exports names, types, expr, module, writer; exposes parse and print
 ```
 
 Transformation entry points (`src/text/to_core.rs`, `src/ersd/to_cont.rs`, `src/cont/to_wasm.rs`) declare submodules privately, so callers see only the public transformation function.
 
-Three top-level modules fall outside this pattern:
+Several top-level modules fall outside this pattern:
 
-| Module        | Role                                                                                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/span.rs` | `Source` (text + optional path) and `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)              |
-| `src/run.rs`  | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature |
-| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                                                                            |
+| Module          | Role                                                                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/span.rs`   | `Source` (text + optional path) and `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)              |
+| `src/run.rs`    | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature  |
+| `src/cli.rs`    | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                                                                            |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
 
@@ -98,25 +105,37 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 ---
 
-## Stage 2 — Elaboration (`src/text/to_core/`)
+## Stage 2 — Resolution & elaboration (`src/text/to_core/`)
 
-**Key files:** `to_core.rs`, `to_core/elaborate.rs`, `to_core/context.rs`, `text/loader.rs`
+`text → core` does the name/module resolution and the desugaring that makes terms fully explicit, in a single pass producing `core::Term` directly.
 
-Two concerns, handled separately:
+**Key files:** `to_core.rs`, `to_core/elaborate.rs`, `to_core/context.rs`, `to_core/interface.rs`, `text/loader.rs`
 
-**Module processing** (`to_core.rs`): walks `TopItem` list, resolves `use` declarations (enforcing visibility), qualifies names under `mod` blocks (e.g. `Foo/bar`), resolves file-backed `mod Label;` via the `Loader` trait, elaborates `union` declarations into type bindings plus constructor modules, and folds generated `let`/`rec` items right-to-left into the tail.
+**Discovery** (`to_core.rs`): a single pass (`Resolved::for_entrypoint`) walks the `mod` tree once. Because `mod` declarations only name children, the module graph is a tree — every qualifier is reached exactly once, so the walk needs no visited-set: it loads each file-backed module through the `Loader` into a cache and records its `ModuleInfo` in the same traversal.
 
-The `Loader` trait (`src/text/loader.rs`) has two implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `NullLoader` (for inline programs and tests, which have no file-backed modules — any `load` is a `ModuleNotFound`). A single discovery pass (`Resolved::for_entrypoint`) walks the `mod` tree once, loading each file-backed module through the `Loader` into a cache **and** building the global module-info table in the same traversal; because the whole table exists before elaboration, cross-module name references may be cyclic (value-level recursion still needs `rec`). Elaboration then reads modules from the cache.
+**Interface fixed point** (`to_core/interface.rs`): before any body is elaborated, the public export view of every module is computed to a fixed point (`PublicInterface`), resolving `pub use` re-exports (including chains) and rejecting `ExportConflict` / `CyclicReExport`. This separates a module's *interface* (its exports) from the *lexical* import effect of `use`, which is applied per-body in source order.
 
-**Term elaboration** (`to_core/elaborate.rs`): pure syntactic translation from `text::Term` to `core::Term`. The only binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices. Union matches elaborate to ordinary atom matches over the generated tag field. No type-directed work — that happens in `core/typing.rs`.
+**Module processing** (`to_core.rs`): walks the `TopItem` list, applies `use`/`pub use` scoping, qualifies names under `mod` blocks, and lowers `union` declarations to two parts — a `rec` group of type bindings (each desugared to a tagged-tuple type, wrapped in a `Func` over any type parameters) and one constructor function per variant whose body injects the variant as a tagged tuple. All generated `let`/`rec` items are flattened, **topologically reordered** (`order_flat_items`, a stable Kahn pass) so each declaration's value dependencies precede it, then folded right-to-left into the tail. A genuine value cycle is left unorderable and surfaces downstream as an unbound name — cross-declaration value recursion is unexpressible by construction.
 
-Both concerns are fallible: `to_core` returns `Result<Lowered, text::Error>`, where `Lowered { term, type_ }` carries the elaborated entrypoint term plus the optional elaborated type annotation (both produced from one discovery + elaboration). `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding` — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `NullLoader` (for inline programs and tests, which have no file-backed modules — any `load` is a `ModuleNotFound`). Because the whole module-info table exists before elaboration, cross-module name references may be cyclic (value-level recursion still needs `rec`).
+
+**Prelude and embedded standard library** (`src/text/prelude.rs`): `prelude(inner)` wraps any base loader in two layers — `SysLoader` serves the built-in `/sys` modules (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, `Bln`, `Io`, …), constructed directly as `text` AST and never parsed; `StdLoader` serves the `/std` standard library, whose sources are real Curios authored alongside the compiler in `std/*.crs` (plus the `std.crs` manifest of `pub mod`/`pub use` declarations) and embedded into the binary with `include_str!`. Both layers also add `sys`/`std` to `Loader::roots`, so `to_core` declares them at the entrypoint root automatically — every program sees `/sys` and `/std` without an explicit import. Anything not under those roots falls through to `inner`.
+
+**Term elaboration** (`to_core/elaborate.rs`): syntactic translation from `text::Term` to `core::Term`. The binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices; the union forms in a term — a `union` match — are desugared here to an atom match on the scrutinee's projected tag, binding each arm's fields from the payload projections. No type-directed work.
+
+`to_core` returns `Result<Lowered, text::Error>`, where `Lowered { term, type_ }` carries the entrypoint term plus the optional type annotation, both as `core::Term`. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+
+The three union desugarings are:
+
+- a union **type** → a tagged-tuple type `{ tag : '[..], match tag { .. } }`
+- a constructor's `inject` → the tagged tuple `('variant, (args..))`
+- a union **match** → an atom match on the projected tag
 
 ---
 
 ## Stage 3 — Core type system (`src/core/`)
 
-**Key files:** `term.rs`, `infer.rs`, `erase.rs`, `typing.rs`, `reduce.rs`, `convert.rs`, `context.rs`, `arity.rs`
+**Key files:** `term.rs`, `infer.rs`, `erase.rs`, `typing.rs`, `error.rs`, `reduce.rs`, `convert.rs`, `context.rs`, `scope.rs`
 
 The central `core::Term` enum:
 
@@ -134,6 +153,8 @@ The central `core::Term` enum:
 | `Var`                          | Variables (free or bound)                                    |
 
 ### De Bruijn indices and `Scope<A: Arity, B: Bound>`
+
+The de Bruijn machinery lives in **`src/core/scope.rs`**. `core`'s `Subterm::traverse` (the big structural match, including its primitives) plugs into it by implementing `Bound`. `Scope`, `Telescope`, `Var`, the `Bound` trait, the `Visit` driver, and the `Arity` types (`One`, `Two`, `Many`) all live here.
 
 Variables arrive from elaboration as free labels (`Var::free("x")`). Each binding construct calls `Scope::close(arity, labels, body)` to capture them as de Bruijn indices; `scope.open(terms)` substitutes indices back during reduction.
 
@@ -205,9 +226,9 @@ Key differences from `core`:
 
 ## Stage 5 — CPS lowering (`src/ersd/to_cont/`)
 
-**Key files:** `lowerer.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
+**Key files:** `lowerer.rs`, `builder.rs`, `conts.rs`, `rec.rs`, `lower_prim.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is one of the more complex transformations in the pipeline: `lowerer.rs` is 755 lines, and the full `ersd/to_cont` implementation is roughly 1,800 lines.
+This is one of the more complex transformations in the pipeline: `lowerer.rs` is 764 lines, and the full `ersd/to_cont` implementation is roughly 1,900 lines.
 
 ### CPS IR structure
 
@@ -258,9 +279,37 @@ When a call appears in value position, the lowerer creates a **join block** that
 
 ---
 
-## Stage 6 — WebAssembly codegen (`src/cont/to_wasm/`, `src/wasm/`)
+## Stage 6 — CPS optimization (`src/optm/`)
 
-**Key files:** `cont/to_wasm.rs`, `cont/to_wasm/table.rs`, `cont/to_wasm/context.rs`, `cont/to_wasm/frame.rs`, `cont/to_wasm/expr_emitter.rs`, `cont/to_wasm/module_emitter.rs`
+**Key files:** `optm.rs` (façade + pass pipeline), `walk.rs`, `harvest.rs`, plus one file per pass.
+
+A `cont::Module` → `cont::Module` transform: `optm::optimize` (`src/optm.rs`) runs a fixed sequence of passes over the CPS IR before codegen. Its central goal is **monomorphization and devirtualization** — turning indirect closure dispatch into direct calls where the closure shape is statically known, then cleaning up the fallout. Wired into the pipeline at `src/run/compile.rs` between `ersd::to_cont` and `cont::to_wasm`, and surfaced to the observer as `Stage::Optm`.
+
+### Shared infrastructure
+
+- **`walk.rs`** — the traversal engine: a closed walker over the region tree with read-only (`Sink`) and rewriting (`SinkMut`) variants. The single place the structural recursion and the `Code` operand match live, so passes describe *what* to do per node, not *how* to recurse.
+- **`harvest.rs`** — metadata-harvesting helpers (use counts, references) built on the read-only walker; passes consult these to decide what is safe to rewrite.
+
+### Passes (in pipeline order)
+
+| Pass                          | File                            | Effect                                                                       |
+| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
+| `propagate_copies`            | `copy_propagation.rs`           | Eliminates `let x = y` renames (`Alias` values)                              |
+| `fold_constants`              | `constant_folding.rs`           | Evaluates primitive ops on literal operands                                  |
+| `lift_closures`               | `closure_lifting.rs`            | Turns known closures into functions and devirtualizes their call sites       |
+| `specialize_calls`            | `specialize_calls.rs`           | Clones a function per closure shape passed into a candidate parameter, so closure lifting can devirtualize through it (monomorphization) |
+| `inline_calls`                | `function_inlining.rs`          | Splices single-call-site functions into their call site                      |
+| `thread_jumps`                | `jump_threading.rs`             | Merges single-predecessor blocks into their predecessor                      |
+| `eliminate_dead_arguments`    | `dead_argument_elimination.rs`  | Drops unused function parameters and closure captures, finishing type erasure |
+| `eliminate_dead_code`         | `dead_code_elimination.rs`      | Drops unused bindings and unreachable functions, closures, and consts        |
+
+`optimize` interleaves and repeats several of these — `lift_closures` runs both before and after `specialize_calls` (specialization exposes fresh known-closure shapes to lift), and `propagate_copies`/`fold_constants`/`thread_jumps` run again after inlining to clean up the simplified CFG. Dead-argument and dead-code elimination run last, once nothing else will reintroduce uses.
+
+---
+
+## Stage 7 — WebAssembly codegen (`src/cont/to_wasm/`, `src/wasm/`)
+
+**Key files:** `cont/to_wasm.rs`, `cont/to_wasm/table.rs`, `cont/to_wasm/context.rs`, `cont/to_wasm/frame.rs`, `cont/to_wasm/expr_emitter.rs`, `cont/to_wasm/code_emitter.rs`, `cont/to_wasm/module_emitter.rs`
 
 ### Value representation
 
@@ -291,14 +340,15 @@ Direct calls use `return_call`; indirect calls use `return_call_ref`. This elimi
 | `table.rs`          | Builds symbol tables; pre-allocates GC struct types for closures, tuples, floats                                                         |
 | `context.rs`        | Tracks locals, frames, and value classification (`LoadAs` enum) for correct casting                                                      |
 | `frame.rs`          | Represents nested WASM blocks; accumulates instructions; manages label-based branching                                                   |
-| `expr_emitter.rs`   | Emits instructions for CPS values: closure allocation, tuple projection, arithmetic, constants                                           |
+| `code_emitter.rs`   | Emits a single CPS `Code` operation (arithmetic, comparisons, conversions, projections, array/binary ops) with the right boxing (`WrapAs`) |
+| `expr_emitter.rs`   | Emits instructions for CPS values and tails: closure allocation, tuple projection, constants, jumps, matches, calls (drives `code_emitter`) |
 | `module_emitter.rs` | Emits the top-level WASM module: type definitions, function bodies, exports, and host imports when the corresponding operations are used |
 
 The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`, `Arr`) drives which cast or unboxing sequence the emitter generates for each value.
 
 ### Binary serialization (`src/wasm/writer.rs`)
 
-The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. `wasm/writer.rs` is 1,691 lines, with helper modules under `wasm/writer/`.
+The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. `wasm/writer.rs` is 1,716 lines, with helper modules under `wasm/writer/`.
 
 ### WAT parser (`src/wasm/parse.rs`)
 
@@ -314,7 +364,7 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 - `run_file(timeout, path, host)` — reads a `.crs` file; constructs `FileLoader` rooted at the file's directory
 - `run(timeout, source, loader, host)` — shared core: full pipeline → `run_wasm`
 - `run_wasm(wasm_module, host)` — executes a `wasm::Module` directly via Wasmtime (`src/run/engine.rs`)
-- `compile(timeout, loader, type_, source, observe)` — runs the full pipeline from text to `wasm::Module` without execution; `type_: Option<&str>` supplies an explicit expected type when present, otherwise the type is inferred. The `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
+- `compile(timeout, loader, type_, source, observe)` — runs the full pipeline from text to `wasm::Module` without execution; `type_: Option<&str>` supplies an explicit expected type when present, otherwise the type is inferred. The `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Optm`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
 
 The `Host` trait (`src/run/host.rs`) abstracts all program IO:
 
@@ -354,7 +404,7 @@ Every fallible stage reports through a uniform pattern built on two primitives i
 - `Span { source, start, end }` — a byte range into a specific source; carries its `Rc<Source>`, so the originating file travels with the span even after modules are merged into one core term.
 - `Span::render_snippet(&self)` — formats the offending line with a line number and a `^` caret underline, prefixed with a `--> path:line` header when the source has a path.
 
-Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/typing.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format()` prints the message followed by the rendered snippet; an unlocated error prints the message alone. Because the source rides on the span, type-checking and erasure errors in file-backed modules name their file too. The parser's `ParserError::format` renders a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
+Each stage owns an `Error` enum (`src/text/error.rs`, `src/core/error.rs`) whose variants carry the specifics of each failure. A `Located { span, error }` wrapper attaches a span to any variant via `.at(span)` (idempotent — re-wrapping an already-located error is a no-op). Calling `.format()` prints the message followed by the rendered snippet; an unlocated error prints the message alone. Because the source rides on the span, type-checking and erasure errors in file-backed modules name their file too. The parser's `ParserError::format` renders a zero-width span at the failure offset. Reduction timeouts surface here too, as `core::Error::ReducePreempted`.
 
 Sources are built at the parse entry points: `FromStr` (`"...".parse()`) builds a pathless `Source`, while `Entrypoint::from_path`/`Module::from_path` read a file and build a path-bearing one (`src/text/parse.rs`, error type `LoadError`). `main` returns `ExitCode`: on `Err` it prints the formatted message to stderr and exits `FAILURE`, otherwise `SUCCESS`.
 
@@ -369,7 +419,7 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,wasm`. Bare `--print` selects all; omitting the flag prints none.
+- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,optm,wasm`. Bare `--print` selects all; omitting the flag prints none.
 - `run` compiles and executes the entrypoint
 - `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
 - `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
@@ -379,7 +429,7 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 
 ## Testing
 
-229 tests across the library crate, covering every layer:
+322 tests across the library crate, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -389,8 +439,9 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 | Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
 | Erasure         | Primitive, tuple, array, binary type erasure                                                                                                                |
 | CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection            |
+| CPS optimization | `src/optm/` — per-pass tests: constant folding (the bulk), call specialization, closure lifting, copy propagation, jump threading, inlining, dead-argument and dead-code elimination |
 | WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
-| Module system   | `src/text/to_core.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths                                                                   |
+| Module system   | `src/text/to_core/tests.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths, interface fixed point                                      |
 | Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
 | End-to-end      | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion                                                   |
 
@@ -401,11 +452,12 @@ curios [--timeout <MILLIS>] [--print] <run|check|compile> <input-path> [--output
 1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
 2. **`src/text/term.rs`** — the surface AST; variants mirror the language syntax with all variables as plain strings.
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
-4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes `core::Term`; how `Scope::close` turns string labels into de Bruijn indices.
-5. **`src/core/term.rs`** — the typed AST; understanding `Scope<A: Arity, B: Bound>`, the `Bound` trait, and `Telescope<B>` is prerequisite for everything downstream.
+4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes `core::Term`: how `Scope::close` turns string labels into de Bruijn indices, how `union` lowers to type + constructor bindings, and where the three union forms are desugared to tagged tuples.
+5. **`src/core/scope.rs`** + **`src/core/term.rs`** — the de Bruijn machinery (`Scope<A: Arity, B: Bound>`, the `Bound` trait, `Telescope<B>`) and the typed AST built on it; prerequisite for everything downstream.
 6. **`src/core/infer.rs`** + **`src/core/erase.rs`** — bidirectional type checking, split into the synthesis (`infer`) and checking (`erase`) passes; note where reduction is invoked and how erasure is interleaved in `erase`. Shared helpers live in `src/core/typing.rs`.
 7. **`src/ersd/term.rs`** — what disappears at erasure and what survives into runtime.
 8. **`src/cont/module.rs`** — the CPS IR types; pay attention to how `Call` specifies a `resume` block.
 9. **`src/ersd/to_cont/lowerer.rs`** — how `ersd::Term` becomes CPS; the `lower_tail` vs `lower_to_name` distinction is the key insight.
-10. **`src/cont/to_wasm/expr_emitter.rs`** + **`src/cont/to_wasm/module_emitter.rs`** — how CPS maps to WASM instructions.
-11. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_wasm`, and `compile` (with the `Stage` observer) tie the whole pipeline together; the implementation lives under `src/run/`.
+10. **`src/optm.rs`** — the optimizer pass pipeline; read `optm/walk.rs` for the shared traversal, then `optm/specialize_calls.rs` + `optm/closure_lifting.rs` for the monomorphization/devirtualization core.
+11. **`src/cont/to_wasm/expr_emitter.rs`** + **`src/cont/to_wasm/module_emitter.rs`** — how CPS maps to WASM instructions.
+12. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_wasm`, and `compile` (with the `Stage` observer) tie the whole pipeline together; the implementation lives under `src/run/`.

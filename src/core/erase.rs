@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, erase_prim,
-        check_motive, expect, expect_prim_head, infer, reduce_with, refine_head,
+        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, check_motive,
+        erase_prim, expect, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -59,7 +59,13 @@ fn erase_func(
                 // never depends on the parameter itself.
                 candidates.push(is_candidate(context, &type_)?);
                 context.assume(&names[0], &type_);
-                output_type(context, rest.open(&[&terms[0]]), &names[1..], &terms[1..], candidates)
+                output_type(
+                    context,
+                    rest.open(&[&terms[0]]),
+                    &names[1..],
+                    &terms[1..],
+                    candidates,
+                )
             }
         }
     }

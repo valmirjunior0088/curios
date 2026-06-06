@@ -24,7 +24,7 @@ where
     observe(Stage::Text(entrypoint));
 
     let text::Lowered { term, type_ } =
-        text::to_core(entrypoint, loader).map_err(|error| error.format())?;
+        text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
 
     observe(Stage::Core(&term));
 
@@ -64,8 +64,7 @@ mod tests {
         let entrypoint = "0"
             .parse::<text::Entrypoint>()
             .unwrap()
-            .with_type("/sys/Bln".parse().unwrap())
-            .with_prelude();
+            .with_type("/sys/Bln".parse().unwrap());
 
         let error = compile_entrypoint(
             Duration::from_secs(1),

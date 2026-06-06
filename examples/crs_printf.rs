@@ -1,22 +1,16 @@
 use {
     curios::{Stage, compile_entrypoint, core, text},
-    std::{
-        path::Path,
-        time::{Duration, Instant},
-    },
+    std::time::{Duration, Instant},
 };
 
 fn main() {
-    let base = Path::new(file!()).parent().unwrap().join("crs");
     let timeout = Duration::from_secs(15);
 
     let source = r#"
-        use /std/{Str, Io, Bin};
-
-        pub mod fmt;
+        use /std/{Str, Io, Bin, Fmt};
 
         let name : Bin = Str/trim(Io/read());
-        fmt/printf("%s is %d")(name)(30)
+        Fmt/printf("%s is %d")(name)(30)
         "#;
 
     let mut last = Instant::now();
@@ -24,11 +18,9 @@ fn main() {
     let entrypoint = source
         .parse::<text::Entrypoint>()
         .expect("failed to parse source")
-        .with_type("()".parse().unwrap())
-        .with_prelude();
-    let loader = text::FileLoader::new(&base);
+        .with_type("()".parse().unwrap());
 
-    let wasm_module = compile_entrypoint(timeout, &entrypoint, &loader, |stage| {
+    let wasm_module = compile_entrypoint(timeout, &entrypoint, &text::NullLoader, |stage| {
         let now = Instant::now();
         let elapsed = now - last;
         last = now;
@@ -57,19 +49,15 @@ fn main() {
     );
 
     let ill_typed = r#"
-        pub mod fmt;
-
-        fmt/printf("%d")("Alice")
+        /std/Fmt/printf("%d")("Alice")
         "#;
 
     let entrypoint = ill_typed
         .parse::<text::Entrypoint>()
-        .expect("failed to parse ill-typed source")
-        .with_prelude();
-    let loader = text::FileLoader::new(&base);
+        .expect("failed to parse ill-typed source");
 
-    let core_term = text::to_core(&entrypoint, &loader)
-        .expect("expected core term")
+    let core_term = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
+        .expect("expected lowered term")
         .term;
     let core_type = core::infer(&mut core::Context::new(timeout), &core_term);
 

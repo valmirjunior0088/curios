@@ -1,7 +1,4 @@
-use {
-    super::*,
-    std::collections::HashMap,
-};
+use {super::*, std::collections::HashMap};
 
 /// Constant folding: evaluate `Value::Eval(code)` bindings whose operands are all
 /// known literals, replacing each with its simplified `Value` — a `Pure(result)`
@@ -291,7 +288,9 @@ fn eval(code: &Code, lits: &Lits) -> Option<Data> {
         IntShl(a, b) => {
             fits31s(int(lits, a)?.wrapping_shl(int(lits, b)? as u32) as i64).map(Data::Int)
         }
-        IntShr(a, b) => Some(Data::Int(wrap31s(int(lits, a)?.wrapping_shr(int(lits, b)? as u32)))),
+        IntShr(a, b) => Some(Data::Int(wrap31s(
+            int(lits, a)?.wrapping_shr(int(lits, b)? as u32),
+        ))),
         IntRotl(a, b) => {
             let rotated = (int(lits, a)? as u32).rotate_left(int(lits, b)? as u32) as i32;
             fits31s(rotated as i64).map(Data::Int)
@@ -451,7 +450,9 @@ fn fits31u(value: u64) -> Option<u32> {
 /// Accept an `Int` result only if it fits the 31-bit signed range; otherwise the
 /// runtime traps on overflow.
 fn fits31s(value: i64) -> Option<i32> {
-    ((-(1 << 30))..(1 << 30)).contains(&value).then_some(value as i32)
+    ((-(1 << 30))..(1 << 30))
+        .contains(&value)
+        .then_some(value as i32)
 }
 
 fn nonzero_u(divisor: u32) -> Option<u32> {
@@ -747,7 +748,10 @@ mod tests {
     fn forwards_arr_get_with_literal_index() {
         let source = forwarded(
             vec![
-                (v("arr"), Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")]))),
+                (
+                    v("arr"),
+                    Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")])),
+                ),
                 (v("i"), Value::Pure(Data::Nat(2))),
                 (v("w"), Value::Eval(Code::ArrGet(v("arr"), v("i")))),
             ],
@@ -760,7 +764,10 @@ mod tests {
     fn folds_arr_and_bin_len() {
         let arr_len = folded(
             vec![
-                (v("arr"), Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")]))),
+                (
+                    v("arr"),
+                    Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")])),
+                ),
                 (v("n"), Value::Eval(Code::ArrLen(v("arr")))),
             ],
             "n",
@@ -875,8 +882,14 @@ mod tests {
 
     #[test]
     fn folds_nat_shifts() {
-        assert!(matches!(binary(Data::Nat(3), Data::Nat(2), Code::NatShl), Data::Nat(12)));
-        assert!(matches!(binary(Data::Nat(12), Data::Nat(2), Code::NatShr), Data::Nat(3)));
+        assert!(matches!(
+            binary(Data::Nat(3), Data::Nat(2), Code::NatShl),
+            Data::Nat(12)
+        ));
+        assert!(matches!(
+            binary(Data::Nat(12), Data::Nat(2), Code::NatShr),
+            Data::Nat(3)
+        ));
     }
 
     #[test]
@@ -894,7 +907,10 @@ mod tests {
 
     #[test]
     fn folds_nat_rotate_or_traps_on_overflow() {
-        assert!(matches!(binary(Data::Nat(1), Data::Nat(2), Code::NatRotl), Data::Nat(4)));
+        assert!(matches!(
+            binary(Data::Nat(1), Data::Nat(2), Code::NatRotl),
+            Data::Nat(4)
+        ));
         // 2^30 rotated left by 1 lands on bit 31 — a trap.
         stays_eval(
             vec![
@@ -917,17 +933,32 @@ mod tests {
 
     #[test]
     fn folds_int_bitwise() {
-        assert!(matches!(binary(Data::Int(5), Data::Int(2), Code::IntAnd), Data::Int(0)));
-        assert!(matches!(binary(Data::Int(5), Data::Int(2), Code::IntOr), Data::Int(7)));
+        assert!(matches!(
+            binary(Data::Int(5), Data::Int(2), Code::IntAnd),
+            Data::Int(0)
+        ));
+        assert!(matches!(
+            binary(Data::Int(5), Data::Int(2), Code::IntOr),
+            Data::Int(7)
+        ));
         // -1 is all 31 bits set; xor with 1 clears the low bit, staying negative.
-        assert!(matches!(binary(Data::Int(-1), Data::Int(1), Code::IntXor), Data::Int(-2)));
+        assert!(matches!(
+            binary(Data::Int(-1), Data::Int(1), Code::IntXor),
+            Data::Int(-2)
+        ));
     }
 
     #[test]
     fn folds_int_shifts() {
-        assert!(matches!(binary(Data::Int(3), Data::Int(2), Code::IntShl), Data::Int(12)));
+        assert!(matches!(
+            binary(Data::Int(3), Data::Int(2), Code::IntShl),
+            Data::Int(12)
+        ));
         // Arithmetic right shift preserves the sign.
-        assert!(matches!(binary(Data::Int(-8), Data::Int(1), Code::IntShr), Data::Int(-4)));
+        assert!(matches!(
+            binary(Data::Int(-8), Data::Int(1), Code::IntShr),
+            Data::Int(-4)
+        ));
     }
 
     #[test]
@@ -946,7 +977,10 @@ mod tests {
     #[test]
     fn folds_int_bit_scans_over_the_sign_extended_word() {
         assert!(matches!(unary(Data::Int(-1), Code::IntClz), Data::Int(0)));
-        assert!(matches!(unary(Data::Int(-1), Code::IntPopcnt), Data::Int(32)));
+        assert!(matches!(
+            unary(Data::Int(-1), Code::IntPopcnt),
+            Data::Int(32)
+        ));
         // `Eqz` yields a `Bln`, represented as `Nat(0 | 1)` like every comparison.
         assert!(matches!(unary(Data::Int(0), Code::IntEqz), Data::Nat(1)));
     }
@@ -993,9 +1027,15 @@ mod tests {
     fn folds_int_int_conversions_by_reinterpreting_the_payload() {
         assert!(matches!(unary(Data::Nat(5), Code::NatToInt), Data::Int(5)));
         // A `Nat` with bit 30 set reads back as a negative `Int`.
-        assert!(matches!(unary(Data::Nat(1 << 30), Code::NatToInt), Data::Int(-1_073_741_824)));
+        assert!(matches!(
+            unary(Data::Nat(1 << 30), Code::NatToInt),
+            Data::Int(-1_073_741_824)
+        ));
         // A negative `Int` reads back as a large `Nat` (its low 31 bits).
-        assert!(matches!(unary(Data::Int(-1), Code::IntToNat), Data::Nat(0x7FFF_FFFF)));
+        assert!(matches!(
+            unary(Data::Int(-1), Code::IntToNat),
+            Data::Nat(0x7FFF_FFFF)
+        ));
     }
 
     #[test]
@@ -1013,11 +1053,23 @@ mod tests {
     #[test]
     fn folds_float_to_int_conversions_in_range() {
         // Truncation toward zero.
-        assert!(matches!(unary(Data::Flt(3.7), Code::FltToNat), Data::Nat(3)));
-        assert!(matches!(unary(Data::Flt(-0.5), Code::FltToNat), Data::Nat(0)));
-        assert!(matches!(unary(Data::Flt(-3.7), Code::FltToInt), Data::Int(-3)));
+        assert!(matches!(
+            unary(Data::Flt(3.7), Code::FltToNat),
+            Data::Nat(3)
+        ));
+        assert!(matches!(
+            unary(Data::Flt(-0.5), Code::FltToNat),
+            Data::Nat(0)
+        ));
+        assert!(matches!(
+            unary(Data::Flt(-3.7), Code::FltToInt),
+            Data::Int(-3)
+        ));
         // The inclusive lower bound of the signed range folds.
-        assert!(matches!(unary(Data::Flt(-1_073_741_824.0), Code::FltToInt), Data::Int(-1_073_741_824)));
+        assert!(matches!(
+            unary(Data::Flt(-1_073_741_824.0), Code::FltToInt),
+            Data::Int(-1_073_741_824)
+        ));
     }
 
     #[test]

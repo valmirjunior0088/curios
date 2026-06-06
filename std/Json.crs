@@ -1,4 +1,4 @@
-use /std/{Arr, Bin, Bln, Char, Flt, Nat, Parse, Result};
+use /std/{Arr, Bin, Bln, Char, Flt, Nat, Parse, Result, Lst};
 
 pub union Json
 | null()
@@ -18,18 +18,25 @@ let encode_num(n : Flt) -> Bin =
     | false => raw
     end;
 
+let escape_byte(byte : Nat) -> Bin =
+    match byte : Bin
+    | '"' => "\\\""
+    | '\\' => "\\\\"
+    | '\n' => "\\n"
+    | '\r' => "\\r"
+    | '\t' => "\\t"
+    | _ => Bin/append("", byte)
+    end;
+
 let encode_str(s : Bin) -> Bin =
-    Bin/concat(Bin/concat("\"",
-        Bin/fold(Bin, s, "", (byte, acc) =>
-            match byte : Bin
-            | '"' => Bin/concat(acc, "\\\"")
-            | '\\' => Bin/concat(acc, "\\\\")
-            | '\n' => Bin/concat(acc, "\\n")
-            | '\r' => Bin/concat(acc, "\\r")
-            | '\t' => Bin/concat(acc, "\\t")
-            | _ => Bin/append(acc, byte)
-            end)),
-        "\"");
+    -- Collect each byte's (possibly escaped) rendering into a `Lst(Bin)` — O(1) per
+    -- byte — then assemble once with `Bin/concat_all` (O(n log n)). Folding
+    -- `Bin/concat(acc, ...)` per byte would be O(n^2) in the string length.
+    let body : Bin =
+        Bin/concat_all(Lst/to_arr(Bin, Lst/rev(Bin,
+            Bin/fold(Lst(Bin), s, Lst/nil(Bin), (byte, acc) =>
+                Lst/cons(Bin, escape_byte(byte), acc)))));
+    Bin/concat(Bin/concat("\"", body), "\"");
 
 pub rec encode(v : Json) -> Bin =
     match v : Bin
@@ -135,7 +142,7 @@ let parse_raw_str : Parse(Bin) =
     Parse/bind(Nat, Bin, Parse/take_byte('"'), (_) =>
     Parse/bind(Arr(Bin), Bin, parse_str_body, (chunks) =>
     Parse/bind(Nat, Bin, Parse/take_byte('"'), (_) =>
-        Parse/pure(Bin, Arr/fold(Bin, Bin, chunks, "", (chunk, acc) => Bin/concat(acc, chunk))))));
+        Parse/pure(Bin, Bin/concat_all(chunks)))));
 
 let parse_str_value : Parse(Json) =
     Parse/map(Bin, Json, (s) => Json/str(s), parse_raw_str);

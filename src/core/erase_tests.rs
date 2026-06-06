@@ -11,6 +11,10 @@ fn context() -> Context {
     Context::new(Duration::from_secs(1))
 }
 
+fn lower(entrypoint: &text::Entrypoint, loader: &dyn text::Loader) -> Term {
+    text::to_core(entrypoint, loader).unwrap().term
+}
+
 #[test]
 fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
     let mut context = context();
@@ -81,11 +85,9 @@ fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
 
 #[test]
 fn erase_match_singleton_lowers_to_match() {
-    let type_ = text::to_core(&"'[yes, no]".parse().unwrap(), &text::NullLoader)
-        .unwrap()
-        .term;
+    let type_ = lower(&"'[yes, no]".parse().unwrap(), &text::NullLoader);
 
-    let term = text::to_core(
+    let term = lower(
         &r#"
                 let x : '[unit] = 'unit;
                 match x : _ => '[yes, no]
@@ -95,9 +97,7 @@ fn erase_match_singleton_lowers_to_match() {
         .parse()
         .unwrap(),
         &text::NullLoader,
-    )
-    .unwrap()
-    .term;
+    );
 
     let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 
@@ -114,12 +114,8 @@ fn type_mismatch_from_expect_carries_span() {
     // A conversion mismatch raised by `expect` (here: `Type` erased against an
     // atom type) must still carry the offending term's span. These errors used
     // to escape `erase`'s span wrapper through the arm-level `?`.
-    let term = text::to_core(&"Type".parse().unwrap(), &text::NullLoader)
-        .unwrap()
-        .term;
-    let expected = text::to_core(&"'[a]".parse().unwrap(), &text::NullLoader)
-        .unwrap()
-        .term;
+    let term = lower(&"Type".parse().unwrap(), &text::NullLoader);
+    let expected = lower(&"'[a]".parse().unwrap(), &text::NullLoader);
 
     let error = erase(&mut context(), &term, &expected).unwrap_err();
 
@@ -238,11 +234,9 @@ fn erase_rejects_wrong_prim_operand_types() {
 
 #[test]
 fn erase_match_and_atom_stress_test() {
-    let type_ = text::to_core(&"'[zeta, alpha, mu]".parse().unwrap(), &text::NullLoader)
-        .unwrap()
-        .term;
+    let type_ = lower(&"'[zeta, alpha, mu]".parse().unwrap(), &text::NullLoader);
 
-    let term = text::to_core(
+    let term = lower(
         &r#"
                 let outer : '[zeta, alpha, mu] = 'mu;
                 let alpha_case : '[zeta, alpha, mu] = 'alpha;
@@ -272,9 +266,7 @@ fn erase_match_and_atom_stress_test() {
         .parse()
         .unwrap(),
         &text::NullLoader,
-    )
-    .unwrap()
-    .term;
+    );
 
     let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 

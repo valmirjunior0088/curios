@@ -10,10 +10,7 @@ fn main() {
         Int/add(triple.0, Int/add(triple.1, triple.2))
         "#;
 
-    let entrypoint = source
-        .parse::<curios::text::Entrypoint>()
-        .unwrap()
-        .with_prelude();
+    let entrypoint = source.parse::<curios::text::Entrypoint>().unwrap();
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

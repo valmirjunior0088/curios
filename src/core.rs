@@ -1,11 +1,10 @@
-mod arity;
-pub use arity::*;
-
-mod flt;
-pub use flt::*;
+mod scope;
 
 mod int;
 pub use int::*;
+
+mod flt;
+pub use flt::*;
 
 mod nat;
 pub use nat::*;

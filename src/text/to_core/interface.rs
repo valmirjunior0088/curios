@@ -98,16 +98,30 @@ fn seed(
     counter: &mut usize,
 ) -> Result<(), Error> {
     let mut interface = PublicInterface::new();
-    let info = table.get(prefix).expect("module info present from discovery");
+    let info = table
+        .get(prefix)
+        .expect("module info present from discovery");
 
     for label in info.public_children() {
         let target = prefix.with(&label);
-        interface.children.insert(label, Entry { target, source: Source::Direct });
+        interface.children.insert(
+            label,
+            Entry {
+                target,
+                source: Source::Direct,
+            },
+        );
     }
 
     for label in info.public_bindings() {
         let target = prefix.with(&label);
-        interface.bindings.insert(label, Entry { target, source: Source::Direct });
+        interface.bindings.insert(
+            label,
+            Entry {
+                target,
+                source: Source::Direct,
+            },
+        );
     }
 
     public.insert(prefix.clone(), interface);
@@ -137,9 +151,13 @@ fn seed(
                         let mut interface = PublicInterface::new();
                         for case in &union.cases {
                             let target = ctor.with(&case.label);
-                            interface
-                                .bindings
-                                .insert(case.label.clone(), Entry { target, source: Source::Direct });
+                            interface.bindings.insert(
+                                case.label.clone(),
+                                Entry {
+                                    target,
+                                    source: Source::Direct,
+                                },
+                            );
                         }
                         public.insert(ctor, interface);
                     }
@@ -149,7 +167,12 @@ fn seed(
                 let path = prefix.with(&mod_item.label);
                 let child = match &mod_item.module {
                     Some(module) => &module.items,
-                    None => &modules.get(&path).expect("module loaded during discovery").items,
+                    None => {
+                        &modules
+                            .get(&path)
+                            .expect("module loaded during discovery")
+                            .items
+                    }
                 };
 
                 seed(child, &path, modules, table, public, pub_uses, counter)?;
@@ -173,7 +196,10 @@ fn fixed_point(
 
         for use_ in pub_uses {
             for (ns, label, target) in resolvable(public, table, use_) {
-                let entry = Entry { target, source: Source::ReExport(use_.id) };
+                let entry = Entry {
+                    target,
+                    source: Source::ReExport(use_.id),
+                };
                 changed |= insert(public, &use_.module, ns, label, entry)?;
             }
         }
@@ -348,7 +374,9 @@ fn classify_dead(
 
                     if !resolved {
                         let ns = if in_binding { Ns::Binding } else { Ns::Module };
-                        return Err(classify_label(public, table, pub_uses, &provider, ns, label));
+                        return Err(classify_label(
+                            public, table, pub_uses, &provider, ns, label,
+                        ));
                     }
                 }
             }
@@ -373,7 +401,9 @@ fn classify_label(
 
     loop {
         if !visited.insert(current.clone()) {
-            return Error::CyclicReExport { label: label.to_string() };
+            return Error::CyclicReExport {
+                label: label.to_string(),
+            };
         }
 
         match producer(public, table, pub_uses, &current, ns, label) {
@@ -441,7 +471,11 @@ fn unreachable_path(
                 // Own direct child (any visibility) is a valid start; only an
                 // outright non-child fails here.
                 Some(_) => module.with(first),
-                None => return Error::ChildModuleNotFound { segment: first.clone() },
+                None => {
+                    return Error::ChildModuleNotFound {
+                        segment: first.clone(),
+                    };
+                }
             },
         };
 
@@ -455,12 +489,23 @@ fn unreachable_path(
         }
     }
 
-    Error::NoSuchUseTarget { label: name.last().to_string(), parent: current.join() }
+    Error::NoSuchUseTarget {
+        label: name.last().to_string(),
+        parent: current.join(),
+    }
 }
 
-fn segment_error(table: &HashMap<Qualifier, ModuleInfo>, module: &Qualifier, segment: &str) -> Error {
+fn segment_error(
+    table: &HashMap<Qualifier, ModuleInfo>,
+    module: &Qualifier,
+    segment: &str,
+) -> Error {
     match table.get(module).and_then(|info| info.get_child(segment)) {
-        Some(false) => Error::PrivateChildModule { segment: segment.to_string() },
-        _ => Error::ChildModuleNotFound { segment: segment.to_string() },
+        Some(false) => Error::PrivateChildModule {
+            segment: segment.to_string(),
+        },
+        _ => Error::ChildModuleNotFound {
+            segment: segment.to_string(),
+        },
     }
 }

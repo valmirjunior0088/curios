@@ -1,5 +1,5 @@
 use {
-    super::{Arity, Atom, Flt, Int, Many, Nat, One, Prim, Two},
+    super::{Atom, Flt, Int, Nat, Prim, scope::Visit},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -11,51 +11,14 @@ use {
     },
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum VarType {
-    Free(String),
-    Bound(usize),
-}
+pub use super::scope::{Arity, Bound, Many, One, Two, Var};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Var {
-    type_: VarType,
-}
+/// `core`-stage scope: a body binding `A` de Bruijn variables. Defaults its body
+/// to [`Term`], so existing `Scope<One>` / `Scope<Many>` call sites are unchanged.
+pub type Scope<A, B = Term> = super::scope::Scope<A, B>;
 
-impl Var {
-    pub fn free<A>(label: A) -> Self
-    where
-        A: Into<String>,
-    {
-        Self {
-            type_: VarType::Free(label.into()),
-        }
-    }
-
-    fn as_free(&self) -> Option<&str> {
-        match &self.type_ {
-            VarType::Free(label) => Some(label),
-            VarType::Bound(_) => None,
-        }
-    }
-
-    fn bound(index: usize) -> Self {
-        Self {
-            type_: VarType::Bound(index),
-        }
-    }
-
-    fn as_bound(&self) -> Option<usize> {
-        match &self.type_ {
-            VarType::Free(_) => None,
-            &VarType::Bound(index) => Some(index),
-        }
-    }
-
-    pub fn unwrap(&self) -> &str {
-        self.as_free().unwrap()
-    }
-}
+/// `core`-stage telescope of dependent binders ending in a body of type `B`.
+pub type Telescope<B> = super::scope::Telescope<B>;
 
 #[derive(Debug, Clone)]
 pub struct Term {
@@ -411,236 +374,6 @@ impl From<Subterm> for Term {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Scope<A: Arity, B: Bound = Term> {
-    arity: A,
-    names: Option<Vec<String>>,
-    body: Box<B>,
-}
-
-impl<A, B> Scope<A, B>
-where
-    A: Arity,
-    B: Bound,
-{
-    pub fn close<'a>(arity: A, labels: A::Params<'a, str>, body: B) -> Self {
-        assert!(
-            arity.arity() == labels.as_ref().len(),
-            "scope arity mismatch in `close`: expected {}, got {}",
-            arity.arity(),
-            labels.as_ref().len()
-        );
-
-        Self {
-            arity,
-            names: Some(labels.as_ref().iter().map(|s| s.to_string()).collect()),
-            body: body.capture(labels.as_ref()).into(),
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        self.arity.arity()
-    }
-
-    fn reach(&self) -> usize {
-        self.body.reach().saturating_sub(self.arity())
-    }
-
-    pub fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
-        assert!(
-            self.arity() == terms.as_ref().len(),
-            "scope arity mismatch in `open`: expected {}, got {}",
-            self.arity(),
-            terms.as_ref().len()
-        );
-
-        self.body.release(terms.as_ref())
-    }
-
-    pub fn constant(arity: A, body: B) -> Self {
-        Self {
-            arity,
-            names: None,
-            body: body.into(),
-        }
-    }
-
-    pub fn first_label(&self) -> Option<&str> {
-        self.names.as_deref()?.first().map(String::as_str)
-    }
-
-    pub fn second_label(&self) -> Option<&str> {
-        self.names.as_deref()?.get(1).map(String::as_str)
-    }
-
-    pub fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
-        (0..self.arity()).map(move |i| {
-            self.names
-                .as_deref()
-                .and_then(|ns| ns.get(i))
-                .map(String::as_str)
-        })
-    }
-
-    pub fn free_vars(&self) -> BTreeSet<String> {
-        self.body.free_vars()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Telescope<B: Bound> {
-    Done(Box<B>),
-    Cons(Term, Scope<One, Telescope<B>>),
-}
-
-impl<B: Bound> Bound for Telescope<B> {
-    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
-    where
-        F: FnMut(usize, &Var) -> Option<Subterm>,
-    {
-        match self {
-            Telescope::Cons(ty, rest) => {
-                Telescope::Cons(visit.visit_subterm(ty), visit.visit_scope(rest))
-            }
-            Telescope::Done(body) => Telescope::Done(body.traverse(visit).into()),
-        }
-    }
-
-    fn reach(&self) -> usize {
-        match self {
-            Telescope::Cons(ty, rest) => ty.reach().max(rest.reach()),
-            Telescope::Done(body) => body.reach(),
-        }
-    }
-}
-
-impl<B: Bound> Telescope<B> {
-    pub fn done(body: B) -> Self {
-        Telescope::Done(body.into())
-    }
-
-    pub fn cons<L, T>(label: L, ty: T, rest: Telescope<B>) -> Self
-    where
-        L: Into<String>,
-        T: Into<Term>,
-    {
-        let label = label.into();
-        Telescope::Cons(ty.into(), Scope::close(One, &[label.as_str()], rest))
-    }
-
-    pub fn build<I, L, T>(entries: I, body: B) -> Self
-    where
-        I: IntoIterator<Item = (L, T)>,
-        L: Into<String>,
-        T: Into<Term>,
-    {
-        entries
-            .into_iter()
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .fold(Telescope::done(body), |rest, (l, t)| {
-                Telescope::cons(l, t, rest)
-            })
-    }
-
-    pub fn len(&self) -> usize {
-        let mut n = 0;
-        let mut cur = self;
-        while let Telescope::Cons(_, rest) = cur {
-            n += 1;
-            cur = &rest.body;
-        }
-        n
-    }
-
-    pub fn is_empty(&self) -> bool {
-        matches!(self, Telescope::Done(_))
-    }
-
-    pub fn first_label(&self) -> Option<&str> {
-        match self {
-            Telescope::Cons(_, rest) => rest.first_label(),
-            Telescope::Done(_) => None,
-        }
-    }
-
-    pub fn open(&self, args: &[&Term]) -> B {
-        assert!(
-            self.len() == args.len(),
-            "telescope arity mismatch in `open`: expected {}, got {}",
-            self.len(),
-            args.len()
-        );
-
-        let mut cur = self.clone();
-        for arg in args {
-            cur = match cur {
-                Telescope::Cons(_, rest) => rest.open(&[arg]),
-                Telescope::Done(_) => unreachable!(),
-            };
-        }
-        match cur {
-            Telescope::Done(body) => *body,
-            Telescope::Cons(_, _) => unreachable!(),
-        }
-    }
-
-    /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder before
-    /// substituting that arg into the rest, and return the final `Done` body. The walk is
-    /// infallible; the error type `E` belongs to the callback, so callers in different
-    /// error worlds (`Error` for infer/erase, `ReduceError` for convert) can all reuse it.
-    pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
-    where
-        F: FnMut(&Term, &Term) -> Result<(), E>,
-    {
-        assert!(
-            self.len() == args.len(),
-            "telescope arity mismatch in `walk`: expected {}, got {}",
-            self.len(),
-            args.len()
-        );
-
-        let mut tele = self;
-        let mut i = 0;
-        loop {
-            match tele {
-                Telescope::Done(body) => return Ok(*body),
-                Telescope::Cons(ty, rest) => {
-                    f(&args[i], &ty)?;
-                    tele = rest.open(&[&args[i]]);
-                    i += 1;
-                }
-            }
-        }
-    }
-
-    pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
-    where
-        F: FnMut(usize) -> Term,
-    {
-        fn go<B: Bound, F: FnMut(usize) -> Term>(
-            tele: Telescope<B>,
-            index: usize,
-            j: usize,
-            sub: &mut F,
-        ) -> Option<Term> {
-            match tele {
-                Telescope::Done(_) => None,
-                Telescope::Cons(ty, rest) => {
-                    if j == index {
-                        Some(ty)
-                    } else {
-                        go(rest.open(&[&sub(j)]), index, j + 1, sub)
-                    }
-                }
-            }
-        }
-
-        go(self, index, 0, &mut sub)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FuncType {
     pub telescope: Telescope<Term>,
 }
@@ -764,86 +497,7 @@ impl Subterm {
     }
 
     pub fn free_vars(&self) -> BTreeSet<String> {
-        Bound::free_vars(self)
-    }
-}
-
-pub trait Bound: Sized + Clone + Eq + Hash + Debug {
-    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
-    where
-        F: FnMut(usize, &Var) -> Option<Subterm>;
-
-    /// Number of outer de Bruijn binders this term depends on: `1 + max escaping bound
-    /// index`, or `0` if none. A term with `reach <= depth` contains no bound index
-    /// `>= depth`, so `shift`/`release` at that depth are the identity on it.
-    fn reach(&self) -> usize;
-
-    /// `true` iff the term has no loose de Bruijn indices — i.e. it's not floating
-    /// inside some outer scope. Reducing a non-closed term doesn't make sense; this
-    /// is also the gate for memoising reductions.
-    fn closed(&self) -> bool {
-        self.reach() == 0
-    }
-
-    fn shift(&self, amount: usize) -> Self {
-        self.traverse(&mut Visit::pruning(|depth, var| {
-            var.as_bound()
-                .filter(|&index| index >= depth)
-                .map(|index| Subterm::Var(Var::bound(index + amount)))
-        }))
-    }
-
-    fn capture(&self, labels: &[&str]) -> Self {
-        self.traverse(&mut Visit::new(|depth, var| {
-            var.as_free()
-                .and_then(|label| {
-                    labels
-                        .iter()
-                        .position(|&candidate| label == candidate)
-                        .map(|index| Subterm::Var(Var::bound(depth + index)))
-                })
-                .or_else(|| {
-                    var.as_bound()
-                        .filter(|&index| index >= depth)
-                        .map(|index| Subterm::Var(Var::bound(index + labels.len())))
-                })
-        }))
-    }
-
-    fn release(&self, terms: &[&Term]) -> Self {
-        self.traverse(&mut Visit::pruning(|depth, var| {
-            var.as_bound().and_then(|index| {
-                index
-                    .checked_sub(depth)
-                    .map(|delta| match delta < terms.len() {
-                        true => (**terms[delta]).shift(depth),
-                        false => Subterm::Var(Var::bound(index - terms.len())),
-                    })
-            })
-        }))
-    }
-
-    fn free_vars(&self) -> BTreeSet<String> {
-        let mut vars = BTreeSet::new();
-        self.traverse(&mut Visit::new(|_, var| {
-            if let Some(label) = var.as_free() {
-                vars.insert(label.to_string());
-            }
-            None
-        }));
-        vars
-    }
-}
-
-impl Bound for () {
-    fn traverse<F>(&self, _: &mut Visit<F>) -> Self
-    where
-        F: FnMut(usize, &Var) -> Option<Subterm>,
-    {
-    }
-
-    fn reach(&self) -> usize {
-        0
+        <Subterm as Bound>::free_vars(self)
     }
 }
 
@@ -852,7 +506,7 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        if visit.prune && self.reach() <= visit.depth {
+        if visit.prune() && self.reach() <= visit.depth() {
             return self.clone();
         }
 
@@ -877,7 +531,7 @@ impl Bound for Subterm {
     {
         match self {
             Subterm::Type => Subterm::Type,
-            Subterm::Prim(prim) => Subterm::Prim(visit.visit_prim(prim)),
+            Subterm::Prim(prim) => Subterm::Prim(traverse_prim(prim, visit)),
             Subterm::AtomType(at) => Subterm::AtomType(at.clone()),
             Subterm::Atom(atom) => Subterm::Atom(atom.clone()),
             Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
@@ -960,9 +614,7 @@ impl Bound for Subterm {
                     .collect(),
                 tail: visit.visit_scope(tail),
             }),
-            Subterm::Var(var) => {
-                (visit.visit)(visit.depth, var).unwrap_or_else(|| Subterm::Var(var.clone()))
-            }
+            Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
         }
     }
 
@@ -1125,233 +777,185 @@ fn prim_reach(prim: &Prim) -> usize {
     }
 }
 
-#[derive(Debug)]
-pub struct Visit<F> {
-    depth: usize,
-    prune: bool,
-    visit: F,
-}
-
-impl<F> Visit<F>
+fn traverse_prim<F>(prim: &Prim, visit: &mut Visit<F>) -> Prim
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    fn new(visit: F) -> Self {
-        Self {
-            depth: 0,
-            prune: false,
-            visit,
+    match prim {
+        Prim::BlnType => Prim::BlnType,
+        Prim::Bln(value) => Prim::Bln(*value),
+        Prim::NatType => Prim::NatType,
+        Prim::Nat(Nat::Zero) => Prim::Nat(Nat::Zero),
+        Prim::Nat(Nat::Succ(spine, inner)) => {
+            Prim::Nat(Nat::Succ(spine.clone(), visit.visit_subterm(inner)))
         }
-    }
-
-    /// Like `new`, but lets `Term::traverse` skip (and structurally share) subtrees that
-    /// the visit provably leaves unchanged. Only sound for index-monotonic visits whose
-    /// effect on a subterm depends solely on bound indices `>= depth` — i.e. `shift` and
-    /// `release`. Must NOT be used for `capture` (rewrites free names) or `free_vars`
-    /// (must observe every node).
-    fn pruning(visit: F) -> Self {
-        Self {
-            depth: 0,
-            prune: true,
-            visit,
+        Prim::NatEql(left, right) => {
+            Prim::NatEql(visit.visit_subterm(left), visit.visit_subterm(right))
         }
-    }
-
-    fn visit_subterm(&mut self, subterm: &Term) -> Term {
-        subterm.traverse(self)
-    }
-
-    fn visit_prim(&mut self, prim: &Prim) -> Prim {
-        match prim {
-            Prim::BlnType => Prim::BlnType,
-            Prim::Bln(value) => Prim::Bln(*value),
-            Prim::NatType => Prim::NatType,
-            Prim::Nat(Nat::Zero) => Prim::Nat(Nat::Zero),
-            Prim::Nat(Nat::Succ(spine, inner)) => {
-                Prim::Nat(Nat::Succ(spine.clone(), self.visit_subterm(inner)))
-            }
-            Prim::NatEql(left, right) => {
-                Prim::NatEql(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatNeq(left, right) => {
-                Prim::NatNeq(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatAdd(left, right) => {
-                Prim::NatAdd(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatSub(left, right) => {
-                Prim::NatSub(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatMul(left, right) => {
-                Prim::NatMul(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatLt(left, right) => {
-                Prim::NatLt(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatDiv(left, right) => {
-                Prim::NatDiv(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatRem(left, right) => {
-                Prim::NatRem(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatGt(left, right) => {
-                Prim::NatGt(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatLte(left, right) => {
-                Prim::NatLte(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::NatGte(left, right) => {
-                Prim::NatGte(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntType => Prim::IntType,
-            Prim::Int(value) => Prim::Int(*value),
-            Prim::IntEql(left, right) => {
-                Prim::IntEql(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntNeq(left, right) => {
-                Prim::IntNeq(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntAdd(left, right) => {
-                Prim::IntAdd(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntSub(left, right) => {
-                Prim::IntSub(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntMul(left, right) => {
-                Prim::IntMul(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntDiv(left, right) => {
-                Prim::IntDiv(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntRem(left, right) => {
-                Prim::IntRem(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntLt(left, right) => {
-                Prim::IntLt(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntGt(left, right) => {
-                Prim::IntGt(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntLte(left, right) => {
-                Prim::IntLte(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::IntGte(left, right) => {
-                Prim::IntGte(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltType => Prim::FltType,
-            Prim::Flt(flt) => Prim::Flt(*flt),
-            Prim::FltAdd(left, right) => {
-                Prim::FltAdd(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltSub(left, right) => {
-                Prim::FltSub(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltMul(left, right) => {
-                Prim::FltMul(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltDiv(left, right) => {
-                Prim::FltDiv(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltEql(left, right) => {
-                Prim::FltEql(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltNeq(left, right) => {
-                Prim::FltNeq(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltLt(left, right) => {
-                Prim::FltLt(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltGt(left, right) => {
-                Prim::FltGt(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltLte(left, right) => {
-                Prim::FltLte(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltGte(left, right) => {
-                Prim::FltGte(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltMin(left, right) => {
-                Prim::FltMin(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltMax(left, right) => {
-                Prim::FltMax(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::FltNeg(inner) => Prim::FltNeg(self.visit_subterm(inner)),
-            Prim::FltAbs(inner) => Prim::FltAbs(self.visit_subterm(inner)),
-            Prim::FltSqrt(inner) => Prim::FltSqrt(self.visit_subterm(inner)),
-            Prim::FltFloor(inner) => Prim::FltFloor(self.visit_subterm(inner)),
-            Prim::FltCeil(inner) => Prim::FltCeil(self.visit_subterm(inner)),
-            Prim::FltTrunc(inner) => Prim::FltTrunc(self.visit_subterm(inner)),
-            Prim::FltNearest(inner) => Prim::FltNearest(self.visit_subterm(inner)),
-            Prim::NatToStr(inner) => Prim::NatToStr(self.visit_subterm(inner)),
-            Prim::IntToStr(inner) => Prim::IntToStr(self.visit_subterm(inner)),
-            Prim::FltToStr(inner) => Prim::FltToStr(self.visit_subterm(inner)),
-            Prim::NatToInt(inner) => Prim::NatToInt(self.visit_subterm(inner)),
-            Prim::NatToFlt(inner) => Prim::NatToFlt(self.visit_subterm(inner)),
-            Prim::IntToNat(inner) => Prim::IntToNat(self.visit_subterm(inner)),
-            Prim::IntToFlt(inner) => Prim::IntToFlt(self.visit_subterm(inner)),
-            Prim::FltToNat(inner) => Prim::FltToNat(self.visit_subterm(inner)),
-            Prim::FltToInt(inner) => Prim::FltToInt(self.visit_subterm(inner)),
-            Prim::BinType => Prim::BinType,
-            Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
-            Prim::BinLen(bin) => Prim::BinLen(self.visit_subterm(bin)),
-            Prim::BinEql(left, right) => {
-                Prim::BinEql(self.visit_subterm(left), self.visit_subterm(right))
-            }
-            Prim::BinGet(bin, index) => {
-                Prim::BinGet(self.visit_subterm(bin), self.visit_subterm(index))
-            }
-            Prim::BinSlice(bin, start, end) => Prim::BinSlice(
-                self.visit_subterm(bin),
-                self.visit_subterm(start),
-                self.visit_subterm(end),
-            ),
-            Prim::BinAppend(bin, byte) => {
-                Prim::BinAppend(self.visit_subterm(bin), self.visit_subterm(byte))
-            }
-            Prim::BinConcat(operands) => {
-                Prim::BinConcat(operands.iter().map(|e| self.visit_subterm(e)).collect())
-            }
-            Prim::ArrType(elem) => Prim::ArrType(self.visit_subterm(elem)),
-            Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| self.visit_subterm(e)).collect()),
-            Prim::ArrLen(ty, list) => {
-                Prim::ArrLen(self.visit_subterm(ty), self.visit_subterm(list))
-            }
-            Prim::ArrGet(ty, list, index) => Prim::ArrGet(
-                self.visit_subterm(ty),
-                self.visit_subterm(list),
-                self.visit_subterm(index),
-            ),
-            Prim::ArrSlice(ty, list, start, end) => Prim::ArrSlice(
-                self.visit_subterm(ty),
-                self.visit_subterm(list),
-                self.visit_subterm(start),
-                self.visit_subterm(end),
-            ),
-            Prim::ArrAppend(ty, list, elem) => Prim::ArrAppend(
-                self.visit_subterm(ty),
-                self.visit_subterm(list),
-                self.visit_subterm(elem),
-            ),
-            Prim::ArrConcat(ty, operands) => Prim::ArrConcat(
-                self.visit_subterm(ty),
-                operands.iter().map(|e| self.visit_subterm(e)).collect(),
-            ),
-            Prim::IoPrint(inner) => Prim::IoPrint(self.visit_subterm(inner)),
-            Prim::IoRead => Prim::IoRead,
+        Prim::NatNeq(left, right) => {
+            Prim::NatNeq(visit.visit_subterm(left), visit.visit_subterm(right))
         }
-    }
-
-    fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
-        self.depth += scope.arity.arity();
-        let body = scope.body.traverse(self).into();
-        self.depth -= scope.arity.arity();
-
-        Scope {
-            arity: scope.arity,
-            names: scope.names.clone(),
-            body,
+        Prim::NatAdd(left, right) => {
+            Prim::NatAdd(visit.visit_subterm(left), visit.visit_subterm(right))
         }
+        Prim::NatSub(left, right) => {
+            Prim::NatSub(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatMul(left, right) => {
+            Prim::NatMul(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatLt(left, right) => {
+            Prim::NatLt(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatDiv(left, right) => {
+            Prim::NatDiv(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatRem(left, right) => {
+            Prim::NatRem(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatGt(left, right) => {
+            Prim::NatGt(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatLte(left, right) => {
+            Prim::NatLte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatGte(left, right) => {
+            Prim::NatGte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntType => Prim::IntType,
+        Prim::Int(value) => Prim::Int(*value),
+        Prim::IntEql(left, right) => {
+            Prim::IntEql(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntNeq(left, right) => {
+            Prim::IntNeq(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntAdd(left, right) => {
+            Prim::IntAdd(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntSub(left, right) => {
+            Prim::IntSub(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntMul(left, right) => {
+            Prim::IntMul(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntDiv(left, right) => {
+            Prim::IntDiv(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntRem(left, right) => {
+            Prim::IntRem(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntLt(left, right) => {
+            Prim::IntLt(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntGt(left, right) => {
+            Prim::IntGt(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntLte(left, right) => {
+            Prim::IntLte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntGte(left, right) => {
+            Prim::IntGte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltType => Prim::FltType,
+        Prim::Flt(flt) => Prim::Flt(*flt),
+        Prim::FltAdd(left, right) => {
+            Prim::FltAdd(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltSub(left, right) => {
+            Prim::FltSub(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltMul(left, right) => {
+            Prim::FltMul(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltDiv(left, right) => {
+            Prim::FltDiv(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltEql(left, right) => {
+            Prim::FltEql(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltNeq(left, right) => {
+            Prim::FltNeq(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltLt(left, right) => {
+            Prim::FltLt(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltGt(left, right) => {
+            Prim::FltGt(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltLte(left, right) => {
+            Prim::FltLte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltGte(left, right) => {
+            Prim::FltGte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltMin(left, right) => {
+            Prim::FltMin(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltMax(left, right) => {
+            Prim::FltMax(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::FltNeg(inner) => Prim::FltNeg(visit.visit_subterm(inner)),
+        Prim::FltAbs(inner) => Prim::FltAbs(visit.visit_subterm(inner)),
+        Prim::FltSqrt(inner) => Prim::FltSqrt(visit.visit_subterm(inner)),
+        Prim::FltFloor(inner) => Prim::FltFloor(visit.visit_subterm(inner)),
+        Prim::FltCeil(inner) => Prim::FltCeil(visit.visit_subterm(inner)),
+        Prim::FltTrunc(inner) => Prim::FltTrunc(visit.visit_subterm(inner)),
+        Prim::FltNearest(inner) => Prim::FltNearest(visit.visit_subterm(inner)),
+        Prim::NatToStr(inner) => Prim::NatToStr(visit.visit_subterm(inner)),
+        Prim::IntToStr(inner) => Prim::IntToStr(visit.visit_subterm(inner)),
+        Prim::FltToStr(inner) => Prim::FltToStr(visit.visit_subterm(inner)),
+        Prim::NatToInt(inner) => Prim::NatToInt(visit.visit_subterm(inner)),
+        Prim::NatToFlt(inner) => Prim::NatToFlt(visit.visit_subterm(inner)),
+        Prim::IntToNat(inner) => Prim::IntToNat(visit.visit_subterm(inner)),
+        Prim::IntToFlt(inner) => Prim::IntToFlt(visit.visit_subterm(inner)),
+        Prim::FltToNat(inner) => Prim::FltToNat(visit.visit_subterm(inner)),
+        Prim::FltToInt(inner) => Prim::FltToInt(visit.visit_subterm(inner)),
+        Prim::BinType => Prim::BinType,
+        Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
+        Prim::BinLen(bin) => Prim::BinLen(visit.visit_subterm(bin)),
+        Prim::BinEql(left, right) => {
+            Prim::BinEql(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::BinGet(bin, index) => {
+            Prim::BinGet(visit.visit_subterm(bin), visit.visit_subterm(index))
+        }
+        Prim::BinSlice(bin, start, end) => Prim::BinSlice(
+            visit.visit_subterm(bin),
+            visit.visit_subterm(start),
+            visit.visit_subterm(end),
+        ),
+        Prim::BinAppend(bin, byte) => {
+            Prim::BinAppend(visit.visit_subterm(bin), visit.visit_subterm(byte))
+        }
+        Prim::BinConcat(operands) => {
+            Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
+        }
+        Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
+        Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
+        Prim::ArrLen(ty, list) => Prim::ArrLen(visit.visit_subterm(ty), visit.visit_subterm(list)),
+        Prim::ArrGet(ty, list, index) => Prim::ArrGet(
+            visit.visit_subterm(ty),
+            visit.visit_subterm(list),
+            visit.visit_subterm(index),
+        ),
+        Prim::ArrSlice(ty, list, start, end) => Prim::ArrSlice(
+            visit.visit_subterm(ty),
+            visit.visit_subterm(list),
+            visit.visit_subterm(start),
+            visit.visit_subterm(end),
+        ),
+        Prim::ArrAppend(ty, list, elem) => Prim::ArrAppend(
+            visit.visit_subterm(ty),
+            visit.visit_subterm(list),
+            visit.visit_subterm(elem),
+        ),
+        Prim::ArrConcat(ty, operands) => Prim::ArrConcat(
+            visit.visit_subterm(ty),
+            operands.iter().map(|e| visit.visit_subterm(e)).collect(),
+        ),
+        Prim::IoPrint(inner) => Prim::IoPrint(visit.visit_subterm(inner)),
+        Prim::IoRead => Prim::IoRead,
     }
 }
 
@@ -1388,7 +992,7 @@ mod tests {
         // body does not mention the bound variable -> open returns the stored Rc unchanged
         let scope = Scope::close(One, &["x"], Term::atom("k"));
         let opened = scope.open(&[&Term::var(Var::free("y"))]);
-        assert!(Rc::ptr_eq(&opened.inner, &scope.body.inner));
+        assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
     }
 
     #[test]
@@ -1400,7 +1004,7 @@ mod tests {
             Term::tuple([Term::var(Var::free("x")), closed]),
         );
 
-        let stored_field = match &**scope.body {
+        let stored_field = match &**scope.body() {
             Subterm::Tuple(Tuple { fields }) => fields[1].clone(),
             _ => panic!("expected tuple body"),
         };

@@ -102,16 +102,4 @@ impl Entrypoint {
             ..self
         }
     }
-
-    pub fn with_prelude(self) -> Self {
-        let items = [super::prelude(), super::std()]
-            .into_iter()
-            .chain(self.module.items)
-            .collect();
-
-        Self {
-            module: Module { items },
-            ..self
-        }
-    }
 }

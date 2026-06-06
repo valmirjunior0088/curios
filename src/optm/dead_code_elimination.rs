@@ -130,8 +130,12 @@ fn dce_module(module: &mut Module) {
         }
     }
 
-    module.funcs_mut().retain(|(name, _)| keep_funcs.contains(name));
-    module.clsrs_mut().retain(|(name, _)| keep_clsrs.contains(name));
+    module
+        .funcs_mut()
+        .retain(|(name, _)| keep_funcs.contains(name));
+    module
+        .clsrs_mut()
+        .retain(|(name, _)| keep_clsrs.contains(name));
     module
         .consts_mut()
         .retain(|(name, _)| used_values.contains(name));

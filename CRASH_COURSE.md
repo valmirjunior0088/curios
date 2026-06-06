@@ -220,19 +220,17 @@ let head(T : Type, n : Nat, v : Vec(T, n + 1)) -> T =
 
 ## Payoff: typed format strings
 
-Length-indexed vectors rule out bounds errors. The same mechanism rules out variadic argument mismatches. The standard library module `fmt` exports `printf`, a function whose argument list is determined by the format string at compile time — not by a macro, but by an ordinary dependent function type.
+Length-indexed vectors rule out bounds errors. The same mechanism rules out variadic argument mismatches. The standard library module `/std/Fmt` exports `printf`, a function whose argument list is determined by the format string at compile time — not by a macro, but by an ordinary dependent function type.
 
 ```
-pub mod fmt;
-fmt/printf("%s is %d")("Alice")(30)
+/std/Fmt/printf("%s is %d")("Alice")(30)
 -- output: Alice is 30
 ```
 
-`"%s is %d"` calls for a `Bin` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `fmt/printf("%s is %d")` is `Bin -> Nat -> Bin` — computed by reducing the format string during type checking, so the format string and each argument are applied in turn. Swapping the types is a compile-time error:
+`"%s is %d"` calls for a `Bin` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `/std/Fmt/printf("%s is %d")` is `Bin -> Nat -> Bin` — computed by reducing the format string during type checking, so the format string and each argument are applied in turn. Swapping the types is a compile-time error:
 
 ```
-pub mod fmt;
-fmt/printf("%d")("Alice")
+/std/Fmt/printf("%d")("Alice")
 -- TypeMismatch: %d expects Nat, but "Alice" has type Bin
 ```
 

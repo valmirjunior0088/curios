@@ -3,7 +3,7 @@ use {
     crate::wasm,
     std::sync::Arc,
     wasmtime::{
-        AnyRef, ArrayType, Config, Engine, FieldType, FuncType, HeapType, Linker, Module,
+        AnyRef, ArrayType, Config, Engine, FieldType, FuncType, HeapType, Instance, Linker, Module,
         Mutability, RefType, Rooted, StorageType, Store, ValType,
     },
 };
@@ -31,6 +31,15 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
     module: &wasm::Module,
     host: H,
 ) -> Result<(), String> {
+    instantiate_and_run(module, host).map(|_| ())
+}
+
+/// Instantiate `module`, wire up the host imports, and run its entrypoint, returning the
+/// store and instance so callers can inspect post-run state.
+fn instantiate_and_run<H: Host + Send + Sync + 'static>(
+    module: &wasm::Module,
+    host: H,
+) -> Result<(Store<()>, Instance), String> {
     let mut config = Config::new();
     config.wasm_reference_types(true);
     config.wasm_function_references(true);
@@ -97,5 +106,5 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
         .call(&mut store, ())
         .map_err(|error| format!("execution failed: {error}"))?;
 
-    Ok(())
+    Ok((store, instance))
 }

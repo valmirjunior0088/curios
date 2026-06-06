@@ -63,9 +63,7 @@ struct Cli {
 }
 
 fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<wasm::Module, String> {
-    let entrypoint = text::Entrypoint::from_path(input_path)
-        .map_err(|error| error.format())?
-        .with_prelude();
+    let entrypoint = text::Entrypoint::from_path(input_path).map_err(|error| error.format())?;
 
     let loader = text::FileLoader::new(input_path.parent().unwrap_or(Path::new(".")));
 

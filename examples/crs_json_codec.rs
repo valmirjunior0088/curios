@@ -31,8 +31,7 @@ fn main() {
     let base = Path::new(file!()).parent().unwrap().join("crs");
     let entrypoint = source
         .parse::<text::Entrypoint>()
-        .expect("failed to parse source")
-        .with_prelude();
+        .expect("failed to parse source");
     let loader = text::FileLoader::new(&base);
     let mut last = Instant::now();
 

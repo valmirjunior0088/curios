@@ -9,4 +9,18 @@ pub let fold(T : Type, A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     end;
 
 pub let map(A : Type, B : Type, f : A -> B, arr : Arr(A)) -> Arr(B) =
-    fold(A, Arr(B), arr, [], (elem, acc) => append(B, acc, f(elem)));
+    -- Map `[lo, hi)` of `arr` by divide-and-conquer, so the result is assembled
+    -- with balanced `concat`s (O(n log n) total) rather than n `append`s — each of
+    -- which copies the whole accumulator, making the naive fold O(n^2).
+    rec go(lo : Nat, hi : Nat) -> Arr(B) =
+        match Nat/lt(Nat/add(lo, 1), hi) : Arr(B)
+        | false =>
+            match Nat/lt(lo, hi) : Arr(B)
+            | false => []
+            | true => [f(get(A, arr, lo))]
+            end
+        | true =>
+            let mid : Nat = Nat/div(Nat/add(lo, hi), 2);
+            concat(B, go(lo, mid), go(mid, hi))
+        end;
+    go(0, len(A, arr));

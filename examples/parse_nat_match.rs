@@ -20,8 +20,7 @@ fn main() {
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("'[quote, lbracket, lbrace, other]".parse().unwrap())
-        .with_prelude();
+        .with_type("'[quote, lbracket, lbrace, other]".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

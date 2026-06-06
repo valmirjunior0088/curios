@@ -18,8 +18,7 @@ fn main() {
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("/sys/Int".parse().unwrap())
-        .with_prelude();
+        .with_type("/sys/Int".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),
