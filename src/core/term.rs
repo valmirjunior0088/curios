@@ -1208,10 +1208,7 @@ mod tests {
                 Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
             ],
         );
-        assert_eq!(
-            term.metavars(),
-            BTreeSet::from([1, 2, 3])
-        );
+        assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3]));
     }
 
     #[test]

@@ -62,15 +62,23 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 self.term(&ft.output)?,
             ),
             Subterm::Func(func) => {
-                // An omitted argument annotation lowers to a fresh hole, exactly
-                // like a `Subterm::Hole`; the domain is then solved (or, once the
-                // surface carries annotations, checked) when elaborating the
-                // lambda against its expected function type.
+                // Each parameter's domain is its annotation lowered, or — for the
+                // `(x) => …` sugar — a fresh hole (exactly like `Subterm::Hole`).
+                // The hole is solved against the expected function type when the
+                // lambda is checked, or synthesized from the annotation when the
+                // lambda is inferred. Core's `func` constructor closes the param
+                // names over both the body and the later (dependent) domains.
                 let params = func
                     .params
                     .iter()
-                    .map(|name| (name.clone(), core::Term::metavar(self.context.fresh_metavar())))
-                    .collect::<Vec<_>>();
+                    .map(|(name, annotation)| {
+                        let domain = match annotation {
+                            Some(ty) => self.term(ty)?,
+                            None => core::Term::metavar(self.context.fresh_metavar()),
+                        };
+                        Ok((name.clone(), domain))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
                 core::Term::func(params, self.term(&func.body)?)
             }
             Subterm::Apply(apply) => core::Term::apply(

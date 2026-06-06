@@ -118,8 +118,14 @@ pub enum Term {
 /// can feed it straight to `lower_letrec_bindings`, exactly like a local `Rec`.
 #[derive(Debug)]
 pub enum Item {
-    Let { name: String, body: Term },
-    Rec { names: Vec<String>, items: Vec<Term> },
+    Let {
+        name: String,
+        body: Term,
+    },
+    Rec {
+        names: Vec<String>,
+        items: Vec<Term>,
+    },
 }
 
 /// The erased program: a flat list of top-level `items` plus the entrypoint

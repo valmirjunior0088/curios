@@ -213,7 +213,15 @@ fn print_term(term: Term) -> Printer<'static> {
         ]),
         Subterm::Func(Func { params, body }) => flat([
             pure("("),
-            sep_flat(params.into_iter().map(pure), || pure(", ")),
+            sep_flat(
+                params
+                    .into_iter()
+                    .map(|(name, annotation)| match annotation {
+                        Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
+                        None => pure(name),
+                    }),
+                || pure(", "),
+            ),
             pure(") =>\n"),
             indent(print_term(body)),
         ]),
@@ -404,8 +412,10 @@ fn print_term(term: Term) -> Printer<'static> {
 fn print_let_signature(signature: LetSignature) -> Printer<'static> {
     match signature {
         LetSignature::Name { type_, body } => flat([
-            pure(" : "),
-            print_term(type_),
+            match type_ {
+                Some(type_) => flat([pure(" : "), print_term(type_)]),
+                None => pure(""),
+            },
             pure(" =\n"),
             indent(print_term(body)),
         ]),

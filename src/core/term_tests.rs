@@ -14,8 +14,12 @@ fn close_open_substitutes_label_name() {
 
 #[test]
 fn close_open_preserves_nested_bind() {
-    let term = Scope::close(One, &["x"], Term::func([("y", Term::type_())], Term::var(Var::free("x"))))
-        .open(&[&Term::var(Var::free("z"))]);
+    let term = Scope::close(
+        One,
+        &["x"],
+        Term::func([("y", Term::type_())], Term::var(Var::free("x"))),
+    )
+    .open(&[&Term::var(Var::free("z"))]);
 
     let Subterm::Func(body) = &*term else {
         panic!("unexpected `{term:?}`")

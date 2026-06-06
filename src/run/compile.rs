@@ -23,7 +23,8 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let module = text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
+    let module =
+        text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
 
     observe(Stage::Core(&module));
 
@@ -44,8 +45,8 @@ where
         None => core::Mode::Infer,
     };
 
-    let (module, core_type) = core::elaborate_module(&mut context, &module, core_mode)
-        .map_err(|error| error.format())?;
+    let (module, core_type) =
+        core::elaborate_module(&mut context, &module, core_mode).map_err(|error| error.format())?;
 
     let module = core::zonk_module(&context, &module).map_err(|error| error.format())?;
     let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;
@@ -159,6 +160,62 @@ mod tests {
         "#;
 
         let error = compile(source, Some("/sys/Nat")).unwrap_err();
+
+        assert!(error.contains("cannot"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn typeless_let_infers_a_literal_body() {
+        // A local `let` with no type annotation infers the body's type (`Nat`
+        // here) and lowers end-to-end.
+        let source = r#"
+            let n = 5;
+            n
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn typeless_let_binds_an_annotated_closure() {
+        // The composite feature: a typeless local `let` binds an annotated
+        // closure. The closure's type is synthesized from its annotation
+        // (Infer-mode `elaborate_func`), the let's type is inferred from it, and
+        // `f(5)` checks and lowers all the way to wasm.
+        let source = r#"
+            use /sys/{Nat};
+            let f = (x : Nat) => x;
+            f(5)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn closure_annotation_must_match_the_expected_domain() {
+        // In checking position the param annotation is verified against the
+        // expected function type's domain — a wrong annotation is a type mismatch.
+        let source = r#"
+            use /sys/{Nat, Bln};
+            let f : (Nat) -> Nat = (x : Bln) => x;
+            f(5)
+        "#;
+
+        let error = compile(source, None).unwrap_err();
+
+        assert!(error.contains("mismatch"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bare_typeless_let_closure_cannot_be_inferred() {
+        // Without an annotation there is nothing to infer the domain from, so a
+        // typeless `let` binding a bare closure is a `cannot`-infer error.
+        let source = r#"
+            let f = (x) => x;
+            f
+        "#;
+
+        let error = compile(source, None).unwrap_err();
 
         assert!(error.contains("cannot"), "unexpected error: {error}");
     }

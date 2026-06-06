@@ -53,7 +53,10 @@ fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     TopItem::Let(TopLet {
         is_pub: true,
         label: label.to_string(),
-        signature: LetSignature::Name { type_, body },
+        signature: LetSignature::Name {
+            type_: Some(type_),
+            body,
+        },
     })
 }
 

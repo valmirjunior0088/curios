@@ -429,13 +429,21 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
     parse_paren_func_type().or(parse_non_dependent_func_type())
 }
 
+// A lambda parameter with an optional domain annotation. `(x)` is sugar for
+// `(x : _)`; the annotation, when present, parses as an arbitrary term and stops
+// at the closing `)` (mirrors `parse_func_type_param`).
+fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
+    parse_identifier().map(|name: &str| name.to_string()).and(
+        catch(parse_literal(":").and_keep(lazy(parse_term)))
+            .map(Some)
+            .or(pure(None)),
+    )
+}
+
 fn parse_func<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0(
-                || parse_identifier().map(|s: &str| s.to_string()),
-                || parse_literal(","),
-            ))
+            .and_keep(sep_by0(parse_func_param, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .and_drop(parse_literal("=>")),
     )
@@ -644,12 +652,10 @@ fn parse_func_sugar_param<'a>() -> Parser<'a, (String, Term)> {
         .map(|(name, ty): (&str, Term)| (name.to_string(), ty))
 }
 
-// Parses the part of a `let` binding after its name. Yields either
-// `LetSignature::Func` for the function-definition sugar
-// `(p : T, ...) -> R = body`, or `LetSignature::Name` for the plain
-// `: T = body` form.
-fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
-    let func = catch(
+// The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the
+// type-required and the local (type-optional) signature parsers.
+fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
+    catch(
         parse_literal("(")
             .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
             .and_drop(parse_literal(")"))
@@ -664,21 +670,48 @@ fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
             output,
             body,
         },
-    );
+    )
+}
 
-    let name = catch(parse_literal(":"))
+// The plain `: T = body` form with a mandatory type.
+fn parse_required_name_signature<'a>() -> Parser<'a, LetSignature> {
+    catch(parse_literal(":"))
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal("="))
         .and(lazy(parse_term))
-        .map(|(type_, body)| LetSignature::Name { type_, body });
+        .map(|(type_, body)| LetSignature::Name {
+            type_: Some(type_),
+            body,
+        })
+}
 
-    func.or(name)
+// The plain `(: T)? = body` form: the type may be omitted (inferred from `body`).
+fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
+    catch(parse_literal(":").and_keep(lazy(parse_term)))
+        .map(Some)
+        .or(pure(None))
+        .and_drop(parse_literal("="))
+        .and(lazy(parse_term))
+        .map(|(type_, body)| LetSignature::Name { type_, body })
+}
+
+// Parses the part of a `let`/`rec` binding after its name where a type is
+// **required**: the function sugar, or the `: T = body` form. Used for top-level
+// `let` and every `rec` binding, whose types cannot be inferred.
+fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
+    parse_func_let_signature().or(parse_required_name_signature())
+}
+
+// Like `parse_let_signature`, but the plain form's type annotation may be
+// omitted. Used only by local `let`, where the body's type can be inferred.
+fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
+    parse_func_let_signature().or(parse_optional_name_signature())
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("let"))
         .and_keep(parse_identifier())
-        .and(parse_let_signature())
+        .and(parse_local_let_signature())
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
         .map(|((label, signature), tail)| {

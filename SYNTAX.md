@@ -170,11 +170,18 @@ Arguments are arbitrary terms — there is no need to parenthesise compound argu
 ### Lambda
 
 ```
-label => body
+(a) => body
 (a, b) => body
+(a : A, b : B) => body
 ```
 
-Introduces a function. A single parameter may be written without parentheses; multiple parameters are parenthesised and comma-separated. All parameters are in scope in `body`.
+Introduces a function. Parameters are parenthesised and comma-separated, and each
+may carry an optional type annotation. `(x) => body` is shorthand for
+`(x : _) => body`: the omitted domain is solved from the expected function type
+when the lambda is checked, or synthesized from the annotation when the lambda is
+in inference position (for instance, the body of a typeless `let`). A lambda whose
+domain cannot be determined — a bare `(x) => body` with no expected type — is
+rejected. All parameters are in scope in `body`.
 
 ### Local let
 
@@ -183,7 +190,21 @@ let name : Type = body;
 tail
 ```
 
-Binds `name` to `body` for the rest of `tail`. The type annotation and semicolon are required. The function-definition shorthand is also available locally:
+Binds `name` to `body` for the rest of `tail`. The semicolon is required. The type
+annotation is **optional for a local `let`** — `let name = body;` infers it from
+`body` (equivalently, write `: _`):
+
+```
+let n = 5;                 -- n : Nat, inferred
+let f = (x : Nat) => x;    -- f : (Nat) -> Nat, inferred from the annotation
+tail
+```
+
+The body must be inferable: a bare `let f = (x) => x;` (nothing constrains the
+domain), or a tuple/atom with no annotation, is rejected. Top-level `let` and every
+`rec` binding (local or top-level) still require an explicit type — a `rec` group's
+mutually recursive types cannot be inferred from their bodies. The
+function-definition shorthand is also available locally:
 
 ```
 let add(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat = /sys/Nat/add(a, b);

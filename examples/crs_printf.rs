@@ -60,11 +60,8 @@ fn main() {
         .expect("expected lowered module");
     // Elaborating the module type-checks every top-level item, then the body
     // `printf("%d")("Alice")` — where the mismatch surfaces.
-    let result = core::elaborate_module(
-        &mut core::Context::new(timeout),
-        &module,
-        core::Mode::Infer,
-    );
+    let result =
+        core::elaborate_module(&mut core::Context::new(timeout), &module, core::Mode::Infer);
 
     assert!(matches!(
         &result,

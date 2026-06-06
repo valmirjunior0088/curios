@@ -833,12 +833,18 @@ impl Work<'_, '_, '_> {
                         }),
                     );
                 }
-                ersd::Item::Let { name, body: let_body } if is_synchronous(let_body) => {
+                ersd::Item::Let {
+                    name,
+                    body: let_body,
+                } if is_synchronous(let_body) => {
                     let value = self.lower_pure_name(let_body, &frame);
                     frame.push(name.clone(), value);
                     index += 1;
                 }
-                ersd::Item::Let { name, body: let_body } => {
+                ersd::Item::Let {
+                    name,
+                    body: let_body,
+                } => {
                     let name = name.clone();
                     let rest = &items[index + 1..];
                     let resume = resume.clone();

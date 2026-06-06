@@ -12,7 +12,9 @@ fn context() -> Context {
 }
 
 fn lower(entrypoint: &text::Entrypoint, loader: &dyn text::Loader) -> Term {
-    text::to_core(entrypoint, loader).unwrap().into_nested_term()
+    text::to_core(entrypoint, loader)
+        .unwrap()
+        .into_nested_term()
 }
 
 #[test]
@@ -560,4 +562,3 @@ fn erase_arr_concat() {
 
     erase(&mut context, &concat, &arr_nat).unwrap();
 }
-

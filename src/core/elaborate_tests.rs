@@ -67,10 +67,34 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
 fn naturally_checked_func_cannot_infer() {
     let mut context = context();
 
+    // A lambda whose domain is an unconstrained hole (the bare `(x) => …` sugar)
+    // has nothing to synthesize a domain from, so inference still fails.
     let func = Term::func([("x", Term::metavar(0))], nat_lit(0));
     let result = elaborate(&mut context, &func, Mode::Infer);
 
     assert!(result.is_err());
+}
+
+#[test]
+fn annotated_func_infers_a_function_type() {
+    let mut context = context();
+
+    // `(x : Nat) => x` synthesizes `(Nat) -> Nat` on its own — no expected type.
+    let func = Term::func([("x", nat())], Term::var(Var::free("x")));
+    let (term, type_) = elaborate(&mut context, &func, Mode::Infer).unwrap();
+
+    // Meta-free, and convertible (alpha-insensitive) to the expected function
+    // type; a structural `assert_eq!` would trip only on the cosmetic fresh
+    // binder label the Infer arm generates.
+    assert!(term.metavars().is_empty());
+    assert!(
+        convert_with(
+            &mut context,
+            &type_,
+            &Term::func_type([("x", nat())], nat())
+        )
+        .unwrap()
+    );
 }
 
 #[test]

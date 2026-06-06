@@ -230,7 +230,8 @@ fn process_items(
                                     core::Telescope::build(fields, ()),
                                 ))
                             })
-                            .collect::<Result<BTreeMap<core::Atom, core::Telescope<()>>, Error>>()?;
+                            .collect::<Result<BTreeMap<core::Atom, core::Telescope<()>>, Error>>(
+                            )?;
 
                         // Desugar the union type to a tagged-tuple type
                         // `{ tag : '[c_1, ...], match tag { 'c_i => (payload_i...) } }`.

@@ -69,7 +69,11 @@ pub struct FuncType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
-    pub params: Vec<String>,
+    /// Each parameter carries an optional domain annotation. `None` is the
+    /// surface `(x) => …` form, sugar for `(x : _) => …`; it lowers to a hole
+    /// (`to_core::elaborate`), solved against the expected function type when the
+    /// lambda is checked, or synthesized from the annotation when inferred.
+    pub params: Vec<(String, Option<Term>)>,
     pub body: Term,
 }
 
@@ -163,7 +167,10 @@ pub enum Match {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature {
     Name {
-        type_: Term,
+        /// `None` only for a local `let x = body` (the parser forbids omitting
+        /// the type for top-level `let` and for every `rec` binding). It lowers
+        /// to a hole so the core elaborator infers the body's type.
+        type_: Option<Term>,
         body: Term,
     },
     Func {
@@ -176,7 +183,12 @@ pub enum LetSignature {
 impl LetSignature {
     pub fn type_(&self) -> Term {
         match self {
-            LetSignature::Name { type_, .. } => type_.clone(),
+            LetSignature::Name {
+                type_: Some(type_), ..
+            } => type_.clone(),
+            // An omitted (local-only) annotation lowers to a hole, so the core
+            // elaborator infers the body's type; identical to writing `: _`.
+            LetSignature::Name { type_: None, .. } => Subterm::Hole.into(),
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
@@ -192,7 +204,10 @@ impl LetSignature {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
             LetSignature::Func { params, body, .. } => Subterm::Func(Func {
-                params: params.iter().map(|(n, _)| n.clone()).collect(),
+                params: params
+                    .iter()
+                    .map(|(n, t)| (n.clone(), Some(t.clone())))
+                    .collect(),
                 body: body.clone(),
             })
             .into(),

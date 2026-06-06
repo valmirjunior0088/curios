@@ -515,7 +515,11 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Term::type_(),
         };
-        self.enqueue(output_type, func.telescope.open(&y_refs), Term::apply(other, ys));
+        self.enqueue(
+            output_type,
+            func.telescope.open(&y_refs),
+            Term::apply(other, ys),
+        );
         Ok(true)
     }
 

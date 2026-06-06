@@ -46,8 +46,7 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
     }
 
     let mut domains = Vec::new();
-    let output =
-        context.with_frame(|context| walk(context, ft.telescope.clone(), &mut domains))?;
+    let output = context.with_frame(|context| walk(context, ft.telescope.clone(), &mut domains))?;
 
     Ok((Term::func_type(domains, output), Term::type_()))
 }
@@ -84,10 +83,7 @@ fn elaborate_apply(
     Ok((Term::apply(head, elaborated), output))
 }
 
-fn elaborate_tuple_type(
-    context: &mut Context,
-    tt: &TupleType,
-) -> Result<(Term, Term), Error> {
+fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, Term), Error> {
     fn walk(
         context: &mut Context,
         tele: Telescope<()>,
@@ -125,8 +121,12 @@ fn elaborate_prim_head(
     let head_type = reduce_with(context, &head_type)?;
 
     match expected {
-        Prim::NatType if matches!(&*head_type, Subterm::Prim(Prim::NatType)) => Ok((head, head_type)),
-        Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => Ok((head, head_type)),
+        Prim::NatType if matches!(&*head_type, Subterm::Prim(Prim::NatType)) => {
+            Ok((head, head_type))
+        }
+        Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => {
+            Ok((head, head_type))
+        }
         Prim::NatType => Err(Error::not_nat_type(term.clone(), head_type)),
         Prim::BlnType => Err(Error::not_bln_type(term.clone(), head_type)),
         _ => unreachable!("elaborate_prim_head supports only NatType and BlnType"),
@@ -175,8 +175,7 @@ fn elaborate_nat_induction(
         )
     })?;
 
-    let succ_elaborated =
-        Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+    let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     let rebuilt = Subterm::NatMatch(NatMatch::Induction {
         head: head_elaborated,
@@ -376,15 +375,26 @@ fn elaborate_match(context: &mut Context, m: &Match, term: &Term) -> Result<(Ter
     Ok((rebuilt, motive.open(&[head])))
 }
 
-fn elaborate_let(
-    context: &mut Context,
-    let_: &Let,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
+fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term, Term), Error> {
     let Let { type_, body, tail } = let_;
 
-    let type_elaborated = check(context, type_, Term::type_())?;
-    let body_elaborated = check(context, body, type_.clone())?;
+    // A bare metavar annotation is the lowering of a typeless local `let x = e`
+    // (equivalently `let x : _ = e`): infer the body's type instead of checking
+    // the body against the hole. This is what lets a lambda/tuple/atom body —
+    // which `check` against an unsolved hole would reject — be bound without an
+    // annotation. Otherwise check the body against the (possibly partial)
+    // annotation, as before.
+    let (type_elaborated, body_elaborated, assumed) = match &**type_ {
+        Subterm::Metavar(_) => {
+            let (body_elaborated, inferred) = elaborate(context, body, Mode::Infer)?;
+            (inferred.clone(), body_elaborated, inferred)
+        }
+        _ => {
+            let type_elaborated = check(context, type_, Term::type_())?;
+            let body_elaborated = check(context, body, type_.clone())?;
+            (type_elaborated, body_elaborated, type_.clone())
+        }
+    };
 
     let label = context.fresh(tail.first_label());
 
@@ -394,7 +404,7 @@ fn elaborate_let(
     // The binding is `define`d with the *original* body, which `reduce`/`convert`
     // (domain-blind) treat identically to the rebuilt one.
     let (tail_elaborated, tail_type) = context.with_frame(|context| {
-        context.define_assuming(&label, type_, body);
+        context.define_assuming(&label, &assumed, body);
 
         let (tail_elaborated, tail_type) =
             elaborate(context, &tail.open(&[&Term::var(Var::free(&label))]), mode)?;
@@ -407,11 +417,7 @@ fn elaborate_let(
     Ok((rebuilt, tail_type))
 }
 
-fn elaborate_rec(
-    context: &mut Context,
-    rec: &Rec,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
+fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Term, Term), Error> {
     let Rec { items, tail } = rec;
 
     let labels = tail
@@ -481,10 +487,27 @@ fn elaborate_func(
 ) -> Result<(Term, Term), Error> {
     let Func { telescope } = func;
 
-    let Mode::Check(expected) = mode else {
-        return Err(Error::cannot_infer(term.clone()));
-    };
+    match mode {
+        Mode::Check(expected) => elaborate_func_check(context, telescope, term, expected),
+        Mode::Infer => elaborate_func_infer(context, telescope, term),
+    }
+}
 
+/// Check a lambda against an expected function type. Walk the lambda's own
+/// telescope (whose `Done` is the body) alongside the expected type's telescope
+/// (whose `Done` is the output type) in lockstep. Each parameter's domain is
+/// taken from the expected type; the lambda's own domain — a hole when the
+/// annotation was omitted, or the annotation itself — is unified against it via
+/// `expect`, which solves the hole (or checks the annotation). The rebuilt lambda
+/// then *carries* the expected domain rather than the hole, so re-closing it (and
+/// every enclosing binder) captures any free names the domain mentions — this is
+/// what keeps nested lambda domains de-Bruijn-correct for `zonk`/`erase` (§9).
+fn elaborate_func_check(
+    context: &mut Context,
+    telescope: &Telescope<Term>,
+    term: &Term,
+    expected: Term,
+) -> Result<(Term, Term), Error> {
     let ft = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
         Subterm::FuncType(ft) => ft,
         _ => return Err(Error::not_a_function_type(term.clone(), expected.clone())),
@@ -498,15 +521,6 @@ fn elaborate_func(
         ));
     }
 
-    // Walk the lambda's own telescope (whose `Done` is the body) alongside the
-    // expected function type's telescope (whose `Done` is the output type) in
-    // lockstep. Each parameter's domain is taken from the expected type; the
-    // lambda's own domain — a hole when the surface annotation was omitted — is
-    // unified against it via `expect`, which solves the hole (or, once
-    // annotations exist, checks it). The rebuilt lambda then *carries* the
-    // expected domain rather than the hole, so re-closing it below (and re-closing
-    // every enclosing binder) captures any free names the domain mentions — this
-    // is what keeps nested lambda domains de-Bruijn-correct for `zonk`/`erase`.
     fn walk(
         context: &mut Context,
         term: &Term,
@@ -541,6 +555,52 @@ fn elaborate_func(
         .with_frame(|context| walk(context, term, telescope.clone(), ft.telescope, &mut domains))?;
 
     Ok((Term::func(domains, body), expected))
+}
+
+/// Synthesize a function type from a lambda's own domain annotations — the mirror
+/// of `elaborate_func_type`. Walk the telescope, elaborating each domain against
+/// `Type`, assuming the parameter, and inferring the body at `Done`. A domain
+/// that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`)
+/// offers nothing to synthesize from, so inference fails — exactly as a bare
+/// lambda in inference position did before annotations existed. The rebuilt lambda
+/// and its type share the same closed domains, so both stay de-Bruijn-correct.
+fn elaborate_func_infer(
+    context: &mut Context,
+    telescope: &Telescope<Term>,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
+    fn walk(
+        context: &mut Context,
+        term: &Term,
+        body: Telescope<Term>,
+        domains: &mut Vec<(String, Term)>,
+    ) -> Result<(Term, Term), Error> {
+        match body {
+            Telescope::Done(body) => elaborate(context, &body, Mode::Infer),
+            Telescope::Cons(domain, body_rest) => {
+                let domain = check(context, &domain, Term::type_())?;
+
+                if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(_)) {
+                    return Err(Error::cannot_infer(term.clone()));
+                }
+
+                let name = context.fresh(body_rest.first_label());
+                let x = Term::var(Var::free(&name));
+                context.assume(&name, &domain);
+                domains.push((name, domain));
+                walk(context, term, body_rest.open(&[&x]), domains)
+            }
+        }
+    }
+
+    let mut domains = Vec::new();
+    let (body, output) =
+        context.with_frame(|context| walk(context, term, telescope.clone(), &mut domains))?;
+
+    Ok((
+        Term::func(domains.clone(), body),
+        Term::func_type(domains, output),
+    ))
 }
 
 fn elaborate_tuple(

@@ -10,13 +10,15 @@ fn parse_rec_func_and_apply() {
             items: vec![RecItem {
                 label: "id".to_string(),
                 signature: LetSignature::Name {
-                    type_: Subterm::FuncType(FuncType {
-                        params: vec![(Some("x".to_string()), Subterm::Type.into())],
-                        output: Subterm::Type.into(),
-                    })
-                    .into(),
+                    type_: Some(
+                        Subterm::FuncType(FuncType {
+                            params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                            output: Subterm::Type.into(),
+                        })
+                        .into(),
+                    ),
                     body: Subterm::Func(Func {
-                        params: vec!["x".to_string()],
+                        params: vec![("x".to_string(), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -41,10 +43,12 @@ fn parse_let_tuple_and_atoms() {
         Subterm::Let(Let {
             label: "x".to_string(),
             signature: LetSignature::Name {
-                type_: Subterm::AtomType(AtomType {
-                    atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
-                })
-                .into(),
+                type_: Some(
+                    Subterm::AtomType(AtomType {
+                        atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
+                    })
+                    .into(),
+                ),
                 body: Subterm::Atom(Atom::from("hot")).into(),
             },
             tail: Subterm::Tuple(Tuple {
@@ -176,7 +180,7 @@ fn parse_top_let_without_pub() {
             is_pub: false,
             label: "x".to_string(),
             signature: LetSignature::Name {
-                type_: Subterm::Type.into(),
+                type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
             },
         })]
@@ -191,7 +195,7 @@ fn parse_top_let_with_pub() {
             is_pub: true,
             label: "x".to_string(),
             signature: LetSignature::Name {
-                type_: Subterm::Type.into(),
+                type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
             },
         })]
@@ -213,13 +217,15 @@ fn parse_top_rec_mixed_pub() {
                 is_pub: true,
                 label: "id".to_string(),
                 signature: LetSignature::Name {
-                    type_: Subterm::FuncType(FuncType {
-                        params: vec![(Some("x".to_string()), Subterm::Type.into())],
-                        output: Subterm::Type.into(),
-                    })
-                    .into(),
+                    type_: Some(
+                        Subterm::FuncType(FuncType {
+                            params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                            output: Subterm::Type.into(),
+                        })
+                        .into(),
+                    ),
                     body: Subterm::Func(Func {
-                        params: vec!["x".to_string()],
+                        params: vec![("x".to_string(), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -229,7 +235,7 @@ fn parse_top_rec_mixed_pub() {
                 is_pub: false,
                 label: "helper".to_string(),
                 signature: LetSignature::Name {
-                    type_: Subterm::Type.into(),
+                    type_: Some(Subterm::Type.into()),
                     body: Subterm::Type.into(),
                 },
             },
@@ -275,7 +281,7 @@ fn parse_nested_module() {
                     is_pub: true,
                     label: "x".to_string(),
                     signature: LetSignature::Name {
-                        type_: Subterm::Type.into(),
+                        type_: Some(Subterm::Type.into()),
                         body: Subterm::Type.into(),
                     },
                 })],
@@ -638,4 +644,93 @@ fn underscore_prefixed_name_is_not_a_hole() {
         "_foo".parse::<Term>().unwrap().into_subterm(),
         Subterm::Name(_)
     ));
+}
+
+#[test]
+fn parse_local_let_without_type() {
+    // A local `let x = e` omits the type; it parses to `Name { type_: None }`,
+    // and the core elaborator infers the body's type.
+    assert_eq!(
+        "let x = Type; x".parse::<Term>().unwrap(),
+        Subterm::Let(Let {
+            label: "x".to_string(),
+            signature: LetSignature::Name {
+                type_: None,
+                body: Subterm::Type.into(),
+            },
+            tail: Subterm::Name(Name::from(["x".to_string()])).into(),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_local_let_with_type_still_works() {
+    assert_eq!(
+        "let x : Type = Type; x".parse::<Term>().unwrap(),
+        Subterm::Let(Let {
+            label: "x".to_string(),
+            signature: LetSignature::Name {
+                type_: Some(Subterm::Type.into()),
+                body: Subterm::Type.into(),
+            },
+            tail: Subterm::Name(Name::from(["x".to_string()])).into(),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_func_with_annotation() {
+    assert_eq!(
+        "(x : Type) => x".parse::<Term>().unwrap(),
+        Subterm::Func(Func {
+            params: vec![("x".to_string(), Some(Subterm::Type.into()))],
+            body: Subterm::Name(Name::from(["x".to_string()])).into(),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_func_with_mixed_annotations() {
+    // Annotations are per-parameter and optional; a bare param is `None`.
+    assert_eq!(
+        "(x : Type, y) => x".parse::<Term>().unwrap(),
+        Subterm::Func(Func {
+            params: vec![
+                ("x".to_string(), Some(Subterm::Type.into())),
+                ("y".to_string(), None),
+            ],
+            body: Subterm::Name(Name::from(["x".to_string()])).into(),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_func_without_annotation_still_works() {
+    assert_eq!(
+        "(x) => x".parse::<Term>().unwrap(),
+        Subterm::Func(Func {
+            params: vec![("x".to_string(), None)],
+            body: Subterm::Name(Name::from(["x".to_string()])).into(),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn top_level_let_requires_a_type() {
+    // The optional-type form is local-only: a module-level `let` without a type
+    // is a parse error.
+    assert!("let x = Type;".parse::<Module>().is_err());
+}
+
+#[test]
+fn rec_binding_requires_a_type() {
+    // `rec` types cannot be inferred from their (mutually recursive) bodies, so a
+    // typeless `rec` binding is a parse error — both at the top level and locally.
+    assert!("rec f = Type;".parse::<Module>().is_err());
+    assert!("rec f = Type; f".parse::<Term>().is_err());
 }
