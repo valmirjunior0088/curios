@@ -1,65 +1,115 @@
-use super::{Context, Error, Mode, Prim, Subterm, Term, elaborate, expect, infer, reduce_with};
+use super::{Context, Error, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with};
 
-/// Synthesize a primitive's type, checking its operands. Mirrors the old
-/// `infer_prim`, but every operand obligation goes through `elaborate(Check)`
-/// rather than `erase` — erase is now downstream lowering (§6).
-fn synth_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
-    match prim {
-        Prim::BlnType => Ok(Term::type_()),
-        Prim::Bln(_) => Ok(Subterm::Prim(Prim::BlnType).into()),
-        Prim::NatType => Ok(Term::type_()),
-        Prim::Nat(_) => Ok(Subterm::Prim(Prim::NatType).into()),
+/// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors
+/// the old `infer_prim`, but every operand obligation goes through
+/// `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim`
+/// is the authoritative (rebuilt) one that flows on to `zonk`/`erase` (§9).
+fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error> {
+    let nat_type: Term = Subterm::Prim(Prim::NatType).into();
+    let int_type: Term = Subterm::Prim(Prim::IntType).into();
+    let flt_type: Term = Subterm::Prim(Prim::FltType).into();
+    let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
+    let bin_type: Term = Subterm::Prim(Prim::BinType).into();
+
+    Ok(match prim {
+        Prim::BlnType => (prim.clone(), Term::type_()),
+        Prim::Bln(_) => (prim.clone(), bln_type),
+        Prim::NatType => (prim.clone(), Term::type_()),
+        Prim::Nat(_) => (prim.clone(), nat_type),
         Prim::NatEql(left, right)
         | Prim::NatNeq(left, right)
         | Prim::NatLt(left, right)
         | Prim::NatGt(left, right)
         | Prim::NatLte(left, right)
         | Prim::NatGte(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(Subterm::Prim(Prim::BlnType).into())
+            let left = elaborate(context, left, Mode::Check(nat_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(nat_type))?.0;
+            let prim = match prim {
+                Prim::NatEql(..) => Prim::NatEql(left, right),
+                Prim::NatNeq(..) => Prim::NatNeq(left, right),
+                Prim::NatLt(..) => Prim::NatLt(left, right),
+                Prim::NatGt(..) => Prim::NatGt(left, right),
+                Prim::NatLte(..) => Prim::NatLte(left, right),
+                Prim::NatGte(..) => Prim::NatGte(left, right),
+                _ => unreachable!(),
+            };
+            (prim, bln_type)
         }
         Prim::NatAdd(left, right)
         | Prim::NatSub(left, right)
         | Prim::NatMul(left, right)
         | Prim::NatDiv(left, right)
         | Prim::NatRem(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(Subterm::Prim(Prim::NatType).into())
+            let left = elaborate(context, left, Mode::Check(nat_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(nat_type.clone()))?.0;
+            let prim = match prim {
+                Prim::NatAdd(..) => Prim::NatAdd(left, right),
+                Prim::NatSub(..) => Prim::NatSub(left, right),
+                Prim::NatMul(..) => Prim::NatMul(left, right),
+                Prim::NatDiv(..) => Prim::NatDiv(left, right),
+                Prim::NatRem(..) => Prim::NatRem(left, right),
+                _ => unreachable!(),
+            };
+            (prim, nat_type)
         }
-        Prim::IntType => Ok(Term::type_()),
-        Prim::Int(_) => Ok(Subterm::Prim(Prim::IntType).into()),
+        Prim::IntType => (prim.clone(), Term::type_()),
+        Prim::Int(_) => (prim.clone(), int_type),
         Prim::IntEql(left, right)
         | Prim::IntNeq(left, right)
         | Prim::IntLt(left, right)
         | Prim::IntGt(left, right)
         | Prim::IntLte(left, right)
         | Prim::IntGte(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            Ok(Subterm::Prim(Prim::BlnType).into())
+            let left = elaborate(context, left, Mode::Check(int_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(int_type))?.0;
+            let prim = match prim {
+                Prim::IntEql(..) => Prim::IntEql(left, right),
+                Prim::IntNeq(..) => Prim::IntNeq(left, right),
+                Prim::IntLt(..) => Prim::IntLt(left, right),
+                Prim::IntGt(..) => Prim::IntGt(left, right),
+                Prim::IntLte(..) => Prim::IntLte(left, right),
+                Prim::IntGte(..) => Prim::IntGte(left, right),
+                _ => unreachable!(),
+            };
+            (prim, bln_type)
         }
         Prim::IntAdd(left, right)
         | Prim::IntSub(left, right)
         | Prim::IntMul(left, right)
         | Prim::IntDiv(left, right)
         | Prim::IntRem(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            Ok(Subterm::Prim(Prim::IntType).into())
+            let left = elaborate(context, left, Mode::Check(int_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(int_type.clone()))?.0;
+            let prim = match prim {
+                Prim::IntAdd(..) => Prim::IntAdd(left, right),
+                Prim::IntSub(..) => Prim::IntSub(left, right),
+                Prim::IntMul(..) => Prim::IntMul(left, right),
+                Prim::IntDiv(..) => Prim::IntDiv(left, right),
+                Prim::IntRem(..) => Prim::IntRem(left, right),
+                _ => unreachable!(),
+            };
+            (prim, int_type)
         }
-        Prim::FltType => Ok(Term::type_()),
-        Prim::Flt(_) => Ok(Subterm::Prim(Prim::FltType).into()),
+        Prim::FltType => (prim.clone(), Term::type_()),
+        Prim::Flt(_) => (prim.clone(), flt_type),
         Prim::FltAdd(left, right)
         | Prim::FltSub(left, right)
         | Prim::FltMul(left, right)
         | Prim::FltDiv(left, right)
         | Prim::FltMin(left, right)
         | Prim::FltMax(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            Ok(Subterm::Prim(Prim::FltType).into())
+            let left = elaborate(context, left, Mode::Check(flt_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(flt_type.clone()))?.0;
+            let prim = match prim {
+                Prim::FltAdd(..) => Prim::FltAdd(left, right),
+                Prim::FltSub(..) => Prim::FltSub(left, right),
+                Prim::FltMul(..) => Prim::FltMul(left, right),
+                Prim::FltDiv(..) => Prim::FltDiv(left, right),
+                Prim::FltMin(..) => Prim::FltMin(left, right),
+                Prim::FltMax(..) => Prim::FltMax(left, right),
+                _ => unreachable!(),
+            };
+            (prim, flt_type)
         }
         Prim::FltNeg(inner)
         | Prim::FltAbs(inner)
@@ -68,8 +118,18 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         | Prim::FltCeil(inner)
         | Prim::FltTrunc(inner)
         | Prim::FltNearest(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            Ok(Subterm::Prim(Prim::FltType).into())
+            let inner = elaborate(context, inner, Mode::Check(flt_type.clone()))?.0;
+            let prim = match prim {
+                Prim::FltNeg(..) => Prim::FltNeg(inner),
+                Prim::FltAbs(..) => Prim::FltAbs(inner),
+                Prim::FltSqrt(..) => Prim::FltSqrt(inner),
+                Prim::FltFloor(..) => Prim::FltFloor(inner),
+                Prim::FltCeil(..) => Prim::FltCeil(inner),
+                Prim::FltTrunc(..) => Prim::FltTrunc(inner),
+                Prim::FltNearest(..) => Prim::FltNearest(inner),
+                _ => unreachable!(),
+            };
+            (prim, flt_type)
         }
         Prim::FltEql(left, right)
         | Prim::FltNeq(left, right)
@@ -77,164 +137,184 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<Term, Error> {
         | Prim::FltGt(left, right)
         | Prim::FltLte(left, right)
         | Prim::FltGte(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            Ok(Subterm::Prim(Prim::BlnType).into())
+            let left = elaborate(context, left, Mode::Check(flt_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(flt_type))?.0;
+            let prim = match prim {
+                Prim::FltEql(..) => Prim::FltEql(left, right),
+                Prim::FltNeq(..) => Prim::FltNeq(left, right),
+                Prim::FltLt(..) => Prim::FltLt(left, right),
+                Prim::FltGt(..) => Prim::FltGt(left, right),
+                Prim::FltLte(..) => Prim::FltLte(left, right),
+                Prim::FltGte(..) => Prim::FltGte(left, right),
+                _ => unreachable!(),
+            };
+            (prim, bln_type)
         }
         Prim::NatToStr(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(Subterm::Prim(Prim::BinType).into())
+            let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
+            (Prim::NatToStr(inner), bin_type)
         }
         Prim::IntToStr(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            Ok(Subterm::Prim(Prim::BinType).into())
+            let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
+            (Prim::IntToStr(inner), bin_type)
         }
         Prim::FltToStr(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            Ok(Subterm::Prim(Prim::BinType).into())
+            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
+            (Prim::FltToStr(inner), bin_type)
         }
         Prim::NatToInt(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(Subterm::Prim(Prim::IntType).into())
+            let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
+            (Prim::NatToInt(inner), int_type)
         }
         Prim::NatToFlt(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(Subterm::Prim(Prim::FltType).into())
+            let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
+            (Prim::NatToFlt(inner), flt_type)
         }
         Prim::IntToNat(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            Ok(Subterm::Prim(Prim::NatType).into())
+            let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
+            (Prim::IntToNat(inner), nat_type)
         }
         Prim::IntToFlt(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::IntType).into()))?;
-            Ok(Subterm::Prim(Prim::FltType).into())
+            let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
+            (Prim::IntToFlt(inner), flt_type)
         }
         Prim::FltToNat(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            Ok(Subterm::Prim(Prim::NatType).into())
+            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
+            (Prim::FltToNat(inner), nat_type)
         }
         Prim::FltToInt(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::FltType).into()))?;
-            Ok(Subterm::Prim(Prim::IntType).into())
+            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
+            (Prim::FltToInt(inner), int_type)
         }
-        Prim::BinType => Ok(Term::type_()),
-        Prim::Bin(_) => Ok(Subterm::Prim(Prim::BinType).into()),
+        Prim::BinType => (prim.clone(), Term::type_()),
+        Prim::Bin(_) => (prim.clone(), bin_type),
         Prim::BinLen(bin) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce_with(context, &bin_type)?;
-            match &*bin_type {
-                Subterm::Prim(Prim::BinType) => Ok(Subterm::Prim(Prim::NatType).into()),
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::BinType),
-                )),
+            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
+            let bin_actual = reduce_with(context, &bin_actual)?;
+            match &*bin_actual {
+                Subterm::Prim(Prim::BinType) => (Prim::BinLen(bin), nat_type),
+                other => {
+                    return Err(Error::type_mismatch(
+                        Subterm::Prim(prim.clone()),
+                        other.clone(),
+                        Subterm::Prim(Prim::BinType),
+                    ));
+                }
             }
         }
         Prim::BinEql(left, right) => {
-            elaborate(context, left, Mode::Check(Subterm::Prim(Prim::BinType).into()))?;
-            elaborate(context, right, Mode::Check(Subterm::Prim(Prim::BinType).into()))?;
-            Ok(Subterm::Prim(Prim::BlnType).into())
+            let left = elaborate(context, left, Mode::Check(bin_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(bin_type))?.0;
+            (Prim::BinEql(left, right), bln_type)
         }
         Prim::BinGet(bin, index) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce_with(context, &bin_type)?;
-            match &*bin_type {
+            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
+            let bin_actual = reduce_with(context, &bin_actual)?;
+            match &*bin_actual {
                 Subterm::Prim(Prim::BinType) => {
-                    elaborate(context, index, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-                    Ok(Subterm::Prim(Prim::NatType).into())
+                    let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
+                    (Prim::BinGet(bin, index), nat_type)
                 }
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::BinType),
-                )),
+                other => {
+                    return Err(Error::type_mismatch(
+                        Subterm::Prim(prim.clone()),
+                        other.clone(),
+                        Subterm::Prim(Prim::BinType),
+                    ));
+                }
             }
         }
         Prim::BinSlice(bin, start, end) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce_with(context, &bin_type)?;
-            match &*bin_type {
+            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
+            let bin_actual = reduce_with(context, &bin_actual)?;
+            match &*bin_actual {
                 Subterm::Prim(Prim::BinType) => {
-                    elaborate(context, start, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-                    elaborate(context, end, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-                    Ok(Subterm::Prim(Prim::BinType).into())
+                    let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
+                    let end = elaborate(context, end, Mode::Check(nat_type))?.0;
+                    (Prim::BinSlice(bin, start, end), bin_type)
                 }
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::BinType),
-                )),
+                other => {
+                    return Err(Error::type_mismatch(
+                        Subterm::Prim(prim.clone()),
+                        other.clone(),
+                        Subterm::Prim(Prim::BinType),
+                    ));
+                }
             }
         }
         Prim::BinAppend(bin, byte) => {
-            let bin_type = infer(context, bin)?;
-            let bin_type = reduce_with(context, &bin_type)?;
-            match &*bin_type {
+            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
+            let bin_actual = reduce_with(context, &bin_actual)?;
+            match &*bin_actual {
                 Subterm::Prim(Prim::BinType) => {
-                    elaborate(context, byte, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-                    Ok(Subterm::Prim(Prim::BinType).into())
+                    let byte = elaborate(context, byte, Mode::Check(nat_type))?.0;
+                    (Prim::BinAppend(bin, byte), bin_type)
                 }
-                other => Err(Error::type_mismatch(
-                    Subterm::Prim(prim.clone()),
-                    other.clone(),
-                    Subterm::Prim(Prim::BinType),
-                )),
+                other => {
+                    return Err(Error::type_mismatch(
+                        Subterm::Prim(prim.clone()),
+                        other.clone(),
+                        Subterm::Prim(Prim::BinType),
+                    ));
+                }
             }
         }
         Prim::BinConcat(operands) => {
+            let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
-                elaborate(context, operand, Mode::Check(Subterm::Prim(Prim::BinType).into()))?;
+                elaborated.push(elaborate(context, operand, Mode::Check(bin_type.clone()))?.0);
             }
-            Ok(Subterm::Prim(Prim::BinType).into())
+            (Prim::BinConcat(elaborated), bin_type)
         }
         Prim::ArrType(elem) => {
-            elaborate(context, elem, Mode::Check(Term::type_()))?;
-            Ok(Term::type_())
+            let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
+            (Prim::ArrType(elem), Term::type_())
         }
-        Prim::Arr(_) => Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
+        Prim::Arr(_) => return Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
         Prim::ArrLen(type_, list) => {
-            elaborate(context, type_, Mode::Check(Term::type_()))?;
-            let list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
-            elaborate(context, list, Mode::Check(list_type))?;
-            Ok(Subterm::Prim(Prim::NatType).into())
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list = elaborate(context, list, Mode::Check(list_type))?.0;
+            (Prim::ArrLen(type_, list), nat_type)
         }
         Prim::ArrGet(type_, list, index) => {
-            elaborate(context, type_, Mode::Check(Term::type_()))?;
-            let list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
-            elaborate(context, list, Mode::Check(list_type))?;
-            elaborate(context, index, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(type_.clone())
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list = elaborate(context, list, Mode::Check(list_type))?.0;
+            let index = elaborate(context, index, Mode::Check(nat_type))?.0;
+            let output = type_.clone();
+            (Prim::ArrGet(type_, list, index), output)
         }
         Prim::ArrSlice(type_, list, start, end) => {
-            elaborate(context, type_, Mode::Check(Term::type_()))?;
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
-            elaborate(context, list, Mode::Check(list_type.clone()))?;
-            elaborate(context, start, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            elaborate(context, end, Mode::Check(Subterm::Prim(Prim::NatType).into()))?;
-            Ok(list_type)
+            let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
+            let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
+            let end = elaborate(context, end, Mode::Check(nat_type))?.0;
+            (Prim::ArrSlice(type_, list, start, end), list_type)
         }
         Prim::ArrAppend(type_, list, elem) => {
-            elaborate(context, type_, Mode::Check(Term::type_()))?;
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
-            elaborate(context, list, Mode::Check(list_type.clone()))?;
-            elaborate(context, elem, Mode::Check(type_.clone()))?;
-            Ok(list_type)
+            let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
+            let elem = elaborate(context, elem, Mode::Check(type_.clone()))?.0;
+            (Prim::ArrAppend(type_, list, elem), list_type)
         }
         Prim::ArrConcat(type_, operands) => {
-            elaborate(context, type_, Mode::Check(Term::type_()))?;
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
-                elaborate(context, operand, Mode::Check(list_type.clone()))?;
+                elaborated.push(elaborate(context, operand, Mode::Check(list_type.clone()))?.0);
             }
-            Ok(list_type)
+            (Prim::ArrConcat(type_, elaborated), list_type)
         }
         Prim::IoPrint(inner) => {
-            elaborate(context, inner, Mode::Check(Subterm::Prim(Prim::BinType).into()))?;
-            Ok(Term::tuple_type_unit())
+            let inner = elaborate(context, inner, Mode::Check(bin_type))?.0;
+            (Prim::IoPrint(inner), Term::tuple_type_unit())
         }
-        Prim::IoRead => Ok(Subterm::Prim(Prim::BinType).into()),
-    }
+        Prim::IoRead => (prim.clone(), bin_type),
+    })
 }
 
 pub fn elaborate_prim(
@@ -255,18 +335,19 @@ pub fn elaborate_prim(
             other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
         };
 
+        let mut elaborated = Vec::with_capacity(elems.len());
         for elem in elems {
-            elaborate(context, elem, Mode::Check(elem_type.clone()))?;
+            elaborated.push(elaborate(context, elem, Mode::Check(elem_type.clone()))?.0);
         }
 
-        return Ok((term.clone(), expected.clone()));
+        return Ok((Term::prim(Prim::Arr(elaborated)), expected.clone()));
     }
 
-    let type_ = synth_prim(context, prim)?;
+    let (prim, type_) = synth_prim(context, prim)?;
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &type_, expected)?;
     }
 
-    Ok((term.clone(), type_))
+    Ok((Term::prim(prim), type_))
 }

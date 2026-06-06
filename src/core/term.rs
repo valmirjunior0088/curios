@@ -103,21 +103,15 @@ impl Term {
         }))
     }
 
-    pub fn func<I, L, B>(labels: I, body: B) -> Self
+    pub fn func<I, L, T, B>(params: I, body: B) -> Self
     where
-        I: IntoIterator<Item = L>,
+        I: IntoIterator<Item = (L, T)>,
         L: Into<String>,
+        T: Into<Term>,
         B: Into<Term>,
     {
-        let labels = labels
-            .into_iter()
-            .map(|l| l.into())
-            .collect::<Vec<String>>();
-
-        let label_strs = labels.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-
         Self::from(Subterm::Func(Func {
-            body: Scope::close(Many(labels.len()), &label_strs, body.into()),
+            telescope: Telescope::build(params, body.into()),
         }))
     }
 
@@ -384,7 +378,7 @@ pub struct FuncType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Func {
-    pub body: Scope<Many>,
+    pub telescope: Telescope<Term>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -532,7 +526,7 @@ impl Subterm {
             }
             Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) | Subterm::Var(_) => {}
             Subterm::Prim(prim) => prim_metavars(prim, ids),
-            Subterm::Func(Func { body }) => body.body().collect_metavars(ids),
+            Subterm::Func(Func { telescope }) => telescope_metavars(telescope, ids),
             Subterm::FuncType(FuncType { telescope }) => telescope_metavars(telescope, ids),
             Subterm::Apply(Apply { head, params }) => {
                 head.collect_metavars(ids);
@@ -667,8 +661,8 @@ impl Bound for Subterm {
             Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
                 telescope: telescope.traverse(visit),
             }),
-            Subterm::Func(Func { body }) => Subterm::Func(Func {
-                body: visit.visit_scope(body),
+            Subterm::Func(Func { telescope }) => Subterm::Func(Func {
+                telescope: telescope.traverse(visit),
             }),
             Subterm::Apply(Apply { head, params }) => Subterm::Apply(Apply {
                 head: visit.visit_subterm(head),
@@ -758,7 +752,7 @@ impl Bound for Subterm {
                 None => 0,
             },
             Subterm::Prim(prim) => prim_reach(prim),
-            Subterm::Func(Func { body }) => body.reach(),
+            Subterm::Func(Func { telescope }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope }) => telescope.reach(),
             Subterm::Apply(Apply { head, params }) => head.reach().max(max_reach(params)),
             Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
@@ -1208,7 +1202,7 @@ mod tests {
     fn metavars_collects_ids_across_structure() {
         // (λx. ?1)(?2, Nat.add ?3 ?1)
         let term = Term::apply(
-            Term::func(["x"], Term::metavar(1)),
+            Term::func([("x", Term::type_())], Term::metavar(1)),
             [
                 Term::metavar(2),
                 Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
@@ -1236,21 +1230,38 @@ mod tests {
         assert_eq!(Term::var(Var::bound(0)).reach(), 1);
         assert_eq!(Term::var(Var::bound(3)).reach(), 4);
         // closed identity function λx.x
-        assert_eq!(Term::func(["x"], Term::var(Var::free("x"))).reach(), 0);
+        assert_eq!(
+            Term::func([("x", Term::type_())], Term::var(Var::free("x"))).reach(),
+            0
+        );
     }
 
     #[test]
-    fn reach_scope_absorbs_arity() {
-        // body references bound index 2 (reach 3); a scope absorbs its arity
+    fn reach_telescope_absorbs_arity() {
+        // body references bound index 2 (reach 3); each telescope binder absorbs one.
+        // `Scope::constant` places the body without capturing, so the bound index is
+        // preserved exactly (unlike `Telescope::cons`, which captures by label).
         let f1 = Term::from(Subterm::Func(Func {
-            body: Scope::constant(Many(1), Term::var(Var::bound(2))),
+            telescope: Telescope::Cons(
+                Term::type_(),
+                Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
+            ),
         }));
-        assert_eq!(f1.reach(), 2); // (2 + 1) - 1
+        assert_eq!(f1.reach(), 2); // one binder: (2 + 1) - 1
 
         let f2 = Term::from(Subterm::Func(Func {
-            body: Scope::constant(Many(2), Term::var(Var::bound(2))),
+            telescope: Telescope::Cons(
+                Term::type_(),
+                Scope::constant(
+                    One,
+                    Telescope::Cons(
+                        Term::type_(),
+                        Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
+                    ),
+                ),
+            ),
         }));
-        assert_eq!(f2.reach(), 1); // (2 + 1) - 2
+        assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
     }
 
     #[test]
@@ -1263,7 +1274,7 @@ mod tests {
 
     #[test]
     fn open_shares_closed_subterm_inside_substituted_body() {
-        let closed = Term::func(["a"], Term::var(Var::free("a"))); // λa.a, closed
+        let closed = Term::func([("a", Term::type_())], Term::var(Var::free("a"))); // λa.a, closed
         let scope = Scope::close(
             One,
             &["x"],

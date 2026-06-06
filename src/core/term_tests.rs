@@ -14,14 +14,14 @@ fn close_open_substitutes_label_name() {
 
 #[test]
 fn close_open_preserves_nested_bind() {
-    let term = Scope::close(One, &["x"], Term::func(["y"], Term::var(Var::free("x"))))
+    let term = Scope::close(One, &["x"], Term::func([("y", Term::type_())], Term::var(Var::free("x"))))
         .open(&[&Term::var(Var::free("z"))]);
 
     let Subterm::Func(body) = &*term else {
         panic!("unexpected `{term:?}`")
     };
 
-    let opened = body.body.open(&[&Term::var(Var::free("w"))]);
+    let opened = body.telescope.open(&[&Term::var(Var::free("w"))]);
     let Subterm::Var(var) = &*opened else {
         panic!("unexpected term")
     };
@@ -32,7 +32,7 @@ fn close_open_preserves_nested_bind() {
 #[test]
 fn collect_ignores_index_names() {
     let term = Term::func(
-        ["x"],
+        [("x", Term::type_())],
         Term::tuple([
             Term::var(Var::free("x")),
             Term::rec(

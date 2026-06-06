@@ -262,10 +262,9 @@ fn process_items(
                                 .iter()
                                 .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
                                 .collect::<Result<Vec<_>, Error>>()?;
-                            let labels = u.params.iter().map(|(n, _)| n.clone());
                             (
-                                core::Term::func_type(param_tys, core::Term::type_()),
-                                core::Term::func(labels, union),
+                                core::Term::func_type(param_tys.clone(), core::Term::type_()),
+                                core::Term::func(param_tys, union),
                             )
                         };
 
@@ -314,15 +313,9 @@ fn process_items(
                             )
                             .collect::<Result<Vec<_>, Error>>()?;
                         let ctor_type =
-                            core::Term::func_type(param_tys, elaborate.term(&output_type)?);
+                            core::Term::func_type(param_tys.clone(), elaborate.term(&output_type)?);
 
                         // Constructor body: (params..., _0, ...) => inject 'c (_0, ...)
-                        let labels: Vec<String> = u
-                            .params
-                            .iter()
-                            .map(|(n, _)| n.clone())
-                            .chain((0..k).map(|i| format!("_{i}")))
-                            .collect();
                         let args: Vec<core::Term> = (0..k)
                             .map(|i| core::Term::var(core::Var::free(format!("_{i}"))))
                             .collect();
@@ -331,7 +324,7 @@ fn process_items(
                             core::Term::atom(core::Atom::from(c.label.as_str())),
                             core::Term::tuple(args),
                         ]);
-                        let ctor_body = core::Term::func(labels, inject);
+                        let ctor_body = core::Term::func(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),

@@ -17,7 +17,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
     let Apply { head, params } = apply;
     let param_refs = params.iter().collect::<Vec<_>>();
     match Term::unwrap_or_clone(reduce(context, head)?) {
-        Subterm::Func(Func { body }) => Ok(Reduce::Continue(body.open(&param_refs))),
+        Subterm::Func(Func { telescope }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
         head => Ok(Reduce::Break(Term::apply(head, params))),
     }
 }
@@ -45,14 +45,14 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
 }
 
 fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceError> {
-    let n = func.body.arity();
+    let n = func.telescope.len();
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
     let ys = freshs
         .iter()
         .map(|f| Term::var(Var::free(f)))
         .collect::<Vec<_>>();
     let y_refs = ys.iter().collect::<Vec<_>>();
-    match Term::unwrap_or_clone(func.body.open(&y_refs)) {
+    match Term::unwrap_or_clone(func.telescope.open(&y_refs)) {
             Subterm::Apply(Apply { head, params })
                 if params.len() == n
                     && params.iter().enumerate().all(|(i, p)| {

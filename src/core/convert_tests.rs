@@ -12,6 +12,12 @@ fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceE
     convert(context, &Term::type_(), this, that)
 }
 
+/// Build a lambda whose argument domains are irrelevant to conversion (which
+/// compares only bodies); each parameter gets a placeholder `Type` domain.
+fn func<const N: usize>(labels: [&str; N], body: impl Into<Term>) -> Term {
+    Term::func(labels.map(|l| (l, Term::type_())), body.into())
+}
+
 #[test]
 fn convert_func_type_is_alpha_equivalent() {
     let mut context = context();
@@ -27,9 +33,9 @@ fn convert_func_type_is_alpha_equivalent() {
 fn convert_func_is_alpha_equivalent() {
     let mut context = context();
 
-    let this = Term::func(["x"], Term::var(Var::free("x")));
+    let this = func(["x"], Term::var(Var::free("x")));
 
-    let that = Term::func(["y"], Term::var(Var::free("y")));
+    let that = func(["y"], Term::var(Var::free("y")));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -65,7 +71,7 @@ fn convert_match_compares_matches_and_motive() {
 fn convert_prim_recurses_into_operands() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
         Subterm::Prim(Prim::int_add(
             Term::var(Var::free("x")),
@@ -73,7 +79,7 @@ fn convert_prim_recurses_into_operands() {
         )),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
         Subterm::Prim(Prim::int_add(
             Term::var(Var::free("y")),
@@ -88,7 +94,7 @@ fn convert_prim_recurses_into_operands() {
 fn convert_prim_distinguishes_operator_kind() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
         Subterm::Prim(Prim::int_add(
             Term::var(Var::free("x")),
@@ -96,7 +102,7 @@ fn convert_prim_distinguishes_operator_kind() {
         )),
     );
 
-    let that = Term::func(
+    let that = func(
         ["x"],
         Subterm::Prim(Prim::int_sub(
             Term::var(Var::free("x")),
@@ -128,7 +134,7 @@ fn convert_rec_is_alpha_equivalent() {
 fn convert_prim_nat_add_recurses_into_operands() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
         Subterm::Prim(Prim::nat_add(
             Term::var(Var::free("x")),
@@ -136,7 +142,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
         )),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
         Subterm::Prim(Prim::nat_add(
             Term::var(Var::free("y")),
@@ -151,12 +157,12 @@ fn convert_prim_nat_add_recurses_into_operands() {
 fn convert_prim_flt_neg_recurses_into_operand() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
         Subterm::Prim(Prim::flt_neg(Term::var(Var::free("x")))),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
         Subterm::Prim(Prim::flt_neg(Term::var(Var::free("y")))),
     );
@@ -168,12 +174,12 @@ fn convert_prim_flt_neg_recurses_into_operand() {
 fn convert_prim_nat_to_int_recurses_into_operand() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
         Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("x")))),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
         Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("y")))),
     );
@@ -252,11 +258,11 @@ fn convert_prim_bin_literal_compares_bytes() {
 fn convert_prim_bin_len_recurses_into_operand() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
         Subterm::Prim(Prim::bin_len(Term::var(Var::free("x")))),
     );
-    let that = Term::func(
+    let that = func(
         ["y"],
         Subterm::Prim(Prim::bin_len(Term::var(Var::free("y")))),
     );
@@ -268,9 +274,9 @@ fn convert_prim_bin_len_recurses_into_operand() {
 fn convert_prim_bin_get_recurses_into_operands() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
-        Term::func(
+        func(
             ["a"],
             Subterm::Prim(Prim::bin_get(
                 Term::var(Var::free("x")),
@@ -279,9 +285,9 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
-        Term::func(
+        func(
             ["b"],
             Subterm::Prim(Prim::bin_get(
                 Term::var(Var::free("y")),
@@ -297,9 +303,9 @@ fn convert_prim_bin_get_recurses_into_operands() {
 fn convert_prim_bin_concat_recurses_into_operands() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
-        Term::func(
+        func(
             ["a"],
             Subterm::Prim(Prim::bin_concat([
                 Term::var(Var::free("x")),
@@ -308,9 +314,9 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
-        Term::func(
+        func(
             ["b"],
             Subterm::Prim(Prim::bin_concat([
                 Term::var(Var::free("y")),
@@ -326,11 +332,11 @@ fn convert_prim_bin_concat_recurses_into_operands() {
 fn convert_prim_bin_slice_recurses_into_operands() {
     let mut context = context();
 
-    let this = Term::func(
+    let this = func(
         ["x"],
-        Term::func(
+        func(
             ["a"],
-            Term::func(
+            func(
                 ["p"],
                 Subterm::Prim(Prim::bin_slice(
                     Term::var(Var::free("x")),
@@ -341,11 +347,11 @@ fn convert_prim_bin_slice_recurses_into_operands() {
         ),
     );
 
-    let that = Term::func(
+    let that = func(
         ["y"],
-        Term::func(
+        func(
             ["b"],
-            Term::func(
+            func(
                 ["q"],
                 Subterm::Prim(Prim::bin_slice(
                     Term::var(Var::free("y")),
@@ -456,7 +462,7 @@ fn convert_times_out_on_pathological_inputs() {
         (
             "x",
             Term::apply(
-                Term::func(["z"], Term::var(Var::free("z"))),
+                func(["z"], Term::var(Var::free("z"))),
                 [Term::var(Var::free("loop"))],
             ),
         ),

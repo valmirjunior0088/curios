@@ -29,7 +29,7 @@ pub struct MetaEntry {
 /// never touch it.
 #[derive(Debug, Default)]
 pub struct MetaStore {
-    entries: Vec<MetaEntry>,
+    entries: Vec<Option<MetaEntry>>,
 }
 
 #[derive(Debug)]
@@ -302,35 +302,34 @@ impl Context {
         span: Option<Span>,
     ) {
         if id >= self.metas.entries.len() {
-            self.metas.entries.resize_with(id + 1, || MetaEntry {
-                telescope: Vec::new(),
-                result: Term::type_(),
-                solution: None,
-                span: None,
-            });
+            self.metas.entries.resize_with(id + 1, || None);
         }
 
-        self.metas.entries[id] = MetaEntry {
+        self.metas.entries[id] = Some(MetaEntry {
             telescope,
             result,
             solution: None,
             span,
-        };
+        });
     }
 
     pub fn metavar_entry(&self, id: usize) -> Option<&MetaEntry> {
-        self.metas.entries.get(id)
+        self.metas.entries.get(id).and_then(Option::as_ref)
     }
 
     pub fn metavar_solution(&self, id: usize) -> Option<&Term> {
-        self.metas.entries.get(id).and_then(|e| e.solution.as_ref())
+        self.metas
+            .entries
+            .get(id)
+            .and_then(Option::as_ref)
+            .and_then(|e| e.solution.as_ref())
     }
 
     /// Commit a metavariable's solution. Clears the reduction cache, since a
     /// bare metavariable is `reach == 0` (hence cacheable) and may have cached
     /// as itself while unsolved (§7.2).
     pub fn solve_metavar(&mut self, id: usize, term: Term) {
-        if let Some(entry) = self.metas.entries.get_mut(id) {
+        if let Some(Some(entry)) = self.metas.entries.get_mut(id) {
             entry.solution = Some(term);
             self.reductions.clear();
         }

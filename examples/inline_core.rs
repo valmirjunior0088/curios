@@ -8,7 +8,7 @@ fn main() {
         vec![(
             "id",
             core::Term::func_type([("_", core::Term::type_())], core::Term::type_()),
-            core::Term::func(["x"], core::Term::var(core::Var::free("x"))),
+            core::Term::func([("x", core::Term::type_())], core::Term::var(core::Var::free("x"))),
         )],
         core::Term::let_(
             "tuple_ty",

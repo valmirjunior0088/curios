@@ -68,25 +68,27 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
     Ok(())
 }
 
-/// Check that `motive` is a well-formed type family over a scrutinee of `head_type`.
-/// Pure validation, shared by every match form. Runs the motive through
-/// `elaborate` in `Check(Type)` mode — erase is downstream lowering now and no
-/// longer type-checks (§6).
+/// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,
+/// returning the rebuilt motive. Shared by every match form. Runs the motive
+/// through `elaborate` in `Check(Type)` mode — erase is downstream lowering now
+/// and no longer type-checks (§6) — and re-closes the elaborated body so the
+/// motive carries its solved/re-closed form (§9).
 pub fn check_motive(
     context: &mut Context,
     head_type: &Term,
     motive: &Scope<One>,
-) -> Result<(), Error> {
+) -> Result<Scope<One>, Error> {
     let label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
         context.assume(&label, head_type);
-        elaborate(
+        let body = elaborate(
             context,
             &motive.open(&[&Term::var(Var::free(&label))]),
             Mode::Check(Term::type_()),
-        )
-        .map(|_| ())
+        )?
+        .0;
+        Ok(Scope::close(One, &[label.as_str()], body))
     })
 }
 

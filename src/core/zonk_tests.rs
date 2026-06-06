@@ -20,7 +20,7 @@ fn nat_lit(n: usize) -> Term {
 fn zonk_leaves_a_meta_free_term_unchanged() {
     let context = context();
 
-    let term = Term::func(["x"], nat_lit(0));
+    let term = Term::func([("x", Term::type_())], nat_lit(0));
     let zonked = zonk(&context, &term).unwrap();
 
     assert_eq!(zonked, term);

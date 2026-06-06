@@ -14,7 +14,7 @@ fn erase_func(
     _term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Func { body } = func;
+    let Func { telescope } = func;
 
     let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::FuncType(ft) => ft,
@@ -22,65 +22,68 @@ fn erase_func(
         _ => unreachable!("erase: function checked against non-function type"),
     };
 
-    let n = ft.telescope.len();
-
-    // The candidate flag rides from here — the last point a binder's type is known
-    // — down to `cont`, where the optimizer specializes function-typed arguments.
-    let captures = body
-        .free_vars()
-        .into_iter()
-        .map(|name| {
-            let type_ = infer(context, &Term::var(Var::free(&name)))?;
-            let candidate = is_candidate(context, &type_)?;
-            Ok(ersd::Argument { name, candidate })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    let param_names = (0..n)
-        .map(|i| context.fresh(body.label_iter().nth(i).flatten()))
-        .collect::<Vec<_>>();
-    let param_terms = param_names
-        .iter()
-        .map(|p| Term::var(Var::free(p)))
-        .collect::<Vec<_>>();
-    let param_refs = param_terms.iter().collect::<Vec<_>>();
-    let body_opened = body.open(&param_refs);
-
-    fn output_type(
+    // Walk the lambda's telescope (whose `Done` is the body) alongside the
+    // checked function type's telescope (whose `Done` is the output type),
+    // generating a fresh name per parameter and recording the candidate flag
+    // from each expected domain. The lambda's own domains are erased away.
+    fn walk(
         context: &mut Context,
-        tele: Telescope<Term>,
-        names: &[String],
-        terms: &[Term],
+        body: Telescope<Term>,
+        type_: Telescope<Term>,
+        names: &mut Vec<String>,
         candidates: &mut Vec<bool>,
-    ) -> Result<Term, Error> {
-        match tele {
-            Telescope::Done(body) => Ok(*body),
-            Telescope::Cons(type_, rest) => {
+    ) -> Result<(Term, Term), Error> {
+        match (body, type_) {
+            (Telescope::Done(body), Telescope::Done(output)) => Ok((*body, *output)),
+            (Telescope::Cons(_domain, body_rest), Telescope::Cons(type_, type_rest)) => {
                 // The flag is read before the binder is assumed: a parameter's type
                 // never depends on the parameter itself.
                 candidates.push(is_candidate(context, &type_)?);
-                context.assume(&names[0], &type_);
-                output_type(
+                let name = context.fresh(body_rest.first_label());
+                let x = Term::var(Var::free(&name));
+                context.assume(&name, &type_);
+                names.push(name);
+                walk(
                     context,
-                    rest.open(&[&terms[0]]),
-                    &names[1..],
-                    &terms[1..],
+                    body_rest.open(&[&x]),
+                    type_rest.open(&[&x]),
+                    names,
                     candidates,
                 )
             }
+            _ => unreachable!("erase: function/type telescope arity mismatch"),
         }
     }
 
-    let mut candidates = Vec::with_capacity(n);
-    let erased_body = context.with_frame(|context| {
-        let output_type = output_type(
+    let mut param_names = Vec::new();
+    let mut candidates = Vec::new();
+    let (erased_body, captures) = context.with_frame(|context| {
+        let (body_opened, output_type) = walk(
             context,
+            telescope.clone(),
             ft.telescope,
-            &param_names,
-            &param_terms,
+            &mut param_names,
             &mut candidates,
         )?;
-        erase(context, &body_opened, &output_type)
+
+        // Captures are the body's free variables other than the lambda's own
+        // parameters (which appear as fresh frees once the body is opened). The
+        // candidate flag rides from here — the last point a binder's type is
+        // known — down to `cont`, where the optimizer specializes function-typed
+        // arguments.
+        let captures = body_opened
+            .free_vars()
+            .into_iter()
+            .filter(|name| !param_names.contains(name))
+            .map(|name| {
+                let type_ = infer(context, &Term::var(Var::free(&name)))?;
+                let candidate = is_candidate(context, &type_)?;
+                Ok(ersd::Argument { name, candidate })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        let erased_body = erase(context, &body_opened, &output_type)?;
+        Ok::<_, Error>((erased_body, captures))
     })?;
 
     let params = param_names

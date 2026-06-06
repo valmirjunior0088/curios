@@ -104,8 +104,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 
         Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim)?),
 
-        Subterm::Func(Func { body }) => Subterm::Func(Func {
-            body: body.map_body(|b| zonk_term(context, b))?,
+        Subterm::Func(Func { telescope }) => Subterm::Func(Func {
+            telescope: telescope.zonk(context)?,
         }),
 
         Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {

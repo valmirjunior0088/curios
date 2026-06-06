@@ -88,7 +88,7 @@ fn erase_rec_single_identity_function() {
         vec![(
             "f",
             func_type.clone(),
-            Term::func(["x"], Term::var(Var::free("x"))),
+            Term::func([("x", Term::type_())], Term::var(Var::free("x"))),
         )],
         Term::var(Var::free("f")),
     );
@@ -143,7 +143,7 @@ fn erase_func_captures_free_variables_before_opening_body() {
     let tuple_type = Term::tuple_type([("z", atom_type.clone()), ("w", atom_type.clone())]);
     let type_ = Term::func_type([("x", atom_type.clone())], tuple_type);
     let term = Term::func(
-        ["x"],
+        [("x", Term::type_())],
         Term::tuple([Term::var(Var::free("x")), Term::var(Var::free("y"))]),
     );
 

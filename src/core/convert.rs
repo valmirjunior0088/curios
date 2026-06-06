@@ -203,7 +203,7 @@ impl Convert {
         that: Func,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        let n = this.body.arity();
+        let n = this.telescope.len();
         let ys: Vec<Term> = (0..n)
             .map(|_| Term::var(Var::free(context.fresh(None))))
             .collect();
@@ -214,8 +214,8 @@ impl Convert {
         };
         self.enqueue(
             output_type,
-            this.body.open(&y_refs),
-            that.body.open(&y_refs),
+            this.telescope.open(&y_refs),
+            that.telescope.open(&y_refs),
         );
 
         Ok(true)
@@ -506,7 +506,7 @@ impl Convert {
         other: Term,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        let n = func.body.arity();
+        let n = func.telescope.len();
         let ys: Vec<Term> = (0..n)
             .map(|_| Term::var(Var::free(context.fresh(None))))
             .collect();
@@ -515,7 +515,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
             _ => Term::type_(),
         };
-        self.enqueue(output_type, func.body.open(&y_refs), Term::apply(other, ys));
+        self.enqueue(output_type, func.telescope.open(&y_refs), Term::apply(other, ys));
         Ok(true)
     }
 

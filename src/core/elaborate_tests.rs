@@ -52,11 +52,14 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
 
     // `\ _ -> 0` checked against `(_ : Nat) -> Nat`.
     let func_type = Term::func_type([("x", nat())], nat());
-    let func = Term::func(["x"], nat_lit(0));
+    let func = Term::func([("x", Term::metavar(0))], nat_lit(0));
 
     let (term, type_) = elaborate(&mut context, &func, Mode::Check(func_type.clone())).unwrap();
 
-    assert_eq!(term, func);
+    // Elaboration is authoritative: the rebuilt lambda carries its domain solved
+    // from the expected function type, so the hole is gone and the term is
+    // meta-free.
+    assert!(term.metavars().is_empty());
     assert_eq!(type_, func_type);
 }
 
@@ -64,7 +67,7 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
 fn naturally_checked_func_cannot_infer() {
     let mut context = context();
 
-    let func = Term::func(["x"], nat_lit(0));
+    let func = Term::func([("x", Term::metavar(0))], nat_lit(0));
     let result = elaborate(&mut context, &func, Mode::Infer);
 
     assert!(result.is_err());

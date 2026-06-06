@@ -30,10 +30,13 @@ where
     // Elaborate (checking against the entrypoint's type when it carries one, else
     // synthesizing), then zonk metavariable solutions in so the module is
     // meta-free, then erase the meta-free module to `ersd` — the
-    // `elaborate → zonk → erase` data flow (§9). Elaboration and zonking share one
-    // context (the solutions live in its `MetaStore`); erase runs over a fresh one.
-    // Each pass iterates the flat top-level items rather than recursing a nested
-    // spine, so prelude depth no longer overflows the stack (BUG.md).
+    // `elaborate → zonk → erase` data flow (§9). Elaboration is authoritative: it
+    // returns a rebuilt module (lambda domains solved, binders re-closed), and it
+    // is *that* module — not the lowered one — that zonk makes meta-free.
+    // Elaboration and zonking share one context (the solutions live in its
+    // `MetaStore`); erase runs over a fresh one. Each pass iterates the flat
+    // top-level items rather than recursing a nested spine, so prelude depth no
+    // longer overflows the stack (BUG.md).
     let mut context = core::Context::new(timeout);
 
     let core_mode = match &module.type_ {
@@ -41,7 +44,7 @@ where
         None => core::Mode::Infer,
     };
 
-    let core_type = core::elaborate_module(&mut context, &module, core_mode)
+    let (module, core_type) = core::elaborate_module(&mut context, &module, core_mode)
         .map_err(|error| error.format())?;
 
     let module = core::zonk_module(&context, &module).map_err(|error| error.format())?;

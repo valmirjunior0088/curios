@@ -13,7 +13,7 @@ fn reduce_apply_beta_reduces() {
     let mut context = context();
 
     let term: Term = Term::apply(
-        Term::func(["x"], Term::var(Var::free("x"))),
+        Term::func([("x", Term::type_())], Term::var(Var::free("x"))),
         [Term::atom(Atom::from("ok"))],
     );
 
@@ -310,7 +310,7 @@ fn eta_reduce_func_fires() {
     let mut context = context();
 
     let term: Term = Term::func(
-        ["y"],
+        [("y", Term::type_())],
         Term::apply(Term::var(Var::free("f")), [Term::var(Var::free("y"))]),
     );
 

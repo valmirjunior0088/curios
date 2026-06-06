@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Definition, Flt, Func, FuncType, Item, Let, Many, Match,
+        Apply, Atom, AtomType, BlnMatch, Definition, Flt, Func, FuncType, Item, Let, Match,
         Module, Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
         TupleType, Two, Var,
     },
@@ -26,25 +26,24 @@ fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
     (label, body)
 }
 
-fn open_scope_many(scope: Scope<Many>, depth: usize) -> (Vec<String>, Term) {
-    let n = scope.arity();
-    let labels = (0..n)
-        .map(|i| {
-            scope
-                .label_iter()
-                .nth(i)
-                .flatten()
-                .map(str::to_string)
-                .unwrap_or_else(|| label_at(depth + i))
-        })
-        .collect::<Vec<_>>();
-    let label_terms = labels
-        .iter()
-        .map(Var::free)
-        .map(Term::var)
-        .collect::<Vec<_>>();
-    let label_refs = label_terms.iter().collect::<Vec<_>>();
-    let body = scope.open(&label_refs);
+fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Term) {
+    fn walk(cur: Telescope<Term>, depth: usize, idx: usize, labels: &mut Vec<String>) -> Term {
+        match cur {
+            Telescope::Done(body) => *body,
+            Telescope::Cons(_ty, rest) => {
+                let label = rest
+                    .first_label()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| label_at(depth + idx));
+                let next = rest.open(&[&Term::var(Var::free(&label))]);
+                labels.push(label);
+                walk(next, depth, idx + 1, labels)
+            }
+        }
+    }
+
+    let mut labels = Vec::new();
+    let body = walk(telescope, depth, 0, &mut labels);
     (labels, body)
 }
 
@@ -554,8 +553,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(output, depth + n),
             ])
         }
-        Subterm::Func(Func { body }) => {
-            let (labels, body) = open_scope_many(body, depth);
+        Subterm::Func(Func { telescope }) => {
+            let n = telescope.len();
+            let (labels, body) = open_telescope(telescope, depth);
             let param_str = if labels.len() == 1 {
                 labels.into_iter().next().unwrap()
             } else {
@@ -564,7 +564,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             flat([
                 pure(param_str),
                 pure(" =>\n"),
-                indent(print_term(body, depth + 1)),
+                indent(print_term(body, depth + n)),
             ])
         }
         Subterm::Apply(Apply { head, params }) => flat([

@@ -61,7 +61,18 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&ft.output)?,
             ),
-            Subterm::Func(func) => core::Term::func(func.params.clone(), self.term(&func.body)?),
+            Subterm::Func(func) => {
+                // An omitted argument annotation lowers to a fresh hole, exactly
+                // like a `Subterm::Hole`; the domain is then solved (or, once the
+                // surface carries annotations, checked) when elaborating the
+                // lambda against its expected function type.
+                let params = func
+                    .params
+                    .iter()
+                    .map(|name| (name.clone(), core::Term::metavar(self.context.fresh_metavar())))
+                    .collect::<Vec<_>>();
+                core::Term::func(params, self.term(&func.body)?)
+            }
             Subterm::Apply(apply) => core::Term::apply(
                 self.term(&apply.head)?,
                 apply
