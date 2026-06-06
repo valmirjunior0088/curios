@@ -283,6 +283,18 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         }
     }
 
+    /// Rebuild this scope with `f` applied to its body, preserving arity and
+    /// binder names. The body keeps its de Bruijn structure, so `f` must be a
+    /// transformation that does not disturb loose indices — e.g. zonking, which
+    /// only replaces closed metavariable nodes by closed solutions.
+    pub fn map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
+        Ok(Self {
+            arity: self.arity,
+            names: self.names.clone(),
+            body: f(&self.body)?.into(),
+        })
+    }
+
     pub fn first_label(&self) -> Option<&str> {
         self.names.as_deref()?.first().map(String::as_str)
     }

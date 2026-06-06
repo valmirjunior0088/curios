@@ -1,13 +1,24 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatMatch, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, Var, convert_prim, reduce,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, Var, convert_prim, infer, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
         time::Instant,
     },
 };
+
+/// The outcome of attempting to solve a metavariable against a candidate.
+enum Solved {
+    /// Committed `m := t`.
+    Done,
+    /// Not yet solvable (embedded unsolved metavariable): the goal is parked on
+    /// the `blocked` queue and retried after later progress.
+    Postponed,
+    /// Unsolvable: occurs-check, scope-check, or re-validation failure.
+    Failed,
+}
 
 pub fn convert(
     context: &mut Context,
@@ -120,6 +131,13 @@ struct Goal {
 pub struct Convert {
     history: HashSet<Goal>,
     pending: VecDeque<Goal>,
+    // Constraints postponed because a side is flexible but not yet solvable
+    // (flex–flex with distinct heads, or a candidate carrying an unsolved
+    // metavariable). Retried whenever a fresh solution lands (§8).
+    blocked: Vec<Goal>,
+    // Whether a metavariable was solved since the last `blocked` sweep — the
+    // signal that retrying `blocked` could make further progress.
+    progress: bool,
 }
 
 impl Convert {
@@ -127,6 +145,8 @@ impl Convert {
         Self {
             history: HashSet::new(),
             pending: VecDeque::from([Goal { type_, this, that }]),
+            blocked: Vec::new(),
+            progress: false,
         }
     }
 
@@ -563,11 +583,141 @@ impl Convert {
         }
     }
 
+    /// `Some(id)` iff `term` is an unsolved bare metavariable. (`reduce` already
+    /// resolves solved metavariables, so a metavariable surviving to weak-head
+    /// normal form is necessarily unsolved.)
+    fn as_metavar(term: &Term) -> Option<usize> {
+        match &**term {
+            Subterm::Metavar(metavar) => Some(metavar.id),
+            _ => None,
+        }
+    }
+
+    /// Solve a metavariable `id` against candidate `t` (the rigid side, already
+    /// in weak-head normal form). Implements §7.3: embedded-metavariable guard,
+    /// occurs check, scope check, and re-validation against the frozen birth
+    /// context, before committing.
+    fn solve(&mut self, context: &mut Context, id: usize, t: &Term) -> Result<Solved, ReduceError> {
+        let metavars = t.metavars();
+
+        // Occurs check: a candidate mentioning `id` itself is an infinite solution.
+        if metavars.contains(&id) {
+            return Ok(Solved::Failed);
+        }
+
+        // Embedded-metavariable guard: any *other* unsolved metavariable in the
+        // candidate may carry a wider context than `id`'s, so solving now could
+        // let the solution escape its scope. Postpone (the stand-in for pruning).
+        if metavars
+            .iter()
+            .any(|other| context.metavar_solution(*other).is_none())
+        {
+            return Ok(Solved::Postponed);
+        }
+
+        let Some(entry) = context.metavar_entry(id) else {
+            // No birth record (e.g. a synthesis-position hole that never reached
+            // a checking site): nothing to validate against, cannot solve.
+            return Ok(Solved::Failed);
+        };
+        let telescope = entry.telescope.clone();
+        let result = entry.result.clone();
+
+        // Scope check: the solution may only mention variables available to `id`.
+        let allowed = telescope
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect::<HashSet<_>>();
+        if !t.free_vars().iter().all(|name| allowed.contains(name)) {
+            return Ok(Solved::Failed);
+        }
+
+        // Re-validation (§7.4): the candidate must type-check against the
+        // metavariable's frozen type, under its birth context Γ, with
+        // counterfactual refinements suppressed. Stable definitions are kept.
+        let revalidated = context.with_frame(|context| {
+            for (name, ty) in &telescope {
+                context.assume(name, ty);
+            }
+
+            context.with_suppressed_refinements(|context| match infer(context, t) {
+                Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
+                // A meta-free, well-scoped candidate that fails to synthesize is
+                // not validly typed here — reject the solution.
+                Err(_) => Ok(false),
+            })
+        })?;
+
+        if !revalidated {
+            return Ok(Solved::Failed);
+        }
+
+        context.solve_metavar(id, t.clone());
+        self.progress = true;
+        Ok(Solved::Done)
+    }
+
     fn convert(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
+        loop {
+            if !self.drain(context)? {
+                return Ok(false);
+            }
+
+            // Fixpoint: retry postponed constraints only when a fresh solution
+            // since the last sweep could have unblocked them.
+            if self.progress && !self.blocked.is_empty() {
+                self.pending = std::mem::take(&mut self.blocked).into();
+                self.progress = false;
+            } else {
+                break;
+            }
+        }
+
+        // A constraint still blocked at quiescence is an unsolved/residual
+        // constraint. Reject (zonking later pins the precise `cannot_infer`).
+        Ok(self.blocked.is_empty())
+    }
+
+    /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)`
+    /// when the queue empties (possibly leaving `blocked` constraints).
+    fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
             let type_ = reduce(context, type_)?;
+
+            if this == that {
+                continue;
+            }
+
+            // Flexible heads are dispatched before history and before the
+            // structural/η fallthrough — a flexible head must never be
+            // η-expanded into a spine (§7.1).
+            match (Self::as_metavar(&this), Self::as_metavar(&that)) {
+                (Some(_), Some(_)) => {
+                    // Distinct heads (equal ids are caught by `this == that`).
+                    // v1 flex–flex does no intersection: postpone.
+                    self.blocked.push(Goal { type_, this, that });
+                    continue;
+                }
+                (Some(id), None) => match self.solve(context, id, &that)? {
+                    Solved::Done => continue,
+                    Solved::Postponed => {
+                        self.blocked.push(Goal { type_, this, that });
+                        continue;
+                    }
+                    Solved::Failed => return Ok(false),
+                },
+                (None, Some(id)) => match self.solve(context, id, &this)? {
+                    Solved::Done => continue,
+                    Solved::Postponed => {
+                        self.blocked.push(Goal { type_, this, that });
+                        continue;
+                    }
+                    Solved::Failed => return Ok(false),
+                },
+                (None, None) => {}
+            }
 
             let goal = Goal {
                 type_: type_.clone(),
@@ -575,7 +725,7 @@ impl Convert {
                 that: that.clone(),
             };
 
-            if this == that || self.in_history(&goal) {
+            if self.in_history(&goal) {
                 continue;
             }
 

@@ -73,6 +73,10 @@ impl Term {
         Self::from(Subterm::Atom(atom.into()))
     }
 
+    pub fn metavar(id: usize) -> Self {
+        Self::from(Subterm::Metavar(Metavar { id }))
+    }
+
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
         inner.into().with_span(span)
     }
@@ -454,6 +458,17 @@ pub struct Rec {
     pub tail: Scope<Many>,
 }
 
+/// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
+/// born from a surface hole `_` and (possibly) solved by unification. It is a
+/// global head carrying no de Bruijn index — like a free `Var` or an `Atom`,
+/// it is inert under the `Visit` machinery (it holds no `Var`). The solution,
+/// when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`; the
+/// node itself is immutable.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Metavar {
+    pub id: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Subterm {
     Type,
@@ -472,6 +487,7 @@ pub enum Subterm {
     Let(Let),
     Rec(Rec),
     Var(Var),
+    Metavar(Metavar),
 }
 
 impl Subterm {
@@ -499,6 +515,120 @@ impl Subterm {
     pub fn free_vars(&self) -> BTreeSet<String> {
         <Subterm as Bound>::free_vars(self)
     }
+
+    /// Collect the ids of every metavariable occurring in this subterm. `Visit`
+    /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
+    /// cannot piggyback on `free_vars` — this walk enumerates them directly.
+    pub fn metavars(&self) -> BTreeSet<usize> {
+        let mut ids = BTreeSet::new();
+        self.collect_metavars(&mut ids);
+        ids
+    }
+
+    fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
+        match self {
+            Subterm::Metavar(Metavar { id }) => {
+                ids.insert(*id);
+            }
+            Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) | Subterm::Var(_) => {}
+            Subterm::Prim(prim) => prim_metavars(prim, ids),
+            Subterm::Func(Func { body }) => body.body().collect_metavars(ids),
+            Subterm::FuncType(FuncType { telescope }) => telescope_metavars(telescope, ids),
+            Subterm::Apply(Apply { head, params }) => {
+                head.collect_metavars(ids);
+                params.iter().for_each(|p| p.collect_metavars(ids));
+            }
+            Subterm::TupleType(TupleType { telescope }) => telescope_metavars(telescope, ids),
+            Subterm::Tuple(Tuple { fields }) => {
+                fields.iter().for_each(|f| f.collect_metavars(ids));
+            }
+            Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => {
+                head.collect_metavars(ids);
+                motive.body().collect_metavars(ids);
+                cases.values().for_each(|b| b.collect_metavars(ids));
+            }
+            Subterm::BlnMatch(BlnMatch {
+                head,
+                motive,
+                false_case,
+                true_case,
+            }) => {
+                head.collect_metavars(ids);
+                motive.body().collect_metavars(ids);
+                false_case.collect_metavars(ids);
+                true_case.collect_metavars(ids);
+            }
+            Subterm::NatMatch(NatMatch::Induction {
+                head,
+                motive,
+                zero_case,
+                succ_case,
+            }) => {
+                head.collect_metavars(ids);
+                motive.body().collect_metavars(ids);
+                zero_case.collect_metavars(ids);
+                succ_case.body().collect_metavars(ids);
+            }
+            Subterm::NatMatch(NatMatch::Dispatch {
+                head,
+                motive,
+                cases,
+                default,
+            }) => {
+                head.collect_metavars(ids);
+                motive.body().collect_metavars(ids);
+                cases.values().for_each(|b| b.collect_metavars(ids));
+                default.collect_metavars(ids);
+            }
+            Subterm::Let(Let { type_, body, tail }) => {
+                type_.collect_metavars(ids);
+                body.collect_metavars(ids);
+                tail.body().collect_metavars(ids);
+            }
+            Subterm::Rec(Rec { items, tail }) => {
+                for (type_, value) in items {
+                    type_.body().collect_metavars(ids);
+                    value.body().collect_metavars(ids);
+                }
+                tail.body().collect_metavars(ids);
+            }
+        }
+    }
+}
+
+fn telescope_metavars<B>(telescope: &Telescope<B>, ids: &mut BTreeSet<usize>)
+where
+    B: Bound + CollectMetavars,
+{
+    match telescope {
+        Telescope::Cons(ty, rest) => {
+            ty.collect_metavars(ids);
+            telescope_metavars(rest.body(), ids);
+        }
+        Telescope::Done(body) => body.collect_metavars(ids),
+    }
+}
+
+/// Helper so `telescope_metavars` works uniformly over `Telescope<Term>` (a
+/// `FuncType`'s body is a `Term`) and `Telescope<()>` (a `TupleType` has no
+/// trailing body term).
+trait CollectMetavars {
+    fn collect_metavars(&self, ids: &mut BTreeSet<usize>);
+}
+
+impl CollectMetavars for Term {
+    fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
+        (**self).collect_metavars(ids);
+    }
+}
+
+impl CollectMetavars for () {
+    fn collect_metavars(&self, _: &mut BTreeSet<usize>) {}
 }
 
 impl Bound for Term {
@@ -615,12 +745,14 @@ impl Bound for Subterm {
                 tail: visit.visit_scope(tail),
             }),
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
+            // A metavariable holds no `Var`, so it is inert under every visit.
+            Subterm::Metavar(m) => Subterm::Metavar(m.clone()),
         }
     }
 
     fn reach(&self) -> usize {
         match self {
-            Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) => 0,
+            Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) | Subterm::Metavar(_) => 0,
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,
@@ -774,6 +906,107 @@ fn prim_reach(prim: &Prim) -> usize {
 
         Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
         Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
+    }
+}
+
+fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
+    let mut go = |t: &Term| t.collect_metavars(ids);
+
+    match prim {
+        Prim::BlnType
+        | Prim::Bln(_)
+        | Prim::NatType
+        | Prim::Nat(Nat::Zero)
+        | Prim::IntType
+        | Prim::Int(_)
+        | Prim::FltType
+        | Prim::Flt(_)
+        | Prim::BinType
+        | Prim::Bin(_)
+        | Prim::IoRead => {}
+
+        Prim::Nat(Nat::Succ(_, inner)) => go(inner),
+
+        Prim::NatToStr(t)
+        | Prim::IntToStr(t)
+        | Prim::FltToStr(t)
+        | Prim::NatToInt(t)
+        | Prim::NatToFlt(t)
+        | Prim::IntToNat(t)
+        | Prim::IntToFlt(t)
+        | Prim::FltToNat(t)
+        | Prim::FltToInt(t)
+        | Prim::FltNeg(t)
+        | Prim::FltAbs(t)
+        | Prim::FltSqrt(t)
+        | Prim::FltFloor(t)
+        | Prim::FltCeil(t)
+        | Prim::FltTrunc(t)
+        | Prim::FltNearest(t)
+        | Prim::BinLen(t)
+        | Prim::ArrType(t)
+        | Prim::IoPrint(t) => go(t),
+
+        Prim::NatEql(a, b)
+        | Prim::NatNeq(a, b)
+        | Prim::NatAdd(a, b)
+        | Prim::NatSub(a, b)
+        | Prim::NatMul(a, b)
+        | Prim::NatLt(a, b)
+        | Prim::NatDiv(a, b)
+        | Prim::NatRem(a, b)
+        | Prim::NatGt(a, b)
+        | Prim::NatLte(a, b)
+        | Prim::NatGte(a, b)
+        | Prim::IntEql(a, b)
+        | Prim::IntNeq(a, b)
+        | Prim::IntAdd(a, b)
+        | Prim::IntSub(a, b)
+        | Prim::IntMul(a, b)
+        | Prim::IntDiv(a, b)
+        | Prim::IntRem(a, b)
+        | Prim::IntLt(a, b)
+        | Prim::IntGt(a, b)
+        | Prim::IntLte(a, b)
+        | Prim::IntGte(a, b)
+        | Prim::FltAdd(a, b)
+        | Prim::FltSub(a, b)
+        | Prim::FltMul(a, b)
+        | Prim::FltDiv(a, b)
+        | Prim::FltEql(a, b)
+        | Prim::FltNeq(a, b)
+        | Prim::FltLt(a, b)
+        | Prim::FltGt(a, b)
+        | Prim::FltLte(a, b)
+        | Prim::FltGte(a, b)
+        | Prim::FltMin(a, b)
+        | Prim::FltMax(a, b)
+        | Prim::BinEql(a, b)
+        | Prim::BinGet(a, b)
+        | Prim::BinAppend(a, b)
+        | Prim::ArrLen(a, b) => {
+            go(a);
+            go(b);
+        }
+
+        Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
+            go(a);
+            go(b);
+            go(c);
+        }
+
+        Prim::ArrSlice(a, b, c, d) => {
+            go(a);
+            go(b);
+            go(c);
+            go(d);
+        }
+
+        Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(go),
+        Prim::ArrConcat(ty, terms) => {
+            go(ty);
+            terms.iter().for_each(go);
+        }
     }
 }
 
@@ -962,6 +1195,39 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metavar_is_a_closed_global_head() {
+        let m = Term::metavar(7);
+        assert_eq!(m.reach(), 0);
+        assert!(m.closed());
+        assert_eq!(format!("{m}"), "?7");
+    }
+
+    #[test]
+    fn metavars_collects_ids_across_structure() {
+        // (λx. ?1)(?2, Nat.add ?3 ?1)
+        let term = Term::apply(
+            Term::func(["x"], Term::metavar(1)),
+            [
+                Term::metavar(2),
+                Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
+            ],
+        );
+        assert_eq!(
+            term.metavars(),
+            BTreeSet::from([1, 2, 3])
+        );
+    }
+
+    #[test]
+    fn metavar_is_inert_under_traversal() {
+        // shifting/capture must not disturb a metavariable node
+        let m = Term::metavar(4);
+        assert_eq!(m.shift(3), m);
+        let scope = Scope::close(One, &["x"], Term::metavar(4));
+        assert_eq!(scope.open(&[&Term::var(Var::free("y"))]), Term::metavar(4));
+    }
 
     #[test]
     fn reach_basic_values() {

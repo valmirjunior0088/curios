@@ -714,6 +714,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Subterm::Var(var) => print_var(var),
+        Subterm::Metavar(metavar) => pure(format!("?{}", metavar.id)),
     }
 }
 

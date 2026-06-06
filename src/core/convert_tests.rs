@@ -497,3 +497,118 @@ fn convert_unit_typed_neutrals_in_type_argument() {
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
+
+// === Metavariables / unification ===========================================
+
+#[test]
+fn solve_flex_rigid_commits_solution() {
+    let mut context = context();
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+
+    // ?0 ≟ Nat  (at type Type)
+    let nat = Term::prim(Prim::NatType);
+    assert_eq!(conv(&mut context, &Term::metavar(0), &nat), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&nat));
+}
+
+#[test]
+fn solve_is_symmetric() {
+    let mut context = context();
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+
+    let nat = Term::prim(Prim::NatType);
+    // rigid on the left, flex on the right
+    assert_eq!(conv(&mut context, &nat, &Term::metavar(0)), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&nat));
+}
+
+#[test]
+fn occurs_check_rejects_cyclic_solution() {
+    let mut context = context();
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+
+    // ?0 ≟ (x : ?0) -> Nat  — the candidate mentions ?0 itself.
+    let cyclic = Term::func_type([("x", Term::metavar(0))], Term::prim(Prim::NatType));
+    assert_eq!(conv(&mut context, &Term::metavar(0), &cyclic), Ok(false));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn scope_check_rejects_out_of_context_variable() {
+    let mut context = context();
+    // Birth with empty Γ: no variable is in scope for ?0.
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+
+    // ?0 ≟ x  — `x` is not available to ?0.
+    let x = Term::var(Var::free("x"));
+    assert_eq!(conv(&mut context, &Term::metavar(0), &x), Ok(false));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn scope_check_allows_in_context_variable() {
+    let mut context = context();
+    // Γ = (x : Type); result is Type, and the candidate `x` is in scope.
+    context.assume("x", &Term::type_());
+    context.birth_metavar(
+        0,
+        vec![("x".to_string(), Term::type_())],
+        Term::type_(),
+        None,
+    );
+
+    let x = Term::var(Var::free("x"));
+    assert_eq!(conv(&mut context, &Term::metavar(0), &x), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&x));
+}
+
+#[test]
+fn flex_flex_equal_id_short_circuits() {
+    let mut context = context();
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+
+    // ?0 ≟ ?0 is trivially true and leaves the metavariable unsolved.
+    assert_eq!(
+        conv(&mut context, &Term::metavar(0), &Term::metavar(0)),
+        Ok(true)
+    );
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn flex_flex_distinct_is_residual() {
+    let mut context = context();
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(1, Vec::new(), Term::type_(), None);
+
+    // ?0 ≟ ?1 postpones with no way to progress — a residual constraint.
+    assert_eq!(
+        conv(&mut context, &Term::metavar(0), &Term::metavar(1)),
+        Ok(false)
+    );
+}
+
+#[test]
+fn embedded_metavar_postpones_to_residual() {
+    let mut context = context();
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(1, Vec::new(), Term::type_(), None);
+
+    // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the
+    // solve is postponed; nothing solves ?1, so it stays residual.
+    let candidate = Term::func_type([("x", Term::metavar(1))], Term::prim(Prim::NatType));
+    assert_eq!(conv(&mut context, &Term::metavar(0), &candidate), Ok(false));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn revalidation_rejects_ill_typed_solution() {
+    let mut context = context();
+    // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bln`) does not
+    // type-check against Nat, so re-validation rejects it.
+    context.birth_metavar(0, Vec::new(), Term::prim(Prim::NatType), None);
+
+    let bln = Term::prim(Prim::BlnType);
+    assert_eq!(conv(&mut context, &Term::metavar(0), &bln), Ok(false));
+    assert_eq!(context.metavar_solution(0), None);
+}

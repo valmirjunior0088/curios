@@ -28,14 +28,25 @@ where
 
     observe(Stage::Core(&term));
 
-    let core_type = match type_ {
-        Some(type_) => type_,
-        None => {
-            core::infer(&mut core::Context::new(timeout), &term).map_err(|error| error.format())?
-        }
+    // Elaborate (checking against the entrypoint's type when it carries one, else
+    // synthesizing), then zonk metavariable solutions in so the term is meta-free,
+    // then erase the meta-free term to `ersd` — the `elaborate → zonk → erase`
+    // data flow (§9). Elaboration and zonking share one context (the solutions
+    // live in its `MetaStore`); erase runs over a fresh one.
+    let mut context = core::Context::new(timeout);
+
+    let core_mode = match &type_ {
+        Some(type_) => core::Mode::Check(type_.clone()),
+        None => core::Mode::Infer,
     };
 
-    let ersd_term = core::erase(&mut core::Context::new(timeout), &term, &core_type)
+    let (core_term, core_type) =
+        core::elaborate(&mut context, &term, core_mode).map_err(|error| error.format())?;
+
+    let elaborated = core::zonk(&context, &core_term).map_err(|error| error.format())?;
+    let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;
+
+    let ersd_term = core::erase(&mut core::Context::new(timeout), &elaborated, &core_type)
         .map_err(|error| error.format())?;
 
     observe(Stage::Ersd(&ersd_term));

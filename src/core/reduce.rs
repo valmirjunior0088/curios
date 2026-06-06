@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Func, Let, Match, Nat, NatMatch, One, Prim, Proj, ReduceError,
-        Scope, Subterm, Term, Tuple, Two, Var, reduce_prim,
+        Apply, BlnMatch, Context, Func, Let, Match, Metavar, Nat, NatMatch, One, Prim, Proj,
+        ReduceError, Scope, Subterm, Term, Tuple, Two, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -24,7 +24,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 
 fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError> {
     let Proj { head, index } = proj;
-    if let Some(v) = context.projection(&head, index) {
+    if let Some(v) = context.proj_reduct(&head, index) {
         return Ok(Reduce::Continue(v.clone()));
     }
     match Term::unwrap_or_clone(reduce(context, head)?) {
@@ -36,7 +36,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         )),
         head => {
             let head: Term = head.into();
-            match context.projection(&head, index) {
+            match context.proj_reduct(&head, index) {
                 Some(v) => Ok(Reduce::Continue(v.clone())),
                 None => Ok(Reduce::Break(Term::proj(head, index))),
             }
@@ -207,9 +207,16 @@ fn reduce_let(let_: Let) -> Reduce {
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {
-    match context.definition(var.unwrap()) {
+    match context.var_reduct(var.unwrap()) {
         Some(next) => Reduce::Continue(next.clone()),
         None => Reduce::Break(Term::var(var)),
+    }
+}
+
+fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
+    match context.metavar_solution(metavar.id) {
+        Some(solution) => Reduce::Continue(solution.clone()),
+        None => Reduce::Break(Term::from(Subterm::Metavar(metavar))),
     }
 }
 
@@ -232,6 +239,7 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 Subterm::Match(m) => reduce_match(context, m)?,
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
+                Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
                 term => Reduce::Break(term.into()),
             };
 

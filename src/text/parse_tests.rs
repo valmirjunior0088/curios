@@ -613,3 +613,29 @@ fn parse_atom_match_still_works() {
         .into()
     );
 }
+
+#[test]
+fn parse_hole() {
+    assert_eq!("_".parse::<Term>().unwrap(), Subterm::Hole.into());
+}
+
+#[test]
+fn parse_hole_as_argument() {
+    // A lone `_` is a hole; `_foo` is still an ordinary name.
+    let term = "id(_)".parse::<Term>().unwrap();
+    match term.into_subterm() {
+        Subterm::Apply(apply) => {
+            assert_eq!(apply.params.len(), 1);
+            assert_eq!(apply.params[0], Subterm::Hole.into());
+        }
+        other => panic!("expected apply, got {other:?}"),
+    }
+}
+
+#[test]
+fn underscore_prefixed_name_is_not_a_hole() {
+    assert!(matches!(
+        "_foo".parse::<Term>().unwrap().into_subterm(),
+        Subterm::Name(_)
+    ));
+}

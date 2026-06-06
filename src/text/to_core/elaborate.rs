@@ -34,6 +34,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
     fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
         Ok(match term {
             Subterm::Type => core::Term::type_(),
+            Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
             Subterm::Name(name) => {
                 let resolved = if name.is_abs() || !name.is_single() {

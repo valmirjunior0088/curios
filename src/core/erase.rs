@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Let, Match, Nat, NatMatch, One,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, check_motive,
-        erase_prim, expect, expect_prim_head, infer, reduce_with, refine_head,
+        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, Var, erase_prim,
+        expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -11,14 +11,15 @@ use {
 fn erase_func(
     context: &mut Context,
     func: &Func,
-    term: &Term,
+    _term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let Func { body } = func;
 
     let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::FuncType(ft) => ft,
-        _ => return Err(Error::not_a_function_type(term.clone(), expected.clone())),
+        // Elaborate already checked this function against a function type (§9).
+        _ => unreachable!("erase: function checked against non-function type"),
     };
 
     let n = ft.telescope.len();
@@ -116,35 +117,33 @@ fn is_candidate(context: &mut Context, type_: &Term) -> Result<bool, Error> {
 fn erase_apply(
     context: &mut Context,
     apply: &Apply,
-    term: &Term,
-    expected: &Term,
+    _term: &Term,
+    _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let Apply { head, params } = apply;
 
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
+    // Elaborate already checked the head is a function applied to the right
+    // number of arguments (§9); here the shape is re-derived only to lower.
     let ft = match &*head_type {
         Subterm::FuncType(ft) => ft,
-        _ => return Err(Error::not_a_function(term.clone(), head_type)),
+        _ => unreachable!("erase: applied a non-function"),
     };
 
-    if params.len() != ft.telescope.len() {
-        return Err(Error::wrong_number_of_arguments(
-            term.clone(),
-            ft.telescope.len(),
-            params.len(),
-        ));
-    }
+    assert_eq!(
+        params.len(),
+        ft.telescope.len(),
+        "erase: application arity disagrees with the function type",
+    );
 
     let mut erased_params = Vec::with_capacity(params.len());
-    let result_type = ft.telescope.clone().walk(params, |arg, ty| {
+    ft.telescope.clone().walk(params, |arg, ty| {
         erased_params.push(erase(context, arg, ty)?);
         Ok(())
     })?;
     let erased_head = erase(context, head, &head_type)?;
-
-    expect(context, term, &result_type, expected)?;
 
     Ok(ersd::Term::Apply(ersd::Apply {
         head: erased_head.into(),
@@ -155,23 +154,18 @@ fn erase_apply(
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
     let Tuple { fields } = tuple;
 
+    // Elaborate already checked this tuple against a tuple type of matching
+    // arity (§9); the telescope is re-derived here only to lower the fields.
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::TupleType(TupleType { telescope }) => telescope,
-        _ => {
-            return Err(Error::not_a_tuple_type(
-                Term::from(Subterm::Tuple(tuple.clone())),
-                expected.clone(),
-            ));
-        }
+        _ => unreachable!("erase: tuple checked against non-tuple type"),
     };
 
-    if fields.len() != type_telescope.len() {
-        return Err(Error::tuple_arity_mismatch(
-            Term::from(Subterm::Tuple(tuple.clone())),
-            type_telescope.len(),
-            fields.len(),
-        ));
-    }
+    assert_eq!(
+        fields.len(),
+        type_telescope.len(),
+        "erase: tuple width disagrees with the tuple type",
+    );
 
     fn walk(
         context: &mut Context,
@@ -204,11 +198,9 @@ fn erase_nat_induction(
     zero_case: &Term,
     succ_case: &Scope<Two>,
     term: &Term,
-    expected: &Term,
+    _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, term, Prim::NatType)?;
-
-    check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
     let erased_zero_case = erase(
         context,
@@ -242,8 +234,6 @@ fn erase_nat_induction(
 
     let erased_head = erase(context, head, &head_type)?;
 
-    expect(context, term, &motive.open(&[head]), expected)?;
-
     Ok(ersd::Term::NatMatch(ersd::NatMatch::Induction {
         head: erased_head.into(),
         zero_case: erased_zero_case.into(),
@@ -260,11 +250,9 @@ fn erase_nat_dispatch(
     cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
-    expected: &Term,
+    _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, term, Prim::NatType)?;
-
-    check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
     let erased_cases = cases
         .iter()
@@ -284,8 +272,6 @@ fn erase_nat_dispatch(
     let erased_default = erase(context, default, &motive.open(&[head]))?;
 
     let erased_head = erase(context, head, &head_type)?;
-
-    expect(context, term, &motive.open(&[head]), expected)?;
 
     Ok(ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
         head: erased_head.into(),
@@ -320,7 +306,7 @@ fn erase_bln_match(
     context: &mut Context,
     bm: &BlnMatch,
     term: &Term,
-    expected: &Term,
+    _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let BlnMatch {
         head,
@@ -330,8 +316,6 @@ fn erase_bln_match(
     } = bm;
 
     let head_type = expect_prim_head(context, head, term, Prim::BlnType)?;
-
-    check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
 
     let erased_false = context.with_frame(|context| {
         refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into())?;
@@ -353,8 +337,6 @@ fn erase_bln_match(
 
     let erased_head = erase(context, head, &head_type)?;
 
-    expect(context, term, &motive.open(&[head]), expected)?;
-
     Ok(ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
         head: erased_head.into(),
         cases: BTreeMap::from([(0, erased_false.into())]),
@@ -365,32 +347,25 @@ fn erase_bln_match(
 fn erase_proj(
     context: &mut Context,
     proj: &Proj,
-    term: &Term,
-    expected: &Term,
+    _term: &Term,
+    _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let Proj { head, index } = proj;
 
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
+    // Elaborate already checked the head is a tuple and the index is in range
+    // (§9); the type is re-derived here only to lower the head.
     let TupleType { telescope } = match Term::unwrap_or_clone(head_type.clone()) {
         Subterm::TupleType(tt) => tt,
-        other => return Err(Error::not_a_tuple(term.clone(), other)),
+        _ => unreachable!("erase: projected a non-tuple"),
     };
 
-    if *index >= telescope.len() {
-        return Err(Error::tuple_index_out_of_bounds(
-            term.clone(),
-            *index,
-            telescope.len(),
-        ));
-    }
-
-    let field_type = telescope
-        .nth(*index, |j| Term::proj((**head).clone(), j))
-        .expect("index in range");
-
-    expect(context, term, &field_type, expected)?;
+    assert!(
+        *index < telescope.len(),
+        "erase: projection index out of range",
+    );
 
     Ok(ersd::Term::Proj(ersd::Proj {
         head: erase(context, head, &head_type)?.into(),
@@ -401,30 +376,20 @@ fn erase_proj(
 fn erase_atom(
     context: &mut Context,
     atom: &Atom,
-    term: &Term,
+    _term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
+    // Elaborate already checked this atom belongs to `expected` (§9); the atom
+    // type is re-derived here only to read off the runtime tag index.
     let atoms = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
         Subterm::AtomType(AtomType { atoms }) => atoms,
-        _ => {
-            return Err(Error::type_mismatch(
-                term.clone(),
-                Term::atom_type([atom.clone()]),
-                expected.clone(),
-            ));
-        }
+        _ => unreachable!("erase: atom checked against non-atom type"),
     };
 
     let index = atoms
         .iter()
         .position(|candidate| candidate == atom)
-        .ok_or_else(|| {
-            Error::type_mismatch(
-                term.clone(),
-                Term::atom_type([atom.clone()]),
-                expected.clone(),
-            )
-        })?;
+        .expect("erase: atom absent from its atom type");
 
     Ok(ersd::Term::Atom(ersd::Atom { index }))
 }
@@ -432,8 +397,8 @@ fn erase_atom(
 fn erase_match(
     context: &mut Context,
     m: &Match,
-    term: &Term,
-    expected: &Term,
+    _term: &Term,
+    _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let Match {
         head,
@@ -444,29 +409,26 @@ fn erase_match(
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
+    // Elaborate already checked the head is an atom type with exactly one body
+    // per atom (§9); the atoms are re-derived here only to order and lower the
+    // cases.
     let atoms = match Term::unwrap_or_clone(head_type.clone()) {
         Subterm::AtomType(AtomType { atoms }) => atoms,
-        other => return Err(Error::not_an_atom_type(term.clone(), other)),
+        _ => unreachable!("erase: matched on a non-atom type"),
     };
 
-    check_motive(context, &Term::atom_type(atoms.iter().cloned()), motive)?;
-
-    if cases.len() != atoms.len() {
-        return Err(Error::match_arity_mismatch(
-            term.clone(),
-            atoms.len(),
-            cases.len(),
-        ));
-    }
+    assert_eq!(
+        cases.len(),
+        atoms.len(),
+        "erase: match arm count disagrees with the atom type",
+    );
 
     let cases = atoms
         .iter()
         .map(|atom| {
-            let body = if let Some(body) = cases.get(atom) {
-                body
-            } else {
-                return Err(Error::match_case_missing(term.clone(), atom.clone()));
-            };
+            let body = cases
+                .get(atom)
+                .expect("erase: match missing an arm for an atom");
 
             let expected = motive.open(&[&Term::atom(atom.clone())]);
 
@@ -476,8 +438,6 @@ fn erase_match(
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
-
-    expect(context, term, &motive.open(&[head]), expected)?;
 
     Ok(ersd::Term::Match(ersd::Match {
         head: erase(context, head, &head_type)?.into(),
@@ -491,8 +451,6 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
         body,
         tail,
     } = let_;
-
-    erase(context, body_type, &Term::type_())?;
 
     let name = context.fresh(tail.first_label());
     let erased_body = erase(context, body, body_type)?;
@@ -540,10 +498,6 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
             context.assume(name, type_);
         }
 
-        for (type_, _) in &items {
-            erase(context, type_, &Term::type_())?;
-        }
-
         for (name, (_, body)) in names.iter().zip(items.iter()) {
             context.define(name, body);
         }
@@ -581,37 +535,21 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::Prim(prim) => erase_prim(context, term, prim, expected),
         Subterm::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
         Subterm::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
-        Subterm::Type => {
-            expect(context, term, &Term::type_(), expected)?;
-            Ok(ersd::Term::Erased)
-        }
-        Subterm::FuncType(_) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
+        // Type formers all erase to a runtime unit; they carry nothing to lower
+        // and were already checked by `elaborate`.
+        Subterm::Type | Subterm::FuncType(_) | Subterm::TupleType(_) | Subterm::AtomType(_) => {
             Ok(ersd::Term::Erased)
         }
         Subterm::Func(func) => erase_func(context, func, term, expected),
         Subterm::Apply(apply) => erase_apply(context, apply, term, expected),
-        Subterm::TupleType(_) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Term::Erased)
-        }
         Subterm::Tuple(tuple) => erase_tuple(context, tuple, expected),
         Subterm::Proj(proj) => erase_proj(context, proj, term, expected),
-        Subterm::AtomType(_) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Term::Erased)
-        }
         Subterm::Atom(atom) => erase_atom(context, atom, term, expected),
         Subterm::Match(m) => erase_match(context, m, term, expected),
         Subterm::Let(let_) => erase_let(context, let_, expected),
         Subterm::Rec(lr) => erase_rec(context, lr, expected),
-        Subterm::Var(var) => {
-            let t = infer(context, term)?;
-            expect(context, term, &t, expected)?;
-            Ok(ersd::Term::Name(ersd::Name::from(var.unwrap())))
-        }
+        Subterm::Var(var) => Ok(ersd::Term::Name(ersd::Name::from(var.unwrap()))),
+        // Erase runs downstream of zonking, on a meta-free term (§9).
+        Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erase"),
     }
 }

@@ -1044,3 +1044,18 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
             if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "A")
     ));
 }
+
+#[test]
+fn hole_lowers_to_metavar() {
+    assert_eq!(run("_"), core::Term::metavar(0));
+}
+
+#[test]
+fn distinct_holes_get_distinct_ids() {
+    // Two holes in one program draw distinct, monotonic ids from the shared counter.
+    let term = run("(_, _)");
+    assert_eq!(
+        term,
+        core::Term::tuple([core::Term::metavar(0), core::Term::metavar(1)]),
+    );
+}

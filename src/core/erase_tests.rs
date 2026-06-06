@@ -53,37 +53,6 @@ fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
 }
 
 #[test]
-fn erase_dependent_tuple_type_rejects_wrong_branch_atom() {
-    let mut context = context();
-
-    let tuple_type = Term::tuple_type([
-        ("x", Term::atom_type(["left", "right"])),
-        (
-            "y",
-            Term::match_(
-                Term::var(Var::free("x")),
-                Some("m"),
-                Term::type_(),
-                vec![
-                    ("left", Term::atom_type(["hot"])),
-                    ("right", Term::atom_type(["cold"])),
-                ],
-            ),
-        ),
-    ]);
-
-    let tuple = Term::tuple([
-        Term::atom(Atom::from("left")),
-        Term::atom(Atom::from("cold")),
-    ]);
-
-    assert!(matches!(
-        erase(&mut context, &tuple, &tuple_type),
-        Err(Error::TypeMismatch { .. })
-    ));
-}
-
-#[test]
 fn erase_match_singleton_lowers_to_match() {
     let type_ = lower(&"'[yes, no]".parse().unwrap(), &text::NullLoader);
 
@@ -110,19 +79,6 @@ fn erase_match_singleton_lowers_to_match() {
 }
 
 #[test]
-fn type_mismatch_from_expect_carries_span() {
-    // A conversion mismatch raised by `expect` (here: `Type` erased against an
-    // atom type) must still carry the offending term's span. These errors used
-    // to escape `erase`'s span wrapper through the arm-level `?`.
-    let term = lower(&"Type".parse().unwrap(), &text::NullLoader);
-    let expected = lower(&"'[a]".parse().unwrap(), &text::NullLoader);
-
-    let error = erase(&mut context(), &term, &expected).unwrap_err();
-
-    assert!(matches!(error, Error::Located { .. }));
-}
-
-#[test]
 fn erase_rec_single_identity_function() {
     let mut context = context();
 
@@ -138,18 +94,6 @@ fn erase_rec_single_identity_function() {
     );
 
     erase(&mut context, &term, &func_type).unwrap();
-}
-
-#[test]
-fn erase_preempts_on_cyclic_expected_type() {
-    let mut context = context();
-
-    context.define("loop", &Term::var(Var::free("loop")));
-
-    assert!(matches!(
-        erase(&mut context, &Term::type_(), &Term::var(Var::free("loop"))),
-        Err(Error::ConvertPreempted { .. })
-    ));
 }
 
 #[test]
@@ -214,22 +158,6 @@ fn erase_func_captures_free_variables_before_opening_body() {
 
     assert_eq!(captures.len(), 1);
     assert!(captures.iter().any(|c| c.name == "y"));
-}
-
-#[test]
-fn erase_rejects_wrong_prim_operand_types() {
-    assert!(matches!(
-        erase(
-            &mut Context::new(Duration::from_secs(1)),
-            &Subterm::Prim(Prim::int_add(
-                Subterm::Prim(Prim::Int(Int::new(1))),
-                Subterm::Prim(Prim::Flt(Flt::from_f32(2.0)))
-            ))
-            .into(),
-            &Subterm::Prim(Prim::IntType).into(),
-        ),
-        Err(Error::TypeMismatch { .. })
-    ));
 }
 
 #[test]
@@ -547,28 +475,6 @@ fn erase_nat_eql_returns_bool_atom() {
 }
 
 #[test]
-fn erase_nat_fold_rejects_non_nat_head() {
-    let mut context = context();
-
-    let bool_type = Term::atom_type(["false", "true"]);
-
-    let nat_fold = Term::nat_induction(
-        Term::prim(Prim::Int(Int::new(1))),
-        Some("m"),
-        Term::atom_type(["false", "true"]),
-        Term::atom(Atom::from("false")),
-        "pred",
-        "ih",
-        Term::atom(Atom::from("true")),
-    );
-
-    assert!(matches!(
-        erase(&mut context, &nat_fold, &bool_type),
-        Err(Error::NotNatType { .. })
-    ));
-}
-
-#[test]
 fn erase_nat_match_dispatches_to_named_case() {
     let mut context = context();
 
@@ -583,26 +489,6 @@ fn erase_nat_match_dispatches_to_named_case() {
     );
 
     erase(&mut context, &nat_match, &bool_type).unwrap();
-}
-
-#[test]
-fn erase_nat_match_rejects_non_nat_head() {
-    let mut context = context();
-
-    let bool_type = Term::atom_type(["false", "true"]);
-
-    let nat_match = Term::nat_dispatch(
-        Term::prim(Prim::Int(Int::new(0))),
-        Some("m"),
-        Term::atom_type(["false", "true"]),
-        [(0u32, Term::atom(Atom::from("true")))],
-        Term::atom(Atom::from("false")),
-    );
-
-    assert!(matches!(
-        erase(&mut context, &nat_match, &bool_type),
-        Err(Error::NotNatType { .. })
-    ));
 }
 
 #[test]
@@ -659,22 +545,6 @@ fn erase_bin_concat() {
 }
 
 #[test]
-fn erase_bin_concat_rejects_wrong_expected_type() {
-    let mut context = context();
-
-    let concat = Subterm::Prim(Prim::bin_concat([
-        Subterm::Prim(Prim::Bin(vec![1])),
-        Subterm::Prim(Prim::Bin(vec![2])),
-    ]))
-    .into();
-
-    assert!(matches!(
-        erase(&mut context, &concat, &Subterm::Prim(Prim::NatType).into()),
-        Err(Error::TypeMismatch { .. })
-    ));
-}
-
-#[test]
 fn erase_arr_concat() {
     let mut context = context();
 
@@ -691,22 +561,3 @@ fn erase_arr_concat() {
     erase(&mut context, &concat, &arr_nat).unwrap();
 }
 
-#[test]
-fn erase_arr_concat_rejects_wrong_expected_type() {
-    let mut context = context();
-
-    let arr_nat = Subterm::Prim(Prim::arr_type(Subterm::Prim(Prim::NatType))).into();
-    context.assume("xs", &arr_nat);
-    context.assume("ys", &arr_nat);
-
-    let concat = Subterm::Prim(Prim::arr_concat(
-        Subterm::Prim(Prim::NatType),
-        [Term::var(Var::free("xs")), Term::var(Var::free("ys"))],
-    ))
-    .into();
-
-    assert!(matches!(
-        erase(&mut context, &concat, &Subterm::Prim(Prim::NatType).into()),
-        Err(Error::TypeMismatch { .. })
-    ));
-}

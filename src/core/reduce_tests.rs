@@ -364,3 +364,48 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
     // would still return "inner"; the cache clear on leave_frame prevents that.
     assert_eq!(reduce(&mut context, x.clone()), Ok(x));
 }
+
+#[test]
+fn reduce_unsolved_metavar_is_neutral() {
+    let mut context = context();
+    let m = Term::metavar(0);
+
+    // No store entry, or an unsolved one, both reduce to the metavariable itself.
+    assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
+
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    assert_eq!(reduce(&mut context, m.clone()), Ok(m));
+}
+
+#[test]
+fn reduce_solved_metavar_yields_solution_and_clears_cache() {
+    let mut context = context();
+    let m = Term::metavar(0);
+
+    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+
+    // First reduce caches the metavariable as itself (it is `reach == 0`).
+    assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
+
+    let solution = Term::atom(Atom::from("ok"));
+    context.solve_metavar(0, solution.clone());
+
+    // `solve` cleared the cache, so the stale "itself" reduct is gone.
+    assert_eq!(reduce(&mut context, m), Ok(solution));
+}
+
+#[test]
+fn refinement_is_suppressible() {
+    let mut context = context();
+    let b = Term::var(Var::free("b"));
+    let truth = Term::prim(Prim::Bln(true));
+
+    context.refine("b", &truth);
+
+    // With the refinement active, `b` reduces to its counterfactual value.
+    assert_eq!(reduce(&mut context, b.clone()), Ok(truth));
+
+    // Suppressed (as in re-validation), `b` is abstract again.
+    let reduced = context.with_suppressed_refinements(|context| reduce(context, b.clone()));
+    assert_eq!(reduced, Ok(b));
+}

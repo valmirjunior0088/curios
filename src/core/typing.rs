@@ -1,4 +1,11 @@
-use super::{Context, Error, One, Prim, Proj, Scope, Subterm, Term, Var, erase, infer};
+use super::{Context, Error, Mode, One, Prim, Proj, Scope, Subterm, Term, Var, elaborate};
+
+/// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
+/// as a thin shim so the many existing call sites (this module, `erase*.rs`,
+/// tests) read unchanged while erase is migrated to downstream lowering (§6).
+pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
+    elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
+}
 
 pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     super::reduce(context, term.clone())
@@ -35,10 +42,10 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
     // the arm, so the (possibly counterfactual) assumption does not leak.
     match &**head {
         Subterm::Var(var) => {
-            context.define(var.unwrap(), value);
+            context.refine(var.unwrap(), value);
         }
         Subterm::Proj(Proj { head, index }) => {
-            context.define_projection(head.clone(), *index, value.clone());
+            context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {}
     }
@@ -50,10 +57,10 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
 
     match &*canonical {
         Subterm::Var(var) => {
-            context.define(var.unwrap(), value);
+            context.refine(var.unwrap(), value);
         }
         Subterm::Proj(Proj { head, index }) => {
-            context.define_projection(head.clone(), *index, value.clone());
+            context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {}
     }
@@ -62,7 +69,9 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
 }
 
 /// Check that `motive` is a well-formed type family over a scrutinee of `head_type`.
-/// Pure validation, identical in both `infer` and `erase` for every match form.
+/// Pure validation, shared by every match form. Runs the motive through
+/// `elaborate` in `Check(Type)` mode — erase is downstream lowering now and no
+/// longer type-checks (§6).
 pub fn check_motive(
     context: &mut Context,
     head_type: &Term,
@@ -72,10 +81,10 @@ pub fn check_motive(
 
     context.with_frame(|context| {
         context.assume(&label, head_type);
-        erase(
+        elaborate(
             context,
             &motive.open(&[&Term::var(Var::free(&label))]),
-            &Term::type_(),
+            Mode::Check(Term::type_()),
         )
         .map(|_| ())
     })

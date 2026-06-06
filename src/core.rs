@@ -53,11 +53,14 @@ pub use typing::*;
 #[cfg(test)]
 mod typing_tests;
 
-mod infer_prim;
-use infer_prim::*;
+mod elaborate_prim;
+use elaborate_prim::*;
 
-mod infer;
-pub use infer::*;
+mod elaborate;
+pub use elaborate::*;
+
+#[cfg(test)]
+mod elaborate_tests;
 
 mod erase_prim;
 use erase_prim::*;
@@ -67,3 +70,9 @@ pub use erase::*;
 
 #[cfg(test)]
 mod erase_tests;
+
+mod zonk;
+pub use zonk::*;
+
+#[cfg(test)]
+mod zonk_tests;

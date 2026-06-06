@@ -719,10 +719,16 @@ fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
     spanned(parser).map(|(span, term)| term.with_span(span))
 }
 
+fn parse_hole<'a>() -> Parser<'a, Term> {
+    // `_` is a valid identifier character, so match it token-aware (via
+    // `parse_keyword`) — `_foo` stays a name, only a lone `_` is a hole.
+    catch(parse_keyword("_")).map(|()| Subterm::Hole.into())
+}
+
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_qualified_name()
-            .map(|n| Subterm::Name(n).into())
+        parse_hole()
+            .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
             .or(parse_type())
             .or(parse_prim())
             .or(parse_atom_type())

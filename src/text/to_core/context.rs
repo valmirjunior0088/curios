@@ -4,7 +4,7 @@ use {
         core,
         text::{Error, Name, Qualifier},
     },
-    std::collections::HashMap,
+    std::{cell::Cell, collections::HashMap},
 };
 
 #[derive(Clone)]
@@ -96,6 +96,12 @@ pub struct Context<'a> {
     public: &'a HashMap<Qualifier, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
+    // Shared, program-global metavariable-id counter. The whole program folds
+    // into one `core::Term`, so holes in different module bodies (each its own
+    // `Context` via `nested`) must draw from the same monotonic source. Shared
+    // by reference (like `table`/`public`) and `Cell`-backed so it survives
+    // `Elaborate`'s immutable `&Context` borrow.
+    metavars: &'a Cell<usize>,
 }
 
 fn attach(error: Error, name: &Name) -> Error {
@@ -109,6 +115,7 @@ impl<'a> Context<'a> {
     pub fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
+        metavars: &'a Cell<usize>,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
@@ -116,6 +123,7 @@ impl<'a> Context<'a> {
             public,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
+            metavars,
         }
     }
 
@@ -126,7 +134,15 @@ impl<'a> Context<'a> {
             public: self.public,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
+            metavars: self.metavars,
         }
+    }
+
+    /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
+    pub fn fresh_metavar(&self) -> usize {
+        let id = self.metavars.get();
+        self.metavars.set(id + 1);
+        id
     }
 
     pub fn prefixed(&self, label: &str) -> Qualifier {
