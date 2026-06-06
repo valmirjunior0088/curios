@@ -280,10 +280,17 @@ pub struct SysLoader<L> {
     inner: L,
 }
 
+thread_local! {
+    // `sys` is the same on every load, so build its AST once per thread and hand
+    // out clones — discovery asks for it on every compile (§ loader cache). `Module`
+    // is not `Sync`, so this is thread-local rather than a `static`.
+    static SYS_MODULE: Module = sys_module();
+}
+
 impl<L: Loader> Loader for SysLoader<L> {
     fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
         if qualifier.iter().eq(["sys"]) {
-            return Ok(sys_module());
+            return Ok(SYS_MODULE.with(Module::clone));
         }
 
         self.inner.load(qualifier)
@@ -326,17 +333,28 @@ pub struct StdLoader<L> {
     inner: L,
 }
 
+thread_local! {
+    // Parse every embedded `std` module once per thread; `load` then hands out
+    // clones. `std` being well-formed is a compiler invariant, so a parse failure
+    // is a `panic!`. Discovery loads the full `std` manifest (and its leaves) on
+    // every compile, so without this each compile re-parses all of `std`. `Module`
+    // is not `Sync`, so this is thread-local rather than a `static` (§ loader cache).
+    static STD_MODULES: Vec<Module> = STD
+        .iter()
+        .map(|(segments, source)| {
+            source.parse::<Module>().unwrap_or_else(|error| {
+                panic!("embedded std module {} is malformed: {error:?}", segments.join("/"))
+            })
+        })
+        .collect();
+}
+
 impl<L: Loader> Loader for StdLoader<L> {
     fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
         let path = qualifier.iter().collect::<Vec<_>>();
 
-        if let Some((_, source)) = STD.iter().find(|(segments, _)| path == **segments) {
-            return Ok(source.parse::<Module>().unwrap_or_else(|error| {
-                panic!(
-                    "embedded std module {} is malformed: {error:?}",
-                    qualifier.join()
-                )
-            }));
+        if let Some(index) = STD.iter().position(|(segments, _)| path == **segments) {
+            return Ok(STD_MODULES.with(|modules| modules[index].clone()));
         }
 
         self.inner.load(qualifier)

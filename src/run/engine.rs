@@ -1,12 +1,31 @@
 use {
     super::{Host, Lift, Lower},
     crate::wasm,
-    std::sync::Arc,
+    std::sync::{Arc, LazyLock},
     wasmtime::{
         AnyRef, ArrayType, Config, Engine, FieldType, FuncType, HeapType, Instance, Linker, Module,
         Mutability, RefType, Rooted, StorageType, Store, ValType,
     },
 };
+
+/// The one wasm engine for the whole process. Building an `Engine` stands up the
+/// Cranelift backend and is expensive, so it is created once and shared; `Engine`
+/// is `Send + Sync` (internally reference-counted), so a `static` is sound and a
+/// clone is cheap. Every module, store, and type below is created against it, so
+/// they stay engine-consistent.
+fn shared_engine() -> &'static Engine {
+    static ENGINE: LazyLock<Engine> = LazyLock::new(|| {
+        let mut config = Config::new();
+        config.wasm_reference_types(true);
+        config.wasm_function_references(true);
+        config.wasm_gc(true);
+        config.wasm_tail_call(true);
+
+        Engine::new(&config).expect("failed to create wasm engine")
+    });
+
+    &ENGINE
+}
 
 pub fn define_import<Li, Lo, F>(
     linker: &mut Linker<()>,
@@ -40,26 +59,19 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     module: &wasm::Module,
     host: H,
 ) -> Result<(Store<()>, Instance), String> {
-    let mut config = Config::new();
-    config.wasm_reference_types(true);
-    config.wasm_function_references(true);
-    config.wasm_gc(true);
-    config.wasm_tail_call(true);
+    let engine = shared_engine();
 
-    let engine =
-        Engine::new(&config).map_err(|error| format!("failed to create engine: {error}"))?;
-
-    let module = Module::from_binary(&engine, &wasm::to_bytes(module))
+    let module = Module::from_binary(engine, &wasm::to_bytes(module))
         .map_err(|error| format!("failed to load wasm module: {error}"))?;
 
-    let bin_array_type = ArrayType::new(&engine, FieldType::new(Mutability::Var, StorageType::I8));
+    let bin_array_type = ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8));
     let bin_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(bin_array_type)));
-    let i32_to_bin_type = FuncType::new(&engine, [ValType::I32], [bin_ref.clone()]);
-    let f32_to_bin_type = FuncType::new(&engine, [ValType::F32], [bin_ref.clone()]);
-    let unit_to_bin_type = FuncType::new(&engine, [], [bin_ref.clone()]);
-    let bin_to_unit_type = FuncType::new(&engine, [bin_ref], []);
+    let i32_to_bin_type = FuncType::new(engine, [ValType::I32], [bin_ref.clone()]);
+    let f32_to_bin_type = FuncType::new(engine, [ValType::F32], [bin_ref.clone()]);
+    let unit_to_bin_type = FuncType::new(engine, [], [bin_ref.clone()]);
+    let bin_to_unit_type = FuncType::new(engine, [bin_ref], []);
 
-    let mut linker: Linker<()> = Linker::new(&engine);
+    let mut linker: Linker<()> = Linker::new(engine);
     let host = Arc::new(host);
 
     define_import(&mut linker, "nat_to_str", i32_to_bin_type.clone(), {
@@ -92,7 +104,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         move |bytes: Vec<u8>| host.print(&bytes)
     })?;
 
-    let mut store = Store::new(&engine, ());
+    let mut store = Store::new(engine, ());
 
     let instance = linker
         .instantiate(&mut store, &module)
