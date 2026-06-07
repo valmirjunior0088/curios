@@ -86,7 +86,7 @@ pub let take_byte(expected : Nat) -> Parse(Nat) =
         match Nat/lt(pos, Bin/len(input)) : Result({ Nat, Nat }, Bin)
         | false => Result/failure({ Nat, Nat }, Bin, "unexpected end of input")
         | true =>
-            let byte : Nat = Bin/get(input, pos);
+            let byte = Bin/get(input, pos);
             match Nat/eql(byte, expected) : Result({ Nat, Nat }, Bin)
             | true => Result/success({ Nat, Nat }, Bin, (Nat/add(pos, 1), byte))
             | false => Result/failure({ Nat, Nat }, Bin, "unexpected byte")
@@ -102,14 +102,14 @@ pub let take_byte(expected : Nat) -> Parse(Nat) =
 -- compile-time reducibility here.
 pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
     (input, pos) =>
-        let r : { Nat, Bin, Bln } =
+        let r =
             match Nat/sub(Bin/len(input), pos) : { Nat, Bin, Bln }
             | 0 => (pos, "", false)
             | step + 1, ih =>
                 match ih.2 : { Nat, Bin, Bln }
                 | true => ih
                 | false =>
-                    let byte : Nat = Bin/get(input, ih.0);
+                    let byte = Bin/get(input, ih.0);
                     match pred(byte) : { Nat, Bin, Bln }
                     | true => (Nat/add(ih.0, 1), Bin/append(ih.1, byte), false)
                     | false => (ih.0, ih.1, true)

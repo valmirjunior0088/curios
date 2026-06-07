@@ -47,9 +47,9 @@ pub let to_arr(A : Type, l : Lst(A)) -> Arr(A) =
                 end
             end
         | false =>
-            let half : Nat = Nat/div(n, 2);
-            let left : { Arr(A), Lst(A) } = go(rest, half);
-            let right : { Arr(A), Lst(A) } = go(left.1, Nat/sub(n, half));
+            let half = Nat/div(n, 2);
+            let left = go(rest, half);
+            let right = go(left.1, Nat/sub(n, half));
             (Arr/concat(A, left.0, right.0), right.1)
         end;
     (go(l, len(A, l))).0;

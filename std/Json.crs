@@ -12,7 +12,7 @@ end
 pub use Json/*;
 
 let encode_num(n : Flt) -> Bin =
-    let raw : Bin = Flt/to_str(n);
+    let raw = Flt/to_str(n);
     match Nat/eql(Bin/get(raw, 0), '+') : Bin
     | true => Bin/slice(raw, 1, Bin/len(raw))
     | false => raw
@@ -32,7 +32,7 @@ let encode_str(s : Bin) -> Bin =
     -- Collect each byte's (possibly escaped) rendering into a `Lst(Bin)` — O(1) per
     -- byte — then assemble once with `Bin/concat_all` (O(n log n)). Folding
     -- `Bin/concat(acc, ...)` per byte would be O(n^2) in the string length.
-    let body : Bin =
+    let body =
         Bin/concat_all(Lst/to_arr(Bin, Lst/rev(Bin,
             Bin/fold(Lst(Bin), s, Lst/nil(Bin), (byte, acc) =>
                 Lst/cons(Bin, escape_byte(byte), acc)))));
@@ -71,7 +71,7 @@ let is_num_byte(byte : Nat) -> Bln =
 
 let take_literal(literal : Bin) -> Parse({}) =
     (input, pos) =>
-        let r : { Nat, Bln } =
+        let r =
             match Bin/len(literal) : { Nat, Bln }
             | 0 => (pos, true)
             | step + 1, ih =>

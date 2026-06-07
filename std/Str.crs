@@ -25,6 +25,6 @@ pub let trim_stop(str : Bin) -> Nat =
     end;
 
 pub let trim(str : Bin) -> Bin =
-    let start : Nat = trim_start(str);
-    let stop : Nat = trim_stop(str);
+    let start = trim_start(str);
+    let stop = trim_stop(str);
     Bin/slice(str, Nat/min(start, stop), stop);
