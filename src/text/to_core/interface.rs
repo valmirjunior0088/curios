@@ -1,5 +1,5 @@
 use {
-    super::context::ModuleInfo,
+    super::ModuleInfo,
     crate::text::{Entrypoint, Error, GroupItem, Module, Name, Qualifier, TopItem, UseGroup},
     std::{
         collections::{HashMap, HashSet},

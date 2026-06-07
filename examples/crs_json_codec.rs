@@ -10,7 +10,7 @@ fn main() {
     let source = r#"
         use /std/{Json, Io, Bin, Nat, Result};
 
-        let value : Json = Json/obj([
+        let value = Json/obj([
             ("name", Json/str("Alice")),
             ("score", Json/num(+9.5)),
             ("active", Json/bln(true)),
@@ -18,9 +18,9 @@ fn main() {
             ("extra", Json/null())
         ]);
 
-        let encoded : Bin = Json/encode(value);
+        let encoded = Json/encode(value);
 
-        let decoded : Result({ Nat, Json }, Bin) = Json/decode(encoded, 0);
+        let decoded = Json/decode(encoded, 0);
 
         match decoded : {}
         | success(pair) => Io/print(Json/encode(pair.1))

@@ -4,7 +4,7 @@ Curios is a functional language with dependent types that compiles to WebAssembl
 
 Dependent types pay off most in a handful of recurring patterns. Length-indexed collections rule out bounds errors by construction, replacing runtime panics with type-level guarantees. Typed format strings derive their argument list directly from the format value, eliminating a whole class of variadic bugs. Dependent records encode protocol state in the type itself, turning invalid transitions into compile-time errors rather than runtime failures.
 
-Curios is an impure language, like OCaml. Side effects — terminal IO, file access, and other operations — are ordinary expressions that can appear anywhere in a program. The type system accommodates this by treating effectful operations as opaque at the type level: when the type checker encounters a term that performs IO during reduction, it raises a type error rather than attempting to evaluate the side effect.
+Curios is an impure language, like OCaml. Side effects — currently terminal IO through `/sys/Io` — are ordinary expressions that can appear anywhere in a program. The type system accommodates this by treating effectful operations as opaque at the type level: when the type checker encounters a term that performs IO during reduction, it raises a type error rather than attempting to evaluate the side effect.
 
 ## Installation
 

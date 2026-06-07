@@ -19,7 +19,7 @@ let double(n : Nat) -> Nat =
     Nat/mul(n, 2);
 ```
 
-`double(n : Nat) -> Nat = …` is function-definition shorthand: it names the parameter and the result type. The underlying value is a lambda, written `n => body` (the same as `|n| body` in Rust), so the shorthand desugars to `let double : Nat -> Nat = n => Nat/mul(n, 2);`.
+`double(n : Nat) -> Nat = …` is function-definition shorthand: it names the parameter and the result type. The underlying value is a lambda, written `(n) => body` (the same as `|n| body` in Rust), so the shorthand desugars to `let double : Nat -> Nat = (n) => Nat/mul(n, 2);`.
 
 A function can take several parameters at once. A call passes them in parentheses, comma-separated — `add(2, 3)`:
 

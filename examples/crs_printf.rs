@@ -9,7 +9,7 @@ fn main() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        let name : Bin = Str/trim(Io/read());
+        let name = Str/trim(Io/read());
         Fmt/printf("%s is %d")(name)(30)
         "#;
 
