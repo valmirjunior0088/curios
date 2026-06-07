@@ -126,11 +126,11 @@ mod tests {
 
     #[test]
     fn hole_in_a_type_argument_is_inferred_and_lowers() {
-        // `id _ 5`: the type argument `_` is solved to `Nat` from the value `5`,
-        // synthesizing the whole program end-to-end through to wasm (§14, `id _ x`).
+        // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5`,
+        // synthesizing the whole program end-to-end through to wasm (§14, `id ? x`).
         let source = r#"
             let id(A : Type, a : A) -> A = a;
-            id(_, 5)
+            id(?, 5)
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -138,12 +138,12 @@ mod tests {
 
     #[test]
     fn hole_pinned_through_the_expected_type_is_solved() {
-        // `id _ true` checked against `/sys/Bln`: the turnaround pins the type
-        // argument `_` to `Bln` through the expected type (§14, a type-level pin).
+        // `id ? true` checked against `/sys/Bln`: the turnaround pins the type
+        // argument `?` to `Bln` through the expected type (§14, a type-level pin).
         let source = r#"
             use /sys/{Bln};
             let id(A : Type, a : A) -> A = a;
-            id(_, true)
+            id(?, true)
         "#;
 
         assert!(compile(source, Some("/sys/Bln")).is_ok());
@@ -151,11 +151,11 @@ mod tests {
 
     #[test]
     fn unconstrained_value_hole_cannot_be_inferred() {
-        // `let m : Nat = _ in m`: nothing constrains the value of `_`, so the
+        // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the
         // metavariable is unsolved at zonk and compilation fails (§14).
         let source = r#"
             use /sys/{Nat};
-            let m : Nat = _;
+            let m : Nat = ?;
             m
         "#;
 

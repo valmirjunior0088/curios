@@ -250,7 +250,7 @@ pub enum Subterm {
     Let(Let),
     Rec(Rec),
     Name(Name),
-    /// A surface hole `_`: a placeholder elaborated to a fresh metavariable.
+    /// A surface hole `?`: a placeholder elaborated to a fresh metavariable.
     /// Carries no payload — its span rides on the wrapping [`Term`].
     Hole,
 }

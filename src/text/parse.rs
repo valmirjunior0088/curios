@@ -756,9 +756,9 @@ fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
 }
 
 fn parse_hole<'a>() -> Parser<'a, Term> {
-    // `_` is a valid identifier character, so match it token-aware (via
-    // `parse_keyword`) — `_foo` stays a name, only a lone `_` is a hole.
-    catch(parse_keyword("_")).map(|()| Subterm::Hole.into())
+    // `?` is not an identifier character, so a plain literal suffices — no
+    // token-aware matching needed. (`_` remains the match wildcard binder.)
+    catch(parse_literal("?")).map(|()| Subterm::Hole.into())
 }
 
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {

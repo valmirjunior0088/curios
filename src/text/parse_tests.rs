@@ -649,13 +649,12 @@ fn omitted_motive_round_trips() {
 
 #[test]
 fn parse_hole() {
-    assert_eq!("_".parse::<Term>().unwrap(), Subterm::Hole.into());
+    assert_eq!("?".parse::<Term>().unwrap(), Subterm::Hole.into());
 }
 
 #[test]
 fn parse_hole_as_argument() {
-    // A lone `_` is a hole; `_foo` is still an ordinary name.
-    let term = "id(_)".parse::<Term>().unwrap();
+    let term = "id(?)".parse::<Term>().unwrap();
     match term.into_subterm() {
         Subterm::Apply(apply) => {
             assert_eq!(apply.params.len(), 1);

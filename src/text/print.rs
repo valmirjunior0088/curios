@@ -204,7 +204,7 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::Type => pure("Type"),
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::Name(name) => pure(name.join()),
-        Subterm::Hole => pure("_"),
+        Subterm::Hole => pure("?"),
         Subterm::Atom(atom) => print_atom(atom),
         Subterm::AtomType(AtomType { atoms }) => flat([
             pure("'["),

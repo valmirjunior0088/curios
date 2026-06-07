@@ -453,7 +453,7 @@ pub struct Rec {
 }
 
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
-/// born from a surface hole `_` and (possibly) solved by unification. It is a
+/// born from a surface hole `?` and (possibly) solved by unification. It is a
 /// global head carrying no de Bruijn index — like a free `Var` or an `Atom`,
 /// it is inert under the `Visit` machinery (it holds no `Var`). The solution,
 /// when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`; the

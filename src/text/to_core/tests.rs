@@ -1047,13 +1047,13 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
 
 #[test]
 fn hole_lowers_to_metavar() {
-    assert_eq!(run("_"), core::Term::metavar(0));
+    assert_eq!(run("?"), core::Term::metavar(0));
 }
 
 #[test]
 fn distinct_holes_get_distinct_ids() {
     // Two holes in one program draw distinct, monotonic ids from the shared counter.
-    let term = run("(_, _)");
+    let term = run("(?, ?)");
     assert_eq!(
         term,
         core::Term::tuple([core::Term::metavar(0), core::Term::metavar(1)]),
