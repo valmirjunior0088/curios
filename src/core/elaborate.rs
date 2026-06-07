@@ -133,6 +133,29 @@ fn elaborate_prim_head(
     }
 }
 
+/// When a match is elaborated in checking mode, solve its motive against the
+/// expected type *before* the arms are checked. An omitted motive is a constant
+/// scope wrapping a fresh metavar (`text::to_core::elaborate`), so `motive.open`
+/// is that bare metavar and this pins it to `expected` up front — checking-only
+/// arms (tuples, atoms, constructors) then see a concrete target instead of an
+/// unsolved hole, and a result mentioning an enclosing type variable is taken
+/// straight from `expected` rather than inverted out of an arm. For an explicit
+/// motive it is the same consistency check that the `Check` turnaround would
+/// otherwise run post-hoc on the match's type (`elaborate_subterm`), only earlier.
+fn seed_motive(
+    context: &mut Context,
+    term: &Term,
+    motive: &Scope<One>,
+    head: &Term,
+    mode: &Mode,
+) -> Result<(), Error> {
+    if let Mode::Check(expected) = mode {
+        expect(context, term, &motive.open(&[head]), expected)?;
+    }
+
+    Ok(())
+}
+
 fn elaborate_nat_induction(
     context: &mut Context,
     head: &Term,
@@ -140,10 +163,13 @@ fn elaborate_nat_induction(
     zero_case: &Term,
     succ_case: &Scope<Two>,
     term: &Term,
+    mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::NatType)?;
 
     let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
+
+    seed_motive(context, term, motive, head, &mode)?;
 
     let zero_elaborated = check(
         context,
@@ -195,10 +221,13 @@ fn elaborate_nat_dispatch(
     cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
+    mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::NatType)?;
 
     let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
+
+    seed_motive(context, term, motive, head, &mode)?;
 
     let mut cases_elaborated = BTreeMap::new();
     for (n, body) in cases {
@@ -234,6 +263,7 @@ fn elaborate_nat_match(
     context: &mut Context,
     nm: &NatMatch,
     term: &Term,
+    mode: Mode,
 ) -> Result<(Term, Term), Error> {
     match nm {
         NatMatch::Induction {
@@ -241,13 +271,13 @@ fn elaborate_nat_match(
             motive,
             zero_case,
             succ_case,
-        } => elaborate_nat_induction(context, head, motive, zero_case, succ_case, term),
+        } => elaborate_nat_induction(context, head, motive, zero_case, succ_case, term, mode),
         NatMatch::Dispatch {
             head,
             motive,
             cases,
             default,
-        } => elaborate_nat_dispatch(context, head, motive, cases, default, term),
+        } => elaborate_nat_dispatch(context, head, motive, cases, default, term, mode),
     }
 }
 
@@ -255,6 +285,7 @@ fn elaborate_bln_match(
     context: &mut Context,
     bm: &BlnMatch,
     term: &Term,
+    mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let BlnMatch {
         head,
@@ -266,6 +297,8 @@ fn elaborate_bln_match(
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::BlnType)?;
 
     let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
+
+    seed_motive(context, term, motive, head, &mode)?;
 
     let false_elaborated = context.with_frame(|context| {
         refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into())?;
@@ -322,7 +355,12 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
     Ok((Term::proj(head, *index), field_type))
 }
 
-fn elaborate_match(context: &mut Context, m: &Match, term: &Term) -> Result<(Term, Term), Error> {
+fn elaborate_match(
+    context: &mut Context,
+    m: &Match,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
     let Match {
         head,
         motive,
@@ -338,6 +376,8 @@ fn elaborate_match(context: &mut Context, m: &Match, term: &Term) -> Result<(Ter
     };
 
     let motive_elaborated = check_motive(context, &Term::atom_type(atoms.iter().cloned()), motive)?;
+
+    seed_motive(context, term, motive, head, &mode)?;
 
     if cases.len() != atoms.len() {
         return Err(Error::match_arity_mismatch(
@@ -836,14 +876,14 @@ fn elaborate_subterm(
     let (rebuilt, type_) = match &**term {
         Subterm::Type => (term.clone(), Term::type_()),
         Subterm::Prim(prim) => return elaborate_prim(context, term, prim, mode),
-        Subterm::BlnMatch(bm) => elaborate_bln_match(context, bm, term)?,
-        Subterm::NatMatch(nm) => elaborate_nat_match(context, nm, term)?,
+        Subterm::BlnMatch(bm) => return elaborate_bln_match(context, bm, term, mode),
+        Subterm::NatMatch(nm) => return elaborate_nat_match(context, nm, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
         Subterm::Apply(apply) => elaborate_apply(context, apply, term)?,
         Subterm::TupleType(tt) => elaborate_tuple_type(context, tt)?,
         Subterm::Proj(proj) => elaborate_proj(context, proj, term)?,
         Subterm::AtomType(_) => (term.clone(), Term::type_()),
-        Subterm::Match(m) => elaborate_match(context, m, term)?,
+        Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::Var(var) => match context.assumption(var.unwrap()) {
