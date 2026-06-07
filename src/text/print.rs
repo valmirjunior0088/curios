@@ -1,7 +1,8 @@
 use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, LetSignature, Match, Module, Nat, NatLiteral, NatMatch, Prim, Proj, Rec,
+        GroupItem, Let, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Prim, Proj,
+        Rec,
         Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
         UnionCase, UnionMatch, UseGroup,
     },
@@ -12,6 +13,19 @@ use {
 
 fn print_atom(atom: Atom) -> Printer<'static> {
     flat([pure("'"), pure(atom.as_string())])
+}
+
+/// Prints a match's optional motive: ` : label => body` (or ` : body` when
+/// unlabelled), or nothing at all when the motive was omitted in the source.
+fn print_motive(motive: Option<Motive>) -> Printer<'static> {
+    match motive {
+        Some(Motive {
+            label: Some(label),
+            body,
+        }) => flat([pure(" : "), pure(label), pure(" => "), print_term(body)]),
+        Some(Motive { label: None, body }) => flat([pure(" : "), print_term(body)]),
+        None => pure(""),
+    }
 }
 
 fn print_flt(value: f32) -> Printer<'static> {
@@ -267,11 +281,7 @@ fn print_term(term: Term) -> Printer<'static> {
             }) => flat([
                 pure("match "),
                 print_term(head),
-                pure(" : "),
-                match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
-                    None => print_term(motive.body),
-                },
+                print_motive(motive),
                 pure("\n| false =>\n"),
                 indent(print_term(false_case)),
                 pure("\n| true =>\n"),
@@ -288,11 +298,7 @@ fn print_term(term: Term) -> Printer<'static> {
             }) => flat([
                 pure("match "),
                 print_term(head),
-                pure(" : "),
-                match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
-                    None => print_term(motive.body),
-                },
+                print_motive(motive),
                 pure("\n| 0 =>\n"),
                 indent(print_term(zero_case)),
                 pure("\n| "),
@@ -311,11 +317,7 @@ fn print_term(term: Term) -> Printer<'static> {
             }) => flat([
                 pure("match "),
                 print_term(head),
-                pure(" : "),
-                match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
-                    None => print_term(motive.body),
-                },
+                print_motive(motive),
                 flat(
                     cases
                         .into_iter()
@@ -335,11 +337,7 @@ fn print_term(term: Term) -> Printer<'static> {
             }) => flat([
                 pure("match "),
                 print_term(head),
-                pure(" : "),
-                match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
-                    None => print_term(motive.body),
-                },
+                print_motive(motive),
                 flat(
                     cases
                         .into_iter()
@@ -362,11 +360,7 @@ fn print_term(term: Term) -> Printer<'static> {
             }) => flat([
                 pure("match "),
                 print_term(head),
-                pure(" : "),
-                match motive.label {
-                    Some(label) => flat([pure(label), pure(" => "), print_term(motive.body)]),
-                    None => print_term(motive.body),
-                },
+                print_motive(motive),
                 flat(
                     cases
                         .into_iter()

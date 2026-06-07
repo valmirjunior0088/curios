@@ -459,11 +459,14 @@ fn parse_motive<'a>() -> Parser<'a, Motive> {
         .map(|(label, body)| Motive { label, body })
 }
 
-fn parse_match_prefix<'a>() -> Parser<'a, (Term, Motive)> {
+fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Motive>)> {
     catch(parse_keyword("match"))
         .and_keep(lazy(parse_term))
-        .and_drop(parse_literal(":"))
-        .and(parse_motive())
+        .and(
+            catch(parse_literal(":").and_keep(parse_motive()))
+                .map(Some)
+                .or(pure(None)),
+        )
 }
 
 fn parse_bln_false_branch<'a>() -> Parser<'a, Term> {

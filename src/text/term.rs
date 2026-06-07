@@ -103,7 +103,7 @@ pub struct Motive {
 pub enum NatMatch {
     Induction {
         head: Term,
-        motive: Motive,
+        motive: Option<Motive>,
         zero_case: Term,
         pred_label: String,
         ih_label: String,
@@ -111,7 +111,7 @@ pub enum NatMatch {
     },
     Dispatch {
         head: Term,
-        motive: Motive,
+        motive: Option<Motive>,
         cases: BTreeMap<u32, Term>,
         default: Term,
     },
@@ -120,7 +120,7 @@ pub enum NatMatch {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlnMatch {
     pub head: Term,
-    pub motive: Motive,
+    pub motive: Option<Motive>,
     pub false_case: Term,
     pub true_case: Term,
 }
@@ -139,7 +139,7 @@ pub struct AtomType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomMatch {
     pub head: Term,
-    pub motive: Motive,
+    pub motive: Option<Motive>,
     pub cases: BTreeMap<Atom, Term>,
 }
 
@@ -152,7 +152,7 @@ pub struct UnionCase {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionMatch {
     pub head: Term,
-    pub motive: Motive,
+    pub motive: Option<Motive>,
     pub cases: BTreeMap<String, UnionCase>,
 }
 

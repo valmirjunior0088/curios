@@ -2,7 +2,7 @@ use {
     super::Context,
     crate::{
         core,
-        text::{BinLiteral, Error, Match, Nat, NatLiteral, NatMatch, Prim, Subterm, Term},
+        text::{BinLiteral, Error, Match, Motive, Nat, NatLiteral, NatMatch, Prim, Subterm, Term},
     },
     num_bigint::BigUint,
     std::collections::BTreeMap,
@@ -106,13 +106,16 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             ),
             Subterm::Proj(proj) => core::Term::proj(self.term(&proj.head)?, proj.index),
             Subterm::Match(match_) => match match_ {
-                Match::Bln(bm) => core::Term::bln_match(
-                    self.term(&bm.head)?,
-                    bm.motive.label.as_deref(),
-                    self.term(&bm.motive.body)?,
-                    self.term(&bm.false_case)?,
-                    self.term(&bm.true_case)?,
-                ),
+                Match::Bln(bm) => {
+                    let (label, body) = self.motive_parts(&bm.motive)?;
+                    core::Term::bln_match(
+                        self.term(&bm.head)?,
+                        label,
+                        body,
+                        self.term(&bm.false_case)?,
+                        self.term(&bm.true_case)?,
+                    )
+                }
                 Match::Nat(NatMatch::Induction {
                     head,
                     motive,
@@ -120,39 +123,50 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     pred_label,
                     ih_label,
                     succ_case,
-                }) => core::Term::nat_induction(
-                    self.term(head)?,
-                    motive.label.as_deref(),
-                    self.term(&motive.body)?,
-                    self.term(zero_case)?,
-                    pred_label.clone(),
-                    ih_label.clone(),
-                    self.term(succ_case)?,
-                ),
+                }) => {
+                    let (label, body) = self.motive_parts(motive)?;
+                    core::Term::nat_induction(
+                        self.term(head)?,
+                        label,
+                        body,
+                        self.term(zero_case)?,
+                        pred_label.clone(),
+                        ih_label.clone(),
+                        self.term(succ_case)?,
+                    )
+                }
                 Match::Nat(NatMatch::Dispatch {
                     head,
                     motive,
                     cases,
                     default,
-                }) => core::Term::nat_dispatch(
-                    self.term(head)?,
-                    motive.label.as_deref(),
-                    self.term(&motive.body)?,
-                    cases
-                        .iter()
-                        .map(|(&nat, body)| Ok((nat, self.term(body)?)))
-                        .collect::<Result<Vec<_>, Error>>()?,
-                    self.term(default)?,
-                ),
-                Match::Atom(am) => core::Term::match_(
-                    self.term(&am.head)?,
-                    am.motive.label.as_deref(),
-                    self.term(&am.motive.body)?,
-                    am.cases
-                        .iter()
-                        .map(|(atom, body)| Ok((core::Atom::from(atom.as_str()), self.term(body)?)))
-                        .collect::<Result<Vec<_>, Error>>()?,
-                ),
+                }) => {
+                    let (label, motive_body) = self.motive_parts(motive)?;
+                    core::Term::nat_dispatch(
+                        self.term(head)?,
+                        label,
+                        motive_body,
+                        cases
+                            .iter()
+                            .map(|(&nat, body)| Ok((nat, self.term(body)?)))
+                            .collect::<Result<Vec<_>, Error>>()?,
+                        self.term(default)?,
+                    )
+                }
+                Match::Atom(am) => {
+                    let (label, body) = self.motive_parts(&am.motive)?;
+                    core::Term::match_(
+                        self.term(&am.head)?,
+                        label,
+                        body,
+                        am.cases
+                            .iter()
+                            .map(|(atom, body)| {
+                                Ok((core::Atom::from(atom.as_str()), self.term(body)?))
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?,
+                    )
+                }
                 Match::Union(um) => {
                     // A union match desugars to an atom match on the projected tag:
                     // the scrutinee's tag (field 0) selects the arm, and each arm's
@@ -161,8 +175,8 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     let tag = core::Term::proj(head.clone(), 0);
                     let payload = core::Term::proj(head, 1);
 
-                    let motive_body = self.term(&um.motive.body)?;
-                    let motive = match um.motive.label.as_deref() {
+                    let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
+                    let motive = match motive_label {
                         Some(label) => core::Scope::close(core::One, &[label], motive_body),
                         None => core::Scope::constant(core::One, motive_body),
                     };
@@ -215,6 +229,20 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 self.term(&rec.tail)?,
             ),
         })
+    }
+
+    /// Splits an optional match motive into its `(label, body)` for the core
+    /// match constructors. An omitted motive (`None`) lowers to an unlabelled
+    /// fresh metavariable body — the same as writing `: _` — so a non-dependent
+    /// match infers its motive by unifying the arms against that metavariable.
+    fn motive_parts<'m>(
+        &self,
+        motive: &'m Option<Motive>,
+    ) -> Result<(Option<&'m str>, core::Term), Error> {
+        match motive {
+            Some(motive) => Ok((motive.label.as_deref(), self.term(&motive.body)?)),
+            None => Ok((None, core::Term::metavar(self.context.fresh_metavar()))),
+        }
     }
 
     pub fn prim(&self, prim: &Prim) -> Result<core::Prim, Error> {

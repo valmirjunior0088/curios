@@ -72,6 +72,28 @@ fn triangular_sum() {
 }
 
 #[test]
+fn match_omitted_motive_infers() {
+    // The same induction as `triangular_sum`, but with the motive omitted. It is
+    // non-dependent (every arm has type `sys/Nat`), so the synthesized metavar
+    // motive is solved by the arms — no explicit `: _ => sys/Nat` needed.
+    let source = r#"
+        let result : sys/Nat =
+            match 5
+            | 0 => 0
+            | pred + 1, ih => sys/Nat/add(ih, pred)
+            end;
+        sys/Io/print(sys/Nat/to_str(result))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"10".to_vec()]
+    );
+}
+
+#[test]
 fn multi_arg_function() {
     let source = r#"
         let add : (sys/Int, sys/Int) -> sys/Int = (x, y) => sys/Int/add(x, y);

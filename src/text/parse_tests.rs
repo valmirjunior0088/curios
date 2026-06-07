@@ -71,13 +71,13 @@ fn parse_match_single_branch() {
             .unwrap(),
         Subterm::Match(Match::Atom(AtomMatch {
             head: Subterm::Atom(Atom::from("foo")).into(),
-            motive: Motive {
+            motive: Some(Motive {
                 label: Some("k".to_string()),
                 body: Subterm::AtomType(AtomType {
                     atoms: [Atom::from("foo")].into_iter().collect(),
                 })
                 .into(),
-            },
+            }),
             cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
                 .into_iter()
                 .collect(),
@@ -544,10 +544,10 @@ fn parse_union_match_nullary_and_unary() {
             .unwrap(),
         Subterm::Match(Match::Union(UnionMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Motive {
+            motive: Some(Motive {
                 label: None,
                 body: Subterm::Name(Name::from(["Bin".to_string()])).into(),
-            },
+            }),
             cases: [
                 (
                     "null".to_string(),
@@ -579,10 +579,10 @@ fn parse_union_match_multi_binder() {
             .unwrap(),
         Subterm::Match(Match::Union(UnionMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Motive {
+            motive: Some(Motive {
                 label: None,
                 body: Subterm::Name(Name::from(["T".to_string()])).into(),
-            },
+            }),
             cases: [(
                 "lit".to_string(),
                 UnionCase {
@@ -605,19 +605,46 @@ fn parse_atom_match_still_works() {
             .unwrap(),
         Subterm::Match(Match::Atom(AtomMatch {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
-            motive: Motive {
+            motive: Some(Motive {
                 label: None,
                 body: Subterm::AtomType(AtomType {
                     atoms: [Atom::from("foo")].into_iter().collect(),
                 })
                 .into(),
-            },
+            }),
             cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
                 .into_iter()
                 .collect(),
         }))
         .into()
     );
+}
+
+#[test]
+fn parse_match_omitted_motive() {
+    // Dropping the `: motive` clause entirely yields `motive: None`; the
+    // elaborator later lowers it to a fresh metavariable (sugar for `: _`).
+    assert_eq!(
+        "match x | 'foo => 'foo end".parse::<Term>().unwrap(),
+        Subterm::Match(Match::Atom(AtomMatch {
+            head: Subterm::Name(Name::from(["x".to_string()])).into(),
+            motive: None,
+            cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
+                .into_iter()
+                .collect(),
+        }))
+        .into()
+    );
+}
+
+#[test]
+fn omitted_motive_round_trips() {
+    let term = "match x | 'foo => 'foo end".parse::<Term>().unwrap();
+    let printed = term.to_string();
+    // An omitted motive prints back without the `: …` clause …
+    assert!(!printed.contains(" : "));
+    // … and re-parses to the same tree.
+    assert_eq!(printed.parse::<Term>().unwrap(), term);
 }
 
 #[test]
