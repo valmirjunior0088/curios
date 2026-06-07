@@ -1,4 +1,7 @@
-use {super::*, std::collections::HashMap};
+use {
+    super::*,
+    std::collections::{HashMap, HashSet},
+};
 
 /// Closure specialization — monomorphization on first-class-function arguments.
 ///
@@ -95,10 +98,17 @@ pub fn specialize_calls(module: &mut Module) {
         };
 
         for (_, func) in module.funcs_mut() {
-            spec.specialize_body(&mut func.region);
+            let scope = func.params.iter().map(|a| a.name.clone()).collect();
+            spec.specialize_body(&mut func.region, scope);
         }
         for (_, clsr) in module.clsrs_mut() {
-            spec.specialize_body(&mut clsr.region);
+            let scope = clsr
+                .fields
+                .iter()
+                .chain(clsr.params.iter())
+                .map(|a| a.name.clone())
+                .collect();
+            spec.specialize_body(&mut clsr.region, scope);
         }
 
         let Specializer {
@@ -269,7 +279,7 @@ impl Specializer<'_> {
     /// records), so the in-place rewrites below never invalidate it; transitive and
     /// nested specialization is resolved across outer fixed-point rounds, which
     /// rebuild every snapshot.
-    fn specialize_body(&mut self, region: &mut Region) {
+    fn specialize_body(&mut self, region: &mut Region, scope: HashSet<ValueName>) {
         let known = known_values(region);
 
         if known.is_empty() {
@@ -283,29 +293,45 @@ impl Specializer<'_> {
         // the written value disagree on layout. Record every fill we respecialize
         // across the whole body, then sync the preallocs tree-wide.
         let mut respecialized: HashMap<ValueName, ClsrName> = HashMap::new();
-        self.rewrite_region(region, &known, &mut respecialized);
+        self.rewrite_region(region, &known, &scope, &mut respecialized);
 
         if !respecialized.is_empty() {
             sync_preallocs(region, &respecialized);
         }
     }
 
+    /// Rewrite one region, tracking the value names in scope on the path from the
+    /// body root. `known` is tree-wide, but a known closure's *captures* are only
+    /// valid where they are in scope: a recursive closure's `prealloc` shell makes
+    /// its name visible across the shell's whole subtree, while its captures are
+    /// written by a fill in just one descendant. Threading those captures into a
+    /// sibling of the fill would emit out-of-scope references, so each splice is
+    /// gated on `scope` (see [`Self::resolve`]).
     fn rewrite_region(
         &mut self,
         region: &mut Region,
         known: &Known,
+        scope: &HashSet<ValueName>,
         respecialized: &mut HashMap<ValueName, ClsrName>,
     ) {
+        // A region's own preallocs and values are in scope throughout it (fills and
+        // forward references included), so fold them in before rewriting.
+        let mut here = scope.clone();
+        here.extend(region.preallocs.iter().map(|(name, _)| name.clone()));
+        here.extend(region.values.iter().map(|(name, _)| name.clone()));
+
         for (name, value) in &mut region.values {
-            if let Some(specialized) = self.rewrite_value(value, known) {
+            if let Some(specialized) = self.rewrite_value(value, known, &here) {
                 respecialized.insert(name.clone(), specialized);
             }
         }
 
-        self.rewrite_tail(&mut region.tail, known);
+        self.rewrite_tail(&mut region.tail, known, &here);
 
         for (_, block) in &mut region.blocks {
-            self.rewrite_region(&mut block.region, known, respecialized);
+            let mut child = here.clone();
+            child.extend(block.params.iter().cloned());
+            self.rewrite_region(&mut block.region, known, &child, respecialized);
         }
     }
 
@@ -313,7 +339,12 @@ impl Specializer<'_> {
     /// the matching specialized closure clone — the allocation-site mirror of
     /// [`Self::rewrite_tail`]. Each known-closure capture is expanded into its own
     /// captures and each unit capture is dropped, exactly as a call's arguments are.
-    fn rewrite_value(&mut self, value: &mut Value, known: &Known) -> Option<ClsrName> {
+    fn rewrite_value(
+        &mut self,
+        value: &mut Value,
+        known: &Known,
+        scope: &HashSet<ValueName>,
+    ) -> Option<ClsrName> {
         let Value::Pure(Data::Clsr(clsr, captures)) = value else {
             return None;
         };
@@ -322,12 +353,7 @@ impl Specializer<'_> {
 
         let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
             .iter()
-            .filter_map(|&index| match known.get(captures.get(index)?)? {
-                KnownValue::Clsr(inner, inner_captures) => {
-                    Some((index, Shape::Clsr(inner.clone()), inner_captures.clone()))
-                }
-                KnownValue::Unit => Some((index, Shape::Unit, vec![])),
-            })
+            .filter_map(|&index| resolve(known.get(captures.get(index)?)?, index, scope))
             .collect();
 
         if resolved.is_empty() {
@@ -358,7 +384,7 @@ impl Specializer<'_> {
     /// Retarget a `Direct` call whose candidate positions carry known shapes to the
     /// matching specialized clone, expanding each known-closure argument into its
     /// captures and dropping each unit argument.
-    fn rewrite_tail(&mut self, tail: &mut Tail, known: &Known) {
+    fn rewrite_tail(&mut self, tail: &mut Tail, known: &Known, scope: &HashSet<ValueName>) {
         let Tail::Call(CallTarget::Direct {
             target,
             params,
@@ -377,12 +403,7 @@ impl Specializer<'_> {
         // nothing for unit).
         let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
             .iter()
-            .filter_map(|&index| match known.get(&params[index])? {
-                KnownValue::Clsr(clsr, captures) => {
-                    Some((index, Shape::Clsr(clsr.clone()), captures.clone()))
-                }
-                KnownValue::Unit => Some((index, Shape::Unit, vec![])),
-            })
+            .filter_map(|&index| resolve(known.get(&params[index])?, index, scope))
             .collect();
 
         if resolved.is_empty() {
@@ -409,6 +430,30 @@ impl Specializer<'_> {
         });
 
         self.changed = true;
+    }
+}
+
+/// Resolve a candidate position against its statically-known value, gated on scope.
+///
+/// A known closure's captures must be threaded into the rewritten site, so they have
+/// to be in scope *there*. The closure's *name* being in scope at the site does not
+/// guarantee its captures are: a recursive closure's `prealloc` shell makes the name
+/// visible across the shell's whole subtree, while the fill that writes its captures
+/// sits in one descendant — so a sibling of the fill sees the name but not the
+/// captures. When any threaded capture is out of scope, the position is left
+/// unspecialized (the site keeps referring to the closure by name). Unit threads
+/// nothing, so it is always in scope.
+fn resolve(
+    known: &KnownValue,
+    index: usize,
+    scope: &HashSet<ValueName>,
+) -> Option<(usize, Shape, Vec<ValueName>)> {
+    match known {
+        KnownValue::Clsr(clsr, captures) => captures
+            .iter()
+            .all(|capture| scope.contains(capture))
+            .then(|| (index, Shape::Clsr(clsr.clone()), captures.clone())),
+        KnownValue::Unit => Some((index, Shape::Unit, vec![])),
     }
 }
 
@@ -1065,6 +1110,87 @@ mod tests {
             &func_named(&module, "main").unwrap().region.values[0],
             (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec__0_c",
         ));
+    }
+
+    #[test]
+    fn skips_specialization_when_a_known_closures_captures_are_out_of_scope() {
+        // A recursive closure `rec` is a `prealloc` shell in the root region plus a
+        // fill, in one block, that captures *that block's local param* `v`. A
+        // *sibling* block passes `rec` to a candidate parameter of `f`. `rec`'s name
+        // is in scope there (via the shell), but its capture `v` is not — it is bound
+        // in a different block. Threading `v` would emit an out-of-scope reference, so
+        // the pass must leave that call unspecialized.
+        let f = Func {
+            params: vec![candidate("p")],
+            resume: BlockName::from("r"),
+            region: region(vec![], indirect("p", vec![])),
+        };
+        let c = Clsr {
+            fields: vec![v("e").into()],
+            params: vec![v("x").into()],
+            resume: BlockName::from("r"),
+            region: region(
+                vec![],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("x")],
+                }),
+            ),
+        };
+        // The fill captures the block-local `v`; reachable from the root only here.
+        let fill = Block {
+            params: vec![v("v")],
+            region: region(
+                vec![(
+                    v("rec"),
+                    Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("v")])),
+                )],
+                Tail::Jump(JumpTarget {
+                    target: BlockName::from("r"),
+                    params: vec![v("rec")],
+                }),
+            ),
+        };
+        // A sibling of `fill`: `rec`'s name reaches here via the shell, but `v` does not.
+        let used = Block {
+            params: vec![],
+            region: region(vec![], direct("f", vec![v("rec")])),
+        };
+        let main = Func {
+            params: vec![],
+            resume: BlockName::from("r"),
+            region: Region {
+                preallocs: vec![(v("rec"), Prealloc::Clsr(ClsrName::from("c")))],
+                values: vec![(v("init"), Value::Pure(Data::Nat(0)))],
+                blocks: vec![
+                    (BlockName::from("fill"), fill),
+                    (BlockName::from("used"), used),
+                ],
+                tail: Tail::Jump(JumpTarget {
+                    target: BlockName::from("fill"),
+                    params: vec![v("init")],
+                }),
+            },
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_func(FuncName::from("f"), f);
+        module.add_clsr(ClsrName::from("c"), c);
+
+        specialize_calls(&mut module);
+
+        // The sibling call is untouched: still targets `f`, still passes `rec` — no
+        // out-of-scope `v` spliced in.
+        let used_region = &func_named(&module, "main").unwrap().region.blocks[1].1.region;
+        match &used_region.tail {
+            Tail::Call(CallTarget::Direct { target, params, .. }) => {
+                assert_eq!(target.as_str(), "f");
+                assert_eq!(params, &vec![v("rec")]);
+            }
+            other => panic!("expected an unspecialized call, got {other:?}"),
+        }
+        assert!(func_named(&module, "f@spec__0_c").is_none());
     }
 
     #[test]
