@@ -23,7 +23,9 @@ cargo install --path .
 ## Usage
 
 ```
-curios [--timeout MILLIS] [--print] <run|check|compile> <input-path> [--output-path PATH]
+curios [--timeout MILLIS] [--print [STAGES]] run <input-path>
+curios [--timeout MILLIS] [--print [STAGES]] check <input-path>
+curios [--timeout MILLIS] [--print [STAGES]] compile <input-path> [--output-path PATH]
 ```
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
