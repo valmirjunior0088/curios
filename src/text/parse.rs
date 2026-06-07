@@ -3,7 +3,7 @@ use {
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
         NatMatch, Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet,
-        TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
+        TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
     crate::{
         Source,
@@ -20,7 +20,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union", "with",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -734,6 +734,7 @@ fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
 enum Suffix {
     Proj(usize),
     Apply(Vec<Term>),
+    Bang,
 }
 
 fn parse_suffix<'a>() -> Parser<'a, Suffix> {
@@ -743,6 +744,7 @@ fn parse_suffix<'a>() -> Parser<'a, Suffix> {
             .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .map(Suffix::Apply))
+        .or(catch(parse_literal("!")).map(|()| Suffix::Bang))
 }
 
 fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
@@ -781,14 +783,42 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
                     .fold(head, |head, suffix| match suffix {
                         Suffix::Proj(index) => Subterm::Proj(Proj { head, index }).into(),
                         Suffix::Apply(params) => Subterm::Apply(Apply { head, params }).into(),
+                        Suffix::Bang => Subterm::Bang(head).into(),
                     })
             }),
     )
 }
 
+// A `with <a>, <b> => <template>  <body>` block. `a`/`b` are two parens-free
+// binders (like a motive's binder, but arity 2) standing for the monadic action
+// and its continuation; `<template>` is an *atomic* term mentioning them (e.g.
+// `Parse/bind(?, ?, a, b)`). The blessed `a, b =>` syntax means the bind is a
+// two-hole template, not a value — so it needs no annotation and re-instantiates
+// with fresh holes per `!` site. No `end`: the block ends where the enclosing
+// term ends (like a `let`/`rec` tail).
+fn parse_with<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("with"))
+        .and_keep(parse_identifier())
+        .and_drop(parse_literal(","))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(parse_atomic_term())
+        .and(lazy(parse_term))
+        .map(|(((action_param, cont_param), template), body)| {
+            Subterm::With(With {
+                action_param: action_param.to_string(),
+                cont_param: cont_param.to_string(),
+                template,
+                body,
+            })
+        })
+        .map(Into::into)
+}
+
 fn parse_term<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_rec()
+        parse_with()
+            .or(parse_rec())
             .or(parse_let())
             .or(parse_match())
             .or(parse_func_type())

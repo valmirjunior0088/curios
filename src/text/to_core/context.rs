@@ -102,6 +102,11 @@ pub struct Context<'a> {
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
     // `Elaborate`'s immutable `&Context` borrow.
     metavars: &'a Cell<usize>,
+    // Sibling counter for fresh continuation-binder names minted while desugaring
+    // `with`/`!` blocks. Threaded (not a process-global atomic) for determinism:
+    // `core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
+    // tests must be order-stable.
+    binders: &'a Cell<usize>,
 }
 
 fn attach(error: Error, name: &Name) -> Error {
@@ -116,6 +121,7 @@ impl<'a> Context<'a> {
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
         metavars: &'a Cell<usize>,
+        binders: &'a Cell<usize>,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
@@ -124,6 +130,7 @@ impl<'a> Context<'a> {
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
             metavars,
+            binders,
         }
     }
 
@@ -135,6 +142,7 @@ impl<'a> Context<'a> {
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
             metavars: self.metavars,
+            binders: self.binders,
         }
     }
 
@@ -143,6 +151,15 @@ impl<'a> Context<'a> {
         let id = self.metavars.get();
         self.metavars.set(id + 1);
         id
+    }
+
+    /// Mint a fresh continuation-binder name for `with`/`!` desugaring. The `#`
+    /// sigil is illegal in source identifiers, so it cannot collide with user
+    /// names or qualified references.
+    pub fn fresh_binder(&self) -> String {
+        let id = self.binders.get();
+        self.binders.set(id + 1);
+        format!("#{id}")
     }
 
     pub fn prefixed(&self, label: &str) -> Qualifier {

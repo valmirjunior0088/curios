@@ -461,7 +461,8 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = std::cell::Cell::new(0);
-    let mut context = Context::new(&table, &public, &metavars);
+    let binders = std::cell::Cell::new(0);
+    let mut context = Context::new(&table, &public, &metavars, &binders);
     let mut flat_items = Vec::new();
 
     process_items(

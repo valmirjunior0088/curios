@@ -2,7 +2,9 @@ use {
     super::Context,
     crate::{
         core,
-        text::{BinLiteral, Error, Match, Motive, Nat, NatLiteral, NatMatch, Prim, Subterm, Term},
+        text::{
+            BinLiteral, Error, Let, Match, Motive, Nat, NatLiteral, NatMatch, Prim, Subterm, Term,
+        },
     },
     num_bigint::BigUint,
     std::collections::BTreeMap,
@@ -10,6 +12,16 @@ use {
 
 pub struct Elaborate<'a, 'b> {
     context: &'a Context<'b>,
+}
+
+/// The active bind of a `with` region: a blessed two-hole template. `action_param`
+/// and `cont_param` are the binder names for the monadic action and continuation;
+/// `template` is the term they occur in. [`Elaborate::instantiate`] re-elaborates
+/// `template` and substitutes the two for each `!` site (see `WITH.md`).
+struct Bind<'t> {
+    action_param: &'t str,
+    cont_param: &'t str,
+    template: &'t Term,
 }
 
 impl<'a, 'b> Elaborate<'a, 'b> {
@@ -228,7 +240,296 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&rec.tail)?,
             ),
+            // `with <a>, <b> => <template> <body>` opens a monadic block. The bind
+            // is a two-hole template (not a value); the body is desugared
+            // (eliminating every `Bang`) into ordinary core terms by re-elaborating
+            // and substituting that template per `!` site. See `region`/`instantiate`.
+            Subterm::With(with) => {
+                let bind = Bind {
+                    action_param: &with.action_param,
+                    cont_param: &with.cont_param,
+                    template: &with.template,
+                };
+                self.region(&with.body, &bind)?
+            }
+            // A bang outside any `with` body has no continuation to hoist to.
+            Subterm::Bang(_) => return Err(Error::BangOutsideWith),
         })
+    }
+
+    /// Desugars `term` as a single **region** under the active `bind`. A region
+    /// is a stretch of a `with` body that shares one continuation; each `!` in it
+    /// hoists to the top of the region, never past a boundary (lambda body, match
+    /// arm, nested `with`). Boundaries re-root a region. See `WITH.md`.
+    fn region(&self, term: &Term, bind: &Bind) -> Result<core::Term, Error> {
+        match term.as_subterm() {
+            // A `let`'s bound expression evaluates in place (its bangs hoist to
+            // this region); the tail continues the same region (a bang there
+            // hoists after `x` is bound, not above the `let`).
+            Subterm::Let(let_) => {
+                let mut binds = Vec::new();
+                let let_term = self.build_let(let_, bind, &mut binds)?;
+                self.wrap(binds, let_term, bind)
+            }
+            // The scrutinee evaluates before branching (its bangs hoist here);
+            // each arm is its own region (branch-local effects).
+            Subterm::Match(match_) => {
+                let mut binds = Vec::new();
+                let match_term = self.match_region(match_, bind, &mut binds)?;
+                self.wrap(binds, match_term, bind)
+            }
+            // A lambda re-roots the region (same bind, lexically in scope).
+            Subterm::Func(func) => {
+                let params = func
+                    .params
+                    .iter()
+                    .map(|(name, annotation)| {
+                        let domain = match annotation {
+                            Some(ty) => self.term(ty)?,
+                            None => core::Term::metavar(self.context.fresh_metavar()),
+                        };
+                        Ok((name.clone(), domain))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+                Ok(core::Term::func(params, self.region(&func.body, bind)?))
+            }
+            // A nested `with` switches the bind and desugars independently.
+            Subterm::With(with) => {
+                let inner = Bind {
+                    action_param: &with.action_param,
+                    cont_param: &with.cont_param,
+                    template: &with.template,
+                };
+                self.region(&with.body, &inner)
+            }
+            // Spine forms (atomic / apply / tuple / proj): collect bangs in
+            // left-to-right evaluation order, then wrap.
+            _ => {
+                let mut binds = Vec::new();
+                let body = self.collect(term, bind, &mut binds)?;
+                self.wrap(binds, body, bind)
+            }
+        }
+    }
+
+    /// Walks a non-boundary expression, elaborating to core and accumulating each
+    /// `Bang` into `binds` (in evaluation order) replaced by a fresh variable.
+    /// Boundary/binding forms desugar as their own nested region; `let`/`match`
+    /// hoist their bound-expression/scrutinee bangs into the *enclosing* `binds`.
+    fn collect(
+        &self,
+        term: &Term,
+        bind: &Bind,
+        binds: &mut Vec<(String, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        Ok(match term.as_subterm() {
+            Subterm::Bang(action) => {
+                // The action is itself desugared first, so its inner bangs
+                // evaluate before this one (left-to-right).
+                let action = self.collect(action, bind, binds)?;
+                let name = self.context.fresh_binder();
+                let var = core::Term::var(core::Var::free(name.clone()));
+                binds.push((name, action));
+                var
+            }
+            Subterm::Apply(apply) => core::Term::apply(
+                self.collect(&apply.head, bind, binds)?,
+                apply
+                    .params
+                    .iter()
+                    .map(|p| self.collect(p, bind, binds))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Subterm::Tuple(tuple) => core::Term::tuple(
+                tuple
+                    .fields
+                    .iter()
+                    .map(|f| self.collect(f, bind, binds))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Subterm::Proj(proj) => {
+                core::Term::proj(self.collect(&proj.head, bind, binds)?, proj.index)
+            }
+            // A `let`/`match` sub-expression hoists its bound-expression /
+            // scrutinee bangs into the enclosing region (this `binds`).
+            Subterm::Let(let_) => self.build_let(let_, bind, binds)?,
+            Subterm::Match(match_) => self.match_region(match_, bind, binds)?,
+            // A lambda is a value and a nested `with` is independent: neither
+            // hoists anything outward, so desugar each as its own region.
+            Subterm::Func(_) | Subterm::With(_) => self.region(term, bind)?,
+            // Leaves elaborate normally. A `Bang` reachable here (e.g. nested in a
+            // type position) hits `self.term`'s `Bang` arm and is rejected.
+            _ => self.term(term)?,
+        })
+    }
+
+    /// Builds `let x = value; tail` for a `let` inside a `with` region, collecting
+    /// the bound expression's bangs into `binds` and desugaring the tail as the
+    /// continuation of the same region.
+    fn build_let(
+        &self,
+        let_: &Let,
+        bind: &Bind,
+        binds: &mut Vec<(String, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        let value = self.collect(&let_.signature.body(), bind, binds)?;
+        let tail = self.region(&let_.tail, bind)?;
+        Ok(core::Term::let_(
+            let_.label.clone(),
+            self.term(&let_.signature.type_())?,
+            value,
+            tail,
+        ))
+    }
+
+    /// Desugars a `match` inside a `with` region: the scrutinee's bangs are
+    /// collected into `binds` (hoisted out — the scrutinee runs unconditionally),
+    /// while each arm is desugared as its own region (branch-local effects). This
+    /// mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect`
+    /// on heads and `region` on arm bodies.
+    fn match_region(
+        &self,
+        match_: &Match,
+        bind: &Bind,
+        binds: &mut Vec<(String, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        Ok(match match_ {
+            Match::Bln(bm) => {
+                let (label, body) = self.motive_parts(&bm.motive)?;
+                core::Term::bln_match(
+                    self.collect(&bm.head, bind, binds)?,
+                    label,
+                    body,
+                    self.region(&bm.false_case, bind)?,
+                    self.region(&bm.true_case, bind)?,
+                )
+            }
+            Match::Nat(NatMatch::Induction {
+                head,
+                motive,
+                zero_case,
+                pred_label,
+                ih_label,
+                succ_case,
+            }) => {
+                let (label, body) = self.motive_parts(motive)?;
+                core::Term::nat_induction(
+                    self.collect(head, bind, binds)?,
+                    label,
+                    body,
+                    self.region(zero_case, bind)?,
+                    pred_label.clone(),
+                    ih_label.clone(),
+                    self.region(succ_case, bind)?,
+                )
+            }
+            Match::Nat(NatMatch::Dispatch {
+                head,
+                motive,
+                cases,
+                default,
+            }) => {
+                let (label, motive_body) = self.motive_parts(motive)?;
+                core::Term::nat_dispatch(
+                    self.collect(head, bind, binds)?,
+                    label,
+                    motive_body,
+                    cases
+                        .iter()
+                        .map(|(&nat, body)| Ok((nat, self.region(body, bind)?)))
+                        .collect::<Result<Vec<_>, Error>>()?,
+                    self.region(default, bind)?,
+                )
+            }
+            Match::Atom(am) => {
+                let (label, body) = self.motive_parts(&am.motive)?;
+                core::Term::match_(
+                    self.collect(&am.head, bind, binds)?,
+                    label,
+                    body,
+                    am.cases
+                        .iter()
+                        .map(|(atom, body)| {
+                            Ok((core::Atom::from(atom.as_str()), self.region(body, bind)?))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?,
+                )
+            }
+            Match::Union(um) => {
+                let head = self.collect(&um.head, bind, binds)?;
+                let tag = core::Term::proj(head.clone(), 0);
+                let payload = core::Term::proj(head, 1);
+
+                let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
+                let motive = match motive_label {
+                    Some(label) => core::Scope::close(core::One, &[label], motive_body),
+                    None => core::Scope::constant(core::One, motive_body),
+                };
+
+                let cases = um
+                    .cases
+                    .iter()
+                    .map(|(label, case)| {
+                        let body = self.region(&case.body, bind)?;
+                        let binder_strs =
+                            case.binders.iter().map(String::as_str).collect::<Vec<_>>();
+                        let scope =
+                            core::Scope::close(core::Many(case.binders.len()), &binder_strs, body);
+                        let projections = (0..case.binders.len())
+                            .map(|i| core::Term::proj(payload.clone(), i))
+                            .collect::<Vec<_>>();
+                        let refs = projections.iter().collect::<Vec<_>>();
+                        Ok((core::Atom::from(label.as_str()), scope.open(&refs)))
+                    })
+                    .collect::<Result<BTreeMap<_, _>, Error>>()?;
+
+                core::Subterm::Match(core::Match {
+                    head: tag,
+                    motive,
+                    cases,
+                })
+                .into()
+            }
+        })
+    }
+
+    /// Wraps `body` in one instantiation of the bind template per collected bang.
+    /// The first-collected bang (`binds[0]`) becomes the outermost bind, preserving
+    /// left-to-right evaluation order. Continuation lambdas are built with
+    /// `core::Term::func` over the gensym'd free name, whose `capture` closes it
+    /// robustly under nesting; the domain is a fresh hole, inference-solved.
+    fn wrap(
+        &self,
+        binds: Vec<(String, core::Term)>,
+        body: core::Term,
+        bind: &Bind,
+    ) -> Result<core::Term, Error> {
+        binds
+            .into_iter()
+            .rev()
+            .try_fold(body, |acc, (name, action)| {
+                let domain = core::Term::metavar(self.context.fresh_metavar());
+                let cont = core::Term::func([(name, domain)], acc);
+                self.instantiate(bind, action, cont)
+            })
+    }
+
+    /// Instantiates the bind template for one `!` site. The template is
+    /// re-elaborated each call, so its `?` holes get *fresh* metavariables — a
+    /// region can therefore sequence actions of differing result types. The
+    /// `action_param`/`cont_param` binders are then substituted by `action`/`cont`
+    /// via `Scope::close`/`open`. Because the result keeps the template's own head
+    /// (e.g. `Parse/bind`) in head position — never a bare lambda — it synthesizes
+    /// without annotations.
+    fn instantiate(
+        &self,
+        bind: &Bind,
+        action: core::Term,
+        cont: core::Term,
+    ) -> Result<core::Term, Error> {
+        let template = self.term(bind.template)?;
+        let scope = core::Scope::close(core::Two, &[bind.action_param, bind.cont_param], template);
+        Ok(scope.open(&[&action, &cont]))
     }
 
     /// Splits an optional match motive into its `(label, body)` for the core

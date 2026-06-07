@@ -234,6 +234,25 @@ pub struct Rec {
     pub tail: Term,
 }
 
+/// A `with <a>, <b> => <template>  <body>` block: monadic do-notation. The bind
+/// is a blessed two-hole **template** rather than a value: `action_param` and
+/// `cont_param` are the binder names standing for the monadic action and its
+/// continuation, and `template` is the term they occur in (e.g.
+/// `Parse/bind(?, ?, a, b)`). The desugarer re-elaborates `template` at each `!`
+/// site — minting fresh holes, so a region can mix action types — and
+/// substitutes the action/continuation for the two binders, keeping the
+/// template's head in head position (synthesizable without annotations). `body`
+/// sequences effects via the postfix `!`. Both this and [`Subterm::Bang`] exist
+/// only between parsing and desugaring — `to_core::elaborate` eliminates them
+/// before core elaboration.
+#[derive(Debug, Clone, PartialEq)]
+pub struct With {
+    pub action_param: String,
+    pub cont_param: String,
+    pub template: Term,
+    pub body: Term,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subterm {
     Type,
@@ -249,6 +268,11 @@ pub enum Subterm {
     Match(Match),
     Let(Let),
     Rec(Rec),
+    With(With),
+    /// A postfix bang `e!`: extracts the result of monadic action `e` inline.
+    /// The operand is the action whose result is bound. Only meaningful inside a
+    /// [`With`] body; a stray `Bang` is rejected during desugaring.
+    Bang(Term),
     Name(Name),
     /// A surface hole `?`: a placeholder elaborated to a fresh metavariable.
     /// Carries no payload — its span rides on the wrapping [`Term`].

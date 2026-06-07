@@ -50,6 +50,9 @@ pub enum Error {
     CyclicReExport {
         label: String,
     },
+    /// A postfix `!` appeared outside any `with` body, so there is no bind
+    /// function to sequence it with.
+    BangOutsideWith,
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -120,6 +123,9 @@ impl fmt::Display for Error {
             }
             Error::CyclicReExport { label } => {
                 write!(f, "cyclic re-export with no concrete target: {label}")
+            }
+            Error::BangOutsideWith => {
+                write!(f, "postfix `!` used outside a `with` block")
             }
             Error::ModuleLoadFailed { label, cause } => {
                 write!(f, "failed to load module {label}:\n{}", cause.format())

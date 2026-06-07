@@ -760,3 +760,173 @@ fn rec_binding_requires_a_type() {
     assert!("rec f = Type;".parse::<Module>().is_err());
     assert!("rec f = Type; f".parse::<Term>().is_err());
 }
+
+fn name(label: &str) -> Term {
+    Subterm::Name(Name::from([label.to_string()])).into()
+}
+
+#[test]
+fn parse_with_block() {
+    // `with <a>, <b> => <template>  <body>`: two parens-free binders (like a
+    // motive's binder, arity 2), an atomic template mentioning them, then a
+    // full-term body that runs to the end of the region (no `end` terminator).
+    assert_eq!(
+        "with m, k => bind(m, k) body".parse::<Term>().unwrap(),
+        Subterm::With(With {
+            action_param: "m".to_string(),
+            cont_param: "k".to_string(),
+            template: Subterm::Apply(Apply {
+                head: name("bind"),
+                params: vec![name("m"), name("k")],
+            })
+            .into(),
+            body: name("body"),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_with_template_holes() {
+    // The template may carry `?` holes (e.g. `Parse/bind`'s leading `Type` args);
+    // they elaborate to fresh metavariables per `!` site. The binders stay
+    // parens-free even though the template is a qualified application.
+    assert_eq!(
+        "with p, k => Parse/bind(?, ?, p, k) body"
+            .parse::<Term>()
+            .unwrap(),
+        Subterm::With(With {
+            action_param: "p".to_string(),
+            cont_param: "k".to_string(),
+            template: Subterm::Apply(Apply {
+                head: Subterm::Name(Name::from(["Parse".to_string(), "bind".to_string()])).into(),
+                params: vec![
+                    Subterm::Hole.into(),
+                    Subterm::Hole.into(),
+                    name("p"),
+                    name("k"),
+                ],
+            })
+            .into(),
+            body: name("body"),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_bang_suffix() {
+    assert_eq!(
+        "x!".parse::<Term>().unwrap(),
+        Subterm::Bang(name("x")).into()
+    );
+}
+
+#[test]
+fn parse_multi_bang_in_apply() {
+    // Each argument keeps its own `!`; the desugarer hoists them left-to-right.
+    assert_eq!(
+        "f(x!, y!)".parse::<Term>().unwrap(),
+        Subterm::Apply(Apply {
+            head: name("f"),
+            params: vec![
+                Subterm::Bang(name("x")).into(),
+                Subterm::Bang(name("y")).into(),
+            ],
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_bang_in_let_binding() {
+    assert_eq!(
+        "let x = e!; x".parse::<Term>().unwrap(),
+        Subterm::Let(Let {
+            label: "x".to_string(),
+            signature: LetSignature::Name {
+                type_: None,
+                body: Subterm::Bang(name("e")).into(),
+            },
+            tail: name("x"),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn parse_bang_in_match_scrutinee_and_arm() {
+    // A `!` in the scrutinee and a `!` inside an arm are distinct `Bang` nodes;
+    // the elaborator hoists them into different regions.
+    let term = "match x! | 'foo => y! end".parse::<Term>().unwrap();
+    match term.into_subterm() {
+        Subterm::Match(Match::Atom(m)) => {
+            assert_eq!(m.head, Subterm::Bang(name("x")).into());
+            assert_eq!(
+                m.cases.get(&Atom::from("foo")),
+                Some(&Subterm::Bang(name("y")).into())
+            );
+        }
+        other => panic!("expected atom match, got {other:?}"),
+    }
+}
+
+#[test]
+fn bang_binds_tighter_than_application() {
+    // `f(x)!` bangs the whole application; the `!` is the outermost node.
+    assert_eq!(
+        "f(x)!".parse::<Term>().unwrap(),
+        Subterm::Bang(
+            Subterm::Apply(Apply {
+                head: name("f"),
+                params: vec![name("x")],
+            })
+            .into()
+        )
+        .into()
+    );
+}
+
+#[test]
+fn bang_binds_tighter_than_projection() {
+    // `p.0!` bangs the projection (`!` outermost) …
+    assert_eq!(
+        "p.0!".parse::<Term>().unwrap(),
+        Subterm::Bang(
+            Subterm::Proj(Proj {
+                head: name("p"),
+                index: 0,
+            })
+            .into()
+        )
+        .into()
+    );
+    // … while `x!.0` projects out of the banged action (`Proj` outermost).
+    assert_eq!(
+        "x!.0".parse::<Term>().unwrap(),
+        Subterm::Proj(Proj {
+            head: Subterm::Bang(name("x")).into(),
+            index: 0,
+        })
+        .into()
+    );
+}
+
+#[test]
+fn with_and_bang_round_trip() {
+    for source in [
+        "with m, k => bind(m, k) body",
+        "with p, k => Parse/bind(?, ?, p, k) body",
+        "f(x!, y!)",
+        "p.0!",
+        "x!.0",
+        "let x = e!; x",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "round-trip failed for {source:?}"
+        );
+    }
+}

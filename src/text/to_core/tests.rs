@@ -1059,3 +1059,10 @@ fn distinct_holes_get_distinct_ids() {
         core::Term::tuple([core::Term::metavar(0), core::Term::metavar(1)]),
     );
 }
+
+#[test]
+fn bang_outside_with_is_rejected() {
+    // A postfix `!` with no enclosing `with` has no bind to sequence it, so the
+    // desugarer rejects it rather than emitting a dangling continuation.
+    assert!(run_err("x!").contains("outside a `with` block"));
+}

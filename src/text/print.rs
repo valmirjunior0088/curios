@@ -2,9 +2,8 @@ use {
     super::{
         Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Prim, Proj,
-        Rec,
-        Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
-        UnionCase, UnionMatch, UseGroup,
+        Rec, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
+        UnionCase, UnionMatch, UseGroup, With,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -400,6 +399,22 @@ fn print_term(term: Term) -> Printer<'static> {
                 print_term(tail),
             ])
         }
+        Subterm::With(With {
+            action_param,
+            cont_param,
+            template,
+            body,
+        }) => flat([
+            pure("with "),
+            pure(action_param),
+            pure(", "),
+            pure(cont_param),
+            pure(" => "),
+            print_term(template),
+            pure("\n"),
+            indent(print_term(body)),
+        ]),
+        Subterm::Bang(term) => flat([pure("("), print_term(term), pure(")!")]),
     }
 }
 
