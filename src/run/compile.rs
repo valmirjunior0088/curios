@@ -12,12 +12,23 @@ pub enum Stage<'a> {
     Wasm(&'a wasm::Module),
 }
 
-pub fn compile_entrypoint<O>(
+/// The type-checking prologue shared by [`compile_entrypoint`] and
+/// [`typecheck_entrypoint`]: lower to core, elaborate (checking against the
+/// entrypoint's type when it carries one, else synthesizing), then zonk
+/// metavariable solutions in so the module is meta-free — the `elaborate → zonk`
+/// half of the `elaborate → zonk → erase` data flow (§9). Elaboration is
+/// authoritative: it returns a rebuilt module (lambda domains solved, binders
+/// re-closed), and it is *that* module — not the lowered one — that zonk makes
+/// meta-free. `zonk` is also where an unsolved hole is rejected, so a program that
+/// merely *type-checks* is fully validated by the time this returns. Elaboration
+/// and zonking share one context (the solutions live in its `MetaStore`); the
+/// returned module is self-contained, so the caller's `erase` runs over a fresh one.
+fn elaborate_and_zonk<O>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
     loader: &dyn text::Loader,
-    mut observe: O,
-) -> Result<wasm::Module, String>
+    observe: &mut O,
+) -> Result<(core::Module, core::Term), String>
 where
     O: FnMut(Stage<'_>),
 {
@@ -28,16 +39,6 @@ where
 
     observe(Stage::Core(&module));
 
-    // Elaborate (checking against the entrypoint's type when it carries one, else
-    // synthesizing), then zonk metavariable solutions in so the module is
-    // meta-free, then erase the meta-free module to `ersd` — the
-    // `elaborate → zonk → erase` data flow (§9). Elaboration is authoritative: it
-    // returns a rebuilt module (lambda domains solved, binders re-closed), and it
-    // is *that* module — not the lowered one — that zonk makes meta-free.
-    // Elaboration and zonking share one context (the solutions live in its
-    // `MetaStore`); erase runs over a fresh one. Each pass iterates the flat
-    // top-level items rather than recursing a nested spine, so prelude depth no
-    // longer overflows the stack (BUG.md).
     let mut context = core::Context::new(timeout);
 
     let core_mode = match &module.type_ {
@@ -50,6 +51,37 @@ where
 
     let module = core::zonk_module(&context, &module).map_err(|error| error.format())?;
     let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;
+
+    Ok((module, core_type))
+}
+
+/// Type-check an entrypoint and stop — the fast path for `check`. Runs only
+/// `to_core → elaborate → zonk` (so it observes `Text` and `Core` only), skipping
+/// the `erase → cont → optm → wasm` lowering that a type-check does not need.
+pub fn typecheck_entrypoint<O>(
+    timeout: Duration,
+    entrypoint: &text::Entrypoint,
+    loader: &dyn text::Loader,
+    mut observe: O,
+) -> Result<(), String>
+where
+    O: FnMut(Stage<'_>),
+{
+    elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
+
+    Ok(())
+}
+
+pub fn compile_entrypoint<O>(
+    timeout: Duration,
+    entrypoint: &text::Entrypoint,
+    loader: &dyn text::Loader,
+    mut observe: O,
+) -> Result<wasm::Module, String>
+where
+    O: FnMut(Stage<'_>),
+{
+    let (module, core_type) = elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
     let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
         .map_err(|error| error.format())?;
@@ -218,5 +250,105 @@ mod tests {
         let error = compile(source, None).unwrap_err();
 
         assert!(error.contains("cannot"), "unexpected error: {error}");
+    }
+
+    // --- A: fast `check` (typecheck-only) ------------------------------------
+
+    fn typecheck(source: &str) -> Result<(), String> {
+        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+        typecheck_entrypoint(Duration::from_secs(5), &entrypoint, &text::NullLoader, |_| {})
+    }
+
+    #[test]
+    fn typecheck_accepts_a_well_typed_program() {
+        // The fast path stops after `elaborate → zonk`; a well-typed program passes
+        // without running erase/cont/optm/wasm.
+        assert!(typecheck("/sys/Io/print(/sys/Nat/to_str(0))").is_ok());
+    }
+
+    #[test]
+    fn typecheck_rejects_an_unsolved_hole() {
+        // `zonk` is included in the fast path, so an unconstrained hole is still
+        // caught — type-checking is fully validated even though lowering is skipped.
+        let error = typecheck(
+            r#"
+            use /sys/{Nat};
+            let m : Nat = ?;
+            m
+            "#,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("cannot"), "unexpected error: {error}");
+    }
+
+    // --- C: reachability prune of unused sys/std -----------------------------
+
+    /// The `name`s of every top-level item in the lowered `core::Module`, captured
+    /// from the `Core` stage of a full compile (which runs the real `prelude`).
+    fn core_item_names(source: &str) -> Vec<String> {
+        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+        let mut names = Vec::new();
+
+        compile_entrypoint(Duration::from_secs(5), &entrypoint, &text::NullLoader, |stage| {
+            if let Stage::Core(module) = stage {
+                for item in &module.items {
+                    match item {
+                        core::Item::Let(def) => names.push(def.name.clone()),
+                        core::Item::Rec(defs) => {
+                            names.extend(defs.iter().map(|def| def.name.clone()))
+                        }
+                    }
+                }
+            }
+        })
+        .unwrap();
+
+        names
+    }
+
+    #[test]
+    fn prune_drops_unreachable_library_modules() {
+        // A program touching only `Io`/`Nat` must not drag the unrelated (and
+        // expensive) `std/Json`, `std/Parse`, `std/Fmt`, … into the typechecked core.
+        let names = core_item_names("use /std/{Io, Nat};\n/std/Io/print(/std/Nat/to_str(0))");
+
+        for unused in ["std/Json", "std/Parse", "std/Fmt", "std/Lst", "std/Str"] {
+            assert!(
+                !names.iter().any(|name| name.starts_with(unused)),
+                "expected `{unused}` to be pruned, but it survived in {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn prune_keeps_reachable_library_and_transitive_deps() {
+        // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
+        let names =
+            core_item_names("use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/Json, /std/Json/decode, \"1\")");
+
+        assert!(
+            names.iter().any(|name| name.starts_with("std/Json")),
+            "expected `std/Json` to be retained, got {names:?}"
+        );
+        assert!(
+            names.iter().any(|name| name.starts_with("std/Parse")),
+            "expected transitive `std/Parse` to be retained, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn prune_still_typechecks_dead_user_definitions() {
+        // The prune is root-restricted: a user-authored top-level binding the body
+        // never references is still type-checked, so its error is reported.
+        let error = typecheck(
+            r#"
+            let dead : /sys/Nat = /sys/Io/print("x");
+            /sys/Io/print("ok")
+            "#,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("mismatch"), "unexpected error: {error}");
     }
 }

@@ -1,5 +1,5 @@
 use {
-    super::{Stage, StdioHost, compile_entrypoint, run_wasm, text, wasm},
+    super::{Stage, StdioHost, compile_entrypoint, run_wasm, text, typecheck_entrypoint, wasm},
     clap::{Parser, Subcommand},
     std::{
         fs,
@@ -80,6 +80,20 @@ fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<was
     })
 }
 
+fn typecheck_file(timeout: Duration, print: &str, input_path: &Path) -> Result<(), String> {
+    let entrypoint = text::Entrypoint::from_path(input_path).map_err(|error| error.format())?;
+
+    let loader = text::FileLoader::new(input_path.parent().unwrap_or(Path::new(".")));
+
+    let stages = print.split(',').collect::<Vec<_>>();
+
+    typecheck_entrypoint(timeout, &entrypoint, &loader, |stage| match stage {
+        Stage::Text(text) if stages.contains(&"text") => eprintln!("\n=== text ===\n{text}"),
+        Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
+        _ => {}
+    })
+}
+
 fn default_output_path(input_path: &Path) -> PathBuf {
     PathBuf::from(input_path.file_stem().unwrap_or(input_path.as_os_str())).with_extension("wasm")
 }
@@ -103,7 +117,16 @@ pub fn cli() -> Result<(), String> {
             run_wasm(&compile_file(timeout, &print, &input_path)?, StdioHost)?;
         }
         Mode::Check { input_path } => {
-            compile_file(timeout, &print, &input_path)?;
+            // Run the fast type-check-only path; fall through to the full pipeline
+            // only when a post-core stage is requested for printing, since those
+            // stages do not exist until lowering runs.
+            let post_core = ["ersd", "cont", "optm", "wasm"];
+
+            if print.split(',').any(|stage| post_core.contains(&stage)) {
+                compile_file(timeout, &print, &input_path)?;
+            } else {
+                typecheck_file(timeout, &print, &input_path)?;
+            }
         }
         Mode::Compile {
             input_path,

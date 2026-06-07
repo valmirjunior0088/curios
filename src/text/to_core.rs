@@ -347,7 +347,11 @@ fn process_items(
 // source order; a genuine value cycle leaves nodes unorderable, which are emitted
 // in source order and rejected downstream as unbound names — there is nothing to
 // repair, as cross-declaration value recursion is unexpressible by construction.
-fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
+fn order_flat_items(
+    items: Vec<FlatItem>,
+    referenced: &HashSet<String>,
+    library_roots: &HashSet<String>,
+) -> Vec<FlatItem> {
     let names = |item: &FlatItem| -> Vec<String> {
         match item {
             FlatItem::Let(let_) => vec![let_.name.join()],
@@ -394,6 +398,52 @@ fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
         .collect();
 
     let count = items.len();
+
+    // Reachability prune: drop library (`sys`/`std`) definitions the program can't
+    // reach, so they are never type-checked or lowered (the wasm DCE already removed
+    // them downstream — this just stops the wasted work earlier). A node is a
+    // prunable library item only if *every* name it declares lives under a loader
+    // root; user-authored items are never pruned, so a dead user definition is still
+    // type-checked. Seeds: every non-prunable node (kept unconditionally) plus every
+    // node owning a name the program references directly; BFS over `deps` keeps the
+    // transitive closure.
+    let prunable = |node: usize| -> bool {
+        !library_roots.is_empty()
+            && names(&items[node]).iter().all(|name| {
+                name.split('/')
+                    .next()
+                    .is_some_and(|segment| library_roots.contains(segment))
+            })
+    };
+
+    let mut keep = vec![false; count];
+    let mut stack = Vec::new();
+
+    for node in 0..count {
+        if !prunable(node) {
+            keep[node] = true;
+            stack.push(node);
+        }
+    }
+
+    for name in referenced {
+        if let Some(&node) = owner.get(name) {
+            if !keep[node] {
+                keep[node] = true;
+                stack.push(node);
+            }
+        }
+    }
+
+    while let Some(node) = stack.pop() {
+        for &dep in &deps[node] {
+            if !keep[dep] {
+                keep[dep] = true;
+                stack.push(dep);
+            }
+        }
+    }
+
     let mut emitted = vec![false; count];
     let mut order = Vec::with_capacity(count);
 
@@ -412,6 +462,7 @@ fn order_flat_items(items: Vec<FlatItem>) -> Vec<FlatItem> {
     let mut slots: Vec<Option<FlatItem>> = items.into_iter().map(Some).collect();
     order
         .into_iter()
+        .filter(|&node| keep[node])
         .map(|node| slots[node].take().unwrap())
         .collect()
 }
@@ -445,10 +496,11 @@ fn declaration(label: &str) -> TopItem {
 }
 
 pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Module, Error> {
+    let roots = loader.roots();
+
     let entrypoint = &Entrypoint {
         module: Module {
-            items: loader
-                .roots()
+            items: roots
                 .iter()
                 .map(|label| declaration(label))
                 .chain(entrypoint.module.items.iter().cloned())
@@ -486,7 +538,16 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
     // free `Var`s keyed by the definition's joined name; the core passes `define`
     // each one into the `Context`, so both the body and its annotation reduce
     // through those definitions and agree — no shared binder scope required.
-    let items = order_flat_items(flat_items)
+    // The program references these top-level names directly (the entrypoint body and
+    // its type annotation); they seed the reachability prune in `order_flat_items`.
+    let referenced: HashSet<String> = tail
+        .free_vars()
+        .into_iter()
+        .chain(type_.iter().flat_map(|type_| type_.free_vars()))
+        .collect();
+    let library_roots: HashSet<String> = roots.iter().cloned().collect();
+
+    let items = order_flat_items(flat_items, &referenced, &library_roots)
         .into_iter()
         .map(flat_item_to_core)
         .collect();
