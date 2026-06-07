@@ -121,7 +121,7 @@ let is_not_string_special(byte : Nat) -> Bln =
     end;
 
 let parse_str_escape : Parse(Bin) =
-    with p, k => Parse/bind(?, ?, p, k)
+    with Parse/bind(?, ?)
         let _ = Parse/take_byte('\\')!;
         let byte = Parse/any_byte!;
         match byte : Parse(Bin)
@@ -140,7 +140,7 @@ let parse_str_body : Parse(Arr(Bin)) =
     Parse/many0(Bin, Parse/or(Bin, parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Bin) =
-    with p, k => Parse/bind(?, ?, p, k)
+    with Parse/bind(?, ?)
         let _ = Parse/take_byte('"')!;
         let chunks = parse_str_body!;
         let _ = Parse/take_byte('"')!;
@@ -168,19 +168,19 @@ pub rec decode : Parse(Json) = (input, pos) =>
         end
     end
 and parse_arr : Parse(Json) =
-    with p, k => Parse/bind(?, ?, p, k)
+    with Parse/bind(?, ?)
         let _ = Parse/take_byte('[')!;
         let elems = Parse/sep_by0(Json, Nat, decode, Parse/take_byte(','))!;
         let _ = Parse/take_byte(']')!;
         Parse/pure(Json, Json/arr(elems))
 and parse_obj : Parse(Json) =
-    with p, k => Parse/bind(?, ?, p, k)
+    with Parse/bind(?, ?)
         let _ = Parse/take_byte('{')!;
         let pairs = Parse/sep_by0({ Bin, Json }, Nat, parse_pair, Parse/take_byte(','))!;
         let _ = Parse/take_byte('}')!;
         Parse/pure(Json, Json/obj(pairs))
 and parse_pair : Parse({ Bin, Json }) =
-    with p, k => Parse/bind(?, ?, p, k)
+    with Parse/bind(?, ?)
         let key = parse_raw_str!;
         let _ = Parse/take_byte(':')!;
         let val = decode!;

@@ -129,14 +129,14 @@ fn curried_function() {
 #[test]
 fn with_identity_monad_sequences_bangs() {
     // A minimal Identity monad over `sys/Nat`: `bind(m, f) = f(m)`. The compiler is
-    // monad-agnostic — `with m, k => bind(m, k)` instantiates the template `bind(m, k)`
-    // per `!` site — so the sugar `add(a!, b!)` threads each banged value through a
-    // fresh continuation and evaluates to `add(a, b)`.
+    // monad-agnostic — `with bind` applies the binary `bind` to `(action, cont)` per
+    // `!` site — so the sugar `add(a!, b!)` threads each banged value through a fresh
+    // continuation and evaluates to `add(a, b)`.
     let source = r#"
         let bind : (sys/Nat, (sys/Nat) -> sys/Nat) -> sys/Nat = (m, f) => f(m);
         let a : sys/Nat = 3;
         let b : sys/Nat = 4;
-        let result : sys/Nat = with m, k => bind(m, k) sys/Nat/add(a!, b!);
+        let result : sys/Nat = with bind sys/Nat/add(a!, b!);
         sys/Io/print(sys/Nat/to_str(result))
         "#;
 
@@ -147,10 +147,10 @@ fn with_identity_monad_sequences_bangs() {
 
 #[test]
 fn with_std_parse_threads_bangs_left_to_right() {
-    // The real `std/Parse` monad. The blessed template `with p, k => Parse/bind(?, ?,
-    // p, k)` fixes `Parse/bind`'s leading `Type` arguments with `?` holes — and because
-    // the template is re-elaborated per `!` site, each site mints its own holes (solved
-    // by inference). `Parse/bind` stays in head position, so no annotations are needed.
+    // The real `std/Parse` monad. `with Parse/bind(?, ?)` partially applies the curried
+    // bind, fixing its leading `Type` arguments with `?` holes — and because the bind is
+    // re-elaborated per `!` site, each site mints its own holes (solved by inference).
+    // `Parse/bind` stays in head position, so no annotations are needed.
     // Two `any_byte!`s read consecutive bytes; using a *non-commutative* `Nat/sub`
     // pins the evaluation order: on "BA" the first byte is 'B' (66) and the second
     // 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
@@ -158,7 +158,7 @@ fn with_std_parse_threads_bangs_left_to_right() {
         use /std/{Parse, Nat, Result, Io};
 
         let parser : Parse/Parse(Nat) =
-            with p, k => Parse/bind(?, ?, p, k)
+            with Parse/bind(?, ?)
             Parse/pure(Nat, Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
         match Parse/run(Nat, parser, "BA") : {}
@@ -183,18 +183,18 @@ fn with_std_parse_threads_bangs_left_to_right() {
 fn with_region_mixes_action_types() {
     // A single region sequences two actions of *different* payload types: a
     // `Parse(Bin)` (`take_while`) and a `Parse(Nat)` (`any_byte`). This works only
-    // because the bind template `Parse/bind(?, ?, p, k)` is re-elaborated per `!`
-    // site, so each site gets its own holes (`?A := Bin` for the first, `?A := Nat`
-    // for the second). A single shared bind value would force one `A` and reject
-    // this. On "AB": `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte`
-    // reads 'B' (66); `Bin/append("A", 66)` is "AB".
+    // because `with Parse/bind(?, ?)` is re-elaborated per `!` site, so each site gets
+    // its own holes (`?A := Bin` for the first, `?A := Nat` for the second). A single
+    // shared bind value would force one `A` and reject this. On "AB": `take_while(is_a)`
+    // reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bin/append("A", 66)`
+    // is "AB".
     let source = r#"
         use /std/{Parse, Nat, Bin, Bln, Result, Io};
 
         let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
 
         let parser : Parse/Parse(Bin) =
-            with p, k => Parse/bind(?, ?, p, k)
+            with Parse/bind(?, ?)
             Parse/pure(Bin, Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
         match Parse/run(Bin, parser, "AB") : {}

@@ -767,19 +767,12 @@ fn name(label: &str) -> Term {
 
 #[test]
 fn parse_with_block() {
-    // `with <a>, <b> => <template>  <body>`: two parens-free binders (like a
-    // motive's binder, arity 2), an atomic template mentioning them, then a
-    // full-term body that runs to the end of the region (no `end` terminator).
+    // `with <bind>  <body>`: an atomic bind term, then a full-term body that runs to
+    // the end of the region (no `end` terminator). Here the bind is a bare name.
     assert_eq!(
-        "with m, k => bind(m, k) body".parse::<Term>().unwrap(),
+        "with bind body".parse::<Term>().unwrap(),
         Subterm::With(With {
-            action_param: "m".to_string(),
-            cont_param: "k".to_string(),
-            template: Subterm::Apply(Apply {
-                head: name("bind"),
-                params: vec![name("m"), name("k")],
-            })
-            .into(),
+            bind: name("bind"),
             body: name("body"),
         })
         .into()
@@ -787,25 +780,16 @@ fn parse_with_block() {
 }
 
 #[test]
-fn parse_with_template_holes() {
-    // The template may carry `?` holes (e.g. `Parse/bind`'s leading `Type` args);
-    // they elaborate to fresh metavariables per `!` site. The binders stay
-    // parens-free even though the template is a qualified application.
+fn parse_with_partial_application_holes() {
+    // The bind is typically a partial application carrying `?` holes (e.g.
+    // `Parse/bind`'s leading `Type` args); they elaborate to fresh metavariables per
+    // `!` site. Atomic maximal-munch ends the bind at `)`, before the body.
     assert_eq!(
-        "with p, k => Parse/bind(?, ?, p, k) body"
-            .parse::<Term>()
-            .unwrap(),
+        "with Parse/bind(?, ?) body".parse::<Term>().unwrap(),
         Subterm::With(With {
-            action_param: "p".to_string(),
-            cont_param: "k".to_string(),
-            template: Subterm::Apply(Apply {
+            bind: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["Parse".to_string(), "bind".to_string()])).into(),
-                params: vec![
-                    Subterm::Hole.into(),
-                    Subterm::Hole.into(),
-                    name("p"),
-                    name("k"),
-                ],
+                params: vec![Subterm::Hole.into(), Subterm::Hole.into()],
             })
             .into(),
             body: name("body"),
@@ -915,8 +899,8 @@ fn bang_binds_tighter_than_projection() {
 #[test]
 fn with_and_bang_round_trip() {
     for source in [
-        "with m, k => bind(m, k) body",
-        "with p, k => Parse/bind(?, ?, p, k) body",
+        "with bind body",
+        "with Parse/bind(?, ?) body",
         "f(x!, y!)",
         "p.0!",
         "x!.0",

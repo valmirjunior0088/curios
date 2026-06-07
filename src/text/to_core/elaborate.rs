@@ -14,14 +14,11 @@ pub struct Elaborate<'a, 'b> {
     context: &'a Context<'b>,
 }
 
-/// The active bind of a `with` region: a blessed two-hole template. `action_param`
-/// and `cont_param` are the binder names for the monadic action and continuation;
-/// `template` is the term they occur in. [`Elaborate::instantiate`] re-elaborates
-/// `template` and substitutes the two for each `!` site (see `WITH.md`).
+/// The active bind of a `with` region: an atomic term denoting a binary bind
+/// `(M A, A -> M B) -> M B`. [`Elaborate::instantiate`] re-elaborates `term` (so its
+/// `?` holes are fresh per `!` site) and applies it to `(action, continuation)`.
 struct Bind<'t> {
-    action_param: &'t str,
-    cont_param: &'t str,
-    template: &'t Term,
+    term: &'t Term,
 }
 
 impl<'a, 'b> Elaborate<'a, 'b> {
@@ -240,16 +237,12 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&rec.tail)?,
             ),
-            // `with <a>, <b> => <template> <body>` opens a monadic block. The bind
-            // is a two-hole template (not a value); the body is desugared
+            // `with <bind> <body>` opens a monadic block. The body is desugared
             // (eliminating every `Bang`) into ordinary core terms by re-elaborating
-            // and substituting that template per `!` site. See `region`/`instantiate`.
+            // the bind and applying it to `(action, continuation)` per `!` site. See
+            // `region`/`instantiate`.
             Subterm::With(with) => {
-                let bind = Bind {
-                    action_param: &with.action_param,
-                    cont_param: &with.cont_param,
-                    template: &with.template,
-                };
+                let bind = Bind { term: &with.bind };
                 self.region(&with.body, &bind)?
             }
             // A bang outside any `with` body has no continuation to hoist to.
@@ -295,11 +288,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             }
             // A nested `with` switches the bind and desugars independently.
             Subterm::With(with) => {
-                let inner = Bind {
-                    action_param: &with.action_param,
-                    cont_param: &with.cont_param,
-                    template: &with.template,
-                };
+                let inner = Bind { term: &with.bind };
                 self.region(&with.body, &inner)
             }
             // Spine forms (atomic / apply / tuple / proj): collect bangs in
@@ -514,22 +503,19 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             })
     }
 
-    /// Instantiates the bind template for one `!` site. The template is
-    /// re-elaborated each call, so its `?` holes get *fresh* metavariables — a
-    /// region can therefore sequence actions of differing result types. The
-    /// `action_param`/`cont_param` binders are then substituted by `action`/`cont`
-    /// via `Scope::close`/`open`. Because the result keeps the template's own head
-    /// (e.g. `Parse/bind`) in head position — never a bare lambda — it synthesizes
-    /// without annotations.
+    /// Instantiates the bind for one `!` site: re-elaborate the bind term, then apply
+    /// it to `(action, cont)`. The term is re-elaborated each call, so its `?` holes
+    /// get *fresh* metavariables — a region can therefore sequence actions of
+    /// differing result types. Because the result keeps the bind's own head (e.g.
+    /// `Parse/bind`) in head position — never a bare lambda — it synthesizes without
+    /// annotations.
     fn instantiate(
         &self,
         bind: &Bind,
         action: core::Term,
         cont: core::Term,
     ) -> Result<core::Term, Error> {
-        let template = self.term(bind.template)?;
-        let scope = core::Scope::close(core::Two, &[bind.action_param, bind.cont_param], template);
-        Ok(scope.open(&[&action, &cont]))
+        Ok(core::Term::apply(self.term(bind.term)?, [action, cont]))
     }
 
     /// Splits an optional match motive into its `(label, body)` for the core

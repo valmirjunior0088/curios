@@ -789,29 +789,17 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
     )
 }
 
-// A `with <a>, <b> => <template>  <body>` block. `a`/`b` are two parens-free
-// binders (like a motive's binder, but arity 2) standing for the monadic action
-// and its continuation; `<template>` is an *atomic* term mentioning them (e.g.
-// `Parse/bind(?, ?, a, b)`). The blessed `a, b =>` syntax means the bind is a
-// two-hole template, not a value — so it needs no annotation and re-instantiates
-// with fresh holes per `!` site. No `end`: the block ends where the enclosing
-// term ends (like a `let`/`rec` tail).
+// A `with <bind>  <body>` block. `<bind>` is an *atomic* term denoting a binary
+// bind `(M A, A -> M B) -> M B` (e.g. the partially-applied `Parse/bind(?, ?)`).
+// It is re-elaborated per `!` site, so its `?` holes get fresh metavariables each
+// time and the desugarer applies it to `(action, continuation)` there — keeping the
+// bind's own head (e.g. `Parse/bind`) in head position, so it needs no annotation.
+// No `end`: the block ends where the enclosing term ends (like a `let`/`rec` tail).
 fn parse_with<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("with"))
-        .and_keep(parse_identifier())
-        .and_drop(parse_literal(","))
-        .and(parse_identifier())
-        .and_drop(parse_literal("=>"))
-        .and(parse_atomic_term())
+        .and_keep(parse_atomic_term())
         .and(lazy(parse_term))
-        .map(|(((action_param, cont_param), template), body)| {
-            Subterm::With(With {
-                action_param: action_param.to_string(),
-                cont_param: cont_param.to_string(),
-                template,
-                body,
-            })
-        })
+        .map(|(bind, body)| Subterm::With(With { bind, body }))
         .map(Into::into)
 }
 

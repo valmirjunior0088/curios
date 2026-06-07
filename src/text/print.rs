@@ -399,18 +399,9 @@ fn print_term(term: Term) -> Printer<'static> {
                 print_term(tail),
             ])
         }
-        Subterm::With(With {
-            action_param,
-            cont_param,
-            template,
-            body,
-        }) => flat([
+        Subterm::With(With { bind, body }) => flat([
             pure("with "),
-            pure(action_param),
-            pure(", "),
-            pure(cont_param),
-            pure(" => "),
-            print_term(template),
+            print_term(bind),
             pure("\n"),
             indent(print_term(body)),
         ]),
