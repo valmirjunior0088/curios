@@ -8,8 +8,8 @@ use {
     crate::{
         Source,
         parser::{
-            Parser, ParserError, catch, fail, lazy, many0, many1, pure, run_parser, sep_by0,
-            sep_by1, spanned, take_eof, take_exact, take_n, take_while,
+            Parser, ParserError, catch, fail, lazy, many0, many1, memoize, pure, run_parser,
+            sep_by0, sep_by1, spanned, take_eof, take_exact, take_n, take_while,
         },
     },
     num_bigint::BigUint,
@@ -763,7 +763,17 @@ fn parse_hole<'a>() -> Parser<'a, Term> {
     catch(parse_literal("?")).map(|()| Subterm::Hole.into())
 }
 
+// Grammar keys for the packrat cache (see `parser::memoize`). Only the two
+// nonterminals that overlapping alternatives re-probe at the same offset are
+// memoized; that is enough to keep parsing linear.
+const MEMO_TERM: u32 = 0;
+const MEMO_ATOMIC_TERM: u32 = 1;
+
 fn parse_atomic_term<'a>() -> Parser<'a, Term> {
+    memoize(MEMO_ATOMIC_TERM, parse_atomic_term_inner())
+}
+
+fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
         parse_hole()
             .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
@@ -804,6 +814,10 @@ fn parse_with<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_term<'a>() -> Parser<'a, Term> {
+    memoize(MEMO_TERM, parse_term_inner())
+}
+
+fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
         parse_with()
             .or(parse_rec())

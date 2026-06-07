@@ -1,4 +1,7 @@
-use {crate::Source, std::rc::Rc};
+use {
+    crate::Source,
+    std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc},
+};
 
 #[derive(Debug, Clone, Copy)]
 struct ParserState<'a> {
@@ -70,9 +73,20 @@ impl<'a> ParserState<'a> {
     fn is_finished(&self) -> bool {
         self.string.is_empty()
     }
+
+    /// Rebuilds the state at an absolute byte `offset` into the same source. Used
+    /// by [`memoize`] to resume from a cached parse without re-walking the input;
+    /// all parser offsets are byte offsets, so slicing `source.text` is exact.
+    fn jump_to(self, offset: usize) -> Self {
+        Self {
+            offset,
+            string: &self.source.text[offset..],
+            source: self.source,
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParserError {
     fatal: bool,
     offset: usize,
@@ -232,10 +246,71 @@ where
     }
 }
 
+/// One cached parse at a given grammar key and start offset: either the produced
+/// value (type-erased, since the table is shared across the memoized parsers) paired
+/// with the end offset to resume at, or the verbatim error the parser failed with.
+type MemoEntry = Result<(Rc<dyn Any>, usize), ParserError>;
+
+thread_local! {
+    /// Packrat cache for [`memoize`]d parsers, keyed by `(grammar key, byte offset)`.
+    /// Cleared at the start of every [`run_parser`] so offsets never collide across
+    /// independent parses. Per-thread, so concurrent parses (e.g. the test suite)
+    /// don't share it.
+    static MEMO: RefCell<HashMap<(u32, usize), MemoEntry>> = RefCell::new(HashMap::new());
+}
+
+/// Wraps a parser so its result at each start offset is computed once and reused.
+/// This is what makes the term grammar linear instead of exponential: the same
+/// position is probed by several overlapping alternatives (a `(` is tried as a
+/// dependent function type, then a non-dependent one, then a lambda, then parens),
+/// and without memoization each retry re-parses the whole nested subterm.
+///
+/// Sound as straight packrat because the wrapped parsers ([`parse_term`],
+/// [`parse_atomic_term`]) are pure functions of the offset — parsing carries no
+/// symbol table or other context that could make the same input parse differently.
+/// `key` distinguishes the grammar nonterminals that share the table. The wrapped
+/// parser must never re-enter itself at the *same* offset without consuming input
+/// (no left recursion), which the term grammar satisfies.
+pub fn memoize<'a, A>(key: u32, parser: Parser<'a, A>) -> Parser<'a, A>
+where
+    A: Clone + 'static,
+{
+    Parser::new(move |state| {
+        let offset = state.offset;
+
+        if let Some(entry) = MEMO.with(|memo| memo.borrow().get(&(key, offset)).cloned()) {
+            return match entry {
+                Ok((value, end)) => {
+                    let value = value
+                        .downcast_ref::<A>()
+                        .expect("memoized parser reused a key for a different type")
+                        .clone();
+
+                    Ok((value, state.jump_to(end)))
+                }
+                Err(error) => Err(error),
+            };
+        }
+
+        let result = parser.parse(state);
+
+        let entry: MemoEntry = match &result {
+            Ok((value, next)) => Ok((Rc::new(value.clone()) as Rc<dyn Any>, next.offset)),
+            Err(error) => Err(error.clone()),
+        };
+
+        MEMO.with(|memo| memo.borrow_mut().insert((key, offset), entry));
+
+        result
+    })
+}
+
 pub fn run_parser<'a, A>(parser: Parser<'a, A>, source: &'a Rc<Source>) -> Result<A, ParserError>
 where
     A: 'a,
 {
+    MEMO.with(|memo| memo.borrow_mut().clear());
+
     parser.parse(ParserState::new(source)).map(|(item, _)| item)
 }
 
