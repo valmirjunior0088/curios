@@ -7,6 +7,7 @@
 //!   read-only walker.
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
+//! - [`hoist_literals`] — lifts bytestring literals into shared module consts.
 //! - [`specialize_calls`] — clones a function per closure shape passed into a
 //!   candidate parameter, so closure lifting can devirtualize through it.
 //! - [`closure_lifting`] — turns known closures into functions and devirtualizes
@@ -29,6 +30,9 @@ pub use copy_propagation::*;
 
 mod constant_folding;
 pub use constant_folding::*;
+
+mod hoist_literals;
+pub use hoist_literals::*;
 
 mod specialize_calls;
 pub use specialize_calls::*;
@@ -61,13 +65,15 @@ use super::cont::*;
 /// their one call site — which,
 /// together with jump threading dissolving the leftover continuation blocks,
 /// finally brings literal arguments next to the primitive ops the prelude wraps,
-/// so a second copy-propagation and folding pass can collapse them. Folding also
-/// forwards aggregate projections and decides matches on known tags, which leaves
-/// alias bindings and freshly single-predecessor arms behind; a second jump
-/// threading and a final copy propagation collapse those, so dead-code
-/// elimination — running last to sweep the alias, literal, and closure bindings
-/// the earlier passes leave behind — can reclaim the now-unreferenced aggregates
-/// and untaken arms along with everything else dead.
+/// so a second copy-propagation and folding pass can collapse them. With the
+/// literals settled, hoisting lifts every bytestring into a shared module const so
+/// it is built once at startup instead of on each execution. Folding also forwards
+/// aggregate projections and decides matches on known tags, which leaves alias
+/// bindings and freshly single-predecessor arms behind; a second jump threading and
+/// a final copy propagation collapse those, so dead-code elimination — running last
+/// to sweep the alias, literal, and closure bindings the earlier passes leave
+/// behind — can reclaim the now-unreferenced aggregates and untaken arms along with
+/// everything else dead.
 pub fn optimize(mut module: Module) -> Module {
     propagate_copies(&mut module);
     fold_constants(&mut module);
@@ -78,6 +84,7 @@ pub fn optimize(mut module: Module) -> Module {
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+    hoist_literals(&mut module);
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     eliminate_dead_arguments(&mut module);

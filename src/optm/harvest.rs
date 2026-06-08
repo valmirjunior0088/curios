@@ -31,6 +31,15 @@ pub fn region_refs(region: &Region) -> Refs {
     refs
 }
 
+/// The value and closure references held by a single `Data` — used to follow the
+/// edges out of a module-level const (a const aggregate can name other consts; a
+/// const `Data::Clsr` names a closure), which a region walk never reaches.
+pub fn data_refs(data: &Data) -> Refs {
+    let mut refs = Refs::default();
+    walk_data_refs(data, &mut refs);
+    refs
+}
+
 impl Sink for Refs {
     fn value_use(&mut self, name: &ValueName) {
         self.values.insert(name.clone());

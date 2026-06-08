@@ -54,6 +54,13 @@ fn walk_value(value: &Value, sink: &mut impl Sink) {
     }
 }
 
+/// Walk a single `Data`, firing reference events into `sink`. Exposed so a lone
+/// const value can be harvested without an enclosing region (see
+/// [`harvest::data_refs`](super::harvest)).
+pub fn walk_data_refs(data: &Data, sink: &mut impl Sink) {
+    walk_data(data, sink);
+}
+
 fn walk_data(data: &Data, sink: &mut impl Sink) {
     match data {
         Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => {}
@@ -62,6 +69,25 @@ fn walk_data(data: &Data, sink: &mut impl Sink) {
             sink.clsr_ref(clsr);
             walk_uses(captures, sink);
         }
+    }
+}
+
+/// The block names a tail transfers control to: a `Jump`'s target, every `Match`
+/// arm (cases and default), or a `Call`'s resume continuation. The one place this
+/// edge enumeration lives, shared by predecessor counting and reachability.
+pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
+    match tail {
+        Tail::Jump(jump) => vec![&jump.target],
+        Tail::Match(target) => {
+            let mut targets: Vec<&BlockName> =
+                target.cases.values().map(|jump| &jump.target).collect();
+            if let Some(jump) = &target.default {
+                targets.push(&jump.target);
+            }
+            targets
+        }
+        Tail::Call(CallTarget::Direct { resume, .. })
+        | Tail::Call(CallTarget::Indirect { resume, .. }) => vec![resume],
     }
 }
 

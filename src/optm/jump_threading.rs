@@ -133,18 +133,8 @@ fn predecessor_counts(region: &Region) -> HashMap<BlockName, usize> {
 }
 
 fn count_predecessors(region: &Region, counts: &mut HashMap<BlockName, usize>) {
-    match &region.tail {
-        Tail::Jump(jump) => bump(counts, &jump.target),
-        Tail::Match(target) => {
-            for jump in target.cases.values() {
-                bump(counts, &jump.target);
-            }
-            if let Some(jump) = &target.default {
-                bump(counts, &jump.target);
-            }
-        }
-        Tail::Call(CallTarget::Direct { resume, .. })
-        | Tail::Call(CallTarget::Indirect { resume, .. }) => bump(counts, resume),
+    for target in tail_targets(&region.tail) {
+        bump(counts, target);
     }
 
     for (_, block) in &region.blocks {
