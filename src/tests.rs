@@ -329,14 +329,13 @@ fn folds_constant_arg_through_let_function() {
 
 #[test]
 fn printf_partial_evaluation_reduces_residual() {
-    // End-to-end smoke for `evaluate_pure_calls` on the §2 motivating workload.
-    // `Fmt/printf("%s is %d")(name)(30)` exercises the parser combinator over a
-    // compile-time-literal format string; §2's role is to interpret pure
-    // sub-bodies at compile time. The reduction is bounded by std/Fmt's design
-    // (its parser combinator fuses pure parsing with the impure IO it ultimately
-    // drives, so the classifier marks most bodies impure) — we pin "§2 removed
-    // at least one func" rather than the full predicted collapse, and verify
-    // the output still round-trips.
+    // End-to-end smoke for §2 (`evaluate_pure_calls`) and §3 (size-bounded
+    // multi-site inlining) on `Fmt/printf("%s is %d")(name)(30)`. §2 interprets
+    // pure sub-bodies of the parser combinator at compile time; §3 then
+    // dissolves the residual primitive wrappers at every call site. Together
+    // they collapse the post-§1 residue (≈14 funcs) down to a handful — the
+    // assert pins a comfortable upper bound while leaving headroom for
+    // legitimate std/Fmt drift.
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
@@ -350,6 +349,7 @@ fn printf_partial_evaluation_reduces_residual() {
         .with_type("()".parse().unwrap());
 
     let mut optm_funcs: Option<usize> = None;
+
     let wasm_module = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
@@ -364,8 +364,9 @@ fn printf_partial_evaluation_reduces_residual() {
 
     let funcs = optm_funcs.expect("Stage::Optm observed");
     assert!(
-        funcs < 15,
-        "expected fewer than 15 residual funcs after partial evaluation, got {funcs}",
+        funcs < 5,
+        "expected fewer than 5 residual funcs after partial evaluation and \
+         size-bounded multi-site inlining, got {funcs}",
     );
 
     let (system, receiver) = ChannelHost::in_out(["Alice"]);
