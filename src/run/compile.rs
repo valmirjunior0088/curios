@@ -197,6 +197,27 @@ mod tests {
     }
 
     #[test]
+    fn omitted_motive_mentioning_a_type_param_lowers() {
+        // `pick` is polymorphic in `A`, and the `match c` omits its motive. The
+        // motive metavar is solved to `A` — a binder local to `pick`'s telescope.
+        // zonk must realign that solution to the enclosing binders when it splices
+        // it back in; otherwise `A` dangles as a free var after the module is
+        // re-closed and `erase` rejects it with `unbound variable`. Guards the
+        // zonk binder-realignment fix.
+        let source = r#"
+            use /sys/{Bln};
+            let pick(A : Type, a : A, b : A, c : Bln) -> A =
+                match c
+                | false => a
+                | true => b
+                end;
+            pick(/sys/Nat, 1, 2, true)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
     fn typeless_let_infers_a_literal_body() {
         // A local `let` with no type annotation infers the body's type (`Nat`
         // here) and lowers end-to-end.

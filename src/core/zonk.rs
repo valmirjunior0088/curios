@@ -1,7 +1,36 @@
 use super::{
-    Apply, BlnMatch, Bound, Context, Definition, Error, Func, FuncType, Item, Let, Match, Metavar,
-    Module, Nat, NatMatch, Prim, Proj, Rec, Subterm, Telescope, Term, Tuple, TupleType,
+    Apply, Arity, BlnMatch, Bound, Context, Definition, Error, Func, FuncType, Item, Let, Match,
+    Metavar, Module, Nat, NatMatch, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
+    TupleType,
 };
+
+/// Placeholder label pushed onto the binder stack for an unnamed (constant) scope
+/// — e.g. a match motive's scrutinee binder. It occupies a de Bruijn slot so depths
+/// stay correct; the empty string can never match a real free name (every
+/// elaborator-introduced binder name is `fresh`-minted with a `#`, and globals are
+/// `/`-joined paths), so `capture` never rewrites anything against it.
+const UNNAMED_BINDER: &str = "";
+
+/// Enter `scope`'s body with its binders pushed onto the stack, innermost last.
+/// `capture` at a metavariable splice (see [`zonk_term`]) reads this stack to
+/// realign a solution's free locals to the de Bruijn indices they now sit under.
+fn enter_scope<A, B>(
+    binders: &[String],
+    scope: &Scope<A, B>,
+    body: impl FnOnce(&B, &[String]) -> Result<B, Error>,
+) -> Result<Scope<A, B>, Error>
+where
+    A: Arity,
+    B: Bound,
+{
+    let mut extended = binders.to_vec();
+    match scope.names() {
+        Some(names) => extended.extend(names.iter().cloned()),
+        None => extended.extend(std::iter::repeat(UNNAMED_BINDER.to_string()).take(scope.arity())),
+    }
+
+    scope.map_body(|inner| body(inner, &extended))
+}
 
 /// Substitute every solved metavariable in `term` by its (recursively zonked)
 /// solution, yielding a meta-free term (§9). An unsolved metavariable is a
@@ -9,11 +38,12 @@ use super::{
 /// at its occurrence span. The result flows downstream to `erase`, which is then
 /// guaranteed never to meet a `Subterm::Metavar`.
 ///
-/// Substitution is direct (a metavariable node is replaced by its solution as
-/// is): sound because a bare metavariable is a closed head and its solution is a
-/// closed term, so no de Bruijn realignment is needed.
+/// Substitution replaces a metavariable node by its solution. A solution may
+/// capture binders local to where the metavariable was born (e.g. a combinator's
+/// type parameter), so it is *not* in general a closed term; [`zonk_term`] realigns
+/// it to the de Bruijn indices of its splice site via the threaded binder stack.
 pub fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
-    zonk_term(context, term)
+    zonk_term(context, term, &[])
 }
 
 /// Zonk a whole [`Module`]: substitute metavariable solutions throughout every
@@ -26,12 +56,12 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .map(|item| zonk_item(context, item))
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let body = zonk_term(context, &module.body)?;
+    let body = zonk_term(context, &module.body, &[])?;
 
     let type_ = module
         .type_
         .as_ref()
-        .map(|type_| zonk_term(context, type_))
+        .map(|type_| zonk_term(context, type_, &[]))
         .transpose()?;
 
     Ok(Module { items, type_, body })
@@ -51,12 +81,12 @@ fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
 fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Error> {
     Ok(Definition {
         name: def.name.clone(),
-        type_: zonk_term(context, &def.type_)?,
-        body: zonk_term(context, &def.body)?,
+        type_: zonk_term(context, &def.type_, &[])?,
+        body: zonk_term(context, &def.body, &[])?,
     })
 }
 
-fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
+fn zonk_term(context: &Context, term: &Term, binders: &[String]) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution,
     // recursively zonked (the solution may itself mention solved metavariables).
     if let Subterm::Metavar(Metavar { id }) = &**term {
@@ -68,7 +98,22 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
             }
         })?;
 
-        let zonked = zonk_term(context, solution)?;
+        // Resolve the solution in its own (named) frame: with an empty stack every
+        // `capture` below is the identity, so nested metavariables are substituted
+        // but no realignment happens yet — that is done once, here, for the whole
+        // solution.
+        let resolved = zonk_term(context, solution, &[])?;
+
+        // Realign the solution to this occurrence. A solution may legitimately
+        // mention binders local to where its metavariable was born (e.g. a
+        // combinator's type parameter `A`); it is stored in named form, but it is
+        // spliced into a context where those binders have been re-closed to de
+        // Bruijn indices. `capture` against the enclosing binder labels (innermost
+        // first) turns each such free name into its correct index. A closed
+        // solution matches no label and is left untouched — the original "solutions
+        // are closed" fast case, now a special case rather than an assumption.
+        let labels = binders.iter().rev().map(String::as_str).collect::<Vec<_>>();
+        let zonked = resolved.capture(&labels);
 
         // Carry the hole's span only if the solution carries none of its own.
         return Ok(match term.span() {
@@ -83,7 +128,7 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
         return Ok(term.clone());
     }
 
-    let inner = zonk_subterm(context, term)?;
+    let inner = zonk_subterm(context, term, binders)?;
 
     Ok(match term.span() {
         Some(span) => Term::spanned(span, inner),
@@ -91,42 +136,42 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     })
 }
 
-fn zonk_terms(context: &Context, terms: &[Term]) -> Result<Vec<Term>, Error> {
-    terms.iter().map(|t| zonk_term(context, t)).collect()
+fn zonk_terms(context: &Context, terms: &[Term], binders: &[String]) -> Result<Vec<Term>, Error> {
+    terms.iter().map(|t| zonk_term(context, t, binders)).collect()
 }
 
-fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
+fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Subterm, Error> {
     Ok(match &**term {
         Subterm::Type => Subterm::Type,
         Subterm::Var(var) => Subterm::Var(var.clone()),
         Subterm::Atom(atom) => Subterm::Atom(atom.clone()),
         Subterm::AtomType(atom_type) => Subterm::AtomType(atom_type.clone()),
 
-        Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim)?),
+        Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim, binders)?),
 
         Subterm::Func(Func { telescope }) => Subterm::Func(Func {
-            telescope: telescope.zonk(context)?,
+            telescope: telescope.zonk(context, binders)?,
         }),
 
         Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
-            telescope: telescope.zonk(context)?,
+            telescope: telescope.zonk(context, binders)?,
         }),
 
         Subterm::Apply(Apply { head, params }) => Subterm::Apply(Apply {
-            head: zonk_term(context, head)?,
-            params: zonk_terms(context, params)?,
+            head: zonk_term(context, head, binders)?,
+            params: zonk_terms(context, params, binders)?,
         }),
 
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
-            telescope: telescope.zonk(context)?,
+            telescope: telescope.zonk(context, binders)?,
         }),
 
         Subterm::Tuple(Tuple { fields }) => Subterm::Tuple(Tuple {
-            fields: zonk_terms(context, fields)?,
+            fields: zonk_terms(context, fields, binders)?,
         }),
 
         Subterm::Proj(Proj { head, index }) => Subterm::Proj(Proj {
-            head: zonk_term(context, head)?,
+            head: zonk_term(context, head, binders)?,
             index: *index,
         }),
 
@@ -135,11 +180,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             motive,
             cases,
         }) => Subterm::Match(Match {
-            head: zonk_term(context, head)?,
-            motive: motive.map_body(|b| zonk_term(context, b))?,
+            head: zonk_term(context, head, binders)?,
+            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
             cases: cases
                 .iter()
-                .map(|(atom, body)| Ok((atom.clone(), zonk_term(context, body)?)))
+                .map(|(atom, body)| Ok((atom.clone(), zonk_term(context, body, binders)?)))
                 .collect::<Result<_, Error>>()?,
         }),
 
@@ -149,10 +194,10 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             false_case,
             true_case,
         }) => Subterm::BlnMatch(BlnMatch {
-            head: zonk_term(context, head)?,
-            motive: motive.map_body(|b| zonk_term(context, b))?,
-            false_case: zonk_term(context, false_case)?,
-            true_case: zonk_term(context, true_case)?,
+            head: zonk_term(context, head, binders)?,
+            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
+            false_case: zonk_term(context, false_case, binders)?,
+            true_case: zonk_term(context, true_case, binders)?,
         }),
 
         Subterm::NatMatch(NatMatch::Induction {
@@ -161,10 +206,10 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             zero_case,
             succ_case,
         }) => Subterm::NatMatch(NatMatch::Induction {
-            head: zonk_term(context, head)?,
-            motive: motive.map_body(|b| zonk_term(context, b))?,
-            zero_case: zonk_term(context, zero_case)?,
-            succ_case: succ_case.map_body(|b| zonk_term(context, b))?,
+            head: zonk_term(context, head, binders)?,
+            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
+            zero_case: zonk_term(context, zero_case, binders)?,
+            succ_case: enter_scope(binders, succ_case, |b, binders| zonk_term(context, b, binders))?,
         }),
 
         Subterm::NatMatch(NatMatch::Dispatch {
@@ -173,19 +218,19 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             cases,
             default,
         }) => Subterm::NatMatch(NatMatch::Dispatch {
-            head: zonk_term(context, head)?,
-            motive: motive.map_body(|b| zonk_term(context, b))?,
+            head: zonk_term(context, head, binders)?,
+            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
             cases: cases
                 .iter()
-                .map(|(n, body)| Ok((*n, zonk_term(context, body)?)))
+                .map(|(n, body)| Ok((*n, zonk_term(context, body, binders)?)))
                 .collect::<Result<_, Error>>()?,
-            default: zonk_term(context, default)?,
+            default: zonk_term(context, default, binders)?,
         }),
 
         Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
-            type_: zonk_term(context, type_)?,
-            body: zonk_term(context, body)?,
-            tail: tail.map_body(|b| zonk_term(context, b))?,
+            type_: zonk_term(context, type_, binders)?,
+            body: zonk_term(context, body, binders)?,
+            tail: enter_scope(binders, tail, |b, binders| zonk_term(context, b, binders))?,
         }),
 
         Subterm::Rec(Rec { items, tail }) => Subterm::Rec(Rec {
@@ -193,12 +238,12 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 .iter()
                 .map(|(type_, body)| {
                     Ok((
-                        type_.map_body(|t| zonk_term(context, t))?,
-                        body.map_body(|b| zonk_term(context, b))?,
+                        enter_scope(binders, type_, |t, binders| zonk_term(context, t, binders))?,
+                        enter_scope(binders, body, |b, binders| zonk_term(context, b, binders))?,
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
-            tail: tail.map_body(|b| zonk_term(context, b))?,
+            tail: enter_scope(binders, tail, |b, binders| zonk_term(context, b, binders))?,
         }),
 
         // Handled in `zonk_term` before dispatch.
@@ -208,8 +253,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 
 /// Zonk a primitive's term operands. Mirrors `traverse_prim`'s rebuild, but
 /// fallibly substitutes metavariable solutions rather than de Bruijn shifting.
-fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
-    let z = |t: &Term| zonk_term(context, t);
+fn zonk_prim(context: &Context, prim: &Prim, binders: &[String]) -> Result<Prim, Error> {
+    let z = |t: &Term| zonk_term(context, t, binders);
 
     Ok(match prim {
         Prim::BlnType
@@ -286,15 +331,15 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::BinGet(a, b) => Prim::BinGet(z(a)?, z(b)?),
         Prim::BinAppend(a, b) => Prim::BinAppend(z(a)?, z(b)?),
         Prim::BinSlice(a, b, c) => Prim::BinSlice(z(a)?, z(b)?, z(c)?),
-        Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
+        Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms, binders)?),
 
         Prim::ArrType(t) => Prim::ArrType(z(t)?),
-        Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems)?),
+        Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems, binders)?),
         Prim::ArrLen(a, b) => Prim::ArrLen(z(a)?, z(b)?),
         Prim::ArrGet(a, b, c) => Prim::ArrGet(z(a)?, z(b)?, z(c)?),
         Prim::ArrAppend(a, b, c) => Prim::ArrAppend(z(a)?, z(b)?, z(c)?),
         Prim::ArrSlice(a, b, c, d) => Prim::ArrSlice(z(a)?, z(b)?, z(c)?, z(d)?),
-        Prim::ArrConcat(ty, operands) => Prim::ArrConcat(z(ty)?, zonk_terms(context, operands)?),
+        Prim::ArrConcat(ty, operands) => Prim::ArrConcat(z(ty)?, zonk_terms(context, operands, binders)?),
 
         Prim::IoPrint(t) => Prim::IoPrint(z(t)?),
     })
@@ -304,28 +349,30 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
 /// `zonk` uniformly over `Telescope<Term>` (a `FuncType`) and `Telescope<()>`
 /// (a `TupleType`, whose trailing body is `()`), mirroring `CollectMetavars`.
 trait Zonk: Sized {
-    fn zonk(&self, context: &Context) -> Result<Self, Error>;
+    fn zonk(&self, context: &Context, binders: &[String]) -> Result<Self, Error>;
 }
 
 impl Zonk for () {
-    fn zonk(&self, _: &Context) -> Result<Self, Error> {
+    fn zonk(&self, _: &Context, _: &[String]) -> Result<Self, Error> {
         Ok(())
     }
 }
 
 impl Zonk for Term {
-    fn zonk(&self, context: &Context) -> Result<Self, Error> {
-        zonk_term(context, self)
+    fn zonk(&self, context: &Context, binders: &[String]) -> Result<Self, Error> {
+        zonk_term(context, self, binders)
     }
 }
 
 impl<B: Zonk + Bound> Zonk for Telescope<B> {
-    fn zonk(&self, context: &Context) -> Result<Self, Error> {
+    fn zonk(&self, context: &Context, binders: &[String]) -> Result<Self, Error> {
         match self {
-            Telescope::Done(body) => Ok(Telescope::Done(body.zonk(context)?.into())),
+            Telescope::Done(body) => Ok(Telescope::Done(body.zonk(context, binders)?.into())),
+            // `ty` is at the current depth; the rest of the telescope is under this
+            // binder, so descend it with the binder pushed.
             Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
-                zonk_term(context, ty)?,
-                rest.map_body(|t| t.zonk(context))?,
+                zonk_term(context, ty, binders)?,
+                enter_scope(binders, rest, |inner, binders| inner.zonk(context, binders))?,
             )),
         }
     }
