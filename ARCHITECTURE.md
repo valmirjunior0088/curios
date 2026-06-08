@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~41,000 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
+**Codebase size:** ~44,100 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
 
 ---
 
@@ -40,16 +40,16 @@ result                    printed by src/run.rs
 
 The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trait) lives in `src/core/scope.rs` — see [Stage 3](#stage-3--core-type-system-srccore).
 
-| Stage                   | Key file(s)                                        | Lines  |
-| ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,118  |
-| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)       | ~2,170 |
-| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~2,165 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers | ~1,895 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 868    |
-| CPS optimization        | `optm.rs` + `optm/` (11 files)                     | ~5,865 |
-| WASM codegen            | `cont/to_wasm/` (9 files)                          | ~6,210 |
-| Binary serialization    | `wasm/writer.rs`                                   | 1,716  |
+| Stage                   | Key file(s)                                                            | Lines  |
+| ----------------------- | ---------------------------------------------------------------------- | ------ |
+| Parsing                 | `text/parse.rs`                                                        | 1,118  |
+| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)                           | ~2,170 |
+| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~2,300 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers                 | ~1,895 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                                              | 903    |
+| CPS optimization        | `optm.rs` + `optm/` (13 files)                                         | ~7,710 |
+| WASM codegen            | `cont/to_wasm/` (9 files)                                              | ~6,140 |
+| Binary serialization    | `wasm/writer.rs`                                                       | 1,716  |
 
 ---
 
@@ -70,11 +70,11 @@ Transformation entry points (`src/text/to_core.rs`, `src/ersd/to_cont.rs`, `src/
 
 Several top-level modules fall outside this pattern:
 
-| Module          | Role                                                                                                                                                       |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/span.rs`   | `Source` (text + optional path) and `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)              |
-| `src/run.rs`    | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature  |
-| `src/cli.rs`    | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                                                                            |
+| Module        | Role                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/span.rs` | `Source` (text + optional path) and `Span` byte ranges with the `render_snippet` method; the foundation of [error reporting](#error-reporting)             |
+| `src/run.rs`  | Public entry points for running a program; the implementation lives in `src/run/{host,engine,compile,lift,lower}.rs`. Gated behind the `run` Cargo feature |
+| `src/cli.rs`  | Clap argument parsing and CLI entry point; gated behind the `cli` Cargo feature                                                                            |
 
 The `cli` feature depends on `run`; `default = ["cli"]`. Dev builds activate `run` via a self-referential dev-dependency (`curios = { path = ".", features = ["run"] }`), giving tests access to `run_file` without enabling `cli`.
 
@@ -115,7 +115,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 **Discovery** (`to_core.rs`): a single pass (`Resolved::for_entrypoint`) walks the `mod` tree once. Because `mod` declarations only name children, the module graph is a tree — every qualifier is reached exactly once, so the walk needs no visited-set: it loads each file-backed module through the `Loader` into a cache and records its `ModuleInfo` in the same traversal.
 
-**Interface fixed point** (`to_core/interface.rs`): before any body is elaborated, the public export view of every module is computed to a fixed point (`PublicInterface`), resolving `pub use` re-exports (including chains) and rejecting `ExportConflict` / `CyclicReExport`. This separates a module's *interface* (its exports) from the *lexical* import effect of `use`, which is applied per-body in source order.
+**Interface fixed point** (`to_core/interface.rs`): before any body is elaborated, the public export view of every module is computed to a fixed point (`PublicInterface`), resolving `pub use` re-exports (including chains) and rejecting `ExportConflict` / `CyclicReExport`. This separates a module's _interface_ (its exports) from the _lexical_ import effect of `use`, which is applied per-body in source order.
 
 **Module processing** (`to_core.rs`): walks the `TopItem` list, applies `use`/`pub use` scoping, qualifies names under `mod` blocks, and lowers `union` declarations to two parts — a `rec` group of type bindings (each desugared to a tagged-tuple type, wrapped in a `Func` over any type parameters) and one constructor function per variant whose body injects the variant as a tagged tuple. All generated `let`/`rec` items are flattened, **topologically reordered** (`order_flat_items`, a stable Kahn pass) so each declaration's value dependencies precede it, then folded right-to-left into the tail. A genuine value cycle is left unorderable and surfaces downstream as an unbound name — cross-declaration value recursion is unexpressible by construction.
 
@@ -234,7 +234,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `builder.rs`, `conts.rs`, `rec.rs`, `lower_prim.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
 
-This is one of the more complex transformations in the pipeline: `lowerer.rs` is 868 lines, and the full `ersd/to_cont` implementation is roughly 1,900 lines.
+This is one of the more complex transformations in the pipeline: `lowerer.rs` is 903 lines, and the full `ersd/to_cont` implementation is roughly 1,900 lines.
 
 ### CPS IR structure
 
@@ -260,11 +260,12 @@ Module
 
 **Tails** (terminators):
 
-| Variant                                 | Meaning                                                             |
-| --------------------------------------- | ------------------------------------------------------------------- |
-| `Jump(target, params)`                  | unconditional branch to a block                                     |
-| `Match(operand, cases, default)`        | sparse dispatch on a `u32` (atom index or nat)                      |
-| `Call(Direct/Indirect, params, resume)` | function call; `resume` is the block that receives the return value |
+| Variant                                 | Meaning                                                                                        |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `Jump(target, params)`                  | unconditional branch to a block                                                                |
+| `Match(operand, cases, default)`        | sparse dispatch on a `u32` (atom index or nat)                                                 |
+| `Call(Direct/Indirect, params, resume)` | function call; `resume` is the block that receives the return value                            |
+| `Host(IoPrint/IoRead, resume)`          | host-provided IO primitive in tail position; the impure boundary that purity analysis stops at |
 
 ### Second-class continuations
 
@@ -293,24 +294,26 @@ A `cont::Module` → `cont::Module` transform: `optm::optimize` (`src/optm.rs`) 
 
 ### Shared infrastructure
 
-- **`walk.rs`** — the traversal engine: a closed walker over the region tree with read-only (`Sink`) and rewriting (`SinkMut`) variants. The single place the structural recursion and the `Code` operand match live, so passes describe *what* to do per node, not *how* to recurse.
+- **`walk.rs`** — the traversal engine: a closed walker over the region tree with read-only (`Sink`) and rewriting (`SinkMut`) variants. The single place the structural recursion and the `Code` operand match live, so passes describe _what_ to do per node, not _how_ to recurse.
 - **`harvest.rs`** — metadata-harvesting helpers (use counts, references) built on the read-only walker; passes consult these to decide what is safe to rewrite.
+- **`scalar_eval.rs`** — wasm-faithful leaf semantics for `Code` operations against a literal environment (arithmetic, bitwise, conversions, aggregate builders, and the value-dependent trap conditions). Consumed by both `constant_folding` and `evaluate_pure_calls`, so compile-time folding and compile-time interpretation share the same trap and host-boundary set.
 
 ### Passes (in pipeline order)
 
-| Pass                          | File                            | Effect                                                                       |
-| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
-| `propagate_copies`            | `copy_propagation.rs`           | Eliminates `let x = y` renames (`Alias` values)                              |
-| `fold_constants`              | `constant_folding.rs`           | Evaluates primitive ops on literal operands                                  |
-| `lift_closures`               | `closure_lifting.rs`            | Turns known closures into functions and devirtualizes their call sites       |
-| `specialize_calls`            | `specialize_calls.rs`           | Clones a function per closure shape passed into a candidate parameter, so closure lifting can devirtualize through it (monomorphization) |
-| `inline_calls`                | `function_inlining.rs`          | Splices single-call-site functions into their call site                      |
-| `thread_jumps`                | `jump_threading.rs`             | Merges single-predecessor blocks into their predecessor                      |
-| `hoist_literals`              | `hoist_literals.rs`             | Lifts bytestrings and closed aggregates into shared module consts            |
-| `eliminate_dead_arguments`    | `dead_argument_elimination.rs`  | Drops unused function parameters and closure captures, finishing type erasure |
-| `eliminate_dead_code`         | `dead_code_elimination.rs`      | Drops unused bindings and unreachable functions, closures, and consts        |
+| Pass                       | File                           | Effect                                                                                                                                                                                                                                                                                                                        |
+| -------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `propagate_copies`         | `copy_propagation.rs`          | Eliminates `let x = y` renames (`Alias` values)                                                                                                                                                                                                                                                                               |
+| `fold_constants`           | `constant_folding.rs`          | Evaluates primitive ops on literal operands                                                                                                                                                                                                                                                                                   |
+| `lift_closures`            | `closure_lifting.rs`           | Turns known closures into functions and devirtualizes their call sites                                                                                                                                                                                                                                                        |
+| `specialize_calls`         | `specialize_calls.rs`          | Clones a function per closure shape passed into a candidate parameter, so closure lifting can devirtualize through it (monomorphization)                                                                                                                                                                                      |
+| `evaluate_pure_calls`      | `evaluate_pure_calls.rs`       | CPS-level partial evaluator: interprets pure-callee `Direct`/`Indirect` calls with all-literal arguments at compile time, replacing the call with the materialised result plus a `Jump` to the original resume — reaches recursive callees (e.g. the parser combinator in `crs_printf`) that single-call-site inlining cannot |
+| `inline_calls`             | `function_inlining.rs`         | Splices a `Func` body into its `Direct` call sites. Two tiers: **Tier 1** (single call site, any size) and **Tier 2** (multi-site, body size ≤ 8) — the latter dissolves the tiny primitive wrappers (e.g. `Nat.add`, `Bin.concat`) at every site. Direct-call cycles are excluded                                            |
+| `thread_jumps`             | `jump_threading.rs`            | Merges single-predecessor blocks into their predecessor                                                                                                                                                                                                                                                                       |
+| `hoist_literals`           | `hoist_literals.rs`            | Lifts bytestrings and closed aggregates into shared module consts                                                                                                                                                                                                                                                             |
+| `eliminate_dead_arguments` | `dead_argument_elimination.rs` | Drops unused function parameters and closure captures, finishing type erasure                                                                                                                                                                                                                                                 |
+| `eliminate_dead_code`      | `dead_code_elimination.rs`     | Drops unused bindings and unreachable functions, closures, and consts                                                                                                                                                                                                                                                         |
 
-`optimize` interleaves and repeats several of these — `lift_closures` runs both before and after `specialize_calls` (specialization exposes fresh known-closure shapes to lift), and `propagate_copies`/`fold_constants`/`thread_jumps` run again after inlining to clean up the simplified CFG. Once literal values have settled, `hoist_literals` lifts bytestrings and closed aggregates into module consts. Dead-argument and dead-code elimination run last, once nothing else will reintroduce uses.
+`optimize` (`src/optm.rs:107`) interleaves and repeats these in a 21-step sequence. After the initial `propagate_copies`/`fold_constants`, `lift_closures` runs both before and after `specialize_calls` (specialization exposes fresh known-closure shapes to lift), then an **interim `eliminate_dead_code`** sweeps the specialization residue so the single-call-site rule in `inline_calls` sees accurate counts. The first `inline_calls` round brings literal arguments next to the primitive ops the prelude wraps, and `thread_jumps`/`propagate_copies`/`fold_constants` collapse them. `evaluate_pure_calls` then closes the gap inlining cannot — dissolving recursive pure callees by interpretation — and a second `propagate_copies`/`fold_constants` settles the freshly-introduced literals. A **second `inline_calls`** round picks up the residual primitive wrappers via its Tier 2 size-bounded rule, with one more `propagate_copies`/`fold_constants` settling the spliced material before `hoist_literals` lifts every bytestring and closed aggregate into a shared module const. `thread_jumps` and a final `propagate_copies` collapse the alias bindings and freshly single-predecessor arms that folding leaves behind, then `eliminate_dead_arguments` and `eliminate_dead_code` run last to reclaim everything dead.
 
 ---
 
@@ -342,14 +345,14 @@ Direct calls use `return_call`; indirect calls use `return_call_ref`. This elimi
 
 ### Codegen submodules
 
-| File                | Responsibility                                                                                                                           |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `table.rs`          | Builds symbol tables; pre-allocates GC struct types for closures, tuples, floats                                                         |
-| `context.rs`        | Tracks locals, frames, and value classification (`LoadAs` enum) for correct casting                                                      |
-| `frame.rs`          | Represents nested WASM blocks; accumulates instructions; manages label-based branching                                                   |
-| `code_emitter.rs`   | Emits a single CPS `Code` operation (arithmetic, comparisons, conversions, projections, array/binary ops) with the right boxing (`WrapAs`) |
+| File                | Responsibility                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `table.rs`          | Builds symbol tables; pre-allocates GC struct types for closures, tuples, floats                                                            |
+| `context.rs`        | Tracks locals, frames, and value classification (`LoadAs` enum) for correct casting                                                         |
+| `frame.rs`          | Represents nested WASM blocks; accumulates instructions; manages label-based branching                                                      |
+| `code_emitter.rs`   | Emits a single CPS `Code` operation (arithmetic, comparisons, conversions, projections, array/binary ops) with the right boxing (`WrapAs`)  |
 | `expr_emitter.rs`   | Emits instructions for CPS values and tails: closure allocation, tuple projection, constants, jumps, matches, calls (drives `code_emitter`) |
-| `module_emitter.rs` | Emits the top-level WASM module: type definitions, function bodies, exports, and host imports when the corresponding operations are used |
+| `module_emitter.rs` | Emits the top-level WASM module: type definitions, function bodies, exports, and host imports when the corresponding operations are used    |
 
 The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`, `Arr`) drives which cast or unboxing sequence the emitter generates for each value.
 
@@ -375,21 +378,20 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 - `compile_entrypoint(timeout, entrypoint, loader, observe)` — runs the full pipeline from text to `wasm::Module` without execution. An explicit expected type is carried by the `text::Entrypoint` when present, otherwise the type is inferred. The `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Optm`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
 - `typecheck_entrypoint(timeout, entrypoint, loader, observe)` — runs the fast check path (`to_core → elaborate → zonk`) without erasure, lowering, optimization, or codegen. The CLI's `check` subcommand uses this unless `--print` asks for a post-core stage.
 
-The `Host` trait (`src/run/host.rs`) abstracts all program IO:
+The `Host` trait (`src/run/host.rs`) abstracts the IO side of the program:
 
 ```rust
 pub trait Host {
-    fn nat_to_str(&self, value: u32) -> Vec<u8> { /* default: format!("{value}") */ }
-    fn int_to_str(&self, value: i32) -> Vec<u8> { /* default: format!("{value}") */ }
-    fn flt_to_str(&self, value: f32) -> Vec<u8> { /* default: signed format!("{value}") */ }
     fn read(&self) -> Vec<u8>;
     fn print(&self, bytes: &[u8]);
 }
 ```
 
-Two implementations ship: `StdioHost` writes to stdout and reads a line from stdin; `ChannelHost` routes `print` output through an `mpsc::Sender<Vec<u8>>` and serves `read` calls from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand for output-only simulation.
+The number-to-`Bin` conversions live alongside the trait as free functions — `nat_to_str(u32)`, `int_to_str(i32)`, `flt_to_str(f32)` — not trait methods. The runtime wasm imports and the compile-time `scalar_eval` folder both call the same free functions, so the two paths cannot diverge.
 
-Five operations are wired as Wasmtime host imports under `"env"`, all routed through the `Host` Arc held by `run_wasm`: `nat_to_str`/`int_to_str`/`flt_to_str` convert primitive values to `Bin` (the trait's default impls cover the common case); `io_print` unpacks the `Bin` argument and calls `host.print()`; `io_read` calls `host.read()` and returns the result as a `Bin`.
+Two trait implementations ship: `StdioHost` writes to stdout and reads a line from stdin; `ChannelHost` routes `print` output through an `mpsc::Sender<Vec<u8>>` and serves `read` calls from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand for output-only simulation.
+
+Up to five operations are wired as Wasmtime host imports under `"env"` by `run_wasm`: `nat_to_str`/`int_to_str`/`flt_to_str` (each emitted only if the codegen `Table` records the corresponding `_used()` flag — partial evaluation or constant folding may have eliminated every runtime call site) route directly to the free functions; `io_print` unpacks the `Bin` argument and calls `host.print()`; `io_read` calls `host.read()` and returns the result as a `Bin`. The `io_*` imports correspond to the `Tail::Host` variants (`IoPrint`/`IoRead`) introduced in [Stage 5](#stage-5--cps-lowering-srcersdto_cont).
 
 Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/print` and `/sys/Io/read` through the `Host`.
 
@@ -440,21 +442,21 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Testing
 
-407 tests across the library crate, covering every layer:
+427 tests across the library crate, covering every layer:
 
-| Layer           | What is tested                                                                                                                                              |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Term operations | `Scope` open/close symmetry, shift, capture, release                                                                                                        |
-| Parsing         | Round-trips: rec groups, atoms, tuples, function types, primitives, field access                                                                            |
-| Reduction       | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                        |
-| Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
-| Erasure         | Primitive, tuple, array, binary type erasure                                                                                                                |
-| CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection            |
-| CPS optimization | `src/optm/` — per-pass tests: constant folding (the bulk), literal hoisting, call specialization, closure lifting, copy propagation, jump threading, inlining, dead-argument and dead-code elimination |
-| WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
-| Module system   | `src/text/to_core/tests.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths, interface fixed point                                      |
-| Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
-| End-to-end      | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion                                                   |
+| Layer            | What is tested                                                                                                                                                                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Term operations  | `Scope` open/close symmetry, shift, capture, release                                                                                                                                                                                                                             |
+| Parsing          | Round-trips: rec groups, atoms, tuples, function types, primitives, field access                                                                                                                                                                                                 |
+| Reduction        | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                                                                                                                                             |
+| Type checking    | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                                                                                                                                          |
+| Erasure          | Primitive, tuple, array, binary type erasure                                                                                                                                                                                                                                     |
+| CPS lowering     | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection                                                                                                                                 |
+| CPS optimization | `src/optm/` — per-pass tests: constant folding (the bulk), partial evaluation of pure calls, literal hoisting, call specialization, closure lifting, copy propagation, jump threading, single-site and size-bounded multi-site inlining, dead-argument and dead-code elimination |
+| WASM codegen     | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                                                                                                                                          |
+| Module system    | `src/text/to_core/tests.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths, interface fixed point                                                                                                                                                           |
+| Integration      | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls)                                                                                                                      |
+| End-to-end       | `src/tests.rs` — `end_to_end` runs the full pipeline from source text through a Wasmtime output assertion                                                                                                                                                                        |
 
 ---
 
