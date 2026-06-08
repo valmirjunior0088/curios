@@ -1,4 +1,7 @@
-use crate::{cont, ersd};
+use {
+    crate::{cont, ersd},
+    std::collections::BTreeSet,
+};
 
 pub fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
     panic!(
@@ -6,6 +9,157 @@ pub fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
          the following term reaches `Apply`/`Match`/`NatMatch` on its construction path \
          but is bound where a synchronous value is required: {term:?}",
     )
+}
+
+/// Free names of an `ersd::Term`, treating a nested `Func` as contributing its precomputed
+/// `captures` (the closure's free variables) rather than descending into its body. Used to
+/// build the dependency graph that feeds [`rec_computed_order`]; lives here because the `rec`
+/// lowerer is its only consumer.
+pub fn free_names(term: &ersd::Term) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+
+    match term {
+        ersd::Term::Erased | ersd::Term::Atom(_) => {}
+        ersd::Term::Name(name) => {
+            names.insert(name.as_str().to_owned());
+        }
+        ersd::Term::Func(func) => names.extend(func.captures.iter().map(|c| c.name.clone())),
+        ersd::Term::Apply(apply) => {
+            names.extend(free_names(&apply.head));
+            apply
+                .params
+                .iter()
+                .for_each(|param| names.extend(free_names(param)));
+        }
+        ersd::Term::Tuple(tuple) => tuple
+            .fields
+            .iter()
+            .for_each(|field| names.extend(free_names(field))),
+        ersd::Term::Proj(proj) => names.extend(free_names(&proj.head)),
+        ersd::Term::Match(m) => {
+            names.extend(free_names(&m.head));
+            m.cases
+                .iter()
+                .for_each(|case| names.extend(free_names(case)));
+        }
+        ersd::Term::NatMatch(ersd::NatMatch::Induction {
+            head,
+            zero_case,
+            pred,
+            ih,
+            succ_case,
+        }) => {
+            names.extend(free_names(head));
+            names.extend(free_names(zero_case));
+
+            let mut succ = free_names(succ_case);
+            succ.remove(pred);
+            succ.remove(ih);
+            names.extend(succ);
+        }
+        ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
+            head,
+            cases,
+            default,
+        }) => {
+            names.extend(free_names(head));
+            cases
+                .iter()
+                .for_each(|(_, case)| names.extend(free_names(case)));
+            names.extend(free_names(default));
+        }
+        ersd::Term::Let(let_) => {
+            names.extend(free_names(&let_.body));
+
+            let mut tail = free_names(&let_.tail);
+            tail.remove(&let_.name);
+            names.extend(tail);
+        }
+        ersd::Term::Rec(rec) => {
+            let mut inner = BTreeSet::new();
+            rec.items
+                .iter()
+                .for_each(|item| inner.extend(free_names(item)));
+            inner.extend(free_names(&rec.tail));
+            rec.names.iter().for_each(|name| {
+                inner.remove(name);
+            });
+            names.extend(inner);
+        }
+        ersd::Term::Prim(prim) => names.extend(free_names_prim(prim)),
+    }
+
+    names
+}
+
+fn free_names_prim(prim: &ersd::Prim) -> BTreeSet<String> {
+    match prim {
+        ersd::Prim::Pure(p) => free_names_pure_prim(p),
+        ersd::Prim::Host(h) => free_names_host_prim(h),
+    }
+}
+
+fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
+    match prim {
+        ersd::HostPrim::IoPrint(operand) => free_names(operand),
+        ersd::HostPrim::IoRead => BTreeSet::new(),
+    }
+}
+
+fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
+    use ersd::PurePrim::*;
+
+    let operands: Vec<&ersd::Subterm> = match prim {
+        Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit => vec![],
+        NatToStr(a) | IntToStr(a) | FltToStr(a) | NatToInt(a) | NatToFlt(a) | IntToNat(a)
+        | IntToFlt(a) | FltToNat(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a)
+        | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => {
+            vec![a]
+        }
+        NatEql(a, b)
+        | NatNeq(a, b)
+        | NatAdd(a, b)
+        | NatSub(a, b)
+        | NatMul(a, b)
+        | NatLt(a, b)
+        | NatDiv(a, b)
+        | NatRem(a, b)
+        | NatGt(a, b)
+        | NatLte(a, b)
+        | NatGte(a, b)
+        | IntEql(a, b)
+        | IntNeq(a, b)
+        | IntAdd(a, b)
+        | IntSub(a, b)
+        | IntMul(a, b)
+        | IntDiv(a, b)
+        | IntRem(a, b)
+        | IntLt(a, b)
+        | IntGt(a, b)
+        | IntLte(a, b)
+        | IntGte(a, b)
+        | FltAdd(a, b)
+        | FltSub(a, b)
+        | FltMul(a, b)
+        | FltDiv(a, b)
+        | FltEql(a, b)
+        | FltNeq(a, b)
+        | FltLt(a, b)
+        | FltGt(a, b)
+        | FltLte(a, b)
+        | FltGte(a, b)
+        | FltMin(a, b)
+        | FltMax(a, b)
+        | BinEql(a, b)
+        | BinGet(a, b)
+        | BinAppend(a, b)
+        | ArrGet(a, b)
+        | ArrAppend(a, b) => vec![a, b],
+        BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
+        BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter().collect(),
+    };
+
+    operands.into_iter().flat_map(|o| free_names(o)).collect()
 }
 
 /// Post-order (dependencies first) of the call/match-valued `rec` bindings, panicking

@@ -29,9 +29,6 @@ let escape_byte(byte : Nat) -> Bin =
     end;
 
 let encode_str(s : Bin) -> Bin =
-    -- Collect each byte's (possibly escaped) rendering into a `Lst(Bin)` — O(1) per
-    -- byte — then assemble once with `Bin/concat_all` (O(n log n)). Folding
-    -- `Bin/concat(acc, ...)` per byte would be O(n^2) in the string length.
     let body =
         Bin/concat_all(Lst/to_arr(?, Lst/rev(?,
             Bin/fold(?, s, Lst/nil(Bin), (byte, acc) =>

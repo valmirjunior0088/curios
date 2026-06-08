@@ -1,7 +1,8 @@
 use {
     super::{
         Backpatch, Cont, ContMany, Emit, Entropy, Frame, FrameEntropy, RecBody, RegionBuilder,
-        lower_pure_prim, lower_value_prim, rec_computed_order, unsupported_sync_rec_item,
+        free_names, lower_pure_prim, lower_value_prim, rec_computed_order,
+        unsupported_sync_rec_item,
     },
     crate::{cont, ersd},
     std::collections::{BTreeMap, HashMap},
@@ -510,7 +511,7 @@ impl Work<'_, '_, '_> {
         let deps = computed
             .iter()
             .map(|(_, _, rhs)| {
-                rhs.free_names()
+                free_names(rhs)
                     .iter()
                     .filter_map(|name| name_to_pos.get(name.as_str()).copied())
                     .collect::<Vec<_>>()
