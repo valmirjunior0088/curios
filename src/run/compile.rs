@@ -268,6 +268,26 @@ mod tests {
     }
 
     #[test]
+    fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
+        // `Arr/map(?, ?, (pair) => pair.0, xs)`: the holed type-arg `?A` is the
+        // lambda's domain *and* `xs`'s element type, but `xs : Arr(?A)` is checked
+        // after the lambda. Elaboration must postpone the lambda (its domain is an
+        // unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`,
+        // then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`;
+        // without it this fails "projected from a non-tuple". Checked at the
+        // type-check level — the inference is the point, not lowering.
+        let source = r#"
+            use /std/{Arr};
+            use /sys/{Nat};
+            let first(xs : Arr({ Nat, Nat })) -> Arr(Nat) =
+                Arr/map(?, ?, (pair) => pair.0, xs);
+            first
+        "#;
+
+        assert!(typecheck(source).is_ok());
+    }
+
+    #[test]
     fn typeless_let_infers_a_literal_body() {
         // A local `let` with no type annotation infers the body's type (`Nat`
         // here) and lowers end-to-end.

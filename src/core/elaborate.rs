@@ -110,20 +110,33 @@ fn elaborate_apply(
     Ok((Term::apply(head, elaborated), output))
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, atom) whose
-/// parameter type `ty` reduces to a bare, unsolved metavar — i.e. an argument that
-/// cannot be elaborated yet because it has no type structure to check against.
-/// Synthesizable forms return `false`: they have a turnaround of their own and must
-/// run eagerly so their solutions feed the result unification.
+/// Whether `arg` is a checked-only introduction form (tuple, lambda, atom) that
+/// cannot be elaborated yet because the type structure it needs is an unsolved
+/// metavar — a tuple/atom whose whole expected type, or a lambda whose expected
+/// *domain*, reduces to one. (A lambda only needs its domain known: the body, which
+/// may project the parameter, can't be checked against an unknown domain; its
+/// codomain may stay a metavar.) Synthesizable forms return `false`: they have a
+/// turnaround of their own and must run eagerly so their solutions feed the result
+/// unification.
 fn blocked_on_metavar(context: &mut Context, arg: &Term, ty: &Term) -> Result<bool, Error> {
-    if !matches!(
-        &**arg,
-        Subterm::Tuple(_) | Subterm::Func(_) | Subterm::Atom(_)
-    ) {
+    let is_lambda = matches!(&**arg, Subterm::Func(_));
+    if !is_lambda && !matches!(&**arg, Subterm::Tuple(_) | Subterm::Atom(_)) {
         return Ok(false);
     }
-    Ok(match &*reduce_with(context, ty)? {
+    let reduced = reduce_with(context, ty)?;
+    Ok(match &*reduced {
+        // A tuple/atom/lambda whose whole expected type is an unsolved metavar.
         Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
+        // A lambda whose expected *domain* is an unsolved metavar: its body may need
+        // the domain's structure (to project the parameter), so postpone it until a
+        // sibling argument (e.g. `p : Parse(A)`) pins the domain.
+        Subterm::FuncType(FuncType { telescope }) if is_lambda => match telescope {
+            Telescope::Cons(domain, _) => match &*reduce_with(context, domain)? {
+                Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
+                _ => false,
+            },
+            Telescope::Done(_) => false,
+        },
         _ => false,
     })
 }
