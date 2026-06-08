@@ -23,7 +23,7 @@ let is_not_pct(byte : Nat) -> Bln =
 
 rec parse_fmt : Parse(Fmt) = (input, pos) =>
     match Nat/lt(pos, Bin/len(input))
-    | false => Result/success({ Nat, Fmt }, Bin, (pos, Fmt/nil()))
+    | false => Result/success(?, ?, (pos, Fmt/nil()))
     | true =>
         match Nat/eql(Bin/get(input, pos), '%')
         | false => parse_lit(input, pos)
