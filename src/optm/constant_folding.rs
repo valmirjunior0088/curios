@@ -220,8 +220,8 @@ fn eval(code: &Code, lits: &Lits) -> Option<Data> {
         NatAdd(a, b) => fits31u(nat(lits, a)? as u64 + nat(lits, b)? as u64).map(Data::Nat),
         NatSub(a, b) => Some(Data::Nat(nat(lits, a)?.saturating_sub(nat(lits, b)?))),
         NatMul(a, b) => fits31u(nat(lits, a)? as u64 * nat(lits, b)? as u64).map(Data::Nat),
-        NatDiv(a, b) => nonzero_u(nat(lits, b)?).map(|d| Data::Nat(nat(lits, a).unwrap() / d)),
-        NatRem(a, b) => nonzero_u(nat(lits, b)?).map(|d| Data::Nat(nat(lits, a).unwrap() % d)),
+        NatDiv(a, b) => Some(Data::Nat(nat(lits, a)? / (nonzero_u(nat(lits, b)?)?))),
+        NatRem(a, b) => Some(Data::Nat(nat(lits, a)? % (nonzero_u(nat(lits, b)?)?))),
         NatAnd(a, b) => Some(Data::Nat(nat(lits, a)? & nat(lits, b)?)),
         NatOr(a, b) => Some(Data::Nat(nat(lits, a)? | nat(lits, b)?)),
         NatXor(a, b) => Some(Data::Nat(nat(lits, a)? ^ nat(lits, b)?)),
@@ -237,10 +237,9 @@ fn eval(code: &Code, lits: &Lits) -> Option<Data> {
         IntSub(a, b) => fits31s(int(lits, a)? as i64 - int(lits, b)? as i64).map(Data::Int),
         IntMul(a, b) => fits31s(int(lits, a)? as i64 * int(lits, b)? as i64).map(Data::Int),
         IntDiv(a, b) => {
-            let divisor = nonzero_s(int(lits, b)?)?;
-            fits31s(int(lits, a)? as i64 / divisor as i64).map(Data::Int)
+            fits31s(int(lits, a)? as i64 / (nonzero_s(int(lits, b)?)?) as i64).map(Data::Int)
         }
-        IntRem(a, b) => nonzero_s(int(lits, b)?).map(|d| Data::Int(int(lits, a).unwrap() % d)),
+        IntRem(a, b) => Some(Data::Int(int(lits, a)? % (nonzero_s(int(lits, b)?)?))),
         IntEql(a, b) => Some(bln(int(lits, a)? == int(lits, b)?)),
         IntNeq(a, b) => Some(bln(int(lits, a)? != int(lits, b)?)),
         IntLt(a, b) => Some(bln(int(lits, a)? < int(lits, b)?)),
@@ -638,6 +637,33 @@ mod tests {
                 (v("a"), Value::Pure(Data::Nat(7))),
                 (v("b"), Value::Pure(Data::Nat(0))),
                 (v("c"), Value::Eval(Code::NatDiv(v("a"), v("b")))),
+            ],
+            "c",
+        );
+    }
+
+    #[test]
+    fn does_not_fold_or_panic_on_runtime_dividend() {
+        // A literal divisor with a non-literal dividend (`p` is never bound): the
+        // fold must bail, not read the absent dividend and panic. `runtime % const`
+        // and `runtime / const` are ordinary user code (digit extraction, halving).
+        for make in [
+            Code::NatDiv as fn(ValueName, ValueName) -> Code,
+            Code::NatRem,
+        ] {
+            stays_eval(
+                vec![
+                    (v("b"), Value::Pure(Data::Nat(3))),
+                    (v("c"), Value::Eval(make(v("p"), v("b")))),
+                ],
+                "c",
+            );
+        }
+
+        stays_eval(
+            vec![
+                (v("b"), Value::Pure(Data::Int(3))),
+                (v("c"), Value::Eval(Code::IntRem(v("p"), v("b")))),
             ],
             "c",
         );
