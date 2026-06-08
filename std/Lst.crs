@@ -15,7 +15,7 @@ pub use Lst/*;
 
 pub let len(A : Type, l : Lst(A)) -> Nat =
     rec go(rest : Lst(A), acc : Nat) -> Nat =
-        match rest : Nat
+        match rest
         | nil() => acc
         | cons(_, tail) => go(tail, Nat/add(acc, 1))
         end;
@@ -25,7 +25,7 @@ pub let len(A : Type, l : Lst(A)) -> Nat =
 -- parse order, so callers `rev` before `to_arr` to restore order.
 pub let rev(A : Type, l : Lst(A)) -> Lst(A) =
     rec go(rest : Lst(A), acc : Lst(A)) -> Lst(A) =
-        match rest : Lst(A)
+        match rest
         | nil() => acc
         | cons(x, tail) => go(tail, Lst/cons(A, x, acc))
         end;
@@ -36,12 +36,12 @@ pub let rev(A : Type, l : Lst(A)) -> Lst(A) =
 -- total of n elements once — versus the O(n^2) of folding with `Arr/append`.
 pub let to_arr(A : Type, l : Lst(A)) -> Arr(A) =
     rec go(rest : Lst(A), n : Nat) -> { Arr(A), Lst(A) } =
-        match Nat/lt(n, 2) : { Arr(A), Lst(A) }
+        match Nat/lt(n, 2)
         | true =>
-            match rest : { Arr(A), Lst(A) }
+            match rest
             | nil() => ([], rest)
             | cons(x, tail) =>
-                match Nat/eql(n, 0) : { Arr(A), Lst(A) }
+                match Nat/eql(n, 0)
                 | true => ([], rest)
                 | false => ([x], tail)
                 end

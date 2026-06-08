@@ -3,12 +3,12 @@ pub use /sys/{Flt};
 use /std/{Nat, Int, Bin, Bln};
 
 let find_byte(target : Nat, str : Bin) -> Nat =
-    match Bin/len(str) : Nat
+    match Bin/len(str)
     | 0 => Bin/len(str)
     | pred + 1, ih =>
-        match Nat/lt(pred, ih) : Nat
+        match Nat/lt(pred, ih)
         | true =>
-            match Nat/eql(Bin/get(str, pred), target) : Nat
+            match Nat/eql(Bin/get(str, pred), target)
             | true => pred
             | false => ih
             end
@@ -17,7 +17,7 @@ let find_byte(target : Nat, str : Bin) -> Nat =
     end;
 
 let pow10(n : Nat) -> Flt =
-    match n : Flt
+    match n
     | 0 => +1.0
     | pred + 1, ih => Flt/mul(ih, +10.0)
     end;
@@ -26,7 +26,7 @@ pub let from_str(str : Bin) -> Flt =
     let is_neg = Nat/eql(Bin/get(str, 0), '-');
 
     let start =
-        match Bin/get(str, 0) : Nat
+        match Bin/get(str, 0)
         | '+' => 1
         | '-' => 1
         | _ => 0
@@ -39,7 +39,7 @@ pub let from_str(str : Bin) -> Flt =
     let int_flt = Nat/to_flt(Nat/from_str(Bin/slice(str, start, int_end)));
 
     let frac_flt =
-        match Nat/lt(dot_pos, e_pos) : Flt
+        match Nat/lt(dot_pos, e_pos)
         | true =>
             let frac_slice = Bin/slice(str, Nat/add(dot_pos, 1), e_pos);
             Flt/div(Nat/to_flt(Nat/from_str(frac_slice)), pow10(Bin/len(frac_slice)))
@@ -47,10 +47,10 @@ pub let from_str(str : Bin) -> Flt =
         end;
 
     let exp_flt =
-        match Nat/lt(e_pos, len) : Flt
+        match Nat/lt(e_pos, len)
         | true =>
             let exp_int = Int/from_str(Bin/slice(str, Nat/add(e_pos, 1), len));
-            match Int/gte(exp_int, +0) : Flt
+            match Int/gte(exp_int, +0)
             | true => pow10(Int/to_nat(exp_int))
             | false => Flt/div(+1.0, pow10(Int/abs(exp_int)))
             end
@@ -59,7 +59,7 @@ pub let from_str(str : Bin) -> Flt =
 
     let result = Flt/mul(Flt/add(int_flt, frac_flt), exp_flt);
 
-    match is_neg : Flt
+    match is_neg
     | true => Flt/neg(result)
     | false => result
     end;

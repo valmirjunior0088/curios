@@ -2,7 +2,7 @@ pub use /sys/{Bln};
 use /std/{Bin};
 
 pub let to_str(b : Bln) -> Bin =
-    match b : Bin
+    match b
     | true => "true"
     | false => "false"
     end;

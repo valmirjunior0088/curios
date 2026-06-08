@@ -8,7 +8,7 @@ pub union Fmt
 end
 
 pub rec format_type_with(result: Type, f: Fmt) -> Type =
-    match f : Type
+    match f
     | nil() => result
     | lit(_, rest) => format_type_with(result, rest)
     | str(rest) => Bin -> format_type_with(result, rest)
@@ -16,16 +16,16 @@ pub rec format_type_with(result: Type, f: Fmt) -> Type =
     end;
 
 let is_not_pct(byte : Nat) -> Bln =
-    match byte : Bln
+    match byte
     | '%' => false
     | _ => true
     end;
 
 rec parse_fmt : Parse(Fmt) = (input, pos) =>
-    match Nat/lt(pos, Bin/len(input)) : Result({ Nat, Fmt }, Bin)
+    match Nat/lt(pos, Bin/len(input))
     | false => Result/success({ Nat, Fmt }, Bin, (pos, Fmt/nil()))
     | true =>
-        match Nat/eql(Bin/get(input, pos), '%') : Result({ Nat, Fmt }, Bin)
+        match Nat/eql(Bin/get(input, pos), '%')
         | false => parse_lit(input, pos)
         | true => parse_spec(input, pos)
         end
@@ -49,7 +49,7 @@ and parse_lit : Parse(Fmt) =
         Parse/pure(Fmt, Fmt/lit(bytes, rest));
 
 pub let parse(input : Bin) -> Fmt =
-    match Parse/run(Fmt, parse_fmt, input) : Fmt
+    match Parse/run(Fmt, parse_fmt, input)
     | success(value) => value
     | failure(_) => Fmt/nil()
     end;

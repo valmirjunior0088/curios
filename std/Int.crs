@@ -3,14 +3,14 @@ pub use /sys/{Int};
 use /std/{Nat, Bin};
 
 pub let from_str(str : Bin) -> Int =
-    match Bin/get(str, 0) : Int
+    match Bin/get(str, 0)
     | '+' => Nat/to_int(Nat/from_str(Bin/slice(str, 1, Bin/len(str))))
     | '-' => Int/sub(+0, Nat/to_int(Nat/from_str(Bin/slice(str, 1, Bin/len(str)))))
     | _ => Nat/to_int(Nat/from_str(str))
     end;
 
 pub let abs(n : Int) -> Nat =
-    match gte(n, +0) : Nat
+    match gte(n, +0)
     | true => to_nat(n)
     | false => to_nat(sub(+0, n))
     end;

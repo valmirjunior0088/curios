@@ -3,16 +3,16 @@ pub use /sys/{Arr};
 use /std/{Nat};
 
 pub let fold(T : Type, A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
-    match len(T, arr) : A
+    match len(T, arr)
     | 0 => init
     | pred + 1, ih => f(get(T, arr, pred), ih)
     end;
 
 pub let map(A : Type, B : Type, f : A -> B, arr : Arr(A)) -> Arr(B) =
     rec go(lo : Nat, hi : Nat) -> Arr(B) =
-        match Nat/lt(Nat/add(lo, 1), hi) : Arr(B)
+        match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
-            match Nat/lt(lo, hi) : Arr(B)
+            match Nat/lt(lo, hi)
             | false => []
             | true => [f(get(A, arr, lo))]
             end

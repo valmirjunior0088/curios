@@ -1,12 +1,12 @@
 use /std/{Char, Nat, Bin};
 
 pub let trim_start(str : Bin) -> Nat =
-    match Bin/len(str) : Nat
+    match Bin/len(str)
     | 0 => Bin/len(str)
     | pred + 1, ih =>
-        match Nat/lt(pred, ih) : Nat
+        match Nat/lt(pred, ih)
         | true =>
-            match Char/is_whitespace(Bin/get(str, pred)) : Nat
+            match Char/is_whitespace(Bin/get(str, pred))
             | true => ih
             | false => pred
             end
@@ -15,10 +15,10 @@ pub let trim_start(str : Bin) -> Nat =
     end;
 
 pub let trim_stop(str : Bin) -> Nat =
-    match Bin/len(str) : Nat
+    match Bin/len(str)
     | 0 => 0
     | pred + 1, ih =>
-        match Char/is_whitespace(Bin/get(str, pred)) : Nat
+        match Char/is_whitespace(Bin/get(str, pred))
         | true => ih
         | false => Nat/add(pred, 1)
         end

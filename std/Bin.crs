@@ -3,16 +3,16 @@ pub use /sys/{Bin};
 use /std/{Arr, Nat};
 
 pub let fold(A : Type, str : Bin, init : A, f : (Nat, A) -> A) -> A =
-    match len(str) : A
+    match len(str)
     | 0 => init
     | pred + 1, ih => f(get(str, pred), ih)
     end;
 
 pub let concat_all(parts : Arr(Bin)) -> Bin =
     rec go(lo : Nat, hi : Nat) -> Bin =
-        match Nat/lt(Nat/add(lo, 1), hi) : Bin
+        match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
-            match Nat/lt(lo, hi) : Bin
+            match Nat/lt(lo, hi)
             | false => ""
             | true => Arr/get(Bin, parts, lo)
             end
@@ -24,9 +24,9 @@ pub let concat_all(parts : Arr(Bin)) -> Bin =
 
 pub let join(sep : Bin, parts : Arr(Bin)) -> Bin =
     rec go(lo : Nat, hi : Nat) -> Bin =
-        match Nat/lt(Nat/add(lo, 1), hi) : Bin
+        match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
-            match Nat/lt(lo, hi) : Bin
+            match Nat/lt(lo, hi)
             | false => ""
             | true => Arr/get(Bin, parts, lo)
             end
