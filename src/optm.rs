@@ -62,8 +62,12 @@ use super::cont::*;
 /// calls — which exposes higher-order callees as direct calls carrying known
 /// closures in their candidate parameters, so specialization can clone them per
 /// closure shape; a second lift devirtualizes the calls those clones expose. With
-/// the higher-order layer flattened, inlining splices the resulting callees into
-/// their one call site — which,
+/// the higher-order layer flattened, an interim dead-code elimination sweeps the
+/// specialization residue — once `specialize_calls` rewrites a closure's allocation
+/// site to call the lifted clone directly, the original specialized closure body
+/// becomes unreachable but its direct calls still inflate `inline_calls`' count of
+/// call sites, so the sweep ensures the single-call-site rule sees accurate counts.
+/// Inlining then splices the resulting callees into their one call site — which,
 /// together with jump threading dissolving the leftover continuation blocks,
 /// finally brings literal arguments next to the primitive ops the prelude wraps,
 /// so a second copy-propagation and folding pass can collapse them. With the
@@ -82,6 +86,7 @@ pub fn optimize(mut module: Module) -> Module {
     lift_closures(&mut module);
     specialize_calls(&mut module);
     lift_closures(&mut module);
+    eliminate_dead_code(&mut module);
     inline_calls(&mut module);
     thread_jumps(&mut module);
     propagate_copies(&mut module);

@@ -244,3 +244,85 @@ fn vec_cons_with_nat_succ() {
         vec![b"42".to_vec()]
     );
 }
+
+#[test]
+fn folds_constant_arg_through_let_function() {
+    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4` in
+    // `main`. Without the interim DCE before `inline_calls`, `specialize_calls`
+    // leaves a dead closure body in `module.clsrs` whose direct call to the
+    // lifted clone of `f` inflates the inliner's call-site count, blocking the
+    // splice that ultimately lets constant folding see `3` next to the `+ 1`.
+    use crate::{cont, text};
+
+    let source = r#"
+        use /sys/{Nat};
+        let f(x : Nat) -> Nat = Nat/add(x, 1);
+        f(3)
+        "#;
+
+    let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+
+    let mut main_func: Option<cont::Func> = None;
+    crate::compile_entrypoint(
+        Duration::from_secs(5),
+        &entrypoint,
+        &text::NullLoader,
+        |stage| {
+            if let crate::Stage::Optm(module) = stage {
+                let entry = module.entry().expect("module has entry").clone();
+                let (_, func) = module
+                    .funcs()
+                    .iter()
+                    .find(|(name, _)| name == &entry)
+                    .expect("entry function present in module");
+                main_func = Some(func.clone());
+            }
+        },
+    )
+    .expect("compile succeeded");
+
+    let main = main_func.expect("Stage::Optm observed");
+
+    assert!(
+        main.region.preallocs.is_empty(),
+        "expected main to have no preallocs, got {:?}",
+        main.region.preallocs,
+    );
+    assert!(
+        main.region.blocks.is_empty(),
+        "expected main to have no nested blocks, got {} block(s)",
+        main.region.blocks.len(),
+    );
+
+    let folded: Vec<&cont::ValueName> = main
+        .region
+        .values
+        .iter()
+        .filter_map(|(name, val)| match val {
+            cont::Value::Pure(cont::Data::Nat(4)) => Some(name),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        folded.len(),
+        1,
+        "expected exactly one Pure(Data::Nat(4)) in main, got values {:?}",
+        main.region.values,
+    );
+    let folded_name = folded[0].clone();
+
+    match &main.region.tail {
+        cont::Tail::Jump(jump) => {
+            assert_eq!(
+                jump.target, main.resume,
+                "expected main to jump to its resume sentinel",
+            );
+            assert_eq!(
+                jump.params,
+                vec![folded_name],
+                "expected main to return the folded Pure(Data::Nat(4))",
+            );
+        }
+        other => panic!("expected resume jump in main, got {other:?}"),
+    }
+}

@@ -516,4 +516,86 @@ mod tests {
 
         assert!(func_named(&module, "f").is_some());
     }
+
+    #[test]
+    fn inlines_chain_after_dce() {
+        // main → f → g, plus a dead closure `c_dead` whose region also calls `g`.
+        // `direct_call_counts` walks both funcs and clsrs, so without DCE first
+        // `g`'s count is 2 (one from `f`, one from `c_dead`) and the single-call-site
+        // rule refuses to inline it. The early `eliminate_dead_code` in the pipeline
+        // sweeps `c_dead` (nothing reachable from `main` names it via `Pure(Data::Clsr)`),
+        // dropping `g`'s count to 1 so both `f` and `g` inline into `main`. This
+        // mirrors the residue `specialize_calls` leaves after rewriting a closure's
+        // allocation site to a direct call to the lifted clone.
+
+        let g = func(
+            vec![],
+            "rg",
+            region(
+                vec![(v("v0"), Value::Pure(Data::Nat(7)))],
+                vec![],
+                ret("rg", v("v0")),
+            ),
+        );
+
+        let f_cont = Block {
+            params: vec![v("res")],
+            region: region(vec![], vec![], ret("rf", v("res"))),
+        };
+        let f = func(
+            vec![],
+            "rf",
+            region(
+                vec![],
+                vec![(b("kf"), f_cont)],
+                direct("g", vec![], "kf"),
+            ),
+        );
+
+        let c_dead_cont = Block {
+            params: vec![v("res")],
+            region: region(vec![], vec![], ret("rcd", v("res"))),
+        };
+        let c_dead = Clsr {
+            fields: vec![],
+            params: vec![],
+            resume: b("rcd"),
+            region: region(
+                vec![],
+                vec![(b("kcd"), c_dead_cont)],
+                direct("g", vec![], "kcd"),
+            ),
+        };
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main_calling("f", vec![]));
+        module.add_func(FuncName::from("f"), f);
+        module.add_func(FuncName::from("g"), g);
+        module.add_clsr(ClsrName::from("c_dead"), c_dead);
+        module.set_entry(FuncName::from("main"));
+
+        // Pipeline order from src/optm.rs::optimize.
+        eliminate_dead_code(&mut module);
+        inline_calls(&mut module);
+
+        assert!(func_named(&module, "f").is_none(), "f should have been inlined");
+        assert!(func_named(&module, "g").is_none(), "g should have been inlined");
+        assert!(
+            !module
+                .clsrs()
+                .iter()
+                .any(|(name, _)| name == &ClsrName::from("c_dead")),
+            "c_dead should have been swept by DCE"
+        );
+
+        let region = main_region(&module);
+        assert!(
+            region
+                .values
+                .iter()
+                .any(|(_, val)| matches!(val, Value::Pure(Data::Nat(7)))),
+            "expected g's Pure(Data::Nat(7)) to be spliced into main, got {:?}",
+            region.values,
+        );
+    }
 }
