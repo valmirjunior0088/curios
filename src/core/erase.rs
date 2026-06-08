@@ -359,21 +359,48 @@ fn erase_proj(
     let head_type = reduce_with(context, &head_type)?;
 
     // Elaborate already checked the head is a tuple and the index is in range
-    // (§9); the type is re-derived here only to lower the head.
-    let TupleType { telescope } = match Term::unwrap_or_clone(head_type.clone()) {
-        Subterm::TupleType(tt) => tt,
-        _ => unreachable!("erase: projected a non-tuple"),
-    };
-
+    // (§9); the type is re-derived here only to lower the head. The head's type
+    // is usually a `TupleType`, but a projection of a *union payload* whose
+    // discriminant is stuck (a `parse`-style combinator run at compile time on a
+    // symbolic input) has a neutral `match` type instead — every variant still
+    // carries a field at `index`, in the same runtime slot, so the projection is
+    // well-formed and lowers to the same `ersd::Proj` (§9).
     assert!(
-        *index < telescope.len(),
-        "erase: projection index out of range",
+        projectable_at(context, &head_type, *index)?,
+        "erase: projected a non-tuple",
     );
 
     Ok(ersd::Term::Proj(ersd::Proj {
         head: erase(context, head, &head_type)?.into(),
         index: *index,
     }))
+}
+
+/// Whether field `index` can be projected from a value of (reduced) type `ty`.
+/// A `TupleType` answers directly. A *neutral* `match` — a union payload type
+/// with a stuck discriminant — answers when every branch is itself projectable
+/// at `index`: at runtime the tag selects a variant, and each variant is a tuple
+/// carrying that field at the shared offset, so the lowered projection is sound.
+fn projectable_at(context: &mut Context, ty: &Term, index: usize) -> Result<bool, Error> {
+    Ok(match Term::unwrap_or_clone(reduce_with(context, ty)?) {
+        Subterm::TupleType(TupleType { telescope }) => index < telescope.len(),
+        Subterm::Match(Match { cases, .. }) => {
+            let mut ok = !cases.is_empty();
+            for body in cases.values() {
+                ok = ok && projectable_at(context, body, index)?;
+            }
+            ok
+        }
+        Subterm::BlnMatch(BlnMatch {
+            false_case,
+            true_case,
+            ..
+        }) => {
+            projectable_at(context, &false_case, index)?
+                && projectable_at(context, &true_case, index)?
+        }
+        _ => false,
+    })
 }
 
 fn erase_atom(

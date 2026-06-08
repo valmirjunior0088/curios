@@ -218,6 +218,24 @@ mod tests {
     }
 
     #[test]
+    fn projection_through_a_stuck_union_payload_lowers() {
+        // `Fmt/printf`'s return type is `format_type_with({}, parse(s))`, so
+        // erasing `printf` evaluates `parse(s)` at compile time with a *symbolic*
+        // `s`. The `Parse` combinator's result is a `Result` union whose
+        // discriminant is therefore stuck, and the inlined `success` payload is
+        // reached by a projection. `erase` must lower that projection through the
+        // neutral payload `match` (every variant carries the field at the same
+        // index) instead of demanding a literal `TupleType`. Guards
+        // `projectable_at`; without it this panics `erase: projected a non-tuple`.
+        let source = r#"
+            use /std/{Fmt, Bin};
+            Fmt/printf("%s is %d")
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
     fn typeless_let_infers_a_literal_body() {
         // A local `let` with no type annotation infers the body's type (`Nat`
         // here) and lowers end-to-end.
