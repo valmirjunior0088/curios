@@ -41,7 +41,7 @@ and parse_spec : Parse(Fmt) =
             | 'd' => Parse/pure(?, Fmt/nat(rest))
             | _ => Parse/pure(?, rest)
             end,
-        Parse/map(Nat, ?, (_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
+        Parse/map(?, ?, (_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
 and parse_lit : Parse(Fmt) =
     with Parse/bind(?, ?)
         let bytes = Parse/take_while(is_not_pct)!;

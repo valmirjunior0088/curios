@@ -49,7 +49,7 @@ pub rec encode(v : Json) -> Bin =
             Bin/join(",", Arr/map(?, ?, encode, xs))), "]")
     | obj(ps) =>
         Bin/concat(Bin/concat("{",
-            Bin/join(",", Arr/map({ Bin, Json }, ?,
+            Bin/join(",", Arr/map(?, ?,
                 (pair) => Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1)),
                 ps))),
             "}")
@@ -94,13 +94,13 @@ let take_literal(literal : Bin) -> Parse({}) =
         end;
 
 let parse_null : Parse(Json) =
-    Parse/map({}, ?, (_) => Json/null(), take_literal("null"));
+    Parse/map(?, ?, (_) => Json/null(), take_literal("null"));
 
 let parse_true_val : Parse(Json) =
-    Parse/map({}, ?, (_) => Json/bln(true), take_literal("true"));
+    Parse/map(?, ?, (_) => Json/bln(true), take_literal("true"));
 
 let parse_false_val : Parse(Json) =
-    Parse/map({}, ?, (_) => Json/bln(false), take_literal("false"));
+    Parse/map(?, ?, (_) => Json/bln(false), take_literal("false"));
 
 let parse_num : Parse(Json) =
     (input, pos) =>
@@ -147,7 +147,7 @@ let parse_raw_str : Parse(Bin) =
         Parse/pure(?, Bin/concat_all(chunks));
 
 let parse_str_value : Parse(Json) =
-    Parse/map(Bin, ?, (s) => Json/str(s), parse_raw_str);
+    Parse/map(?, ?, (s) => Json/str(s), parse_raw_str);
 
 pub rec decode : Parse(Json) = (input, pos) =>
     match Nat/lt(pos, Bin/len(input))
