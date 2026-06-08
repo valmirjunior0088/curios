@@ -47,7 +47,7 @@ The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trai
 | Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~2,165 |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers | ~1,895 |
 | CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 868    |
-| CPS optimization        | `optm.rs` + `optm/` (10 files)                     | ~4,960 |
+| CPS optimization        | `optm.rs` + `optm/` (11 files)                     | ~5,865 |
 | WASM codegen            | `cont/to_wasm/` (9 files)                          | ~6,210 |
 | Binary serialization    | `wasm/writer.rs`                                   | 1,716  |
 
@@ -306,10 +306,11 @@ A `cont::Module` → `cont::Module` transform: `optm::optimize` (`src/optm.rs`) 
 | `specialize_calls`            | `specialize_calls.rs`           | Clones a function per closure shape passed into a candidate parameter, so closure lifting can devirtualize through it (monomorphization) |
 | `inline_calls`                | `function_inlining.rs`          | Splices single-call-site functions into their call site                      |
 | `thread_jumps`                | `jump_threading.rs`             | Merges single-predecessor blocks into their predecessor                      |
+| `hoist_literals`              | `hoist_literals.rs`             | Lifts bytestrings and closed aggregates into shared module consts            |
 | `eliminate_dead_arguments`    | `dead_argument_elimination.rs`  | Drops unused function parameters and closure captures, finishing type erasure |
 | `eliminate_dead_code`         | `dead_code_elimination.rs`      | Drops unused bindings and unreachable functions, closures, and consts        |
 
-`optimize` interleaves and repeats several of these — `lift_closures` runs both before and after `specialize_calls` (specialization exposes fresh known-closure shapes to lift), and `propagate_copies`/`fold_constants`/`thread_jumps` run again after inlining to clean up the simplified CFG. Dead-argument and dead-code elimination run last, once nothing else will reintroduce uses.
+`optimize` interleaves and repeats several of these — `lift_closures` runs both before and after `specialize_calls` (specialization exposes fresh known-closure shapes to lift), and `propagate_copies`/`fold_constants`/`thread_jumps` run again after inlining to clean up the simplified CFG. Once literal values have settled, `hoist_literals` lifts bytestrings and closed aggregates into module consts. Dead-argument and dead-code elimination run last, once nothing else will reintroduce uses.
 
 ---
 
@@ -439,7 +440,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Testing
 
-393 tests across the library crate, covering every layer:
+407 tests across the library crate, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -449,7 +450,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 | Type checking   | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                     |
 | Erasure         | Primitive, tuple, array, binary type erasure                                                                                                                |
 | CPS lowering    | Recursive tuples, tail application, arrays/binaries, join block creation, prealloc'd shells, cross-region mutual recursion, call-cycle rejection            |
-| CPS optimization | `src/optm/` — per-pass tests: constant folding (the bulk), call specialization, closure lifting, copy propagation, jump threading, inlining, dead-argument and dead-code elimination |
+| CPS optimization | `src/optm/` — per-pass tests: constant folding (the bulk), literal hoisting, call specialization, closure lifting, copy propagation, jump threading, inlining, dead-argument and dead-code elimination |
 | WASM codegen    | Primitives, arrays, binaries, tuples, recursive closures, end-to-end Wasmtime execution                                                                     |
 | Module system   | `src/text/to_core/tests.rs` — qualifier resolution, visibility, `use`/`pub use`, absolute paths, interface fixed point                                      |
 | Integration     | `src/tests.rs` — `triangular_sum` (structural `Nat` induction, `sum(5) = 10`), `multi_arg_function` / `curried_function` (multi-argument and curried calls) |
