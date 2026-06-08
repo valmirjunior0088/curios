@@ -326,3 +326,52 @@ fn folds_constant_arg_through_let_function() {
         other => panic!("expected resume jump in main, got {other:?}"),
     }
 }
+
+#[test]
+fn printf_partial_evaluation_reduces_residual() {
+    // End-to-end smoke for `evaluate_pure_calls` on the §2 motivating workload.
+    // `Fmt/printf("%s is %d")(name)(30)` exercises the parser combinator over a
+    // compile-time-literal format string; §2's role is to interpret pure
+    // sub-bodies at compile time. The reduction is bounded by std/Fmt's design
+    // (its parser combinator fuses pure parsing with the impure IO it ultimately
+    // drives, so the classifier marks most bodies impure) — we pin "§2 removed
+    // at least one func" rather than the full predicted collapse, and verify
+    // the output still round-trips.
+    let source = r#"
+        use /std/{Str, Io, Bin, Fmt};
+
+        let name = Str/trim(Io/read());
+        Fmt/printf("%s is %d")(name)(30)
+        "#;
+
+    let entrypoint = source
+        .parse::<crate::text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_type("()".parse().unwrap());
+
+    let mut optm_funcs: Option<usize> = None;
+    let wasm_module = crate::compile_entrypoint(
+        Duration::from_secs(15),
+        &entrypoint,
+        &crate::text::NullLoader,
+        |stage| {
+            if let crate::Stage::Optm(module) = stage {
+                optm_funcs = Some(module.funcs().len());
+            }
+        },
+    )
+    .expect("compile succeeded");
+
+    let funcs = optm_funcs.expect("Stage::Optm observed");
+    assert!(
+        funcs < 15,
+        "expected fewer than 15 residual funcs after partial evaluation, got {funcs}",
+    );
+
+    let (system, receiver) = ChannelHost::in_out(["Alice"]);
+    crate::run_wasm(&wasm_module, system).expect("execution succeeded");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"Alice is 30".to_vec()]
+    );
+}

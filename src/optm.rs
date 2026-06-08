@@ -7,6 +7,9 @@
 //!   read-only walker.
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
+//! - [`evaluate_pure_calls`] — interprets pure-callee direct/indirect calls
+//!   whose arguments are all literal, replacing them with the materialised
+//!   result plus a `Jump` to the original resume.
 //! - [`hoist_literals`] — lifts bytestrings and closed aggregates into shared
 //!   module consts.
 //! - [`specialize_calls`] — clones a function per closure shape passed into a
@@ -26,11 +29,17 @@ pub use walk::*;
 mod harvest;
 pub use harvest::*;
 
+mod scalar_eval;
+pub use scalar_eval::*;
+
 mod copy_propagation;
 pub use copy_propagation::*;
 
 mod constant_folding;
 pub use constant_folding::*;
+
+mod evaluate_pure_calls;
+pub use evaluate_pure_calls::*;
 
 mod hoist_literals;
 pub use hoist_literals::*;
@@ -70,9 +79,16 @@ use super::cont::*;
 /// Inlining then splices the resulting callees into their one call site — which,
 /// together with jump threading dissolving the leftover continuation blocks,
 /// finally brings literal arguments next to the primitive ops the prelude wraps,
-/// so a second copy-propagation and folding pass can collapse them. With the
-/// literals settled, hoisting lifts every bytestring and closed aggregate into a
-/// shared module const so it is built once at startup instead of on each execution.
+/// so a second copy-propagation and folding pass can collapse them. Partial
+/// evaluation then closes the gap inlining cannot — when a `Direct` call's
+/// target is statically pure and every argument is a literal, the callee is
+/// interpreted at compile time and replaced by the materialised result plus a
+/// jump to the original resume, dissolving recursive callees (the parser
+/// combinator in `examples/crs_printf.rs`) that single-call-site inlining
+/// could never reach. A follow-up copy-propagation and folding pass settles
+/// the freshly-introduced literals before hoisting lifts every bytestring and
+/// closed aggregate into a shared module const so it is built once at startup
+/// instead of on each execution.
 /// Folding also forwards
 /// aggregate projections and decides matches on known tags, which leaves alias
 /// bindings and freshly single-predecessor arms behind; a second jump threading and
@@ -89,6 +105,9 @@ pub fn optimize(mut module: Module) -> Module {
     eliminate_dead_code(&mut module);
     inline_calls(&mut module);
     thread_jumps(&mut module);
+    propagate_copies(&mut module);
+    fold_constants(&mut module);
+    evaluate_pure_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
     hoist_literals(&mut module);

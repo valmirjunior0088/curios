@@ -390,27 +390,62 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.start_expr.push(wasm::Instr::GlobalSet { global_name });
     }
 
+    /// Emit a module-level const. Every global is declared mutable so that
+    /// aggregate (`Tpl`/`Arr`/`Clsr`) consts can `global.get` their dependencies
+    /// inside the start function — wasm constant expressions can only read
+    /// immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained
+    /// const initializer (mutability is harmless when the init is constant);
+    /// `Bin` and aggregates declare a placeholder init and build the real value
+    /// in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`]
+    /// because its payload comes from a data segment.
     fn emit_let_data(&mut self, name: &'a cont::ValueName, value: &'a cont::Data) {
-        if let cont::Data::Bin(bytes) = value {
-            self.emit_let_bin_data(name, bytes);
-            return;
+        match value {
+            cont::Data::Bin(bytes) => {
+                self.emit_let_bin_data(name, bytes);
+            }
+            cont::Data::Nat(_) | cont::Data::Int(_) | cont::Data::Flt(_) => {
+                let mut expr = Default::default();
+                ExprEmitter::new(Context::new_const(self.table), self.module, &mut expr)
+                    .emit_data(name, value);
+                self.module.add_global(
+                    self.table.find_const(name),
+                    wasm::Global {
+                        global_type: wasm::GlobalType {
+                            val_type: self.table.top_type(false),
+                            mutability: wasm::Mutability::Var,
+                        },
+                        expr,
+                    },
+                );
+            }
+            cont::Data::Tpl(_) | cont::Data::Arr(_) | cont::Data::Clsr(_, _) => {
+                let global_name = self.table.find_const(name);
+
+                let mut init_expr: wasm::Expr = Default::default();
+                init_expr.push(wasm::Instr::I32Const { value: 0 });
+                init_expr.push(wasm::Instr::RefI31);
+
+                self.module.add_global(
+                    global_name.clone(),
+                    wasm::Global {
+                        global_type: wasm::GlobalType {
+                            val_type: self.table.top_type(false),
+                            mutability: wasm::Mutability::Var,
+                        },
+                        expr: init_expr,
+                    },
+                );
+
+                ExprEmitter::new(
+                    Context::new_const(self.table),
+                    self.module,
+                    &mut self.start_expr,
+                )
+                .emit_data(name, value);
+                self.start_expr
+                    .push(wasm::Instr::GlobalSet { global_name });
+            }
         }
-
-        let mut expr = Default::default();
-
-        ExprEmitter::new(Context::new_const(self.table), self.module, &mut expr)
-            .emit_data(name, value);
-
-        self.module.add_global(
-            self.table.find_const(name),
-            wasm::Global {
-                global_type: wasm::GlobalType {
-                    val_type: self.table.top_type(false),
-                    mutability: wasm::Mutability::Const,
-                },
-                expr,
-            },
-        );
     }
 
     fn emit_let_clsr(&mut self, name: &'a cont::ClsrName, clsr: &'a cont::Clsr) {
