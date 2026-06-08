@@ -419,19 +419,19 @@ fn order_flat_items(
     let mut keep = vec![false; count];
     let mut stack = Vec::new();
 
-    for node in 0..count {
+    for (node, slot) in keep.iter_mut().enumerate() {
         if !prunable(node) {
-            keep[node] = true;
+            *slot = true;
             stack.push(node);
         }
     }
 
     for name in referenced {
-        if let Some(&node) = owner.get(name) {
-            if !keep[node] {
-                keep[node] = true;
-                stack.push(node);
-            }
+        if let Some(&node) = owner.get(name)
+            && !keep[node]
+        {
+            keep[node] = true;
+            stack.push(node);
         }
     }
 

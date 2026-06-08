@@ -400,7 +400,12 @@ mod tests {
 
     fn typecheck(source: &str) -> Result<(), String> {
         let entrypoint = source.parse::<text::Entrypoint>().unwrap();
-        typecheck_entrypoint(Duration::from_secs(5), &entrypoint, &text::NullLoader, |_| {})
+        typecheck_entrypoint(
+            Duration::from_secs(5),
+            &entrypoint,
+            &text::NullLoader,
+            |_| {},
+        )
     }
 
     #[test]
@@ -434,18 +439,23 @@ mod tests {
         let entrypoint = source.parse::<text::Entrypoint>().unwrap();
         let mut names = Vec::new();
 
-        compile_entrypoint(Duration::from_secs(5), &entrypoint, &text::NullLoader, |stage| {
-            if let Stage::Core(module) = stage {
-                for item in &module.items {
-                    match item {
-                        core::Item::Let(def) => names.push(def.name.clone()),
-                        core::Item::Rec(defs) => {
-                            names.extend(defs.iter().map(|def| def.name.clone()))
+        compile_entrypoint(
+            Duration::from_secs(5),
+            &entrypoint,
+            &text::NullLoader,
+            |stage| {
+                if let Stage::Core(module) = stage {
+                    for item in &module.items {
+                        match item {
+                            core::Item::Let(def) => names.push(def.name.clone()),
+                            core::Item::Rec(defs) => {
+                                names.extend(defs.iter().map(|def| def.name.clone()))
+                            }
                         }
                     }
                 }
-            }
-        })
+            },
+        )
         .unwrap();
 
         names
@@ -468,8 +478,9 @@ mod tests {
     #[test]
     fn prune_keeps_reachable_library_and_transitive_deps() {
         // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
-        let names =
-            core_item_names("use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/Json, /std/Json/decode, \"1\")");
+        let names = core_item_names(
+            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/Json, /std/Json/decode, \"1\")",
+        );
 
         assert!(
             names.iter().any(|name| name.starts_with("std/Json")),

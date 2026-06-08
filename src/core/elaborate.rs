@@ -177,8 +177,7 @@ fn blocked_on_metavar(
                 domain_blocked
                     || (expected_ground
                         && reduced.metavars().iter().any(|id| {
-                            result_metavars.contains(id)
-                                && context.metavar_solution(*id).is_none()
+                            result_metavars.contains(id) && context.metavar_solution(*id).is_none()
                         }))
             }
             Telescope::Done(_) => false,

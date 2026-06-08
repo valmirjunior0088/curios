@@ -1182,7 +1182,9 @@ mod tests {
 
         // The sibling call is untouched: still targets `f`, still passes `rec` — no
         // out-of-scope `v` spliced in.
-        let used_region = &func_named(&module, "main").unwrap().region.blocks[1].1.region;
+        let used_region = &func_named(&module, "main").unwrap().region.blocks[1]
+            .1
+            .region;
         match &used_region.tail {
             Tail::Call(CallTarget::Direct { target, params, .. }) => {
                 assert_eq!(target.as_str(), "f");

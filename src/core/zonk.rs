@@ -26,7 +26,10 @@ where
     let mut extended = binders.to_vec();
     match scope.names() {
         Some(names) => extended.extend(names.iter().cloned()),
-        None => extended.extend(std::iter::repeat(UNNAMED_BINDER.to_string()).take(scope.arity())),
+        None => extended.extend(std::iter::repeat_n(
+            UNNAMED_BINDER.to_string(),
+            scope.arity(),
+        )),
     }
 
     scope.map_body(|inner| body(inner, &extended))
@@ -137,7 +140,10 @@ fn zonk_term(context: &Context, term: &Term, binders: &[String]) -> Result<Term,
 }
 
 fn zonk_terms(context: &Context, terms: &[Term], binders: &[String]) -> Result<Vec<Term>, Error> {
-    terms.iter().map(|t| zonk_term(context, t, binders)).collect()
+    terms
+        .iter()
+        .map(|t| zonk_term(context, t, binders))
+        .collect()
 }
 
 fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Subterm, Error> {
@@ -209,7 +215,9 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             head: zonk_term(context, head, binders)?,
             motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
             zero_case: zonk_term(context, zero_case, binders)?,
-            succ_case: enter_scope(binders, succ_case, |b, binders| zonk_term(context, b, binders))?,
+            succ_case: enter_scope(binders, succ_case, |b, binders| {
+                zonk_term(context, b, binders)
+            })?,
         }),
 
         Subterm::NatMatch(NatMatch::Dispatch {
@@ -339,7 +347,9 @@ fn zonk_prim(context: &Context, prim: &Prim, binders: &[String]) -> Result<Prim,
         Prim::ArrGet(a, b, c) => Prim::ArrGet(z(a)?, z(b)?, z(c)?),
         Prim::ArrAppend(a, b, c) => Prim::ArrAppend(z(a)?, z(b)?, z(c)?),
         Prim::ArrSlice(a, b, c, d) => Prim::ArrSlice(z(a)?, z(b)?, z(c)?, z(d)?),
-        Prim::ArrConcat(ty, operands) => Prim::ArrConcat(z(ty)?, zonk_terms(context, operands, binders)?),
+        Prim::ArrConcat(ty, operands) => {
+            Prim::ArrConcat(z(ty)?, zonk_terms(context, operands, binders)?)
+        }
 
         Prim::IoPrint(t) => Prim::IoPrint(z(t)?),
     })
