@@ -236,6 +236,38 @@ mod tests {
     }
 
     #[test]
+    fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
+        // `Result/success(?, ?, (a, a))` checked against a known `Result(...)`. The
+        // tuple is an introduction form whose parameter type is the holed type-arg
+        // `?A`, so it can't be checked until `?A` is known. Elaboration postpones it,
+        // unifies the result against the expected `Result` — solving `?A` (the
+        // success type, which the tuple's own result witnesses) and the *phantom*
+        // `?E` (the failure type, carried only by the expected type) — then re-checks
+        // the tuple. Guards the result-directed argument order in `elaborate_apply`;
+        // without it this fails "introduced a tuple where the expected type is not a
+        // tuple type".
+        let source = r#"
+            use /std/{Result};
+            use /sys/{Nat};
+            let f(a : Nat) -> Result({ Nat, Nat }, Nat) =
+                Result/success(?, ?, (a, a));
+            f(7)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+
+        // In infer position nothing pins the holes, so the postponed tuple is
+        // re-checked against a still-unsolved metavar and rejected — graceful
+        // degradation, no new acceptance of un-annotated constructors.
+        let unpinned = r#"
+            use /std/{Result};
+            Result/success(?, ?, (1, 1))
+        "#;
+
+        assert!(compile(unpinned, None).is_err());
+    }
+
+    #[test]
     fn typeless_let_infers_a_literal_body() {
         // A local `let` with no type annotation infers the body's type (`Nat`
         // here) and lowers end-to-end.

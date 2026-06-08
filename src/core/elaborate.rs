@@ -55,6 +55,7 @@ fn elaborate_apply(
     context: &mut Context,
     apply: &Apply,
     term: &Term,
+    mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let Apply { head, params } = apply;
 
@@ -74,13 +75,57 @@ fn elaborate_apply(
         ));
     }
 
+    // Result-directed argument order (§6). An introduction form (tuple, lambda,
+    // atom) is checked-only: it can't be elaborated against a parameter type that
+    // reduces to a bare, unsolved metavar — there is no structure to drive it. In
+    // `Check` mode we postpone exactly those arguments, unify the application's
+    // result type against `expected` (which pins the metavars — both those a sibling
+    // argument would witness and phantom ones the expected type alone carries), then
+    // re-check the postponed arguments against their now-refined types. Synthesizable
+    // arguments (`Var`/`Apply`/`Proj`/literals) are never postponed: they run first
+    // and feed that very unification, so this only reorders the checked-only forms
+    // and is otherwise byte-for-byte the previous left-to-right walk. If the result
+    // unification fails to pin a postponed argument's type, the re-check fails with
+    // the same error as before — no new acceptance, graceful degradation.
+    let checking = matches!(mode, Mode::Check(_));
     let mut elaborated = Vec::with_capacity(params.len());
+    let mut postponed: Vec<(usize, Term, Term)> = Vec::new();
     let output = ft.telescope.clone().walk(params, |arg, ty| {
-        elaborated.push(check(context, arg, ty.clone())?);
+        if checking && blocked_on_metavar(context, arg, ty)? {
+            postponed.push((elaborated.len(), arg.clone(), ty.clone()));
+            elaborated.push(arg.clone());
+        } else {
+            elaborated.push(check(context, arg, ty.clone())?);
+        }
         Ok(())
     })?;
 
+    if let Mode::Check(expected) = &mode {
+        expect(context, term, &output, expected)?;
+        for (index, arg, ty) in postponed {
+            elaborated[index] = check(context, &arg, ty)?;
+        }
+    }
+
     Ok((Term::apply(head, elaborated), output))
+}
+
+/// Whether `arg` is a checked-only introduction form (tuple, lambda, atom) whose
+/// parameter type `ty` reduces to a bare, unsolved metavar — i.e. an argument that
+/// cannot be elaborated yet because it has no type structure to check against.
+/// Synthesizable forms return `false`: they have a turnaround of their own and must
+/// run eagerly so their solutions feed the result unification.
+fn blocked_on_metavar(context: &mut Context, arg: &Term, ty: &Term) -> Result<bool, Error> {
+    if !matches!(
+        &**arg,
+        Subterm::Tuple(_) | Subterm::Func(_) | Subterm::Atom(_)
+    ) {
+        return Ok(false);
+    }
+    Ok(match &*reduce_with(context, ty)? {
+        Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
+        _ => false,
+    })
 }
 
 fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, Term), Error> {
@@ -879,7 +924,7 @@ fn elaborate_subterm(
         Subterm::BlnMatch(bm) => return elaborate_bln_match(context, bm, term, mode),
         Subterm::NatMatch(nm) => return elaborate_nat_match(context, nm, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
-        Subterm::Apply(apply) => elaborate_apply(context, apply, term)?,
+        Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),
         Subterm::TupleType(tt) => elaborate_tuple_type(context, tt)?,
         Subterm::Proj(proj) => elaborate_proj(context, proj, term)?,
         Subterm::AtomType(_) => (term.clone(), Term::type_()),
