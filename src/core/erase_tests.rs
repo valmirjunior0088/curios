@@ -72,12 +72,15 @@ fn erase_match_singleton_lowers_to_match() {
 
     let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 
-    let ersd::Term::Let(ersd::Let { body, tail, .. }) = erased else {
+    let ersd::Subterm::Let(ersd::Let { body, tail, .. }) = erased.into_subterm() else {
         panic!("expected let");
     };
 
-    assert!(matches!(*body, ersd::Term::Atom(ersd::Atom { index: 0 })));
-    assert!(matches!(*tail, ersd::Term::Match(_)));
+    assert!(matches!(
+        *body,
+        ersd::Subterm::Atom(ersd::Atom { index: 0 })
+    ));
+    assert!(matches!(*tail, ersd::Subterm::Match(_)));
 }
 
 #[test]
@@ -154,7 +157,7 @@ fn erase_func_captures_free_variables_before_opening_body() {
 
     let erased = erase(&mut context, &term, &type_).unwrap();
 
-    let ersd::Term::Func(ersd::Func { captures, .. }) = erased else {
+    let ersd::Subterm::Func(ersd::Func { captures, .. }) = erased.into_subterm() else {
         panic!("expected erased func");
     };
 
@@ -200,11 +203,11 @@ fn erase_match_and_atom_stress_test() {
 
     let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
 
-    let ersd::Term::Let(ersd::Let {
+    let ersd::Subterm::Let(ersd::Let {
         name: outer_name,
         body: outer_body,
         tail,
-    }) = erased
+    }) = erased.into_subterm()
     else {
         panic!("expected outer let");
     };
@@ -212,14 +215,14 @@ fn erase_match_and_atom_stress_test() {
     assert_eq!(outer_name, "outer#0");
     assert!(matches!(
         *outer_body,
-        ersd::Term::Atom(ersd::Atom { index: 1 })
+        ersd::Subterm::Atom(ersd::Atom { index: 1 })
     ));
 
-    let ersd::Term::Let(ersd::Let {
+    let ersd::Subterm::Let(ersd::Let {
         name: alpha_name,
         body: alpha_body,
         tail,
-    }) = *tail
+    }) = tail.into_subterm()
     else {
         panic!("expected alpha_case let");
     };
@@ -227,14 +230,14 @@ fn erase_match_and_atom_stress_test() {
     assert_eq!(alpha_name, "alpha_case#1");
     assert!(matches!(
         *alpha_body,
-        ersd::Term::Atom(ersd::Atom { index: 0 })
+        ersd::Subterm::Atom(ersd::Atom { index: 0 })
     ));
 
-    let ersd::Term::Let(ersd::Let {
+    let ersd::Subterm::Let(ersd::Let {
         name: mu_name,
         body: mu_body,
         tail,
-    }) = *tail
+    }) = tail.into_subterm()
     else {
         panic!("expected mu_case let");
     };
@@ -242,14 +245,14 @@ fn erase_match_and_atom_stress_test() {
     assert_eq!(mu_name, "mu_case#2");
     assert!(matches!(
         *mu_body,
-        ersd::Term::Atom(ersd::Atom { index: 1 })
+        ersd::Subterm::Atom(ersd::Atom { index: 1 })
     ));
 
-    let ersd::Term::Let(ersd::Let {
+    let ersd::Subterm::Let(ersd::Let {
         name: zeta_name,
         body: zeta_body,
         tail,
-    }) = *tail
+    }) = tail.into_subterm()
     else {
         panic!("expected zeta_case let");
     };
@@ -257,21 +260,21 @@ fn erase_match_and_atom_stress_test() {
     assert_eq!(zeta_name, "zeta_case#3");
     assert!(matches!(
         *zeta_body,
-        ersd::Term::Atom(ersd::Atom { index: 2 })
+        ersd::Subterm::Atom(ersd::Atom { index: 2 })
     ));
 
-    let ersd::Term::Match(ersd::Match { head, cases }) = *tail else {
+    let ersd::Subterm::Match(ersd::Match { head, cases }) = tail.into_subterm() else {
         panic!("expected outer erased case");
     };
 
     assert!(matches!(
-        *head,
-        ersd::Term::Name(name) if name.as_str() == "outer#0"
+        &*head,
+        ersd::Subterm::Name(name) if name.as_str() == "outer#0"
     ));
 
     assert_eq!(cases.len(), 3);
 
-    let ersd::Term::Match(ersd::Match {
+    let ersd::Subterm::Match(ersd::Match {
         head: alpha_head,
         cases: alpha_cases,
     }) = &*cases[0]
@@ -281,24 +284,24 @@ fn erase_match_and_atom_stress_test() {
 
     assert!(matches!(
         &**alpha_head,
-        ersd::Term::Name(name) if name.as_str() == "zeta_case#3"
+        ersd::Subterm::Name(name) if name.as_str() == "zeta_case#3"
     ));
 
     assert_eq!(alpha_cases.len(), 3);
     assert!(matches!(
         *alpha_cases[0],
-        ersd::Term::Atom(ersd::Atom { index: 2 })
+        ersd::Subterm::Atom(ersd::Atom { index: 2 })
     ));
     assert!(matches!(
         *alpha_cases[1],
-        ersd::Term::Atom(ersd::Atom { index: 0 })
+        ersd::Subterm::Atom(ersd::Atom { index: 0 })
     ));
     assert!(matches!(
         *alpha_cases[2],
-        ersd::Term::Atom(ersd::Atom { index: 1 })
+        ersd::Subterm::Atom(ersd::Atom { index: 1 })
     ));
 
-    let ersd::Term::Match(ersd::Match {
+    let ersd::Subterm::Match(ersd::Match {
         head: mu_head,
         cases: mu_cases,
     }) = &*cases[1]
@@ -308,27 +311,27 @@ fn erase_match_and_atom_stress_test() {
 
     assert!(matches!(
         &**mu_head,
-        ersd::Term::Name(name) if name.as_str() == "mu_case#2"
+        ersd::Subterm::Name(name) if name.as_str() == "mu_case#2"
     ));
 
     assert_eq!(mu_cases.len(), 3);
 
     assert!(matches!(
         *mu_cases[0],
-        ersd::Term::Atom(ersd::Atom { index: 0 })
+        ersd::Subterm::Atom(ersd::Atom { index: 0 })
     ));
 
     assert!(matches!(
         *mu_cases[1],
-        ersd::Term::Atom(ersd::Atom { index: 1 })
+        ersd::Subterm::Atom(ersd::Atom { index: 1 })
     ));
 
     assert!(matches!(
         *mu_cases[2],
-        ersd::Term::Atom(ersd::Atom { index: 2 })
+        ersd::Subterm::Atom(ersd::Atom { index: 2 })
     ));
 
-    let ersd::Term::Match(ersd::Match {
+    let ersd::Subterm::Match(ersd::Match {
         head: zeta_head,
         cases: zeta_cases,
     }) = &*cases[2]
@@ -338,24 +341,24 @@ fn erase_match_and_atom_stress_test() {
 
     assert!(matches!(
         &**zeta_head,
-        ersd::Term::Name(name) if name.as_str() == "alpha_case#1"
+        ersd::Subterm::Name(name) if name.as_str() == "alpha_case#1"
     ));
 
     assert_eq!(zeta_cases.len(), 3);
 
     assert!(matches!(
         *zeta_cases[0],
-        ersd::Term::Atom(ersd::Atom { index: 1 })
+        ersd::Subterm::Atom(ersd::Atom { index: 1 })
     ));
 
     assert!(matches!(
         *zeta_cases[1],
-        ersd::Term::Atom(ersd::Atom { index: 2 })
+        ersd::Subterm::Atom(ersd::Atom { index: 2 })
     ));
 
     assert!(matches!(
         *zeta_cases[2],
-        ersd::Term::Atom(ersd::Atom { index: 0 })
+        ersd::Subterm::Atom(ersd::Atom { index: 0 })
     ));
 }
 

@@ -2,7 +2,9 @@ use {
     super::to_cont,
     crate::{
         cont,
-        ersd::{Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Term, Tuple},
+        ersd::{
+            Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term, Tuple,
+        },
     },
     std::collections::BTreeMap,
 };
@@ -20,34 +22,34 @@ fn identity_func() -> Func {
     Func {
         captures: vec![],
         params: vec!["arg".into()],
-        body: Term::Name(Name::from("arg")).into(),
+        body: Subterm::Name(Name::from("arg")).into(),
     }
 }
 
 #[test]
 fn lowers_recursive_pairs_into_main_region_values() {
-    let term = Term::Rec(Rec {
+    let term = Subterm::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![
-            Term::Tuple(Tuple {
+            Subterm::Tuple(Tuple {
                 fields: vec![
-                    Term::Name(Name::from("y")).into(),
-                    Term::Prim(Prim::Pure(PurePrim::Int(1))).into(),
+                    Subterm::Name(Name::from("y")).into(),
+                    Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
                 ],
             })
             .into(),
-            Term::Tuple(Tuple {
+            Subterm::Tuple(Tuple {
                 fields: vec![
-                    Term::Prim(Prim::Pure(PurePrim::Int(2))).into(),
-                    Term::Name(Name::from("x")).into(),
+                    Subterm::Prim(Prim::Pure(PurePrim::Int(2))).into(),
+                    Subterm::Name(Name::from("x")).into(),
                 ],
             })
             .into(),
         ],
-        tail: Term::Name(Name::from("x")).into(),
+        tail: Subterm::Name(Name::from("x")).into(),
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
 
     assert!(module.consts().is_empty());
     assert!(module.clsrs().is_empty());
@@ -93,17 +95,17 @@ fn lowers_recursive_pairs_into_main_region_values() {
 
 #[test]
 fn lowers_tail_apply_as_indirect_call_to_resume() {
-    let term = Term::Apply(Apply {
-        head: Term::Func(Func {
+    let term = Subterm::Apply(Apply {
+        head: Subterm::Func(Func {
             captures: vec![],
             params: vec!["x".into()],
-            body: Term::Name(Name::from("x")).into(),
+            body: Subterm::Name(Name::from("x")).into(),
         })
         .into(),
-        params: vec![Term::Prim(Prim::Pure(PurePrim::Int(7))).into()],
+        params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
 
     assert_eq!(module.clsrs().len(), 1);
 
@@ -119,22 +121,22 @@ fn lowers_tail_apply_as_indirect_call_to_resume() {
 
 #[test]
 fn lowers_arr_into_main_region_value() {
-    let term = Term::Let(Let {
+    let term = Subterm::Let(Let {
         name: "a".into(),
-        body: Term::Prim(Prim::Pure(PurePrim::Nat(1))).into(),
-        tail: Term::Let(Let {
+        body: Subterm::Prim(Prim::Pure(PurePrim::Nat(1))).into(),
+        tail: Subterm::Let(Let {
             name: "b".into(),
-            body: Term::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
-            tail: Term::Prim(Prim::Pure(PurePrim::Arr(vec![
-                Term::Name(Name::from("a")).into(),
-                Term::Name(Name::from("b")).into(),
+            body: Subterm::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
+            tail: Subterm::Prim(Prim::Pure(PurePrim::Arr(vec![
+                Subterm::Name(Name::from("a")).into(),
+                Subterm::Name(Name::from("b")).into(),
             ])))
             .into(),
         })
         .into(),
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
     assert!(func.region.values.iter().any(|(_, value)| matches!(
@@ -145,21 +147,21 @@ fn lowers_arr_into_main_region_value() {
 
 #[test]
 fn lowers_arr_with_apply_element_through_join_block() {
-    let term = Term::Prim(Prim::Pure(PurePrim::Arr(vec![
-        Term::Apply(Apply {
-            head: Term::Func(Func {
+    let term = Subterm::Prim(Prim::Pure(PurePrim::Arr(vec![
+        Subterm::Apply(Apply {
+            head: Subterm::Func(Func {
                 captures: vec![],
                 params: vec!["x".into()],
-                body: Term::Name(Name::from("x")).into(),
+                body: Subterm::Name(Name::from("x")).into(),
             })
             .into(),
-            params: vec![Term::Prim(Prim::Pure(PurePrim::Nat(1))).into()],
+            params: vec![Subterm::Prim(Prim::Pure(PurePrim::Nat(1))).into()],
         })
         .into(),
-        Term::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
+        Subterm::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
     ])));
 
-    let module = lower(term);
+    let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
     assert_eq!(func.region.blocks.len(), 1);
@@ -174,23 +176,23 @@ fn lowers_arr_with_apply_element_through_join_block() {
 
 #[test]
 fn lowers_apply_in_value_position_through_join_block() {
-    let term = Term::Tuple(Tuple {
+    let term = Subterm::Tuple(Tuple {
         fields: vec![
-            Term::Apply(Apply {
-                head: Term::Func(Func {
+            Subterm::Apply(Apply {
+                head: Subterm::Func(Func {
                     captures: vec![],
                     params: vec!["x".into()],
-                    body: Term::Name(Name::from("x")).into(),
+                    body: Subterm::Name(Name::from("x")).into(),
                 })
                 .into(),
-                params: vec![Term::Prim(Prim::Pure(PurePrim::Int(7))).into()],
+                params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
             })
             .into(),
-            Term::Prim(Prim::Pure(PurePrim::Int(1))).into(),
+            Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
         ],
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
     assert_eq!(func.region.blocks.len(), 1);
@@ -213,16 +215,16 @@ fn lowers_apply_in_value_position_through_join_block() {
 
 #[test]
 fn lowers_nat_match_as_sparse_match() {
-    let term = Term::NatMatch(NatMatch::Dispatch {
-        head: Term::Prim(Prim::Pure(PurePrim::Nat(7))).into(),
+    let term = Subterm::NatMatch(NatMatch::Dispatch {
+        head: Subterm::Prim(Prim::Pure(PurePrim::Nat(7))).into(),
         cases: BTreeMap::from([
-            (2, Term::Prim(Prim::Pure(PurePrim::Nat(10))).into()),
-            (7, Term::Prim(Prim::Pure(PurePrim::Nat(20))).into()),
+            (2, Subterm::Prim(Prim::Pure(PurePrim::Nat(10))).into()),
+            (7, Subterm::Prim(Prim::Pure(PurePrim::Nat(20))).into()),
         ]),
-        default: Term::Prim(Prim::Pure(PurePrim::Nat(0))).into(),
+        default: Subterm::Prim(Prim::Pure(PurePrim::Nat(0))).into(),
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
     let cont::Tail::Match(cont::MatchTarget { cases, default, .. }) = &func.region.tail else {
@@ -236,8 +238,8 @@ fn lowers_nat_match_as_sparse_match() {
 
 #[test]
 fn lowers_bin_literal() {
-    let term = Term::Prim(Prim::Pure(PurePrim::Bin(vec![1, 2, 3])));
-    let module = lower(term);
+    let term = Subterm::Prim(Prim::Pure(PurePrim::Bin(vec![1, 2, 3])));
+    let module = lower(term.into());
 
     let func = &module.funcs()[0].1;
     let has_bin = func.region.values.iter().any(|(_, value)| {
@@ -249,28 +251,28 @@ fn lowers_bin_literal() {
 
 #[test]
 fn recursive_pairs_declare_preallocs() {
-    let term = Term::Rec(Rec {
+    let term = Subterm::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![
-            Term::Tuple(Tuple {
+            Subterm::Tuple(Tuple {
                 fields: vec![
-                    Term::Name(Name::from("y")).into(),
-                    Term::Prim(Prim::Pure(PurePrim::Int(1))).into(),
+                    Subterm::Name(Name::from("y")).into(),
+                    Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
                 ],
             })
             .into(),
-            Term::Tuple(Tuple {
+            Subterm::Tuple(Tuple {
                 fields: vec![
-                    Term::Prim(Prim::Pure(PurePrim::Int(2))).into(),
-                    Term::Name(Name::from("x")).into(),
+                    Subterm::Prim(Prim::Pure(PurePrim::Int(2))).into(),
+                    Subterm::Name(Name::from("x")).into(),
                 ],
             })
             .into(),
         ],
-        tail: Term::Name(Name::from("x")).into(),
+        tail: Subterm::Name(Name::from("x")).into(),
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
     // Both mutually-referential tuples are prealloc'd so their shells exist before fill.
@@ -288,25 +290,25 @@ fn lowers_cross_region_rec_through_resume_block() {
     // `rec f = (x) => g and g = id(f)`: the aggregate `f` captures the call-valued `g`,
     // while `g`'s call references `f`. `f` must be prealloc'd (shell before the call) and
     // filled in the resume region after `g` returns.
-    let term = Term::Rec(Rec {
+    let term = Subterm::Rec(Rec {
         names: vec!["f".into(), "g".into()],
         items: vec![
-            Term::Func(Func {
+            Subterm::Func(Func {
                 captures: vec!["g".into()],
                 params: vec!["x".into()],
-                body: Term::Name(Name::from("g")).into(),
+                body: Subterm::Name(Name::from("g")).into(),
             })
             .into(),
-            Term::Apply(Apply {
-                head: Term::Func(identity_func()).into(),
-                params: vec![Term::Name(Name::from("f")).into()],
+            Subterm::Apply(Apply {
+                head: Subterm::Func(identity_func()).into(),
+                params: vec![Subterm::Name(Name::from("f")).into()],
             })
             .into(),
         ],
-        tail: Term::Name(Name::from("f")).into(),
+        tail: Subterm::Name(Name::from("f")).into(),
     });
 
-    let module = lower(term);
+    let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
     // `f`'s closure shell is declared at region entry.
@@ -325,22 +327,22 @@ fn lowers_cross_region_rec_through_resume_block() {
 #[test]
 #[should_panic(expected = "value-level mutual recursion through calls")]
 fn rejects_apply_apply_cycle() {
-    let term = Term::Rec(Rec {
+    let term = Subterm::Rec(Rec {
         names: vec!["a".into(), "b".into()],
         items: vec![
-            Term::Apply(Apply {
-                head: Term::Func(identity_func()).into(),
-                params: vec![Term::Name(Name::from("b")).into()],
+            Subterm::Apply(Apply {
+                head: Subterm::Func(identity_func()).into(),
+                params: vec![Subterm::Name(Name::from("b")).into()],
             })
             .into(),
-            Term::Apply(Apply {
-                head: Term::Func(identity_func()).into(),
-                params: vec![Term::Name(Name::from("a")).into()],
+            Subterm::Apply(Apply {
+                head: Subterm::Func(identity_func()).into(),
+                params: vec![Subterm::Name(Name::from("a")).into()],
             })
             .into(),
         ],
-        tail: Term::Name(Name::from("a")).into(),
+        tail: Subterm::Name(Name::from("a")).into(),
     });
 
-    lower(term);
+    lower(term.into());
 }

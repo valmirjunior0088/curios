@@ -18,31 +18,31 @@ pub fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
 pub fn free_names(term: &ersd::Term) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
 
-    match term {
-        ersd::Term::Erased | ersd::Term::Atom(_) => {}
-        ersd::Term::Name(name) => {
+    match &**term {
+        ersd::Subterm::Erased | ersd::Subterm::Atom(_) => {}
+        ersd::Subterm::Name(name) => {
             names.insert(name.as_str().to_owned());
         }
-        ersd::Term::Func(func) => names.extend(func.captures.iter().map(|c| c.name.clone())),
-        ersd::Term::Apply(apply) => {
+        ersd::Subterm::Func(func) => names.extend(func.captures.iter().map(|c| c.name.clone())),
+        ersd::Subterm::Apply(apply) => {
             names.extend(free_names(&apply.head));
             apply
                 .params
                 .iter()
                 .for_each(|param| names.extend(free_names(param)));
         }
-        ersd::Term::Tuple(tuple) => tuple
+        ersd::Subterm::Tuple(tuple) => tuple
             .fields
             .iter()
             .for_each(|field| names.extend(free_names(field))),
-        ersd::Term::Proj(proj) => names.extend(free_names(&proj.head)),
-        ersd::Term::Match(m) => {
+        ersd::Subterm::Proj(proj) => names.extend(free_names(&proj.head)),
+        ersd::Subterm::Match(m) => {
             names.extend(free_names(&m.head));
             m.cases
                 .iter()
                 .for_each(|case| names.extend(free_names(case)));
         }
-        ersd::Term::NatMatch(ersd::NatMatch::Induction {
+        ersd::Subterm::NatMatch(ersd::NatMatch::Induction {
             head,
             zero_case,
             pred,
@@ -57,7 +57,7 @@ pub fn free_names(term: &ersd::Term) -> BTreeSet<String> {
             succ.remove(ih);
             names.extend(succ);
         }
-        ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
+        ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
             head,
             cases,
             default,
@@ -68,14 +68,14 @@ pub fn free_names(term: &ersd::Term) -> BTreeSet<String> {
                 .for_each(|(_, case)| names.extend(free_names(case)));
             names.extend(free_names(default));
         }
-        ersd::Term::Let(let_) => {
+        ersd::Subterm::Let(let_) => {
             names.extend(free_names(&let_.body));
 
             let mut tail = free_names(&let_.tail);
             tail.remove(&let_.name);
             names.extend(tail);
         }
-        ersd::Term::Rec(rec) => {
+        ersd::Subterm::Rec(rec) => {
             let mut inner = BTreeSet::new();
             rec.items
                 .iter()
@@ -86,7 +86,7 @@ pub fn free_names(term: &ersd::Term) -> BTreeSet<String> {
             });
             names.extend(inner);
         }
-        ersd::Term::Prim(prim) => names.extend(free_names_prim(prim)),
+        ersd::Subterm::Prim(prim) => names.extend(free_names_prim(prim)),
     }
 
     names
@@ -109,7 +109,7 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
 fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
     use ersd::PurePrim::*;
 
-    let operands: Vec<&ersd::Subterm> = match prim {
+    let operands: Vec<&ersd::Term> = match prim {
         Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit => vec![],
         NatToStr(a) | IntToStr(a) | FltToStr(a) | NatToInt(a) | NatToFlt(a) | IntToNat(a)
         | IntToFlt(a) | FltToNat(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a)
@@ -159,7 +159,7 @@ fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
         BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter().collect(),
     };
 
-    operands.into_iter().flat_map(|o| free_names(o)).collect()
+    operands.into_iter().flat_map(free_names).collect()
 }
 
 /// Post-order (dependencies first) of the call/match-valued `rec` bindings, panicking
@@ -221,8 +221,8 @@ pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
 /// only need their length up front and lower their elements at patch time.
 pub enum Backpatch<'b> {
     Clsr(cont::ClsrName, Vec<cont::ValueName>),
-    Tpl(&'b [ersd::Subterm]),
-    Arr(&'b [ersd::Subterm]),
+    Tpl(&'b [ersd::Term]),
+    Arr(&'b [ersd::Term]),
 }
 
 impl Backpatch<'_> {

@@ -39,11 +39,7 @@ fn lower_pure_ternary_code(
     work.fresh(cont::Value::Eval(code(first, second, third)))
 }
 
-fn lower_pure_names(
-    work: &mut Work,
-    terms: &[ersd::Subterm],
-    frame: &Frame,
-) -> Vec<cont::ValueName> {
+fn lower_pure_names(work: &mut Work, terms: &[ersd::Term], frame: &Frame) -> Vec<cont::ValueName> {
     terms
         .iter()
         .map(|term| work.lower_pure_name(term, frame))
@@ -127,7 +123,7 @@ fn lower_ternary_code<'b>(
 
 fn lower_lst<'b>(
     work: &mut Work,
-    elements: &'b [ersd::Subterm],
+    elements: &'b [ersd::Term],
     frame: &'b Frame,
     mut names: Vec<cont::ValueName>,
     cont: Cont<'b>,
@@ -151,7 +147,7 @@ fn lower_lst<'b>(
 
 fn lower_bin_concat<'b>(
     work: &mut Work,
-    operands: &'b [ersd::Subterm],
+    operands: &'b [ersd::Term],
     frame: &'b Frame,
     mut names: Vec<cont::ValueName>,
     cont: Cont<'b>,
@@ -175,7 +171,7 @@ fn lower_bin_concat<'b>(
 
 fn lower_arr_concat<'b>(
     work: &mut Work,
-    operands: &'b [ersd::Subterm],
+    operands: &'b [ersd::Term],
     frame: &'b Frame,
     mut names: Vec<cont::ValueName>,
     cont: Cont<'b>,

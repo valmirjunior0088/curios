@@ -1,23 +1,52 @@
 use {
     super::{Name, Prim},
-    std::collections::BTreeMap,
+    std::{collections::BTreeMap, ops::Deref},
 };
 
-pub type Subterm = Box<Term>;
+#[derive(Debug)]
+pub struct Term {
+    inner: Box<Subterm>,
+}
+
+impl Term {
+    pub fn into_subterm(self) -> Subterm {
+        *self.inner
+    }
+
+    pub fn as_subterm(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
+impl Deref for Term {
+    type Target = Subterm;
+
+    fn deref(&self) -> &Subterm {
+        &self.inner
+    }
+}
+
+impl From<Subterm> for Term {
+    fn from(subterm: Subterm) -> Self {
+        Self {
+            inner: Box::new(subterm),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum NatMatch {
     Induction {
-        head: Subterm,
-        zero_case: Subterm,
+        head: Term,
+        zero_case: Term,
         pred: String,
         ih: String,
-        succ_case: Subterm,
+        succ_case: Term,
     },
     Dispatch {
-        head: Subterm,
-        cases: BTreeMap<u32, Subterm>,
-        default: Subterm,
+        head: Term,
+        cases: BTreeMap<u32, Term>,
+        default: Term,
     },
 }
 
@@ -51,23 +80,23 @@ impl Argument {
 pub struct Func {
     pub captures: Vec<Argument>,
     pub params: Vec<Argument>,
-    pub body: Subterm,
+    pub body: Term,
 }
 
 #[derive(Debug)]
 pub struct Apply {
-    pub head: Subterm,
-    pub params: Vec<Subterm>,
+    pub head: Term,
+    pub params: Vec<Term>,
 }
 
 #[derive(Debug)]
 pub struct Tuple {
-    pub fields: Vec<Subterm>,
+    pub fields: Vec<Term>,
 }
 
 #[derive(Debug)]
 pub struct Proj {
-    pub head: Subterm,
+    pub head: Term,
     pub index: usize,
 }
 
@@ -78,26 +107,26 @@ pub struct Atom {
 
 #[derive(Debug)]
 pub struct Match {
-    pub head: Subterm,
-    pub cases: Vec<Subterm>,
+    pub head: Term,
+    pub cases: Vec<Term>,
 }
 
 #[derive(Debug)]
 pub struct Let {
     pub name: String,
-    pub body: Subterm,
-    pub tail: Subterm,
+    pub body: Term,
+    pub tail: Term,
 }
 
 #[derive(Debug)]
 pub struct Rec {
     pub names: Vec<String>,
-    pub items: Vec<Subterm>,
-    pub tail: Subterm,
+    pub items: Vec<Term>,
+    pub tail: Term,
 }
 
 #[derive(Debug)]
-pub enum Term {
+pub enum Subterm {
     Erased,
     Prim(Prim),
     NatMatch(NatMatch),
@@ -111,31 +140,3 @@ pub enum Term {
     Rec(Rec),
     Name(Name),
 }
-
-/// A top-level item of a [`Module`]: a single `let` definition, or a `rec` group
-/// of mutually-recursive definitions. The flat, name-keyed mirror of `core::Item`
-/// after erasure — `Rec` keeps `names`/`items` as parallel vectors so the lowerer
-/// can feed it straight to `lower_letrec_bindings`, exactly like a local `Rec`.
-#[derive(Debug)]
-pub enum Item {
-    Let {
-        name: String,
-        body: Term,
-    },
-    Rec {
-        names: Vec<String>,
-        items: Vec<Term>,
-    },
-}
-
-/// The erased program: a flat list of top-level `items` plus the entrypoint
-/// `body`. Replaces the N-deep `Let`/`Rec` chain `erase` used to build, which
-/// `to_cont` then recursed along (BUG.md, §scope/notes). Local `Let`/`Rec` are
-/// unchanged. Bodies are unboxed `Term`s: a `Module` owns its items in a `Vec`,
-/// so there is no recursive-type cycle to break with `Subterm` indirection.
-#[derive(Debug)]
-pub struct Module {
-    pub items: Vec<Item>,
-    pub body: Term,
-}
-

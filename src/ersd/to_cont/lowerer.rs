@@ -51,8 +51,11 @@ impl<'a> Lowerer<'a> {
 /// into a flat loop; only the rare non-synchronous top-level `let` recurses.
 fn is_synchronous(term: &ersd::Term) -> bool {
     matches!(
-        term,
-        ersd::Term::Func(_) | ersd::Term::Erased | ersd::Term::Atom(_) | ersd::Term::Name(_)
+        &**term,
+        ersd::Subterm::Func(_)
+            | ersd::Subterm::Erased
+            | ersd::Subterm::Atom(_)
+            | ersd::Subterm::Name(_)
     )
 }
 
@@ -204,10 +207,10 @@ impl Work<'_, '_, '_> {
                     self.emit.add_prealloc(target.clone(), backpatch.prealloc());
                     self.emit_backpatch(target, &backpatch, &frame);
                 }
-                None => match item {
-                    ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
-                        unsupported_sync_rec_item(item)
-                    }
+                None => match &**item {
+                    ersd::Subterm::Apply(_)
+                    | ersd::Subterm::Match(_)
+                    | ersd::Subterm::NatMatch(_) => unsupported_sync_rec_item(item),
                     _ => self.lower_letrec_item(item, target, &frame),
                 },
             }
@@ -217,15 +220,15 @@ impl Work<'_, '_, '_> {
     }
 
     pub fn lower_pure_name(&mut self, term: &ersd::Term, frame: &Frame) -> cont::ValueName {
-        match term {
-            ersd::Term::Name(name) => frame.find(name.as_str()),
-            ersd::Term::Erased => self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
-            ersd::Term::Prim(ersd::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
-            ersd::Term::Prim(ersd::Prim::Host(_)) => unreachable!(
+        match &**term {
+            ersd::Subterm::Name(name) => frame.find(name.as_str()),
+            ersd::Subterm::Erased => self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
+            ersd::Subterm::Prim(ersd::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
+            ersd::Subterm::Prim(ersd::Prim::Host(_)) => unreachable!(
                 "host primitive reached pure-name context — pure-name lowering cannot \
                  construct the resume block required by Tail::Host"
             ),
-            ersd::Term::Func(func) => {
+            ersd::Subterm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
 
                 self.emit.fresh(cont::Value::Pure(cont::Data::Clsr(
@@ -233,7 +236,7 @@ impl Work<'_, '_, '_> {
                     captured_values,
                 )))
             }
-            ersd::Term::Tuple(s) => {
+            ersd::Subterm::Tuple(s) => {
                 let field_names = s
                     .fields
                     .iter()
@@ -243,39 +246,35 @@ impl Work<'_, '_, '_> {
                 self.emit
                     .fresh(cont::Value::Pure(cont::Data::Tpl(field_names)))
             }
-            ersd::Term::Atom(atom) => self
+            ersd::Subterm::Atom(atom) => self
                 .emit
                 .fresh(cont::Value::Pure(cont::Data::Nat(atom.index as u32))),
-            ersd::Term::Let(let_) => {
+            ersd::Subterm::Let(let_) => {
                 let body = self.lower_pure_name(&let_.body, frame);
                 let frame = frame.extended([(let_.name.clone(), body)]);
 
                 self.lower_pure_name(&let_.tail, &frame)
             }
-            ersd::Term::Rec(letrec) => {
-                let frame = self.lower_letrec_bindings(
-                    &letrec.names,
-                    letrec.items.iter().map(Box::as_ref),
-                    frame,
-                );
+            ersd::Subterm::Rec(letrec) => {
+                let frame = self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), frame);
 
                 self.lower_pure_name(&letrec.tail, &frame)
             }
-            ersd::Term::Proj(proj) => {
+            ersd::Subterm::Proj(proj) => {
                 let head = self.lower_pure_name(&proj.head, frame);
 
                 self.emit
                     .fresh(cont::Value::Eval(cont::Code::TplGet(head, proj.index)))
             }
-            ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
+            ersd::Subterm::Apply(_) | ersd::Subterm::Match(_) | ersd::Subterm::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
             }
         }
     }
 
     pub fn lower_letrec_item(&mut self, term: &ersd::Term, target: cont::ValueName, frame: &Frame) {
-        match term {
-            ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
+        match &**term {
+            ersd::Subterm::Apply(_) | ersd::Subterm::Match(_) | ersd::Subterm::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
             }
             _ => {
@@ -291,15 +290,15 @@ impl Work<'_, '_, '_> {
         frame: &Frame,
         cont: Cont<'_>,
     ) -> cont::Tail {
-        match term {
-            ersd::Term::Name(name) => cont.call(self, frame.find(name.as_str())),
-            ersd::Term::Erased => {
+        match &**term {
+            ersd::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
+            ersd::Subterm::Erased => {
                 let value = self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
 
                 cont.call(self, value)
             }
-            ersd::Term::Prim(prim) => lower_value_prim(self, prim, frame, cont),
-            ersd::Term::Func(func) => {
+            ersd::Subterm::Prim(prim) => lower_value_prim(self, prim, frame, cont),
+            ersd::Subterm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
                 let value = self.emit.fresh(cont::Value::Pure(cont::Data::Clsr(
                     clsr_name,
@@ -308,15 +307,15 @@ impl Work<'_, '_, '_> {
 
                 cont.call(self, value)
             }
-            ersd::Term::Tuple(s) => self.lower_struct(&s.fields, frame, vec![], cont),
-            ersd::Term::Atom(atom) => {
+            ersd::Subterm::Tuple(s) => self.lower_struct(&s.fields, frame, vec![], cont),
+            ersd::Subterm::Atom(atom) => {
                 let value = self
                     .emit
                     .fresh(cont::Value::Pure(cont::Data::Nat(atom.index as u32)));
 
                 cont.call(self, value)
             }
-            ersd::Term::Let(let_) => {
+            ersd::Subterm::Let(let_) => {
                 let name = let_.name.clone();
 
                 self.lower_value_name(
@@ -329,13 +328,13 @@ impl Work<'_, '_, '_> {
                     }),
                 )
             }
-            ersd::Term::Rec(letrec) => self.lower_rec(
+            ersd::Subterm::Rec(letrec) => self.lower_rec(
                 &letrec.names,
-                letrec.items.iter().map(Box::as_ref),
+                letrec.items.iter(),
                 frame,
                 RecBody::new(move |work, frame| work.lower_value_name(&letrec.tail, frame, cont)),
             ),
-            ersd::Term::Proj(proj) => {
+            ersd::Subterm::Proj(proj) => {
                 let index = proj.index;
 
                 self.lower_value_name(
@@ -350,7 +349,7 @@ impl Work<'_, '_, '_> {
                     }),
                 )
             }
-            ersd::Term::Apply(_) | ersd::Term::Match(_) | ersd::Term::NatMatch(_) => {
+            ersd::Subterm::Apply(_) | ersd::Subterm::Match(_) | ersd::Subterm::NatMatch(_) => {
                 let block = self.emit.fresh_block();
                 let param = self.emit.fresh_value();
                 let region = self.in_subregion(|work| cont.call(work, param.clone()));
@@ -370,7 +369,7 @@ impl Work<'_, '_, '_> {
 
     pub fn lower_names<'b>(
         &mut self,
-        params: &'b [ersd::Subterm],
+        params: &'b [ersd::Term],
         frame: &'b Frame,
         mut names: Vec<cont::ValueName>,
         cont: ContMany<'b>,
@@ -390,7 +389,7 @@ impl Work<'_, '_, '_> {
 
     fn lower_struct<'b>(
         &mut self,
-        fields: &'b [ersd::Subterm],
+        fields: &'b [ersd::Term],
         frame: &'b Frame,
         mut names: Vec<cont::ValueName>,
         cont: Cont<'b>,
@@ -420,14 +419,14 @@ impl Work<'_, '_, '_> {
         item: &'b ersd::Term,
         frame: &Frame,
     ) -> Option<Backpatch<'b>> {
-        match item {
-            ersd::Term::Func(func) => {
+        match &**item {
+            ersd::Subterm::Func(func) => {
                 let (clsr_name, captures) = self.lower_closure(func, frame);
 
                 Some(Backpatch::Clsr(clsr_name, captures))
             }
-            ersd::Term::Tuple(tuple) => Some(Backpatch::Tpl(&tuple.fields)),
-            ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Arr(elems))) => {
+            ersd::Subterm::Tuple(tuple) => Some(Backpatch::Tpl(&tuple.fields)),
+            ersd::Subterm::Prim(ersd::Prim::Pure(ersd::PurePrim::Arr(elems))) => {
                 Some(Backpatch::Arr(elems))
             }
             _ => None,
@@ -572,8 +571,8 @@ impl Work<'_, '_, '_> {
         frame: &Frame,
         resume: &cont::BlockName,
     ) -> cont::Tail {
-        match term {
-            ersd::Term::Apply(apply) => self.lower_value_name(
+        match &**term {
+            ersd::Subterm::Apply(apply) => self.lower_value_name(
                 &apply.head,
                 frame,
                 Cont::new(move |work, head| {
@@ -585,7 +584,7 @@ impl Work<'_, '_, '_> {
                     )
                 }),
             ),
-            ersd::Term::Match(m) => self.lower_value_name(
+            ersd::Subterm::Match(m) => self.lower_value_name(
                 &m.head,
                 frame,
                 Cont::new(move |work, head| {
@@ -619,7 +618,7 @@ impl Work<'_, '_, '_> {
                     })
                 }),
             ),
-            ersd::Term::NatMatch(ersd::NatMatch::Induction {
+            ersd::Subterm::NatMatch(ersd::NatMatch::Induction {
                 head: nat_head,
                 zero_case,
                 pred,
@@ -759,7 +758,7 @@ impl Work<'_, '_, '_> {
                     work.lower_tail(zero_case, frame, &zero_resume_name)
                 }),
             ),
-            ersd::Term::NatMatch(ersd::NatMatch::Dispatch {
+            ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
                 head: nm_head,
                 cases: nm_cases,
                 default: nm_default,
@@ -808,7 +807,7 @@ impl Work<'_, '_, '_> {
                     })
                 }),
             ),
-            ersd::Term::Let(let_) => {
+            ersd::Subterm::Let(let_) => {
                 let name = let_.name.clone();
                 self.lower_value_name(
                     &let_.body,
@@ -819,9 +818,9 @@ impl Work<'_, '_, '_> {
                     }),
                 )
             }
-            ersd::Term::Rec(letrec) => self.lower_rec(
+            ersd::Subterm::Rec(letrec) => self.lower_rec(
                 &letrec.names,
-                letrec.items.iter().map(Box::as_ref),
+                letrec.items.iter(),
                 frame,
                 RecBody::new(move |work, frame| work.lower_tail(&letrec.tail, frame, resume)),
             ),

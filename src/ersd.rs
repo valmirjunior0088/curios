@@ -7,6 +7,9 @@ pub use names::*;
 mod term;
 pub use term::*;
 
+mod module;
+pub use module::*;
+
 mod print;
 
 mod to_cont;

@@ -1,7 +1,7 @@
 use {
     super::{
-        Atom, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj, PurePrim, Rec, Term,
-        Tuple,
+        Atom, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj, PurePrim, Rec,
+        Subterm, Term, Tuple,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -166,10 +166,10 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
 }
 
 fn print_term<'a>(term: &'a Term) -> Printer<'a> {
-    match term {
-        Term::Erased => pure("_"),
-        Term::Prim(prim) => print_prim(prim),
-        Term::NatMatch(NatMatch::Induction {
+    match &**term {
+        Subterm::Erased => pure("_"),
+        Subterm::Prim(prim) => print_prim(prim),
+        Subterm::NatMatch(NatMatch::Induction {
             head,
             zero_case,
             pred,
@@ -187,7 +187,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure(" =>\n"),
             indent(flat([print_term(succ_case), pure(";")])),
         ]),
-        Term::NatMatch(NatMatch::Dispatch {
+        Subterm::NatMatch(NatMatch::Dispatch {
             head,
             cases,
             default,
@@ -207,7 +207,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 indent(flat([print_term(default), pure(";")])),
             ])
         }
-        Term::Func(Func {
+        Subterm::Func(Func {
             captures,
             params,
             body,
@@ -238,22 +238,22 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 ])
             }
         }
-        Term::Apply(super::Apply { head, params }) => flat([
+        Subterm::Apply(super::Apply { head, params }) => flat([
             print_term(head),
             pure("("),
             sep_flat(params.iter().map(|p| print_term(p)), || pure(", ")),
             pure(")"),
         ]),
-        Term::Tuple(Tuple { fields }) => flat([
+        Subterm::Tuple(Tuple { fields }) => flat([
             pure("("),
             sep_flat(fields.iter().map(|f| print_term(f)), || pure(", ")),
             pure(")"),
         ]),
-        Term::Proj(Proj { head, index }) => {
+        Subterm::Proj(Proj { head, index }) => {
             flat([pure("("), print_term(head), pure(format!(").{index}"))])
         }
-        Term::Atom(atom) => print_atom(atom),
-        Term::Match(Match { head, cases }) => {
+        Subterm::Atom(atom) => print_atom(atom),
+        Subterm::Match(Match { head, cases }) => {
             let cases = cases.iter().enumerate().map(|(i, body)| {
                 flat([
                     pure(format!("\n| @{i} =>\n")),
@@ -267,7 +267,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 flat(cases.collect::<Vec<_>>()),
             ])
         }
-        Term::Let(Let { name, body, tail }) => flat([
+        Subterm::Let(Let { name, body, tail }) => flat([
             pure("let "),
             pure(format!("#{}", name.as_str())),
             pure(" =\n"),
@@ -275,7 +275,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             pure("\n"),
             print_term(tail),
         ]),
-        Term::Rec(Rec { names, items, tail }) => {
+        Subterm::Rec(Rec { names, items, tail }) => {
             let bindings = names
                 .iter()
                 .zip(items.iter())
@@ -295,7 +295,7 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 print_term(tail),
             ])
         }
-        Term::Name(name) => pure(format!("#{}", name.as_str())),
+        Subterm::Name(name) => pure(format!("#{}", name.as_str())),
     }
 }
 
