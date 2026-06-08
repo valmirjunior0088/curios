@@ -4,7 +4,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union` `with`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
 
@@ -183,6 +183,21 @@ in inference position (for instance, the body of a typeless `let`). A lambda who
 domain cannot be determined — a bare `(x) => body` with no expected type — is
 rejected. All parameters are in scope in `body`.
 
+### Holes
+
+```
+?
+```
+
+A hole is a placeholder elaborated to a fresh metavariable. The type checker solves it from surrounding constraints when possible:
+
+```
+let id(T : Type, x : T) -> T = x;
+id(?, 5)        -- the hole is solved as /sys/Nat
+```
+
+An unsolved hole is rejected during type checking.
+
 ### Local let
 
 ```
@@ -220,6 +235,26 @@ tail
 ```
 
 Mutually recursive local bindings. Unlike top-level `rec`, the `and` clauses do not accept `pub`. Terminated by a semicolon; the remaining expression `tail` follows.
+
+### With and bang
+
+```
+with bind body
+action!
+```
+
+`with` introduces monadic sequencing sugar. The `bind` term is an atomic term denoting a binary bind operation of shape `(M A, A -> M B) -> M B`; it is commonly a partially applied function containing holes, such as `Parse/bind(?, ?)`. Inside the `body`, postfix `!` marks an action whose result should be bound inline:
+
+```
+with Parse/bind(?, ?)
+    let a = parse_a!;
+    let b = parse_b!;
+    combine(a, b)
+```
+
+The desugarer rewrites each `!` into an application of the active bind to the action and a generated continuation. The bind term is re-elaborated at each `!` site, so holes in the bind are fresh for each action and can solve to different types.
+
+Bang is only valid inside a `with` body. A `!` in a call or tuple is collected left-to-right; a `!` in a `match` scrutinee runs before branching, while bangs inside branches stay branch-local. Lambda bodies and nested `with` blocks start their own sequencing regions.
 
 ### Match
 

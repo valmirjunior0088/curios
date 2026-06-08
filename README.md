@@ -31,7 +31,7 @@ curios [--timeout MILLIS] [--print [STAGES]] compile <input-path> [--output-path
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
 - `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,optm,wasm`. Bare `--print` selects all; omitting the flag prints none.
 - `run` compiles and executes the entrypoint
-- `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
+- `check` type-checks the entrypoint without executing it, exiting with a non-zero status on failure; if `--print` requests a post-core stage (`ersd`, `cont`, `optm`, or `wasm`), it runs the full lowering pipeline so that stage exists to print
 - `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
 - `<input-path>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
 

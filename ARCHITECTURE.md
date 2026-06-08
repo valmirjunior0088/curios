@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~39,500 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
+**Codebase size:** ~41,000 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
 
 ---
 
@@ -42,13 +42,13 @@ The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trai
 
 | Stage                   | Key file(s)                                        | Lines  |
 | ----------------------- | -------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                    | 1,083  |
-| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)       | ~1,780 |
-| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~1,920 |
+| Parsing                 | `text/parse.rs`                                    | 1,118  |
+| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)       | ~2,170 |
+| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~2,165 |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers | ~1,895 |
 | CPS lowering            | `ersd/to_cont/lowerer.rs`                          | 868    |
-| CPS optimization        | `optm.rs` + `optm/` (10 files)                     | ~4,850 |
-| WASM codegen            | `cont/to_wasm/` (9 files)                          | ~3,700 |
+| CPS optimization        | `optm.rs` + `optm/` (10 files)                     | ~4,960 |
+| WASM codegen            | `cont/to_wasm/` (9 files)                          | ~6,210 |
 | Binary serialization    | `wasm/writer.rs`                                   | 1,716  |
 
 ---
@@ -97,6 +97,8 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
 - Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
+- Holes `?`, which elaborate to fresh metavariables solved by bidirectional type checking
+- Monadic sequencing sugar: `with bind body` plus postfix `!`, desugared before core elaboration by re-elaborating the bind at each bang site
 - Primitive literals plus the prelude-backed `/sys` module, which exposes `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)`, `Bln`, and their operations as ordinary paths
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `union Label ... end`, `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`
@@ -356,7 +358,7 @@ The compiler writes WASM binary directly — no `wasm-encoder` or similar librar
 
 ### WAT parser (`src/wasm/parse.rs`)
 
-A full WebAssembly Text format parser implemented with the same monadic combinator library as the surface parser. `wasm::Module` supports a text round-trip: parse → print → parse produces an identical result, verified by a round-trip test in `src/wasm/module.rs`.
+A full WebAssembly Text format parser implemented with the same monadic combinator library as the surface parser. `wasm::Module` supports a text round-trip: parse → print → parse produces an identical result, verified by a round-trip test in `src/wasm/module_tests.rs`.
 
 ---
 
@@ -370,6 +372,7 @@ A full WebAssembly Text format parser implemented with the same monadic combinat
 - `run_entrypoint(timeout, entrypoint, loader, host)` — shared core: full pipeline → `run_wasm`
 - `run_wasm(wasm_module, host)` — executes a `wasm::Module` directly via Wasmtime (`src/run/engine.rs`)
 - `compile_entrypoint(timeout, entrypoint, loader, observe)` — runs the full pipeline from text to `wasm::Module` without execution. An explicit expected type is carried by the `text::Entrypoint` when present, otherwise the type is inferred. The `observe: FnMut(Stage<'_>)` callback receives each intermediate representation (`Stage::Text`/`Core`/`Ersd`/`Cont`/`Optm`/`Wasm`) and is what the CLI's `--print` flag drives (`src/run/compile.rs`)
+- `typecheck_entrypoint(timeout, entrypoint, loader, observe)` — runs the fast check path (`to_core → elaborate → zonk`) without erasure, lowering, optimization, or codegen. The CLI's `check` subcommand uses this unless `--print` asks for a post-core stage.
 
 The `Host` trait (`src/run/host.rs`) abstracts all program IO:
 
@@ -417,7 +420,7 @@ Sources are built at the parse entry points: `FromStr` (`"...".parse()`) builds 
 
 ## CLI (`src/cli.rs`)
 
-A Clap wrapper that runs the full compilation pipeline. Top-level options precede a subcommand:
+A Clap wrapper around the run, check, and compile entry points. Top-level options precede a subcommand:
 
 ```
 curios [--timeout <MILLIS>] [--print [STAGES]] run <input-path>
@@ -428,7 +431,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
 - `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,optm,wasm`. Bare `--print` selects all; omitting the flag prints none.
 - `run` compiles and executes the entrypoint
-- `check` runs the full compilation pipeline without executing the result, exiting with a non-zero status on failure
+- `check` type-checks the entrypoint without executing it, exiting with a non-zero status on failure; if `--print` requests a post-core stage (`ersd`, `cont`, `optm`, or `wasm`), it runs the full lowering pipeline so that stage exists to print
 - `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
 - `<input-path>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
 
@@ -436,7 +439,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Testing
 
-365 tests across the library crate, covering every layer:
+393 tests across the library crate, covering every layer:
 
 | Layer           | What is tested                                                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -467,4 +470,4 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 9. **`src/ersd/to_cont/lowerer.rs`** — how `ersd::Term` becomes CPS; the `lower_tail` vs `lower_to_name` distinction is the key insight.
 10. **`src/optm.rs`** — the optimizer pass pipeline; read `optm/walk.rs` for the shared traversal, then `optm/specialize_calls.rs` + `optm/closure_lifting.rs` for the monomorphization/devirtualization core.
 11. **`src/cont/to_wasm/expr_emitter.rs`** + **`src/cont/to_wasm/module_emitter.rs`** — how CPS maps to WASM instructions.
-12. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_entrypoint`, `run_wasm`, and `compile_entrypoint` (with the `Stage` observer) tie the whole pipeline together; the implementation lives under `src/run/`.
+12. **`src/run.rs`** — `run`, `run_text`, `run_file`, `run_entrypoint`, `run_wasm`, `typecheck_entrypoint`, and `compile_entrypoint` (with the `Stage` observer) tie the whole pipeline together; the implementation lives under `src/run/`.
