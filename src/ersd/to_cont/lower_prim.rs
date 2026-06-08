@@ -197,11 +197,7 @@ fn lower_arr_concat<'b>(
     }
 }
 
-pub fn lower_pure_prim(
-    work: &mut Work,
-    prim: &ersd::PurePrim,
-    frame: &Frame,
-) -> cont::ValueName {
+pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) -> cont::ValueName {
     match prim {
         ersd::PurePrim::Nat(value) => work.fresh(cont::Value::Pure(cont::Data::Nat(*value))),
         ersd::PurePrim::NatEql(left, right) => {
@@ -357,9 +353,7 @@ pub fn lower_pure_prim(
             lower_pure_unary_code(work, operand, frame, cont::Code::FltToInt)
         }
         ersd::PurePrim::Bin(bytes) => work.fresh(cont::Value::Pure(cont::Data::Bin(bytes.clone()))),
-        ersd::PurePrim::BinLen(bin) => {
-            lower_pure_unary_code(work, bin, frame, cont::Code::BinLen)
-        }
+        ersd::PurePrim::BinLen(bin) => lower_pure_unary_code(work, bin, frame, cont::Code::BinLen),
         ersd::PurePrim::BinEql(left, right) => {
             lower_pure_binary_code(work, left, right, frame, cont::Code::BinEql)
         }
@@ -382,9 +376,7 @@ pub fn lower_pure_prim(
 
             work.fresh(cont::Value::Pure(cont::Data::Arr(names)))
         }
-        ersd::PurePrim::ArrLen(lst) => {
-            lower_pure_unary_code(work, lst, frame, cont::Code::ArrLen)
-        }
+        ersd::PurePrim::ArrLen(lst) => lower_pure_unary_code(work, lst, frame, cont::Code::ArrLen),
         ersd::PurePrim::ArrGet(lst, idx) => {
             lower_pure_binary_code(work, lst, idx, frame, cont::Code::ArrGet)
         }
@@ -617,9 +609,7 @@ fn lower_value_pure_prim<'b>(
 
             cont.call(work, value)
         }
-        ersd::PurePrim::BinLen(bin) => {
-            lower_unary_code(work, bin, frame, cont, cont::Code::BinLen)
-        }
+        ersd::PurePrim::BinLen(bin) => lower_unary_code(work, bin, frame, cont, cont::Code::BinLen),
         ersd::PurePrim::BinEql(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::BinEql)
         }
@@ -636,9 +626,7 @@ fn lower_value_pure_prim<'b>(
             lower_bin_concat(work, operands, frame, vec![], cont)
         }
         ersd::PurePrim::Arr(elements) => lower_lst(work, elements, frame, vec![], cont),
-        ersd::PurePrim::ArrLen(lst) => {
-            lower_unary_code(work, lst, frame, cont, cont::Code::ArrLen)
-        }
+        ersd::PurePrim::ArrLen(lst) => lower_unary_code(work, lst, frame, cont, cont::Code::ArrLen),
         ersd::PurePrim::ArrGet(lst, idx) => {
             lower_binary_code(work, lst, idx, frame, cont, cont::Code::ArrGet)
         }

@@ -464,7 +464,10 @@ impl<'a> Interp<'a> {
                     Some(Snapshot::Nat(t)) => *t,
                     _ => return Err(Outcome::GaveUp),
                 };
-                let jump = cases.get(&tag).or(default.as_ref()).ok_or(Outcome::GaveUp)?;
+                let jump = cases
+                    .get(&tag)
+                    .or(default.as_ref())
+                    .ok_or(Outcome::GaveUp)?;
                 let args = resolve_names(&jump.params, frame).ok_or(Outcome::GaveUp)?;
                 Ok((jump.target.clone(), args))
             }
@@ -554,9 +557,10 @@ fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
         Data::Bin(bytes) => Snapshot::Bin(Rc::new(bytes.clone())),
         Data::Arr(elems) => Snapshot::Arr(Rc::new(resolve_names(elems, frame)?)),
         Data::Tpl(elems) => Snapshot::Tpl(Rc::new(resolve_names(elems, frame)?)),
-        Data::Clsr(c, captures) => {
-            Snapshot::Clsr(c.clone(), Rc::new(RefCell::new(resolve_names(captures, frame)?)))
-        }
+        Data::Clsr(c, captures) => Snapshot::Clsr(
+            c.clone(),
+            Rc::new(RefCell::new(resolve_names(captures, frame)?)),
+        ),
     })
 }
 
@@ -900,11 +904,7 @@ mod tests {
         let mut module = Module::new();
         module.add_func(
             FuncName::from("f"),
-            func(
-                vec![v("p")],
-                "r",
-                region(vec![], io_print(v("p"), "r")),
-            ),
+            func(vec![v("p")], "r", region(vec![], io_print(v("p"), "r"))),
         );
 
         let pure = pure_funcs(&module);
@@ -964,11 +964,7 @@ mod tests {
         let mut module = Module::new();
         module.add_func(
             FuncName::from("host"),
-            func(
-                vec![v("p")],
-                "r",
-                region(vec![], io_print(v("p"), "r")),
-            ),
+            func(vec![v("p")], "r", region(vec![], io_print(v("p"), "r"))),
         );
         module.add_func(
             FuncName::from("caller"),
@@ -1062,7 +1058,7 @@ mod tests {
         module
     }
 
-    fn main_region<'a>(module: &'a Module) -> &'a Region {
+    fn main_region(module: &Module) -> &Region {
         &module
             .funcs()
             .iter()
@@ -1260,11 +1256,7 @@ mod tests {
         let mut module = module_with_main_calling("f", vec![(v("a"), Data::Nat(1))]);
         module.add_func(
             FuncName::from("f"),
-            func(
-                vec![v("n")],
-                "rf",
-                region(vec![], io_print(v("n"), "rf")),
-            ),
+            func(vec![v("n")], "rf", region(vec![], io_print(v("n"), "rf"))),
         );
 
         evaluate_pure_calls(&mut module);

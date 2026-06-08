@@ -442,8 +442,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     &mut self.start_expr,
                 )
                 .emit_data(name, value);
-                self.start_expr
-                    .push(wasm::Instr::GlobalSet { global_name });
+                self.start_expr.push(wasm::Instr::GlobalSet { global_name });
             }
         }
     }

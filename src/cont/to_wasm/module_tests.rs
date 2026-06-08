@@ -250,14 +250,12 @@ fn lowers_and_runs_mutually_recursive_closures() {
                         params: vec![cont::ValueName::from("out")],
                         region: cont::Region {
                             preallocs: vec![],
-                            values: vec![
-                                (
-                                    cont::ValueName::from("str"),
-                                    cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
-                                        "out",
-                                    ))),
-                                ),
-                            ],
+                            values: vec![(
+                                cont::ValueName::from("str"),
+                                cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                    "out",
+                                ))),
+                            )],
                             blocks: vec![],
                             tail: cont::Tail::Host(cont::HostTarget::IoPrint {
                                 value: cont::ValueName::from("str"),
@@ -323,14 +321,12 @@ fn lowers_and_runs_direct_call() {
                         params: vec![cont::ValueName::from("out")],
                         region: cont::Region {
                             preallocs: vec![],
-                            values: vec![
-                                (
-                                    cont::ValueName::from("str"),
-                                    cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
-                                        "out",
-                                    ))),
-                                ),
-                            ],
+                            values: vec![(
+                                cont::ValueName::from("str"),
+                                cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                    "out",
+                                ))),
+                            )],
                             blocks: vec![],
                             tail: cont::Tail::Host(cont::HostTarget::IoPrint {
                                 value: cont::ValueName::from("str"),
@@ -518,14 +514,12 @@ fn lowers_and_runs_global_closure() {
                         params: vec![cont::ValueName::from("out")],
                         region: cont::Region {
                             preallocs: vec![],
-                            values: vec![
-                                (
-                                    cont::ValueName::from("str"),
-                                    cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
-                                        "out",
-                                    ))),
-                                ),
-                            ],
+                            values: vec![(
+                                cont::ValueName::from("str"),
+                                cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from(
+                                    "out",
+                                ))),
+                            )],
                             blocks: vec![],
                             tail: cont::Tail::Host(cont::HostTarget::IoPrint {
                                 value: cont::ValueName::from("str"),
@@ -572,14 +566,12 @@ fn lowers_and_runs_sparse_match() {
                             params: vec![cont::ValueName::from("out")],
                             region: cont::Region {
                                 preallocs: vec![],
-                                values: vec![
-                                    (
-                                        cont::ValueName::from("str"),
-                                        cont::Value::Eval(cont::Code::NatToStr(
-                                            cont::ValueName::from("out"),
-                                        )),
-                                    ),
-                                ],
+                                values: vec![(
+                                    cont::ValueName::from("str"),
+                                    cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from(
+                                        "out",
+                                    ))),
+                                )],
                                 blocks: vec![],
                                 tail: cont::Tail::Host(cont::HostTarget::IoPrint {
                                     value: cont::ValueName::from("str"),

@@ -158,10 +158,7 @@ pub enum CallTarget {
 pub enum HostTarget {
     /// Print `value` (a `Bin`) to the host. Returns no payload; `resume` takes
     /// zero block parameters.
-    IoPrint {
-        value: ValueName,
-        resume: BlockName,
-    },
+    IoPrint { value: ValueName, resume: BlockName },
     /// Read a line of input from the host. Returns one `Bin`; `resume` takes
     /// a single block parameter bound to that `Bin`.
     IoRead { resume: BlockName },

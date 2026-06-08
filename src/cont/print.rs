@@ -608,9 +608,7 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
-            HostTarget::IoRead { resume } => {
-                flat([pure("Io.read "), print_block_name(resume)])
-            }
+            HostTarget::IoRead { resume } => flat([pure("Io.read "), print_block_name(resume)]),
         },
     }
 }

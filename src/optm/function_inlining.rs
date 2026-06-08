@@ -157,10 +157,7 @@ impl Sink for Counts {
 /// Pick the next callee to inline. Tier 1 (single call site, not in a cycle) is
 /// preferred over Tier 2 (size ≤ [`SIZE_THRESHOLD`], ≥1 call site, not in a
 /// cycle) so the cheaper, history-preserving path always wins when applicable.
-fn pick_callee(
-    module: &Module,
-    counts: &HashMap<FuncName, usize>,
-) -> Option<(FuncName, Tier)> {
+fn pick_callee(module: &Module, counts: &HashMap<FuncName, usize>) -> Option<(FuncName, Tier)> {
     if let Some((name, _)) = module
         .funcs()
         .iter()
@@ -238,12 +235,7 @@ fn find_func<'a>(module: &'a Module, name: &FuncName) -> Option<&'a Func> {
 /// Find the first region in the tree whose tail is a `Direct` call to `callee`
 /// and inline there using `suffix` to freshen the callee's bindings. Returns
 /// whether a site was found.
-fn splice_first(
-    region: &mut Region,
-    callee_name: &FuncName,
-    callee: &Func,
-    suffix: &str,
-) -> bool {
+fn splice_first(region: &mut Region, callee_name: &FuncName, callee: &Func, suffix: &str) -> bool {
     let here = matches!(
         &region.tail,
         Tail::Call(CallTarget::Direct { target, .. }) if target == callee_name,
@@ -649,7 +641,13 @@ mod tests {
             .find(|(n, _)| n == &b("k1"))
             .expect("k1 present");
         assert!(matches!(k1_block.region.tail, Tail::Jump(_)));
-        assert!(k1_block.region.values.iter().any(|(n, _)| n == &v("v1@f#2")));
+        assert!(
+            k1_block
+                .region
+                .values
+                .iter()
+                .any(|(n, _)| n == &v("v1@f#2"))
+        );
 
         // Site 3 spliced into k2's region with suffix `@f#3`.
         let (_, k2_block) = k1_block
@@ -659,7 +657,13 @@ mod tests {
             .find(|(n, _)| n == &b("k2"))
             .expect("k2 present");
         assert!(matches!(k2_block.region.tail, Tail::Jump(_)));
-        assert!(k2_block.region.values.iter().any(|(n, _)| n == &v("v1@f#3")));
+        assert!(
+            k2_block
+                .region
+                .values
+                .iter()
+                .any(|(n, _)| n == &v("v1@f#3"))
+        );
     }
 
     #[test]
@@ -688,7 +692,10 @@ mod tests {
 
         inline_calls(&mut module);
 
-        assert!(func_named(&module, "f").is_some(), "f exceeds the size threshold and should survive");
+        assert!(
+            func_named(&module, "f").is_some(),
+            "f exceeds the size threshold and should survive"
+        );
         assert!(matches!(
             main_region(&module).tail,
             Tail::Call(CallTarget::Direct { .. })
@@ -709,8 +716,16 @@ mod tests {
         // a → b → a forms a non-trivial direct-call cycle. Both bodies are
         // small enough for Tier 2 by size, but the cycle excludes them from
         // both tiers. Neither is inlined.
-        let a = func(vec![], "ra", region(vec![], vec![], direct("b", vec![], "ra")));
-        let b = func(vec![], "rb", region(vec![], vec![], direct("a", vec![], "rb")));
+        let a = func(
+            vec![],
+            "ra",
+            region(vec![], vec![], direct("b", vec![], "ra")),
+        );
+        let b = func(
+            vec![],
+            "rb",
+            region(vec![], vec![], direct("a", vec![], "rb")),
+        );
 
         let mut module = Module::new();
         module.add_func(FuncName::from("a"), a);
@@ -822,11 +837,7 @@ mod tests {
         let f = func(
             vec![],
             "rf",
-            region(
-                vec![],
-                vec![(b("kf"), f_cont)],
-                direct("g", vec![], "kf"),
-            ),
+            region(vec![], vec![(b("kf"), f_cont)], direct("g", vec![], "kf")),
         );
 
         let c_dead_cont = Block {
@@ -855,8 +866,14 @@ mod tests {
         eliminate_dead_code(&mut module);
         inline_calls(&mut module);
 
-        assert!(func_named(&module, "f").is_none(), "f should have been inlined");
-        assert!(func_named(&module, "g").is_none(), "g should have been inlined");
+        assert!(
+            func_named(&module, "f").is_none(),
+            "f should have been inlined"
+        );
+        assert!(
+            func_named(&module, "g").is_none(),
+            "g should have been inlined"
+        );
         assert!(
             !module
                 .clsrs()
