@@ -407,6 +407,10 @@ fn freshen_tail_blocks(tail: &mut Tail, sentinel: &BlockName, resume: &BlockName
         | Tail::Call(CallTarget::Indirect { resume: r, .. }) => {
             freshen_block(r, sentinel, resume, suffix);
         }
+        Tail::Host(HostTarget::IoPrint { resume: r, .. })
+        | Tail::Host(HostTarget::IoRead { resume: r }) => {
+            freshen_block(r, sentinel, resume, suffix);
+        }
     }
 }
 

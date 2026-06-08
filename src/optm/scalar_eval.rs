@@ -220,13 +220,19 @@ pub fn eval(code: &Code, lits: &Lits) -> Option<Data> {
         // the backend does (`ref.i31` then `i31.get_{u,s}`), so a high `Nat` reads
         // back as a negative `Int` and a negative `Int` as a large `Nat`. The
         // float→int casts truncate toward zero and trap-check the 31-bit range.
-        // `*ToStr` calls a runtime formatter and is left to it.
         NatToInt(a) => Some(Data::Int(wrap31s(nat(lits, a)? as i32))),
         NatToFlt(a) => Some(Data::Flt(nat(lits, a)? as f32)),
         IntToNat(a) => Some(Data::Nat(int(lits, a)? as u32 & 0x7FFF_FFFF)),
         IntToFlt(a) => Some(Data::Flt(int(lits, a)? as f32)),
         FltToNat(a) => flt_to_nat(flt(lits, a)?),
         FltToInt(a) => flt_to_int(flt(lits, a)?),
+
+        // Number → string. Deterministic — every value formats. The output must
+        // match `src/run/host.rs`'s free functions byte-for-byte so compile-time
+        // folding and runtime conversion agree.
+        NatToStr(a) => Some(Data::Bin(format!("{}", nat(lits, a)?).into_bytes())),
+        IntToStr(a) => Some(Data::Bin(format!("{:+}", int(lits, a)?).into_bytes())),
+        FltToStr(a) => Some(Data::Bin(format!("{:+}", flt(lits, a)?).into_bytes())),
 
         // Bytewise equality — total whenever both operands are known.
         BinEql(a, b) => Some(bln(bin(lits, a)? == bin(lits, b)?)),

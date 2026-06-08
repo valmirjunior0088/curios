@@ -2,7 +2,7 @@ use {
     super::to_cont,
     crate::{
         cont,
-        ersd::{Apply, Func, Let, Module, Name, NatMatch, Prim, Rec, Term, Tuple},
+        ersd::{Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Term, Tuple},
     },
     std::collections::BTreeMap,
 };
@@ -32,13 +32,13 @@ fn lowers_recursive_pairs_into_main_region_values() {
             Term::Tuple(Tuple {
                 fields: vec![
                     Term::Name(Name::from("y")).into(),
-                    Term::Prim(Prim::Int(1)).into(),
+                    Term::Prim(Prim::Pure(PurePrim::Int(1))).into(),
                 ],
             })
             .into(),
             Term::Tuple(Tuple {
                 fields: vec![
-                    Term::Prim(Prim::Int(2)).into(),
+                    Term::Prim(Prim::Pure(PurePrim::Int(2))).into(),
                     Term::Name(Name::from("x")).into(),
                 ],
             })
@@ -100,7 +100,7 @@ fn lowers_tail_apply_as_indirect_call_to_resume() {
             body: Term::Name(Name::from("x")).into(),
         })
         .into(),
-        params: vec![Term::Prim(Prim::Int(7)).into()],
+        params: vec![Term::Prim(Prim::Pure(PurePrim::Int(7))).into()],
     });
 
     let module = lower(term);
@@ -121,14 +121,14 @@ fn lowers_tail_apply_as_indirect_call_to_resume() {
 fn lowers_arr_into_main_region_value() {
     let term = Term::Let(Let {
         name: "a".into(),
-        body: Term::Prim(Prim::Nat(1)).into(),
+        body: Term::Prim(Prim::Pure(PurePrim::Nat(1))).into(),
         tail: Term::Let(Let {
             name: "b".into(),
-            body: Term::Prim(Prim::Nat(2)).into(),
-            tail: Term::Prim(Prim::Arr(vec![
+            body: Term::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
+            tail: Term::Prim(Prim::Pure(PurePrim::Arr(vec![
                 Term::Name(Name::from("a")).into(),
                 Term::Name(Name::from("b")).into(),
-            ]))
+            ])))
             .into(),
         })
         .into(),
@@ -145,7 +145,7 @@ fn lowers_arr_into_main_region_value() {
 
 #[test]
 fn lowers_arr_with_apply_element_through_join_block() {
-    let term = Term::Prim(Prim::Arr(vec![
+    let term = Term::Prim(Prim::Pure(PurePrim::Arr(vec![
         Term::Apply(Apply {
             head: Term::Func(Func {
                 captures: vec![],
@@ -153,11 +153,11 @@ fn lowers_arr_with_apply_element_through_join_block() {
                 body: Term::Name(Name::from("x")).into(),
             })
             .into(),
-            params: vec![Term::Prim(Prim::Nat(1)).into()],
+            params: vec![Term::Prim(Prim::Pure(PurePrim::Nat(1))).into()],
         })
         .into(),
-        Term::Prim(Prim::Nat(2)).into(),
-    ]));
+        Term::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
+    ])));
 
     let module = lower(term);
     let func = &module.funcs()[0].1;
@@ -183,10 +183,10 @@ fn lowers_apply_in_value_position_through_join_block() {
                     body: Term::Name(Name::from("x")).into(),
                 })
                 .into(),
-                params: vec![Term::Prim(Prim::Int(7)).into()],
+                params: vec![Term::Prim(Prim::Pure(PurePrim::Int(7))).into()],
             })
             .into(),
-            Term::Prim(Prim::Int(1)).into(),
+            Term::Prim(Prim::Pure(PurePrim::Int(1))).into(),
         ],
     });
 
@@ -214,12 +214,12 @@ fn lowers_apply_in_value_position_through_join_block() {
 #[test]
 fn lowers_nat_match_as_sparse_match() {
     let term = Term::NatMatch(NatMatch::Dispatch {
-        head: Term::Prim(Prim::Nat(7)).into(),
+        head: Term::Prim(Prim::Pure(PurePrim::Nat(7))).into(),
         cases: BTreeMap::from([
-            (2, Term::Prim(Prim::Nat(10)).into()),
-            (7, Term::Prim(Prim::Nat(20)).into()),
+            (2, Term::Prim(Prim::Pure(PurePrim::Nat(10))).into()),
+            (7, Term::Prim(Prim::Pure(PurePrim::Nat(20))).into()),
         ]),
-        default: Term::Prim(Prim::Nat(0)).into(),
+        default: Term::Prim(Prim::Pure(PurePrim::Nat(0))).into(),
     });
 
     let module = lower(term);
@@ -236,7 +236,7 @@ fn lowers_nat_match_as_sparse_match() {
 
 #[test]
 fn lowers_bin_literal() {
-    let term = Term::Prim(Prim::Bin(vec![1, 2, 3]));
+    let term = Term::Prim(Prim::Pure(PurePrim::Bin(vec![1, 2, 3])));
     let module = lower(term);
 
     let func = &module.funcs()[0].1;
@@ -255,13 +255,13 @@ fn recursive_pairs_declare_preallocs() {
             Term::Tuple(Tuple {
                 fields: vec![
                     Term::Name(Name::from("y")).into(),
-                    Term::Prim(Prim::Int(1)).into(),
+                    Term::Prim(Prim::Pure(PurePrim::Int(1))).into(),
                 ],
             })
             .into(),
             Term::Tuple(Tuple {
                 fields: vec![
-                    Term::Prim(Prim::Int(2)).into(),
+                    Term::Prim(Prim::Pure(PurePrim::Int(2))).into(),
                     Term::Name(Name::from("x")).into(),
                 ],
             })

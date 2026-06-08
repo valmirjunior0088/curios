@@ -87,7 +87,7 @@ pub fn evaluate_pure_calls(module: &mut Module) {
 /// What a single region tree reveals about its enclosing func or clsr.
 ///
 /// The fields are split so the worklist below can read each in isolation:
-/// `has_host_code` and `has_indirect_call` are *direct* reasons (terminate the
+/// `has_host_tail` and `has_indirect_call` are *direct* reasons (terminate the
 /// classifier in one step), while `func_calls` and `clsr_refs` are *edges* the
 /// fixed point propagates impurity along.
 #[derive(Default)]
@@ -101,11 +101,12 @@ struct BodyScan {
     /// still resolves indirect calls dynamically when the target is a known
     /// `Pure(Data::Clsr)` and that closure itself is pure.
     has_indirect_call: bool,
-    /// A `Value::Eval(code)` was found whose `code` is one of the five
-    /// host-overrideable variants (`NatToStr`/`IntToStr`/`FltToStr`/`IoPrint`/
-    /// `IoRead`). Anything else is mathematically pure — runtime traps are
-    /// handled dynamically by `scalar_eval::eval` returning `None`.
-    has_host_code: bool,
+    /// A `Tail::Host(_)` was found — the impure boundary lives at the tail
+    /// position, so any region tree whose tails include a host primitive is
+    /// classified impure. (`Code`-level ops are now all pure: arithmetic and
+    /// conversions are deterministic and folded by `scalar_eval::eval`; trap
+    /// conditions are operand-dependent and handled by it returning `None`.)
+    has_host_tail: bool,
 }
 
 fn scan_body(region: &Region) -> BodyScan {
@@ -126,12 +127,7 @@ fn scan_region(region: &Region, scan: &mut BodyScan) {
             Value::Pure(Data::Clsr(c, _)) => {
                 scan.clsr_refs.insert(c.clone());
             }
-            Value::Pure(_) | Value::Alias(_) => {}
-            Value::Eval(code) => {
-                if is_host_code(code) {
-                    scan.has_host_code = true;
-                }
-            }
+            Value::Pure(_) | Value::Alias(_) | Value::Eval(_) => {}
         }
     }
 
@@ -142,27 +138,15 @@ fn scan_region(region: &Region, scan: &mut BodyScan) {
         Tail::Call(CallTarget::Indirect { .. }) => {
             scan.has_indirect_call = true;
         }
+        Tail::Host(_) => {
+            scan.has_host_tail = true;
+        }
         Tail::Jump(_) | Tail::Match(_) => {}
     }
 
     for (_, block) in &region.blocks {
         scan_region(&block.region, scan);
     }
-}
-
-/// The five `Code` variants whose lowering calls a host import — never
-/// foldable, and never interpretable at compile time. Every other variant is
-/// mathematically pure: trap conditions are operand-dependent and decided by
-/// `scalar_eval::eval` returning `None`.
-fn is_host_code(code: &Code) -> bool {
-    matches!(
-        code,
-        Code::NatToStr(_)
-            | Code::IntToStr(_)
-            | Code::FltToStr(_)
-            | Code::IoPrint(_)
-            | Code::IoRead
-    )
 }
 
 /// The set of pure `FuncName`s — every body that has no host code, no
@@ -214,12 +198,12 @@ fn classify(module: &Module) -> (HashSet<FuncName>, HashSet<ClsrName>) {
 
     let mut impure_funcs: HashSet<FuncName> = func_scans
         .iter()
-        .filter(|(_, scan)| scan.has_host_code || scan.has_indirect_call)
+        .filter(|(_, scan)| scan.has_host_tail || scan.has_indirect_call)
         .map(|(name, _)| name.clone())
         .collect();
     let mut impure_clsrs: HashSet<ClsrName> = clsr_scans
         .iter()
-        .filter(|(_, scan)| scan.has_host_code || scan.has_indirect_call)
+        .filter(|(_, scan)| scan.has_host_tail || scan.has_indirect_call)
         .map(|(name, _)| name.clone())
         .collect();
 
@@ -533,6 +517,7 @@ impl<'a> Interp<'a> {
                 };
                 Ok((resume.clone(), vec![snap]))
             }
+            Tail::Host(_) => Err(Outcome::GaveUp),
         }
     }
 }
@@ -851,6 +836,13 @@ mod tests {
         })
     }
 
+    fn io_print(value: ValueName, resume: &str) -> Tail {
+        Tail::Host(HostTarget::IoPrint {
+            value,
+            resume: b(resume),
+        })
+    }
+
     fn region(values: Vec<(ValueName, Value)>, tail: Tail) -> Region {
         Region {
             preallocs: vec![],
@@ -900,7 +892,30 @@ mod tests {
     }
 
     #[test]
-    fn host_code_demotes_to_impure() {
+    fn host_tail_demotes_to_impure() {
+        // A body whose tail is `Tail::Host(_)` is impure regardless of its
+        // values. The `*ToStr` ops are no longer impure (see
+        // `pure_to_str_code_is_pure`); `Io.print`/`Io.read` are the real
+        // impurity boundary and they live at tail position.
+        let mut module = Module::new();
+        module.add_func(
+            FuncName::from("f"),
+            func(
+                vec![v("p")],
+                "r",
+                region(vec![], io_print(v("p"), "r")),
+            ),
+        );
+
+        let pure = pure_funcs(&module);
+        assert!(!pure.contains(&FuncName::from("f")));
+    }
+
+    #[test]
+    fn pure_to_str_code_is_pure() {
+        // `Code::NatToStr` is deterministic and folded by `scalar_eval`. A
+        // body that only does conversions is now classified pure — the
+        // interpreter materialises the converted string at compile time.
         let mut module = Module::new();
         module.add_func(
             FuncName::from("f"),
@@ -915,7 +930,7 @@ mod tests {
         );
 
         let pure = pure_funcs(&module);
-        assert!(!pure.contains(&FuncName::from("f")));
+        assert!(pure.contains(&FuncName::from("f")));
     }
 
     #[test]
@@ -952,10 +967,7 @@ mod tests {
             func(
                 vec![v("p")],
                 "r",
-                region(
-                    vec![(v("v0"), Value::Eval(Code::IoPrint(v("p"))))],
-                    jump("r", vec![v("p")]),
-                ),
+                region(vec![], io_print(v("p"), "r")),
             ),
         );
         module.add_func(
@@ -991,10 +1003,7 @@ mod tests {
                 vec![],
                 vec![v("p")],
                 "r",
-                region(
-                    vec![(v("v0"), Value::Eval(Code::IoPrint(v("p"))))],
-                    jump("r", vec![v("p")]),
-                ),
+                region(vec![], io_print(v("p"), "r")),
             ),
         );
         module.add_func(
@@ -1254,10 +1263,7 @@ mod tests {
             func(
                 vec![v("n")],
                 "rf",
-                region(
-                    vec![(v("v0"), Value::Eval(Code::IoPrint(v("n"))))],
-                    jump("rf", vec![v("n")]),
-                ),
+                region(vec![], io_print(v("n"), "rf")),
             ),
         );
 
@@ -1341,9 +1347,11 @@ mod tests {
     }
 
     #[test]
-    fn leaves_host_string_call_intact() {
-        // f(n) = Nat::to_str(n) — host-overrideable, so the classifier marks
-        // f impure and the rewriter leaves the call alone.
+    fn folds_to_str_call_at_compile_time() {
+        // f(n) = Nat::to_str(n) — now pure under the new classification (see
+        // `pure_to_str_code_is_pure`). With a literal argument, partial eval
+        // folds the call to a `Pure(Data::Bin("7"))` plus a jump to the
+        // original resume; the runtime conversion disappears.
         let mut module = module_with_main_calling("f", vec![(v("a"), Data::Nat(7))]);
         module.add_func(
             FuncName::from("f"),
@@ -1359,12 +1367,20 @@ mod tests {
 
         evaluate_pure_calls(&mut module);
 
-        match &main_region(&module).tail {
-            Tail::Call(CallTarget::Direct { target, .. }) => {
-                assert_eq!(target, &FuncName::from("f"));
-            }
-            other => panic!("expected the Direct call to survive, got {other:?}"),
-        }
+        let region = main_region(&module);
+        assert!(
+            matches!(&region.tail, Tail::Jump(_)),
+            "expected the Direct call to fold to a Jump, got {:?}",
+            region.tail,
+        );
+        assert!(
+            region
+                .values
+                .iter()
+                .any(|(_, v)| matches!(v, Value::Pure(Data::Bin(b)) if b == b"7")),
+            "expected a Pure(Bin(\"7\")) binding from the folded NatToStr, got {:?}",
+            region.values,
+        );
     }
 
     // --- Classifier tests --------------------------------------------------

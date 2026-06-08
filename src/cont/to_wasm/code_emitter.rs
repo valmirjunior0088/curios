@@ -1433,26 +1433,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local,
                 });
             }
-            cont::Code::IoPrint(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
-                self.emit_instr(wasm::Instr::Call {
-                    func_name: self.context.table().io_print_func().clone(),
-                });
-                self.emit_instr(wasm::Instr::StructNew {
-                    type_name: self.context.table().find_tpl_type(0),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local,
-                });
-            }
-            cont::Code::IoRead => {
-                self.emit_instr(wasm::Instr::Call {
-                    func_name: self.context.table().io_read_func().clone(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local,
-                });
-            }
         }
     }
 }

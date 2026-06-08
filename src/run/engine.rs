@@ -75,21 +75,15 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let host = Arc::new(host);
 
     define_import(&mut linker, "nat_to_str", i32_to_bin_type.clone(), {
-        let host = host.clone();
-
-        move |value| host.nat_to_str(value)
+        move |value| super::host::nat_to_str(value)
     })?;
 
     define_import(&mut linker, "int_to_str", i32_to_bin_type, {
-        let host = host.clone();
-
-        move |value| host.int_to_str(value)
+        move |value| super::host::int_to_str(value)
     })?;
 
     define_import(&mut linker, "flt_to_str", f32_to_bin_type, {
-        let host = host.clone();
-
-        move |value| host.flt_to_str(value)
+        move |value| super::host::flt_to_str(value)
     })?;
 
     define_import(&mut linker, "io_read", unit_to_bin_type, {

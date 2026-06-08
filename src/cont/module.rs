@@ -101,8 +101,6 @@ pub enum Code {
     ArrAppend(ValueName, ValueName),
     ArrConcat(Vec<ValueName>),
     TplGet(ValueName, usize),
-    IoPrint(ValueName),
-    IoRead,
 }
 
 #[derive(Debug, Clone)]
@@ -152,11 +150,37 @@ pub enum CallTarget {
     },
 }
 
+/// A host-provided primitive call in tail position. Mirrors [`CallTarget`] for
+/// user calls: every variant carries its own operands plus the `resume` block
+/// to branch to once the host returns. Purity analysis treats any `Tail::Host`
+/// as the impure boundary of its enclosing region tree.
+#[derive(Debug, Clone)]
+pub enum HostTarget {
+    /// Print `value` (a `Bin`) to the host. Returns no payload; `resume` takes
+    /// zero block parameters.
+    IoPrint {
+        value: ValueName,
+        resume: BlockName,
+    },
+    /// Read a line of input from the host. Returns one `Bin`; `resume` takes
+    /// a single block parameter bound to that `Bin`.
+    IoRead { resume: BlockName },
+}
+
+impl HostTarget {
+    pub fn resume(&self) -> &BlockName {
+        match self {
+            HostTarget::IoPrint { resume, .. } | HostTarget::IoRead { resume } => resume,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Tail {
     Jump(JumpTarget),
     Match(MatchTarget),
     Call(CallTarget),
+    Host(HostTarget),
 }
 
 #[derive(Debug, Clone)]

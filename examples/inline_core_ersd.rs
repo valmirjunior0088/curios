@@ -3,33 +3,33 @@ use curios::{cont, ersd};
 fn main() {
     let ersd_term = ersd::Term::Let(ersd::Let {
         name: "bias".into(),
-        body: ersd::Term::Prim(ersd::Prim::IntMul(
-            ersd::Term::Prim(ersd::Prim::IntAdd(
-                ersd::Term::Prim(ersd::Prim::Int(2)).into(),
-                ersd::Term::Prim(ersd::Prim::Int(3)).into(),
-            ))
+        body: ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::IntMul(
+            ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::IntAdd(
+                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Int(2))).into(),
+                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Int(3))).into(),
+            )))
             .into(),
-            ersd::Term::Prim(ersd::Prim::IntSub(
-                ersd::Term::Prim(ersd::Prim::Int(10)).into(),
-                ersd::Term::Prim(ersd::Prim::Int(5)).into(),
-            ))
+            ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::IntSub(
+                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Int(10))).into(),
+                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Int(5))).into(),
+            )))
             .into(),
-        ))
+        )))
         .into(),
         tail: ersd::Term::Let(ersd::Let {
             name: "scaled".into(),
-            body: ersd::Term::Prim(ersd::Prim::FltAdd(
-                ersd::Term::Prim(ersd::Prim::FltMul(
-                    ersd::Term::Prim(ersd::Prim::Flt(1.5)).into(),
-                    ersd::Term::Prim(ersd::Prim::Flt(2.0)).into(),
-                ))
+            body: ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::FltAdd(
+                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::FltMul(
+                    ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Flt(1.5))).into(),
+                    ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Flt(2.0))).into(),
+                )))
                 .into(),
-                ersd::Term::Prim(ersd::Prim::FltSub(
-                    ersd::Term::Prim(ersd::Prim::Flt(4.0)).into(),
-                    ersd::Term::Prim(ersd::Prim::Flt(1.0)).into(),
-                ))
+                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::FltSub(
+                    ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Flt(4.0))).into(),
+                    ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Flt(1.0))).into(),
+                )))
                 .into(),
-            ))
+            )))
             .into(),
             tail: ersd::Term::Let(ersd::Let {
                 name: "unit".into(),
@@ -49,16 +49,18 @@ fn main() {
                             params: vec!["input".into()],
                             body: ersd::Term::Let(ersd::Let {
                                 name: "sum".into(),
-                                body: ersd::Term::Prim(ersd::Prim::IntAdd(
+                                body: ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::IntAdd(
                                     ersd::Term::Name(ersd::Name::from("input")).into(),
                                     ersd::Term::Name(ersd::Name::from("bias")).into(),
-                                ))
+                                )))
                                 .into(),
                                 tail: ersd::Term::Let(ersd::Let {
                                     name: "is_bias".into(),
-                                    body: ersd::Term::Prim(ersd::Prim::IntEql(
-                                        ersd::Term::Name(ersd::Name::from("sum")).into(),
-                                        ersd::Term::Name(ersd::Name::from("bias")).into(),
+                                    body: ersd::Term::Prim(ersd::Prim::Pure(
+                                        ersd::PurePrim::IntEql(
+                                            ersd::Term::Name(ersd::Name::from("sum")).into(),
+                                            ersd::Term::Name(ersd::Name::from("bias")).into(),
+                                        ),
                                     ))
                                     .into(),
                                     tail: ersd::Term::Tuple(ersd::Tuple {
@@ -79,7 +81,9 @@ fn main() {
                         name: "applied".into(),
                         body: ersd::Term::Apply(ersd::Apply {
                             head: ersd::Term::Name(ersd::Name::from("make")).into(),
-                            params: vec![ersd::Term::Prim(ersd::Prim::Int(2)).into()],
+                            params: vec![
+                                ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Int(2))).into(),
+                            ],
                         })
                         .into(),
                         tail: ersd::Term::Let(ersd::Let {
@@ -104,7 +108,8 @@ fn main() {
                                             index: 1,
                                         })
                                         .into(),
-                                        ersd::Term::Prim(ersd::Prim::Int(0)).into(),
+                                        ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Int(0)))
+                                            .into(),
                                     ],
                                 })
                                 .into(),

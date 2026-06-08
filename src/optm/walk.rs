@@ -73,8 +73,9 @@ fn walk_data(data: &Data, sink: &mut impl Sink) {
 }
 
 /// The block names a tail transfers control to: a `Jump`'s target, every `Match`
-/// arm (cases and default), or a `Call`'s resume continuation. The one place this
-/// edge enumeration lives, shared by predecessor counting and reachability.
+/// arm (cases and default), a `Call`'s resume continuation, or a `Host` op's
+/// resume. The one place this edge enumeration lives, shared by predecessor
+/// counting and reachability.
 pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
     match tail {
         Tail::Jump(jump) => vec![&jump.target],
@@ -88,6 +89,7 @@ pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
         }
         Tail::Call(CallTarget::Direct { resume, .. })
         | Tail::Call(CallTarget::Indirect { resume, .. }) => vec![resume],
+        Tail::Host(host) => vec![host.resume()],
     }
 }
 
@@ -111,6 +113,8 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(target);
             walk_uses(params, sink);
         }
+        Tail::Host(HostTarget::IoPrint { value, .. }) => sink.value_use(value),
+        Tail::Host(HostTarget::IoRead { .. }) => {}
     }
 }
 
@@ -215,13 +219,10 @@ fn walk_code(code: &Code, sink: &mut impl Sink) {
         | FltToInt(a)
         | BinLen(a)
         | ArrLen(a)
-        | TplGet(a, _)
-        | IoPrint(a) => sink.value_use(a),
+        | TplGet(a, _) => sink.value_use(a),
 
         // Variadic operands.
         BinConcat(operands) | ArrConcat(operands) => walk_uses(operands, sink),
-
-        IoRead => {}
     }
 }
 
@@ -288,6 +289,8 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
             sink.value_use(target);
             walk_uses_mut(params, sink);
         }
+        Tail::Host(HostTarget::IoPrint { value, .. }) => sink.value_use(value),
+        Tail::Host(HostTarget::IoRead { .. }) => {}
     }
 }
 
@@ -392,13 +395,10 @@ fn walk_code_mut(code: &mut Code, sink: &mut impl SinkMut) {
         | FltToInt(a)
         | BinLen(a)
         | ArrLen(a)
-        | TplGet(a, _)
-        | IoPrint(a) => sink.value_use(a),
+        | TplGet(a, _) => sink.value_use(a),
 
         // Variadic operands.
         BinConcat(operands) | ArrConcat(operands) => walk_uses_mut(operands, sink),
-
-        IoRead => {}
     }
 }
 

@@ -81,6 +81,35 @@ impl Work<'_, '_, '_> {
         self.emit.fresh(value)
     }
 
+    /// Mint a fresh block name. The block isn't bound to the current region yet —
+    /// the caller is expected to follow up with [`Self::add_resume_block`] (or
+    /// equivalent) once the block's region is ready.
+    pub fn fresh_block(&mut self) -> cont::BlockName {
+        self.emit.fresh_block()
+    }
+
+    /// Mint a fresh value name without binding it to the current region. Used
+    /// when the name is needed as a block parameter (bound by control flow) or
+    /// passed to a continuation before the binding lands in some other region.
+    pub fn fresh_value(&mut self) -> cont::ValueName {
+        self.emit.fresh_value()
+    }
+
+    /// Add a block to the current region whose region is built by `build` inside a
+    /// fresh subregion. Used when emitting a tail (`Tail::Host`, `Tail::Call`, …)
+    /// that branches to a synthesized continuation: the caller mints the block
+    /// name, supplies the block's params, and provides a closure that emits the
+    /// continuation's region against an outer `Cont`.
+    pub fn add_resume_block(
+        &mut self,
+        name: cont::BlockName,
+        params: Vec<cont::ValueName>,
+        build: impl FnOnce(&mut Work) -> cont::Tail,
+    ) {
+        let region = self.in_subregion(build);
+        self.emit.add_block(name, cont::Block { params, region });
+    }
+
     pub fn lower_closure(
         &mut self,
         func: &ersd::Func,
@@ -190,7 +219,11 @@ impl Work<'_, '_, '_> {
         match term {
             ersd::Term::Name(name) => frame.find(name.as_str()),
             ersd::Term::Erased => self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
-            ersd::Term::Prim(prim) => lower_pure_prim(self, prim, frame),
+            ersd::Term::Prim(ersd::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
+            ersd::Term::Prim(ersd::Prim::Host(_)) => unreachable!(
+                "host primitive reached pure-name context — pure-name lowering cannot \
+                 construct the resume block required by Tail::Host"
+            ),
             ersd::Term::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
 
@@ -393,7 +426,9 @@ impl Work<'_, '_, '_> {
                 Some(Backpatch::Clsr(clsr_name, captures))
             }
             ersd::Term::Tuple(tuple) => Some(Backpatch::Tpl(&tuple.fields)),
-            ersd::Term::Prim(ersd::Prim::Arr(elems)) => Some(Backpatch::Arr(elems)),
+            ersd::Term::Prim(ersd::Prim::Pure(ersd::PurePrim::Arr(elems))) => {
+                Some(Backpatch::Arr(elems))
+            }
             _ => None,
         }
     }

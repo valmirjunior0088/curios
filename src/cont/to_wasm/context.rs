@@ -625,7 +625,99 @@ impl<'a, 'b> Context<'a, 'b> {
                 params,
                 resume,
             }) => self.call_indirect_instrs(target, params, resume),
+            cont::Tail::Host(host) => self.host_instrs(host),
         }
+    }
+
+    /// Emit a host primitive call in tail position, then branch to its resume.
+    /// Models `call_direct_instrs`: load operands, call the host import, then
+    /// either fall through to the function's return (when the resume happens
+    /// to be the sentinel) or set up the dispatcher and branch into the resume
+    /// block.
+    pub fn host_instrs(&self, host: &'a cont::HostTarget) -> Vec<wasm::Instr> {
+        let mut output = Vec::new();
+
+        match host {
+            cont::HostTarget::IoPrint { value, resume } => {
+                output.extend(self.load_value_instrs(value, LoadAs::Bin));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_print_func().clone(),
+                });
+
+                if self.is_resume(resume) {
+                    // The enclosing function's resume sentinel expects exactly
+                    // one value (the function's return). `Io.print` produces no
+                    // payload, so materialise a unit before returning.
+                    output.push(wasm::Instr::StructNew {
+                        type_name: self.table().find_tpl_type(0),
+                    });
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+
+                    if !block_data.params.is_empty() {
+                        panic!(
+                            "Io.print resume `{}` expects 0 params, got {}",
+                            resume,
+                            block_data.params.len(),
+                        );
+                    }
+
+                    output.push(wasm::Instr::I32Const {
+                        value: block_data.index as i32,
+                    });
+
+                    output.push(wasm::Instr::LocalSet {
+                        local_name: block_data.dispatcher_local.clone(),
+                    });
+
+                    output.push(wasm::Instr::Br {
+                        label_name: block_data.dispatcher_label.clone(),
+                    });
+                }
+            }
+            cont::HostTarget::IoRead { resume } => {
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_read_func().clone(),
+                });
+
+                if self.is_resume(resume) {
+                    // The read `Bin` is on the stack and matches the function's
+                    // resume-sentinel single-param shape.
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+
+                    if block_data.params.len() != 1 {
+                        panic!(
+                            "Io.read resume `{}` expects 1 param, got {}",
+                            resume,
+                            block_data.params.len(),
+                        );
+                    }
+
+                    for (_, local_data) in block_data.params.iter().rev() {
+                        output.push(wasm::Instr::LocalSet {
+                            local_name: local_data.local_name.clone(),
+                        });
+                    }
+
+                    output.push(wasm::Instr::I32Const {
+                        value: block_data.index as i32,
+                    });
+
+                    output.push(wasm::Instr::LocalSet {
+                        local_name: block_data.dispatcher_local.clone(),
+                    });
+
+                    output.push(wasm::Instr::Br {
+                        label_name: block_data.dispatcher_label.clone(),
+                    });
+                }
+            }
+        }
+
+        output
     }
 
     pub fn flow_instrs(

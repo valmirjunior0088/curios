@@ -1,7 +1,7 @@
 use {
     super::{
         Argument, Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
-        JumpTarget, Module, Prealloc, Region, Tail, Value, ValueName,
+        HostTarget, JumpTarget, Module, Prealloc, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -505,8 +505,6 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(" "),
             pure(index.to_string()),
         ]),
-        Code::IoPrint(operand) => flat([pure("Io.print"), pure(" "), print_value_name(operand)]),
-        Code::IoRead => pure("Io.read"),
     }
 }
 
@@ -603,6 +601,17 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 print_block_name(resume),
             ],
         }),
+        Tail::Host(host) => match host {
+            HostTarget::IoPrint { value, resume } => flat([
+                pure("Io.print "),
+                print_value_name(value),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoRead { resume } => {
+                flat([pure("Io.read "), print_block_name(resume)])
+            }
+        },
     }
 }
 

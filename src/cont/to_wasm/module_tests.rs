@@ -45,15 +45,11 @@ fn lowers_and_runs_mutually_recursive_tuple() {
                         cont::ValueName::from("str"),
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("out"))),
                     ),
-                    (
-                        cont::ValueName::from("unit"),
-                        cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
-                    ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("unit")],
+                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                    value: cont::ValueName::from("str"),
+                    resume: cont::BlockName::from("r"),
                 }),
             },
         },
@@ -261,17 +257,11 @@ fn lowers_and_runs_mutually_recursive_closures() {
                                         "out",
                                     ))),
                                 ),
-                                (
-                                    cont::ValueName::from("unit"),
-                                    cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from(
-                                        "str",
-                                    ))),
-                                ),
                             ],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("unit")],
+                            tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                                value: cont::ValueName::from("str"),
+                                resume: cont::BlockName::from("r"),
                             }),
                         },
                     },
@@ -340,17 +330,11 @@ fn lowers_and_runs_direct_call() {
                                         "out",
                                     ))),
                                 ),
-                                (
-                                    cont::ValueName::from("unit"),
-                                    cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from(
-                                        "str",
-                                    ))),
-                                ),
                             ],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("unit")],
+                            tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                                value: cont::ValueName::from("str"),
+                                resume: cont::BlockName::from("r"),
                             }),
                         },
                     },
@@ -423,15 +407,11 @@ fn lowers_and_runs_float_result() {
                         cont::ValueName::from("str"),
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("sum"))),
                     ),
-                    (
-                        cont::ValueName::from("unit"),
-                        cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
-                    ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("unit")],
+                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                    value: cont::ValueName::from("str"),
+                    resume: cont::BlockName::from("r"),
                 }),
             },
         },
@@ -471,15 +451,11 @@ fn lowers_and_runs_global_tuple() {
                         cont::ValueName::from("str"),
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("out"))),
                     ),
-                    (
-                        cont::ValueName::from("unit"),
-                        cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from("str"))),
-                    ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("unit")],
+                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                    value: cont::ValueName::from("str"),
+                    resume: cont::BlockName::from("r"),
                 }),
             },
         },
@@ -549,17 +525,11 @@ fn lowers_and_runs_global_closure() {
                                         "out",
                                     ))),
                                 ),
-                                (
-                                    cont::ValueName::from("unit"),
-                                    cont::Value::Eval(cont::Code::IoPrint(cont::ValueName::from(
-                                        "str",
-                                    ))),
-                                ),
                             ],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("unit")],
+                            tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                                value: cont::ValueName::from("str"),
+                                resume: cont::BlockName::from("r"),
                             }),
                         },
                     },
@@ -609,17 +579,11 @@ fn lowers_and_runs_sparse_match() {
                                             cont::ValueName::from("out"),
                                         )),
                                     ),
-                                    (
-                                        cont::ValueName::from("unit"),
-                                        cont::Value::Eval(cont::Code::IoPrint(
-                                            cont::ValueName::from("str"),
-                                        )),
-                                    ),
                                 ],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("r"),
-                                    params: vec![cont::ValueName::from("unit")],
+                                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
+                                    value: cont::ValueName::from("str"),
+                                    resume: cont::BlockName::from("r"),
                                 }),
                             },
                         },

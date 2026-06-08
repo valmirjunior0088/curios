@@ -1,7 +1,7 @@
 use {super::Subterm, std::collections::BTreeSet};
 
 #[derive(Debug)]
-pub enum Prim {
+pub enum PurePrim {
     Nat(u32),
     NatEql(Subterm, Subterm),
     NatNeq(Subterm, Subterm),
@@ -69,20 +69,31 @@ pub enum Prim {
     ArrAppend(Subterm, Subterm),
     ArrConcat(Vec<Subterm>),
     Unit,
+}
+
+#[derive(Debug)]
+pub enum HostPrim {
     IoPrint(Subterm),
     IoRead,
 }
 
-impl Prim {
+#[derive(Debug)]
+pub enum Prim {
+    Pure(PurePrim),
+    Host(HostPrim),
+}
+
+impl PurePrim {
     pub fn free_names(&self) -> BTreeSet<String> {
-        use Prim::*;
+        use PurePrim::*;
 
         let operands: Vec<&Subterm> = match self {
-            Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit | IoRead => vec![],
+            Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit => vec![],
             NatToStr(a) | IntToStr(a) | FltToStr(a) | NatToInt(a) | NatToFlt(a) | IntToNat(a)
             | IntToFlt(a) | FltToNat(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a)
-            | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a)
-            | IoPrint(a) => vec![a],
+            | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => {
+                vec![a]
+            }
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -130,5 +141,23 @@ impl Prim {
             .into_iter()
             .flat_map(|operand| operand.free_names())
             .collect()
+    }
+}
+
+impl HostPrim {
+    pub fn free_names(&self) -> BTreeSet<String> {
+        match self {
+            HostPrim::IoPrint(operand) => operand.free_names(),
+            HostPrim::IoRead => BTreeSet::new(),
+        }
+    }
+}
+
+impl Prim {
+    pub fn free_names(&self) -> BTreeSet<String> {
+        match self {
+            Prim::Pure(p) => p.free_names(),
+            Prim::Host(h) => h.free_names(),
+        }
     }
 }

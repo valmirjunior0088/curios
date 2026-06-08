@@ -32,6 +32,14 @@ fn bin_type() -> Term {
     prim_type(Prim::BinType)
 }
 
+fn pure(prim: ersd::PurePrim) -> ersd::Term {
+    ersd::Term::Prim(ersd::Prim::Pure(prim))
+}
+
+fn host(prim: ersd::HostPrim) -> ersd::Term {
+    ersd::Term::Prim(ersd::Prim::Host(prim))
+}
+
 /// Lower a primitive to its `ersd` form. Pure downstream lowering: the term is
 /// already well-typed (elaborate discharged every obligation) and meta-free
 /// (zonk ran), so there is no checking here. `expected` is consumed only where a
@@ -45,228 +53,228 @@ pub fn erase_prim(
 ) -> Result<ersd::Term, Error> {
     match prim {
         Prim::BlnType => Ok(ersd::Term::Erased),
-        &Prim::Bln(value) => Ok(ersd::Term::Prim(ersd::Prim::Nat(if value { 1 } else { 0 }))),
+        &Prim::Bln(value) => Ok(pure(ersd::PurePrim::Nat(if value { 1 } else { 0 }))),
         Prim::NatType => Ok(ersd::Term::Erased),
-        Prim::Nat(Nat::Zero) => Ok(ersd::Term::Prim(ersd::Prim::Nat(0))),
+        Prim::Nat(Nat::Zero) => Ok(pure(ersd::PurePrim::Nat(0))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
             if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) {
-                Ok(ersd::Term::Prim(ersd::Prim::Nat(narrow_nat(spine)?)))
+                Ok(pure(ersd::PurePrim::Nat(narrow_nat(spine)?)))
             } else {
                 let inner_ersd = erase(context, inner, &nat_type())?;
-                let spine_term = ersd::Term::Prim(ersd::Prim::Nat(narrow_nat(spine)?));
-                Ok(ersd::Term::Prim(ersd::Prim::NatAdd(
+                let spine_term = pure(ersd::PurePrim::Nat(narrow_nat(spine)?));
+                Ok(pure(ersd::PurePrim::NatAdd(
                     spine_term.into(),
                     inner_ersd.into(),
                 )))
             }
         }
-        Prim::NatEql(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatEql(
+        Prim::NatEql(left, right) => Ok(pure(ersd::PurePrim::NatEql(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatAdd(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatAdd(
+        Prim::NatAdd(left, right) => Ok(pure(ersd::PurePrim::NatAdd(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatSub(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatSub(
+        Prim::NatSub(left, right) => Ok(pure(ersd::PurePrim::NatSub(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatMul(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatMul(
+        Prim::NatMul(left, right) => Ok(pure(ersd::PurePrim::NatMul(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatNeq(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatNeq(
+        Prim::NatNeq(left, right) => Ok(pure(ersd::PurePrim::NatNeq(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatDiv(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatDiv(
+        Prim::NatDiv(left, right) => Ok(pure(ersd::PurePrim::NatDiv(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatRem(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatRem(
+        Prim::NatRem(left, right) => Ok(pure(ersd::PurePrim::NatRem(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatLt(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatLt(
+        Prim::NatLt(left, right) => Ok(pure(ersd::PurePrim::NatLt(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatGt(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatGt(
+        Prim::NatGt(left, right) => Ok(pure(ersd::PurePrim::NatGt(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatLte(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatLte(
+        Prim::NatLte(left, right) => Ok(pure(ersd::PurePrim::NatLte(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
-        Prim::NatGte(left, right) => Ok(ersd::Term::Prim(ersd::Prim::NatGte(
+        Prim::NatGte(left, right) => Ok(pure(ersd::PurePrim::NatGte(
             erase(context, left, &nat_type())?.into(),
             erase(context, right, &nat_type())?.into(),
         ))),
         Prim::IntType => Ok(ersd::Term::Erased),
-        &Prim::Int(value) => Ok(ersd::Term::Prim(ersd::Prim::Int(value.to_i32()))),
-        Prim::IntEql(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntEql(
+        &Prim::Int(value) => Ok(pure(ersd::PurePrim::Int(value.to_i32()))),
+        Prim::IntEql(left, right) => Ok(pure(ersd::PurePrim::IntEql(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntNeq(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntNeq(
+        Prim::IntNeq(left, right) => Ok(pure(ersd::PurePrim::IntNeq(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntAdd(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntAdd(
+        Prim::IntAdd(left, right) => Ok(pure(ersd::PurePrim::IntAdd(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntSub(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntSub(
+        Prim::IntSub(left, right) => Ok(pure(ersd::PurePrim::IntSub(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntMul(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntMul(
+        Prim::IntMul(left, right) => Ok(pure(ersd::PurePrim::IntMul(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntDiv(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntDiv(
+        Prim::IntDiv(left, right) => Ok(pure(ersd::PurePrim::IntDiv(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntRem(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntRem(
+        Prim::IntRem(left, right) => Ok(pure(ersd::PurePrim::IntRem(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntLt(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntLt(
+        Prim::IntLt(left, right) => Ok(pure(ersd::PurePrim::IntLt(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntGt(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntGt(
+        Prim::IntGt(left, right) => Ok(pure(ersd::PurePrim::IntGt(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntLte(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntLte(
+        Prim::IntLte(left, right) => Ok(pure(ersd::PurePrim::IntLte(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
-        Prim::IntGte(left, right) => Ok(ersd::Term::Prim(ersd::Prim::IntGte(
+        Prim::IntGte(left, right) => Ok(pure(ersd::PurePrim::IntGte(
             erase(context, left, &int_type())?.into(),
             erase(context, right, &int_type())?.into(),
         ))),
         Prim::FltType => Ok(ersd::Term::Erased),
-        &Prim::Flt(flt) => Ok(ersd::Term::Prim(ersd::Prim::Flt(flt.to_f32()))),
-        Prim::FltAdd(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltAdd(
+        &Prim::Flt(flt) => Ok(pure(ersd::PurePrim::Flt(flt.to_f32()))),
+        Prim::FltAdd(left, right) => Ok(pure(ersd::PurePrim::FltAdd(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltSub(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltSub(
+        Prim::FltSub(left, right) => Ok(pure(ersd::PurePrim::FltSub(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltMul(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltMul(
+        Prim::FltMul(left, right) => Ok(pure(ersd::PurePrim::FltMul(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltNeg(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltNeg(
+        Prim::FltNeg(inner) => Ok(pure(ersd::PurePrim::FltNeg(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltAbs(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltAbs(
+        Prim::FltAbs(inner) => Ok(pure(ersd::PurePrim::FltAbs(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltSqrt(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltSqrt(
+        Prim::FltSqrt(inner) => Ok(pure(ersd::PurePrim::FltSqrt(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltFloor(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltFloor(
+        Prim::FltFloor(inner) => Ok(pure(ersd::PurePrim::FltFloor(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltCeil(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltCeil(
+        Prim::FltCeil(inner) => Ok(pure(ersd::PurePrim::FltCeil(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltTrunc(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltTrunc(
+        Prim::FltTrunc(inner) => Ok(pure(ersd::PurePrim::FltTrunc(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltNearest(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltNearest(
+        Prim::FltNearest(inner) => Ok(pure(ersd::PurePrim::FltNearest(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltDiv(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltDiv(
+        Prim::FltDiv(left, right) => Ok(pure(ersd::PurePrim::FltDiv(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltMin(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltMin(
+        Prim::FltMin(left, right) => Ok(pure(ersd::PurePrim::FltMin(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltMax(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltMax(
+        Prim::FltMax(left, right) => Ok(pure(ersd::PurePrim::FltMax(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltEql(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltEql(
+        Prim::FltEql(left, right) => Ok(pure(ersd::PurePrim::FltEql(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltNeq(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltNeq(
+        Prim::FltNeq(left, right) => Ok(pure(ersd::PurePrim::FltNeq(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltLt(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltLt(
+        Prim::FltLt(left, right) => Ok(pure(ersd::PurePrim::FltLt(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltGt(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltGt(
+        Prim::FltGt(left, right) => Ok(pure(ersd::PurePrim::FltGt(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltLte(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltLte(
+        Prim::FltLte(left, right) => Ok(pure(ersd::PurePrim::FltLte(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::FltGte(left, right) => Ok(ersd::Term::Prim(ersd::Prim::FltGte(
+        Prim::FltGte(left, right) => Ok(pure(ersd::PurePrim::FltGte(
             erase(context, left, &flt_type())?.into(),
             erase(context, right, &flt_type())?.into(),
         ))),
-        Prim::NatToStr(inner) => Ok(ersd::Term::Prim(ersd::Prim::NatToStr(
+        Prim::NatToStr(inner) => Ok(pure(ersd::PurePrim::NatToStr(
             erase(context, inner, &nat_type())?.into(),
         ))),
-        Prim::IntToStr(inner) => Ok(ersd::Term::Prim(ersd::Prim::IntToStr(
+        Prim::IntToStr(inner) => Ok(pure(ersd::PurePrim::IntToStr(
             erase(context, inner, &int_type())?.into(),
         ))),
-        Prim::FltToStr(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltToStr(
+        Prim::FltToStr(inner) => Ok(pure(ersd::PurePrim::FltToStr(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::NatToInt(inner) => Ok(ersd::Term::Prim(ersd::Prim::NatToInt(
+        Prim::NatToInt(inner) => Ok(pure(ersd::PurePrim::NatToInt(
             erase(context, inner, &nat_type())?.into(),
         ))),
-        Prim::IntToNat(inner) => Ok(ersd::Term::Prim(ersd::Prim::IntToNat(
+        Prim::IntToNat(inner) => Ok(pure(ersd::PurePrim::IntToNat(
             erase(context, inner, &int_type())?.into(),
         ))),
-        Prim::IntToFlt(inner) => Ok(ersd::Term::Prim(ersd::Prim::IntToFlt(
+        Prim::IntToFlt(inner) => Ok(pure(ersd::PurePrim::IntToFlt(
             erase(context, inner, &int_type())?.into(),
         ))),
-        Prim::NatToFlt(inner) => Ok(ersd::Term::Prim(ersd::Prim::NatToFlt(
+        Prim::NatToFlt(inner) => Ok(pure(ersd::PurePrim::NatToFlt(
             erase(context, inner, &nat_type())?.into(),
         ))),
-        Prim::FltToInt(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltToInt(
+        Prim::FltToInt(inner) => Ok(pure(ersd::PurePrim::FltToInt(
             erase(context, inner, &flt_type())?.into(),
         ))),
-        Prim::FltToNat(inner) => Ok(ersd::Term::Prim(ersd::Prim::FltToNat(
+        Prim::FltToNat(inner) => Ok(pure(ersd::PurePrim::FltToNat(
             erase(context, inner, &flt_type())?.into(),
         ))),
         Prim::BinType => Ok(ersd::Term::Erased),
-        Prim::Bin(bytes) => Ok(ersd::Term::Prim(ersd::Prim::Bin(bytes.clone()))),
-        Prim::BinLen(bin) => Ok(ersd::Term::Prim(ersd::Prim::BinLen(
+        Prim::Bin(bytes) => Ok(pure(ersd::PurePrim::Bin(bytes.clone()))),
+        Prim::BinLen(bin) => Ok(pure(ersd::PurePrim::BinLen(
             erase(context, bin, &bin_type())?.into(),
         ))),
-        Prim::BinEql(left, right) => Ok(ersd::Term::Prim(ersd::Prim::BinEql(
+        Prim::BinEql(left, right) => Ok(pure(ersd::PurePrim::BinEql(
             erase(context, left, &bin_type())?.into(),
             erase(context, right, &bin_type())?.into(),
         ))),
-        Prim::BinGet(bin, index) => Ok(ersd::Term::Prim(ersd::Prim::BinGet(
+        Prim::BinGet(bin, index) => Ok(pure(ersd::PurePrim::BinGet(
             erase(context, bin, &bin_type())?.into(),
             erase(context, index, &nat_type())?.into(),
         ))),
-        Prim::BinSlice(bin, start, end) => Ok(ersd::Term::Prim(ersd::Prim::BinSlice(
+        Prim::BinSlice(bin, start, end) => Ok(pure(ersd::PurePrim::BinSlice(
             erase(context, bin, &bin_type())?.into(),
             erase(context, start, &nat_type())?.into(),
             erase(context, end, &nat_type())?.into(),
         ))),
-        Prim::BinAppend(bin, byte) => Ok(ersd::Term::Prim(ersd::Prim::BinAppend(
+        Prim::BinAppend(bin, byte) => Ok(pure(ersd::PurePrim::BinAppend(
             erase(context, bin, &bin_type())?.into(),
             erase(context, byte, &nat_type())?.into(),
         ))),
@@ -275,7 +283,7 @@ pub fn erase_prim(
                 .iter()
                 .map(|e| erase(context, e, &bin_type()).map(|t| t.into()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(ersd::Term::Prim(ersd::Prim::BinConcat(erased)))
+            Ok(pure(ersd::PurePrim::BinConcat(erased)))
         }
         Prim::ArrType(_) => Ok(ersd::Term::Erased),
         Prim::Arr(elems) => {
@@ -289,18 +297,18 @@ pub fn erase_prim(
                 .iter()
                 .map(|e| erase(context, e, &elem_type).map(|t| t.into()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(ersd::Term::Prim(ersd::Prim::Arr(erased_elems)))
+            Ok(pure(ersd::PurePrim::Arr(erased_elems)))
         }
         Prim::ArrLen(type_, list) => {
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             let list_erased = erase(context, list, &expected_list_type)?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrLen(list_erased.into())))
+            Ok(pure(ersd::PurePrim::ArrLen(list_erased.into())))
         }
         Prim::ArrGet(type_, list, index) => {
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             let list_erased = erase(context, list, &expected_list_type)?;
             let index_erased = erase(context, index, &nat_type())?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrGet(
+            Ok(pure(ersd::PurePrim::ArrGet(
                 list_erased.into(),
                 index_erased.into(),
             )))
@@ -310,7 +318,7 @@ pub fn erase_prim(
             let list_erased = erase(context, list, &expected_list_type)?;
             let start_erased = erase(context, start, &nat_type())?;
             let end_erased = erase(context, end, &nat_type())?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrSlice(
+            Ok(pure(ersd::PurePrim::ArrSlice(
                 list_erased.into(),
                 start_erased.into(),
                 end_erased.into(),
@@ -320,7 +328,7 @@ pub fn erase_prim(
             let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
             let list_erased = erase(context, list, &expected_list_type)?;
             let elem_erased = erase(context, elem, type_)?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrAppend(
+            Ok(pure(ersd::PurePrim::ArrAppend(
                 list_erased.into(),
                 elem_erased.into(),
             )))
@@ -331,11 +339,11 @@ pub fn erase_prim(
                 .iter()
                 .map(|e| erase(context, e, &expected_list_type).map(|t| t.into()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(ersd::Term::Prim(ersd::Prim::ArrConcat(erased)))
+            Ok(pure(ersd::PurePrim::ArrConcat(erased)))
         }
-        Prim::IoPrint(inner) => Ok(ersd::Term::Prim(ersd::Prim::IoPrint(
+        Prim::IoPrint(inner) => Ok(host(ersd::HostPrim::IoPrint(
             erase(context, inner, &bin_type())?.into(),
         ))),
-        Prim::IoRead => Ok(ersd::Term::Prim(ersd::Prim::IoRead)),
+        Prim::IoRead => Ok(host(ersd::HostPrim::IoRead)),
     }
 }
