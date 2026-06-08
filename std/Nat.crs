@@ -3,7 +3,7 @@ pub use /sys/{Nat};
 use /std/{Bin};
 
 pub let from_str(str : Bin) -> Nat =
-    Bin/fold(Nat, str, 0, (byte, acc) => Nat/add(Nat/mul(acc, 10), Nat/sub(byte, 48)));
+    Bin/fold(?, str, 0, (byte, acc) => Nat/add(Nat/mul(acc, 10), Nat/sub(byte, 48)));
 
 pub let min(a : Nat, b : Nat) -> Nat =
     match lt(a, b)

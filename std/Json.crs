@@ -33,8 +33,8 @@ let encode_str(s : Bin) -> Bin =
     -- byte — then assemble once with `Bin/concat_all` (O(n log n)). Folding
     -- `Bin/concat(acc, ...)` per byte would be O(n^2) in the string length.
     let body =
-        Bin/concat_all(Lst/to_arr(Bin, Lst/rev(Bin,
-            Bin/fold(Lst(Bin), s, Lst/nil(Bin), (byte, acc) =>
+        Bin/concat_all(Lst/to_arr(?, Lst/rev(?,
+            Bin/fold(?, s, Lst/nil(Bin), (byte, acc) =>
                 Lst/cons(Bin, escape_byte(byte), acc)))));
     Bin/concat(Bin/concat("\"", body), "\"");
 
@@ -46,10 +46,10 @@ pub rec encode(v : Json) -> Bin =
     | str(s) => encode_str(s)
     | arr(xs) =>
         Bin/concat(Bin/concat("[",
-            Bin/join(",", Arr/map(Json, Bin, encode, xs))), "]")
+            Bin/join(",", Arr/map(?, ?, encode, xs))), "]")
     | obj(ps) =>
         Bin/concat(Bin/concat("{",
-            Bin/join(",", Arr/map({ Bin, Json }, Bin,
+            Bin/join(",", Arr/map({ Bin, Json }, ?,
                 (pair) => Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1)),
                 ps))),
             "}")
@@ -94,13 +94,13 @@ let take_literal(literal : Bin) -> Parse({}) =
         end;
 
 let parse_null : Parse(Json) =
-    Parse/map({}, Json, (_) => Json/null(), take_literal("null"));
+    Parse/map({}, ?, (_) => Json/null(), take_literal("null"));
 
 let parse_true_val : Parse(Json) =
-    Parse/map({}, Json, (_) => Json/bln(true), take_literal("true"));
+    Parse/map({}, ?, (_) => Json/bln(true), take_literal("true"));
 
 let parse_false_val : Parse(Json) =
-    Parse/map({}, Json, (_) => Json/bln(false), take_literal("false"));
+    Parse/map({}, ?, (_) => Json/bln(false), take_literal("false"));
 
 let parse_num : Parse(Json) =
     (input, pos) =>
@@ -125,29 +125,29 @@ let parse_str_escape : Parse(Bin) =
         let _ = Parse/take_byte('\\')!;
         let byte = Parse/any_byte!;
         match byte : Parse(Bin)
-        | '"' => Parse/pure(Bin, "\"")
-        | '\\' => Parse/pure(Bin, "\\")
-        | 'n' => Parse/pure(Bin, "\n")
-        | 'r' => Parse/pure(Bin, "\r")
-        | 't' => Parse/pure(Bin, "\t")
-        | _ => Parse/fail(Bin, "unknown escape")
+        | '"' => Parse/pure(?, "\"")
+        | '\\' => Parse/pure(?, "\\")
+        | 'n' => Parse/pure(?, "\n")
+        | 'r' => Parse/pure(?, "\r")
+        | 't' => Parse/pure(?, "\t")
+        | _ => Parse/fail(?, "unknown escape")
         end;
 
 let parse_str_segment : Parse(Bin) =
     Parse/take_while(is_not_string_special);
 
 let parse_str_body : Parse(Arr(Bin)) =
-    Parse/many0(Bin, Parse/or(Bin, parse_str_escape, parse_str_segment));
+    Parse/many0(?, Parse/or(?, parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Bin) =
     with Parse/bind(?, ?)
         let _ = Parse/take_byte('"')!;
         let chunks = parse_str_body!;
         let _ = Parse/take_byte('"')!;
-        Parse/pure(Bin, Bin/concat_all(chunks));
+        Parse/pure(?, Bin/concat_all(chunks));
 
 let parse_str_value : Parse(Json) =
-    Parse/map(Bin, Json, (s) => Json/str(s), parse_raw_str);
+    Parse/map(Bin, ?, (s) => Json/str(s), parse_raw_str);
 
 pub rec decode : Parse(Json) = (input, pos) =>
     match Nat/lt(pos, Bin/len(input))
@@ -170,15 +170,15 @@ pub rec decode : Parse(Json) = (input, pos) =>
 and parse_arr : Parse(Json) =
     with Parse/bind(?, ?)
         let _ = Parse/take_byte('[')!;
-        let elems = Parse/sep_by0(Json, Nat, decode, Parse/take_byte(','))!;
+        let elems = Parse/sep_by0(?, ?, decode, Parse/take_byte(','))!;
         let _ = Parse/take_byte(']')!;
-        Parse/pure(Json, Json/arr(elems))
+        Parse/pure(?, Json/arr(elems))
 and parse_obj : Parse(Json) =
     with Parse/bind(?, ?)
         let _ = Parse/take_byte('{')!;
-        let pairs = Parse/sep_by0({ Bin, Json }, Nat, parse_pair, Parse/take_byte(','))!;
+        let pairs = Parse/sep_by0(?, ?, parse_pair, Parse/take_byte(','))!;
         let _ = Parse/take_byte('}')!;
-        Parse/pure(Json, Json/obj(pairs))
+        Parse/pure(?, Json/obj(pairs))
 and parse_pair : Parse({ Bin, Json }) =
     with Parse/bind(?, ?)
         let key = parse_raw_str!;

@@ -31,25 +31,25 @@ rec parse_fmt : Parse(Fmt) = (input, pos) =>
         end
     end
 and parse_spec : Parse(Fmt) =
-    Parse/or(Fmt,
+    Parse/or(?,
         with Parse/bind(?, ?)
             let _ = Parse/take_byte('%')!;
             let byte = Parse/any_byte!;
             let rest = parse_fmt!;
             match byte : Parse(Fmt)
-            | 's' => Parse/pure(Fmt, Fmt/str(rest))
-            | 'd' => Parse/pure(Fmt, Fmt/nat(rest))
-            | _ => Parse/pure(Fmt, rest)
+            | 's' => Parse/pure(?, Fmt/str(rest))
+            | 'd' => Parse/pure(?, Fmt/nat(rest))
+            | _ => Parse/pure(?, rest)
             end,
-        Parse/map(Nat, Fmt, (_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
+        Parse/map(Nat, ?, (_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
 and parse_lit : Parse(Fmt) =
     with Parse/bind(?, ?)
         let bytes = Parse/take_while(is_not_pct)!;
         let rest = parse_fmt!;
-        Parse/pure(Fmt, Fmt/lit(bytes, rest));
+        Parse/pure(?, Fmt/lit(bytes, rest));
 
 pub let parse(input : Bin) -> Fmt =
-    match Parse/run(Fmt, parse_fmt, input)
+    match Parse/run(?, parse_fmt, input)
     | success(value) => value
     | failure(_) => Fmt/nil()
     end;
