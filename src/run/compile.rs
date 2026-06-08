@@ -288,6 +288,59 @@ mod tests {
     }
 
     #[test]
+    fn continuation_postpones_until_the_result_type_pins_its_codomain() {
+        // A `with Parse/bind` block whose tail is `Parse/pure(?, (x, x))` — a *bare
+        // tuple*, checkable only against a known tuple type. The expected type reaches
+        // the tail solely through each bind's result metavar `?B`, which the turnaround
+        // solves *after* the continuation is checked. Elaboration must postpone the
+        // continuation lambda (its codomain `Parse(?B)` carries a result metavar) until
+        // `expect` grounds `?B` against the concrete `Parse({ Nat, Nat })`, then re-check
+        // it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails
+        // "introduced a tuple where the expected type is not a tuple type".
+        let source = r#"
+            use /std/{Parse};
+            use /sys/{Nat};
+            let pair : Parse({ Nat, Nat }) =
+                with Parse/bind(?, ?)
+                    let x = Parse/any_byte!;
+                    Parse/pure(?, (x, x));
+            pair
+        "#;
+
+        assert!(typecheck(source).is_ok());
+
+        // The `expected_ground` gate: with no concrete result type to pin `?B`, the
+        // codomain stays a metavar, the continuation is *not* postponed, and the bare
+        // tuple is rejected — graceful degradation, no new acceptance.
+        let unpinned = r#"
+            use /std/{Parse};
+            with Parse/bind(?, ?)
+                let x = Parse/any_byte!;
+                Parse/pure(?, (x, x))
+        "#;
+
+        assert!(typecheck(unpinned).is_err());
+    }
+
+    #[test]
+    fn closure_returning_a_bare_projection_lowers() {
+        // A closure whose body *is* a tuple projection (`(pair) => pair.0`), handed to
+        // a higher-order function over an empty array, never constructs a tuple
+        // anywhere in the module — yet lowering must still emit the arity-1 tuple type
+        // the projection reads through. The wasm `Table` sizes its tuple types from the
+        // max arity it sees; scanning only tuple *constructions* missed this
+        // projection-only arity and panicked "`Table` lacks tuple type for arity `1`".
+        // Guards folding projection (`index + 1`) and prealloc arities into that scan.
+        let source = r#"
+            use /std/{Arr};
+            use /sys/{Nat};
+            Arr/map({ Nat, Nat }, Nat, (pair) => pair.0, [])
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
     fn typeless_let_infers_a_literal_body() {
         // A local `let` with no type annotation infers the body's type (`Nat`
         // here) and lowers end-to-end.

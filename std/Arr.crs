@@ -3,9 +3,9 @@ pub use /sys/{Arr};
 use /std/{Nat};
 
 pub let fold(T : Type, A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
-    match len(T, arr)
+    match len(?, arr)
     | 0 => init
-    | pred + 1, ih => f(get(T, arr, pred), ih)
+    | pred + 1, ih => f(get(?, arr, pred), ih)
     end;
 
 pub let map(A : Type, B : Type, f : A -> B, arr : Arr(A)) -> Arr(B) =
@@ -14,10 +14,10 @@ pub let map(A : Type, B : Type, f : A -> B, arr : Arr(A)) -> Arr(B) =
         | false =>
             match Nat/lt(lo, hi)
             | false => []
-            | true => [f(get(A, arr, lo))]
+            | true => [f(get(?, arr, lo))]
             end
         | true =>
             let mid = Nat/div(Nat/add(lo, hi), 2);
-            concat(B, go(lo, mid), go(mid, hi))
+            concat(?, go(lo, mid), go(mid, hi))
         end;
-    go(0, len(A, arr));
+    go(0, len(?, arr));

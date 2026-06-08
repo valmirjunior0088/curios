@@ -165,22 +165,35 @@ fn max_tpl_arity(data: &cont::Data) -> usize {
     }
 }
 
+fn max_value_tpl_arity(value: &cont::Value) -> usize {
+    match value {
+        cont::Value::Pure(data) => max_tpl_arity(data),
+        // Projecting field `index` reads through a tuple type of arity at least
+        // `index + 1`, even when no tuple of that arity is ever *built* in the module
+        // (e.g. the projected tuple only ever arrives from outside, or the producing
+        // array is empty). Sizing the tuple types from constructions alone misses it.
+        cont::Value::Eval(cont::Code::TplGet(_, index)) => index + 1,
+        _ => 0,
+    }
+}
+
 fn max_region_tpl_arity(region: &cont::Region) -> usize {
-    region
+    let preallocs = region.preallocs.iter().map(|(_, prealloc)| match prealloc {
+        cont::Prealloc::Tpl(arity) => *arity,
+        _ => 0,
+    });
+
+    let values = region
         .values
         .iter()
-        .filter_map(|(_, value)| match value {
-            cont::Value::Pure(data) => Some(max_tpl_arity(data)),
-            _ => None,
-        })
-        .chain(
-            region
-                .blocks
-                .iter()
-                .map(|(_, block)| max_region_tpl_arity(&block.region)),
-        )
-        .max()
-        .unwrap_or(0)
+        .map(|(_, value)| max_value_tpl_arity(value));
+
+    let blocks = region
+        .blocks
+        .iter()
+        .map(|(_, block)| max_region_tpl_arity(&block.region));
+
+    preallocs.chain(values).chain(blocks).max().unwrap_or(0)
 }
 
 #[derive(Debug)]

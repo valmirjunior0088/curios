@@ -184,4 +184,4 @@ and parse_pair : Parse({ Bin, Json }) =
         let key = parse_raw_str!;
         let _ = Parse/take_byte(':')!;
         let val = decode!;
-        Parse/pure({ Bin, Json }, (key, val));
+        Parse/pure(?, (key, val));

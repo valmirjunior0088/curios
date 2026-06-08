@@ -5,7 +5,7 @@ use {
         Term, Tuple, TupleType, Two, Var, check_motive, elaborate_prim, expect, reduce_with,
         refine_head,
     },
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// The elaboration mode (§6). `Infer` synthesizes a type; `Check(expected)`
@@ -88,10 +88,33 @@ fn elaborate_apply(
     // unification fails to pin a postponed argument's type, the re-check fails with
     // the same error as before — no new acceptance, graceful degradation.
     let checking = matches!(mode, Mode::Check(_));
+
+    // The metavars the result type carries — exactly the ones `expect(output, expected)`
+    // can pin. A continuation lambda whose codomain still mentions one of these is
+    // postponed (see `blocked_on_metavar`) so its body is checked only after that
+    // unification refines the codomain. Opening over the raw args is pure substitution
+    // (no birth/solve), so this is just an early read of the result type.
+    let arg_refs: Vec<&Term> = params.iter().collect();
+    let result_metavars = ft.telescope.clone().open(&arg_refs).metavars();
+
+    // Whether the expected type is fully ground. The codomain postponement is only a
+    // win when `expect(output, expected)` actually *grounds* the result metavar; if
+    // `expected` itself carries an unsolved metavar, that turnaround is flex-flex and
+    // the metavar must instead be grounded by the continuation's body — so postponing
+    // it would strand the metavar (flex-flex-under-constructor) rather than refine it.
+    // When expected is not ground we fall back to the eager (current) behavior.
+    let expected_ground = match &mode {
+        Mode::Check(expected) => expected
+            .metavars()
+            .iter()
+            .all(|&id| transitively_ground(context, id)),
+        Mode::Infer => false,
+    };
+
     let mut elaborated = Vec::with_capacity(params.len());
     let mut postponed: Vec<(usize, Term, Term)> = Vec::new();
     let output = ft.telescope.clone().walk(params, |arg, ty| {
-        if checking && blocked_on_metavar(context, arg, ty)? {
+        if checking && blocked_on_metavar(context, arg, ty, &result_metavars, expected_ground)? {
             postponed.push((elaborated.len(), arg.clone(), ty.clone()));
             elaborated.push(arg.clone());
         } else {
@@ -118,7 +141,13 @@ fn elaborate_apply(
 /// codomain may stay a metavar.) Synthesizable forms return `false`: they have a
 /// turnaround of their own and must run eagerly so their solutions feed the result
 /// unification.
-fn blocked_on_metavar(context: &mut Context, arg: &Term, ty: &Term) -> Result<bool, Error> {
+fn blocked_on_metavar(
+    context: &mut Context,
+    arg: &Term,
+    ty: &Term,
+    result_metavars: &BTreeSet<usize>,
+    expected_ground: bool,
+) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
     if !is_lambda && !matches!(&**arg, Subterm::Tuple(_) | Subterm::Atom(_)) {
         return Ok(false);
@@ -127,18 +156,50 @@ fn blocked_on_metavar(context: &mut Context, arg: &Term, ty: &Term) -> Result<bo
     Ok(match &*reduced {
         // A tuple/atom/lambda whose whole expected type is an unsolved metavar.
         Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
-        // A lambda whose expected *domain* is an unsolved metavar: its body may need
-        // the domain's structure (to project the parameter), so postpone it until a
-        // sibling argument (e.g. `p : Parse(A)`) pins the domain.
         Subterm::FuncType(FuncType { telescope }) if is_lambda => match telescope {
-            Telescope::Cons(domain, _) => match &*reduce_with(context, domain)? {
-                Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
-                _ => false,
-            },
+            Telescope::Cons(domain, _) => {
+                // A lambda whose expected *domain* is an unsolved metavar: its body may
+                // need the domain's structure (to project the parameter), so postpone it
+                // until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
+                let domain_blocked = match &*reduce_with(context, domain)? {
+                    Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
+                    _ => false,
+                };
+                // ...or a lambda whose *codomain* still carries an unsolved metavar that
+                // the result type will pin: postpone until `expect(output, expected)`
+                // solves it, so the body is checked against the refined codomain. This is
+                // the `with`-continuation case — `(x) => …` checked against
+                // `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action
+                // but `?B` (the bind's own result type) is solved only by the turnaround.
+                // Gating on `result_metavars` keeps it to metavars `expect` will address;
+                // gating on `expected_ground` ensures that turnaround actually grounds
+                // `?B` (vs. a flex-flex alias that the eager body must ground instead).
+                domain_blocked
+                    || (expected_ground
+                        && reduced.metavars().iter().any(|id| {
+                            result_metavars.contains(id)
+                                && context.metavar_solution(*id).is_none()
+                        }))
+            }
             Telescope::Done(_) => false,
         },
         _ => false,
     })
+}
+
+/// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its
+/// solution is itself transitively ground. `metavar_solution` only sees one level, and
+/// a solution can still embed unsolved metavars, so `expected_ground` needs this
+/// transitive view to be sure the turnaround will actually pin a result metavar rather
+/// than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
+fn transitively_ground(context: &Context, id: usize) -> bool {
+    match context.metavar_solution(id) {
+        None => false,
+        Some(solution) => solution
+            .metavars()
+            .iter()
+            .all(|&inner| transitively_ground(context, inner)),
+    }
 }
 
 fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, Term), Error> {
