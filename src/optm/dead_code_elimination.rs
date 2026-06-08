@@ -163,14 +163,6 @@ fn dce_module(module: &mut Module) {
     let mut work_consts: Vec<ValueName> = vec![];
     keep_funcs.insert(entry);
 
-    // Record a discovered value use, and if it names a const, enqueue that const so
-    // its own references are followed in turn.
-    let see_value = |name: ValueName, used: &mut HashSet<ValueName>, work: &mut Vec<ValueName>| {
-        if used.insert(name.clone()) && consts.contains_key(&name) {
-            work.push(name);
-        }
-    };
-
     loop {
         let refs = if let Some(name) = work_funcs.pop() {
             module
@@ -195,7 +187,7 @@ fn dce_module(module: &mut Module) {
         };
 
         for value in refs.values {
-            see_value(value, &mut used_values, &mut work_consts);
+            see_value(value, &consts, &mut used_values, &mut work_consts);
         }
         for func in refs.funcs {
             if keep_funcs.insert(func.clone()) {
@@ -218,6 +210,19 @@ fn dce_module(module: &mut Module) {
     module
         .consts_mut()
         .retain(|(name, _)| used_values.contains(name));
+}
+
+// Record a discovered value use, and if it names a const, enqueue that const so
+// its own references are followed in turn.
+fn see_value(
+    name: ValueName,
+    consts: &HashMap<ValueName, Data>,
+    used: &mut HashSet<ValueName>,
+    work: &mut Vec<ValueName>,
+) {
+    if used.insert(name.clone()) && consts.contains_key(&name) {
+        work.push(name);
+    }
 }
 
 #[cfg(test)]
@@ -253,6 +258,15 @@ mod tests {
         );
         module.set_entry(FuncName::from("main"));
         module
+    }
+
+    fn trivial_clsr() -> Clsr {
+        Clsr {
+            fields: vec![],
+            params: vec![v("x").into()],
+            resume: BlockName::from("b0"),
+            region: region(vec![], vec![v("x")]),
+        }
     }
 
     fn value_names(module: &Module) -> Vec<String> {
@@ -344,12 +358,6 @@ mod tests {
             },
         );
 
-        let trivial_clsr = || Clsr {
-            fields: vec![],
-            params: vec![v("x").into()],
-            resume: BlockName::from("b0"),
-            region: region(vec![], vec![v("x")]),
-        };
         module.add_clsr(ClsrName::from("c_used"), trivial_clsr());
         module.add_clsr(ClsrName::from("c_dead"), trivial_clsr());
         module.set_entry(FuncName::from("main"));

@@ -16,6 +16,14 @@ fn lower(term: Term) -> cont::Module {
     })
 }
 
+fn identity_func() -> Func {
+    Func {
+        captures: vec![],
+        params: vec!["arg".into()],
+        body: Term::Name(Name::from("arg")).into(),
+    }
+}
+
 #[test]
 fn lowers_recursive_pairs_into_main_region_values() {
     let term = Term::Rec(Rec {
@@ -280,12 +288,6 @@ fn lowers_cross_region_rec_through_resume_block() {
     // `rec f = (x) => g and g = id(f)`: the aggregate `f` captures the call-valued `g`,
     // while `g`'s call references `f`. `f` must be prealloc'd (shell before the call) and
     // filled in the resume region after `g` returns.
-    let id = || Func {
-        captures: vec![],
-        params: vec!["arg".into()],
-        body: Term::Name(Name::from("arg")).into(),
-    };
-
     let term = Term::Rec(Rec {
         names: vec!["f".into(), "g".into()],
         items: vec![
@@ -296,7 +298,7 @@ fn lowers_cross_region_rec_through_resume_block() {
             })
             .into(),
             Term::Apply(Apply {
-                head: Term::Func(id()).into(),
+                head: Term::Func(identity_func()).into(),
                 params: vec![Term::Name(Name::from("f")).into()],
             })
             .into(),
@@ -323,22 +325,16 @@ fn lowers_cross_region_rec_through_resume_block() {
 #[test]
 #[should_panic(expected = "value-level mutual recursion through calls")]
 fn rejects_apply_apply_cycle() {
-    let id = || Func {
-        captures: vec![],
-        params: vec!["arg".into()],
-        body: Term::Name(Name::from("arg")).into(),
-    };
-
     let term = Term::Rec(Rec {
         names: vec!["a".into(), "b".into()],
         items: vec![
             Term::Apply(Apply {
-                head: Term::Func(id()).into(),
+                head: Term::Func(identity_func()).into(),
                 params: vec![Term::Name(Name::from("b")).into()],
             })
             .into(),
             Term::Apply(Apply {
-                head: Term::Func(id()).into(),
+                head: Term::Func(identity_func()).into(),
                 params: vec![Term::Name(Name::from("a")).into()],
             })
             .into(),

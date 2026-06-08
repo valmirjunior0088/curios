@@ -345,6 +345,16 @@ mod tests {
         }
     }
 
+    fn closed_tuple_body() -> Region {
+        region(
+            vec![
+                (v("a"), Value::Pure(Data::Nat(1))),
+                (v("t"), Value::Pure(Data::Tpl(vec![v("a")]))),
+            ],
+            vec![],
+        )
+    }
+
     fn main_func(region: Region) -> Module {
         let mut module = Module::new();
         module.add_func(
@@ -571,23 +581,13 @@ mod tests {
 
     #[test]
     fn dedups_identical_closed_tuples_across_bodies() {
-        let body = || {
-            region(
-                vec![
-                    (v("a"), Value::Pure(Data::Nat(1))),
-                    (v("t"), Value::Pure(Data::Tpl(vec![v("a")]))),
-                ],
-                vec![],
-            )
-        };
-
         let mut module = Module::new();
         module.add_func(
             FuncName::from("main"),
             Func {
                 params: vec![],
                 resume: BlockName::from("rm"),
-                region: body(),
+                region: closed_tuple_body(),
             },
         );
         module.add_func(
@@ -595,7 +595,7 @@ mod tests {
             Func {
                 params: vec![],
                 resume: BlockName::from("rm"),
-                region: body(),
+                region: closed_tuple_body(),
             },
         );
         module.set_entry(FuncName::from("main"));

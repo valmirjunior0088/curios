@@ -904,8 +904,6 @@ fn prim_reach(prim: &Prim) -> usize {
 }
 
 fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
-    let mut go = |t: &Term| t.collect_metavars(ids);
-
     match prim {
         Prim::BlnType
         | Prim::Bln(_)
@@ -919,7 +917,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::Bin(_)
         | Prim::IoRead => {}
 
-        Prim::Nat(Nat::Succ(_, inner)) => go(inner),
+        Prim::Nat(Nat::Succ(_, inner)) => inner.collect_metavars(ids),
 
         Prim::NatToStr(t)
         | Prim::IntToStr(t)
@@ -939,7 +937,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
         | Prim::ArrType(t)
-        | Prim::IoPrint(t) => go(t),
+        | Prim::IoPrint(t) => t.collect_metavars(ids),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -979,27 +977,29 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
         | Prim::ArrLen(a, b) => {
-            go(a);
-            go(b);
+            a.collect_metavars(ids);
+            b.collect_metavars(ids);
         }
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
-            go(a);
-            go(b);
-            go(c);
+            a.collect_metavars(ids);
+            b.collect_metavars(ids);
+            c.collect_metavars(ids);
         }
 
         Prim::ArrSlice(a, b, c, d) => {
-            go(a);
-            go(b);
-            go(c);
-            go(d);
+            a.collect_metavars(ids);
+            b.collect_metavars(ids);
+            c.collect_metavars(ids);
+            d.collect_metavars(ids);
         }
 
-        Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(go),
+        Prim::BinConcat(terms) | Prim::Arr(terms) => {
+            terms.iter().for_each(|term| term.collect_metavars(ids))
+        }
         Prim::ArrConcat(ty, terms) => {
-            go(ty);
-            terms.iter().for_each(go);
+            ty.collect_metavars(ids);
+            terms.iter().for_each(|term| term.collect_metavars(ids));
         }
     }
 }

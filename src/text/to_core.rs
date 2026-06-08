@@ -352,35 +352,16 @@ fn order_flat_items(
     referenced: &HashSet<String>,
     library_roots: &HashSet<String>,
 ) -> Vec<FlatItem> {
-    let names = |item: &FlatItem| -> Vec<String> {
-        match item {
-            FlatItem::Let(let_) => vec![let_.name.join()],
-            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.join()).collect(),
-        }
-    };
-
-    let free_vars = |item: &FlatItem| -> HashSet<String> {
-        let lets = match item {
-            FlatItem::Let(let_) => std::slice::from_ref(let_),
-            FlatItem::Rec(lets) => lets.as_slice(),
-        };
-
-        lets.iter()
-            .flat_map(|let_| {
-                let_.type_
-                    .free_vars()
-                    .into_iter()
-                    .chain(let_.body.free_vars())
-            })
-            .collect()
-    };
-
     // Index every declared qualifier to the node that owns it (a rec group owns
     // all its members).
     let owner: HashMap<String, usize> = items
         .iter()
         .enumerate()
-        .flat_map(|(node, item)| names(item).into_iter().map(move |name| (name, node)))
+        .flat_map(|(node, item)| {
+            flat_item_names(item)
+                .into_iter()
+                .map(move |name| (name, node))
+        })
         .collect();
 
     // A node depends on the nodes declaring its free vars; self-edges and free
@@ -389,7 +370,7 @@ fn order_flat_items(
         .iter()
         .enumerate()
         .map(|(node, item)| {
-            free_vars(item)
+            flat_item_free_vars(item)
                 .iter()
                 .filter_map(|name| owner.get(name).copied())
                 .filter(|&dep| dep != node)
@@ -407,20 +388,11 @@ fn order_flat_items(
     // type-checked. Seeds: every non-prunable node (kept unconditionally) plus every
     // node owning a name the program references directly; BFS over `deps` keeps the
     // transitive closure.
-    let prunable = |node: usize| -> bool {
-        !library_roots.is_empty()
-            && names(&items[node]).iter().all(|name| {
-                name.split('/')
-                    .next()
-                    .is_some_and(|segment| library_roots.contains(segment))
-            })
-    };
-
     let mut keep = vec![false; count];
     let mut stack = Vec::new();
 
     for (node, slot) in keep.iter_mut().enumerate() {
-        if !prunable(node) {
+        if !flat_item_prunable(&items[node], library_roots) {
             *slot = true;
             stack.push(node);
         }
@@ -465,6 +437,38 @@ fn order_flat_items(
         .filter(|&node| keep[node])
         .map(|node| slots[node].take().unwrap())
         .collect()
+}
+
+fn flat_item_names(item: &FlatItem) -> Vec<String> {
+    match item {
+        FlatItem::Let(let_) => vec![let_.name.join()],
+        FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.join()).collect(),
+    }
+}
+
+fn flat_item_free_vars(item: &FlatItem) -> HashSet<String> {
+    let lets = match item {
+        FlatItem::Let(let_) => std::slice::from_ref(let_),
+        FlatItem::Rec(lets) => lets.as_slice(),
+    };
+
+    lets.iter()
+        .flat_map(|let_| {
+            let_.type_
+                .free_vars()
+                .into_iter()
+                .chain(let_.body.free_vars())
+        })
+        .collect()
+}
+
+fn flat_item_prunable(item: &FlatItem, library_roots: &HashSet<String>) -> bool {
+    !library_roots.is_empty()
+        && flat_item_names(item).iter().all(|name| {
+            name.split('/')
+                .next()
+                .is_some_and(|segment| library_roots.contains(segment))
+        })
 }
 
 fn flat_let_to_core(let_: FlatLet) -> core::Definition {
