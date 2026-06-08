@@ -7,7 +7,8 @@
 //!   read-only walker.
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
-//! - [`hoist_literals`] — lifts bytestring literals into shared module consts.
+//! - [`hoist_literals`] — lifts bytestrings and closed aggregates into shared
+//!   module consts.
 //! - [`specialize_calls`] — clones a function per closure shape passed into a
 //!   candidate parameter, so closure lifting can devirtualize through it.
 //! - [`closure_lifting`] — turns known closures into functions and devirtualizes
@@ -66,8 +67,9 @@ use super::cont::*;
 /// together with jump threading dissolving the leftover continuation blocks,
 /// finally brings literal arguments next to the primitive ops the prelude wraps,
 /// so a second copy-propagation and folding pass can collapse them. With the
-/// literals settled, hoisting lifts every bytestring into a shared module const so
-/// it is built once at startup instead of on each execution. Folding also forwards
+/// literals settled, hoisting lifts every bytestring and closed aggregate into a
+/// shared module const so it is built once at startup instead of on each execution.
+/// Folding also forwards
 /// aggregate projections and decides matches on known tags, which leaves alias
 /// bindings and freshly single-predecessor arms behind; a second jump threading and
 /// a final copy propagation collapse those, so dead-code elimination — running last
