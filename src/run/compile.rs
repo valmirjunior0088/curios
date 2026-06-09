@@ -268,6 +268,106 @@ mod tests {
     }
 
     #[test]
+    fn union_match_arm_arity_is_checked_statically() {
+        // Each arm's binder count is checked against the
+        // constructor's registry telescope at elaboration time. Under the
+        // legacy tagged-tuple desugar this mismatch was silent (the extra
+        // binder became an out-of-range payload projection).
+        let source = r#"
+            use /std/{Result};
+            use /sys/{Nat, Bin};
+            let f(r : Result(Nat, Bin)) -> Nat =
+                match r : Nat
+                | success(value, extra) => value
+                | failure(_) => 0
+                end;
+            f(Result/success(?, ?, 7))
+        "#;
+
+        let error = compile(source, None).unwrap_err();
+
+        assert!(
+            error.contains("constructor 'success' takes 1 argument(s) but the match arm binds 2"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn non_pub_union_constructors_are_usable_in_the_declaring_module() {
+        // Constructors are exactly as visible as their union: a non-`pub`
+        // union is module-local but fully usable where it is declared.
+        let source = r#"
+            use /sys/{Nat};
+            union Opt
+            | none()
+            | some(Nat)
+            end
+            match Opt/some(7) : Nat
+            | none() => 0
+            | some(n) => n
+            end
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn non_pub_union_constructors_stay_private_across_modules() {
+        // The same union declared inside a submodule is not reachable from
+        // the parent: the union's own visibility still gates the outside.
+        let source = r#"
+            pub mod m
+                union Secret
+                | hide(/sys/Nat)
+                end
+            end
+            m/Secret/hide(7)
+        "#;
+
+        assert!(compile(source, None).is_err());
+    }
+
+    #[test]
+    fn union_match_on_a_non_union_scrutinee_is_rejected_directly() {
+        // With the legacy fallback gone, matching union
+        // constructors on a non-union value reports the real problem instead
+        // of a downstream projection error.
+        let source = r#"
+            use /sys/{Nat};
+            match 7 : Nat
+            | success(value) => value
+            end
+        "#;
+
+        let error = compile(source, None).unwrap_err();
+
+        assert!(
+            error.contains("matched union constructors on a non-union type"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn new_style_union_match_lowers_end_to_end() {
+        // The same program with correct arities compiles through to wasm: the
+        // `Result` declaration takes the primitive-inductive path (UnionType /
+        // UnionCtor / UnionMatch) and erases back to the legacy tagged-tuple
+        // runtime shape.
+        let source = r#"
+            use /std/{Result};
+            use /sys/{Nat, Bin};
+            let f(r : Result(Nat, Bin)) -> Nat =
+                match r : Nat
+                | success(value) => value
+                | failure(_) => 0
+                end;
+            f(Result/success(?, ?, 7))
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
     fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
         // `Arr/map(?, ?, (pair) => pair.0, xs)`: the holed type-arg `?A` is the
         // lambda's domain *and* `xs`'s element type, but `xs : Arr(?A)` is checked

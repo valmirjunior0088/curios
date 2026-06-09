@@ -1,6 +1,4 @@
-use crate::{Span, macros::name};
-
-name!(Atom);
+use crate::Span;
 
 // `Qualifier` is a canonical, resolved identity: a sequence of module segments
 // rooted at the module root. It is what the resolution tables key on.

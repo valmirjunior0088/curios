@@ -8,17 +8,15 @@ fn main() {
         use /sys/{Int, Flt};
         rec id : Type -> Type = (x) => x;
         let witness : Type = id(Int);
-        let pair_ty : Type = {
-            label : '[left, right],
-            match label : _ => Type
-            | 'left => Int
-            | 'right => Flt
-            end };
-        let value : pair_ty = ('left, Int/mul(+20, +2));
+        union Pair
+        | left(Int)
+        | right(Flt)
+        end
+        let value : Pair = Pair/left(Int/mul(+20, +2));
         let decoded : Int =
-            match value.0 : _ => Int
-            | 'left => Int/add(+40, +2)
-            | 'right => +7
+            match value : Int
+            | left(_) => Int/add(+40, +2)
+            | right(_) => +7
             end;
         let make : Int -> {witness, Flt} = (x) =>
             (x, Flt/add(+0.25, +0.5));

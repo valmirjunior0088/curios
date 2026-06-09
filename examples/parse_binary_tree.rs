@@ -6,22 +6,20 @@ use {
 fn main() {
     let source = r#"
         use /sys/{Int};
-        rec Tree : Type = {
-            label : '[leaf, node],
-            match label : _ => Type
-            | 'leaf => Int
-            | 'node => {Int, Tree, Tree}
-            end };
+        union Tree
+        | leaf(Int)
+        | node(Int, Tree, Tree)
+        end
         rec sum : Tree -> Int = (t) =>
-            match t.0 : _ => Int
-            | 'leaf => t.1
-            | 'node =>
-                Int/add(t.1.0, Int/add(sum(t.1.1), sum(t.1.2)))
+            match t : Int
+            | leaf(n) => n
+            | node(n, l, r) =>
+                Int/add(n, Int/add(sum(l), sum(r)))
             end;
         let tree : Tree =
-            ('node, (+1,
-                ('node, (+2, ('leaf, +3), ('leaf, +4))),
-                ('node, (+5, ('leaf, +6), ('leaf, +7)))));
+            Tree/node(+1,
+                Tree/node(+2, Tree/leaf(+3), Tree/leaf(+4)),
+                Tree/node(+5, Tree/leaf(+6), Tree/leaf(+7)));
         sum(tree)
         "#;
 

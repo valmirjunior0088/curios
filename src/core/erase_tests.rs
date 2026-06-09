@@ -1,8 +1,8 @@
 use {
     super::*,
     crate::{
-        core::{Atom, Flt, Int, Nat, Prim, Term, Var},
-        ersd, text,
+        core::{Flt, Int, Nat, Prim, Term, Var},
+        ersd,
     },
     std::time::Duration,
 };
@@ -11,83 +11,14 @@ fn context() -> Context {
     Context::new(Duration::from_secs(1))
 }
 
-fn lower(entrypoint: &text::Entrypoint, loader: &dyn text::Loader) -> Term {
-    text::to_core(entrypoint, loader)
-        .unwrap()
-        .into_nested_term()
-}
-
-#[test]
-fn erase_dependent_tuple_type_over_atom_match_and_tuple_value() {
-    let mut context = context();
-
-    let tuple_type = Term::tuple_type([
-        ("x", Term::atom_type(["left", "right"])),
-        (
-            "y",
-            Term::match_(
-                Term::var(Var::free("x")),
-                Some("m"),
-                Term::type_(),
-                vec![
-                    ("left", Term::atom_type(["hot"])),
-                    ("right", Term::atom_type(["cold"])),
-                ],
-            ),
-        ),
-    ]);
-
-    erase(&mut context, &tuple_type, &Term::type_()).unwrap();
-
-    let tuple = Term::tuple([
-        Term::atom(Atom::from("left")),
-        Term::atom(Atom::from("hot")),
-    ]);
-
-    erase(&mut context, &tuple, &tuple_type).unwrap();
-
-    let tuple = Term::tuple([
-        Term::atom(Atom::from("right")),
-        Term::atom(Atom::from("cold")),
-    ]);
-
-    erase(&mut context, &tuple, &tuple_type).unwrap();
-}
-
-#[test]
-fn erase_match_singleton_lowers_to_match() {
-    let type_ = lower(&"'[yes, no]".parse().unwrap(), &text::NullLoader);
-
-    let term = lower(
-        &r#"
-                let x : '[unit] = 'unit;
-                match x : _ => '[yes, no]
-                | 'unit => 'yes
-                end
-            "#
-        .parse()
-        .unwrap(),
-        &text::NullLoader,
-    );
-
-    let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
-
-    let ersd::Subterm::Let(ersd::Let { body, tail, .. }) = erased.into_subterm() else {
-        panic!("expected let");
-    };
-
-    assert!(matches!(
-        *body,
-        ersd::Subterm::Atom(ersd::Atom { index: 0 })
-    ));
-    assert!(matches!(*tail, ersd::Subterm::Match(_)));
-}
-
 #[test]
 fn erase_rec_single_identity_function() {
     let mut context = context();
 
-    let func_type = Term::func_type([("x", Term::atom_type(["a"]))], Term::atom_type(["a"]));
+    let func_type = Term::func_type(
+        [("x", Term::prim(Prim::NatType))],
+        Term::prim(Prim::NatType),
+    );
 
     let term = Term::rec(
         vec![(
@@ -105,7 +36,7 @@ fn erase_rec_single_identity_function() {
 fn erase_accepts_term_level_loop_with_stable_type() {
     let mut context = context();
 
-    let type_ = Term::atom_type(["a"]);
+    let type_ = Term::prim(Prim::NatType);
 
     let term = Term::rec(
         vec![("loop", type_.clone(), Term::var(Var::free("loop")))],
@@ -144,16 +75,16 @@ fn erase_prim_ops_typecheck() {
 
 #[test]
 fn erase_func_captures_free_variables_before_opening_body() {
-    let atom_type = Term::atom_type(["a"]);
-    let tuple_type = Term::tuple_type([("z", atom_type.clone()), ("w", atom_type.clone())]);
-    let type_ = Term::func_type([("x", atom_type.clone())], tuple_type);
+    let nat_type = Term::prim(Prim::NatType);
+    let tuple_type = Term::tuple_type([("z", nat_type.clone()), ("w", nat_type.clone())]);
+    let type_ = Term::func_type([("x", nat_type.clone())], tuple_type);
     let term = Term::func(
         [("x", Term::type_())],
         Term::tuple([Term::var(Var::free("x")), Term::var(Var::free("y"))]),
     );
 
     let mut context = Context::new(Duration::from_secs(1));
-    context.assume("y", &atom_type);
+    context.assume("y", &nat_type);
 
     let erased = erase(&mut context, &term, &type_).unwrap();
 
@@ -163,203 +94,6 @@ fn erase_func_captures_free_variables_before_opening_body() {
 
     assert_eq!(captures.len(), 1);
     assert!(captures.iter().any(|c| c.name == "y"));
-}
-
-#[test]
-fn erase_match_and_atom_stress_test() {
-    let type_ = lower(&"'[zeta, alpha, mu]".parse().unwrap(), &text::NullLoader);
-
-    let term = lower(
-        &r#"
-                let outer : '[zeta, alpha, mu] = 'mu;
-                let alpha_case : '[zeta, alpha, mu] = 'alpha;
-                let mu_case : '[zeta, alpha, mu] = 'mu;
-                let zeta_case : '[zeta, alpha, mu] = 'zeta;
-                match outer : subject => '[zeta, alpha, mu]
-                | 'zeta =>
-                    match alpha_case : nested => '[zeta, alpha, mu]
-                    | 'zeta => 'alpha
-                    | 'alpha => 'mu
-                    | 'mu => 'zeta
-                    end
-                | 'alpha =>
-                    match zeta_case : nested => '[zeta, alpha, mu]
-                    | 'zeta => 'mu
-                    | 'alpha => 'zeta
-                    | 'mu => 'alpha
-                    end
-                | 'mu =>
-                    match mu_case : nested => '[zeta, alpha, mu]
-                    | 'zeta => 'zeta
-                    | 'alpha => 'alpha
-                    | 'mu => 'mu
-                    end
-                end
-            "#
-        .parse()
-        .unwrap(),
-        &text::NullLoader,
-    );
-
-    let erased = erase(&mut Context::new(Duration::from_secs(1)), &term, &type_).unwrap();
-
-    let ersd::Subterm::Let(ersd::Let {
-        name: outer_name,
-        body: outer_body,
-        tail,
-    }) = erased.into_subterm()
-    else {
-        panic!("expected outer let");
-    };
-
-    assert_eq!(outer_name, "outer#0");
-    assert!(matches!(
-        *outer_body,
-        ersd::Subterm::Atom(ersd::Atom { index: 1 })
-    ));
-
-    let ersd::Subterm::Let(ersd::Let {
-        name: alpha_name,
-        body: alpha_body,
-        tail,
-    }) = tail.into_subterm()
-    else {
-        panic!("expected alpha_case let");
-    };
-
-    assert_eq!(alpha_name, "alpha_case#1");
-    assert!(matches!(
-        *alpha_body,
-        ersd::Subterm::Atom(ersd::Atom { index: 0 })
-    ));
-
-    let ersd::Subterm::Let(ersd::Let {
-        name: mu_name,
-        body: mu_body,
-        tail,
-    }) = tail.into_subterm()
-    else {
-        panic!("expected mu_case let");
-    };
-
-    assert_eq!(mu_name, "mu_case#2");
-    assert!(matches!(
-        *mu_body,
-        ersd::Subterm::Atom(ersd::Atom { index: 1 })
-    ));
-
-    let ersd::Subterm::Let(ersd::Let {
-        name: zeta_name,
-        body: zeta_body,
-        tail,
-    }) = tail.into_subterm()
-    else {
-        panic!("expected zeta_case let");
-    };
-
-    assert_eq!(zeta_name, "zeta_case#3");
-    assert!(matches!(
-        *zeta_body,
-        ersd::Subterm::Atom(ersd::Atom { index: 2 })
-    ));
-
-    let ersd::Subterm::Match(ersd::Match { head, cases }) = tail.into_subterm() else {
-        panic!("expected outer erased case");
-    };
-
-    assert!(matches!(
-        &*head,
-        ersd::Subterm::Name(name) if name.as_str() == "outer#0"
-    ));
-
-    assert_eq!(cases.len(), 3);
-
-    let ersd::Subterm::Match(ersd::Match {
-        head: alpha_head,
-        cases: alpha_cases,
-    }) = &*cases[0]
-    else {
-        panic!("expected nested case for 'alpha case");
-    };
-
-    assert!(matches!(
-        &**alpha_head,
-        ersd::Subterm::Name(name) if name.as_str() == "zeta_case#3"
-    ));
-
-    assert_eq!(alpha_cases.len(), 3);
-    assert!(matches!(
-        *alpha_cases[0],
-        ersd::Subterm::Atom(ersd::Atom { index: 2 })
-    ));
-    assert!(matches!(
-        *alpha_cases[1],
-        ersd::Subterm::Atom(ersd::Atom { index: 0 })
-    ));
-    assert!(matches!(
-        *alpha_cases[2],
-        ersd::Subterm::Atom(ersd::Atom { index: 1 })
-    ));
-
-    let ersd::Subterm::Match(ersd::Match {
-        head: mu_head,
-        cases: mu_cases,
-    }) = &*cases[1]
-    else {
-        panic!("expected nested case for 'mu case");
-    };
-
-    assert!(matches!(
-        &**mu_head,
-        ersd::Subterm::Name(name) if name.as_str() == "mu_case#2"
-    ));
-
-    assert_eq!(mu_cases.len(), 3);
-
-    assert!(matches!(
-        *mu_cases[0],
-        ersd::Subterm::Atom(ersd::Atom { index: 0 })
-    ));
-
-    assert!(matches!(
-        *mu_cases[1],
-        ersd::Subterm::Atom(ersd::Atom { index: 1 })
-    ));
-
-    assert!(matches!(
-        *mu_cases[2],
-        ersd::Subterm::Atom(ersd::Atom { index: 2 })
-    ));
-
-    let ersd::Subterm::Match(ersd::Match {
-        head: zeta_head,
-        cases: zeta_cases,
-    }) = &*cases[2]
-    else {
-        panic!("expected nested case for 'zeta case");
-    };
-
-    assert!(matches!(
-        &**zeta_head,
-        ersd::Subterm::Name(name) if name.as_str() == "alpha_case#1"
-    ));
-
-    assert_eq!(zeta_cases.len(), 3);
-
-    assert!(matches!(
-        *zeta_cases[0],
-        ersd::Subterm::Atom(ersd::Atom { index: 1 })
-    ));
-
-    assert!(matches!(
-        *zeta_cases[1],
-        ersd::Subterm::Atom(ersd::Atom { index: 2 })
-    ));
-
-    assert!(matches!(
-        *zeta_cases[2],
-        ersd::Subterm::Atom(ersd::Atom { index: 0 })
-    ));
 }
 
 #[test]
@@ -483,14 +217,14 @@ fn erase_nat_eql_returns_bool_atom() {
 fn erase_nat_match_dispatches_to_named_case() {
     let mut context = context();
 
-    let bool_type = Term::atom_type(["false", "true"]);
+    let bool_type = Term::prim(Prim::BlnType);
 
     let nat_match = Term::nat_dispatch(
         Term::prim(Prim::Nat(Nat::new(5usize))),
         Some("m"),
-        Term::atom_type(["false", "true"]),
-        [(5u32, Term::atom(Atom::from("true")))],
-        Term::atom(Atom::from("false")),
+        Term::prim(Prim::BlnType),
+        [(5u32, Term::prim(Prim::Bln(true)))],
+        Term::prim(Prim::Bln(false)),
     );
 
     erase(&mut context, &nat_match, &bool_type).unwrap();
@@ -519,17 +253,17 @@ fn erase_three_field_tuple_type_and_value() {
     let mut context = context();
 
     let tuple_type = Term::tuple_type([
-        ("x", Term::atom_type(["a"])),
-        ("y", Term::atom_type(["b"])),
-        ("z", Term::atom_type(["c"])),
+        ("x", Term::prim(Prim::NatType)),
+        ("y", Term::prim(Prim::IntType)),
+        ("z", Term::prim(Prim::BlnType)),
     ]);
 
     erase(&mut context, &tuple_type, &Term::type_()).unwrap();
 
     let tuple = Term::tuple([
-        Term::atom(Atom::from("a")),
-        Term::atom(Atom::from("b")),
-        Term::atom(Atom::from("c")),
+        Term::prim(Prim::Nat(Nat::new(1usize))),
+        Term::prim(Prim::Int(Int::new(2))),
+        Term::prim(Prim::Bln(true)),
     ]);
 
     erase(&mut context, &tuple, &tuple_type).unwrap();

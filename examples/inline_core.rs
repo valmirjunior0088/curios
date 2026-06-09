@@ -17,17 +17,15 @@ fn main() {
             "tuple_ty",
             core::Term::type_(),
             core::Term::tuple_type([
-                ("label", core::Term::atom_type(["left", "right"])),
+                ("flag", core::Term::prim(core::Prim::BlnType)),
                 (
                     "value",
-                    core::Term::match_(
-                        core::Term::var(core::Var::free("label")),
+                    core::Term::bln_match(
+                        core::Term::var(core::Var::free("flag")),
                         None,
                         core::Term::type_(),
-                        [
-                            ("left", core::Term::type_()),
-                            ("right", core::Term::type_()),
-                        ],
+                        core::Term::type_(),
+                        core::Term::type_(),
                     ),
                 ),
             ]),
@@ -35,31 +33,26 @@ fn main() {
                 "p",
                 core::Term::var(core::Var::free("tuple_ty")),
                 core::Term::tuple([
-                    core::Term::atom(core::Atom::from("left")),
+                    core::Term::prim(core::Prim::Bln(true)),
                     core::Term::type_(),
                 ]),
                 core::Term::let_(
-                    "label",
-                    core::Term::atom_type(["left", "right"]),
+                    "flag",
+                    core::Term::prim(core::Prim::BlnType),
                     core::Term::proj(core::Term::var(core::Var::free("p")), 0),
                     core::Term::let_(
                         "value",
                         core::Term::type_(),
                         core::Term::proj(core::Term::var(core::Var::free("p")), 1),
-                        core::Term::match_(
-                            core::Term::var(core::Var::free("label")),
+                        core::Term::bln_match(
+                            core::Term::var(core::Var::free("flag")),
                             None,
                             core::Term::type_(),
-                            [
-                                (
-                                    "left",
-                                    core::Term::apply(
-                                        core::Term::var(core::Var::free("id")),
-                                        [core::Term::var(core::Var::free("value"))],
-                                    ),
-                                ),
-                                ("right", core::Term::type_()),
-                            ],
+                            core::Term::type_(),
+                            core::Term::apply(
+                                core::Term::var(core::Var::free("id")),
+                                [core::Term::var(core::Var::free("value"))],
+                            ),
                         ),
                     ),
                 ),

@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Func, FuncType, Match, NatMatch, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, Var, convert_prim, infer, reduce,
+        Apply, BlnMatch, Context, Func, FuncType, NatMatch, Proj, Rec,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionCtor, UnionMatch, UnionType,
+        Var, convert_prim, infer, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -316,14 +317,6 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_atom_type(&mut self, this: AtomType, that: AtomType) -> Result<bool, ReduceError> {
-        Ok(this == that)
-    }
-
-    fn compare_atom(&mut self, this: Atom, that: Atom) -> Result<bool, ReduceError> {
-        Ok(this == that)
-    }
-
     fn compare_bln_match(
         &mut self,
         context: &mut Context,
@@ -427,11 +420,51 @@ impl Convert {
         }
     }
 
-    fn compare_match(
+    fn compare_union_type(
+        &mut self,
+        this: UnionType,
+        that: UnionType,
+    ) -> Result<bool, ReduceError> {
+        if this.name != that.name || this.params.len() != that.params.len() {
+            return Ok(false);
+        }
+
+        for (a, b) in this.params.into_iter().zip(that.params) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        Ok(true)
+    }
+
+    fn compare_union_ctor(
+        &mut self,
+        this: UnionCtor,
+        that: UnionCtor,
+    ) -> Result<bool, ReduceError> {
+        if this.name != that.name
+            || this.tag != that.tag
+            || this.params.len() != that.params.len()
+            || this.payload.len() != that.payload.len()
+        {
+            return Ok(false);
+        }
+
+        for (a, b) in this.params.into_iter().zip(that.params) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        for (a, b) in this.payload.into_iter().zip(that.payload) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        Ok(true)
+    }
+
+    fn compare_union_match(
         &mut self,
         context: &mut Context,
-        this: Match,
-        that: Match,
+        this: UnionMatch,
+        that: UnionMatch,
     ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_(), this.head, that.head);
 
@@ -446,14 +479,23 @@ impl Convert {
             return Ok(false);
         }
 
-        for ((this_atom, this_body), (that_atom, that_body)) in
+        for ((this_atom, this_scope), (that_atom, that_scope)) in
             this.cases.into_iter().zip(that.cases)
         {
-            if this_atom != that_atom {
+            if this_atom != that_atom || this_scope.arity() != that_scope.arity() {
                 return Ok(false);
             }
 
-            self.enqueue(Term::type_(), this_body, that_body);
+            let binders = (0..this_scope.arity())
+                .map(|_| Term::var(Var::free(context.fresh(None))))
+                .collect::<Vec<_>>();
+            let binder_refs = binders.iter().collect::<Vec<_>>();
+
+            self.enqueue(
+                Term::type_(),
+                this_scope.open(&binder_refs),
+                that_scope.open(&binder_refs),
+            );
         }
 
         Ok(true)
@@ -769,12 +811,14 @@ impl Convert {
                     self.eta_expand_tuple(context, tuple, other.into(), type_.clone())?
                 }
                 (Subterm::Proj(this), Subterm::Proj(that)) => self.compare_proj(this, that)?,
-                (Subterm::AtomType(this), Subterm::AtomType(that)) => {
-                    self.compare_atom_type(this, that)?
+                (Subterm::UnionType(this), Subterm::UnionType(that)) => {
+                    self.compare_union_type(this, that)?
                 }
-                (Subterm::Atom(this), Subterm::Atom(that)) => self.compare_atom(this, that)?,
-                (Subterm::Match(this), Subterm::Match(that)) => {
-                    self.compare_match(context, this, that)?
+                (Subterm::UnionCtor(this), Subterm::UnionCtor(that)) => {
+                    self.compare_union_ctor(this, that)?
+                }
+                (Subterm::UnionMatch(this), Subterm::UnionMatch(that)) => {
+                    self.compare_union_match(context, this, that)?
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?

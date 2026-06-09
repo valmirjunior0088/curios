@@ -1,7 +1,7 @@
 use super::{
-    Apply, Arity, BlnMatch, Bound, Context, Definition, Error, Func, FuncType, Item, Let, Match,
-    Metavar, Module, Nat, NatMatch, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
-    TupleType,
+    Apply, Arity, BlnMatch, Bound, Context, Definition, Error, Func, FuncType, Inductive, Item,
+    Let, Metavar, Module, Nat, NatMatch, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
+    Tuple, TupleType, UnionCtor, UnionMatch, UnionType,
 };
 
 /// Placeholder label pushed onto the binder stack for an unnamed (constant) scope
@@ -67,7 +67,32 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .map(|type_| zonk_term(context, type_, &[]))
         .transpose()?;
 
-    Ok(Module { items, type_, body })
+    // The registry's telescopes flow into `erase`, which runs meta-free with
+    // its own (solution-less) context — so they are zonked like everything else.
+    let inductives = module
+        .inductives
+        .iter()
+        .map(|(name, inductive)| {
+            Ok((
+                name.clone(),
+                Inductive {
+                    params: inductive.params.zonk(context, &[])?,
+                    constructors: inductive
+                        .constructors
+                        .iter()
+                        .map(|(tag, signature)| Ok((tag.clone(), signature.zonk(context, &[])?)))
+                        .collect::<Result<_, Error>>()?,
+                },
+            ))
+        })
+        .collect::<Result<_, Error>>()?;
+
+    Ok(Module {
+        items,
+        inductives,
+        type_,
+        body,
+    })
 }
 
 fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
@@ -150,8 +175,6 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
     Ok(match &**term {
         Subterm::Type => Subterm::Type,
         Subterm::Var(var) => Subterm::Var(var.clone()),
-        Subterm::Atom(atom) => Subterm::Atom(atom.clone()),
-        Subterm::AtomType(atom_type) => Subterm::AtomType(atom_type.clone()),
 
         Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim, binders)?),
 
@@ -179,19 +202,6 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
         Subterm::Proj(Proj { head, index }) => Subterm::Proj(Proj {
             head: zonk_term(context, head, binders)?,
             index: *index,
-        }),
-
-        Subterm::Match(Match {
-            head,
-            motive,
-            cases,
-        }) => Subterm::Match(Match {
-            head: zonk_term(context, head, binders)?,
-            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
-            cases: cases
-                .iter()
-                .map(|(atom, body)| Ok((atom.clone(), zonk_term(context, body, binders)?)))
-                .collect::<Result<_, Error>>()?,
         }),
 
         Subterm::BlnMatch(BlnMatch {
@@ -233,6 +243,41 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
                 .map(|(n, body)| Ok((*n, zonk_term(context, body, binders)?)))
                 .collect::<Result<_, Error>>()?,
             default: zonk_term(context, default, binders)?,
+        }),
+
+        Subterm::UnionType(UnionType { name, params }) => Subterm::UnionType(UnionType {
+            name: name.clone(),
+            params: zonk_terms(context, params, binders)?,
+        }),
+
+        Subterm::UnionCtor(UnionCtor {
+            name,
+            params,
+            tag,
+            payload,
+        }) => Subterm::UnionCtor(UnionCtor {
+            name: name.clone(),
+            params: zonk_terms(context, params, binders)?,
+            tag: tag.clone(),
+            payload: zonk_terms(context, payload, binders)?,
+        }),
+
+        Subterm::UnionMatch(UnionMatch {
+            head,
+            motive,
+            cases,
+        }) => Subterm::UnionMatch(UnionMatch {
+            head: zonk_term(context, head, binders)?,
+            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
+            cases: cases
+                .iter()
+                .map(|(atom, scope)| {
+                    Ok((
+                        atom.clone(),
+                        enter_scope(binders, scope, |b, binders| zonk_term(context, b, binders))?,
+                    ))
+                })
+                .collect::<Result<_, Error>>()?,
         }),
 
         Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {

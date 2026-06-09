@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
         NatMatch, Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet,
         TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
@@ -325,29 +325,6 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_arr_literal())
 }
 
-fn parse_atom_label<'a>() -> Parser<'a, Atom> {
-    take_exact("'").and_keep(parse_identifier()).map(Atom::from)
-}
-
-fn parse_atom<'a>() -> Parser<'a, Term> {
-    parse_atom_label().map(Subterm::Atom).map(Into::into)
-}
-
-fn parse_atom_type<'a>() -> Parser<'a, Term> {
-    parse_literal("'[")
-        .and_keep(sep_by0(
-            || parse_identifier().map(Atom::from),
-            || parse_literal(","),
-        ))
-        .and_drop(parse_literal("]"))
-        .map(|atoms| {
-            Subterm::AtomType(AtomType {
-                atoms: atoms.into_iter().collect(),
-            })
-        })
-        .map(Into::into)
-}
-
 fn parse_parens<'a>() -> Parser<'a, Term> {
     parse_literal("(")
         .and_keep(lazy(parse_term))
@@ -571,26 +548,6 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
         })
 }
 
-fn parse_atom_branch<'a>() -> Parser<'a, (Atom, Term)> {
-    catch(parse_literal("|").and_keep(parse_atom_label()))
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-}
-
-fn parse_atom_match<'a>() -> Parser<'a, Term> {
-    catch(parse_match_prefix())
-        .and(many1(parse_atom_branch))
-        .and_drop(parse_keyword("end"))
-        .map(|((head, motive), cases)| {
-            Subterm::Match(Match::Atom(AtomMatch {
-                head,
-                motive,
-                cases: cases.into_iter().collect(),
-            }))
-        })
-        .map(Into::into)
-}
-
 fn parse_union_match_branch<'a>() -> Parser<'a, (String, UnionCase)> {
     catch(parse_literal("|").and_keep(parse_identifier()))
         .and(
@@ -626,8 +583,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
     catch(parse_bln_match())
         .or(catch(parse_nat_fold_match()))
         .or(catch(parse_nat_match()))
-        .or(catch(parse_union_match()))
-        .or(parse_atom_match())
+        .or(parse_union_match())
 }
 
 fn parse_binding<'a>() -> Parser<'a, RecItem> {
@@ -779,8 +735,6 @@ fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
             .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
             .or(parse_type())
             .or(parse_prim())
-            .or(parse_atom_type())
-            .or(parse_atom())
             .or(parse_tuple_type())
             .or(parse_empty_tuple())
             .or(parse_tuple())

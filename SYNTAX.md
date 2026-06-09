@@ -76,7 +76,7 @@ pub union Result(A : Type, B : Type)
 end
 ```
 
-Declares a sum type and a constructor module with the same name. The type name is bound as `Result`; each constructor is bound under the constructor module, for example `Result/ok(A, B, value)` and `Result/err(A, B, value)`. A payload-less case uses empty parentheses:
+Declares a sum type and a constructor module with the same name. The type name is bound as `Result`; each constructor is bound under the constructor module, for example `Result/ok(A, B, value)` and `Result/err(A, B, value)`. A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors. A payload-less case uses empty parentheses:
 
 ```
 pub union Option(A : Type)
@@ -216,7 +216,7 @@ tail
 ```
 
 The body must be inferable: a bare `let f = (x) => x;` (nothing constrains the
-domain), or a tuple/atom with no annotation, is rejected. Top-level `let` and every
+domain), or a tuple with no annotation, is rejected. Top-level `let` and every
 `rec` binding (local or top-level) still require an explicit type — a `rec` group's
 mutually recursive types cannot be inferred from their bodies. The
 function-definition shorthand is also available locally:
@@ -267,15 +267,6 @@ end
 ```
 
 The `motive` gives the result type. It may name the scrutinee — `label => Type` — or omit the name when the result type does not depend on the scrutinee — just `Type`. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
-
-**Atoms** — one branch per atom in the head's atom type; no default branch:
-
-```
-match tag : Type
-| 'foo => body_foo
-| 'bar => body_bar
-end
-```
 
 **Booleans** — both branches required, either order:
 
@@ -349,14 +340,6 @@ Dependent, one or more named parameters (each parameter may be mentioned by late
 (a : A) -> B
 (a : A, b : B) -> C
 ```
-
-### Atom type
-
-```
-'[foo, bar, baz]
-```
-
-A finite set of atoms. The order of labels does not matter.
 
 ### Tuple type
 
@@ -440,14 +423,6 @@ Has type `/sys/Bin`.
 ```
 [1, 2, 3]
 ```
-
-### Atoms
-
-```
-'foo
-```
-
-A single atom value. Its type is any atom type that includes `foo`.
 
 ### Booleans
 
@@ -586,7 +561,7 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Sum types
 
-Use `union` to declare a sum type. Under the surface syntax, a union elaborates to a dependent tuple whose first field is an atom tag and whose second field is the constructor payload.
+Use `union` to declare a sum type. A union is a primitive *nominal* (inductive) type: two unions are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
 
 **Definition**
 

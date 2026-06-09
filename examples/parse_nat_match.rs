@@ -9,18 +9,24 @@ use {
 // WASM codegen path end-to-end from surface syntax.
 fn main() {
     let source = r#"
-        match 91 : _ => '[quote, lbracket, lbrace, other]
-        | '"' => 'quote
-        | '[' => 'lbracket
-        | '{' => 'lbrace
-        | _ => 'other
+        union Token
+        | quote()
+        | lbracket()
+        | lbrace()
+        | other()
+        end
+        match 91 : _ => Token
+        | '"' => Token/quote()
+        | '[' => Token/lbracket()
+        | '{' => Token/lbrace()
+        | _ => Token/other()
         end
         "#;
 
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("'[quote, lbracket, lbrace, other]".parse().unwrap());
+        .with_type("Token".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

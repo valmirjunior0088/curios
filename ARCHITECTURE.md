@@ -95,7 +95,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
 - Application `f(a, b)`
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
-- Atoms `'[left, right]`, `'left`; the unified `match x : k => T | … end` eliminator covering atoms, unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`)
+- The unified `match x : k => T | … end` eliminator covering unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`)
 - `e.0`, `e.1` (field access / Σ-elimination)
 - Holes `?`, which elaborate to fresh metavariables solved by bidirectional type checking
 - Monadic sequencing sugar: `with bind body` plus postfix `!`, desugared before core elaboration by re-elaborating the bind at each bang site
@@ -123,15 +123,15 @@ The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoa
 
 **Prelude and embedded standard library** (`src/text/prelude.rs`): `prelude(inner)` wraps any base loader in two layers — `SysLoader` serves the built-in `/sys` modules (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, `Bln`, `Io`, …), constructed directly as `text` AST and never parsed; `StdLoader` serves the `/std` standard library, whose sources are real Curios authored alongside the compiler in `std/*.crs` (plus the `std.crs` manifest of `pub mod`/`pub use` declarations) and embedded into the binary with `include_str!`. Both layers also add `sys`/`std` to `Loader::roots`, so `to_core` declares them at the entrypoint root automatically — every program sees `/sys` and `/std` without an explicit import. Anything not under those roots falls through to `inner`.
 
-**Term elaboration** (`to_core/elaborate.rs`): syntactic translation from `text::Term` to `core::Term`. The binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices; the union forms in a term — a `union` match — are desugared here to an atom match on the scrutinee's projected tag, binding each arm's fields from the payload projections. No type-directed work.
+**Term elaboration** (`to_core/elaborate.rs`): syntactic translation from `text::Term` to `core::Term`. The binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices; a `union` match lowers to a primitive `core::UnionMatch` whose arms carry their binders as scopes. No type-directed work.
 
-`to_core` returns `Result<core::Module, text::Error>`, where `core::Module { items, type_, body }` carries flat top-level definitions, the optional entrypoint type annotation, and the entrypoint body. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+`to_core` returns `Result<core::Module, text::Error>`, where `core::Module { items, inductives, type_, body }` carries flat top-level definitions, the inductive registry (each `union` declaration's parameter telescope and per-constructor signatures, consulted by elaboration and erasure), the optional entrypoint type annotation, and the entrypoint body. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
-The three union desugarings are:
+The three union lowerings are:
 
-- a union **type** → a tagged-tuple type `{ tag : '[..], match tag { .. } }`
-- a constructor's `inject` → the tagged tuple `('variant, (args..))`
-- a union **match** → an atom match on the projected tag
+- a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope and per-constructor signatures
+- a **constructor function** → a function whose body is the primitive `UnionCtor` normal form
+- a union **match** → a primitive `UnionMatch` (arm binders typed from the registry telescopes during core elaboration, with static arity checking)
 
 ---
 
@@ -149,7 +149,7 @@ The central `core::Term` enum:
 | `BlnMatch`                     | Dependent elimination of `Bln` (false + true cases)          |
 | `NatMatch::Induction`          | Structural induction on `Nat` (zero + pred/IH cases)         |
 | `NatMatch::Dispatch`           | Sparse dispatch on specific `Nat` values                     |
-| `AtomType` / `Atom` / `Match`  | Labeled unions, tags, pattern matching                       |
+| `UnionType` / `UnionCtor` / `UnionMatch` | Nominal (inductive) unions: the type, constructor values, and the eliminator |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                |
 | `Prim`                         | Built-in values and operations                               |
 | `Var`                          | Variables (free or bound)                                    |
@@ -213,7 +213,7 @@ Erasure is performed by `core::erase_module` after elaboration and zonking. The 
 
 | Removed                                                | Preserved                                             |
 | ------------------------------------------------------ | ----------------------------------------------------- |
-| `Type`, `FuncType`, `TupleType`, `AtomType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
+| `Type`, `FuncType`, `TupleType`, `UnionType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
 | Type annotations on binders                            | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`            |
 
 `Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `BlnMatch` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
@@ -224,8 +224,8 @@ Key differences from `core`:
 
 - No `Scope` — variables are plain `String` labels
 - `ersd::Func` carries `captures: Vec<String>` explicitly
-- Atom labels → numeric indices (`ersd::Atom { index: usize }`)
-- `ersd::Match` cases are `Vec<Subterm>` indexed by atom order (no label keys)
+- Union constructor tags → numeric indices (`ersd::Atom { index: usize }`); a constructor value lowers to one flat record `(tag, payload...)` and a union match to an `ersd::Match` on the tag
+- `ersd::Match` cases are `Vec<Subterm>` indexed by tag order (no label keys)
 - `ersd::NatMatch` dispatch cases are stored as `BTreeMap<u32, Subterm>`
 
 ---
@@ -263,7 +263,7 @@ Module
 | Variant                                 | Meaning                                                                                        |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `Jump(target, params)`                  | unconditional branch to a block                                                                |
-| `Match(operand, cases, default)`        | sparse dispatch on a `u32` (atom index or nat)                                                 |
+| `Match(operand, cases, default)`        | sparse dispatch on a `u32` (tag index or nat)                                                  |
 | `Call(Direct/Indirect, params, resume)` | function call; `resume` is the block that receives the return value                            |
 | `Host(IoPrint/IoRead, resume)`          | host-provided IO primitive in tail position; the impure boundary that purity analysis stops at |
 
@@ -331,7 +331,7 @@ A `cont::Module` → `cont::Module` transform: `optm::optimize` (`src/optm.rs`) 
 | `Flt`        | GC struct with single `f32` field                                         |
 | `Tuple(n)`   | GC struct with N `anyref` fields; subtype chain `tpl/1 ← tpl/2 ← tpl/3 …` |
 | `Closure`    | GC struct: funcref field + captured values as fields                      |
-| `Atom`       | `i31ref` (the index)                                                      |
+| `Atom`       | `i31ref` (the union constructor's tag index)                              |
 | `Bin`        | GC array of packed `i8`                                                   |
 | `Arr`        | GC array of nullable `anyref`                                             |
 
@@ -447,7 +447,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 | Layer            | What is tested                                                                                                                                                                                                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Term operations  | `Scope` open/close symmetry, shift, capture, release                                                                                                                                                                                                                             |
-| Parsing          | Round-trips: rec groups, atoms, tuples, function types, primitives, field access                                                                                                                                                                                                 |
+| Parsing          | Round-trips: rec groups, unions, tuples, function types, primitives, field access                                                                                                                                                                                                 |
 | Reduction        | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                                                                                                                                             |
 | Type checking    | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                                                                                                                                          |
 | Erasure          | Primitive, tuple, array, binary type erasure                                                                                                                                                                                                                                     |

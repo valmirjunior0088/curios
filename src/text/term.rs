@@ -1,8 +1,8 @@
 use {
-    super::{Atom, Name, Prim},
+    super::{Name, Prim},
     crate::Span,
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::BTreeMap,
         ops::Deref,
     },
 };
@@ -132,18 +132,6 @@ pub struct Proj {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct AtomType {
-    pub atoms: BTreeSet<Atom>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AtomMatch {
-    pub head: Term,
-    pub motive: Option<Motive>,
-    pub cases: BTreeMap<Atom, Term>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct UnionCase {
     pub binders: Vec<String>,
     pub body: Term,
@@ -160,7 +148,6 @@ pub struct UnionMatch {
 pub enum Match {
     Bln(BlnMatch),
     Nat(NatMatch),
-    Atom(AtomMatch),
     Union(UnionMatch),
 }
 
@@ -258,8 +245,6 @@ pub enum Subterm {
     TupleType(TupleType),
     Tuple(Tuple),
     Proj(Proj),
-    AtomType(AtomType),
-    Atom(Atom),
     Match(Match),
     Let(Let),
     Rec(Rec),

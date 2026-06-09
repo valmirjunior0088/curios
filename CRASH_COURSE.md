@@ -66,7 +66,7 @@ The primitive types map to Rust as follows:
 
 Integer and float literals require an explicit sign: `+42`, `-7`, `+1.5`. Natural number literals are unsigned and have no sign: `42`; they are arbitrary precision during parsing and type-level reduction, narrowed to `u32` during erasure, then emitted as WebAssembly `i31ref` values. String literals (`"hello"`) have type `Bin`.
 
-## Tuples and atoms
+## Tuples
 
 Rust has structs and tuples as separate concepts. Curios has one aggregate type — tuple — which optionally names its fields:
 
@@ -87,7 +87,9 @@ let x_coord(p : { Nat, Nat }) -> Nat =
     p.0;
 ```
 
-Atoms are Curios's replacement for fieldless `enum` variants. An atom value is written `'foo`; its type is the set of atoms it can belong to, written `'[foo, bar]`.
+## Sum types
+
+Rust encodes sum types with `enum`. Curios uses `union` declarations with constructor functions and constructor-pattern matching. Fieldless variants are constructors with an empty payload:
 
 ```rust
 // Rust
@@ -97,24 +99,14 @@ let d: Direction = Direction::North;
 
 ```
 -- Curios
-let d : '[north, south] = 'north;
+union Direction
+| north()
+| south()
+end
+let d : Direction = Direction/north();
 ```
 
-No declaration needed. Matching uses `match`:
-
-```
-let opposite(d : '[north, south]) -> '[north, south] =
-    match d : '[north, south]
-    | 'north => 'south
-    | 'south => 'north
-    end;
-```
-
-Branches are introduced by `|` and the whole `match` is closed by `end`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `label => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
-
-## Sum types
-
-Rust encodes sum types with `enum`. Curios uses `union` declarations with constructor functions and constructor-pattern matching.
+A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors to importing modules.
 
 ```rust
 // Rust
@@ -151,6 +143,8 @@ let area(s : Shape) -> Flt =
 
 In the `circle` branch `radius : Flt`; in the `rectangle` branch `width : Flt` and `height : Flt`. No downcasting, no `unwrap`.
 
+Branches are introduced by `|` and the whole `match` is closed by `end`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `label => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
+
 ## Dependent function types
 
 A function type `(label : A) -> B` binds `label` so it can appear in `B`. This means the return type can be a function of the argument's value — not just its type. Multiple parameters are written `(a : A, b : B) -> C`, and later parameters and the result may mention earlier ones.
@@ -166,20 +160,20 @@ In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary
 The motive in `match` is the same mechanism: `match head : label => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
 ```
-let ReturnType(tag : '[nat, bin]) -> Type =
-    match tag : _ => Type
-    | 'nat => Nat
-    | 'bin => Bin
+let ReturnType(flag : Bln) -> Type =
+    match flag : _ => Type
+    | true => Nat
+    | false => Bin
     end;
 
-let default_for(tag : '[nat, bin]) -> ReturnType(tag) =
-    match tag : t => ReturnType(t)
-    | 'nat => 0
-    | 'bin => ""
+let default_for(flag : Bln) -> ReturnType(flag) =
+    match flag : f => ReturnType(f)
+    | true => 0
+    | false => ""
     end;
 ```
 
-The caller that passes `'nat` gets back a `Nat`; the caller that passes `'bin` gets back a `Bin`. The type checker tracks this without any enum wrapping on the return side.
+The caller that passes `true` gets back a `Nat`; the caller that passes `false` gets back a `Bin`. The type checker tracks this without any enum wrapping on the return side.
 
 ## Payoff: length-indexed vectors
 

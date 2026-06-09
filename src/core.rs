@@ -24,6 +24,9 @@ mod term_tests;
 mod module;
 pub use module::*;
 
+mod inductive;
+pub use inductive::*;
+
 mod print;
 
 mod reduce_prim;

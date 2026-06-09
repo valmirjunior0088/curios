@@ -6,20 +6,18 @@ use {
 fn main() {
     let source = r#"
         use /sys/{Int};
-        rec IntList : Type = {
-            label : '[nil, cons],
-            match label : _ => Type
-            | 'nil => Int
-            | 'cons => {Int, IntList}
-            end };
+        union IntList
+        | nil()
+        | cons(Int, IntList)
+        end
         rec sum : IntList -> Int = (list) =>
-            match list.0 : _ => Int
-            | 'nil => +0
-            | 'cons =>
-                Int/add(list.1.0, sum(list.1.1))
+            match list : Int
+            | nil() => +0
+            | cons(head, tail) =>
+                Int/add(head, sum(tail))
             end;
         let xs : IntList =
-            ('cons, (+1, ('cons, (+2, ('cons, (+3, ('nil, +0)))))));
+            IntList/cons(+1, IntList/cons(+2, IntList/cons(+3, IntList/nil())));
         sum(xs)
         "#;
 

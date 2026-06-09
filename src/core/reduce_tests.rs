@@ -1,11 +1,15 @@
 use {
     super::*,
-    crate::core::{Atom, Flt, Int, Nat, Prim, Var},
+    crate::core::{Flt, Int, Nat, Prim, Var},
     std::time::Duration,
 };
 
 fn context() -> Context {
     Context::new(Duration::from_millis(10))
+}
+
+fn nat(n: usize) -> Term {
+    Term::prim(Prim::Nat(Nat::new(n)))
 }
 
 #[test]
@@ -14,33 +18,30 @@ fn reduce_apply_beta_reduces() {
 
     let term: Term = Term::apply(
         Term::func([("x", Term::type_())], Term::var(Var::free("x"))),
-        [Term::atom(Atom::from("ok"))],
+        [nat(1)],
     );
 
-    assert_eq!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("ok")))
-    );
+    assert_eq!(reduce(&mut context, term.clone()), Ok(nat(1)));
 }
 
 #[test]
-fn reduce_match_selects_match() {
+fn reduce_union_match_selects_case_and_projects_payload() {
     let mut context = context();
 
-    let term: Term = Term::match_(
-        Term::atom(Atom::from("a")),
+    // Dispatch inspects the reduced head's `UnionCtor`; the arm's binder is
+    // bound call-by-name to the flat projection `head.1`, which then reduces
+    // to the payload component.
+    let term: Term = Term::union_match(
+        Term::union_ctor("E", Vec::<Term>::new(), "some", [nat(42)]),
         Some("m"),
-        Term::type_(),
-        vec![
-            ("a", Term::atom(Atom::from("yes"))),
-            ("b", Term::atom(Atom::from("no"))),
+        Term::prim(Prim::NatType),
+        [
+            ("none", Vec::<&str>::new(), nat(0)),
+            ("some", vec!["x"], Term::var(Var::free("x"))),
         ],
     );
 
-    assert_eq!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("yes")))
-    );
+    assert_eq!(reduce(&mut context, term), Ok(nat(42)));
 }
 
 #[test]
@@ -50,16 +51,16 @@ fn reduce_nat_fold_zero_is_not_true() {
     let term: Term = Term::nat_induction(
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
         Some("m"),
-        Term::atom_type(["false", "true"]),
-        Term::atom(Atom::from("false")),
+        Term::prim(Prim::BlnType),
+        Term::prim(Prim::Bln(false)),
         "pred",
         "ih",
-        Term::atom(Atom::from("true")),
+        Term::prim(Prim::Bln(true)),
     );
 
     assert_ne!(
         reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("true")))
+        Ok(Term::prim(Prim::Bln(true)))
     );
 }
 
@@ -67,7 +68,7 @@ fn reduce_nat_fold_zero_is_not_true() {
 fn reduce_let_then_var_unfolds_definition() {
     let mut context = context();
 
-    context.define("y", &Term::atom(Atom::from("done")));
+    context.define("y", &nat(7));
 
     let term: Term = Term::let_(
         "x",
@@ -76,10 +77,7 @@ fn reduce_let_then_var_unfolds_definition() {
         Term::var(Var::free("x")),
     );
 
-    assert_eq!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("done")))
-    );
+    assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
 }
 
 #[test]
@@ -265,28 +263,22 @@ fn reduce_proj_beta_reduces() {
     let mut context = context();
 
     let term: Term = Term::proj(
-        Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("b"))]),
+        Term::tuple([nat(1), nat(2)]),
         1,
     );
 
-    assert_eq!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("b")))
-    );
+    assert_eq!(reduce(&mut context, term.clone()), Ok(nat(2)));
 }
 
 #[test]
 fn reduce_proj_table_lookup() {
     let mut context = context();
 
-    context.define_projection(Term::var(Var::free("r")), 0, Term::atom(Atom::from("ok")));
+    context.define_projection(Term::var(Var::free("r")), 0, nat(1));
 
     let term: Term = Term::proj(Term::var(Var::free("r")), 0);
 
-    assert_eq!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::atom(Atom::from("ok")))
-    );
+    assert_eq!(reduce(&mut context, term.clone()), Ok(nat(1)));
 }
 
 #[test]
@@ -329,8 +321,8 @@ fn define_invalidates_cached_reduction() {
     assert_eq!(reduce(&mut context, x.clone()), Ok(x.clone()));
 
     // Defining x must clear the cache so the next reduce unfolds.
-    context.define("x", &Term::atom(Atom::from("hi")));
-    assert_eq!(reduce(&mut context, x), Ok(Term::atom(Atom::from("hi"))));
+    context.define("x", &nat(3));
+    assert_eq!(reduce(&mut context, x), Ok(nat(3)));
 }
 
 #[test]
@@ -342,8 +334,8 @@ fn define_projection_invalidates_cached_reduction() {
     assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));
 
     // Refining the projection must clear the cache.
-    context.define_projection(Term::var(Var::free("r")), 0, Term::atom(Atom::from("ok")));
-    assert_eq!(reduce(&mut context, proj), Ok(Term::atom(Atom::from("ok"))));
+    context.define_projection(Term::var(Var::free("r")), 0, nat(1));
+    assert_eq!(reduce(&mut context, proj), Ok(nat(1)));
 }
 
 #[test]
@@ -353,11 +345,8 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
 
     // Inside a frame, define x and reduce — the cache will hold x → "inner".
     context.with_frame(|context| {
-        context.define("x", &Term::atom(Atom::from("inner")));
-        assert_eq!(
-            reduce(context, x.clone()),
-            Ok(Term::atom(Atom::from("inner")))
-        );
+        context.define("x", &nat(4));
+        assert_eq!(reduce(context, x.clone()), Ok(nat(4)));
     });
 
     // After the frame pops, x has no definition again. A stale cache entry
@@ -387,7 +376,7 @@ fn reduce_solved_metavar_yields_solution_and_clears_cache() {
     // First reduce caches the metavariable as itself (it is `reach == 0`).
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
-    let solution = Term::atom(Atom::from("ok"));
+    let solution = nat(1);
     context.solve_metavar(0, solution.clone());
 
     // `solve` cleared the cache, so the stale "itself" reduct is gone.

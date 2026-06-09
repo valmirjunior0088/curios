@@ -106,6 +106,7 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
+    inductives: &mut BTreeMap<String, core::Inductive>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in top_items {
@@ -137,6 +138,7 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
+                        inductives,
                         modules,
                     )?;
                 }
@@ -150,6 +152,7 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
+                        inductives,
                         modules,
                     )?;
                 }
@@ -207,62 +210,64 @@ fn process_items(
                 flat_items.push(FlatItem::Rec(items));
             }
             TopItem::Union(unions) => {
-                // Step 1: type bindings as one rec group. Each union desugars to a
-                // tagged-tuple type, wrapped in a `Func` over its type parameters
-                // when present — the capture binds the parameter names referenced
-                // in the variant payload telescopes.
+                // Step 1: type bindings as one rec group. A union's type
+                // binding wraps a primitive `UnionType` normal form in a
+                // `Func` over its type parameters (so `Result(Nat, Bin)`
+                // beta-reduces to `UnionType { Result, [Nat, Bin] }`), and its
+                // shape is recorded in the inductive registry.
                 let type_flat_items = unions
                     .iter()
                     .map(|u| {
                         let elaborate = Elaborate::new(context);
 
-                        let variants = u
+                        let name = context.prefixed(&u.label).join();
+                        let param_tys = u
+                            .params
+                            .iter()
+                            .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
+                            .collect::<Result<Vec<_>, Error>>()?;
+                        let param_vars = u
+                            .params
+                            .iter()
+                            .map(|(n, _)| core::Term::var(core::Var::free(n)))
+                            .collect::<Vec<_>>();
+
+                        // Registry entry: the parameter telescope plus each
+                        // constructor's full signature `(params..., payload...)
+                        // -> UnionType { name, params }`. `Telescope::build`
+                        // captures the parameter labels in the payload types
+                        // and the terminal, mirroring `func_type`.
+                        let constructors = u
                             .cases
                             .iter()
                             .map(|c| {
                                 let fields = c
                                     .payload_types
                                     .iter()
-                                    .map(|t| Ok((String::new(), elaborate.term(t)?)))
-                                    .collect::<Result<Vec<(String, core::Term)>, Error>>()?;
-                                Ok((
-                                    core::Atom::from(c.label.as_str()),
-                                    core::Telescope::build(fields, ()),
-                                ))
+                                    .enumerate()
+                                    .map(|(i, t)| Ok((format!("_{i}"), elaborate.term(t)?)))
+                                    .collect::<Result<Vec<_>, Error>>()?;
+                                let signature = core::Telescope::build(
+                                    param_tys.iter().cloned().chain(fields),
+                                    core::Term::union_type(&name, param_vars.clone()),
+                                );
+                                Ok((core::Atom::from(c.label.as_str()), signature))
                             })
-                            .collect::<Result<BTreeMap<core::Atom, core::Telescope<()>>, Error>>(
-                            )?;
+                            .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
-                        // Desugar the union type to a tagged-tuple type
-                        // `{ tag : '[c_1, ...], match tag { 'c_i => (payload_i...) } }`.
-                        // `tuple_type` captures the `tag` binder, shifting any escaping
-                        // union-parameter indices in the payload telescopes by one.
-                        let atom_type = core::Term::atom_type(variants.keys().cloned());
-                        let tag_match: core::Term = core::Subterm::Match(core::Match {
-                            head: core::Term::var(core::Var::free("tag")),
-                            motive: core::Scope::constant(core::One, core::Term::type_()),
-                            cases: variants
-                                .into_iter()
-                                .map(|(a, telescope)| {
-                                    let payload =
-                                        core::Subterm::TupleType(core::TupleType { telescope })
-                                            .into();
-                                    (a, payload)
-                                })
-                                .collect(),
-                        })
-                        .into();
-                        let union: core::Term =
-                            core::Term::tuple_type([("tag", atom_type), ("", tag_match)]);
+                        inductives.insert(
+                            name.clone(),
+                            core::Inductive {
+                                params: core::Telescope::build(param_tys.clone(), ()),
+                                constructors,
+                            },
+                        );
+
+                        let union = core::Term::union_type(&name, param_vars);
 
                         let (type_, body) = if u.params.is_empty() {
                             (core::Term::type_(), union)
                         } else {
-                            let param_tys = u
-                                .params
-                                .iter()
-                                .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
-                                .collect::<Result<Vec<_>, Error>>()?;
                             (
                                 core::Term::func_type(param_tys.clone(), core::Term::type_()),
                                 core::Term::func(param_tys, union),
@@ -316,15 +321,19 @@ fn process_items(
                         let ctor_type =
                             core::Term::func_type(param_tys.clone(), elaborate.term(&output_type)?);
 
-                        // Constructor body: (params..., _0, ...) => inject 'c (_0, ...)
+                        // Constructor body: (params..., _0, ...) => the variant's
+                        // injection, a primitive `UnionCtor` normal form.
                         let args: Vec<core::Term> = (0..k)
                             .map(|i| core::Term::var(core::Var::free(format!("_{i}"))))
                             .collect();
-                        // Desugar the injection to a tagged tuple `('c, (args...))`.
-                        let inject: core::Term = core::Term::tuple([
-                            core::Term::atom(core::Atom::from(c.label.as_str())),
-                            core::Term::tuple(args),
-                        ]);
+                        let inject = core::Term::union_ctor(
+                            context.prefixed(&u.label).join(),
+                            u.params
+                                .iter()
+                                .map(|(n, _)| core::Term::var(core::Var::free(n))),
+                            core::Atom::from(c.label.as_str()),
+                            args,
+                        );
                         let ctor_body = core::Term::func(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
@@ -520,11 +529,13 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
     let binders = std::cell::Cell::new(0);
     let mut context = Context::new(&table, &public, &metavars, &binders);
     let mut flat_items = Vec::new();
+    let mut inductives = BTreeMap::new();
 
     process_items(
         &entrypoint.module.items,
         &mut context,
         &mut flat_items,
+        &mut inductives,
         &modules,
     )?;
 
@@ -558,6 +569,7 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
 
     Ok(core::Module {
         items,
+        inductives,
         type_,
         body: tail,
     })

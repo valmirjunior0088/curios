@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Func, Let, Match, Metavar, Nat, NatMatch, One, Prim, Proj,
-        ReduceError, Scope, Subterm, Term, Tuple, Two, Var, reduce_prim,
+        Apply, BlnMatch, Context, Func, Let, Metavar, Nat, NatMatch, One, Prim, Proj,
+        ReduceError, Scope, Subterm, Term, Tuple, Two, UnionMatch, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -34,6 +34,19 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
                 .nth(index)
                 .expect("Proj: index out of bounds"),
         )),
+        // The untyped reducer's flat view of a constructor value, mirroring the
+        // runtime layout `(tag, payload...)`: field i + 1 is the i-th payload
+        // component. `reduce_union_match` relies on this to bind arms by
+        // projection (call-by-name). Field 0 (the tag) is never projected at
+        // the term level — dispatch inspects the `UnionCtor` directly.
+        Subterm::UnionCtor(ctor) if (1..=ctor.payload.len()).contains(&index) => {
+            Ok(Reduce::Continue(
+                ctor.payload
+                    .into_iter()
+                    .nth(index - 1)
+                    .expect("index bounded above"),
+            ))
+        }
         head => {
             let head: Term = head.into();
             match context.proj_reduct(&head, index) {
@@ -175,31 +188,39 @@ fn reduce_nat_match(context: &mut Context, nm: NatMatch) -> Result<Reduce, Reduc
     }
 }
 
-fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> {
-    let Match {
+fn reduce_union_match(context: &mut Context, um: UnionMatch) -> Result<Reduce, ReduceError> {
+    let UnionMatch {
         head,
         motive,
         cases,
-    } = m;
-    let atom = match Term::unwrap_or_clone(reduce(context, head)?) {
-        Subterm::Atom(atom) => atom,
-        head => {
-            return Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head.into(),
-                motive,
-                cases,
-            }))));
-        }
-    };
+    } = um;
 
-    match cases.get(&atom) {
-        Some(body) => Ok(Reduce::Continue(body.clone())),
-        None => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-            head: Term::atom(atom),
-            motive,
-            cases,
-        })))),
+    // Dispatch on the reduced scrutinee — a `UnionCtor` directly, or one
+    // reached through a match-arm refinement (`refine_head` registers
+    // `head := ctor_val`, which `reduce` follows). The selected arm's binders
+    // are bound to *projections of the original head term* (`head.(i + 1)`,
+    // the flat view in `reduce_proj`), not to the reduced payload values:
+    // call-by-name. Substituting reduced payloads would inline evaluated
+    // definition internals (including local-`let` annotation holes that
+    // elaboration never births) into types that flow on to `zonk`.
+    let head_reduced = reduce(context, head.clone())?;
+
+    if let Subterm::UnionCtor(ctor) = &*head_reduced
+        && let Some(scope) = cases.get(&ctor.tag)
+    {
+        let projections = (0..scope.arity())
+            .map(|i| Term::proj(head.clone(), i + 1))
+            .collect::<Vec<_>>();
+        let projection_refs = projections.iter().collect::<Vec<_>>();
+
+        return Ok(Reduce::Continue(scope.open(&projection_refs)));
     }
+
+    Ok(Reduce::Break(Term::from(Subterm::UnionMatch(UnionMatch {
+        head: head_reduced,
+        motive,
+        cases,
+    }))))
 }
 
 fn reduce_let(let_: Let) -> Reduce {
@@ -236,10 +257,12 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
                 Subterm::Func(func) => reduce_func_eta(context, func)?,
-                Subterm::Match(m) => reduce_match(context, m)?,
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
+                Subterm::UnionMatch(um) => reduce_union_match(context, um)?,
+                // `UnionType` and `UnionCtor` are primitive normal forms, like
+                // `Tuple`: their sub-terms are not reduced in WHNF.
                 term => Reduce::Break(term.into()),
             };
 

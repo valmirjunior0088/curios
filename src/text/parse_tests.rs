@@ -35,58 +35,6 @@ fn parse_rec_func_and_apply() {
 }
 
 #[test]
-fn parse_let_tuple_and_atoms() {
-    assert_eq!(
-        "let x : '[hot, cold] = 'hot; (x, 'cold)"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Let(Let {
-            label: "x".to_string(),
-            signature: LetSignature::Name {
-                type_: Some(
-                    Subterm::AtomType(AtomType {
-                        atoms: ["cold", "hot"].into_iter().map(Atom::from).collect(),
-                    })
-                    .into(),
-                ),
-                body: Subterm::Atom(Atom::from("hot")).into(),
-            },
-            tail: Subterm::Tuple(Tuple {
-                fields: vec![
-                    Subterm::Name(Name::from(["x".to_string()])).into(),
-                    Subterm::Atom(Atom::from("cold")).into(),
-                ],
-            })
-            .into(),
-        })
-        .into()
-    );
-}
-
-#[test]
-fn parse_match_single_branch() {
-    assert_eq!(
-        "match 'foo : k => '[foo] | 'foo => 'foo end"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Match(Match::Atom(AtomMatch {
-            head: Subterm::Atom(Atom::from("foo")).into(),
-            motive: Some(Motive {
-                label: Some("k".to_string()),
-                body: Subterm::AtomType(AtomType {
-                    atoms: [Atom::from("foo")].into_iter().collect(),
-                })
-                .into(),
-            }),
-            cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
-                .into_iter()
-                .collect(),
-        }))
-        .into()
-    );
-}
-
-#[test]
 fn parse_int_literal_and_flt_literal_are_disambiguated() {
     assert_eq!(
         "+42".parse::<Term>().unwrap(),
@@ -598,40 +546,23 @@ fn parse_union_match_multi_binder() {
 }
 
 #[test]
-fn parse_atom_match_still_works() {
-    assert_eq!(
-        "match x : '[foo] | 'foo => 'foo end"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Match(Match::Atom(AtomMatch {
-            head: Subterm::Name(Name::from(["x".to_string()])).into(),
-            motive: Some(Motive {
-                label: None,
-                body: Subterm::AtomType(AtomType {
-                    atoms: [Atom::from("foo")].into_iter().collect(),
-                })
-                .into(),
-            }),
-            cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
-                .into_iter()
-                .collect(),
-        }))
-        .into()
-    );
-}
-
-#[test]
 fn parse_match_omitted_motive() {
     // Dropping the `: motive` clause entirely yields `motive: None`; the
     // elaborator later lowers it to a fresh metavariable (sugar for `: _`).
     assert_eq!(
-        "match x | 'foo => 'foo end".parse::<Term>().unwrap(),
-        Subterm::Match(Match::Atom(AtomMatch {
+        "match x | foo(y) => y end".parse::<Term>().unwrap(),
+        Subterm::Match(Match::Union(UnionMatch {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
-            cases: [(Atom::from("foo"), Subterm::Atom(Atom::from("foo")).into())]
-                .into_iter()
-                .collect(),
+            cases: [(
+                "foo".to_string(),
+                UnionCase {
+                    binders: vec!["y".to_string()],
+                    body: Subterm::Name(Name::from(["y".to_string()])).into(),
+                },
+            )]
+            .into_iter()
+            .collect(),
         }))
         .into()
     );
@@ -639,7 +570,7 @@ fn parse_match_omitted_motive() {
 
 #[test]
 fn omitted_motive_round_trips() {
-    let term = "match x | 'foo => 'foo end".parse::<Term>().unwrap();
+    let term = "match x | foo(y) => y end".parse::<Term>().unwrap();
     let printed = term.to_string();
     // An omitted motive prints back without the `: …` clause …
     assert!(!printed.contains(" : "));
@@ -842,16 +773,16 @@ fn parse_bang_in_let_binding() {
 fn parse_bang_in_match_scrutinee_and_arm() {
     // A `!` in the scrutinee and a `!` inside an arm are distinct `Bang` nodes;
     // the elaborator hoists them into different regions.
-    let term = "match x! | 'foo => y! end".parse::<Term>().unwrap();
+    let term = "match x! | foo(z) => y! end".parse::<Term>().unwrap();
     match term.into_subterm() {
-        Subterm::Match(Match::Atom(m)) => {
+        Subterm::Match(Match::Union(m)) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
             assert_eq!(
-                m.cases.get(&Atom::from("foo")),
+                m.cases.get("foo").map(|case| &case.body),
                 Some(&Subterm::Bang(name("y")).into())
             );
         }
-        other => panic!("expected atom match, got {other:?}"),
+        other => panic!("expected union match, got {other:?}"),
     }
 }
 

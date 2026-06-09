@@ -33,13 +33,14 @@ pub fn expect(
     }
 }
 
-pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
-    // Register the refinement on the raw head when it's a Var or Proj. Without this,
-    // a scrutinee whose canonical form reduces past the projection (e.g. when the
-    // scrutinee is a literal tagged tuple) would record nothing, and the type checker
-    // would type dead-arm bodies against the actual variant's payload rather than the
-    // arm-assumed variant's payload. The frame containing this refinement is scoped to
-    // the arm, so the (possibly counterfactual) assumption does not leak.
+/// Register a counterfactual match-arm refinement of the scrutinee: a `Var`
+/// scrutinee reduces to the arm's value inside the arm (`refine`), and a
+/// projection scrutinee (e.g. an atom match on a tuple field) refines that
+/// projection (`refine_projection`). The frame containing the refinement is
+/// scoped to the arm, so the (possibly counterfactual) assumption does not
+/// leak. Any other scrutinee shape records nothing — there is no stable key
+/// to refine, and the arm then types against the unrefined head.
+pub fn refine_head(context: &mut Context, head: &Term, value: &Term) {
     match &**head {
         Subterm::Var(var) => {
             context.refine(var.unwrap(), value);
@@ -49,23 +50,6 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
         }
         _ => {}
     }
-
-    // Also register on the canonical form. Handles let-chain canonicalization where
-    // body references in the arm use the underlying base term rather than the raw
-    // expression appearing at the match site.
-    let canonical = reduce_with(context, head)?;
-
-    match &*canonical {
-        Subterm::Var(var) => {
-            context.refine(var.unwrap(), value);
-        }
-        Subterm::Proj(Proj { head, index }) => {
-            context.refine_projection(head.clone(), *index, value.clone());
-        }
-        _ => {}
-    }
-
-    Ok(())
 }
 
 /// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,

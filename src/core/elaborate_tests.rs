@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Nat, Prim, Term},
+    crate::core::{Nat, Prim, Term},
     std::time::Duration,
 };
 
@@ -95,19 +95,6 @@ fn annotated_func_infers_a_function_type() {
         )
         .unwrap()
     );
-}
-
-#[test]
-fn naturally_checked_atom_elaborates_against_its_atom_type() {
-    let mut context = context();
-
-    let atom_type = Term::atom_type(["red", "green"]);
-    let atom = Term::atom(Atom::from("green"));
-
-    let (term, type_) = elaborate(&mut context, &atom, Mode::Check(atom_type.clone())).unwrap();
-
-    assert_eq!(term, atom);
-    assert_eq!(type_, atom_type);
 }
 
 #[test]

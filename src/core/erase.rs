@@ -1,8 +1,9 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Error, Func, Item, Let, Match, Module, Nat,
+        Apply, BlnMatch, Context, Error, Func, Item, Let, Module, Nat,
         NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        Var, erase_prim, expect_prim_head, infer, reduce_with, refine_head,
+        UnionCtor, UnionMatch, UnionType, Var, erase_prim, expect_prim_head, infer, reduce_with,
+        refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -270,7 +271,7 @@ fn erase_nat_dispatch(
                     context,
                     head,
                     &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
-                )?;
+                );
                 erase(context, body, &case_expected).map(|e| (*n, e))
             })
         })
@@ -326,7 +327,7 @@ fn erase_bln_match(
     let head_type = expect_prim_head(context, head, term, Prim::BlnType)?;
 
     let erased_false = context.with_frame(|context| {
-        refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into())?;
+        refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into());
         erase(
             context,
             false_case,
@@ -335,7 +336,7 @@ fn erase_bln_match(
     })?;
 
     let erased_true = context.with_frame(|context| {
-        refine_head(context, head, &Subterm::Prim(Prim::Bln(true)).into())?;
+        refine_head(context, head, &Subterm::Prim(Prim::Bln(true)).into());
         erase(
             context,
             true_case,
@@ -365,16 +366,17 @@ fn erase_proj(
     let head_type = reduce_with(context, &head_type)?;
 
     // Elaborate already checked the head is a tuple and the index is in range
-    // (§9); the type is re-derived here only to lower the head. The head's type
-    // is usually a `TupleType`, but a projection of a *union payload* whose
-    // discriminant is stuck (a `parse`-style combinator run at compile time on a
-    // symbolic input) has a neutral `match` type instead — every variant still
-    // carries a field at `index`, in the same runtime slot, so the projection is
-    // well-formed and lowers to the same `ersd::Proj` (§9).
-    assert!(
-        projectable_at(context, &head_type, *index)?,
-        "erase: projected a non-tuple",
-    );
+    // (§9); the type is re-derived here only to lower the head. (The
+    // projection-through-a-stuck-union-payload workaround that used to live
+    // here — `projectable_at` — died with the tagged-tuple encoding: a union
+    // payload is no longer reached by projecting a structural pair, so a
+    // projection's head type is always a `TupleType` again.)
+    match &*head_type {
+        Subterm::TupleType(TupleType { telescope }) => {
+            assert!(*index < telescope.len(), "erase: projected a non-tuple");
+        }
+        _ => unreachable!("erase: projected a non-tuple"),
+    }
 
     Ok(ersd::Subterm::Proj(ersd::Proj {
         head: erase(context, head, &head_type)?,
@@ -383,102 +385,156 @@ fn erase_proj(
     .into())
 }
 
-/// Whether field `index` can be projected from a value of (reduced) type `ty`.
-/// A `TupleType` answers directly. A *neutral* `match` — a union payload type
-/// with a stuck discriminant — answers when every branch is itself projectable
-/// at `index`: at runtime the tag selects a variant, and each variant is a tuple
-/// carrying that field at the shared offset, so the lowered projection is sound.
-fn projectable_at(context: &mut Context, ty: &Term, index: usize) -> Result<bool, Error> {
-    Ok(match Term::unwrap_or_clone(reduce_with(context, ty)?) {
-        Subterm::TupleType(TupleType { telescope }) => index < telescope.len(),
-        Subterm::Match(Match { cases, .. }) => {
-            let mut ok = !cases.is_empty();
-            for body in cases.values() {
-                ok = ok && projectable_at(context, body, index)?;
-            }
-            ok
-        }
-        Subterm::BlnMatch(BlnMatch {
-            false_case,
-            true_case,
-            ..
-        }) => {
-            projectable_at(context, &false_case, index)?
-                && projectable_at(context, &true_case, index)?
-        }
-        _ => false,
-    })
-}
-
-fn erase_atom(
+/// Lower a primitive constructor value to its flat sum-of-products runtime
+/// representation: a single allocation `(tag_index, payload...)` with the
+/// payload inlined after the tag. The tag's runtime
+/// index is the constructor's position in sorted (registry key) order.
+fn erase_union_ctor(
     context: &mut Context,
-    atom: &Atom,
-    _term: &Term,
-    expected: &Term,
-) -> Result<ersd::Term, Error> {
-    // Elaborate already checked this atom belongs to `expected` (§9); the atom
-    // type is re-derived here only to read off the runtime tag index.
-    let atoms = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-        Subterm::AtomType(AtomType { atoms }) => atoms,
-        _ => unreachable!("erase: atom checked against non-atom type"),
-    };
-
-    let index = atoms
-        .iter()
-        .position(|candidate| candidate == atom)
-        .expect("erase: atom absent from its atom type");
-
-    Ok(ersd::Subterm::Atom(ersd::Atom { index }).into())
-}
-
-fn erase_match(
-    context: &mut Context,
-    m: &Match,
-    _term: &Term,
+    uc: &UnionCtor,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Match {
+    let UnionCtor {
+        name,
+        params,
+        tag,
+        payload,
+    } = uc;
+
+    let inductive = context
+        .inductive(name)
+        .cloned()
+        .expect("erase: constructor names a registered inductive");
+    let index = inductive
+        .tag_index(tag)
+        .expect("erase: constructor tag registered with its inductive");
+    let mut telescope = inductive
+        .instantiate(tag, params)
+        .expect("erase: constructor instantiates at its inductive's parameters");
+
+    // Erase the payload against the constructor telescope's (dependent) types,
+    // inline after the tag.
+    let mut fields = Vec::with_capacity(payload.len() + 1);
+    fields.push(ersd::Subterm::Atom(ersd::Atom { index }).into());
+    for value in payload {
+        match telescope {
+            Telescope::Cons(ty, rest) => {
+                fields.push(erase(context, value, &ty)?);
+                telescope = rest.open(&[value]);
+            }
+            Telescope::Done(_) => unreachable!("erase: constructor arity checked by elaborate"),
+        }
+    }
+
+    Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
+}
+
+/// Lower the primitive eliminator: an atom-match on the scrutinee's tag
+/// (field 0), each arm rebinding its payload binders to the flat record's
+/// remaining fields (`head.(i + 1)`). Downstream stages
+/// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
+/// index-dispatched match.
+fn erase_union_match(
+    context: &mut Context,
+    um: &UnionMatch,
+    _expected: &Term,
+) -> Result<ersd::Term, Error> {
+    let UnionMatch {
         head,
         motive,
         cases,
-    } = m;
+    } = um;
 
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    // Elaborate already checked the head is an atom type with exactly one body
-    // per atom (§9); the atoms are re-derived here only to order and lower the
-    // cases.
-    let atoms = match Term::unwrap_or_clone(head_type.clone()) {
-        Subterm::AtomType(AtomType { atoms }) => atoms,
-        _ => unreachable!("erase: matched on a non-atom type"),
+    let (name, params) = match &*head_type {
+        Subterm::UnionType(UnionType { name, params }) => (name.clone(), params.clone()),
+        _ => unreachable!("erase: union match scrutinee checked by elaborate"),
     };
+
+    let inductive = context
+        .inductive(&name)
+        .cloned()
+        .expect("erase: scrutinee type names a registered inductive");
 
     assert_eq!(
         cases.len(),
-        atoms.len(),
-        "erase: match arm count disagrees with the atom type",
+        inductive.constructors.len(),
+        "erase: union match arm count checked by elaborate",
     );
 
-    let cases = atoms
-        .iter()
-        .map(|atom| {
-            let body = cases
-                .get(atom)
-                .expect("erase: match missing an arm for an atom");
+    let cases_erased = inductive
+        .constructors
+        .keys()
+        .map(|tag| {
+            let scope = cases
+                .get(tag)
+                .expect("erase: union match arm presence checked by elaborate");
+            let telescope = inductive
+                .instantiate(tag, &params)
+                .expect("erase: constructor instantiates at its inductive's parameters");
 
-            let expected = motive.open(&[&Term::atom(atom.clone())]);
+            let hints = scope
+                .label_iter()
+                .map(|l| l.map(str::to_string))
+                .collect::<Vec<_>>();
+            let labels = hints
+                .iter()
+                .map(|hint| context.fresh(hint.as_deref()))
+                .collect::<Vec<_>>();
+            let vars = labels
+                .iter()
+                .map(|label| Term::var(Var::free(label)))
+                .collect::<Vec<_>>();
 
             context.with_frame(|context| {
-                refine_head(context, head, &Term::atom(atom.clone()))?;
-                erase(context, body, &expected)
+                let mut telescope = telescope;
+                for (label, var) in labels.iter().zip(&vars) {
+                    match telescope {
+                        Telescope::Cons(ty, rest) => {
+                            context.assume(label, &ty);
+                            telescope = rest.open(&[var]);
+                        }
+                        Telescope::Done(_) => {
+                            unreachable!("erase: constructor arity checked by elaborate")
+                        }
+                    }
+                }
+
+                let ctor_val =
+                    Term::union_ctor(name.clone(), params.clone(), tag.clone(), vars.clone());
+                refine_head(context, head, &ctor_val);
+
+                let expected = motive.open(&[&ctor_val]);
+                let var_refs = vars.iter().collect::<Vec<_>>();
+                let body = erase(context, &scope.open(&var_refs), &expected)?;
+
+                // Bind each payload binder to its flat-record slot:
+                // `let x_i = head.(i + 1); …` (innermost-last, so fold in reverse).
+                labels.iter().enumerate().rev().try_fold(body, |tail, (i, label)| {
+                    Ok(ersd::Subterm::Let(ersd::Let {
+                        name: label.clone(),
+                        body: ersd::Subterm::Proj(ersd::Proj {
+                            head: erase(context, head, &head_type)?,
+                            index: i + 1,
+                        })
+                        .into(),
+                        tail,
+                    })
+                    .into())
+                })
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
     Ok(ersd::Subterm::Match(ersd::Match {
-        head: erase(context, head, &head_type)?,
-        cases,
+        head: ersd::Subterm::Proj(ersd::Proj {
+            head: erase(context, head, &head_type)?,
+            index: 0,
+        })
+        .into(),
+        cases: cases_erased,
     })
     .into())
 }
@@ -568,6 +624,12 @@ pub fn erase_module(
     module: &Module,
     expected: &Term,
 ) -> Result<ersd::Module, Error> {
+    // Erase runs with its own `Context` (see `run::compile`); seed its
+    // inductive registry from the module before any item consults it.
+    for (name, inductive) in &module.inductives {
+        context.register_inductive(name, inductive.clone());
+    }
+
     let mut items = Vec::with_capacity(module.items.len());
 
     for item in &module.items {
@@ -630,15 +692,16 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
         // Type formers all erase to a runtime unit; they carry nothing to lower
         // and were already checked by `elaborate`.
-        Subterm::Type | Subterm::FuncType(_) | Subterm::TupleType(_) | Subterm::AtomType(_) => {
-            Ok(ersd::Subterm::Erased.into())
-        }
+        Subterm::Type
+        | Subterm::FuncType(_)
+        | Subterm::TupleType(_)
+        | Subterm::UnionType(_) => Ok(ersd::Subterm::Erased.into()),
+        Subterm::UnionCtor(uc) => erase_union_ctor(context, uc, expected),
+        Subterm::UnionMatch(um) => erase_union_match(context, um, expected),
         Subterm::Func(func) => erase_func(context, func, term, expected),
         Subterm::Apply(apply) => erase_apply(context, apply, term, expected),
         Subterm::Tuple(tuple) => erase_tuple(context, tuple, expected),
         Subterm::Proj(proj) => erase_proj(context, proj, term, expected),
-        Subterm::Atom(atom) => erase_atom(context, atom, term, expected),
-        Subterm::Match(m) => erase_match(context, m, term, expected),
         Subterm::Let(let_) => erase_let(context, let_, expected),
         Subterm::Rec(lr) => erase_rec(context, lr, expected),
         Subterm::Var(var) => Ok(ersd::Subterm::Name(ersd::Name::from(var.unwrap())).into()),

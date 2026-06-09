@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, AtomMatch, AtomType, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Prim, Proj,
         Rec, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
         UnionCase, UnionMatch, UseGroup, With,
@@ -9,10 +9,6 @@ use {
     num_traits::One,
     std::fmt::{Display, Formatter, Result},
 };
-
-fn print_atom(atom: Atom) -> Printer<'static> {
-    flat([pure("'"), pure(atom.as_string())])
-}
 
 /// Prints a match's optional motive: ` : label => body` (or ` : body` when
 /// unlabelled), or nothing at all when the motive was omitted in the source.
@@ -204,14 +200,6 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::Name(name) => pure(name.join()),
         Subterm::Hole => pure("?"),
-        Subterm::Atom(atom) => print_atom(atom),
-        Subterm::AtomType(AtomType { atoms }) => flat([
-            pure("'["),
-            sep_flat(atoms.into_iter().map(|atom| pure(atom.as_string())), || {
-                pure(", ")
-            }),
-            pure("]"),
-        ]),
         Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
             sep_flat(
@@ -327,29 +315,6 @@ fn print_term(term: Term) -> Printer<'static> {
                 ),
                 pure("\n| _ =>\n"),
                 indent(print_term(default)),
-                pure("\nend"),
-            ]),
-            Match::Atom(AtomMatch {
-                head,
-                motive,
-                cases,
-            }) => flat([
-                pure("match "),
-                print_term(head),
-                print_motive(motive),
-                flat(
-                    cases
-                        .into_iter()
-                        .map(|(atom, body)| {
-                            flat([
-                                pure("\n| "),
-                                print_atom(atom),
-                                pure(" =>\n"),
-                                indent(print_term(body)),
-                            ])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
                 pure("\nend"),
             ]),
             Match::Union(UnionMatch {

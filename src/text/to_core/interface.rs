@@ -141,26 +141,32 @@ fn seed(
                 for union in unions {
                     let ctor = prefix.with(&union.label);
 
+                    // Constructors are always public *within their nested
+                    // module* — its direct info and public interface are both
+                    // seeded unconditionally, exactly like an ordinary module
+                    // whose bindings are all `pub`. Visibility is governed
+                    // entirely by the union itself: the child-module flag in
+                    // the parent's info gates every walk from outside, so a
+                    // constructor is exactly as visible as its union and the
+                    // declaring module can always use a non-`pub` union.
                     let mut direct = ModuleInfo::new();
                     for case in &union.cases {
-                        direct.insert_binding(case.label.clone(), union.is_pub)?;
+                        direct.insert_binding(case.label.clone(), true)?;
                     }
                     table.insert(ctor.clone(), direct);
 
-                    if union.is_pub {
-                        let mut interface = PublicInterface::new();
-                        for case in &union.cases {
-                            let target = ctor.with(&case.label);
-                            interface.bindings.insert(
-                                case.label.clone(),
-                                Entry {
-                                    target,
-                                    source: Source::Direct,
-                                },
-                            );
-                        }
-                        public.insert(ctor, interface);
+                    let mut interface = PublicInterface::new();
+                    for case in &union.cases {
+                        let target = ctor.with(&case.label);
+                        interface.bindings.insert(
+                            case.label.clone(),
+                            Entry {
+                                target,
+                                source: Source::Direct,
+                            },
+                        );
                     }
+                    public.insert(ctor, interface);
                 }
             }
             TopItem::Mod(mod_item) => {

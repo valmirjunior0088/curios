@@ -1,8 +1,8 @@
 use {
-    super::{Bound, Term},
+    super::{Bound, Inductive, Term},
     crate::Span,
     std::{
-        collections::HashMap,
+        collections::{BTreeMap, HashMap},
         time::{Duration, Instant},
     },
 };
@@ -52,6 +52,10 @@ pub struct Context {
     local: Vec<(String, Term)>,
     local_marks: Vec<usize>,
     metas: MetaStore,
+    // Inductive declarations, keyed by the type's qualified name ("Result").
+    // Like `metas`, a flat store of monotonic facts about the program, not
+    // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
+    inductives: BTreeMap<String, Inductive>,
 }
 
 // Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
@@ -76,6 +80,7 @@ impl Context {
             local: Vec::new(),
             local_marks: Vec::new(),
             metas: MetaStore::default(),
+            inductives: BTreeMap::new(),
         }
     }
 
@@ -287,6 +292,23 @@ impl Context {
         self.reductions.clear();
 
         result
+    }
+
+    // === Inductive registry =================================================
+
+    /// Record an inductive declaration's metadata. Called once per `union`
+    /// declaration as the module's items are processed, alongside the
+    /// `define`s for its type-constructor and value-constructor functions.
+    pub fn register_inductive<N>(&mut self, name: N, inductive: Inductive)
+    where
+        N: Into<String>,
+    {
+        self.inductives.insert(name.into(), inductive);
+    }
+
+    /// Look up an inductive declaration by the type's qualified name.
+    pub fn inductive(&self, name: &str) -> Option<&Inductive> {
+        self.inductives.get(name)
     }
 
     // === Metavariable store =================================================

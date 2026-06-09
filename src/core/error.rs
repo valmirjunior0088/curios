@@ -105,10 +105,6 @@ pub enum Error {
         index: usize,
         arity: usize,
     },
-    NotAnAtomType {
-        term: Box<Term>,
-        head_type: Box<Term>,
-    },
     NotNatType {
         term: Box<Term>,
         head_type: Box<Term>,
@@ -130,6 +126,16 @@ pub enum Error {
     MatchCaseMissing {
         term: Box<Term>,
         atom: Atom,
+    },
+    CtorArityMismatch {
+        term: Box<Term>,
+        atom: Atom,
+        expected: usize,
+        got: usize,
+    },
+    NotAUnionType {
+        term: Box<Term>,
+        head_type: Box<Term>,
     },
     CannotInferLiteral {
         term: Box<Term>,
@@ -233,13 +239,6 @@ impl Error {
         }
     }
 
-    pub fn not_an_atom_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
-        Self::NotAnAtomType {
-            term: Box::new(term.into()),
-            head_type: Box::new(head_type.into()),
-        }
-    }
-
     pub fn not_nat_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
         Self::NotNatType {
             term: Box::new(term.into()),
@@ -274,6 +273,27 @@ impl Error {
         Self::MatchCaseMissing {
             term: Box::new(term.into()),
             atom: atom.into(),
+        }
+    }
+
+    pub fn not_a_union_type<T: Into<Term>, U: Into<Term>>(term: T, head_type: U) -> Self {
+        Self::NotAUnionType {
+            term: Box::new(term.into()),
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn ctor_arity_mismatch<T: Into<Term>, A: Into<Atom>>(
+        term: T,
+        atom: A,
+        expected: usize,
+        got: usize,
+    ) -> Self {
+        Self::CtorArityMismatch {
+            term: Box::new(term.into()),
+            atom: atom.into(),
+            expected,
+            got,
         }
     }
 
@@ -382,12 +402,6 @@ impl fmt::Display for Error {
             Error::TupleIndexOutOfBounds { index, arity, .. } => {
                 write!(f, "tuple index {index} out of bounds (arity {arity})")
             }
-            Error::NotAnAtomType { head_type, .. } => {
-                write!(
-                    f,
-                    "matched on a non-atom type\n  head has type: {head_type}"
-                )
-            }
             Error::NotNatType { head_type, .. } => {
                 write!(f, "expected Nat but got {head_type}")
             }
@@ -405,6 +419,23 @@ impl fmt::Display for Error {
             }
             Error::MatchCaseMissing { term, atom } => {
                 write!(f, "missing match case for atom '{atom}': {term}")
+            }
+            Error::NotAUnionType { head_type, .. } => {
+                write!(
+                    f,
+                    "matched union constructors on a non-union type\n  head has type: {head_type}"
+                )
+            }
+            Error::CtorArityMismatch {
+                atom,
+                expected,
+                got,
+                ..
+            } => {
+                write!(
+                    f,
+                    "constructor '{atom}' takes {expected} argument(s) but the match arm binds {got}"
+                )
             }
             Error::CannotInferLiteral { .. } => {
                 write!(f, "cannot infer type of literal (add an annotation)")

@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Context, Definition, Error, Func, FuncType, Item, Let,
-        Match, Metavar, Module, Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope,
-        Term, Tuple, TupleType, Two, Var, check_motive, elaborate_prim, expect, reduce_with,
-        refine_head,
+        Apply, BlnMatch, Context, Definition, Error, Func, FuncType, Item, Let,
+        Many, Metavar, Module, Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm,
+        Telescope, Term, Tuple, TupleType, Two, UnionCtor, UnionMatch, UnionType, Var,
+        check_motive, elaborate_prim, expect, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -149,7 +149,7 @@ fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    if !is_lambda && !matches!(&**arg, Subterm::Tuple(_) | Subterm::Atom(_)) {
+    if !is_lambda && !matches!(&**arg, Subterm::Tuple(_)) {
         return Ok(false);
     }
     let reduced = reduce_with(context, ty)?;
@@ -354,7 +354,7 @@ fn elaborate_nat_dispatch(
                 context,
                 head,
                 &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
-            )?;
+            );
             check(
                 context,
                 body,
@@ -419,7 +419,7 @@ fn elaborate_bln_match(
     seed_motive(context, term, motive, head, &mode)?;
 
     let false_elaborated = context.with_frame(|context| {
-        refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into())?;
+        refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into());
         check(
             context,
             false_case,
@@ -428,7 +428,7 @@ fn elaborate_bln_match(
     })?;
 
     let true_elaborated = context.with_frame(|context| {
-        refine_head(context, head, &Subterm::Prim(Prim::Bln(true)).into())?;
+        refine_head(context, head, &Subterm::Prim(Prim::Bln(true)).into());
         check(
             context,
             true_case,
@@ -473,57 +473,196 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
     Ok((Term::proj(head, *index), field_type))
 }
 
-fn elaborate_match(
+/// Type a primitive inductive type against its registry entry: the parameters
+/// are checked pointwise (dependently) against the declaration's parameter
+/// telescope, and the whole node is a `Type`.
+fn elaborate_union_type(
     context: &mut Context,
-    m: &Match,
+    ut: &UnionType,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
+    let UnionType { name, params } = ut;
+
+    let Some(inductive) = context.inductive(name).cloned() else {
+        return Err(Error::unbound_variable(Term::var(Var::free(name))));
+    };
+
+    if params.len() != inductive.params.len() {
+        return Err(Error::wrong_number_of_arguments(
+            term.clone(),
+            inductive.params.len(),
+            params.len(),
+        ));
+    }
+
+    let mut elaborated = Vec::with_capacity(params.len());
+    inductive.params.walk(params, |param, ty| {
+        elaborated.push(check(context, param, ty.clone())?);
+        Ok(())
+    })?;
+
+    Ok((Term::union_type(name, elaborated), Term::type_()))
+}
+
+/// Type a primitive constructor value against its registry signature: the
+/// instantiated parameters and the payload are checked through the
+/// constructor's full telescope, whose terminal gives the constructed
+/// `UnionType`.
+fn elaborate_union_ctor(
+    context: &mut Context,
+    uc: &UnionCtor,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
+    let UnionCtor {
+        name,
+        params,
+        tag,
+        payload,
+    } = uc;
+
+    let Some(inductive) = context.inductive(name).cloned() else {
+        return Err(Error::unbound_variable(Term::var(Var::free(name))));
+    };
+
+    let Some(signature) = inductive.constructors.get(tag).cloned() else {
+        return Err(Error::match_case_missing(term.clone(), tag.clone()));
+    };
+
+    let args: Vec<Term> = params.iter().chain(payload.iter()).cloned().collect();
+
+    if args.len() != signature.len() {
+        return Err(Error::wrong_number_of_arguments(
+            term.clone(),
+            signature.len(),
+            args.len(),
+        ));
+    }
+
+    let mut elaborated = Vec::with_capacity(args.len());
+    let output = signature.walk(&args, |arg, ty| {
+        elaborated.push(check(context, arg, ty.clone())?);
+        Ok(())
+    })?;
+
+    let rebuilt = Term::union_ctor(
+        name,
+        elaborated[..params.len()].iter().cloned(),
+        tag.clone(),
+        elaborated[params.len()..].iter().cloned(),
+    );
+
+    Ok((rebuilt, output))
+}
+
+/// The primitive eliminator's typing rule. Arm binders are
+/// typed directly from the constructor's registry telescope instantiated at
+/// the scrutinee type's parameters — no projections from a stuck payload —
+/// and each arm's binder count is statically checked against that telescope.
+fn elaborate_union_match(
+    context: &mut Context,
+    um: &UnionMatch,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Match {
+    let UnionMatch {
         head,
         motive,
         cases,
-    } = m;
+    } = um;
 
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let atoms = match &*head_type {
-        Subterm::AtomType(AtomType { atoms }) => atoms.clone(),
-        other => return Err(Error::not_an_atom_type(term.clone(), other.clone())),
+    let (name, params) = match &*head_type {
+        Subterm::UnionType(UnionType { name, params }) => (name.clone(), params.clone()),
+        other => return Err(Error::not_a_union_type(term.clone(), other.clone())),
     };
 
-    let motive_elaborated = check_motive(context, &Term::atom_type(atoms.iter().cloned()), motive)?;
+    let Some(inductive) = context.inductive(&name).cloned() else {
+        return Err(Error::unbound_variable(Term::var(Var::free(&name))));
+    };
+
+    let motive_elaborated = check_motive(context, &head_type, motive)?;
 
     seed_motive(context, term, motive, head, &mode)?;
 
-    if cases.len() != atoms.len() {
+    if cases.len() != inductive.constructors.len() {
         return Err(Error::match_arity_mismatch(
             term.clone(),
-            atoms.len(),
+            inductive.constructors.len(),
             cases.len(),
         ));
     }
 
     let mut cases_elaborated = BTreeMap::new();
-    for atom in &atoms {
-        let body = if let Some(body) = cases.get(atom) {
-            body
-        } else {
-            return Err(Error::match_case_missing(term.clone(), atom.clone()));
+    for tag in inductive.constructors.keys() {
+        let Some(scope) = cases.get(tag) else {
+            return Err(Error::match_case_missing(term.clone(), tag.clone()));
         };
 
-        let expected = motive.open(&[&Term::atom(atom.clone())]);
+        let telescope = inductive
+            .instantiate(tag, &params)
+            .expect("constructor instantiates at its inductive's parameters");
 
-        let body = context.with_frame(|context| {
-            refine_head(context, head, &Term::atom(atom.clone()))?;
-            check(context, body, expected)
+        // Static arity check: the arm's binder count must equal the
+        // constructor's payload arity.
+        let arity = telescope.len();
+        if scope.arity() != arity {
+            return Err(Error::ctor_arity_mismatch(
+                term.clone(),
+                tag.clone(),
+                arity,
+                scope.arity(),
+            ));
+        }
+
+        // Open the telescope with fresh names paralleling the arm's binder
+        // labels; each binder is assumed at its declared (dependent) type.
+        let hints = scope
+            .label_iter()
+            .map(|l| l.map(str::to_string))
+            .collect::<Vec<_>>();
+        let labels = hints
+            .iter()
+            .map(|hint| context.fresh(hint.as_deref()))
+            .collect::<Vec<_>>();
+        let vars = labels
+            .iter()
+            .map(|label| Term::var(Var::free(label)))
+            .collect::<Vec<_>>();
+
+        let body_elaborated = context.with_frame(|context| {
+            let mut telescope = telescope;
+            for (label, var) in labels.iter().zip(&vars) {
+                match telescope {
+                    Telescope::Cons(ty, rest) => {
+                        context.assume(label, &ty);
+                        telescope = rest.open(&[var]);
+                    }
+                    Telescope::Done(_) => unreachable!("arity checked above"),
+                }
+            }
+
+            // Refinement propagates `head := ctor_val` to other occurrences of
+            // the scrutinee in the arm body; the binder types themselves came
+            // from the telescope above.
+            let ctor_val =
+                Term::union_ctor(name.clone(), params.clone(), tag.clone(), vars.clone());
+            refine_head(context, head, &ctor_val);
+
+            let expected = motive.open(&[&ctor_val]);
+            let var_refs = vars.iter().collect::<Vec<_>>();
+            check(context, &scope.open(&var_refs), expected)
         })?;
 
-        cases_elaborated.insert(atom.clone(), body);
+        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        cases_elaborated.insert(
+            tag.clone(),
+            Scope::close(Many(arity), &label_strs, body_elaborated),
+        );
     }
 
-    let rebuilt = Subterm::Match(Match {
+    let rebuilt = Subterm::UnionMatch(UnionMatch {
         head: head_elaborated,
         motive: motive_elaborated,
         cases: cases_elaborated,
@@ -813,38 +952,6 @@ fn elaborate_tuple(
     Ok((Term::tuple(elaborated), expected))
 }
 
-fn elaborate_atom(
-    context: &mut Context,
-    atom: &Atom,
-    term: &Term,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
-    let Mode::Check(expected) = mode else {
-        return Err(Error::cannot_infer(term.clone()));
-    };
-
-    let atoms = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
-        Subterm::AtomType(AtomType { atoms }) => atoms,
-        _ => {
-            return Err(Error::type_mismatch(
-                term.clone(),
-                Term::atom_type([atom.clone()]),
-                expected.clone(),
-            ));
-        }
-    };
-
-    if !atoms.iter().any(|candidate| candidate == atom) {
-        return Err(Error::type_mismatch(
-            term.clone(),
-            Term::atom_type([atom.clone()]),
-            expected.clone(),
-        ));
-    }
-
-    Ok((term.clone(), expected))
-}
-
 fn elaborate_metavar(
     context: &mut Context,
     metavar: &Metavar,
@@ -949,6 +1056,13 @@ pub fn elaborate_module(
     module: &Module,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
+    // Seed the context's inductive registry before any item is checked: a
+    // union's type-constructor and value-constructor definitions reference
+    // their own registry entry (`elaborate_union_type` / `elaborate_union_ctor`).
+    for (name, inductive) in &module.inductives {
+        context.register_inductive(name, inductive.clone());
+    }
+
     let mut items = Vec::with_capacity(module.items.len());
     for item in &module.items {
         items.push(match item {
@@ -962,6 +1076,7 @@ pub fn elaborate_module(
 
     let module = Module {
         items,
+        inductives: module.inductives.clone(),
         type_: module.type_.clone(),
         body,
     };
@@ -1000,8 +1115,6 @@ fn elaborate_subterm(
         Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),
         Subterm::TupleType(tt) => elaborate_tuple_type(context, tt)?,
         Subterm::Proj(proj) => elaborate_proj(context, proj, term)?,
-        Subterm::AtomType(_) => (term.clone(), Term::type_()),
-        Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::Var(var) => match context.assumption(var.unwrap()) {
@@ -1010,8 +1123,10 @@ fn elaborate_subterm(
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
-        Subterm::Atom(atom) => return elaborate_atom(context, atom, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
+        Subterm::UnionType(ut) => elaborate_union_type(context, ut, term)?,
+        Subterm::UnionCtor(uc) => elaborate_union_ctor(context, uc, term)?,
+        Subterm::UnionMatch(um) => return elaborate_union_match(context, um, term, mode),
     };
 
     if let Mode::Check(expected) = &mode {

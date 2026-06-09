@@ -69,26 +69,12 @@ impl Term {
         Self::from(Subterm::Var(var))
     }
 
-    pub fn atom<A: Into<Atom>>(atom: A) -> Self {
-        Self::from(Subterm::Atom(atom.into()))
-    }
-
     pub fn metavar(id: usize) -> Self {
         Self::from(Subterm::Metavar(Metavar { id }))
     }
 
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
         inner.into().with_span(span)
-    }
-
-    pub fn atom_type<I, A>(atoms: I) -> Self
-    where
-        I: IntoIterator<Item = A>,
-        A: Into<Atom>,
-    {
-        Self::from(Subterm::AtomType(AtomType {
-            atoms: atoms.into_iter().map(Into::into).collect(),
-        }))
     }
 
     pub fn func_type<I, L, T, O>(params: I, output: O) -> Self
@@ -165,15 +151,50 @@ impl Term {
         }))
     }
 
-    pub fn match_<H, M, I, A, B>(head: H, motive_label: Option<&str>, motive: M, cases: I) -> Self
+    pub fn union_type<N, I, P>(name: N, params: I) -> Self
+    where
+        N: Into<String>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+    {
+        Self::from(Subterm::UnionType(UnionType {
+            name: name.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+        }))
+    }
+
+    pub fn union_ctor<N, I, P, A, J, Q>(name: N, params: I, tag: A, payload: J) -> Self
+    where
+        N: Into<String>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        A: Into<Atom>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
+        Self::from(Subterm::UnionCtor(UnionCtor {
+            name: name.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+            tag: tag.into(),
+            payload: payload.into_iter().map(|p| p.into()).collect(),
+        }))
+    }
+
+    pub fn union_match<H, M, I, A, L, B>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        cases: I,
+    ) -> Self
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (A, B)>,
+        I: IntoIterator<Item = (A, Vec<L>, B)>,
         A: Into<Atom>,
+        L: Into<String>,
         B: Into<Term>,
     {
-        Self::from(Subterm::Match(Match {
+        Self::from(Subterm::UnionMatch(UnionMatch {
             head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
@@ -181,7 +202,14 @@ impl Term {
             },
             cases: cases
                 .into_iter()
-                .map(|(atom, body)| (atom.into(), body.into()))
+                .map(|(atom, binders, body)| {
+                    let binders = binders.into_iter().map(Into::into).collect::<Vec<_>>();
+                    let binders = binders.iter().map(String::as_str).collect::<Vec<_>>();
+                    (
+                        atom.into(),
+                        Scope::close(Many(binders.len()), &binders, body.into()),
+                    )
+                })
                 .collect(),
         }))
     }
@@ -427,16 +455,40 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
+/// An inductive type as a primitive normal form. Built inside the
+/// automatically-generated type-constructor function's body. Users never write
+/// one directly — they write `Result(A, E)` and the type-constructor function
+/// reduces to this. Two `UnionType`s are convertible iff same `name` and
+/// pointwise-convertible `params`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AtomType {
-    pub atoms: BTreeSet<Atom>,
+pub struct UnionType {
+    pub name: String,
+    pub params: Vec<Term>,
 }
 
+/// A constructor application as a primitive normal form. Built inside the
+/// automatically-generated value-constructor function's body. Users never
+/// write one directly — they write `Result/success(value)` and the constructor
+/// function reduces to this.
+///
+/// `name` and `params` are recoverable from the term's inferred type; they are
+/// stored redundantly on purpose, so `convert` stays purely structural (no
+/// context lookups mid-comparison).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Match {
+pub struct UnionCtor {
+    pub name: String,
+    pub params: Vec<Term>,
+    pub tag: Atom,
+    pub payload: Vec<Term>,
+}
+
+/// The primitive eliminator for inductive types. Each case's arity equals the
+/// matched constructor's payload arity.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UnionMatch {
     pub head: Term,
     pub motive: Scope<One>,
-    pub cases: BTreeMap<Atom, Term>,
+    pub cases: BTreeMap<Atom, Scope<Many>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -475,9 +527,9 @@ pub enum Subterm {
     TupleType(TupleType),
     Tuple(Tuple),
     Proj(Proj),
-    AtomType(AtomType),
-    Atom(Atom),
-    Match(Match),
+    UnionType(UnionType),
+    UnionCtor(UnionCtor),
+    UnionMatch(UnionMatch),
     Let(Let),
     Rec(Rec),
     Var(Var),
@@ -524,7 +576,7 @@ impl Subterm {
             Subterm::Metavar(Metavar { id }) => {
                 ids.insert(*id);
             }
-            Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) | Subterm::Var(_) => {}
+            Subterm::Type | Subterm::Var(_) => {}
             Subterm::Prim(prim) => prim_metavars(prim, ids),
             Subterm::Func(Func { telescope }) => telescope_metavars(telescope, ids),
             Subterm::FuncType(FuncType { telescope }) => telescope_metavars(telescope, ids),
@@ -537,15 +589,6 @@ impl Subterm {
                 fields.iter().for_each(|f| f.collect_metavars(ids));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
-            Subterm::Match(Match {
-                head,
-                motive,
-                cases,
-            }) => {
-                head.collect_metavars(ids);
-                motive.body().collect_metavars(ids);
-                cases.values().for_each(|b| b.collect_metavars(ids));
-            }
             Subterm::BlnMatch(BlnMatch {
                 head,
                 motive,
@@ -578,6 +621,24 @@ impl Subterm {
                 motive.body().collect_metavars(ids);
                 cases.values().for_each(|b| b.collect_metavars(ids));
                 default.collect_metavars(ids);
+            }
+            Subterm::UnionType(UnionType { params, .. }) => {
+                params.iter().for_each(|p| p.collect_metavars(ids));
+            }
+            Subterm::UnionCtor(UnionCtor {
+                params, payload, ..
+            }) => {
+                params.iter().for_each(|p| p.collect_metavars(ids));
+                payload.iter().for_each(|p| p.collect_metavars(ids));
+            }
+            Subterm::UnionMatch(UnionMatch {
+                head,
+                motive,
+                cases,
+            }) => {
+                head.collect_metavars(ids);
+                motive.body().collect_metavars(ids);
+                cases.values().for_each(|s| s.body().collect_metavars(ids));
             }
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.collect_metavars(ids);
@@ -656,8 +717,6 @@ impl Bound for Subterm {
         match self {
             Subterm::Type => Subterm::Type,
             Subterm::Prim(prim) => Subterm::Prim(traverse_prim(prim, visit)),
-            Subterm::AtomType(at) => Subterm::AtomType(at.clone()),
-            Subterm::Atom(atom) => Subterm::Atom(atom.clone()),
             Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
                 telescope: telescope.traverse(visit),
             }),
@@ -714,16 +773,31 @@ impl Bound for Subterm {
                     .collect(),
                 default: visit.visit_subterm(default),
             }),
-            Subterm::Match(Match {
+            Subterm::UnionType(UnionType { name, params }) => Subterm::UnionType(UnionType {
+                name: name.clone(),
+                params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
+            }),
+            Subterm::UnionCtor(UnionCtor {
+                name,
+                params,
+                tag,
+                payload,
+            }) => Subterm::UnionCtor(UnionCtor {
+                name: name.clone(),
+                params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
+                tag: tag.clone(),
+                payload: payload.iter().map(|p| visit.visit_subterm(p)).collect(),
+            }),
+            Subterm::UnionMatch(UnionMatch {
                 head,
                 motive,
                 cases,
-            }) => Subterm::Match(Match {
+            }) => Subterm::UnionMatch(UnionMatch {
                 head: visit.visit_subterm(head),
                 motive: visit.visit_scope(motive),
                 cases: cases
                     .iter()
-                    .map(|(atom, body)| (atom.clone(), visit.visit_subterm(body)))
+                    .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
                     .collect(),
             }),
             Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
@@ -746,7 +820,7 @@ impl Bound for Subterm {
 
     fn reach(&self) -> usize {
         match self {
-            Subterm::Type | Subterm::Atom(_) | Subterm::AtomType(_) | Subterm::Metavar(_) => 0,
+            Subterm::Type | Subterm::Metavar(_) => 0,
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,
@@ -758,14 +832,6 @@ impl Bound for Subterm {
             Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
-            Subterm::Match(Match {
-                head,
-                motive,
-                cases,
-            }) => head
-                .reach()
-                .max(motive.reach())
-                .max(max_reach(cases.values())),
             Subterm::BlnMatch(BlnMatch {
                 head,
                 motive,
@@ -796,6 +862,18 @@ impl Bound for Subterm {
                 .max(motive.reach())
                 .max(max_reach(cases.values()))
                 .max(default.reach()),
+            Subterm::UnionType(UnionType { params, .. }) => max_reach(params),
+            Subterm::UnionCtor(UnionCtor {
+                params, payload, ..
+            }) => max_reach(params).max(max_reach(payload)),
+            Subterm::UnionMatch(UnionMatch {
+                head,
+                motive,
+                cases,
+            }) => head
+                .reach()
+                .max(motive.reach())
+                .max(cases.values().map(|s| s.reach()).max().unwrap_or(0)),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())
             }
@@ -1221,6 +1299,59 @@ mod tests {
     }
 
     #[test]
+    fn union_ctor_collects_metavars_and_prints_as_function_call() {
+        let ctor = Term::union_ctor(
+            "Result",
+            [Term::metavar(1)],
+            "success",
+            [Term::metavar(2)],
+        );
+        assert_eq!(ctor.metavars(), BTreeSet::from([1, 2]));
+        assert_eq!(format!("{ctor}"), "Result/success(?2)");
+
+        let type_ = Term::union_type("Result", [Term::prim(Prim::NatType), Term::metavar(3)]);
+        assert_eq!(type_.metavars(), BTreeSet::from([3]));
+        assert_eq!(format!("{type_}"), "Result(Nat, ?3)");
+    }
+
+    #[test]
+    fn union_match_case_binders_are_captured() {
+        // match r : #m => Type; | success(value) => value;
+        let term = Term::union_match(
+            Term::var(Var::free("r")),
+            None,
+            Term::type_(),
+            [(
+                "success",
+                vec!["value"],
+                Term::var(Var::free("value")),
+            )],
+        );
+
+        let free = term.free_vars();
+        assert!(free.contains("r"));
+        assert!(!free.contains("value"));
+    }
+
+    #[test]
+    fn union_variants_reach_spans_components() {
+        assert_eq!(
+            Term::union_type("Result", [Term::var(Var::bound(2))]).reach(),
+            3
+        );
+        assert_eq!(
+            Term::union_ctor(
+                "Result",
+                [Term::var(Var::bound(0))],
+                "success",
+                [Term::var(Var::bound(4))],
+            )
+            .reach(),
+            5
+        );
+    }
+
+    #[test]
     fn reach_basic_values() {
         assert_eq!(Term::type_().reach(), 0);
         assert_eq!(Term::var(Var::free("x")).reach(), 0);
@@ -1264,7 +1395,7 @@ mod tests {
     #[test]
     fn open_shares_closed_body_without_rebuild() {
         // body does not mention the bound variable -> open returns the stored Rc unchanged
-        let scope = Scope::close(One, &["x"], Term::atom("k"));
+        let scope = Scope::close(One, &["x"], Term::type_());
         let opened = scope.open(&[&Term::var(Var::free("y"))]);
         assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
     }

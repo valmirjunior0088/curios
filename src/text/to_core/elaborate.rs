@@ -7,7 +7,6 @@ use {
         },
     },
     num_bigint::BigUint,
-    std::collections::BTreeMap,
 };
 
 pub struct Elaborate<'a, 'b> {
@@ -58,10 +57,6 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 };
 
                 core::Term::var(core::Var::free(resolved))
-            }
-            Subterm::Atom(atom) => core::Term::atom(core::Atom::from(atom.as_str())),
-            Subterm::AtomType(at) => {
-                core::Term::atom_type(at.atoms.iter().map(|atom| core::Atom::from(atom.as_str())))
             }
             Subterm::FuncType(ft) => core::Term::func_type(
                 ft.params
@@ -162,60 +157,29 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                         self.term(default)?,
                     )
                 }
-                Match::Atom(am) => {
-                    let (label, body) = self.motive_parts(&am.motive)?;
-                    core::Term::match_(
-                        self.term(&am.head)?,
-                        label,
-                        body,
-                        am.cases
+                Match::Union(um) => {
+                    // A union match lowers to a `UnionMatch` carrying the arm
+                    // binders as scopes. Core elaboration dispatches on the
+                    // scrutinee's type: a primitive inductive types the binders
+                    // from the registry telescopes; a legacy tagged-tuple union
+                    // falls back to the atom-match-plus-projections desugar.
+                    let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
+
+                    core::Term::union_match(
+                        self.term(&um.head)?,
+                        motive_label,
+                        motive_body,
+                        um.cases
                             .iter()
-                            .map(|(atom, body)| {
-                                Ok((core::Atom::from(atom.as_str()), self.term(body)?))
+                            .map(|(label, case)| {
+                                Ok((
+                                    core::Atom::from(label.as_str()),
+                                    case.binders.clone(),
+                                    self.term(&case.body)?,
+                                ))
                             })
                             .collect::<Result<Vec<_>, Error>>()?,
                     )
-                }
-                Match::Union(um) => {
-                    // A union match desugars to an atom match on the projected tag:
-                    // the scrutinee's tag (field 0) selects the arm, and each arm's
-                    // binders are bound to the payload's (field 1) projections.
-                    let head = self.term(&um.head)?;
-                    let tag = core::Term::proj(head.clone(), 0);
-                    let payload = core::Term::proj(head, 1);
-
-                    let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
-                    let motive = match motive_label {
-                        Some(label) => core::Scope::close(core::One, &[label], motive_body),
-                        None => core::Scope::constant(core::One, motive_body),
-                    };
-
-                    let cases = um
-                        .cases
-                        .iter()
-                        .map(|(label, case)| {
-                            let body = self.term(&case.body)?;
-                            let binder_strs =
-                                case.binders.iter().map(String::as_str).collect::<Vec<_>>();
-                            let scope = core::Scope::close(
-                                core::Many(case.binders.len()),
-                                &binder_strs,
-                                body,
-                            );
-                            let projections = (0..case.binders.len())
-                                .map(|i| core::Term::proj(payload.clone(), i))
-                                .collect::<Vec<_>>();
-                            let refs = projections.iter().collect::<Vec<_>>();
-                            Ok((core::Atom::from(label.as_str()), scope.open(&refs)))
-                        })
-                        .collect::<Result<BTreeMap<_, _>, Error>>()?;
-
-                    core::Subterm::Match(core::Match {
-                        head: tag,
-                        motive,
-                        cases,
-                    })
-                    .into()
                 }
             },
             Subterm::Let(let_) => core::Term::let_(
@@ -430,54 +394,28 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     self.region(default, bind)?,
                 )
             }
-            Match::Atom(am) => {
-                let (label, body) = self.motive_parts(&am.motive)?;
-                core::Term::match_(
-                    self.collect(&am.head, bind, binds)?,
-                    label,
-                    body,
-                    am.cases
+            Match::Union(um) => {
+                // Mirrors the `Match::Union` arm of `subterm` (see there for the
+                // type-directed dispatch downstream), swapping `collect` on the
+                // head and `region` on the arm bodies.
+                let head = self.collect(&um.head, bind, binds)?;
+                let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
+
+                core::Term::union_match(
+                    head,
+                    motive_label,
+                    motive_body,
+                    um.cases
                         .iter()
-                        .map(|(atom, body)| {
-                            Ok((core::Atom::from(atom.as_str()), self.region(body, bind)?))
+                        .map(|(label, case)| {
+                            Ok((
+                                core::Atom::from(label.as_str()),
+                                case.binders.clone(),
+                                self.region(&case.body, bind)?,
+                            ))
                         })
                         .collect::<Result<Vec<_>, Error>>()?,
                 )
-            }
-            Match::Union(um) => {
-                let head = self.collect(&um.head, bind, binds)?;
-                let tag = core::Term::proj(head.clone(), 0);
-                let payload = core::Term::proj(head, 1);
-
-                let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
-                let motive = match motive_label {
-                    Some(label) => core::Scope::close(core::One, &[label], motive_body),
-                    None => core::Scope::constant(core::One, motive_body),
-                };
-
-                let cases = um
-                    .cases
-                    .iter()
-                    .map(|(label, case)| {
-                        let body = self.region(&case.body, bind)?;
-                        let binder_strs =
-                            case.binders.iter().map(String::as_str).collect::<Vec<_>>();
-                        let scope =
-                            core::Scope::close(core::Many(case.binders.len()), &binder_strs, body);
-                        let projections = (0..case.binders.len())
-                            .map(|i| core::Term::proj(payload.clone(), i))
-                            .collect::<Vec<_>>();
-                        let refs = projections.iter().collect::<Vec<_>>();
-                        Ok((core::Atom::from(label.as_str()), scope.open(&refs)))
-                    })
-                    .collect::<Result<BTreeMap<_, _>, Error>>()?;
-
-                core::Subterm::Match(core::Match {
-                    head: tag,
-                    motive,
-                    cases,
-                })
-                .into()
             }
         })
     }

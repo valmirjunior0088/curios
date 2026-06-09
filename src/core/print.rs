@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, AtomType, BlnMatch, Definition, Flt, Func, FuncType, Item, Let, Match, Module,
+        Apply, Atom, BlnMatch, Definition, Flt, Func, FuncType, Item, Let, Module,
         Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType,
-        Two, Var,
+        Two, UnionCtor, UnionMatch, UnionType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -624,15 +624,47 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             print_term(head, depth),
             pure(format!(").{index}")),
         ]),
-        Subterm::AtomType(AtomType { atoms }) => flat([
-            pure("'["),
-            sep_flat(atoms.into_iter().map(|atom| pure(atom.as_string())), || {
-                pure(", ")
-            }),
-            pure("]"),
-        ]),
-        Subterm::Atom(atom) => print_atom(atom),
-        Subterm::Match(Match {
+        Subterm::UnionType(UnionType { name, params }) => {
+            if params.is_empty() {
+                pure(name)
+            } else {
+                flat([
+                    pure(name),
+                    pure("("),
+                    sep_flat(
+                        params
+                            .into_iter()
+                            .map(|p| print_term(p, depth))
+                            .collect::<Vec<_>>(),
+                        || pure(", "),
+                    ),
+                    pure(")"),
+                ])
+            }
+        }
+        // Prints as the constructor-function call, instantiated type params
+        // hidden — `Result/success(42)`.
+        Subterm::UnionCtor(UnionCtor {
+            name, tag, payload, ..
+        }) => {
+            if payload.is_empty() {
+                pure(format!("{name}/{tag}"))
+            } else {
+                flat([
+                    pure(format!("{name}/{tag}")),
+                    pure("("),
+                    sep_flat(
+                        payload
+                            .into_iter()
+                            .map(|p| print_term(p, depth))
+                            .collect::<Vec<_>>(),
+                        || pure(", "),
+                    ),
+                    pure(")"),
+                ])
+            }
+        }
+        Subterm::UnionMatch(UnionMatch {
             head,
             motive,
             cases,
@@ -642,12 +674,30 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let cases = flat(
                 cases
                     .into_iter()
-                    .map(|(atom, body)| {
+                    .map(|(atom, scope)| {
+                        let labels = scope
+                            .label_iter()
+                            .enumerate()
+                            .map(|(i, l)| {
+                                l.map(str::to_string).unwrap_or_else(|| label_at(depth + i))
+                            })
+                            .collect::<Vec<_>>();
+                        let label_terms = label_terms(&labels);
+                        let label_terms = label_terms.iter().collect::<Vec<_>>();
+                        let body = scope.open(&label_terms);
+
+                        let binders = if labels.is_empty() {
+                            pure("")
+                        } else {
+                            pure(format!("({})", labels.join(", ")))
+                        };
+
                         flat([
                             pure("\n| "),
                             print_atom(atom),
+                            binders,
                             pure(" =>\n"),
-                            indent(flat([print_term(body, depth), pure(";")])),
+                            indent(flat([print_term(body, depth + labels.len()), pure(";")])),
                         ])
                     })
                     .collect::<Vec<_>>(),

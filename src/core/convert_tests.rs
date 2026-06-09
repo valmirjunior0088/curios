@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Int, Nat, Prim, Var},
+    crate::core::{Int, Nat, Prim, Var},
     std::time::Duration,
 };
 
@@ -10,6 +10,10 @@ fn context() -> Context {
 
 fn conv(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
     convert(context, &Term::type_(), this, that)
+}
+
+fn nat(n: usize) -> Term {
+    Term::prim(Prim::Nat(Nat::new(n)))
 }
 
 /// Build a lambda whose argument domains are irrelevant to conversion (which
@@ -41,30 +45,38 @@ fn convert_func_is_alpha_equivalent() {
 }
 
 #[test]
-fn convert_match_compares_matches_and_motive() {
+fn convert_union_match_compares_cases_and_motive() {
     let mut context = context();
 
-    let this = Term::match_(
-        Term::atom(Atom::from("a")),
+    let make = |motive_label: &str, binder: &str| {
+        Term::union_match(
+            Term::var(Var::free("r")),
+            Some(motive_label),
+            Term::prim(Prim::NatType),
+            [
+                ("none", Vec::<&str>::new(), nat(0)),
+                ("some", vec![binder], Term::var(Var::free(binder))),
+            ],
+        )
+    };
+
+    // Alpha-equivalent binders and motive labels are convertible.
+    assert_eq!(
+        conv(&mut context, &make("m", "x"), &make("n", "y")),
+        Ok(true)
+    );
+
+    let different = Term::union_match(
+        Term::var(Var::free("r")),
         Some("m"),
-        Term::type_(),
-        vec![
-            ("a", Term::atom(Atom::from("yes"))),
-            ("b", Term::atom(Atom::from("no"))),
+        Term::prim(Prim::NatType),
+        [
+            ("none", Vec::<&str>::new(), nat(1)),
+            ("some", vec!["x"], Term::var(Var::free("x"))),
         ],
     );
 
-    let that = Term::match_(
-        Term::atom(Atom::from("a")),
-        Some("n"),
-        Term::type_(),
-        vec![
-            ("a", Term::atom(Atom::from("yes"))),
-            ("b", Term::atom(Atom::from("no"))),
-        ],
-    );
-
-    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(conv(&mut context, &make("m", "x"), &different), Ok(false));
 }
 
 #[test]
@@ -369,8 +381,8 @@ fn convert_prim_bin_slice_recurses_into_operands() {
 fn convert_tuple_equal() {
     let mut context = context();
 
-    let this = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("y"))]);
-    let that = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("y"))]);
+    let this = Term::tuple([nat(1), nat(2)]);
+    let that = Term::tuple([nat(1), nat(2)]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -379,8 +391,8 @@ fn convert_tuple_equal() {
 fn convert_tuple_unequal_field() {
     let mut context = context();
 
-    let this = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("y"))]);
-    let that = Term::tuple([Term::atom(Atom::from("x")), Term::atom(Atom::from("z"))]);
+    let this = Term::tuple([nat(1), nat(2)]);
+    let that = Term::tuple([nat(1), nat(3)]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
@@ -410,8 +422,8 @@ fn convert_eta_tuple_neutral_with_known_type() {
     let mut context = context();
 
     let tuple_type: Term = Term::tuple_type([
-        ("x", Term::atom_type(["a", "b"])),
-        ("y", Term::atom_type(["c", "d"])),
+        ("x", Term::prim(Prim::NatType)),
+        ("y", Term::prim(Prim::BlnType)),
     ]);
 
     let r: Term = Term::var(Var::free("r"));
@@ -426,18 +438,12 @@ fn convert_eta_tuple_neutral_with_known_type() {
 fn convert_partial_projection_tuple_at_narrow_type() {
     let mut context = context();
 
-    // p = (a, b), q = (a, c) — both 2-tuples agreeing on field 0, differing on field 1.
-    context.define(
-        "p",
-        &Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("b"))]),
-    );
-    context.define(
-        "q",
-        &Term::tuple([Term::atom(Atom::from("a")), Term::atom(Atom::from("c"))]),
-    );
+    // p = (1, 2), q = (1, 3) — both 2-tuples agreeing on field 0, differing on field 1.
+    context.define("p", &Term::tuple([nat(1), nat(2)]));
+    context.define("q", &Term::tuple([nat(1), nat(3)]));
 
-    // Term::type_() is a 1-field tuple type {A : {a}}.
-    let type_: Term = Term::tuple_type([("x", Term::atom_type(["a"]))]);
+    // A 1-field tuple type {x : Nat}.
+    let type_: Term = Term::tuple_type([("x", Term::prim(Prim::NatType))]);
 
     // this = (p.0), that = (q.0). At the 1-field type both denote (a),
     // so conversion should return true.
@@ -448,7 +454,7 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     // (`Var p`, `Var q`), the convert loop then routes the neutral pair
     // through `eta_expand_neutral`, which re-projects according to the
     // TRUE type telescope (1 field). Each `proj(_, 0)` then reduces to
-    // `a`, so the comparison succeeds — the bug is masked here.
+    // `1`, so the comparison succeeds — the bug is masked here.
     assert_eq!(convert(&mut context, &type_, &this, &that), Ok(true));
 }
 

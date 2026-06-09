@@ -6,17 +6,15 @@ use {
 fn main() {
     let source = r#"
         use /sys/{Nat, Int, Flt, Bin, Arr};
-        let pair_ty : Type = {
-            label : '[left, right],
-            match label : _ => Type
-            | 'left => Int
-            | 'right => Flt
-            end };
-        let pair : pair_ty = ('left, +42);
-        let score : pair_ty -> Int = (p) =>
-            match p.0 : _ => Int
-            | 'left => +42
-            | 'right => +7
+        union Pair
+        | left(Int)
+        | right(Flt)
+        end
+        let pair : Pair = Pair/left(+42);
+        let score : Pair -> Int = (p) =>
+            match p : Int
+            | left(_) => +42
+            | right(_) => +7
             end;
         let my_list : Arr(Nat) = [1, 2, 3];
         let my_bin : Bin = \01\02\03;

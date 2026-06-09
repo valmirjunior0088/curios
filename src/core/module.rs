@@ -1,4 +1,7 @@
-use super::Term;
+use {
+    super::{Inductive, Term},
+    std::collections::BTreeMap,
+};
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
 ///
@@ -34,6 +37,11 @@ pub enum Item {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub items: Vec<Item>,
+    /// Inductive declarations' registry entries, keyed by the type's qualified
+    /// name. Carried on the module — not on a `Context` — because elaboration
+    /// and erasure each run with their *own* `Context` (see `run::compile`);
+    /// both seed their context's flat inductive store from here on entry.
+    pub inductives: BTreeMap<String, Inductive>,
     pub type_: Option<Term>,
     pub body: Term,
 }

@@ -6,17 +6,15 @@ use {
 #[test]
 fn end_to_end() {
     let source = r#"
-        let pair_ty : Type = {
-            label : '[left, right],
-            match label : _ => Type
-            | 'left => sys/Int
-            | 'right => sys/Flt
-            end };
-        let pair : pair_ty = ('left, +42);
-        let score : (_ : pair_ty) -> sys/Int = (p) =>
-            match p.0 : _ => sys/Int
-            | 'left => +42
-            | 'right => +7
+        union Pair
+        | left(sys/Int)
+        | right(sys/Flt)
+        end
+        let pair : Pair = Pair/left(+42);
+        let score : (_ : Pair) -> sys/Int = (p) =>
+            match p : sys/Int
+            | left(_) => +42
+            | right(_) => +7
             end;
         sys/Io/print(sys/Int/to_str(score(pair)))
         "#;
@@ -223,7 +221,7 @@ fn vec_cons_with_nat_succ() {
     let source = r#"
         rec Vec(T : Type, n : sys/Nat) -> Type =
             match n : Type
-            | 0 => '[nil]
+            | 0 => {}
             | pred + 1, ih => { T, ih }
             end;
 
@@ -233,7 +231,7 @@ fn vec_cons_with_nat_succ() {
         let head(T : Type, n : sys/Nat, xs : Vec(T, n + 1)) -> T =
             xs.0;
 
-        let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, 'nil);
+        let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, ());
         sys/Io/print(sys/Nat/to_str(head(sys/Nat, 0, v)))
     "#;
 
