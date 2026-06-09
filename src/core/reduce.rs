@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Func, Let, Metavar, Nat, NatMatch, One, Prim, Proj,
-        ReduceError, Scope, Subterm, Term, Tuple, Two, UnionMatch, Var, reduce_prim,
+        Apply, Cases, Context, Func, Let, Match, Metavar, Nat, Prim, Proj, ReduceError, Subterm,
+        Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
-    std::{collections::BTreeMap, time::Instant},
+    std::time::Instant,
 };
 
 enum Reduce {
@@ -79,148 +79,115 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
         }
 }
 
-fn reduce_nat_induction(
-    context: &mut Context,
-    head: Subterm,
-    motive: Scope<One>,
-    zero_case: Term,
-    succ_case: Scope<Two>,
-) -> Result<Reduce, ReduceError> {
-    match Term::unwrap_or_clone(reduce(context, head.into())?) {
-        Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
-        Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
-            let one = BigUint::from(1usize);
-            let pred = if spine == one {
-                inner
-            } else {
-                Term::prim(Prim::Nat(Nat::Succ(spine - one, inner)))
-            };
-            let ih: Term = Subterm::NatMatch(NatMatch::Induction {
-                head: pred.clone(),
-                motive: motive.clone(),
-                zero_case: zero_case.clone(),
-                succ_case: succ_case.clone(),
-            })
-            .into();
-            Ok(Reduce::Continue(succ_case.open(&[&pred, &ih])))
-        }
-        head => Ok(Reduce::Break(Term::from(Subterm::NatMatch(
-            NatMatch::Induction {
-                head: head.into(),
-                motive,
-                zero_case,
-                succ_case,
-            },
-        )))),
-    }
-}
-
-fn reduce_bln_match(context: &mut Context, bm: BlnMatch) -> Result<Reduce, ReduceError> {
-    let BlnMatch {
+fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> {
+    let Match {
         head,
         motive,
-        false_case,
-        true_case,
-    } = bm;
-    match Term::unwrap_or_clone(reduce(context, head)?) {
-        Subterm::Prim(Prim::Bln(false)) => Ok(Reduce::Continue(false_case)),
-        Subterm::Prim(Prim::Bln(true)) => Ok(Reduce::Continue(true_case)),
-        head => Ok(Reduce::Break(Term::from(Subterm::BlnMatch(BlnMatch {
-            head: head.into(),
-            motive,
+        cases,
+    } = m;
+
+    match cases {
+        Cases::Bln {
             false_case,
             true_case,
-        })))),
-    }
-}
-
-fn reduce_nat_dispatch(
-    context: &mut Context,
-    head: Subterm,
-    motive: Scope<One>,
-    cases: BTreeMap<u32, Term>,
-    default: Term,
-) -> Result<Reduce, ReduceError> {
-    match Term::unwrap_or_clone(reduce(context, head.into())?) {
-        Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
-            Some(body) => Ok(Reduce::Continue(body.clone())),
-            None => Ok(Reduce::Continue(default.clone())),
-        },
-        Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
-            if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
-        {
-            match spine.to_u32().and_then(|k| cases.get(&k)) {
-                Some(body) => Ok(Reduce::Continue(body.clone())),
-                None => Ok(Reduce::Continue(default.clone())),
-            }
-        }
-        head => Ok(Reduce::Break(Term::from(Subterm::NatMatch(
-            NatMatch::Dispatch {
+        } => match Term::unwrap_or_clone(reduce(context, head)?) {
+            Subterm::Prim(Prim::Bln(false)) => Ok(Reduce::Continue(false_case)),
+            Subterm::Prim(Prim::Bln(true)) => Ok(Reduce::Continue(true_case)),
+            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head.into(),
                 motive,
-                cases,
-                default,
-            },
-        )))),
-    }
-}
+                cases: Cases::Bln {
+                    false_case,
+                    true_case,
+                },
+            })))),
+        },
 
-fn reduce_nat_match(context: &mut Context, nm: NatMatch) -> Result<Reduce, ReduceError> {
-    match nm {
-        NatMatch::Induction {
-            head,
-            motive,
+        Cases::NatInduction {
             zero_case,
             succ_case,
-        } => reduce_nat_induction(
-            context,
-            Term::unwrap_or_clone(head),
-            motive,
-            zero_case,
-            succ_case,
-        ),
-        NatMatch::Dispatch {
-            head,
-            motive,
-            cases,
-            default,
-        } => reduce_nat_dispatch(context, Term::unwrap_or_clone(head), motive, cases, default),
+        } => match Term::unwrap_or_clone(reduce(context, head)?) {
+            Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
+            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
+                let one = BigUint::from(1usize);
+                let pred = if spine == one {
+                    inner
+                } else {
+                    Term::prim(Prim::Nat(Nat::Succ(spine - one, inner)))
+                };
+                let ih: Term = Subterm::Match(Match {
+                    head: pred.clone(),
+                    motive: motive.clone(),
+                    cases: Cases::NatInduction {
+                        zero_case: zero_case.clone(),
+                        succ_case: succ_case.clone(),
+                    },
+                })
+                .into();
+                Ok(Reduce::Continue(succ_case.open(&[&pred, &ih])))
+            }
+            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                head: head.into(),
+                motive,
+                cases: Cases::NatInduction {
+                    zero_case,
+                    succ_case,
+                },
+            })))),
+        },
+
+        Cases::NatDispatch { cases, default } => {
+            match Term::unwrap_or_clone(reduce(context, head)?) {
+                Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
+                    Some(body) => Ok(Reduce::Continue(body.clone())),
+                    None => Ok(Reduce::Continue(default.clone())),
+                },
+                Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
+                    if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
+                {
+                    match spine.to_u32().and_then(|k| cases.get(&k)) {
+                        Some(body) => Ok(Reduce::Continue(body.clone())),
+                        None => Ok(Reduce::Continue(default.clone())),
+                    }
+                }
+                head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                    head: head.into(),
+                    motive,
+                    cases: Cases::NatDispatch { cases, default },
+                })))),
+            }
+        }
+
+        // Dispatch on the reduced scrutinee — a `UnionCtor` directly, or one
+        // reached through a match-arm refinement (`refine_head` registers
+        // `head := ctor_val`, which `reduce` follows). The selected arm's
+        // binders are bound to *projections of the original head term*
+        // (`head.(i + 1)`, the flat view in `reduce_proj`), not to the reduced
+        // payload values: call-by-name. Substituting reduced payloads would
+        // inline evaluated definition internals (including local-`let`
+        // annotation holes that elaboration never births) into types that
+        // flow on to `zonk`.
+        Cases::Union(cases) => {
+            let head_reduced = reduce(context, head.clone())?;
+
+            if let Subterm::UnionCtor(ctor) = &*head_reduced
+                && let Some(scope) = cases.get(&ctor.tag)
+            {
+                let projections = (0..scope.arity())
+                    .map(|i| Term::proj(head.clone(), i + 1))
+                    .collect::<Vec<_>>();
+                let projection_refs = projections.iter().collect::<Vec<_>>();
+
+                return Ok(Reduce::Continue(scope.open(&projection_refs)));
+            }
+
+            Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                head: head_reduced,
+                motive,
+                cases: Cases::Union(cases),
+            }))))
+        }
     }
-}
-
-fn reduce_union_match(context: &mut Context, um: UnionMatch) -> Result<Reduce, ReduceError> {
-    let UnionMatch {
-        head,
-        motive,
-        cases,
-    } = um;
-
-    // Dispatch on the reduced scrutinee — a `UnionCtor` directly, or one
-    // reached through a match-arm refinement (`refine_head` registers
-    // `head := ctor_val`, which `reduce` follows). The selected arm's binders
-    // are bound to *projections of the original head term* (`head.(i + 1)`,
-    // the flat view in `reduce_proj`), not to the reduced payload values:
-    // call-by-name. Substituting reduced payloads would inline evaluated
-    // definition internals (including local-`let` annotation holes that
-    // elaboration never births) into types that flow on to `zonk`.
-    let head_reduced = reduce(context, head.clone())?;
-
-    if let Subterm::UnionCtor(ctor) = &*head_reduced
-        && let Some(scope) = cases.get(&ctor.tag)
-    {
-        let projections = (0..scope.arity())
-            .map(|i| Term::proj(head.clone(), i + 1))
-            .collect::<Vec<_>>();
-        let projection_refs = projections.iter().collect::<Vec<_>>();
-
-        return Ok(Reduce::Continue(scope.open(&projection_refs)));
-    }
-
-    Ok(Reduce::Break(Term::from(Subterm::UnionMatch(UnionMatch {
-        head: head_reduced,
-        motive,
-        cases,
-    }))))
 }
 
 fn reduce_let(let_: Let) -> Reduce {
@@ -252,15 +219,13 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
 
             let step = match Term::unwrap_or_clone(term) {
                 Subterm::Prim(prim) => Reduce::Break(reduce_prim(context, &prim)?.into()),
-                Subterm::BlnMatch(bm) => reduce_bln_match(context, bm)?,
-                Subterm::NatMatch(nm) => reduce_nat_match(context, nm)?,
+                Subterm::Match(m) => reduce_match(context, m)?,
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
                 Subterm::Func(func) => reduce_func_eta(context, func)?,
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
-                Subterm::UnionMatch(um) => reduce_union_match(context, um)?,
                 // `UnionType` and `UnionCtor` are primitive normal forms, like
                 // `Tuple`: their sub-terms are not reduced in WHNF.
                 term => Reduce::Break(term.into()),

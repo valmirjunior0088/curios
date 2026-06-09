@@ -39,10 +39,9 @@ pub struct Context {
     reductions: HashMap<Term, Term>,
     assumptions: Vec<HashMap<String, Term>>,
     definitions: Vec<HashMap<String, Term>>,
-    projections: Vec<HashMap<(Term, usize), Term>>,
     // Counterfactual match-arm refinements (`refine_head`), kept parallel to
-    // `definitions`/`projections` but suppressible: re-validation of a
-    // metavariable solution (§7.4) must keep stable definitions yet ignore these.
+    // `definitions` but suppressible: re-validation of a metavariable
+    // solution (§7.4) must keep stable definitions yet ignore these.
     refinements: Vec<HashMap<String, Term>>,
     refinement_projections: Vec<HashMap<(Term, usize), Term>>,
     suppress_refinements: bool,
@@ -73,7 +72,6 @@ impl Context {
             reductions: HashMap::new(),
             assumptions: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
-            projections: vec![HashMap::new()],
             refinements: vec![HashMap::new()],
             refinement_projections: vec![HashMap::new()],
             suppress_refinements: false,
@@ -119,7 +117,6 @@ impl Context {
     fn enter_frame(&mut self) {
         self.assumptions.push(HashMap::new());
         self.definitions.push(HashMap::new());
-        self.projections.push(HashMap::new());
         self.refinements.push(HashMap::new());
         self.refinement_projections.push(HashMap::new());
         self.local_marks.push(self.local.len());
@@ -128,13 +125,11 @@ impl Context {
     fn leave_frame(&mut self) {
         self.assumptions.pop().unwrap();
         let definitions = self.definitions.pop().unwrap();
-        let projections = self.projections.pop().unwrap();
         let refinements = self.refinements.pop().unwrap();
         let refinement_projections = self.refinement_projections.pop().unwrap();
         self.local.truncate(self.local_marks.pop().unwrap());
 
         if !definitions.is_empty()
-            || !projections.is_empty()
             || !refinements.is_empty()
             || !refinement_projections.is_empty()
         {
@@ -204,22 +199,6 @@ impl Context {
         self.define(label, term);
     }
 
-    pub fn define_projection(&mut self, base: Term, index: usize, value: Term) {
-        self.projections
-            .last_mut()
-            .unwrap()
-            .insert((base, index), value);
-
-        self.reductions.clear();
-    }
-
-    pub fn projection(&self, base: &Term, index: usize) -> Option<&Term> {
-        self.projections
-            .iter()
-            .rev()
-            .find_map(|p| p.get(&(base.clone(), index)))
-    }
-
     // === Refinements ========================================================
 
     /// Register a counterfactual match-arm refinement of a variable. Unlike
@@ -238,7 +217,7 @@ impl Context {
     }
 
     /// Register a counterfactual refinement of a projection (`refine_head` on a
-    /// `Proj` scrutinee). The suppressible analogue of `define_projection`.
+    /// `Proj` scrutinee).
     pub fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
         self.refinement_projections
             .last_mut()
@@ -262,20 +241,17 @@ impl Context {
         self.definition(label)
     }
 
-    /// The reduct of a projection: a stable projection definition, or — unless
-    /// suppressed — a counterfactual projection refinement.
+    /// The reduct of a projection: its counterfactual match-arm refinement,
+    /// unless refinements are suppressed (re-validation, §7.4).
     pub fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
-        if !self.suppress_refinements
-            && let Some(value) = self
-                .refinement_projections
-                .iter()
-                .rev()
-                .find_map(|p| p.get(&(base.clone(), index)))
-        {
-            return Some(value);
+        if self.suppress_refinements {
+            return None;
         }
 
-        self.projection(base, index)
+        self.refinement_projections
+            .iter()
+            .rev()
+            .find_map(|p| p.get(&(base.clone(), index)))
     }
 
     /// Run `f` with refinements suppressed (re-validation, §7.4). Brackets the

@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, BlnMatch, Definition, Flt, Func, FuncType, Item, Let, Module,
-        Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType,
-        Two, UnionCtor, UnionMatch, UnionType, Var,
+        Apply, Cases, Match, Atom, Definition, Flt, Func, FuncType, Item, Let, Module,
+        Nat, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType,
+        Two, UnionCtor, UnionType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -434,85 +434,6 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match Term::unwrap_or_clone(term) {
         Subterm::Type => pure("Type"),
         Subterm::Prim(prim) => print_prim(prim, depth),
-        Subterm::NatMatch(NatMatch::Induction {
-            head,
-            motive,
-            zero_case,
-            succ_case,
-        }) => {
-            let (motive_label, motive) = open_scope_one(motive, depth);
-            let ((pred_label, ih_label), succ_case) = open_scope_two(succ_case, depth);
-
-            flat([
-                pure("Nat.fold "),
-                print_term(head, depth),
-                pure(" : "),
-                pure(motive_label),
-                pure(" => "),
-                print_term(motive, depth + 1),
-                pure(";"),
-                pure("\n| 0n =>\n"),
-                indent(flat([print_term(zero_case, depth), pure(";")])),
-                pure("\n| "),
-                pure(pred_label),
-                pure(" "),
-                pure(ih_label),
-                pure(" =>\n"),
-                indent(flat([print_term(succ_case, depth), pure(";")])),
-            ])
-        }
-        Subterm::BlnMatch(BlnMatch {
-            head,
-            motive,
-            false_case,
-            true_case,
-        }) => {
-            let (motive_label, motive) = open_scope_one(motive, depth);
-            flat([
-                pure("Bln.match "),
-                print_term(head, depth),
-                pure(" : "),
-                pure(motive_label),
-                pure(" => "),
-                print_term(motive, depth + 1),
-                pure(";"),
-                pure("\n| false =>\n"),
-                indent(flat([print_term(false_case, depth), pure(";")])),
-                pure("\n| true =>\n"),
-                indent(flat([print_term(true_case, depth), pure(";")])),
-            ])
-        }
-        Subterm::NatMatch(NatMatch::Dispatch {
-            head,
-            motive,
-            cases,
-            default,
-        }) => {
-            let (motive_label, motive) = open_scope_one(motive, depth);
-            let case_printers = flat(
-                cases
-                    .into_iter()
-                    .map(|(n, body)| {
-                        flat([
-                            pure(format!("\n| {n}n =>\n")),
-                            indent(flat([print_term(body, depth), pure(";")])),
-                        ])
-                    })
-                    .collect::<Vec<_>>(),
-            );
-            flat([
-                pure("Nat.match "),
-                print_term(head, depth),
-                pure(" : "),
-                pure(motive_label),
-                pure(" => "),
-                print_term(motive, depth + 1),
-                pure(";"),
-                case_printers,
-                pure("\n| _ =>\n"),
-                indent(flat([print_term(default, depth), pure(";")])),
-            ])
-        }
         Subterm::FuncType(FuncType { telescope }) => {
             fn walk(
                 cur: Telescope<Term>,
@@ -664,55 +585,110 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 ])
             }
         }
-        Subterm::UnionMatch(UnionMatch {
+        Subterm::Match(Match {
             head,
             motive,
             cases,
         }) => {
             let (motive_label, motive) = open_scope_one(motive, depth);
 
-            let cases = flat(
-                cases
-                    .into_iter()
-                    .map(|(atom, scope)| {
-                        let labels = scope
-                            .label_iter()
-                            .enumerate()
-                            .map(|(i, l)| {
-                                l.map(str::to_string).unwrap_or_else(|| label_at(depth + i))
-                            })
-                            .collect::<Vec<_>>();
-                        let label_terms = label_terms(&labels);
-                        let label_terms = label_terms.iter().collect::<Vec<_>>();
-                        let body = scope.open(&label_terms);
+            // Shared `<keyword> head : label => motive;` prefix; the keyword
+            // and arm bodies depend on the case kind.
+            let keyword = match &cases {
+                Cases::Bln { .. } => "Bln.match ",
+                Cases::NatInduction { .. } => "Nat.fold ",
+                Cases::NatDispatch { .. } => "Nat.match ",
+                Cases::Union(_) => "match ",
+            };
 
-                        let binders = if labels.is_empty() {
-                            pure("")
-                        } else {
-                            pure(format!("({})", labels.join(", ")))
-                        };
-
-                        flat([
-                            pure("\n| "),
-                            print_atom(atom),
-                            binders,
-                            pure(" =>\n"),
-                            indent(flat([print_term(body, depth + labels.len()), pure(";")])),
-                        ])
-                    })
-                    .collect::<Vec<_>>(),
-            );
-
-            flat([
-                pure("match "),
+            let prefix = flat([
+                pure(keyword),
                 print_term(head, depth),
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
                 print_term(motive, depth + 1),
                 pure(";"),
-                cases,
-            ])
+            ]);
+
+            let arms = match cases {
+                Cases::Bln {
+                    false_case,
+                    true_case,
+                } => flat([
+                    pure("\n| false =>\n"),
+                    indent(flat([print_term(false_case, depth), pure(";")])),
+                    pure("\n| true =>\n"),
+                    indent(flat([print_term(true_case, depth), pure(";")])),
+                ]),
+                Cases::NatInduction {
+                    zero_case,
+                    succ_case,
+                } => {
+                    let ((pred_label, ih_label), succ_case) = open_scope_two(succ_case, depth);
+                    flat([
+                        pure("\n| 0n =>\n"),
+                        indent(flat([print_term(zero_case, depth), pure(";")])),
+                        pure("\n| "),
+                        pure(pred_label),
+                        pure(" "),
+                        pure(ih_label),
+                        pure(" =>\n"),
+                        indent(flat([print_term(succ_case, depth), pure(";")])),
+                    ])
+                }
+                Cases::NatDispatch { cases, default } => {
+                    let case_printers = flat(
+                        cases
+                            .into_iter()
+                            .map(|(n, body)| {
+                                flat([
+                                    pure(format!("\n| {n}n =>\n")),
+                                    indent(flat([print_term(body, depth), pure(";")])),
+                                ])
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                    flat([
+                        case_printers,
+                        pure("\n| _ =>\n"),
+                        indent(flat([print_term(default, depth), pure(";")])),
+                    ])
+                }
+                Cases::Union(cases) => flat(
+                    cases
+                        .into_iter()
+                        .map(|(atom, scope)| {
+                            let labels = scope
+                                .label_iter()
+                                .enumerate()
+                                .map(|(i, l)| {
+                                    l.map(str::to_string).unwrap_or_else(|| label_at(depth + i))
+                                })
+                                .collect::<Vec<_>>();
+                            let label_terms = label_terms(&labels);
+                            let label_terms = label_terms.iter().collect::<Vec<_>>();
+                            let body = scope.open(&label_terms);
+
+                            let binders = if labels.is_empty() {
+                                pure("")
+                            } else {
+                                pure(format!("({})", labels.join(", ")))
+                            };
+
+                            flat([
+                                pure("\n| "),
+                                print_atom(atom),
+                                binders,
+                                pure(" =>\n"),
+                                indent(flat([print_term(body, depth + labels.len()), pure(";")])),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            };
+
+            flat([prefix, arms])
         }
         Subterm::Let(Let { type_, body, tail }) => {
             let (label, tail) = open_scope_one(tail, depth);

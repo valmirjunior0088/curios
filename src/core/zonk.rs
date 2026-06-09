@@ -1,7 +1,7 @@
 use super::{
-    Apply, Arity, BlnMatch, Bound, Context, Definition, Error, Func, FuncType, Inductive, Item,
-    Let, Metavar, Module, Nat, NatMatch, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
-    Tuple, TupleType, UnionCtor, UnionMatch, UnionType,
+    Apply, Cases, Match, Arity, Bound, Context, Definition, Error, Func, FuncType, Inductive, Item,
+    Let, Metavar, Module, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
+    Tuple, TupleType, UnionCtor, UnionType,
 };
 
 /// Placeholder label pushed onto the binder stack for an unnamed (constant) scope
@@ -204,47 +204,6 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             index: *index,
         }),
 
-        Subterm::BlnMatch(BlnMatch {
-            head,
-            motive,
-            false_case,
-            true_case,
-        }) => Subterm::BlnMatch(BlnMatch {
-            head: zonk_term(context, head, binders)?,
-            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
-            false_case: zonk_term(context, false_case, binders)?,
-            true_case: zonk_term(context, true_case, binders)?,
-        }),
-
-        Subterm::NatMatch(NatMatch::Induction {
-            head,
-            motive,
-            zero_case,
-            succ_case,
-        }) => Subterm::NatMatch(NatMatch::Induction {
-            head: zonk_term(context, head, binders)?,
-            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
-            zero_case: zonk_term(context, zero_case, binders)?,
-            succ_case: enter_scope(binders, succ_case, |b, binders| {
-                zonk_term(context, b, binders)
-            })?,
-        }),
-
-        Subterm::NatMatch(NatMatch::Dispatch {
-            head,
-            motive,
-            cases,
-            default,
-        }) => Subterm::NatMatch(NatMatch::Dispatch {
-            head: zonk_term(context, head, binders)?,
-            motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
-            cases: cases
-                .iter()
-                .map(|(n, body)| Ok((*n, zonk_term(context, body, binders)?)))
-                .collect::<Result<_, Error>>()?,
-            default: zonk_term(context, default, binders)?,
-        }),
-
         Subterm::UnionType(UnionType { name, params }) => Subterm::UnionType(UnionType {
             name: name.clone(),
             params: zonk_terms(context, params, binders)?,
@@ -262,22 +221,51 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             payload: zonk_terms(context, payload, binders)?,
         }),
 
-        Subterm::UnionMatch(UnionMatch {
+        Subterm::Match(Match {
             head,
             motive,
             cases,
-        }) => Subterm::UnionMatch(UnionMatch {
+        }) => Subterm::Match(Match {
             head: zonk_term(context, head, binders)?,
             motive: enter_scope(binders, motive, |b, binders| zonk_term(context, b, binders))?,
-            cases: cases
-                .iter()
-                .map(|(atom, scope)| {
-                    Ok((
-                        atom.clone(),
-                        enter_scope(binders, scope, |b, binders| zonk_term(context, b, binders))?,
-                    ))
-                })
-                .collect::<Result<_, Error>>()?,
+            cases: match cases {
+                Cases::Bln {
+                    false_case,
+                    true_case,
+                } => Cases::Bln {
+                    false_case: zonk_term(context, false_case, binders)?,
+                    true_case: zonk_term(context, true_case, binders)?,
+                },
+                Cases::NatInduction {
+                    zero_case,
+                    succ_case,
+                } => Cases::NatInduction {
+                    zero_case: zonk_term(context, zero_case, binders)?,
+                    succ_case: enter_scope(binders, succ_case, |b, binders| {
+                        zonk_term(context, b, binders)
+                    })?,
+                },
+                Cases::NatDispatch { cases, default } => Cases::NatDispatch {
+                    cases: cases
+                        .iter()
+                        .map(|(n, body)| Ok((*n, zonk_term(context, body, binders)?)))
+                        .collect::<Result<_, Error>>()?,
+                    default: zonk_term(context, default, binders)?,
+                },
+                Cases::Union(cases) => Cases::Union(
+                    cases
+                        .iter()
+                        .map(|(atom, scope)| {
+                            Ok((
+                                atom.clone(),
+                                enter_scope(binders, scope, |b, binders| {
+                                    zonk_term(context, b, binders)
+                                })?,
+                            ))
+                        })
+                        .collect::<Result<_, Error>>()?,
+                ),
+            },
         }),
 
         Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {

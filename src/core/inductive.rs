@@ -7,7 +7,7 @@ use {
 /// declaration produces alongside its type-constructor and value-constructor
 /// function bindings.
 ///
-/// The elaborator consults this when checking a `UnionMatch`: each arm's
+/// The elaborator consults this when checking a union match: each arm's
 /// binders are typed directly from the matching constructor's telescope
 /// (instantiated at the scrutinee type's parameters), and the arm's binder
 /// count is arity-checked against that telescope statically. `erase` consults
@@ -45,8 +45,8 @@ impl Inductive {
     }
 
     /// The runtime tag index of `tag`: its position among this inductive's
-    /// constructors in sorted (BTreeMap key) order — the same ordering the
-    /// legacy tagged-tuple encoding derives from its `AtomType`'s `BTreeSet`.
+    /// constructors in sorted (BTreeMap key) order — the order in which a
+    /// union match's lowered cases are laid out.
     pub fn tag_index(&self, tag: &Atom) -> Option<usize> {
         self.constructors.keys().position(|candidate| candidate == tag)
     }

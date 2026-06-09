@@ -198,7 +198,7 @@ fn erase_bin_eql() {
 }
 
 #[test]
-fn erase_nat_eql_returns_bool_atom() {
+fn erase_nat_eql_returns_bln() {
     let mut context = context();
 
     let bool_type = Subterm::Prim(Prim::BlnType).into();

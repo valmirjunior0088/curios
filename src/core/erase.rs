@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Error, Func, Item, Let, Module, Nat,
-        NatMatch, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        UnionCtor, UnionMatch, UnionType, Var, erase_prim, expect_prim_head, infer, reduce_with,
+        Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module, Nat,
+        One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        UnionCtor, UnionType, Var, erase_prim, expect_prim_head, infer, reduce_with,
         refine_head,
     },
     crate::ersd,
@@ -289,41 +289,44 @@ fn erase_nat_dispatch(
     .into())
 }
 
-fn erase_nat_match(
+fn erase_match(
     context: &mut Context,
-    nm: &NatMatch,
+    m: &Match,
     term: &Term,
     expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    match nm {
-        NatMatch::Induction {
-            head,
-            motive,
+    let Match {
+        head,
+        motive,
+        cases,
+    } = m;
+
+    match cases {
+        Cases::Bln {
+            false_case,
+            true_case,
+        } => erase_bln_match(context, head, motive, false_case, true_case, term, expected),
+        Cases::NatInduction {
             zero_case,
             succ_case,
         } => erase_nat_induction(context, head, motive, zero_case, succ_case, term, expected),
-        NatMatch::Dispatch {
-            head,
-            motive,
-            cases,
-            default,
-        } => erase_nat_dispatch(context, head, motive, cases, default, term, expected),
+        Cases::NatDispatch { cases, default } => {
+            erase_nat_dispatch(context, head, motive, cases, default, term, expected)
+        }
+        Cases::Union(cases) => erase_union_match(context, head, motive, cases, expected),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn erase_bln_match(
     context: &mut Context,
-    bm: &BlnMatch,
+    head: &Term,
+    motive: &Scope<One>,
+    false_case: &Term,
+    true_case: &Term,
     term: &Term,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let BlnMatch {
-        head,
-        motive,
-        false_case,
-        true_case,
-    } = bm;
-
     let head_type = expect_prim_head(context, head, term, Prim::BlnType)?;
 
     let erased_false = context.with_frame(|context| {
@@ -429,22 +432,18 @@ fn erase_union_ctor(
     Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
 }
 
-/// Lower the primitive eliminator: an atom-match on the scrutinee's tag
+/// Lower the primitive eliminator: an index dispatch on the scrutinee's tag
 /// (field 0), each arm rebinding its payload binders to the flat record's
 /// remaining fields (`head.(i + 1)`). Downstream stages
 /// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
 /// index-dispatched match.
 fn erase_union_match(
     context: &mut Context,
-    um: &UnionMatch,
+    head: &Term,
+    motive: &Scope<One>,
+    cases: &BTreeMap<Atom, Scope<Many>>,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let UnionMatch {
-        head,
-        motive,
-        cases,
-    } = um;
-
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
@@ -688,8 +687,7 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
 fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
     match &**term {
         Subterm::Prim(prim) => erase_prim(context, term, prim, expected),
-        Subterm::BlnMatch(bm) => erase_bln_match(context, bm, term, expected),
-        Subterm::NatMatch(nm) => erase_nat_match(context, nm, term, expected),
+        Subterm::Match(m) => erase_match(context, m, term, expected),
         // Type formers all erase to a runtime unit; they carry nothing to lower
         // and were already checked by `elaborate`.
         Subterm::Type
@@ -697,7 +695,6 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         | Subterm::TupleType(_)
         | Subterm::UnionType(_) => Ok(ersd::Subterm::Erased.into()),
         Subterm::UnionCtor(uc) => erase_union_ctor(context, uc, expected),
-        Subterm::UnionMatch(um) => erase_union_match(context, um, expected),
         Subterm::Func(func) => erase_func(context, func, term, expected),
         Subterm::Apply(apply) => erase_apply(context, apply, term, expected),
         Subterm::Tuple(tuple) => erase_tuple(context, tuple, expected),

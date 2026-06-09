@@ -194,23 +194,25 @@ impl Term {
         L: Into<String>,
         B: Into<Term>,
     {
-        Self::from(Subterm::UnionMatch(UnionMatch {
+        Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            cases: cases
-                .into_iter()
-                .map(|(atom, binders, body)| {
-                    let binders = binders.into_iter().map(Into::into).collect::<Vec<_>>();
-                    let binders = binders.iter().map(String::as_str).collect::<Vec<_>>();
-                    (
-                        atom.into(),
-                        Scope::close(Many(binders.len()), &binders, body.into()),
-                    )
-                })
-                .collect(),
+            cases: Cases::Union(
+                cases
+                    .into_iter()
+                    .map(|(atom, binders, body)| {
+                        let binders = binders.into_iter().map(Into::into).collect::<Vec<_>>();
+                        let binders = binders.iter().map(String::as_str).collect::<Vec<_>>();
+                        (
+                            atom.into(),
+                            Scope::close(Many(binders.len()), &binders, body.into()),
+                        )
+                    })
+                    .collect(),
+            ),
         }))
     }
 
@@ -227,14 +229,16 @@ impl Term {
         F: Into<Term>,
         T: Into<Term>,
     {
-        Self::from(Subterm::BlnMatch(BlnMatch {
+        Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            false_case: false_case.into(),
-            true_case: true_case.into(),
+            cases: Cases::Bln {
+                false_case: false_case.into(),
+                true_case: true_case.into(),
+            },
         }))
     }
 
@@ -258,18 +262,20 @@ impl Term {
         let pred_label = pred_label.into();
         let ih_label = ih_label.into();
 
-        Self::from(Subterm::NatMatch(NatMatch::Induction {
+        Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            zero_case: zero_case.into(),
-            succ_case: Scope::close(
-                Two,
-                &[pred_label.as_str(), ih_label.as_str()],
-                succ_case.into(),
-            ),
+            cases: Cases::NatInduction {
+                zero_case: zero_case.into(),
+                succ_case: Scope::close(
+                    Two,
+                    &[pred_label.as_str(), ih_label.as_str()],
+                    succ_case.into(),
+                ),
+            },
         }))
     }
 
@@ -287,14 +293,16 @@ impl Term {
         B: Into<Term>,
         D: Into<Term>,
     {
-        Self::from(Subterm::NatMatch(NatMatch::Dispatch {
+        Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
                 Some(l) => Scope::close(One, &[l], motive.into()),
                 None => Scope::constant(One, motive.into()),
             },
-            cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
-            default: default.into(),
+            cases: Cases::NatDispatch {
+                cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
+                default: default.into(),
+            },
         }))
     }
 
@@ -431,30 +439,6 @@ pub struct Proj {
     pub index: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NatMatch {
-    Induction {
-        head: Term,
-        motive: Scope<One>,
-        zero_case: Term,
-        succ_case: Scope<Two>,
-    },
-    Dispatch {
-        head: Term,
-        motive: Scope<One>,
-        cases: BTreeMap<u32, Term>,
-        default: Term,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BlnMatch {
-    pub head: Term,
-    pub motive: Scope<One>,
-    pub false_case: Term,
-    pub true_case: Term,
-}
-
 /// An inductive type as a primitive normal form. Built inside the
 /// automatically-generated type-constructor function's body. Users never write
 /// one directly — they write `Result(A, E)` and the type-constructor function
@@ -482,13 +466,33 @@ pub struct UnionCtor {
     pub payload: Vec<Term>,
 }
 
-/// The primitive eliminator for inductive types. Each case's arity equals the
-/// matched constructor's payload arity.
+/// The unified eliminator: every match form shares a scrutinee and a motive
+/// and differs only in its [`Cases`] payload.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UnionMatch {
+pub struct Match {
     pub head: Term,
     pub motive: Scope<One>,
-    pub cases: BTreeMap<Atom, Scope<Many>>,
+    pub cases: Cases,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Cases {
+    /// Dependent elimination of `Bln`: a false arm and a true arm.
+    Bln { false_case: Term, true_case: Term },
+    /// Structural induction on `Nat`: a zero arm plus a successor arm binding
+    /// the predecessor and the induction hypothesis.
+    NatInduction {
+        zero_case: Term,
+        succ_case: Scope<Two>,
+    },
+    /// Sparse dispatch on specific `Nat` values with a default arm.
+    NatDispatch {
+        cases: BTreeMap<u32, Term>,
+        default: Term,
+    },
+    /// The primitive eliminator of a nominal union: one arm per constructor,
+    /// each arm's arity equal to that constructor's payload arity.
+    Union(BTreeMap<Atom, Scope<Many>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -506,7 +510,7 @@ pub struct Rec {
 
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
 /// born from a surface hole `?` and (possibly) solved by unification. It is a
-/// global head carrying no de Bruijn index — like a free `Var` or an `Atom`,
+/// global head carrying no de Bruijn index — like a free `Var`,
 /// it is inert under the `Visit` machinery (it holds no `Var`). The solution,
 /// when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`; the
 /// node itself is immutable.
@@ -519,8 +523,6 @@ pub struct Metavar {
 pub enum Subterm {
     Type,
     Prim(Prim),
-    BlnMatch(BlnMatch),
-    NatMatch(NatMatch),
     FuncType(FuncType),
     Func(Func),
     Apply(Apply),
@@ -529,7 +531,7 @@ pub enum Subterm {
     Proj(Proj),
     UnionType(UnionType),
     UnionCtor(UnionCtor),
-    UnionMatch(UnionMatch),
+    Match(Match),
     Let(Let),
     Rec(Rec),
     Var(Var),
@@ -589,39 +591,6 @@ impl Subterm {
                 fields.iter().for_each(|f| f.collect_metavars(ids));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
-            Subterm::BlnMatch(BlnMatch {
-                head,
-                motive,
-                false_case,
-                true_case,
-            }) => {
-                head.collect_metavars(ids);
-                motive.body().collect_metavars(ids);
-                false_case.collect_metavars(ids);
-                true_case.collect_metavars(ids);
-            }
-            Subterm::NatMatch(NatMatch::Induction {
-                head,
-                motive,
-                zero_case,
-                succ_case,
-            }) => {
-                head.collect_metavars(ids);
-                motive.body().collect_metavars(ids);
-                zero_case.collect_metavars(ids);
-                succ_case.body().collect_metavars(ids);
-            }
-            Subterm::NatMatch(NatMatch::Dispatch {
-                head,
-                motive,
-                cases,
-                default,
-            }) => {
-                head.collect_metavars(ids);
-                motive.body().collect_metavars(ids);
-                cases.values().for_each(|b| b.collect_metavars(ids));
-                default.collect_metavars(ids);
-            }
             Subterm::UnionType(UnionType { params, .. }) => {
                 params.iter().for_each(|p| p.collect_metavars(ids));
             }
@@ -631,14 +600,36 @@ impl Subterm {
                 params.iter().for_each(|p| p.collect_metavars(ids));
                 payload.iter().for_each(|p| p.collect_metavars(ids));
             }
-            Subterm::UnionMatch(UnionMatch {
+            Subterm::Match(Match {
                 head,
                 motive,
                 cases,
             }) => {
                 head.collect_metavars(ids);
                 motive.body().collect_metavars(ids);
-                cases.values().for_each(|s| s.body().collect_metavars(ids));
+                match cases {
+                    Cases::Bln {
+                        false_case,
+                        true_case,
+                    } => {
+                        false_case.collect_metavars(ids);
+                        true_case.collect_metavars(ids);
+                    }
+                    Cases::NatInduction {
+                        zero_case,
+                        succ_case,
+                    } => {
+                        zero_case.collect_metavars(ids);
+                        succ_case.body().collect_metavars(ids);
+                    }
+                    Cases::NatDispatch { cases, default } => {
+                        cases.values().for_each(|b| b.collect_metavars(ids));
+                        default.collect_metavars(ids);
+                    }
+                    Cases::Union(cases) => {
+                        cases.values().for_each(|s| s.body().collect_metavars(ids));
+                    }
+                }
             }
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.collect_metavars(ids);
@@ -737,42 +728,6 @@ impl Bound for Subterm {
                 head: visit.visit_subterm(head),
                 index: *index,
             }),
-            Subterm::BlnMatch(BlnMatch {
-                head,
-                motive,
-                false_case,
-                true_case,
-            }) => Subterm::BlnMatch(BlnMatch {
-                head: visit.visit_subterm(head),
-                motive: visit.visit_scope(motive),
-                false_case: visit.visit_subterm(false_case),
-                true_case: visit.visit_subterm(true_case),
-            }),
-            Subterm::NatMatch(NatMatch::Induction {
-                head,
-                motive,
-                zero_case,
-                succ_case,
-            }) => Subterm::NatMatch(NatMatch::Induction {
-                head: visit.visit_subterm(head),
-                motive: visit.visit_scope(motive),
-                zero_case: visit.visit_subterm(zero_case),
-                succ_case: visit.visit_scope(succ_case),
-            }),
-            Subterm::NatMatch(NatMatch::Dispatch {
-                head,
-                motive,
-                cases,
-                default,
-            }) => Subterm::NatMatch(NatMatch::Dispatch {
-                head: visit.visit_subterm(head),
-                motive: visit.visit_scope(motive),
-                cases: cases
-                    .iter()
-                    .map(|(&n, body)| (n, visit.visit_subterm(body)))
-                    .collect(),
-                default: visit.visit_subterm(default),
-            }),
             Subterm::UnionType(UnionType { name, params }) => Subterm::UnionType(UnionType {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
@@ -788,17 +743,42 @@ impl Bound for Subterm {
                 tag: tag.clone(),
                 payload: payload.iter().map(|p| visit.visit_subterm(p)).collect(),
             }),
-            Subterm::UnionMatch(UnionMatch {
+            Subterm::Match(Match {
                 head,
                 motive,
                 cases,
-            }) => Subterm::UnionMatch(UnionMatch {
+            }) => Subterm::Match(Match {
                 head: visit.visit_subterm(head),
                 motive: visit.visit_scope(motive),
-                cases: cases
-                    .iter()
-                    .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
-                    .collect(),
+                cases: match cases {
+                    Cases::Bln {
+                        false_case,
+                        true_case,
+                    } => Cases::Bln {
+                        false_case: visit.visit_subterm(false_case),
+                        true_case: visit.visit_subterm(true_case),
+                    },
+                    Cases::NatInduction {
+                        zero_case,
+                        succ_case,
+                    } => Cases::NatInduction {
+                        zero_case: visit.visit_subterm(zero_case),
+                        succ_case: visit.visit_scope(succ_case),
+                    },
+                    Cases::NatDispatch { cases, default } => Cases::NatDispatch {
+                        cases: cases
+                            .iter()
+                            .map(|(&n, body)| (n, visit.visit_subterm(body)))
+                            .collect(),
+                        default: visit.visit_subterm(default),
+                    },
+                    Cases::Union(cases) => Cases::Union(
+                        cases
+                            .iter()
+                            .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
+                            .collect(),
+                    ),
+                },
             }),
             Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
                 type_: visit.visit_subterm(type_),
@@ -832,48 +812,28 @@ impl Bound for Subterm {
             Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
-            Subterm::BlnMatch(BlnMatch {
-                head,
-                motive,
-                false_case,
-                true_case,
-            }) => head
-                .reach()
-                .max(motive.reach())
-                .max(false_case.reach())
-                .max(true_case.reach()),
-            Subterm::NatMatch(NatMatch::Induction {
-                head,
-                motive,
-                zero_case,
-                succ_case,
-            }) => head
-                .reach()
-                .max(motive.reach())
-                .max(zero_case.reach())
-                .max(succ_case.reach()),
-            Subterm::NatMatch(NatMatch::Dispatch {
-                head,
-                motive,
-                cases,
-                default,
-            }) => head
-                .reach()
-                .max(motive.reach())
-                .max(max_reach(cases.values()))
-                .max(default.reach()),
             Subterm::UnionType(UnionType { params, .. }) => max_reach(params),
             Subterm::UnionCtor(UnionCtor {
                 params, payload, ..
             }) => max_reach(params).max(max_reach(payload)),
-            Subterm::UnionMatch(UnionMatch {
+            Subterm::Match(Match {
                 head,
                 motive,
                 cases,
-            }) => head
-                .reach()
-                .max(motive.reach())
-                .max(cases.values().map(|s| s.reach()).max().unwrap_or(0)),
+            }) => head.reach().max(motive.reach()).max(match cases {
+                Cases::Bln {
+                    false_case,
+                    true_case,
+                } => false_case.reach().max(true_case.reach()),
+                Cases::NatInduction {
+                    zero_case,
+                    succ_case,
+                } => zero_case.reach().max(succ_case.reach()),
+                Cases::NatDispatch { cases, default } => {
+                    max_reach(cases.values()).max(default.reach())
+                }
+                Cases::Union(cases) => cases.values().map(|s| s.reach()).max().unwrap_or(0),
+            }),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())
             }

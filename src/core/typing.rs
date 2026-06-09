@@ -35,7 +35,7 @@ pub fn expect(
 
 /// Register a counterfactual match-arm refinement of the scrutinee: a `Var`
 /// scrutinee reduces to the arm's value inside the arm (`refine`), and a
-/// projection scrutinee (e.g. an atom match on a tuple field) refines that
+/// projection scrutinee (e.g. a `Bln` or `Nat` match on a tuple field) refines that
 /// projection (`refine_projection`). The frame containing the refinement is
 /// scoped to the arm, so the (possibly counterfactual) assumption does not
 /// leak. Any other scrutinee shape records nothing — there is no stable key

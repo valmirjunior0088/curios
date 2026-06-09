@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Definition, Error, Func, FuncType, Item, Let,
-        Many, Metavar, Module, Nat, NatMatch, One, Prim, Proj, Rec, Scope, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, UnionCtor, UnionMatch, UnionType, Var,
+        Apply, Atom, Cases, Match, Context, Definition, Error, Func, FuncType, Item, Let,
+        Many, Metavar, Module, Nat, One, Prim, Proj, Rec, Scope, Subterm,
+        Telescope, Term, Tuple, TupleType, Two, UnionCtor, UnionType, Var,
         check_motive, elaborate_prim, expect, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -11,7 +11,7 @@ use {
 /// The elaboration mode (§6). `Infer` synthesizes a type; `Check(expected)`
 /// drives the term against a known type, hitting `expect` at each synthesizable
 /// node's turnaround and consuming `expected` directly at naturally-checked
-/// nodes (`Func`, `Tuple`, `Atom`, `Metavar`).
+/// nodes (`Func`, `Tuple`, `Metavar`).
 #[derive(Debug, Clone)]
 pub enum Mode {
     Infer,
@@ -75,8 +75,8 @@ fn elaborate_apply(
         ));
     }
 
-    // Result-directed argument order (§6). An introduction form (tuple, lambda,
-    // atom) is checked-only: it can't be elaborated against a parameter type that
+    // Result-directed argument order (§6). An introduction form (tuple,
+    // lambda) is checked-only: it can't be elaborated against a parameter type that
     // reduces to a bare, unsolved metavar — there is no structure to drive it. In
     // `Check` mode we postpone exactly those arguments, unify the application's
     // result type against `expected` (which pins the metavars — both those a sibling
@@ -133,9 +133,9 @@ fn elaborate_apply(
     Ok((Term::apply(head, elaborated), output))
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, atom) that
+/// Whether `arg` is a checked-only introduction form (tuple, lambda) that
 /// cannot be elaborated yet because the type structure it needs is an unsolved
-/// metavar — a tuple/atom whose whole expected type, or a lambda whose expected
+/// metavar — a tuple whose whole expected type, or a lambda whose expected
 /// *domain*, reduces to one. (A lambda only needs its domain known: the body, which
 /// may project the parameter, can't be checked against an unknown domain; its
 /// codomain may stay a metavar.) Synthesizable forms return `false`: they have a
@@ -154,7 +154,7 @@ fn blocked_on_metavar(
     }
     let reduced = reduce_with(context, ty)?;
     Ok(match &*reduced {
-        // A tuple/atom/lambda whose whole expected type is an unsolved metavar.
+        // A tuple/lambda whose whole expected type is an unsolved metavar.
         Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
         Subterm::FuncType(FuncType { telescope }) if is_lambda => match telescope {
             Telescope::Cons(domain, _) => {
@@ -255,7 +255,7 @@ fn elaborate_prim_head(
 /// expected type *before* the arms are checked. An omitted motive is a constant
 /// scope wrapping a fresh metavar (`text::to_core::elaborate`), so `motive.open`
 /// is that bare metavar and this pins it to `expected` up front — checking-only
-/// arms (tuples, atoms, constructors) then see a concrete target instead of an
+/// arms (tuples, constructors) then see a concrete target instead of an
 /// unsolved hole, and a result mentioning an enclosing type variable is taken
 /// straight from `expected` rather than inverted out of an arm. For an explicit
 /// motive it is the same consistency check that the `Check` turnaround would
@@ -321,11 +321,13 @@ fn elaborate_nat_induction(
 
     let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
-    let rebuilt = Subterm::NatMatch(NatMatch::Induction {
+    let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        zero_case: zero_elaborated,
-        succ_case: succ_elaborated,
+        cases: Cases::NatInduction {
+            zero_case: zero_elaborated,
+            succ_case: succ_elaborated,
+        },
     })
     .into();
 
@@ -366,52 +368,57 @@ fn elaborate_nat_dispatch(
 
     let default_elaborated = check(context, default, motive.open(&[head]))?;
 
-    let rebuilt = Subterm::NatMatch(NatMatch::Dispatch {
+    let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: cases_elaborated,
-        default: default_elaborated,
+        cases: Cases::NatDispatch {
+            cases: cases_elaborated,
+            default: default_elaborated,
+        },
     })
     .into();
 
     Ok((rebuilt, motive.open(&[head])))
 }
 
-fn elaborate_nat_match(
+fn elaborate_match(
     context: &mut Context,
-    nm: &NatMatch,
+    m: &Match,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    match nm {
-        NatMatch::Induction {
-            head,
-            motive,
+    let Match {
+        head,
+        motive,
+        cases,
+    } = m;
+
+    match cases {
+        Cases::Bln {
+            false_case,
+            true_case,
+        } => elaborate_bln_match(context, head, motive, false_case, true_case, term, mode),
+        Cases::NatInduction {
             zero_case,
             succ_case,
         } => elaborate_nat_induction(context, head, motive, zero_case, succ_case, term, mode),
-        NatMatch::Dispatch {
-            head,
-            motive,
-            cases,
-            default,
-        } => elaborate_nat_dispatch(context, head, motive, cases, default, term, mode),
+        Cases::NatDispatch { cases, default } => {
+            elaborate_nat_dispatch(context, head, motive, cases, default, term, mode)
+        }
+        Cases::Union(cases) => elaborate_union_match(context, head, motive, cases, term, mode),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn elaborate_bln_match(
     context: &mut Context,
-    bm: &BlnMatch,
+    head: &Term,
+    motive: &Scope<One>,
+    false_case: &Term,
+    true_case: &Term,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let BlnMatch {
-        head,
-        motive,
-        false_case,
-        true_case,
-    } = bm;
-
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::BlnType)?;
 
     let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
@@ -436,11 +443,13 @@ fn elaborate_bln_match(
         )
     })?;
 
-    let rebuilt = Subterm::BlnMatch(BlnMatch {
+    let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        false_case: false_elaborated,
-        true_case: true_elaborated,
+        cases: Cases::Bln {
+            false_case: false_elaborated,
+            true_case: true_elaborated,
+        },
     })
     .into();
 
@@ -560,16 +569,12 @@ fn elaborate_union_ctor(
 /// and each arm's binder count is statically checked against that telescope.
 fn elaborate_union_match(
     context: &mut Context,
-    um: &UnionMatch,
+    head: &Term,
+    motive: &Scope<One>,
+    cases: &BTreeMap<Atom, Scope<Many>>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let UnionMatch {
-        head,
-        motive,
-        cases,
-    } = um;
-
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
@@ -662,10 +667,10 @@ fn elaborate_union_match(
         );
     }
 
-    let rebuilt = Subterm::UnionMatch(UnionMatch {
+    let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: cases_elaborated,
+        cases: Cases::Union(cases_elaborated),
     })
     .into();
 
@@ -1109,8 +1114,7 @@ fn elaborate_subterm(
     let (rebuilt, type_) = match &**term {
         Subterm::Type => (term.clone(), Term::type_()),
         Subterm::Prim(prim) => return elaborate_prim(context, term, prim, mode),
-        Subterm::BlnMatch(bm) => return elaborate_bln_match(context, bm, term, mode),
-        Subterm::NatMatch(nm) => return elaborate_nat_match(context, nm, term, mode),
+        Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
         Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),
         Subterm::TupleType(tt) => elaborate_tuple_type(context, tt)?,
@@ -1126,7 +1130,6 @@ fn elaborate_subterm(
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::UnionType(ut) => elaborate_union_type(context, ut, term)?,
         Subterm::UnionCtor(uc) => elaborate_union_ctor(context, uc, term)?,
-        Subterm::UnionMatch(um) => return elaborate_union_match(context, um, term, mode),
     };
 
     if let Mode::Check(expected) = &mode {

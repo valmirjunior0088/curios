@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, BlnMatch, Context, Func, FuncType, NatMatch, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionCtor, UnionMatch, UnionType,
+        Apply, Cases, Match, Context, Func, FuncType, Proj, Rec,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionCtor, UnionType,
         Var, convert_prim, infer, reduce,
     },
     std::{
@@ -317,109 +317,6 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_bln_match(
-        &mut self,
-        context: &mut Context,
-        this: BlnMatch,
-        that: BlnMatch,
-    ) -> Result<bool, ReduceError> {
-        self.enqueue(Term::type_(), this.head, that.head);
-
-        let label = Term::var(Var::free(context.fresh(None)));
-        self.enqueue(
-            Term::type_(),
-            this.motive.open(&[&label]),
-            that.motive.open(&[&label]),
-        );
-
-        self.enqueue(Term::type_(), this.false_case, that.false_case);
-        self.enqueue(Term::type_(), this.true_case, that.true_case);
-        Ok(true)
-    }
-
-    fn compare_nat_match(
-        &mut self,
-        context: &mut Context,
-        this: NatMatch,
-        that: NatMatch,
-    ) -> Result<bool, ReduceError> {
-        match (this, that) {
-            (
-                NatMatch::Induction {
-                    head: this_head,
-                    motive: this_motive,
-                    zero_case: this_zero,
-                    succ_case: this_succ,
-                },
-                NatMatch::Induction {
-                    head: that_head,
-                    motive: that_motive,
-                    zero_case: that_zero,
-                    succ_case: that_succ,
-                },
-            ) => {
-                self.enqueue(Term::type_(), this_head, that_head);
-
-                let motive_label = Term::var(Var::free(context.fresh(None)));
-                self.enqueue(
-                    Term::type_(),
-                    this_motive.open(&[&motive_label]),
-                    that_motive.open(&[&motive_label]),
-                );
-
-                self.enqueue(Term::type_(), this_zero, that_zero);
-
-                let pred_label: Term = Term::var(Var::free(context.fresh(None)));
-                let ih_label: Term = Term::var(Var::free(context.fresh(None)));
-                self.enqueue(
-                    Term::type_(),
-                    this_succ.open(&[&pred_label, &ih_label]),
-                    that_succ.open(&[&pred_label, &ih_label]),
-                );
-
-                Ok(true)
-            }
-            (
-                NatMatch::Dispatch {
-                    head: this_head,
-                    motive: this_motive,
-                    cases: this_cases,
-                    default: this_default,
-                },
-                NatMatch::Dispatch {
-                    head: that_head,
-                    motive: that_motive,
-                    cases: that_cases,
-                    default: that_default,
-                },
-            ) => {
-                self.enqueue(Term::type_(), this_head, that_head);
-
-                let label = Term::var(Var::free(context.fresh(None)));
-                self.enqueue(
-                    Term::type_(),
-                    this_motive.open(&[&label]),
-                    that_motive.open(&[&label]),
-                );
-
-                if this_cases.len() != that_cases.len() {
-                    return Ok(false);
-                }
-
-                for ((kl, vl), (kr, vr)) in this_cases.into_iter().zip(that_cases) {
-                    if kl != kr {
-                        return Ok(false);
-                    }
-                    self.enqueue(Term::type_(), vl, vr);
-                }
-
-                self.enqueue(Term::type_(), this_default, that_default);
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
     fn compare_union_type(
         &mut self,
         this: UnionType,
@@ -460,11 +357,11 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_union_match(
+    fn compare_match(
         &mut self,
         context: &mut Context,
-        this: UnionMatch,
-        that: UnionMatch,
+        this: Match,
+        that: Match,
     ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_(), this.head, that.head);
 
@@ -475,30 +372,101 @@ impl Convert {
             that.motive.open(&[&label]),
         );
 
-        if this.cases.len() != that.cases.len() {
-            return Ok(false);
-        }
-
-        for ((this_atom, this_scope), (that_atom, that_scope)) in
-            this.cases.into_iter().zip(that.cases)
-        {
-            if this_atom != that_atom || this_scope.arity() != that_scope.arity() {
-                return Ok(false);
+        match (this.cases, that.cases) {
+            (
+                Cases::Bln {
+                    false_case: this_false,
+                    true_case: this_true,
+                },
+                Cases::Bln {
+                    false_case: that_false,
+                    true_case: that_true,
+                },
+            ) => {
+                self.enqueue(Term::type_(), this_false, that_false);
+                self.enqueue(Term::type_(), this_true, that_true);
+                Ok(true)
             }
 
-            let binders = (0..this_scope.arity())
-                .map(|_| Term::var(Var::free(context.fresh(None))))
-                .collect::<Vec<_>>();
-            let binder_refs = binders.iter().collect::<Vec<_>>();
+            (
+                Cases::NatInduction {
+                    zero_case: this_zero,
+                    succ_case: this_succ,
+                },
+                Cases::NatInduction {
+                    zero_case: that_zero,
+                    succ_case: that_succ,
+                },
+            ) => {
+                self.enqueue(Term::type_(), this_zero, that_zero);
 
-            self.enqueue(
-                Term::type_(),
-                this_scope.open(&binder_refs),
-                that_scope.open(&binder_refs),
-            );
+                let pred_label: Term = Term::var(Var::free(context.fresh(None)));
+                let ih_label: Term = Term::var(Var::free(context.fresh(None)));
+                self.enqueue(
+                    Term::type_(),
+                    this_succ.open(&[&pred_label, &ih_label]),
+                    that_succ.open(&[&pred_label, &ih_label]),
+                );
+
+                Ok(true)
+            }
+
+            (
+                Cases::NatDispatch {
+                    cases: this_cases,
+                    default: this_default,
+                },
+                Cases::NatDispatch {
+                    cases: that_cases,
+                    default: that_default,
+                },
+            ) => {
+                if this_cases.len() != that_cases.len() {
+                    return Ok(false);
+                }
+
+                for ((kl, vl), (kr, vr)) in this_cases.into_iter().zip(that_cases) {
+                    if kl != kr {
+                        return Ok(false);
+                    }
+                    self.enqueue(Term::type_(), vl, vr);
+                }
+
+                self.enqueue(Term::type_(), this_default, that_default);
+                Ok(true)
+            }
+
+            (Cases::Union(this_cases), Cases::Union(that_cases)) => {
+                if this_cases.len() != that_cases.len() {
+                    return Ok(false);
+                }
+
+                for ((this_atom, this_scope), (that_atom, that_scope)) in
+                    this_cases.into_iter().zip(that_cases)
+                {
+                    if this_atom != that_atom || this_scope.arity() != that_scope.arity() {
+                        return Ok(false);
+                    }
+
+                    let binders = (0..this_scope.arity())
+                        .map(|_| Term::var(Var::free(context.fresh(None))))
+                        .collect::<Vec<_>>();
+                    let binder_refs = binders.iter().collect::<Vec<_>>();
+
+                    self.enqueue(
+                        Term::type_(),
+                        this_scope.open(&binder_refs),
+                        that_scope.open(&binder_refs),
+                    );
+                }
+
+                Ok(true)
+            }
+
+            // Unreachable under the dispatch guard (same `Cases` discriminant);
+            // distinct kinds are never structurally convertible.
+            _ => Ok(false),
         }
-
-        Ok(true)
     }
 
     fn compare_rec(
@@ -777,11 +745,13 @@ impl Convert {
 
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Prim(this), Subterm::Prim(that)) => convert_prim(self, this, that)?,
-                (Subterm::BlnMatch(this), Subterm::BlnMatch(that)) => {
-                    self.compare_bln_match(context, this, that)?
-                }
-                (Subterm::NatMatch(this), Subterm::NatMatch(that)) => {
-                    self.compare_nat_match(context, this, that)?
+                // Same-kind matches compare structurally; cross-kind pairs fall
+                // through to `eta_expand_neutral` (e.g. proof irrelevance at unit).
+                (Subterm::Match(this), Subterm::Match(that))
+                    if std::mem::discriminant(&this.cases)
+                        == std::mem::discriminant(&that.cases) =>
+                {
+                    self.compare_match(context, this, that)?
                 }
                 (Subterm::FuncType(this), Subterm::FuncType(that)) => {
                     self.compare_func_type(context, this, that)?
@@ -816,9 +786,6 @@ impl Convert {
                 }
                 (Subterm::UnionCtor(this), Subterm::UnionCtor(that)) => {
                     self.compare_union_ctor(this, that)?
-                }
-                (Subterm::UnionMatch(this), Subterm::UnionMatch(that)) => {
-                    self.compare_union_match(context, this, that)?
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?

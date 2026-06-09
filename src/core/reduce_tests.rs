@@ -110,7 +110,7 @@ fn reduce_int_add_computes() {
 }
 
 #[test]
-fn reduce_int_eql_returns_true_or_false_atom() {
+fn reduce_int_eql_returns_true_or_false_bln() {
     let mut context = context();
 
     assert_eq!(
@@ -271,10 +271,10 @@ fn reduce_proj_beta_reduces() {
 }
 
 #[test]
-fn reduce_proj_table_lookup() {
+fn reduce_proj_refinement_lookup() {
     let mut context = context();
 
-    context.define_projection(Term::var(Var::free("r")), 0, nat(1));
+    context.refine_projection(Term::var(Var::free("r")), 0, nat(1));
 
     let term: Term = Term::proj(Term::var(Var::free("r")), 0);
 
@@ -326,15 +326,15 @@ fn define_invalidates_cached_reduction() {
 }
 
 #[test]
-fn define_projection_invalidates_cached_reduction() {
+fn refine_projection_invalidates_cached_reduction() {
     let mut context = context();
     let proj: Term = Term::proj(Term::var(Var::free("r")), 0);
 
-    // No projection entry yet: proj reduces to itself and is cached.
+    // No projection refinement yet: proj reduces to itself and is cached.
     assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));
 
     // Refining the projection must clear the cache.
-    context.define_projection(Term::var(Var::free("r")), 0, nat(1));
+    context.refine_projection(Term::var(Var::free("r")), 0, nat(1));
     assert_eq!(reduce(&mut context, proj), Ok(nat(1)));
 }
 
