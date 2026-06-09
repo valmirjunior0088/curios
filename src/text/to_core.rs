@@ -293,10 +293,17 @@ fn process_items(
                     } else {
                         Subterm::Apply(Apply {
                             head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
+                            // The type constructor takes its parameters
+                            // explicitly — types are written out.
                             params: u
                                 .params
                                 .iter()
-                                .map(|(n, _)| Subterm::Name(Name::from(vec![n.clone()])).into())
+                                .map(|(n, _)| {
+                                    (
+                                        core::Plicity::Explicit,
+                                        Subterm::Name(Name::from(vec![n.clone()])).into(),
+                                    )
+                                })
                                 .collect(),
                         })
                         .into()
@@ -306,20 +313,25 @@ fn process_items(
                         let k = c.payload_types.len();
                         let elaborate = Elaborate::new(context);
 
-                        // Constructor type: (params..., _0 : T_0, ...) -> T
+                        // Constructor type: (params..., _0 : T_0, ...) -> T.
+                        // Every union parameter is implicit at the value
+                        // constructor — `Result/success(42)` infers them, the
+                        // call-site `@` supplies one positionally — while the
+                        // payload binders stay explicit.
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
-                            .chain(
-                                c.payload_types
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(i, t)| Ok((format!("_{i}"), elaborate.term(t)?))),
-                            )
+                            .map(|(n, t)| {
+                                Ok((core::Plicity::Implicit, n.clone(), elaborate.term(t)?))
+                            })
+                            .chain(c.payload_types.iter().enumerate().map(|(i, t)| {
+                                Ok((core::Plicity::Explicit, format!("_{i}"), elaborate.term(t)?))
+                            }))
                             .collect::<Result<Vec<_>, Error>>()?;
-                        let ctor_type =
-                            core::Term::func_type(param_tys.clone(), elaborate.term(&output_type)?);
+                        let ctor_type = core::Term::func_type_marked(
+                            param_tys.clone(),
+                            elaborate.term(&output_type)?,
+                        );
 
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `UnionCtor` normal form.
@@ -334,7 +346,11 @@ fn process_items(
                             core::Atom::from(c.label.as_str()),
                             args,
                         );
-                        let ctor_body = core::Term::func(param_tys, inject);
+                        // The lambda binds every parameter regardless of mark.
+                        let ctor_body = core::Term::func(
+                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
+                            inject,
+                        );
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
@@ -570,6 +586,7 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
     Ok(core::Module {
         items,
         inductives,
+        metavars: metavars.get(),
         type_,
         body: tail,
     })

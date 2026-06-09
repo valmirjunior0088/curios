@@ -1,6 +1,6 @@
 use super::{
-    Error, LetSignature, Loader, Module, Name, Prim, Qualifier, Subterm, Term, TopItem, TopLet,
-    TopMod, TupleType,
+    Error, LetSignature, Loader, Module, Name, Plicity, Prim, Qualifier, Subterm, Term, TopItem,
+    TopLet, TopMod, TupleType,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -70,13 +70,30 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
 }
 
 fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
+    pub_fn_marked(
+        label,
+        params
+            .into_iter()
+            .map(|(n, t)| (Plicity::Explicit, n, t))
+            .collect(),
+        output,
+        body,
+    )
+}
+
+fn pub_fn_marked(
+    label: &str,
+    params: Vec<(Plicity, &str, Term)>,
+    output: Term,
+    body: Term,
+) -> TopItem {
     TopItem::Let(TopLet {
         is_pub: true,
         label: label.to_string(),
         signature: LetSignature::Func {
             params: params
                 .into_iter()
-                .map(|(n, t)| (n.to_string(), t))
+                .map(|(p, n, t)| (p, n.to_string(), t))
                 .collect(),
             output,
             body,
@@ -190,41 +207,41 @@ fn bin_ops() -> Vec<TopItem> {
 
 fn arr_ops() -> Vec<TopItem> {
     vec![
-        pub_fn(
+        pub_fn_marked(
             "len",
-            vec![("T", type_()), ("a", arr_of(name("T")))],
+            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "a", arr_of(name("T")))],
             nat(),
             prim(Prim::ArrLen(name("T"), name("a"))),
         ),
-        pub_fn(
+        pub_fn_marked(
             "get",
-            vec![("T", type_()), ("a", arr_of(name("T"))), ("i", nat())],
+            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "a", arr_of(name("T"))), (Plicity::Explicit, "i", nat())],
             name("T"),
             prim(Prim::ArrGet(name("T"), name("a"), name("i"))),
         ),
-        pub_fn(
+        pub_fn_marked(
             "slice",
             vec![
-                ("T", type_()),
-                ("a", arr_of(name("T"))),
-                ("s", nat()),
-                ("e", nat()),
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "s", nat()),
+                (Plicity::Explicit, "e", nat()),
             ],
             arr_of(name("T")),
             prim(Prim::ArrSlice(name("T"), name("a"), name("s"), name("e"))),
         ),
-        pub_fn(
+        pub_fn_marked(
             "append",
-            vec![("T", type_()), ("a", arr_of(name("T"))), ("x", name("T"))],
+            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "a", arr_of(name("T"))), (Plicity::Explicit, "x", name("T"))],
             arr_of(name("T")),
             prim(Prim::ArrAppend(name("T"), name("a"), name("x"))),
         ),
-        pub_fn(
+        pub_fn_marked(
             "concat",
             vec![
-                ("T", type_()),
-                ("a", arr_of(name("T"))),
-                ("b", arr_of(name("T"))),
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "b", arr_of(name("T"))),
             ],
             arr_of(name("T")),
             prim(Prim::ArrConcat(name("T"), name("a"), name("b"))),

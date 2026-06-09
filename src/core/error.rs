@@ -146,6 +146,21 @@ pub enum Error {
     CannotInfer {
         term: Box<Term>,
     },
+    /// An inserted implicit argument that unification never pinned. Carries
+    /// the insertion provenance (the applied function and the binder it
+    /// filled) so the report names the hole instead of a bare metavar id.
+    UninferredImplicit {
+        term: Box<Term>,
+        func: String,
+        binder: String,
+    },
+    /// A call supplies more `@`-arguments than the function has implicit
+    /// binders (the explicit-slot counterpart is `WrongNumberOfArguments`).
+    TooManyImplicits {
+        term: Box<Term>,
+        expected: usize,
+        got: usize,
+    },
     NatOverflow {
         value: BigUint,
     },
@@ -315,6 +330,22 @@ impl Error {
         }
     }
 
+    pub fn uninferred_implicit<T: Into<Term>>(term: T, func: String, binder: String) -> Self {
+        Self::UninferredImplicit {
+            term: Box::new(term.into()),
+            func,
+            binder,
+        }
+    }
+
+    pub fn too_many_implicits<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+        Self::TooManyImplicits {
+            term: Box::new(term.into()),
+            expected,
+            got,
+        }
+    }
+
     pub fn nat_overflow(value: BigUint) -> Self {
         Self::NatOverflow { value }
     }
@@ -445,6 +476,18 @@ impl fmt::Display for Error {
             }
             Error::CannotInfer { .. } => {
                 write!(f, "cannot infer type of expression")
+            }
+            Error::UninferredImplicit { func, binder, .. } => {
+                write!(
+                    f,
+                    "implicit argument '{binder}' of '{func}' was not inferred; supply it explicitly: {func}(@...)"
+                )
+            }
+            Error::TooManyImplicits { expected, got, .. } => {
+                write!(
+                    f,
+                    "call supplies {got} '@' argument(s) but the function has only {expected} implicit parameter(s)"
+                )
             }
             Error::NatOverflow { value } => {
                 write!(f, "Nat literal {value} overflows u32 at the erase boundary")

@@ -125,7 +125,7 @@ fn erase_apply(
     _term: &Term,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Apply { head, params } = apply;
+    let Apply { head, params, .. } = apply;
 
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;

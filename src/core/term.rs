@@ -70,7 +70,16 @@ impl Term {
     }
 
     pub fn metavar(id: usize) -> Self {
-        Self::from(Subterm::Metavar(Metavar { id }))
+        Self::from(Subterm::Metavar(Metavar { id, origin: None }))
+    }
+
+    /// A metavariable minted for an omitted implicit argument, carrying its
+    /// insertion provenance (see [`Metavar::origin`]).
+    pub fn metavar_inserted(id: usize, origin: ImplicitOrigin) -> Self {
+        Self::from(Subterm::Metavar(Metavar {
+            id,
+            origin: Some(origin),
+        }))
     }
 
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
@@ -84,8 +93,34 @@ impl Term {
         T: Into<Term>,
         O: Into<Term>,
     {
+        Self::func_type_marked(
+            params
+                .into_iter()
+                .map(|(label, type_)| (Plicity::Explicit, label, type_)),
+            output,
+        )
+    }
+
+    pub fn func_type_marked<I, L, T, O>(params: I, output: O) -> Self
+    where
+        I: IntoIterator<Item = (Plicity, L, T)>,
+        L: Into<String>,
+        T: Into<Term>,
+        O: Into<Term>,
+    {
+        let mut plicities = Vec::new();
+        let telescope = Telescope::build(
+            params.into_iter().map(|(plicity, label, type_)| {
+                plicities.push(plicity);
+                (label, type_)
+            }),
+            output.into(),
+        );
+        assert_eq!(plicities.len(), telescope.len());
+
         Self::from(Subterm::FuncType(FuncType {
-            telescope: Telescope::build(params, output.into()),
+            telescope,
+            plicities,
         }))
     }
 
@@ -107,9 +142,27 @@ impl Term {
         I: IntoIterator<Item = P>,
         P: Into<Term>,
     {
+        Self::apply_marked(
+            head,
+            params.into_iter().map(|p| (Plicity::Explicit, p.into())),
+        )
+    }
+
+    pub fn apply_marked<H, I, P>(head: H, params: I) -> Self
+    where
+        H: Into<Term>,
+        I: IntoIterator<Item = (Plicity, P)>,
+        P: Into<Term>,
+    {
+        let (plicities, params) = params
+            .into_iter()
+            .map(|(plicity, param)| (plicity, param.into()))
+            .unzip();
+
         Self::from(Subterm::Apply(Apply {
             head: head.into(),
-            params: params.into_iter().map(|p| p.into()).collect(),
+            params,
+            plicities,
         }))
     }
 
@@ -407,9 +460,22 @@ impl From<Subterm> for Term {
     }
 }
 
+/// Whether a binder/argument participates in implicit-argument insertion.
+/// An elaboration directive only: conversion ignores plicity entirely, so
+/// erasing the marks yields exactly the unmarked system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Plicity {
+    Explicit,
+    Implicit,
+}
+
+/// `plicities` parallels the telescope, one mark per binder; the builders
+/// assert the lengths agree. `Telescope` itself is unchanged (`TupleType`,
+/// `Func`, and the inductive registry carry no plicity).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FuncType {
     pub telescope: Telescope<Term>,
+    pub plicities: Vec<Plicity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -417,10 +483,15 @@ pub struct Func {
     pub telescope: Telescope<Term>,
 }
 
+/// `plicities` parallels `params`, one mark per argument — the call-site `@`
+/// marks. Core must carry them (rather than `to_core` resolving them) because
+/// `to_core` is type-blind: only the elaborator, holding the head's function
+/// type, can decide which binder an `@`-argument fills.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Apply {
     pub head: Term,
     pub params: Vec<Term>,
+    pub plicities: Vec<Plicity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -508,15 +579,32 @@ pub struct Rec {
     pub tail: Scope<Many>,
 }
 
+/// Provenance of an inserted implicit argument: the applied function (`func`)
+/// had no `@`-argument for its implicit binder `binder` at some call site, so
+/// the elaborator filled the slot with a fresh metavariable.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ImplicitOrigin {
+    pub func: String,
+    pub binder: String,
+}
+
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
 /// born from a surface hole `?` and (possibly) solved by unification. It is a
 /// global head carrying no de Bruijn index — like a free `Var`,
 /// it is inert under the `Visit` machinery (it holds no `Var`). The solution,
 /// when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`; the
 /// node itself is immutable.
+///
+/// `origin` rides with the node: `Some` iff the elaborator minted this
+/// metavariable for an omitted implicit argument, in which case zonk's
+/// unsolved-hole report names the binder instead of a bare id. Each id is
+/// minted exactly once (`to_core` holes with `None`, core insertions above the
+/// `Module::metavars` floor with `Some`), so every occurrence of an id carries
+/// the same origin and the derived equality never splits an id.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Metavar {
     pub id: usize,
+    pub origin: Option<ImplicitOrigin>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -575,14 +663,14 @@ impl Subterm {
 
     fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
         match self {
-            Subterm::Metavar(Metavar { id }) => {
+            Subterm::Metavar(Metavar { id, .. }) => {
                 ids.insert(*id);
             }
             Subterm::Type | Subterm::Var(_) => {}
             Subterm::Prim(prim) => prim_metavars(prim, ids),
             Subterm::Func(Func { telescope }) => telescope_metavars(telescope, ids),
-            Subterm::FuncType(FuncType { telescope }) => telescope_metavars(telescope, ids),
-            Subterm::Apply(Apply { head, params }) => {
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope_metavars(telescope, ids),
+            Subterm::Apply(Apply { head, params, .. }) => {
                 head.collect_metavars(ids);
                 params.iter().for_each(|p| p.collect_metavars(ids));
             }
@@ -708,15 +796,24 @@ impl Bound for Subterm {
         match self {
             Subterm::Type => Subterm::Type,
             Subterm::Prim(prim) => Subterm::Prim(traverse_prim(prim, visit)),
-            Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
+            Subterm::FuncType(FuncType {
+                telescope,
+                plicities,
+            }) => Subterm::FuncType(FuncType {
                 telescope: telescope.traverse(visit),
+                plicities: plicities.clone(),
             }),
             Subterm::Func(Func { telescope }) => Subterm::Func(Func {
                 telescope: telescope.traverse(visit),
             }),
-            Subterm::Apply(Apply { head, params }) => Subterm::Apply(Apply {
+            Subterm::Apply(Apply {
+                head,
+                params,
+                plicities,
+            }) => Subterm::Apply(Apply {
                 head: visit.visit_subterm(head),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
+                plicities: plicities.clone(),
             }),
             Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
                 telescope: telescope.traverse(visit),
@@ -807,8 +904,8 @@ impl Bound for Subterm {
             },
             Subterm::Prim(prim) => prim_reach(prim),
             Subterm::Func(Func { telescope }) => telescope.reach(),
-            Subterm::FuncType(FuncType { telescope }) => telescope.reach(),
-            Subterm::Apply(Apply { head, params }) => head.reach().max(max_reach(params)),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
+            Subterm::Apply(Apply { head, params, .. }) => head.reach().max(max_reach(params)),
             Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
@@ -1272,6 +1369,36 @@ mod tests {
         let type_ = Term::union_type("Result", [Term::prim(Prim::NatType), Term::metavar(3)]);
         assert_eq!(type_.metavars(), BTreeSet::from([3]));
         assert_eq!(format!("{type_}"), "Result(Nat, ?3)");
+    }
+
+    #[test]
+    fn implicit_marks_print_and_default_to_explicit() {
+        let ft = Term::func_type_marked(
+            [
+                (Plicity::Implicit, "T", Term::type_()),
+                (Plicity::Explicit, "x", Term::var(Var::free("T"))),
+            ],
+            Term::var(Var::free("T")),
+        );
+        assert_eq!(format!("{ft}"), "(@T : Type, x : T) -> T");
+
+        // The unmarked builders default every slot to `Explicit`.
+        let plain = Term::func_type([("T", Term::type_())], Term::type_());
+        match &*plain {
+            Subterm::FuncType(FuncType { plicities, .. }) => {
+                assert_eq!(plicities, &[Plicity::Explicit]);
+            }
+            _ => unreachable!(),
+        }
+
+        let call = Term::apply_marked(
+            Term::var(Var::free("foo")),
+            [
+                (Plicity::Implicit, Term::var(Var::free("Nat"))),
+                (Plicity::Explicit, Term::var(Var::free("x"))),
+            ],
+        );
+        assert_eq!(format!("{call}"), "foo(@Nat, x)");
     }
 
     #[test]

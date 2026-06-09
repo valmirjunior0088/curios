@@ -30,9 +30,9 @@ let escape_byte(byte : Nat) -> Bin =
 
 let encode_str(s : Bin) -> Bin =
     let body =
-        Bin/concat_all(Lst/to_arr(?, Lst/rev(?,
-            Bin/fold(?, s, Lst/nil(Bin), (byte, acc) =>
-                Lst/cons(?, escape_byte(byte), acc)))));
+        Bin/concat_all(Lst/to_arr(Lst/rev(
+            Bin/fold(s, Lst/nil(@Bin), (byte, acc) =>
+                Lst/cons(escape_byte(byte), acc)))));
     Bin/concat(Bin/concat("\"", body), "\"");
 
 pub rec encode(v : Json) -> Bin =
@@ -43,10 +43,10 @@ pub rec encode(v : Json) -> Bin =
     | str(s) => encode_str(s)
     | arr(xs) =>
         Bin/concat(Bin/concat("[",
-            Bin/join(",", Arr/map(?, ?, encode, xs))), "]")
+            Bin/join(",", Arr/map(encode, xs))), "]")
     | obj(ps) =>
         Bin/concat(Bin/concat("{",
-            Bin/join(",", Arr/map(?, ?,
+            Bin/join(",", Arr/map(
                 (pair) => Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1)),
                 ps))),
             "}")
@@ -86,28 +86,28 @@ let take_literal(literal : Bin) -> Parse({}) =
                 end
             end;
         match r.1
-        | true => Result/success(?, ?, (r.0, ()))
-        | false => Result/failure(?, ?, "unexpected literal")
+        | true => Result/success((r.0, ()))
+        | false => Result/failure("unexpected literal")
         end;
 
 let parse_null : Parse(Json) =
-    Parse/map(?, ?, (_) => Json/null(), take_literal("null"));
+    Parse/map((_) => Json/null(), take_literal("null"));
 
 let parse_true_val : Parse(Json) =
-    Parse/map(?, ?, (_) => Json/bln(true), take_literal("true"));
+    Parse/map((_) => Json/bln(true), take_literal("true"));
 
 let parse_false_val : Parse(Json) =
-    Parse/map(?, ?, (_) => Json/bln(false), take_literal("false"));
+    Parse/map((_) => Json/bln(false), take_literal("false"));
 
 let parse_num : Parse(Json) =
     (input, pos) =>
         match Parse/take_while(is_num_byte)(input, pos)
         | success(pair) =>
             match Nat/eql(Bin/len(pair.1), 0)
-            | true => Result/failure(?, ?, "expected number")
-            | false => Result/success(?, ?, (pair.0, Json/num(Flt/from_str(pair.1))))
+            | true => Result/failure("expected number")
+            | false => Result/success((pair.0, Json/num(Flt/from_str(pair.1))))
             end
-        | failure(msg) => Result/failure(?, ?, msg)
+        | failure(msg) => Result/failure(msg)
         end;
 
 let is_not_string_special(byte : Nat) -> Bln =
@@ -118,37 +118,37 @@ let is_not_string_special(byte : Nat) -> Bln =
     end;
 
 let parse_str_escape : Parse(Bin) =
-    with Parse/bind(?, ?)
+    with Parse/bind
         let _ = Parse/take_byte('\\')!;
         let byte = Parse/any_byte!;
         match byte : Parse(Bin)
-        | '"' => Parse/pure(?, "\"")
-        | '\\' => Parse/pure(?, "\\")
-        | 'n' => Parse/pure(?, "\n")
-        | 'r' => Parse/pure(?, "\r")
-        | 't' => Parse/pure(?, "\t")
-        | _ => Parse/fail(?, "unknown escape")
+        | '"' => Parse/pure("\"")
+        | '\\' => Parse/pure("\\")
+        | 'n' => Parse/pure("\n")
+        | 'r' => Parse/pure("\r")
+        | 't' => Parse/pure("\t")
+        | _ => Parse/fail("unknown escape")
         end;
 
 let parse_str_segment : Parse(Bin) =
     Parse/take_while(is_not_string_special);
 
 let parse_str_body : Parse(Arr(Bin)) =
-    Parse/many0(?, Parse/or(?, parse_str_escape, parse_str_segment));
+    Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Bin) =
-    with Parse/bind(?, ?)
+    with Parse/bind
         let _ = Parse/take_byte('"')!;
         let chunks = parse_str_body!;
         let _ = Parse/take_byte('"')!;
-        Parse/pure(?, Bin/concat_all(chunks));
+        Parse/pure(Bin/concat_all(chunks));
 
 let parse_str_value : Parse(Json) =
-    Parse/map(?, ?, (s) => Json/str(s), parse_raw_str);
+    Parse/map((s) => Json/str(s), parse_raw_str);
 
 pub rec decode : Parse(Json) = (input, pos) =>
     match Nat/lt(pos, Bin/len(input))
-    | false => Result/failure(?, ?, "unexpected end of input")
+    | false => Result/failure("unexpected end of input")
     | true =>
         match Bin/get(input, pos)
         | ' ' => decode(input, Nat/add(pos, 1))
@@ -165,20 +165,20 @@ pub rec decode : Parse(Json) = (input, pos) =>
         end
     end
 and parse_arr : Parse(Json) =
-    with Parse/bind(?, ?)
+    with Parse/bind
         let _ = Parse/take_byte('[')!;
-        let elems = Parse/sep_by0(?, ?, decode, Parse/take_byte(','))!;
+        let elems = Parse/sep_by0(decode, Parse/take_byte(','))!;
         let _ = Parse/take_byte(']')!;
-        Parse/pure(?, Json/arr(elems))
+        Parse/pure(Json/arr(elems))
 and parse_obj : Parse(Json) =
-    with Parse/bind(?, ?)
+    with Parse/bind
         let _ = Parse/take_byte('{')!;
-        let pairs = Parse/sep_by0(?, ?, parse_pair, Parse/take_byte(','))!;
+        let pairs = Parse/sep_by0(parse_pair, Parse/take_byte(','))!;
         let _ = Parse/take_byte('}')!;
-        Parse/pure(?, Json/obj(pairs))
+        Parse/pure(Json/obj(pairs))
 and parse_pair : Parse({ Bin, Json }) =
-    with Parse/bind(?, ?)
+    with Parse/bind
         let key = parse_raw_str!;
         let _ = Parse/take_byte(':')!;
         let val = decode!;
-        Parse/pure(?, (key, val));
+        Parse/pure((key, val));

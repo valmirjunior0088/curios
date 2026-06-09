@@ -1,5 +1,5 @@
 use {
-    super::{Bound, Inductive, Term},
+    super::{Bound, ImplicitOrigin, Inductive, Term},
     crate::Span,
     std::{
         collections::{BTreeMap, HashMap},
@@ -51,6 +51,10 @@ pub struct Context {
     local: Vec<(String, Term)>,
     local_marks: Vec<usize>,
     metas: MetaStore,
+    // The next metavariable id this context may mint (implicit-argument
+    // insertion). Seeded by `elaborate_module` from `Module::metavars` so
+    // core-minted ids sit strictly above `to_core`'s.
+    next_metavar: usize,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
@@ -78,6 +82,7 @@ impl Context {
             local: Vec::new(),
             local_marks: Vec::new(),
             metas: MetaStore::default(),
+            next_metavar: 0,
             inductives: BTreeMap::new(),
         }
     }
@@ -309,6 +314,37 @@ impl Context {
             solution: None,
             span,
         });
+    }
+
+    /// Raise the minting floor: every id `fresh_metavar` hands out will be
+    /// `>= floor`. Called by `elaborate_module` with `Module::metavars` (the
+    /// count `to_core` minted) before any item is elaborated.
+    pub fn seed_metavars(&mut self, floor: usize) {
+        self.next_metavar = self.next_metavar.max(floor);
+    }
+
+    /// Mint a metavariable for an omitted implicit argument and birth it
+    /// immediately — frozen local Γ, the binder's instantiated type as
+    /// `result`, and the *call site's* span — so the id always has a useful
+    /// birth record. Returns the metavariable term carrying that span and the
+    /// insertion provenance (which rides on the node; see [`Metavar::origin`]).
+    pub fn fresh_metavar(
+        &mut self,
+        result: Term,
+        span: Option<Span>,
+        origin: ImplicitOrigin,
+    ) -> Term {
+        let id = self.next_metavar;
+        self.next_metavar += 1;
+
+        let telescope = self.local_context().to_vec();
+        self.birth_metavar(id, telescope, result, span.clone());
+
+        let metavar = Term::metavar_inserted(id, origin);
+        match span {
+            Some(span) => metavar.with_span(span),
+            None => metavar,
+        }
     }
 
     pub fn metavar_entry(&self, id: usize) -> Option<&MetaEntry> {

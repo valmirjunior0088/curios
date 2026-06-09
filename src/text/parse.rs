@@ -2,7 +2,8 @@ use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
         GroupItem, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
-        NatMatch, Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet,
+        NatMatch, Plicity, Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem,
+        TopLet,
         TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
     crate::{
@@ -366,11 +367,21 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-fn parse_func_type_param<'a>() -> Parser<'a, (Option<String>, Term)> {
-    catch(parse_identifier().and_drop(parse_literal(":")))
-        .and(lazy(parse_term))
-        .map(|(label, ty): (&str, Term)| (Some(label.to_string()), ty))
-        .or(lazy(parse_term).map(|ty| (None, ty)))
+// A leading `@` marks a binder (or call-site argument) implicit.
+fn parse_plicity<'a>() -> Parser<'a, Plicity> {
+    catch(parse_literal("@"))
+        .map(|()| Plicity::Implicit)
+        .or(pure(Plicity::Explicit))
+}
+
+fn parse_func_type_param<'a>() -> Parser<'a, (Plicity, Option<String>, Term)> {
+    parse_plicity().and(
+        catch(parse_identifier().and_drop(parse_literal(":")))
+            .and(lazy(parse_term))
+            .map(|(label, ty): (&str, Term)| (Some(label.to_string()), ty))
+            .or(lazy(parse_term).map(|ty| (None, ty))),
+    )
+    .map(|(plicity, (label, ty))| (plicity, label, ty))
 }
 
 fn parse_paren_func_type<'a>() -> Parser<'a, Term> {
@@ -381,12 +392,14 @@ fn parse_paren_func_type<'a>() -> Parser<'a, Term> {
             .and_drop(parse_literal("->")),
     )
     .and(lazy(parse_term))
-    .map(|(params, output): (Vec<(Option<String>, Term)>, Term)| {
-        Subterm::FuncType(FuncType {
-            params: params.into_iter().collect(),
-            output,
-        })
-    })
+    .map(
+        |(params, output): (Vec<(Plicity, Option<String>, Term)>, Term)| {
+            Subterm::FuncType(FuncType {
+                params: params.into_iter().collect(),
+                output,
+            })
+        },
+    )
     .map(Into::into)
 }
 
@@ -395,7 +408,7 @@ fn parse_non_dependent_func_type<'a>() -> Parser<'a, Term> {
         .and(lazy(parse_term))
         .map(|(input, output)| {
             Subterm::FuncType(FuncType {
-                params: vec![(None, input)],
+                params: vec![(Plicity::Explicit, None, input)],
                 output,
             })
         })
@@ -604,11 +617,12 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_func_sugar_param<'a>() -> Parser<'a, (String, Term)> {
-    parse_identifier()
+fn parse_func_sugar_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
+    parse_plicity()
+        .and(parse_identifier())
         .and_drop(parse_literal(":"))
         .and(lazy(parse_term))
-        .map(|(name, ty): (&str, Term)| (name.to_string(), ty))
+        .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, name.to_string(), ty))
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the
@@ -623,13 +637,11 @@ fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
     .and(lazy(parse_term))
     .and_drop(parse_literal("="))
     .and(lazy(parse_term))
-    .map(
-        |((params, output), body): ((Vec<(String, Term)>, Term), Term)| LetSignature::Func {
-            params,
-            output,
-            body,
-        },
-    )
+    .map(|((params, output), body)| LetSignature::Func {
+        params,
+        output,
+        body,
+    })
 }
 
 // The plain `: T = body` form with a mandatory type.
@@ -689,15 +701,19 @@ fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
 
 enum Suffix {
     Proj(usize),
-    Apply(Vec<Term>),
+    Apply(Vec<(Plicity, Term)>),
     Bang,
+}
+
+fn parse_apply_argument<'a>() -> Parser<'a, (Plicity, Term)> {
+    parse_plicity().and(lazy(parse_term))
 }
 
 fn parse_suffix<'a>() -> Parser<'a, Suffix> {
     parse_proj_suffix()
         .map(Suffix::Proj)
         .or(catch(parse_literal("("))
-            .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+            .and_keep(sep_by0(parse_apply_argument, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .map(Suffix::Apply))
         .or(catch(parse_literal("!")).map(|()| Suffix::Bang))
@@ -971,12 +987,23 @@ fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
         })
 }
 
+// A union parameter is a plain `name : type` — no `@`: the desugar already
+// makes every parameter implicit at the value constructors (and explicit at
+// the type constructor), so a declaration-site mark would have no job; the
+// call-site `@` is how one is supplied positionally.
+fn parse_union_param<'a>() -> Parser<'a, (String, Term)> {
+    parse_identifier()
+        .and_drop(parse_literal(":"))
+        .and(lazy(parse_term))
+        .map(|(name, ty): (&str, Term)| (name.to_string(), ty))
+}
+
 fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
     parse_identifier()
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
+                    .and_keep(sep_by0(parse_union_param, || parse_literal(",")))
                     .and_drop(parse_literal(")")),
             )
             .or(pure(vec![])),

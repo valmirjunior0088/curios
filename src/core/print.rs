@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Cases, Match, Atom, Definition, Flt, Func, FuncType, Item, Let, Module,
-        Nat, One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType,
-        Two, UnionCtor, UnionType, Var,
+        Nat, One, Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
+        TupleType, Two, UnionCtor, UnionType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -434,9 +434,13 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match Term::unwrap_or_clone(term) {
         Subterm::Type => pure("Type"),
         Subterm::Prim(prim) => print_prim(prim, depth),
-        Subterm::FuncType(FuncType { telescope }) => {
+        Subterm::FuncType(FuncType {
+            telescope,
+            plicities,
+        }) => {
             fn walk(
                 cur: Telescope<Term>,
+                plicities: &[Plicity],
                 depth: usize,
                 total: usize,
                 idx: usize,
@@ -449,24 +453,29 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         let label = raw
                             .map(str::to_string)
                             .unwrap_or_else(|| label_at(depth + idx));
+                        let mark = match plicities.get(idx) {
+                            Some(Plicity::Implicit) => "@",
+                            _ => "",
+                        };
                         let printer = match raw {
                             Some(_) => flat([
+                                pure(mark),
                                 pure(label.clone()),
                                 pure(" : "),
                                 print_term(ty, depth + total),
                             ]),
-                            None => print_term(ty, depth + total),
+                            None => flat([pure(mark), print_term(ty, depth + total)]),
                         };
                         printers.push(printer);
                         let next = rest.open(&[&Term::var(Var::free(&label))]);
-                        walk(next, depth, total, idx + 1, printers)
+                        walk(next, plicities, depth, total, idx + 1, printers)
                     }
                 }
             }
 
             let n = telescope.len();
             let mut printers = Vec::with_capacity(n);
-            let output = walk(telescope, depth, n, 0, &mut printers);
+            let output = walk(telescope, &plicities, depth, n, 0, &mut printers);
             flat([
                 pure("("),
                 sep_flat(printers, || pure(", ")),
@@ -488,13 +497,21 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 indent(print_term(body, depth + n)),
             ])
         }
-        Subterm::Apply(Apply { head, params }) => flat([
+        Subterm::Apply(Apply {
+            head,
+            params,
+            plicities,
+        }) => flat([
             print_term(head, depth),
             pure("("),
             sep_flat(
                 params
                     .into_iter()
-                    .map(|p| print_term(p, depth))
+                    .zip(plicities)
+                    .map(|(p, plicity)| match plicity {
+                        Plicity::Implicit => flat([pure("@"), print_term(p, depth)]),
+                        Plicity::Explicit => print_term(p, depth),
+                    })
                     .collect::<Vec<_>>(),
                 || pure(", "),
             ),

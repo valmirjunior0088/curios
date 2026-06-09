@@ -157,6 +157,18 @@ let id(T : Type, x : T) -> T = x;
 
 In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id(Nat, 42)` or `id(Bin, "hello")`. There are no angle brackets.
 
+Passing types by hand gets old, so a binder marked `@` is *implicit* — an
+automatic `?` the elaborator fills by inference at each call site:
+
+```
+let id(@T : Type, x : T) -> T = x;
+id(42)          -- T inferred as Nat
+id(@Bin, "hi")  -- T supplied positionally with @
+```
+
+Union parameters work this way out of the box: `Result/ok(42)` infers the
+type arguments; only the *type* `Result(Nat, Bin)` is written out.
+
 The motive in `match` is the same mechanism: `match head : label => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
 ```

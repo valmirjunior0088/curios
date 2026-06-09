@@ -58,10 +58,12 @@ impl<'a, 'b> Elaborate<'a, 'b> {
 
                 core::Term::var(core::Var::free(resolved))
             }
-            Subterm::FuncType(ft) => core::Term::func_type(
+            Subterm::FuncType(ft) => core::Term::func_type_marked(
                 ft.params
                     .iter()
-                    .map(|(label, ty)| Ok((label.clone().unwrap_or_default(), self.term(ty)?)))
+                    .map(|(plicity, label, ty)| {
+                        Ok((*plicity, label.clone().unwrap_or_default(), self.term(ty)?))
+                    })
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&ft.output)?,
             ),
@@ -85,12 +87,12 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?;
                 core::Term::func(params, self.term(&func.body)?)
             }
-            Subterm::Apply(apply) => core::Term::apply(
+            Subterm::Apply(apply) => core::Term::apply_marked(
                 self.term(&apply.head)?,
                 apply
                     .params
                     .iter()
-                    .map(|p| self.term(p))
+                    .map(|(plicity, p)| Ok((*plicity, self.term(p)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::TupleType(tt) => core::Term::tuple_type(
@@ -285,12 +287,12 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 binds.push((name, action));
                 var
             }
-            Subterm::Apply(apply) => core::Term::apply(
+            Subterm::Apply(apply) => core::Term::apply_marked(
                 self.collect(&apply.head, bind, binds)?,
                 apply
                     .params
                     .iter()
-                    .map(|p| self.collect(p, bind, binds))
+                    .map(|(plicity, p)| Ok((*plicity, self.collect(p, bind, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Tuple(tuple) => core::Term::tuple(

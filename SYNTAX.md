@@ -62,7 +62,7 @@ A binding's value may be any term, not only a lambda. In particular it can be a 
 ```
 pub rec decode : Parse(Value) = (input, pos) => -- … uses parse_arr, parse_obj …
 pub and parse_arr : Parse(Value) =
-    Parse/bind(Nat, Value, Parse/take_byte('['), _ => -- … uses decode … );
+    Parse/bind(Parse/take_byte('['), (_) => -- … uses decode … );
 ```
 
 Members may refer to one another freely through such calls. The sole exception: two bindings whose values are _calls that each require the other's result_ form a cycle with no way to tie the knot, and the group is rejected.
@@ -76,7 +76,7 @@ pub union Result(A : Type, B : Type)
 end
 ```
 
-Declares a sum type and a constructor module with the same name. The type name is bound as `Result`; each constructor is bound under the constructor module, for example `Result/ok(A, B, value)` and `Result/err(A, B, value)`. A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors. A payload-less case uses empty parentheses:
+Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The union's parameters are *implicit* at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors. A payload-less case uses empty parentheses:
 
 ```
 pub union Option(A : Type)
@@ -198,6 +198,36 @@ id(?, 5)        -- the hole is solved as /sys/Nat
 
 An unsolved hole is rejected during type checking.
 
+### Implicit parameters
+
+```
+let id(@T : Type, x : T) -> T = x;
+id(5)           -- T is inferred
+id(@Nat, 5)     -- T is given
+```
+
+A binder marked `@` is an implicit parameter: **an automatic `?`**. At every
+call site the elaborator fills it with a fresh hole unless an `@`-argument
+supplies it. Nothing else changes — conversion ignores the marks entirely, so
+a value of an implicit type flows anywhere its arity fits.
+
+Implicit parameters may appear anywhere in the telescope, not just as a
+prefix; `@` marks work the same in standalone Π-types (`rec` signatures,
+annotations):
+
+```
+rec bind : (@A : Type, @B : Type) -> (Parse(A), A -> Parse(B)) -> Parse(B) = …;
+```
+
+Call sites follow a two-queue rule: plain arguments fill the explicit binders
+in telescope order, `@`-arguments fill the implicit binders in telescope
+order, matched independently — `f(@Nat, x)` and `f(x, @Nat)` are the same
+call. An implicit the elaborator cannot infer is rejected with the binder's
+name; supply it explicitly with `@`.
+
+Union parameters need no marks: they are implicit at the value constructors
+and explicit at the type constructor by definition (see Union above).
+
 ### Local let
 
 ```
@@ -243,16 +273,16 @@ with bind body
 action!
 ```
 
-`with` introduces monadic sequencing sugar. The `bind` term is an atomic term denoting a binary bind operation of shape `(M A, A -> M B) -> M B`; it is commonly a partially applied function containing holes, such as `Parse/bind(?, ?)`. Inside the `body`, postfix `!` marks an action whose result should be bound inline:
+`with` introduces monadic sequencing sugar. The `bind` term is an atomic term denoting a binary bind operation of shape `(M A, A -> M B) -> M B` — typically a reference like `Parse/bind`, whose type parameters are implicit and inferred per use. Inside the `body`, postfix `!` marks an action whose result should be bound inline:
 
 ```
-with Parse/bind(?, ?)
+with Parse/bind
     let a = parse_a!;
     let b = parse_b!;
     combine(a, b)
 ```
 
-The desugarer rewrites each `!` into an application of the active bind to the action and a generated continuation. The bind term is re-elaborated at each `!` site, so holes in the bind are fresh for each action and can solve to different types.
+The desugarer rewrites each `!` into an application of the active bind to the action and a generated continuation. The bind term is re-elaborated at each `!` site, so its implicit parameters (and any holes it contains) are fresh for each action and can solve to different types.
 
 Bang is only valid inside a `with` body. A `!` in a call or tuple is collected left-to-right; a `!` in a `match` scrutinee runs before branching, while bangs inside branches stay branch-local. Lambda bodies and nested `with` blocks start their own sequencing regions.
 
@@ -577,11 +607,13 @@ The union binds the type name `Result` and a constructor module `Result` contain
 **Construction**
 
 ```
-let good : Result(Nat, Bin) = Result/ok(Nat, Bin, 42);
-let bad  : Result(Nat, Bin) = Result/err(Nat, Bin, "something went wrong");
+let good : Result(Nat, Bin) = Result/ok(42);
+let bad  : Result(Nat, Bin) = Result/err("something went wrong");
 ```
 
-Constructors take the union's type parameters first, followed by the case payload.
+The union's type parameters are implicit at the constructors — inference fills
+them from the payload or the expected type. Supply one positionally with a
+call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`.
 
 **Elimination**
 

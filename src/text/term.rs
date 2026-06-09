@@ -1,5 +1,5 @@
 use {
-    super::{Name, Prim},
+    super::{Name, Plicity, Prim},
     crate::Span,
     std::{
         collections::BTreeMap,
@@ -63,7 +63,7 @@ impl From<Subterm> for Term {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
-    pub params: Vec<(Option<String>, Term)>,
+    pub params: Vec<(Plicity, Option<String>, Term)>,
     pub output: Term,
 }
 
@@ -77,10 +77,13 @@ pub struct Func {
     pub body: Term,
 }
 
+/// Each argument carries its call-site plicity mark: `@`-arguments fill
+/// implicit binders, plain arguments fill explicit ones. The marks lower to
+/// core untouched — `to_core` is type-blind and cannot match them to slots.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Apply {
     pub head: Term,
-    pub params: Vec<Term>,
+    pub params: Vec<(Plicity, Term)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,7 +164,7 @@ pub enum LetSignature {
         body: Term,
     },
     Func {
-        params: Vec<(String, Term)>,
+        params: Vec<(Plicity, String, Term)>,
         output: Term,
         body: Term,
     },
@@ -179,7 +182,7 @@ impl LetSignature {
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
-                    .map(|(n, t)| (Some(n.clone()), t.clone()))
+                    .map(|(plicity, n, t)| (*plicity, Some(n.clone()), t.clone()))
                     .collect(),
                 output: output.clone(),
             })
@@ -190,10 +193,12 @@ impl LetSignature {
     pub fn body(&self) -> Term {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
+            // The lambda binds every parameter, implicit or not — plicity is a
+            // fact about the *type*, consulted only at application sites.
             LetSignature::Func { params, body, .. } => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|(n, t)| (n.clone(), Some(t.clone())))
+                    .map(|(_, n, t)| (n.clone(), Some(t.clone())))
                     .collect(),
                 body: body.clone(),
             })

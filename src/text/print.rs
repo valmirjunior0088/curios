@@ -1,14 +1,21 @@
 use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Prim, Proj,
-        Rec, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
-        UnionCase, UnionMatch, UseGroup, With,
+        GroupItem, Let, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity,
+        Prim, Proj, Rec, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple,
+        TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
     std::fmt::{Display, Formatter, Result},
 };
+
+fn print_plicity(plicity: Plicity) -> Printer<'static> {
+    match plicity {
+        Plicity::Implicit => pure("@"),
+        Plicity::Explicit => pure(""),
+    }
+}
 
 /// Prints a match's optional motive: ` : label => body` (or ` : body` when
 /// unlabelled), or nothing at all when the motive was omitted in the source.
@@ -203,9 +210,14 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
             sep_flat(
-                params.into_iter().map(|(label, ty)| match label {
-                    Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
-                    None => print_term(ty),
+                params.into_iter().map(|(plicity, label, ty)| {
+                    flat([
+                        print_plicity(plicity),
+                        match label {
+                            Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
+                            None => print_term(ty),
+                        },
+                    ])
                 }),
                 || pure(", "),
             ),
@@ -229,7 +241,12 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::Apply(Apply { head, params }) => flat([
             print_term(head),
             pure("("),
-            sep_flat(params.into_iter().map(|p| print_term(p)), || pure(", ")),
+            sep_flat(
+                params
+                    .into_iter()
+                    .map(|(plicity, p)| flat([print_plicity(plicity), print_term(p)])),
+                || pure(", "),
+            ),
             pure(")"),
         ]),
         Subterm::TupleType(TupleType { fields }) => {
@@ -391,9 +408,14 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
         } => flat([
             pure("("),
             sep_flat(
-                params
-                    .into_iter()
-                    .map(|(name, ty)| flat([pure(name), pure(" : "), print_term(ty)])),
+                params.into_iter().map(|(plicity, name, ty)| {
+                    flat([
+                        print_plicity(plicity),
+                        pure(name),
+                        pure(" : "),
+                        print_term(ty),
+                    ])
+                }),
                 || pure(", "),
             ),
             pure(") -> "),

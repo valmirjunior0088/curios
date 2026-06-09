@@ -90,6 +90,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
     Ok(Module {
         items,
         inductives,
+        metavars: module.metavars,
         type_,
         body,
     })
@@ -117,9 +118,21 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 fn zonk_term(context: &Context, term: &Term, binders: &[String]) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution,
     // recursively zonked (the solution may itself mention solved metavariables).
-    if let Subterm::Metavar(Metavar { id }) = &**term {
+    if let Subterm::Metavar(Metavar { id, origin }) = &**term {
         let solution = context.metavar_solution(*id).ok_or_else(|| {
-            let error = Error::cannot_infer(term.clone());
+            // An unsolved metavariable the *elaborator* minted (an omitted
+            // implicit argument) is reported by the binder it filled — the
+            // provenance rides on the node itself — not as a bare hole: the
+            // user never wrote this metavariable, so a generic "cannot infer"
+            // would point at nothing they can see.
+            let error = match origin {
+                Some(origin) => Error::uninferred_implicit(
+                    term.clone(),
+                    origin.func.clone(),
+                    origin.binder.clone(),
+                ),
+                None => Error::cannot_infer(term.clone()),
+            };
             match term.span() {
                 Some(span) => error.at(span),
                 None => error,
@@ -182,13 +195,22 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             telescope: telescope.zonk(context, binders)?,
         }),
 
-        Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
+        Subterm::FuncType(FuncType {
+            telescope,
+            plicities,
+        }) => Subterm::FuncType(FuncType {
             telescope: telescope.zonk(context, binders)?,
+            plicities: plicities.clone(),
         }),
 
-        Subterm::Apply(Apply { head, params }) => Subterm::Apply(Apply {
+        Subterm::Apply(Apply {
+            head,
+            params,
+            plicities,
+        }) => Subterm::Apply(Apply {
             head: zonk_term(context, head, binders)?,
             params: zonk_terms(context, params, binders)?,
+            plicities: plicities.clone(),
         }),
 
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {

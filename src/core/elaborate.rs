@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, Atom, Cases, Match, Context, Definition, Error, Func, FuncType, Item, Let,
-        Many, Metavar, Module, Nat, One, Prim, Proj, Rec, Scope, Subterm,
+        Apply, Atom, Cases, Match, Context, Definition, Error, Func, FuncType, ImplicitOrigin,
+        Item, Let, Many, Metavar, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Subterm,
         Telescope, Term, Tuple, TupleType, Two, UnionCtor, UnionType, Var,
         check_motive, elaborate_prim, expect, reduce_with, refine_head,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
 
 /// The elaboration mode (§6). `Infer` synthesizes a type; `Check(expected)`
@@ -48,7 +48,15 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
     let mut domains = Vec::new();
     let output = context.with_frame(|context| walk(context, ft.telescope.clone(), &mut domains))?;
 
-    Ok((Term::func_type(domains, output), Term::type_()))
+    let rebuilt = Term::func_type_marked(
+        ft.plicities
+            .iter()
+            .zip(domains)
+            .map(|(&plicity, (label, domain))| (plicity, label, domain)),
+        output,
+    );
+
+    Ok((rebuilt, Term::type_()))
 }
 
 fn elaborate_apply(
@@ -57,23 +65,146 @@ fn elaborate_apply(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Apply { head, params } = apply;
+    let Apply {
+        head,
+        params,
+        plicities,
+    } = apply;
 
-    let (head, head_type) = elaborate(context, head, Mode::Infer)?;
-    let head_type = reduce_with(context, &head_type)?;
-
-    let ft = match &*head_type {
-        Subterm::FuncType(ft) => ft.clone(),
-        other => return Err(Error::not_a_function(term.clone(), other.clone())),
+    // Insertion provenance: name the applied function in the uninferred-
+    // implicit report. Heads are references in practice; anything else gets a
+    // placeholder (the span still locates the call).
+    let func_label = match &**head {
+        Subterm::Var(var) => var.unwrap().to_string(),
+        _ => "<function>".to_string(),
     };
 
-    if params.len() != ft.telescope.len() {
+    let (mut head, head_type) = elaborate(context, head, Mode::Infer)?;
+    let mut head_type = reduce_with(context, &head_type)?;
+
+    // The two call-site queues: plain arguments fill explicit binders in
+    // telescope order, `@`-arguments fill implicit binders in telescope order,
+    // matched independently — the relative position of an `@`-argument among
+    // the plain ones carries no meaning.
+    let mut plain: VecDeque<Term> = VecDeque::new();
+    let mut marked: VecDeque<Term> = VecDeque::new();
+    for (plicity, param) in plicities.iter().zip(params) {
+        match plicity {
+            Plicity::Explicit => plain.push_back(param.clone()),
+            Plicity::Implicit => marked.push_back(param.clone()),
+        }
+    }
+
+    // All-implicit telescopes (the curried `bind` shape, e.g.
+    // `(@A, @B) -> (M A, A -> M B) -> M B`): when the head telescope has zero
+    // explicit slots but plain arguments were given, saturate it — `@`-queue
+    // first, fresh metavariables for the rest — reduce the output, and
+    // re-target the plain arguments at the next telescope. This fires *only*
+    // with zero explicit slots, so application stays arity-strict everywhere
+    // else (this is deliberately not general partial application).
+    let ft = loop {
+        let ft = match &*head_type {
+            Subterm::FuncType(ft) => ft.clone(),
+            other => return Err(Error::not_a_function(term.clone(), other.clone())),
+        };
+
+        let all_implicit = !ft.plicities.is_empty()
+            && ft
+                .plicities
+                .iter()
+                .all(|p| matches!(p, Plicity::Implicit));
+        if !all_implicit || plain.is_empty() {
+            break ft;
+        }
+
+        let mut args = Vec::with_capacity(ft.plicities.len());
+        let mut tele = ft.telescope.clone();
+        let output = loop {
+            match tele {
+                Telescope::Done(output) => break *output,
+                Telescope::Cons(ty, rest) => {
+                    let arg = match marked.pop_front() {
+                        Some(arg) => check(context, &arg, ty.clone())?,
+                        None => {
+                            let binder = rest.first_label().unwrap_or("_").to_string();
+                            context.fresh_metavar(
+                                ty.clone(),
+                                term.span(),
+                                ImplicitOrigin {
+                                    func: func_label.clone(),
+                                    binder,
+                                },
+                            )
+                        }
+                    };
+                    tele = rest.open(&[&arg]);
+                    args.push(arg);
+                }
+            }
+        };
+
+        head = Term::apply_marked(head, args.into_iter().map(|a| (Plicity::Implicit, a)));
+        head_type = reduce_with(context, &output)?;
+    };
+
+    // Arity is checked per queue: plain arguments must exactly cover the
+    // explicit slots; `@`-arguments may undershoot the implicit slots (the
+    // remainder is inserted) but never overshoot them.
+    let explicit_slots = ft
+        .plicities
+        .iter()
+        .filter(|p| matches!(p, Plicity::Explicit))
+        .count();
+    let implicit_slots = ft.plicities.len() - explicit_slots;
+
+    if plain.len() != explicit_slots {
         return Err(Error::wrong_number_of_arguments(
             term.clone(),
-            ft.telescope.len(),
-            params.len(),
+            explicit_slots,
+            plain.len(),
         ));
     }
+    if marked.len() > implicit_slots {
+        return Err(Error::too_many_implicits(
+            term.clone(),
+            implicit_slots,
+            marked.len(),
+        ));
+    }
+
+    // Materialize the saturated argument vector, threading the dependent
+    // substitution so each inserted metavariable is born at its binder's
+    // *instantiated* type. The walk below re-checks the inserted metavariables
+    // idempotently (`elaborate_metavar` re-checks the recorded type).
+    let mut full_args = Vec::with_capacity(ft.plicities.len());
+    {
+        let mut tele = ft.telescope.clone();
+        for plicity in &ft.plicities {
+            let Telescope::Cons(ty, rest) = tele else {
+                unreachable!("plicities parallel the telescope");
+            };
+            let arg = match plicity {
+                Plicity::Explicit => plain.pop_front().expect("arity checked above"),
+                Plicity::Implicit => match marked.pop_front() {
+                    Some(arg) => arg,
+                    None => {
+                        let binder = rest.first_label().unwrap_or("_").to_string();
+                        context.fresh_metavar(
+                            ty.clone(),
+                            term.span(),
+                            ImplicitOrigin {
+                                func: func_label.clone(),
+                                binder,
+                            },
+                        )
+                    }
+                },
+            };
+            tele = rest.open(&[&arg]);
+            full_args.push(arg);
+        }
+    }
+    let params = &full_args;
 
     // Result-directed argument order (§6). An introduction form (tuple,
     // lambda) is checked-only: it can't be elaborated against a parameter type that
@@ -130,7 +261,14 @@ fn elaborate_apply(
         }
     }
 
-    Ok((Term::apply(head, elaborated), output))
+    // The rebuilt application is fully saturated; each argument's mark is its
+    // binder's plicity (inserted metavariables recorded like any other
+    // argument), so re-elaborating the rebuilt node is stable: both queues
+    // then match their slots exactly and nothing is minted twice.
+    Ok((
+        Term::apply_marked(head, ft.plicities.iter().copied().zip(elaborated)),
+        output,
+    ))
 }
 
 /// Whether `arg` is a checked-only introduction form (tuple, lambda) that
@@ -155,14 +293,14 @@ fn blocked_on_metavar(
     let reduced = reduce_with(context, ty)?;
     Ok(match &*reduced {
         // A tuple/lambda whose whole expected type is an unsolved metavar.
-        Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
-        Subterm::FuncType(FuncType { telescope }) if is_lambda => match telescope {
+        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
+        Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => match telescope {
             Telescope::Cons(domain, _) => {
                 // A lambda whose expected *domain* is an unsolved metavar: its body may
                 // need the domain's structure (to project the parameter), so postpone it
                 // until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
                 let domain_blocked = match &*reduce_with(context, domain)? {
-                    Subterm::Metavar(Metavar { id }) => context.metavar_solution(*id).is_none(),
+                    Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
                     _ => false,
                 };
                 // ...or a lambda whose *codomain* still carries an unsolved metavar that
@@ -703,10 +841,11 @@ fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term,
     // Propagate `mode` into the frame so a `Check(expected)` turnaround happens
     // where the let binding is in scope; `expected` is from the outer scope and
     // does not mention the bound name, so comparing inside the frame is sound.
-    // The binding is `define`d with the *original* body, which `reduce`/`convert`
-    // (domain-blind) treat identically to the rebuilt one.
+    // The binding is `define`d with the *rebuilt* body: insertion saturates
+    // applications during elaboration, and the tail's type-level evaluation
+    // must not reduce through the lowered (under-applied) original.
     let (tail_elaborated, tail_type) = context.with_frame(|context| {
-        context.define_assuming(&label, &assumed, body);
+        context.define_assuming(&label, &assumed, &body_elaborated);
 
         let (tail_elaborated, tail_type) =
             elaborate(context, &tail.open(&[&Term::var(Var::free(&label))]), mode)?;
@@ -760,6 +899,14 @@ fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Term, 
             let mut bodies_elaborated = Vec::with_capacity(items.len());
             for (type_, body) in &items {
                 bodies_elaborated.push(check(context, body, type_.clone())?);
+            }
+
+            // Re-define with the rebuilt bodies before the tail: insertion
+            // saturates applications during elaboration, and the tail's
+            // type-level evaluation must not reduce through the lowered
+            // (under-applied) originals.
+            for (label, body) in labels.iter().zip(&bodies_elaborated) {
+                context.define(label, body);
             }
 
             let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
@@ -999,7 +1146,13 @@ fn elaborate_metavar(
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
     let type_ = check(context, &def.type_, Term::type_())?;
     let body = check(context, &def.body, def.type_.clone())?;
-    context.define_assuming(&def.name, &def.type_, &def.body);
+
+    // Define the *rebuilt* body, not the lowered one: implicit-argument
+    // insertion saturates applications during elaboration, and the untyped
+    // reducer (type-level evaluation in later items' types) would meet the
+    // lowered body's under-applied calls and open a telescope at the wrong
+    // arity. Pre-insertion the two were interchangeable; no longer.
+    context.define_assuming(&def.name, &def.type_, &body);
 
     Ok(Definition {
         name: def.name.clone(),
@@ -1035,6 +1188,14 @@ fn elaborate_module_rec(
         bodies.push(check(context, &def.body, def.type_.clone())?);
     }
 
+    // Re-define every member with its rebuilt body: insertion saturates
+    // applications during elaboration, and later items' type-level evaluation
+    // must not reduce through the lowered (under-applied) originals. The
+    // originals were only needed above, while the members checked each other.
+    for (def, body) in defs.iter().zip(&bodies) {
+        context.define(&def.name, body);
+    }
+
     Ok(defs
         .iter()
         .zip(types)
@@ -1068,6 +1229,10 @@ pub fn elaborate_module(
         context.register_inductive(name, inductive.clone());
     }
 
+    // Implicit-argument insertion mints metavariables during elaboration;
+    // floor the counter above `to_core`'s so the id spaces never collide.
+    context.seed_metavars(module.metavars);
+
     let mut items = Vec::with_capacity(module.items.len());
     for item in &module.items {
         items.push(match item {
@@ -1082,6 +1247,7 @@ pub fn elaborate_module(
     let module = Module {
         items,
         inductives: module.inductives.clone(),
+        metavars: module.metavars,
         type_: module.type_.clone(),
         body,
     };

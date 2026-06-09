@@ -23,7 +23,7 @@ let is_not_pct(byte : Nat) -> Bln =
 
 rec parse_fmt : Parse(Fmt) = (input, pos) =>
     match Nat/lt(pos, Bin/len(input))
-    | false => Result/success(?, ?, (pos, Fmt/nil()))
+    | false => Result/success((pos, Fmt/nil()))
     | true =>
         match Nat/eql(Bin/get(input, pos), '%')
         | false => parse_lit(input, pos)
@@ -31,35 +31,35 @@ rec parse_fmt : Parse(Fmt) = (input, pos) =>
         end
     end
 and parse_spec : Parse(Fmt) =
-    Parse/or(?,
-        with Parse/bind(?, ?)
+    Parse/or(
+        with Parse/bind
             let _ = Parse/take_byte('%')!;
             let byte = Parse/any_byte!;
             let rest = parse_fmt!;
             match byte : Parse(Fmt)
-            | 's' => Parse/pure(?, Fmt/str(rest))
-            | 'd' => Parse/pure(?, Fmt/nat(rest))
-            | _ => Parse/pure(?, rest)
+            | 's' => Parse/pure(Fmt/str(rest))
+            | 'd' => Parse/pure(Fmt/nat(rest))
+            | _ => Parse/pure(rest)
             end,
-        Parse/map(?, ?, (_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
+        Parse/map((_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
 and parse_lit : Parse(Fmt) =
-    with Parse/bind(?, ?)
+    with Parse/bind
         let bytes = Parse/take_while(is_not_pct)!;
         let rest = parse_fmt!;
-        Parse/pure(?, Fmt/lit(bytes, rest));
+        Parse/pure(Fmt/lit(bytes, rest));
 
 pub let parse(input : Bin) -> Fmt =
-    match Parse/run(?, parse_fmt, input)
+    match Parse/run(parse_fmt, input)
     | success(value) => value
     | failure(_) => Fmt/nil()
     end;
 
-rec go_with(result : Type, finish : Bin -> result, f : Fmt, acc : Bin) -> format_type_with(result, f) =
-    match f : format_type_with(result, f)
+rec go_with(T : Type, finish : Bin -> T, f : Fmt, acc : Bin) -> format_type_with(T, f) =
+    match f : format_type_with(T, f)
     | nil() => finish(acc)
-    | lit(bytes, rest) => go_with(result, finish, rest, Bin/concat(acc, bytes))
-    | str(rest) => (s) => go_with(result, finish, rest, Bin/concat(acc, s))
-    | nat(rest) => (n) => go_with(result, finish, rest, Bin/concat(acc, Nat/to_str(n)))
+    | lit(bytes, rest) => go_with(T, finish, rest, Bin/concat(acc, bytes))
+    | str(rest) => (s) => go_with(T, finish, rest, Bin/concat(acc, s))
+    | nat(rest) => (n) => go_with(T, finish, rest, Bin/concat(acc, Nat/to_str(n)))
     end;
 
 pub let format(s : Bin) -> format_type_with(Bin, parse(s)) =

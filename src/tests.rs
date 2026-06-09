@@ -145,7 +145,7 @@ fn with_identity_monad_sequences_bangs() {
 
 #[test]
 fn with_std_parse_threads_bangs_left_to_right() {
-    // The real `std/Parse` monad. `with Parse/bind(?, ?)` partially applies the curried
+    // The real `std/Parse` monad. `with Parse/bind` partially applies the curried
     // bind, fixing its leading `Type` arguments with `?` holes — and because the bind is
     // re-elaborated per `!` site, each site mints its own holes (solved by inference).
     // `Parse/bind` stays in head position, so no annotations are needed.
@@ -156,10 +156,10 @@ fn with_std_parse_threads_bangs_left_to_right() {
         use /std/{Parse, Nat, Result, Io};
 
         let parser : Parse/Parse(Nat) =
-            with Parse/bind(?, ?)
-            Parse/pure(Nat, Nat/sub(Parse/any_byte!, Parse/any_byte!));
+            with Parse/bind
+            Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
-        match Parse/run(Nat, parser, "BA") : {}
+        match Parse/run(parser, "BA") : {}
         | success(n) => Io/print(Nat/to_str(n))
         | failure(msg) => Io/print(msg)
         end
@@ -181,7 +181,7 @@ fn with_std_parse_threads_bangs_left_to_right() {
 fn with_region_mixes_action_types() {
     // A single region sequences two actions of *different* payload types: a
     // `Parse(Bin)` (`take_while`) and a `Parse(Nat)` (`any_byte`). This works only
-    // because `with Parse/bind(?, ?)` is re-elaborated per `!` site, so each site gets
+    // because `with Parse/bind` is re-elaborated per `!` site, so each site gets
     // its own holes (`?A := Bin` for the first, `?A := Nat` for the second). A single
     // shared bind value would force one `A` and reject this. On "AB": `take_while(is_a)`
     // reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bin/append("A", 66)`
@@ -192,10 +192,10 @@ fn with_region_mixes_action_types() {
         let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
 
         let parser : Parse/Parse(Bin) =
-            with Parse/bind(?, ?)
-            Parse/pure(Bin, Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
+            with Parse/bind
+            Parse/pure(Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
-        match Parse/run(Bin, parser, "AB") : {}
+        match Parse/run(parser, "AB") : {}
         | success(s) => Io/print(s)
         | failure(msg) => Io/print(msg)
         end

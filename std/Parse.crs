@@ -3,103 +3,96 @@ use /std/{Result, Nat, Bin, Bln, Arr, Lst};
 pub let Parse(A : Type) -> Type =
     (Bin, Nat) -> Result({ Nat, A }, Bin);
 
-pub let run(A : Type, p : Parse(A), input : Bin) -> Result(A, Bin) =
+pub let run(@A : Type, p : Parse(A), input : Bin) -> Result(A, Bin) =
     match p(input, 0)
-    | success(pair) => Result/success(?, ?, pair.1)
-    | failure(msg) => Result/failure(?, ?, msg)
+    | success(pair) => Result/success(pair.1)
+    | failure(msg) => Result/failure(msg)
     end;
 
-pub let pure(A : Type, a : A) -> Parse(A) =
+pub let pure(@A : Type, a : A) -> Parse(A) =
     (input, pos) =>
-        Result/success(?, ?, (pos, a));
+        Result/success((pos, a));
 
-pub let fail(A : Type, msg : Bin) -> Parse(A) =
+pub let fail(@A : Type, msg : Bin) -> Parse(A) =
     (input, pos) =>
-        Result/failure(?, ?, msg);
+        Result/failure(msg);
 
-pub let map(A : Type, B : Type, f : A -> B, p : Parse(A)) -> Parse(B) =
+pub let map(@A : Type, @B : Type, f : A -> B, p : Parse(A)) -> Parse(B) =
     (input, pos) =>
         match p(input, pos)
-        | success(pair) => Result/success(?, ?, (pair.0, f(pair.1)))
-        | failure(msg) => Result/failure(?, ?, msg)
+        | success(pair) => Result/success((pair.0, f(pair.1)))
+        | failure(msg) => Result/failure(msg)
         end;
 
-pub let bind(A : Type, B : Type) -> (Parse(A), A -> Parse(B)) -> Parse(B) =
+pub let bind(@A : Type, @B : Type) -> (Parse(A), A -> Parse(B)) -> Parse(B) =
     (p, f) => (input, pos) =>
         match p(input, pos)
         | success(pair) => f(pair.1)(input, pair.0)
-        | failure(msg) => Result/failure(?, ?, msg)
+        | failure(msg) => Result/failure(msg)
         end;
 
-pub let or(A : Type, p : Parse(A), q : Parse(A)) -> Parse(A) =
+pub let or(@A : Type, p : Parse(A), q : Parse(A)) -> Parse(A) =
     (input, pos) =>
         match p(input, pos)
-        | success(pair) => Result/success(?, ?, pair)
+        | success(pair) => Result/success(pair)
         | failure(_) => q(input, pos)
         end;
 
-pub let and(A : Type, B : Type, p : Parse(A), q : Parse(B)) -> Parse({ A, B }) =
+pub let and(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse({ A, B }) =
     (input, pos) =>
         match p(input, pos)
         | success(rp) =>
             match q(input, rp.0)
-            | success(sp) => Result/success(?, ?, (sp.0, (rp.1, sp.1)))
-            | failure(msg) => Result/failure(?, ?, msg)
+            | success(sp) => Result/success((sp.0, (rp.1, sp.1)))
+            | failure(msg) => Result/failure(msg)
             end
-        | failure(msg) => Result/failure(?, ?, msg)
+        | failure(msg) => Result/failure(msg)
         end;
 
-pub let and_drop(A : Type, B : Type, p : Parse(A), q : Parse(B)) -> Parse(A) =
+pub let and_drop(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse(A) =
     (input, pos) =>
         match p(input, pos)
         | success(rp) =>
             match q(input, rp.0)
-            | success(sp) => Result/success(?, ?, (sp.0, rp.1))
-            | failure(msg) => Result/failure(?, ?, msg)
+            | success(sp) => Result/success((sp.0, rp.1))
+            | failure(msg) => Result/failure(msg)
             end
-        | failure(msg) => Result/failure(?, ?, msg)
+        | failure(msg) => Result/failure(msg)
         end;
 
-pub let and_keep(A : Type, B : Type, p : Parse(A), q : Parse(B)) -> Parse(B) =
+pub let and_keep(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse(B) =
     (input, pos) =>
         match p(input, pos)
         | success(pair) => q(input, pair.0)
-        | failure(msg) => Result/failure(?, ?, msg)
+        | failure(msg) => Result/failure(msg)
         end;
 
 pub let any_byte : Parse(Nat) =
     (input, pos) =>
         match Nat/lt(pos, Bin/len(input))
-        | false => Result/failure(?, ?, "unexpected end of input")
-        | true => Result/success(?, ?, (Nat/add(pos, 1), Bin/get(input, pos)))
+        | false => Result/failure("unexpected end of input")
+        | true => Result/success((Nat/add(pos, 1), Bin/get(input, pos)))
         end;
 
 pub let peek_byte : Parse(Nat) =
     (input, pos) =>
         match Nat/lt(pos, Bin/len(input))
-        | false => Result/failure(?, ?, "unexpected end of input")
-        | true => Result/success(?, ?, (pos, Bin/get(input, pos)))
+        | false => Result/failure("unexpected end of input")
+        | true => Result/success((pos, Bin/get(input, pos)))
         end;
 
 pub let take_byte(expected : Nat) -> Parse(Nat) =
     (input, pos) =>
         match Nat/lt(pos, Bin/len(input))
-        | false => Result/failure(?, ?, "unexpected end of input")
+        | false => Result/failure("unexpected end of input")
         | true =>
             let byte = Bin/get(input, pos);
             match Nat/eql(byte, expected)
-            | true => Result/success(?, ?, (Nat/add(pos, 1), byte))
-            | false => Result/failure(?, ?, "unexpected byte")
+            | true => Result/success((Nat/add(pos, 1), byte))
+            | false => Result/failure("unexpected byte")
             end
         end;
 
--- Must stay structurally recursive (the `Nat` recursor on `len(input) - pos`),
--- NOT a general `rec`. `Fmt/parse` runs this combinator at *type-check time* to
--- compute `printf`'s type from the format literal, and the type checker's reducer
--- only normalizes structural recursion — a local `rec` would stay stuck, leaving
--- the format type a neutral `match` ("applied a non-function"). The recursor
--- unrolls every remaining byte (O(remaining) per call), which is the price of
--- compile-time reducibility here.
 pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
     (input, pos) =>
         let r =
@@ -116,34 +109,34 @@ pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
                     end
                 end
             end;
-        Result/success(?, ?, (r.0, r.1));
+        Result/success((r.0, r.1));
 
-pub let many0(A : Type, p : Parse(A)) -> Parse(Arr(A)) =
+pub let many0(@A : Type, p : Parse(A)) -> Parse(Arr(A)) =
     (input, pos) =>
         rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Arr(A) }, Bin) =
             match p(input, cur)
-            | failure(_) => Result/success(?, ?, (cur, Lst/to_arr(?, Lst/rev(?, acc))))
+            | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
             | success(pair) =>
                 match Nat/eql(pair.0, cur)
-                | true => Result/success(?, ?, (cur, Lst/to_arr(?, Lst/rev(?, acc))))
-                | false => go(Lst/cons(?, pair.1, acc), pair.0)
+                | true => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                | false => go(Lst/cons(pair.1, acc), pair.0)
                 end
             end;
-        go(Lst/nil(?), pos);
+        go(Lst/nil(), pos);
 
-pub let sep_by0(A : Type, S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Arr(A)) =
+pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Arr(A)) =
     (input, pos) =>
         match elem(input, pos)
-        | failure(_) => Result/success(?, ?, (pos, []))
+        | failure(_) => Result/success((pos, []))
         | success(rp) =>
             rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Arr(A) }, Bin) =
                 match sep(input, cur)
-                | failure(_) => Result/success(?, ?, (cur, Lst/to_arr(?, Lst/rev(?, acc))))
+                | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
                 | success(sp) =>
                     match elem(input, sp.0)
-                    | failure(_) => Result/success(?, ?, (cur, Lst/to_arr(?, Lst/rev(?, acc))))
-                    | success(tp) => go(Lst/cons(?, tp.1, acc), tp.0)
+                    | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                    | success(tp) => go(Lst/cons(tp.1, acc), tp.0)
                     end
                 end;
-            go(Lst/cons(?, rp.1, Lst/nil(?)), rp.0)
+            go(Lst/cons(rp.1, Lst/nil()), rp.0)
         end;

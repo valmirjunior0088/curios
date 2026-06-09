@@ -38,13 +38,13 @@ pub fn convert(
 fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, ReduceError> {
     match &**term {
         Subterm::Var(var) => Ok(context.assumption(var.unwrap()).cloned()),
-        Subterm::Apply(Apply { head, params }) => {
+        Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(context, head)? else {
                 return Ok(None);
             };
 
             match Term::unwrap_or_clone(reduce(context, head_type)?) {
-                Subterm::FuncType(FuncType { telescope }) if telescope.len() == params.len() => {
+                Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == params.len() => {
                     let refs = params.iter().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
                 }
@@ -81,7 +81,7 @@ fn apply_param_types(
     };
 
     let telescope = match Term::unwrap_or_clone(reduce(context, head_type)?) {
-        Subterm::FuncType(FuncType { telescope }) if telescope.len() == params.len() => telescope,
+        Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == params.len() => telescope,
         _ => return Ok(None),
     };
 
@@ -210,7 +210,7 @@ impl Convert {
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.open(&y_refs),
             _ => Term::type_(),
         };
         self.enqueue(
@@ -522,7 +522,7 @@ impl Convert {
             .collect();
         let y_refs: Vec<&Term> = ys.iter().collect();
         let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::FuncType(FuncType { telescope }) => telescope.open(&y_refs),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.open(&y_refs),
             _ => Term::type_(),
         };
         self.enqueue(
@@ -569,7 +569,7 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::FuncType(FuncType { telescope }) => {
+            Subterm::FuncType(FuncType { telescope, .. }) => {
                 let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
                     .map(|_| Term::var(Var::free(context.fresh(None))))

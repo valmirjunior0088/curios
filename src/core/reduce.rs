@@ -14,11 +14,19 @@ enum Reduce {
 }
 
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
-    let Apply { head, params } = apply;
+    let Apply {
+        head,
+        params,
+        plicities,
+    } = apply;
     let param_refs = params.iter().collect::<Vec<_>>();
     match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Func(Func { telescope }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
-        head => Ok(Reduce::Break(Term::apply(head, params))),
+        head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
+            head: head.into(),
+            params,
+            plicities,
+        })))),
     }
 }
 
@@ -66,7 +74,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
         .collect::<Vec<_>>();
     let y_refs = ys.iter().collect::<Vec<_>>();
     match Term::unwrap_or_clone(func.telescope.open(&y_refs)) {
-            Subterm::Apply(Apply { head, params })
+            Subterm::Apply(Apply { head, params, .. })
                 if params.len() == n
                     && params.iter().enumerate().all(|(i, p)| {
                         matches!(p.as_ref(), Subterm::Var(v) if v.unwrap() == freshs[i].as_str())

@@ -12,7 +12,7 @@ fn parse_rec_func_and_apply() {
                 signature: LetSignature::Name {
                     type_: Some(
                         Subterm::FuncType(FuncType {
-                            params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                            params: vec![(Plicity::Explicit, Some("x".to_string()), Subterm::Type.into())],
                             output: Subterm::Type.into(),
                         })
                         .into(),
@@ -26,7 +26,7 @@ fn parse_rec_func_and_apply() {
             }],
             tail: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["id".to_string()])).into(),
-                params: vec![Subterm::Name(Name::from(["a".to_string()])).into()],
+                params: vec![(Plicity::Explicit, Subterm::Name(Name::from(["a".to_string()])).into())],
             })
             .into(),
         })
@@ -167,7 +167,7 @@ fn parse_top_rec_mixed_pub() {
                 signature: LetSignature::Name {
                     type_: Some(
                         Subterm::FuncType(FuncType {
-                            params: vec![(Some("x".to_string()), Subterm::Type.into())],
+                            params: vec![(Plicity::Explicit, Some("x".to_string()), Subterm::Type.into())],
                             output: Subterm::Type.into(),
                         })
                         .into(),
@@ -474,6 +474,52 @@ fn parse_top_union_parameterized() {
 }
 
 #[test]
+fn parse_implicit_marks_on_binders_and_arguments() {
+    // `@` marks a Π-type binder implicit, anywhere in the telescope.
+    let t = "(@T : Type, x : T) -> T".parse::<Term>().unwrap();
+    match t.as_subterm() {
+        Subterm::FuncType(ft) => {
+            assert_eq!(ft.params[0].0, Plicity::Implicit);
+            assert_eq!(ft.params[1].0, Plicity::Explicit);
+        }
+        other => panic!("expected a func type, got {other:?}"),
+    }
+
+    // ...and a call-site argument, independently of its position.
+    let t = "foo(x, @Nat)".parse::<Term>().unwrap();
+    match t.as_subterm() {
+        Subterm::Apply(apply) => {
+            assert_eq!(apply.params[0].0, Plicity::Explicit);
+            assert_eq!(apply.params[1].0, Plicity::Implicit);
+        }
+        other => panic!("expected an apply, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_implicit_marks_on_let_shorthand_and_union_params() {
+    let m = "let foo(@T : Type, x : T) -> T = x;".parse::<Module>().unwrap();
+    match &m.items[0] {
+        TopItem::Let(TopLet {
+            signature: LetSignature::Func { params, .. },
+            ..
+        }) => {
+            assert_eq!(params[0].0, Plicity::Implicit);
+            assert_eq!(params[1].0, Plicity::Explicit);
+        }
+        other => panic!("expected a func let, got {other:?}"),
+    }
+
+    // Union parameters carry no declaration-site marks — they are implicit at
+    // the constructors by definition — so `@` does not parse there.
+    assert!(
+        "union Result(@A : Type)\n| success(A)\nend"
+            .parse::<Module>()
+            .is_err()
+    );
+}
+
+#[test]
 fn parse_top_union_and_chain() {
     let m = "union Tree\n| node(Forest)\nand Forest\n| nil()\n| cons(Tree, Forest)\nend"
         .parse::<Module>()
@@ -589,7 +635,7 @@ fn parse_hole_as_argument() {
     match term.into_subterm() {
         Subterm::Apply(apply) => {
             assert_eq!(apply.params.len(), 1);
-            assert_eq!(apply.params[0], Subterm::Hole.into());
+            assert_eq!(apply.params[0], (Plicity::Explicit, Subterm::Hole.into()));
         }
         other => panic!("expected apply, got {other:?}"),
     }
@@ -720,7 +766,10 @@ fn parse_with_partial_application_holes() {
         Subterm::With(With {
             bind: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["Parse".to_string(), "bind".to_string()])).into(),
-                params: vec![Subterm::Hole.into(), Subterm::Hole.into()],
+                params: vec![
+                    (Plicity::Explicit, Subterm::Hole.into()),
+                    (Plicity::Explicit, Subterm::Hole.into()),
+                ],
             })
             .into(),
             body: name("body"),
@@ -745,8 +794,8 @@ fn parse_multi_bang_in_apply() {
         Subterm::Apply(Apply {
             head: name("f"),
             params: vec![
-                Subterm::Bang(name("x")).into(),
-                Subterm::Bang(name("y")).into(),
+                (Plicity::Explicit, Subterm::Bang(name("x")).into()),
+                (Plicity::Explicit, Subterm::Bang(name("y")).into()),
             ],
         })
         .into()
@@ -794,7 +843,7 @@ fn bang_binds_tighter_than_application() {
         Subterm::Bang(
             Subterm::Apply(Apply {
                 head: name("f"),
-                params: vec![name("x")],
+                params: vec![(Plicity::Explicit, name("x"))],
             })
             .into()
         )

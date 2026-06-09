@@ -237,9 +237,9 @@ mod tests {
 
     #[test]
     fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
-        // `Result/success(?, ?, (a, a))` checked against a known `Result(...)`. The
-        // tuple is an introduction form whose parameter type is the holed type-arg
-        // `?A`, so it can't be checked until `?A` is known. Elaboration postpones it,
+        // `Result/success((a, a))` checked against a known `Result(...)`. The
+        // tuple is an introduction form whose parameter type is the inserted
+        // implicit `?A`, so it can't be checked until `?A` is known. Elaboration postpones it,
         // unifies the result against the expected `Result` — solving `?A` (the
         // success type, which the tuple's own result witnesses) and the *phantom*
         // `?E` (the failure type, carried only by the expected type) — then re-checks
@@ -250,7 +250,7 @@ mod tests {
             use /std/{Result};
             use /sys/{Nat};
             let f(a : Nat) -> Result({ Nat, Nat }, Nat) =
-                Result/success(?, ?, (a, a));
+                Result/success((a, a));
             f(7)
         "#;
 
@@ -261,7 +261,7 @@ mod tests {
         // degradation, no new acceptance of un-annotated constructors.
         let unpinned = r#"
             use /std/{Result};
-            Result/success(?, ?, (1, 1))
+            Result/success((1, 1))
         "#;
 
         assert!(compile(unpinned, None).is_err());
@@ -281,13 +281,176 @@ mod tests {
                 | success(value, extra) => value
                 | failure(_) => 0
                 end;
-            f(Result/success(?, ?, 7))
+            f(Result/success(7))
         "#;
 
         let error = compile(source, None).unwrap_err();
 
         assert!(
             error.contains("constructor 'success' takes 1 argument(s) but the match arm binds 2"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn implicit_arguments_can_all_be_supplied_explicitly() {
+        // Every implicit slot can be overridden positionally with a call-site
+        // `@` — including a union constructor's parameters, which are implicit
+        // by default — and the fully-supplied call compiles end-to-end.
+        let source = r#"
+            use /sys/{Nat};
+            union Opt(A : Type)
+            | some(A)
+            | none()
+            end
+            let id(@T : Type, x : T) -> T = x;
+            match Opt/some(@Nat, id(@Nat, 1)) : Nat
+            | some(value) => value
+            | none() => 0
+            end
+        "#;
+
+        compile(source, None).unwrap();
+    }
+
+    #[test]
+    fn implicit_argument_is_inserted_and_inferred() {
+        // The INDUCTIVES.md promise realized: an `@`-marked union parameter
+        // makes the constructor's type argument implicit, so the call site
+        // writes no holes at all.
+        let source = r#"
+            use /sys/{Nat};
+            union Opt(A : Type)
+            | some(A)
+            | none()
+            end
+            match Opt/some(1) : Nat
+            | some(value) => value
+            | none() => 0
+            end
+        "#;
+
+        compile(source, None).unwrap();
+    }
+
+    #[test]
+    fn interleaved_implicit_with_partial_override() {
+        // `T` is overridden positionally with `@`, `U` (interleaved after an
+        // explicit binder) is inferred from `y`.
+        let source = r#"
+            use /sys/{Nat, Bin};
+            let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
+            sys/Bin/len(second(@Nat, 1, "abc"))
+        "#;
+
+        compile(source, None).unwrap();
+    }
+
+    #[test]
+    fn implicit_argument_queues_are_order_insensitive() {
+        // The two queues are matched independently: an `@`-argument fills the
+        // first unfilled implicit binder no matter where it sits among the
+        // plain arguments.
+        let at_first = r#"
+            use /sys/{Nat, Bin};
+            let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
+            sys/Bin/len(second(@Nat, 1, "abc"))
+        "#;
+        let at_last = r#"
+            use /sys/{Nat, Bin};
+            let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
+            sys/Bin/len(second(1, "abc", @Nat))
+        "#;
+
+        compile(at_first, None).unwrap();
+        compile(at_last, None).unwrap();
+    }
+
+    #[test]
+    fn trailing_implicit_is_pinned_by_the_expected_type() {
+        // The proof-argument shape: the implicit trails every explicit binder
+        // and is mentioned only in the result type, so nothing but the
+        // result-directed turnaround can pin it.
+        let source = r#"
+            use /sys/{Nat};
+            union Opt(A : Type)
+            | some(A)
+            | none()
+            end
+            let nothing(n : Nat, @T : Type) -> Opt(T) = Opt/none(@T);
+            let r : Opt(Nat) = nothing(0);
+            match r : Nat
+            | some(value) => value
+            | none() => 9
+            end
+        "#;
+
+        compile(source, None).unwrap();
+    }
+
+    #[test]
+    fn all_implicit_telescope_saturates_and_retargets() {
+        // The curried `bind` shape: `(@A, @B) -> (M A, A -> M B) -> M B`.
+        // Applying it directly to plain arguments saturates the all-implicit
+        // telescope with fresh metavariables and re-targets the arguments at
+        // the next telescope — both through a direct call and the `with`
+        // sugar (which desugars to exactly that call).
+        let source = r#"
+            use /sys/{Nat};
+            union Id(A : Type)
+            | wrap(A)
+            end
+            let bind : (@A : Type, @B : Type) -> (Id(A), (A) -> Id(B)) -> Id(B) =
+                (A, B) => (m, f) =>
+                    match m : Id(B)
+                    | wrap(x) => f(x)
+                    end;
+            let direct = bind(Id/wrap(1), (x) => Id/wrap(x + 1));
+            let sugared =
+                with bind
+                let v = Id/wrap(3)!;
+                Id/wrap(v);
+            match sugared : Nat
+            | wrap(value) =>
+                match direct : Nat
+                | wrap(other) => Nat/add(value, other)
+                end
+            end
+        "#;
+
+        compile(source, None).unwrap();
+    }
+
+    #[test]
+    fn uninferred_implicit_names_the_binder_and_function() {
+        // Nothing mentions `T` outside the binder itself, so unification can
+        // never pin it; the report must name the hole, not a bare metavar id.
+        let source = r#"
+            use /sys/{Nat};
+            let cast(x : Nat, @T : Type) -> Nat = x;
+            cast(5)
+        "#;
+
+        let error = compile(source, None).unwrap_err();
+
+        assert!(
+            error.contains("implicit argument 'T' of 'cast' was not inferred"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn surplus_implicit_arguments_are_rejected() {
+        let source = r#"
+            use /sys/{Nat};
+            let id(@T : Type, x : T) -> T = x;
+            id(@Nat, @Nat, 1)
+        "#;
+
+        let error = compile(source, None).unwrap_err();
+
+        assert!(
+            error.contains("2 '@' argument(s) but the function has only 1 implicit parameter(s)"),
             "unexpected error: {error}"
         );
     }
@@ -361,7 +524,7 @@ mod tests {
                 | success(value) => value
                 | failure(_) => 0
                 end;
-            f(Result/success(?, ?, 7))
+            f(Result/success(7))
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -369,7 +532,7 @@ mod tests {
 
     #[test]
     fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
-        // `Arr/map(?, ?, (pair) => pair.0, xs)`: the holed type-arg `?A` is the
+        // `Arr/map((pair) => pair.0, xs)`: the inserted implicit `?A` is the
         // lambda's domain *and* `xs`'s element type, but `xs : Arr(?A)` is checked
         // after the lambda. Elaboration must postpone the lambda (its domain is an
         // unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`,
@@ -380,7 +543,7 @@ mod tests {
             use /std/{Arr};
             use /sys/{Nat};
             let first(xs : Arr({ Nat, Nat })) -> Arr(Nat) =
-                Arr/map(?, ?, (pair) => pair.0, xs);
+                Arr/map((pair) => pair.0, xs);
             first
         "#;
 
@@ -389,7 +552,7 @@ mod tests {
 
     #[test]
     fn continuation_postpones_until_the_result_type_pins_its_codomain() {
-        // A `with Parse/bind` block whose tail is `Parse/pure(?, (x, x))` — a *bare
+        // A `with Parse/bind` block whose tail is `Parse/pure((x, x))` — a *bare
         // tuple*, checkable only against a known tuple type. The expected type reaches
         // the tail solely through each bind's result metavar `?B`, which the turnaround
         // solves *after* the continuation is checked. Elaboration must postpone the
@@ -401,9 +564,9 @@ mod tests {
             use /std/{Parse};
             use /sys/{Nat};
             let pair : Parse({ Nat, Nat }) =
-                with Parse/bind(?, ?)
+                with Parse/bind
                     let x = Parse/any_byte!;
-                    Parse/pure(?, (x, x));
+                    Parse/pure((x, x));
             pair
         "#;
 
@@ -414,9 +577,9 @@ mod tests {
         // tuple is rejected — graceful degradation, no new acceptance.
         let unpinned = r#"
             use /std/{Parse};
-            with Parse/bind(?, ?)
+            with Parse/bind
                 let x = Parse/any_byte!;
-                Parse/pure(?, (x, x))
+                Parse/pure((x, x))
         "#;
 
         assert!(typecheck(unpinned).is_err());
@@ -434,7 +597,7 @@ mod tests {
         let source = r#"
             use /std/{Arr};
             use /sys/{Nat};
-            Arr/map({ Nat, Nat }, Nat, (pair) => pair.0, [])
+            Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -579,7 +742,7 @@ mod tests {
     fn prune_keeps_reachable_library_and_transitive_deps() {
         // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
         let names = core_item_names(
-            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/Json, /std/Json/decode, \"1\")",
+            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, \"1\")",
         );
 
         assert!(

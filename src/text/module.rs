@@ -62,6 +62,10 @@ pub struct TopCase {
 pub struct TopUnion {
     pub is_pub: bool,
     pub label: String,
+    /// Union parameters carry no plicity marks: they are *explicit* on the
+    /// type-constructor function (types are written out) and *implicit* on
+    /// every value constructor (the desugar applies the marks), with the
+    /// call-site `@` available to supply one positionally when wanted.
     pub params: Vec<(String, Term)>,
     pub cases: Vec<TopCase>,
 }
