@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Cases, Match, Context, Func, FuncType, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionCtor, UnionType,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, Variant, UnionType,
         Var, convert_prim, infer, reduce,
     },
     std::{
@@ -333,10 +333,10 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_union_ctor(
+    fn compare_variant(
         &mut self,
-        this: UnionCtor,
-        that: UnionCtor,
+        this: Variant,
+        that: Variant,
     ) -> Result<bool, ReduceError> {
         if this.name != that.name
             || this.tag != that.tag
@@ -784,8 +784,8 @@ impl Convert {
                 (Subterm::UnionType(this), Subterm::UnionType(that)) => {
                     self.compare_union_type(this, that)?
                 }
-                (Subterm::UnionCtor(this), Subterm::UnionCtor(that)) => {
-                    self.compare_union_ctor(this, that)?
+                (Subterm::Variant(this), Subterm::Variant(that)) => {
+                    self.compare_variant(this, that)?
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?

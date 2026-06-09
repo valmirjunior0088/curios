@@ -216,7 +216,7 @@ impl Term {
         }))
     }
 
-    pub fn union_ctor<N, I, P, A, J, Q>(name: N, params: I, tag: A, payload: J) -> Self
+    pub fn variant<N, I, P, A, J, Q>(name: N, params: I, tag: A, payload: J) -> Self
     where
         N: Into<String>,
         I: IntoIterator<Item = P>,
@@ -225,7 +225,7 @@ impl Term {
         J: IntoIterator<Item = Q>,
         Q: Into<Term>,
     {
-        Self::from(Subterm::UnionCtor(UnionCtor {
+        Self::from(Subterm::Variant(Variant {
             name: name.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             tag: tag.into(),
@@ -530,7 +530,7 @@ pub struct UnionType {
 /// stored redundantly on purpose, so `convert` stays purely structural (no
 /// context lookups mid-comparison).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UnionCtor {
+pub struct Variant {
     pub name: String,
     pub params: Vec<Term>,
     pub tag: Atom,
@@ -618,7 +618,7 @@ pub enum Subterm {
     Tuple(Tuple),
     Proj(Proj),
     UnionType(UnionType),
-    UnionCtor(UnionCtor),
+    Variant(Variant),
     Match(Match),
     Let(Let),
     Rec(Rec),
@@ -682,7 +682,7 @@ impl Subterm {
             Subterm::UnionType(UnionType { params, .. }) => {
                 params.iter().for_each(|p| p.collect_metavars(ids));
             }
-            Subterm::UnionCtor(UnionCtor {
+            Subterm::Variant(Variant {
                 params, payload, ..
             }) => {
                 params.iter().for_each(|p| p.collect_metavars(ids));
@@ -829,12 +829,12 @@ impl Bound for Subterm {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
             }),
-            Subterm::UnionCtor(UnionCtor {
+            Subterm::Variant(Variant {
                 name,
                 params,
                 tag,
                 payload,
-            }) => Subterm::UnionCtor(UnionCtor {
+            }) => Subterm::Variant(Variant {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 tag: tag.clone(),
@@ -910,7 +910,7 @@ impl Bound for Subterm {
             Subterm::Tuple(Tuple { fields }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
             Subterm::UnionType(UnionType { params, .. }) => max_reach(params),
-            Subterm::UnionCtor(UnionCtor {
+            Subterm::Variant(Variant {
                 params, payload, ..
             }) => max_reach(params).max(max_reach(payload)),
             Subterm::Match(Match {
@@ -1356,8 +1356,8 @@ mod tests {
     }
 
     #[test]
-    fn union_ctor_collects_metavars_and_prints_as_function_call() {
-        let ctor = Term::union_ctor(
+    fn variant_collects_metavars_and_prints_as_function_call() {
+        let ctor = Term::variant(
             "Result",
             [Term::metavar(1)],
             "success",
@@ -1427,7 +1427,7 @@ mod tests {
             3
         );
         assert_eq!(
-            Term::union_ctor(
+            Term::variant(
                 "Result",
                 [Term::var(Var::bound(0))],
                 "success",

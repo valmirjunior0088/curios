@@ -160,11 +160,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     )
                 }
                 Match::Union(um) => {
-                    // A union match lowers to a `UnionMatch` carrying the arm
-                    // binders as scopes. Core elaboration dispatches on the
-                    // scrutinee's type: a primitive inductive types the binders
-                    // from the registry telescopes; a legacy tagged-tuple union
-                    // falls back to the atom-match-plus-projections desugar.
+                    // A union match lowers to a core `Match` with
+                    // `Cases::Union`, carrying the arm binders as scopes; core
+                    // elaboration types the binders from the scrutinee type's
+                    // registry telescopes.
                     let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
 
                     core::Term::union_match(

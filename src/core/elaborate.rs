@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Atom, Cases, Match, Context, Definition, Error, Func, FuncType, ImplicitOrigin,
         Item, Let, Many, Metavar, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, UnionCtor, UnionType, Var,
+        Telescope, Term, Tuple, TupleType, Two, Variant, UnionType, Var,
         check_motive, elaborate_prim, expect, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
@@ -655,12 +655,12 @@ fn elaborate_union_type(
 /// instantiated parameters and the payload are checked through the
 /// constructor's full telescope, whose terminal gives the constructed
 /// `UnionType`.
-fn elaborate_union_ctor(
+fn elaborate_variant(
     context: &mut Context,
-    uc: &UnionCtor,
+    uc: &Variant,
     term: &Term,
 ) -> Result<(Term, Term), Error> {
-    let UnionCtor {
+    let Variant {
         name,
         params,
         tag,
@@ -691,7 +691,7 @@ fn elaborate_union_ctor(
         Ok(())
     })?;
 
-    let rebuilt = Term::union_ctor(
+    let rebuilt = Term::variant(
         name,
         elaborated[..params.len()].iter().cloned(),
         tag.clone(),
@@ -790,7 +790,7 @@ fn elaborate_union_match(
             // the scrutinee in the arm body; the binder types themselves came
             // from the telescope above.
             let ctor_val =
-                Term::union_ctor(name.clone(), params.clone(), tag.clone(), vars.clone());
+                Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
             refine_head(context, head, &ctor_val);
 
             let expected = motive.open(&[&ctor_val]);
@@ -1224,7 +1224,7 @@ pub fn elaborate_module(
 ) -> Result<(Module, Term), Error> {
     // Seed the context's inductive registry before any item is checked: a
     // union's type-constructor and value-constructor definitions reference
-    // their own registry entry (`elaborate_union_type` / `elaborate_union_ctor`).
+    // their own registry entry (`elaborate_union_type` / `elaborate_variant`).
     for (name, inductive) in &module.inductives {
         context.register_inductive(name, inductive.clone());
     }
@@ -1295,7 +1295,7 @@ fn elaborate_subterm(
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::UnionType(ut) => elaborate_union_type(context, ut, term)?,
-        Subterm::UnionCtor(uc) => elaborate_union_ctor(context, uc, term)?,
+        Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
     };
 
     if let Mode::Check(expected) = &mode {

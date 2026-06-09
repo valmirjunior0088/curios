@@ -514,7 +514,7 @@ mod tests {
     fn new_style_union_match_lowers_end_to_end() {
         // The same program with correct arities compiles through to wasm: the
         // `Result` declaration takes the primitive-inductive path (UnionType /
-        // UnionCtor / UnionMatch) and erases back to the legacy tagged-tuple
+        // Variant / UnionMatch) and erases back to the legacy tagged-tuple
         // runtime shape.
         let source = r#"
             use /std/{Result};

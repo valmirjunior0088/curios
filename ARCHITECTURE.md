@@ -130,8 +130,8 @@ The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoa
 The three union lowerings are:
 
 - a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope and per-constructor signatures
-- a **constructor function** → a function whose body is the primitive `UnionCtor` normal form
-- a union **match** → a primitive `UnionMatch` (arm binders typed from the registry telescopes during core elaboration, with static arity checking)
+- a **constructor function** → a function whose body is the primitive `Variant` normal form
+- a union **match** → a primitive `Match` with `Cases::Union` (arm binders typed from the registry telescopes during core elaboration, with static arity checking)
 
 ---
 
@@ -146,10 +146,8 @@ The central `core::Term` enum:
 | `Type`                         | The sort (no universe hierarchy)                             |
 | `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application |
 | `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access   |
-| `BlnMatch`                     | Dependent elimination of `Bln` (false + true cases)          |
-| `NatMatch::Induction`          | Structural induction on `Nat` (zero + pred/IH cases)         |
-| `NatMatch::Dispatch`           | Sparse dispatch on specific `Nat` values                     |
-| `UnionType` / `UnionCtor` / `UnionMatch` | Nominal (inductive) unions: the type, constructor values, and the eliminator |
+| `Match`                        | The unified eliminator: one scrutinee + motive, with `Cases::{Bln, NatInduction, NatDispatch, Union}` |
+| `UnionType` / `Variant`        | Nominal (inductive) unions: the type and constructor values  |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                |
 | `Prim`                         | Built-in values and operations                               |
 | `Var`                          | Variables (free or bound)                                    |

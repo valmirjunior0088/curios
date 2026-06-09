@@ -46,8 +46,8 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         // runtime layout `(tag, payload...)`: field i + 1 is the i-th payload
         // component. `reduce_union_match` relies on this to bind arms by
         // projection (call-by-name). Field 0 (the tag) is never projected at
-        // the term level — dispatch inspects the `UnionCtor` directly.
-        Subterm::UnionCtor(ctor) if (1..=ctor.payload.len()).contains(&index) => {
+        // the term level — dispatch inspects the `Variant` directly.
+        Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
             Ok(Reduce::Continue(
                 ctor.payload
                     .into_iter()
@@ -166,7 +166,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             }
         }
 
-        // Dispatch on the reduced scrutinee — a `UnionCtor` directly, or one
+        // Dispatch on the reduced scrutinee — a `Variant` directly, or one
         // reached through a match-arm refinement (`refine_head` registers
         // `head := ctor_val`, which `reduce` follows). The selected arm's
         // binders are bound to *projections of the original head term*
@@ -178,7 +178,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         Cases::Union(cases) => {
             let head_reduced = reduce(context, head.clone())?;
 
-            if let Subterm::UnionCtor(ctor) = &*head_reduced
+            if let Subterm::Variant(ctor) = &*head_reduced
                 && let Some(scope) = cases.get(&ctor.tag)
             {
                 let projections = (0..scope.arity())
@@ -234,7 +234,7 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
-                // `UnionType` and `UnionCtor` are primitive normal forms, like
+                // `UnionType` and `Variant` are primitive normal forms, like
                 // `Tuple`: their sub-terms are not reduced in WHNF.
                 term => Reduce::Break(term.into()),
             };

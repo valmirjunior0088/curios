@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Cases, Match, Atom, Definition, Flt, Func, FuncType, Item, Let, Module,
         Nat, One, Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
-        TupleType, Two, UnionCtor, UnionType, Var,
+        TupleType, Two, Variant, UnionType, Var,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -582,7 +582,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }
         // Prints as the constructor-function call, instantiated type params
         // hidden — `Result/success(42)`.
-        Subterm::UnionCtor(UnionCtor {
+        Subterm::Variant(Variant {
             name, tag, payload, ..
         }) => {
             if payload.is_empty() {

@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module, Nat,
         One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        UnionCtor, UnionType, Var, erase_prim, expect_prim_head, infer, reduce_with,
+        Variant, UnionType, Var, erase_prim, expect_prim_head, infer, reduce_with,
         refine_head,
     },
     crate::ersd,
@@ -392,12 +392,12 @@ fn erase_proj(
 /// representation: a single allocation `(tag_index, payload...)` with the
 /// payload inlined after the tag. The tag's runtime
 /// index is the constructor's position in sorted (registry key) order.
-fn erase_union_ctor(
+fn erase_variant(
     context: &mut Context,
-    uc: &UnionCtor,
+    uc: &Variant,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let UnionCtor {
+    let Variant {
         name,
         params,
         tag,
@@ -502,7 +502,7 @@ fn erase_union_match(
                 }
 
                 let ctor_val =
-                    Term::union_ctor(name.clone(), params.clone(), tag.clone(), vars.clone());
+                    Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
                 refine_head(context, head, &ctor_val);
 
                 let expected = motive.open(&[&ctor_val]);
@@ -694,7 +694,7 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         | Subterm::FuncType(_)
         | Subterm::TupleType(_)
         | Subterm::UnionType(_) => Ok(ersd::Subterm::Erased.into()),
-        Subterm::UnionCtor(uc) => erase_union_ctor(context, uc, expected),
+        Subterm::Variant(uc) => erase_variant(context, uc, expected),
         Subterm::Func(func) => erase_func(context, func, term, expected),
         Subterm::Apply(apply) => erase_apply(context, apply, term, expected),
         Subterm::Tuple(tuple) => erase_tuple(context, tuple, expected),

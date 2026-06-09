@@ -1,7 +1,7 @@
 use super::{
     Apply, Cases, Match, Arity, Bound, Context, Definition, Error, Func, FuncType, Inductive, Item,
     Let, Metavar, Module, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
-    Tuple, TupleType, UnionCtor, UnionType,
+    Tuple, TupleType, Variant, UnionType,
 };
 
 /// Placeholder label pushed onto the binder stack for an unnamed (constant) scope
@@ -231,12 +231,12 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             params: zonk_terms(context, params, binders)?,
         }),
 
-        Subterm::UnionCtor(UnionCtor {
+        Subterm::Variant(Variant {
             name,
             params,
             tag,
             payload,
-        }) => Subterm::UnionCtor(UnionCtor {
+        }) => Subterm::Variant(Variant {
             name: name.clone(),
             params: zonk_terms(context, params, binders)?,
             tag: tag.clone(),

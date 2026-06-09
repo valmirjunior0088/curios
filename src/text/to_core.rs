@@ -334,11 +334,11 @@ fn process_items(
                         );
 
                         // Constructor body: (params..., _0, ...) => the variant's
-                        // injection, a primitive `UnionCtor` normal form.
+                        // injection, a primitive `Variant` normal form.
                         let args: Vec<core::Term> = (0..k)
                             .map(|i| core::Term::var(core::Var::free(format!("_{i}"))))
                             .collect();
-                        let inject = core::Term::union_ctor(
+                        let inject = core::Term::variant(
                             context.prefixed(&u.label).join(),
                             u.params
                                 .iter()

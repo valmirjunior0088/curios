@@ -28,11 +28,11 @@ fn reduce_apply_beta_reduces() {
 fn reduce_union_match_selects_case_and_projects_payload() {
     let mut context = context();
 
-    // Dispatch inspects the reduced head's `UnionCtor`; the arm's binder is
+    // Dispatch inspects the reduced head's `Variant`; the arm's binder is
     // bound call-by-name to the flat projection `head.1`, which then reduces
     // to the payload component.
     let term: Term = Term::union_match(
-        Term::union_ctor("E", Vec::<Term>::new(), "some", [nat(42)]),
+        Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
         Some("m"),
         Term::prim(Prim::NatType),
         [
