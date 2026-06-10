@@ -50,8 +50,7 @@ const MAX_CALL_DEPTH: usize = 256;
 /// original resume continuation. Indirect calls through a known pure-closure
 /// value are handled symmetrically.
 pub fn evaluate_pure_calls(module: &mut Module) {
-    let pure_funcs = pure_funcs(module);
-    let pure_clsrs = pure_clsrs(module);
+    let (pure_funcs, pure_clsrs) = purity(module);
 
     // Snapshot the callable population so the interpreter can keep reading bodies
     // while the rewriter mutates host tails in place. Cheap (one `clone` per
@@ -155,29 +154,27 @@ fn scan_region(region: &Region, scan: &mut BodyScan) {
     }
 }
 
-/// The set of pure `FuncName`s — every body that has no host code, no
+/// The pure `FuncName`s and `ClsrName`s — every body that has no host code, no
 /// `Indirect` call, no `Direct` call to an impure target, and constructs no
-/// impure closure (transitively).
-fn pure_funcs(module: &Module) -> HashSet<FuncName> {
-    let (impure_funcs, _) = classify(module);
-    module
+/// impure closure (transitively). One [`classify`] fixed point serves both sets.
+fn purity(module: &Module) -> (HashSet<FuncName>, HashSet<ClsrName>) {
+    let (impure_funcs, impure_clsrs) = classify(module);
+
+    let pure_funcs = module
         .funcs()
         .iter()
         .filter(|(name, _)| !impure_funcs.contains(name))
         .map(|(name, _)| name.clone())
-        .collect()
-}
+        .collect();
 
-/// The set of pure `ClsrName`s — same predicate as `pure_funcs`, over closure
-/// bodies.
-fn pure_clsrs(module: &Module) -> HashSet<ClsrName> {
-    let (_, impure_clsrs) = classify(module);
-    module
+    let pure_clsrs = module
         .clsrs()
         .iter()
         .filter(|(name, _)| !impure_clsrs.contains(name))
         .map(|(name, _)| name.clone())
-        .collect()
+        .collect();
+
+    (pure_funcs, pure_clsrs)
 }
 
 /// Compute the impure sets jointly. Funcs and clsrs share one fixed point
@@ -889,7 +886,7 @@ mod tests {
             ),
         );
 
-        let pure = pure_funcs(&module);
+        let (pure, _) = purity(&module);
         assert!(pure.contains(&FuncName::from("f")));
     }
 
@@ -905,7 +902,7 @@ mod tests {
             func(vec![v("p")], "r", region(vec![], io_print(v("p"), "r"))),
         );
 
-        let pure = pure_funcs(&module);
+        let (pure, _) = purity(&module);
         assert!(!pure.contains(&FuncName::from("f")));
     }
 
@@ -927,7 +924,7 @@ mod tests {
             ),
         );
 
-        let pure = pure_funcs(&module);
+        let (pure, _) = purity(&module);
         assert!(pure.contains(&FuncName::from("f")));
     }
 
@@ -952,7 +949,7 @@ mod tests {
             ),
         );
 
-        let pure = pure_funcs(&module);
+        let (pure, _) = purity(&module);
         assert!(!pure.contains(&FuncName::from("f")));
     }
 
@@ -982,7 +979,7 @@ mod tests {
             ),
         );
 
-        let pure = pure_funcs(&module);
+        let (pure, _) = purity(&module);
         assert!(!pure.contains(&FuncName::from("host")));
         assert!(!pure.contains(&FuncName::from("caller")));
     }
@@ -1015,8 +1012,7 @@ mod tests {
             ),
         );
 
-        let pure_funcs = pure_funcs(&module);
-        let pure_clsrs = pure_clsrs(&module);
+        let (pure_funcs, pure_clsrs) = purity(&module);
         assert!(!pure_clsrs.contains(&ClsrName::from("c")));
         assert!(!pure_funcs.contains(&FuncName::from("builder")));
     }
@@ -1500,7 +1496,7 @@ mod tests {
             ),
         );
 
-        let pure = pure_funcs(&module);
+        let (pure, _) = purity(&module);
         assert!(pure.contains(&FuncName::from("even")));
         assert!(pure.contains(&FuncName::from("odd")));
     }
