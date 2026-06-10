@@ -631,8 +631,8 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             // and arm bodies depend on the case kind.
             let keyword = match &cases {
                 Cases::Bln { .. } => "Bln.match ",
-                Cases::NatInduction { .. } => "Nat.fold ",
-                Cases::NatDispatch { .. } => "Nat.match ",
+                Cases::Nat { .. } => "Nat.fold ",
+                Cases::Switch { .. } => "Nat.match ",
                 Cases::Union { .. } => "match ",
             };
 
@@ -656,7 +656,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     pure("\n| true =>\n"),
                     indent(flat([print_term(true_case, depth), pure(";")])),
                 ]),
-                Cases::NatInduction {
+                Cases::Nat {
                     zero_case,
                     succ_case,
                 } => {
@@ -672,7 +672,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         indent(flat([print_term(succ_case, depth), pure(";")])),
                     ])
                 }
-                Cases::NatDispatch { cases, default } => {
+                Cases::Switch { cases, default } => {
                     let case_printers = flat(
                         cases
                             .into_iter()

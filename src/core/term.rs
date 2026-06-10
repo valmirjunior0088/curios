@@ -345,7 +345,7 @@ impl Term {
         }))
     }
 
-    pub fn nat_induction<H, M, ZC, PL, IL, SC>(
+    pub fn nat_match<H, M, ZC, PL, IL, SC>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -371,7 +371,7 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::NatInduction {
+            cases: Cases::Nat {
                 zero_case: zero_case.into(),
                 succ_case: Scope::close(
                     Two,
@@ -382,7 +382,7 @@ impl Term {
         }))
     }
 
-    pub fn nat_dispatch<H, M, I, B, D>(
+    pub fn switch<H, M, I, B, D>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -402,7 +402,7 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::NatDispatch {
+            cases: Cases::Switch {
                 cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
                 default: default.into(),
             },
@@ -642,12 +642,12 @@ pub enum Cases {
     Bln { false_case: Term, true_case: Term },
     /// Structural induction on `Nat`: a zero arm plus a successor arm binding
     /// the predecessor and the induction hypothesis.
-    NatInduction {
+    Nat {
         zero_case: Term,
         succ_case: Scope<Two>,
     },
     /// Sparse dispatch on specific `Nat` values with a default arm.
-    NatDispatch {
+    Switch {
         cases: BTreeMap<u32, Term>,
         default: Term,
     },
@@ -800,14 +800,14 @@ impl Subterm {
                         false_case.collect_metavars(ids);
                         true_case.collect_metavars(ids);
                     }
-                    Cases::NatInduction {
+                    Cases::Nat {
                         zero_case,
                         succ_case,
                     } => {
                         zero_case.collect_metavars(ids);
                         succ_case.body().collect_metavars(ids);
                     }
-                    Cases::NatDispatch { cases, default } => {
+                    Cases::Switch { cases, default } => {
                         cases.values().for_each(|b| b.collect_metavars(ids));
                         default.collect_metavars(ids);
                     }
@@ -962,14 +962,14 @@ impl Bound for Subterm {
                         false_case: visit.visit_subterm(false_case),
                         true_case: visit.visit_subterm(true_case),
                     },
-                    Cases::NatInduction {
+                    Cases::Nat {
                         zero_case,
                         succ_case,
-                    } => Cases::NatInduction {
+                    } => Cases::Nat {
                         zero_case: visit.visit_subterm(zero_case),
                         succ_case: visit.visit_scope(succ_case),
                     },
-                    Cases::NatDispatch { cases, default } => Cases::NatDispatch {
+                    Cases::Switch { cases, default } => Cases::Switch {
                         cases: cases
                             .iter()
                             .map(|(&n, body)| (n, visit.visit_subterm(body)))
@@ -1044,13 +1044,11 @@ impl Bound for Subterm {
                     false_case,
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
-                Cases::NatInduction {
+                Cases::Nat {
                     zero_case,
                     succ_case,
                 } => zero_case.reach().max(succ_case.reach()),
-                Cases::NatDispatch { cases, default } => {
-                    max_reach(cases.values()).max(default.reach())
-                }
+                Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
                 Cases::Union { cases, pattern } => {
                     cases.values().map(|s| s.reach()).max().unwrap_or(0).max(
                         pattern

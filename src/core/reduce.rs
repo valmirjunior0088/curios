@@ -111,7 +111,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             })))),
         },
 
-        Cases::NatInduction {
+        Cases::Nat {
             zero_case,
             succ_case,
         } => match Term::unwrap_or_clone(reduce(context, head)?) {
@@ -126,7 +126,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                 let ih: Term = Subterm::Match(Match {
                     head: pred.clone(),
                     motive: motive.clone(),
-                    cases: Cases::NatInduction {
+                    cases: Cases::Nat {
                         zero_case: zero_case.clone(),
                         succ_case: succ_case.clone(),
                     },
@@ -137,34 +137,32 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head.into(),
                 motive,
-                cases: Cases::NatInduction {
+                cases: Cases::Nat {
                     zero_case,
                     succ_case,
                 },
             })))),
         },
 
-        Cases::NatDispatch { cases, default } => {
-            match Term::unwrap_or_clone(reduce(context, head)?) {
-                Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
+        Cases::Switch { cases, default } => match Term::unwrap_or_clone(reduce(context, head)?) {
+            Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
+                Some(body) => Ok(Reduce::Continue(body.clone())),
+                None => Ok(Reduce::Continue(default.clone())),
+            },
+            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
+                if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
+            {
+                match spine.to_u32().and_then(|k| cases.get(&k)) {
                     Some(body) => Ok(Reduce::Continue(body.clone())),
                     None => Ok(Reduce::Continue(default.clone())),
-                },
-                Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
-                    if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
-                {
-                    match spine.to_u32().and_then(|k| cases.get(&k)) {
-                        Some(body) => Ok(Reduce::Continue(body.clone())),
-                        None => Ok(Reduce::Continue(default.clone())),
-                    }
                 }
-                head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                    head: head.into(),
-                    motive,
-                    cases: Cases::NatDispatch { cases, default },
-                })))),
             }
-        }
+            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                head: head.into(),
+                motive,
+                cases: Cases::Switch { cases, default },
+            })))),
+        },
 
         // Dispatch on the reduced scrutinee — a `Variant` directly, or one
         // reached through a match-arm refinement (`refine_head` registers

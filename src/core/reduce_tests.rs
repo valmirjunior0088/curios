@@ -48,7 +48,7 @@ fn reduce_union_match_selects_case_and_projects_payload() {
 fn reduce_nat_fold_zero_is_not_true() {
     let mut context = context();
 
-    let term: Term = Term::nat_induction(
+    let term: Term = Term::nat_match(
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
         Some("m"),
         Term::prim(Prim::BlnType),

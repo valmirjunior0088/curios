@@ -410,7 +410,7 @@ fn seed_motive(
     Ok(())
 }
 
-fn elaborate_nat_induction(
+fn elaborate_nat_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -460,7 +460,7 @@ fn elaborate_nat_induction(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: Cases::NatInduction {
+        cases: Cases::Nat {
             zero_case: zero_elaborated,
             succ_case: succ_elaborated,
         },
@@ -470,7 +470,7 @@ fn elaborate_nat_induction(
     Ok((rebuilt, motive.open(&[head])))
 }
 
-fn elaborate_nat_dispatch(
+fn elaborate_switch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -507,7 +507,7 @@ fn elaborate_nat_dispatch(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: Cases::NatDispatch {
+        cases: Cases::Switch {
             cases: cases_elaborated,
             default: default_elaborated,
         },
@@ -534,12 +534,12 @@ fn elaborate_match(
             false_case,
             true_case,
         } => elaborate_bln_match(context, head, motive, false_case, true_case, term, mode),
-        Cases::NatInduction {
+        Cases::Nat {
             zero_case,
             succ_case,
-        } => elaborate_nat_induction(context, head, motive, zero_case, succ_case, term, mode),
-        Cases::NatDispatch { cases, default } => {
-            elaborate_nat_dispatch(context, head, motive, cases, default, term, mode)
+        } => elaborate_nat_match(context, head, motive, zero_case, succ_case, term, mode),
+        Cases::Switch { cases, default } => {
+            elaborate_switch(context, head, motive, cases, default, term, mode)
         }
         Cases::Union { cases, pattern } => {
             elaborate_union_match(context, head, motive, cases, pattern.as_ref(), term, mode)

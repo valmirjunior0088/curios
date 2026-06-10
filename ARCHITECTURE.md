@@ -146,7 +146,7 @@ The central `core::Term` enum:
 | `Type`                         | The sort (no universe hierarchy)                             |
 | `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application |
 | `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access   |
-| `Match`                        | The unified eliminator: one scrutinee + motive (`Scope<Many>` — arity 1 except an index-binding union motive), with `Cases::{Bln, NatInduction, NatDispatch, Union}` |
+| `Match`                        | The unified eliminator: one scrutinee + motive (`Scope<Many>` — arity 1 except an index-binding union motive), with `Cases::{Bln, Nat, Switch, Union}` |
 | `UnionType` / `Variant`        | Nominal (inductive) unions: the type and constructor values  |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                |
 | `Prim`                         | Built-in values and operations                               |
@@ -163,7 +163,7 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 | `A`       | Used by                                                                  |
 | --------- | ------------------------------------------------------------------------ |
 | `One`     | `Let` (tail), `Telescope` links                                          |
-| `Two`     | `Cases::NatInduction` (succ_case — binds `pred` and `ih`)                |
+| `Two`     | `Cases::Nat` (succ_case — binds `pred` and `ih`)                         |
 | `Many(n)` | `Func` (parameters), `Rec` (items and tail), `Match` (motive), union arms |
 
 The `Bound` trait describes types that can sit under a `Scope` — its required method is `traverse(&self, visit: &mut Visit<F>) -> Self`, and it provides `shift`, `capture`, `release`, `free_vars` as default methods on top. `Term`, `()`, and `Telescope<B>` all implement `Bound`. A `Visit<F>` struct threads de Bruijn depth and a per-variable rewrite closure (`F: FnMut(depth, &Var) -> Option<Term>`, returning a replacement or `None`) through the whole tree.
@@ -214,7 +214,7 @@ Erasure is performed by `core::erase_module` after elaboration and zonking. The 
 | `Type`, `FuncType`, `TupleType`, `UnionType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
 | Type annotations on binders                            | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`            |
 
-`Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `BlnMatch` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
+`Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `Cases::Bln` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
 
 Type-level positions are replaced with `ersd::Term::Erased` (not dropped), so the tree shape is preserved for later phases.
 

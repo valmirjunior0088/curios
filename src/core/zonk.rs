@@ -272,16 +272,16 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
                     false_case: zonk_term(context, false_case, binders)?,
                     true_case: zonk_term(context, true_case, binders)?,
                 },
-                Cases::NatInduction {
+                Cases::Nat {
                     zero_case,
                     succ_case,
-                } => Cases::NatInduction {
+                } => Cases::Nat {
                     zero_case: zonk_term(context, zero_case, binders)?,
                     succ_case: enter_scope(binders, succ_case, |b, binders| {
                         zonk_term(context, b, binders)
                     })?,
                 },
-                Cases::NatDispatch { cases, default } => Cases::NatDispatch {
+                Cases::Switch { cases, default } => Cases::Switch {
                     cases: cases
                         .iter()
                         .map(|(n, body)| Ok((*n, zonk_term(context, body, binders)?)))

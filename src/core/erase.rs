@@ -197,7 +197,7 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
     .into())
 }
 
-fn erase_nat_induction(
+fn erase_nat_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -250,7 +250,7 @@ fn erase_nat_induction(
     .into())
 }
 
-fn erase_nat_dispatch(
+fn erase_switch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -305,12 +305,12 @@ fn erase_match(
             false_case,
             true_case,
         } => erase_bln_match(context, head, motive, false_case, true_case, term, expected),
-        Cases::NatInduction {
+        Cases::Nat {
             zero_case,
             succ_case,
-        } => erase_nat_induction(context, head, motive, zero_case, succ_case, term, expected),
-        Cases::NatDispatch { cases, default } => {
-            erase_nat_dispatch(context, head, motive, cases, default, term, expected)
+        } => erase_nat_match(context, head, motive, zero_case, succ_case, term, expected),
+        Cases::Switch { cases, default } => {
+            erase_switch(context, head, motive, cases, default, term, expected)
         }
         Cases::Union { cases, pattern } => {
             erase_union_match(context, head, motive, cases, pattern.as_ref(), expected)

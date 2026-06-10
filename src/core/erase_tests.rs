@@ -219,7 +219,7 @@ fn erase_nat_match_dispatches_to_named_case() {
 
     let bool_type = Term::prim(Prim::BlnType);
 
-    let nat_match = Term::nat_dispatch(
+    let nat_match = Term::switch(
         Term::prim(Prim::Nat(Nat::new(5usize))),
         Some("m"),
         Term::prim(Prim::BlnType),

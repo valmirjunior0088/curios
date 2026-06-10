@@ -131,7 +131,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     succ_case,
                 }) => {
                     let (label, body) = self.motive_parts(motive)?;
-                    core::Term::nat_induction(
+                    core::Term::nat_match(
                         self.term(head)?,
                         label,
                         body,
@@ -148,7 +148,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     default,
                 }) => {
                     let (label, motive_body) = self.motive_parts(motive)?;
-                    core::Term::nat_dispatch(
+                    core::Term::switch(
                         self.term(head)?,
                         label,
                         motive_body,
@@ -364,7 +364,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 succ_case,
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
-                core::Term::nat_induction(
+                core::Term::nat_match(
                     self.collect(head, bind, binds)?,
                     label,
                     body,
@@ -381,7 +381,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 default,
             }) => {
                 let (label, motive_body) = self.motive_parts(motive)?;
-                core::Term::nat_dispatch(
+                core::Term::switch(
                     self.collect(head, bind, binds)?,
                     label,
                     motive_body,

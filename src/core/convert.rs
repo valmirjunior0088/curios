@@ -405,11 +405,11 @@ impl Convert {
             }
 
             (
-                Cases::NatInduction {
+                Cases::Nat {
                     zero_case: this_zero,
                     succ_case: this_succ,
                 },
-                Cases::NatInduction {
+                Cases::Nat {
                     zero_case: that_zero,
                     succ_case: that_succ,
                 },
@@ -428,11 +428,11 @@ impl Convert {
             }
 
             (
-                Cases::NatDispatch {
+                Cases::Switch {
                     cases: this_cases,
                     default: this_default,
                 },
-                Cases::NatDispatch {
+                Cases::Switch {
                     cases: that_cases,
                     default: that_default,
                 },
