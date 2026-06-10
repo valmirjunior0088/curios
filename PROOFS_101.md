@@ -1,6 +1,6 @@
 # Proofs 101
 
-This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (unions, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Bin, Eq, Vec, Io};`.
+This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (unions, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Bin, Bln, Eq, Lst, Vec, Io};`.
 
 ## A proof is a test that checks every input
 
@@ -168,4 +168,69 @@ let recast : Vec(Bin, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
 
 `Vec(Bin, Nat/add(1, 0))` and `Vec(Bin, 1)` are the same length, but the checker wants the _types_ to convert — `sym(add_zero(1))` is the evidence, and it erases: at runtime `recast` **is** `single`.
 
-Every snippet in this document is compiled, run, and its two rejections asserted by `examples/crs_proofs.rs`.
+## Payoff: sortedness as a precondition
+
+Rust's `binary_search` documents its precondition — _"if the slice is not sorted, the returned result is unspecified and meaningless"_ — in a doc comment, because the type system cannot see it. In Curios the invariant is a type, assembled from two moves already on the table: a comparison turned into a proposition (the `IsZero` trick aimed at `Nat/lte`) and a recursive type-level function:
+
+```
+let Lte(a : Nat, b : Nat) -> Type =
+    match Nat/lte(a, b) : Type
+    | true => {}
+    | false => Void
+    end;
+
+rec IsSorted(l : Lst(Nat)) -> Type =
+    match l : Type
+    | nil() => {}
+    | cons(x, rest) =>
+        match rest : Type
+        | nil() => {}
+        | cons(y, _) => { Lte(x, y), IsSorted(rest) }
+        end
+    end;
+```
+
+Read `IsSorted(l)` as "every adjacent pair is in order": the empty and one-element lists are trivially sorted (`{}`), and a longer list demands a tuple — head ≤ next, and the rest sorted. Because both functions _compute_, the proposition at a concrete list reduces all the way down to nested units, and the proof writes itself:
+
+```
+let one_two_three : Lst(Nat) = Lst/cons(1, Lst/cons(2, Lst/cons(3, Lst/nil())));
+let sorted_proof : IsSorted(one_two_three) = ((), ((), ()));
+```
+
+Claim the same about an unsorted list and the first tuple slot demands `Lte(3, 1)` — which reduces to `Void`, and nothing fills it:
+
+```
+let three_one : Lst(Nat) = Lst/cons(3, Lst/cons(1, Lst/nil()));
+let unsorted_proof : IsSorted(three_one) = ((), ());
+-- rejected: the first field's expected type is Lte(3, 1), which is Void
+```
+
+Now the precondition moves into a signature. `search` walks a sorted list and gives up as soon as it passes where the target would be — a shortcut that is only correct _because_ the list is sorted, so the function demands the evidence. Its recursive call needs the tail's invariant, which a two-line lemma extracts (matching on `rest` lets `p`'s type reduce in each arm, where its shape is known):
+
+```
+let tail_sorted(@x : Nat, @rest : Lst(Nat), p : IsSorted(Lst/cons(x, rest))) -> IsSorted(rest) =
+    match rest : (r) => IsSorted(r)
+    | nil() => ()
+    | cons(y, tail) => p.1
+    end;
+
+rec search(target : Nat, l : Lst(Nat), sorted : IsSorted(l)) -> Bln =
+    match l : Bln
+    | nil() => false
+    | cons(x, rest) =>
+        match Nat/eql(x, target) : Bln
+        | true => true
+        | false =>
+            match Nat/gt(x, target) : Bln
+            | true => false
+            | false => search(target, rest, tail_sorted(sorted))
+            end
+        end
+    end;
+
+let found : Bln = search(2, one_two_three, sorted_proof);
+```
+
+Calling `search` on `three_one` hits the same wall as `unsorted_proof`: there is no third argument to give. The "unspecified and meaningless" footnote became a compile-time rejection — and, as always, `sorted` erases, so the compiled `search` is just the loop.
+
+Every snippet in this document is compiled, run, and its three rejections asserted by `examples/crs_proofs.rs`.

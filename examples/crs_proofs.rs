@@ -8,11 +8,12 @@ fn main() {
 
     // The complete program from PROOFS_101.md: propositions as types (`Void`,
     // `Not`), the `/std/Eq` kit, induction over `Nat` (`add_zero`), negation
-    // by discriminate-and-transport (`zero_is_not_one`), and `subst` casting
-    // a vector's length index. The proofs all erase — at runtime the program
-    // just prints "ok".
+    // by discriminate-and-transport (`zero_is_not_one`), `subst` casting a
+    // vector's length index, and a sortedness invariant (`IsSorted`) guarding
+    // `search`. The proofs all erase — at runtime the program runs `search`
+    // and prints "ok".
     let source = r#"
-        use /std/{Nat, Bin, Eq, Vec, Io};
+        use /std/{Nat, Bin, Bln, Eq, Lst, Vec, Io};
 
         union Void
         end
@@ -54,7 +55,51 @@ fn main() {
         let single : Vec(Bin, 1) = Vec/cons("hi", Vec/nil());
         let recast : Vec(Bin, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
 
-        Io/print("ok")
+        let Lte(a : Nat, b : Nat) -> Type =
+            match Nat/lte(a, b) : Type
+            | true => {}
+            | false => Void
+            end;
+
+        rec IsSorted(l : Lst(Nat)) -> Type =
+            match l : Type
+            | nil() => {}
+            | cons(x, rest) =>
+                match rest : Type
+                | nil() => {}
+                | cons(y, _) => { Lte(x, y), IsSorted(rest) }
+                end
+            end;
+
+        let one_two_three : Lst(Nat) = Lst/cons(1, Lst/cons(2, Lst/cons(3, Lst/nil())));
+        let sorted_proof : IsSorted(one_two_three) = ((), ((), ()));
+
+        let tail_sorted(@x : Nat, @rest : Lst(Nat), p : IsSorted(Lst/cons(x, rest))) -> IsSorted(rest) =
+            match rest : (r) => IsSorted(r)
+            | nil() => ()
+            | cons(y, tail) => p.1
+            end;
+
+        rec search(target : Nat, l : Lst(Nat), sorted : IsSorted(l)) -> Bln =
+            match l : Bln
+            | nil() => false
+            | cons(x, rest) =>
+                match Nat/eql(x, target) : Bln
+                | true => true
+                | false =>
+                    match Nat/gt(x, target) : Bln
+                    | true => false
+                    | false => search(target, rest, tail_sorted(sorted))
+                    end
+                end
+            end;
+
+        let found : Bln = search(2, one_two_three, sorted_proof);
+
+        match found : {}
+        | true => Io/print("ok")
+        | false => Io/print("unreachable")
+        end
         "#;
 
     let mut last = Instant::now();
@@ -122,6 +167,37 @@ fn main() {
 
     assert_rejected(timeout, unequal_refl, |error| {
         matches!(error, core::Error::TypeMismatch { .. })
+    });
+
+    // Third: claiming `IsSorted` of an unsorted list. The proposition computes
+    // to a tuple whose first field is `Lte(3, 1)` — which is `Void`, not a
+    // tuple type, so the `()` written there is refused.
+    let unsorted_claim = r#"
+        use /std/{Nat, Lst, Void};
+
+        let Lte(a : Nat, b : Nat) -> Type =
+            match Nat/lte(a, b) : Type
+            | true => {}
+            | false => Void
+            end;
+
+        rec IsSorted(l : Lst(Nat)) -> Type =
+            match l : Type
+            | nil() => {}
+            | cons(x, rest) =>
+                match rest : Type
+                | nil() => {}
+                | cons(y, _) => { Lte(x, y), IsSorted(rest) }
+                end
+            end;
+
+        let three_one : Lst(Nat) = Lst/cons(3, Lst/cons(1, Lst/nil()));
+        let unsorted_proof : IsSorted(three_one) = ((), ());
+        unsorted_proof
+        "#;
+
+    assert_rejected(timeout, unsorted_claim, |error| {
+        matches!(error, core::Error::NotATupleType { .. })
     });
 }
 
