@@ -619,19 +619,19 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Arr
 
-| Operation                          | Arity | Description                    | Returns       |
-| ---------------------------------- | ----- | ------------------------------ | ------------- |
-| `/sys/Arr/len(T, a)`               | 2     | Element count                  | `/sys/Nat`    |
-| `/sys/Arr/get(T, a, i)`            | 3     | Element at index `i`           | `T`           |
-| `/sys/Arr/slice(T, a, start, end)` | 4     | Subarray from `start` to `end` | `/sys/Arr(T)` |
-| `/sys/Arr/append(T, a, elem)`      | 3     | Append a single element        | `/sys/Arr(T)` |
-| `/sys/Arr/concat(T, a, b)`         | 3     | Concatenate two arrays         | `/sys/Arr(T)` |
+| Operation                      | Arity | Description                    | Returns       |
+| ------------------------------ | ----- | ------------------------------ | ------------- |
+| `/sys/Arr/len(a)`              | 1     | Element count                  | `/sys/Nat`    |
+| `/sys/Arr/get(a, i)`           | 2     | Element at index `i`           | `T`           |
+| `/sys/Arr/slice(a, start, end)` | 3     | Subarray from `start` to `end` | `/sys/Arr(T)` |
+| `/sys/Arr/append(a, elem)`     | 2     | Append a single element        | `/sys/Arr(T)` |
+| `/sys/Arr/concat(a, b)`        | 2     | Concatenate two arrays         | `/sys/Arr(T)` |
 
 `Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more:
 
 ```
 /sys/Bin/concat(/sys/Bin/concat("hello", ", "), "world")
-/sys/Arr/concat(/sys/Nat, /sys/Arr/concat(/sys/Nat, [1, 2], [3, 4]), [5])
+/sys/Arr/concat(/sys/Arr/concat([1, 2], [3, 4]), [5])
 ```
 
 ### Io
@@ -701,12 +701,12 @@ The `nil` branch has no payload. The `cons` branch holds the head element and a 
 **Construction**
 
 ```
-let empty : List(Nat) = List/nil(Nat);
-let one   : List(Nat) = List/cons(Nat, 1, List/nil(Nat));
+let empty : List(Nat) = List/nil();
+let one   : List(Nat) = List/cons(1, List/nil());
 let three : List(Nat) =
-    List/cons(Nat, 1,
-    List/cons(Nat, 2,
-    List/cons(Nat, 3, List/nil(Nat))));
+    List/cons(1,
+    List/cons(2,
+    List/cons(3, List/nil())));
 ```
 
 **Elimination**

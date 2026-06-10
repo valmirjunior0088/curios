@@ -143,7 +143,7 @@ let area(s : Shape) -> Flt =
 
 In the `circle` branch `radius : Flt`; in the `rectangle` branch `width : Flt` and `height : Flt`. No downcasting, no `unwrap`.
 
-Branches are introduced by `|` and the whole `match` is closed by `end`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `label => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
+Branches are introduced by `|` and the whole `match` is closed by `end`. The motive gives the return type: when all branches share the same type, the motive is just that type; when the return type depends on the scrutinee's value, the motive uses `(label) => type_expr` to bind the scrutinee — `_` discards the name when the expression doesn't use it.
 
 ## Dependent function types
 
@@ -266,4 +266,4 @@ Length-indexed vectors rule out bounds errors. The same mechanism rules out vari
 -- TypeMismatch: %d expects Nat, but "Alice" has type Bin
 ```
 
-The `examples/crs_printf.rs` program runs both cases and asserts the output and the error. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, union values, and arrays to encode and decode a `Json` tree.
+The `examples/crs_printf.rs` program exercises the successful case with host input (`Io/read` + `Str/trim`) and asserts the same output, then checks that the ill-typed `%d` example is rejected. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, union values, and arrays to encode and decode a `Json` tree.

@@ -10,7 +10,7 @@ Consult these on demand when a specific question arises about the language, type
 - **`ARCHITECTURE.md`** — compiler pipeline across seven stages: parsing (`text`), name/module resolution and union desugaring (`text/to_core`), type checking and erasure (`core/`), CPS lowering (`ersd/to_cont`), CPS optimization (`optm/` — monomorphization, devirtualization, DCE), WASM codegen (`cont/to_wasm`), and binary serialization (`wasm/writer.rs`); also the de Bruijn machinery (`core/scope.rs`), module conventions, the embedded `/sys` + `/std` prelude, WASM value representation, the `Loader` trait, the test suite, and a recommended reading order.
 - **`examples/`** — runnable Rust programs that drive the full pipeline end-to-end (parse → typecheck → erase → CPS → WASM → Wasmtime). Two worth knowing:
   - `crs_json_codec.rs` — encodes a `Json` tree to a `Bin`, round-trips through a parser, asserts byte-identical output; exercises the standard library (`std/Json`, `std/Parse`), union values, and arrays.
-  - `crs_printf.rs` — `/std/Fmt/printf("%s is %d")("Alice")(30)`; also demonstrates the type-safety guarantee — passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`.
+  - `crs_printf.rs` — reads `"Alice"` through `/std/Io/read`, trims it, then runs `/std/Fmt/printf("%s is %d")(name)(30)`; also demonstrates the type-safety guarantee — passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`.
 
 # Project management
 

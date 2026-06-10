@@ -51,11 +51,12 @@ curios run hello.crs
 
 The `examples/` directory contains end-to-end Rust programs that drive the full compiler pipeline. Two are particularly instructive:
 
-**Typed format strings** (`examples/crs_printf.rs`) — calls `/std/Fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
+**Typed format strings** (`examples/crs_printf.rs`) — reads a name from `Io/read`, trims it, then calls `/std/Fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
 
 ```
-/std/Fmt/printf("%s is %d")("Alice")(30)
--- output: "Alice is 30"
+let name = Str/trim(Io/read());
+Fmt/printf("%s is %d")(name)(30)
+-- with input "Alice": "Alice is 30"
 ```
 
 Passing the wrong type is a compile-time error, not a runtime failure:

@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~44,100 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
+**Codebase size:** ~46,500 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
 
 ---
 
@@ -17,7 +17,7 @@ Source Text
 text::Entrypoint          surface AST; all variables are plain String labels
     │
     ▼  src/text/to_core/
-core::Module              de Bruijn AST; names/modules resolved, unions desugared to tagged tuples
+core::Module              de Bruijn AST; names/modules resolved, unions registered as inductives
     │
     ▼  src/core/elaborate.rs + src/core/zonk.rs + src/core/erase.rs
 ersd::Module              elaborated, meta-free, type-erased; closures carry explicit capture lists
@@ -42,13 +42,13 @@ The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trai
 
 | Stage                   | Key file(s)                                                            | Lines  |
 | ----------------------- | ---------------------------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                                        | 1,118  |
-| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)                           | ~2,170 |
-| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~2,300 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers                 | ~1,895 |
+| Parsing                 | `text/parse.rs`                                                        | 1,218  |
+| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)                           | ~2,280 |
+| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~3,080 |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers                 | ~1,980 |
 | CPS lowering            | `ersd/to_cont/lowerer.rs`                                              | 903    |
-| CPS optimization        | `optm.rs` + `optm/` (13 files)                                         | ~7,710 |
-| WASM codegen            | `cont/to_wasm/` (9 files)                                              | ~6,140 |
+| CPS optimization        | `optm.rs` + `optm/` (13 files)                                         | ~7,720 |
+| WASM codegen            | `cont/to_wasm/` (9 files)                                              | ~6,040 |
 | Binary serialization    | `wasm/writer.rs`                                                       | 1,716  |
 
 ---
@@ -59,8 +59,8 @@ The stages share a common pattern of a small facade module that re-exports the s
 
 ```
 src/text.rs          facade; re-exports error, names, loader, nat, bin, prim, term, to_core, prelude, module
-src/core.rs          facade; re-exports scope, flt, int, nat, prim, names, term, reduce, context, convert, typing, elaborate, zonk, erase
-src/ersd.rs          facade; re-exports names, prim, term, to_cont
+src/core.rs          facade; re-exports int, flt, nat, prim, names, term, module, inductive, reduce, context, convert, error, typing, invert, elaborate, erase, zonk
+src/ersd.rs          facade; re-exports prim, names, term, module, to_cont
 src/cont.rs          facade; re-exports names, module, to_wasm
 src/optm.rs          facade; re-exports walk, harvest, and each optimization pass
 src/wasm.rs          facade; re-exports names, types, expr, module, writer; exposes parse and print
@@ -117,7 +117,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 **Interface fixed point** (`to_core/interface.rs`): before any body is elaborated, the public export view of every module is computed to a fixed point (`PublicInterface`), resolving `pub use` re-exports (including chains) and rejecting `ExportConflict` / `CyclicReExport`. This separates a module's _interface_ (its exports) from the _lexical_ import effect of `use`, which is applied per-body in source order.
 
-**Module processing** (`to_core.rs`): walks the `TopItem` list, applies `use`/`pub use` scoping, qualifies names under `mod` blocks, and lowers `union` declarations to two parts — a `rec` group of type bindings (each desugared to a tagged-tuple type, wrapped in a `Func` over any type parameters) and one constructor function per variant whose body injects the variant as a tagged tuple. All generated `let`/`rec` items are flattened, **topologically reordered** (`order_flat_items`, a stable Kahn pass) so each declaration's value dependencies precede it, then folded right-to-left into the tail. A genuine value cycle is left unorderable and surfaces downstream as an unbound name — cross-declaration value recursion is unexpressible by construction.
+**Module processing** (`to_core.rs`): walks the `TopItem` list, applies `use`/`pub use` scoping, qualifies names under `mod` blocks, and lowers `union` declarations to two parts — a `rec` group of type bindings (each producing a primitive `UnionType` normal form, wrapped in a `Func` over any type parameters and indices) and one constructor function per variant whose body produces a primitive `Variant` normal form. Each union is also recorded in the inductive registry with its parameter telescope, index telescope, and constructor signatures. All generated `let`/`rec` items are flattened, **topologically reordered** (`order_flat_items`, a stable Kahn pass) so each declaration's value dependencies precede it, then folded right-to-left into the tail. A genuine value cycle is left unorderable and surfaces downstream as an unbound name — cross-declaration value recursion is unexpressible by construction.
 
 The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `NullLoader` (for inline programs and tests, which have no file-backed modules — any `load` is a `ModuleNotFound`). Because the whole module-info table exists before elaboration, cross-module name references may be cyclic (value-level recursion still needs `rec`).
 
@@ -183,7 +183,7 @@ Each `Cons` carries one parameter type and a `Scope<One, …>` that binds exactl
 
 ### Bidirectional elaboration (`elaborate.rs`, `zonk.rs`, `erase.rs`)
 
-`elaborate_module(context, module, mode)` (in `elaborate.rs`) performs bidirectional type checking and returns a rebuilt `core::Module` plus the entrypoint type. `Mode::Infer` synthesizes a type upward; `Mode::Check(expected)` drives a term against a known type. Elaboration is authoritative: it solves omitted lambda domains and surface holes by creating and unifying metavariables, then re-closes binders in the rebuilt term.
+`elaborate_module(context, module, mode)` (in `elaborate.rs`) performs bidirectional type checking and returns a rebuilt `core::Module` plus the entrypoint type. `Mode::Infer` synthesizes a type upward; `Mode::Check(expected)` drives a term against a known type. Elaboration is authoritative: it solves omitted lambda domains and surface holes by creating and unifying metavariables, inserts omitted implicit arguments from `@` plicity marks, validates union constructor and match arities against the inductive registry, then re-closes binders in the rebuilt term.
 
 `zonk_module(context, module)` (in `zonk.rs`) substitutes every solved metavariable into the elaborated module. Any remaining unsolved metavariable is reported as an inference failure at its source span, so downstream passes receive a meta-free module.
 
@@ -440,7 +440,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Testing
 
-427 tests across the library crate, covering every layer:
+449 tests across the library crate, covering every layer:
 
 | Layer            | What is tested                                                                                                                                                                                                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -463,7 +463,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
 2. **`src/text/term.rs`** — the surface AST; variants mirror the language syntax with all variables as plain strings.
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
-4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes a flat `core::Module`: how `Scope::close` turns string labels into de Bruijn indices, how `union` lowers to type + constructor bindings, and where the three union forms are desugared to tagged tuples.
+4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes a flat `core::Module`: how `Scope::close` turns string labels into de Bruijn indices, how `union` lowers to type + constructor bindings, and how the inductive registry records parameters, indices, and constructor signatures for later elaboration and erasure.
 5. **`src/core/scope.rs`** + **`src/core/term.rs`** — the de Bruijn machinery (`Scope<A: Arity, B: Bound>`, the `Bound` trait, `Telescope<B>`) and the typed AST built on it; prerequisite for everything downstream.
 6. **`src/core/elaborate.rs`** + **`src/core/zonk.rs`** + **`src/core/erase.rs`** — bidirectional elaboration, metavariable substitution, and erasure; note where reduction is invoked, how holes are solved, and how the meta-free module is checked while producing `ersd`. Shared helpers live in `src/core/typing.rs`.
 7. **`src/ersd/term.rs`** — what disappears at erasure and what survives into runtime.
