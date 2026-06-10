@@ -336,26 +336,25 @@ impl Env for Frame {
         self.get(name).cloned()
     }
 
-    fn scalar(&self, elem: &Snapshot) -> Option<Data> {
+    fn scalar(&self, elem: &Snapshot) -> Option<Scalar> {
         match elem {
-            Snapshot::Nat(value) => Some(Data::Nat(*value)),
-            Snapshot::Int(value) => Some(Data::Int(*value)),
-            Snapshot::Flt(value) => Some(Data::Flt(*value)),
+            Snapshot::Nat(value) => Some(Scalar::Nat(*value)),
+            Snapshot::Int(value) => Some(Scalar::Int(*value)),
+            Snapshot::Flt(value) => Some(Scalar::Flt(*value)),
             _ => None,
         }
     }
 }
 
-/// A snapshot from a `Data` that owns its content outright — the `Scalar` side
-/// of an [`Evaluated`], which never carries aggregate element names.
-fn owned_snapshot(data: Data) -> Snapshot {
-    match data {
-        Data::Nat(value) => Snapshot::Nat(value),
-        Data::Int(value) => Snapshot::Int(value),
-        Data::Flt(value) => Snapshot::Flt(value),
-        Data::Bin(bytes) => Snapshot::Bin(Rc::new(bytes)),
-        Data::Arr(_) | Data::Tpl(_) | Data::Clsr(..) => {
-            unreachable!("Evaluated::Scalar only carries scalars and bytestrings")
+impl Scalar {
+    /// The snapshot of an owned scalar result — total, since a [`Scalar`]
+    /// cannot carry an aggregate.
+    fn snapshot(self) -> Snapshot {
+        match self {
+            Scalar::Nat(value) => Snapshot::Nat(value),
+            Scalar::Int(value) => Snapshot::Int(value),
+            Scalar::Flt(value) => Snapshot::Flt(value),
+            Scalar::Bin(bytes) => Snapshot::Bin(Rc::new(bytes)),
         }
     }
 }
@@ -514,7 +513,7 @@ impl<'a> Interp<'a> {
             // snapshots, so projections and `Arr` builders work on any element,
             // not just scalars.
             Value::Eval(code) => Some(match simplify(code, frame)? {
-                Evaluated::Scalar(data) => owned_snapshot(data),
+                Evaluated::Scalar(scalar) => scalar.snapshot(),
                 Evaluated::Arr(elems) => Snapshot::Arr(Rc::new(elems)),
                 Evaluated::Elem(snap) => snap,
             }),

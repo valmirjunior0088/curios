@@ -87,7 +87,7 @@ fn fold_region(region: &mut Region, lits: &Lits) -> bool {
             && let Some(replacement) = simplify(code, lits)
         {
             *value = match replacement {
-                Evaluated::Scalar(data) => Value::Pure(data),
+                Evaluated::Scalar(scalar) => Value::Pure(scalar.into()),
                 Evaluated::Arr(elems) => Value::Pure(Data::Arr(elems)),
                 Evaluated::Elem(source) => Value::Alias(source),
             };
