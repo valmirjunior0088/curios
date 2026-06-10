@@ -2,7 +2,7 @@
 //!
 //! Owns the arithmetic, bitwise, conversion, and aggregate-builder semantics that
 //! `cont/to_wasm/code_emitter` lowers — and the value-dependent trap conditions
-//! that go with them. Two passes consume it through the [`Env`] trait:
+//! that go with them. Two passes consume it through the [`EvalEnv`] trait:
 //!
 //! - `constant_folding` evaluates against a region's literal bindings ([`Lits`],
 //!   where an aggregate element is a `ValueName`), replacing every `Value::Eval`
@@ -12,118 +12,14 @@
 //!   is identical between compile-time folding and compile-time interpretation.
 //!
 //! The two consumers represent aggregate *elements* differently, so the
-//! environment carries an associated [`Env::Elem`] type and results come back as
+//! environment carries an associated [`EvalEnv::Elem`] type and results come back as
 //! an [`Evaluated`] over it: an owned scalar, a fresh array of elements, or a
 //! forwarded element. The leaf operations are kept private; the entry points the
 //! two passes need — `literals`, `simplify`, `eval`, `project`, `decide_match` —
 //! are `pub`.
 
-use {super::*, std::collections::HashMap};
 
-/// A region-tree-wide map from value name to its bound literal. Names are unique
-/// per body and scoping is lexical, so a single flat map is sound.
-pub type Lits = HashMap<ValueName, Data>;
-
-/// Collect every literal-bound scalar or aggregate in the region tree.
-pub fn literals(region: &Region) -> Lits {
-    let mut lits = Lits::new();
-    collect_literals(region, &mut lits);
-    lits
-}
-
-fn collect_literals(region: &Region, lits: &mut Lits) {
-    for (name, value) in &region.values {
-        if let Value::Pure(data) = value {
-            lits.insert(name.clone(), data.clone());
-        }
-    }
-
-    for (_, block) in &region.blocks {
-        collect_literals(&block.region, lits);
-    }
-}
-
-/// The environment an evaluation runs against: scalar lookups by operand name,
-/// aggregate lookups yielding the environment's own element representation.
-pub trait Env {
-    /// What an aggregate holds: a `ValueName` when folding against [`Lits`], a
-    /// runtime snapshot when interpreting against a frame.
-    type Elem: Clone;
-
-    fn nat(&self, name: &ValueName) -> Option<u32>;
-    fn int(&self, name: &ValueName) -> Option<i32>;
-    fn flt(&self, name: &ValueName) -> Option<f32>;
-    fn bin(&self, name: &ValueName) -> Option<&[u8]>;
-    fn arr(&self, name: &ValueName) -> Option<&[Self::Elem]>;
-    fn tpl(&self, name: &ValueName) -> Option<&[Self::Elem]>;
-
-    /// The element handle for an operand name — `ArrAppend` appends by reference.
-    fn elem(&self, name: &ValueName) -> Option<Self::Elem>;
-
-    /// The scalar behind an element handle, if it is one (`Nat`/`Int`/`Flt` —
-    /// not `Bin`, which is forwarded by handle to avoid copying). Inlined when a
-    /// projection forwards the element, so it cascades through further folds.
-    fn scalar(&self, elem: &Self::Elem) -> Option<Scalar>;
-}
-
-impl Env for Lits {
-    type Elem = ValueName;
-
-    fn nat(&self, name: &ValueName) -> Option<u32> {
-        match self.get(name)? {
-            Data::Nat(value) => Some(*value),
-            _ => None,
-        }
-    }
-
-    fn int(&self, name: &ValueName) -> Option<i32> {
-        match self.get(name)? {
-            Data::Int(value) => Some(*value),
-            _ => None,
-        }
-    }
-
-    fn flt(&self, name: &ValueName) -> Option<f32> {
-        match self.get(name)? {
-            Data::Flt(value) => Some(*value),
-            _ => None,
-        }
-    }
-
-    fn bin(&self, name: &ValueName) -> Option<&[u8]> {
-        match self.get(name)? {
-            Data::Bin(bytes) => Some(bytes),
-            _ => None,
-        }
-    }
-
-    fn arr(&self, name: &ValueName) -> Option<&[ValueName]> {
-        match self.get(name)? {
-            Data::Arr(elems) => Some(elems),
-            _ => None,
-        }
-    }
-
-    fn tpl(&self, name: &ValueName) -> Option<&[ValueName]> {
-        match self.get(name)? {
-            Data::Tpl(elems) => Some(elems),
-            _ => None,
-        }
-    }
-
-    fn elem(&self, name: &ValueName) -> Option<ValueName> {
-        Some(name.clone())
-    }
-
-    fn scalar(&self, elem: &ValueName) -> Option<Scalar> {
-        match self.get(elem)? {
-            Data::Nat(value) => Some(Scalar::Nat(*value)),
-            Data::Int(value) => Some(Scalar::Int(*value)),
-            Data::Flt(value) => Some(Scalar::Flt(*value)),
-            _ => None,
-        }
-    }
-}
+use super::*;
 
 /// What [`eval_scalar`] produces: a scalar or bytestring, owned outright. A
 /// dedicated carrier rather than [`Data`], whose aggregate variants hold
@@ -200,13 +96,13 @@ pub enum Evaluated<E> {
 
 /// The replacement for an `Eval`, if any: a folded result, or a forwarded
 /// aggregate projection.
-pub fn simplify<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+pub fn simplify<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     eval(code, env).or_else(|| project(code, env))
 }
 
 /// The arm a `Match` takes when its operand is a known `Nat` tag: the matching
 /// case, else the default. A tag with neither is left unfolded.
-pub fn decide_match(tail: &Tail, env: &impl Env) -> Option<JumpTarget> {
+pub fn decide_match(tail: &Tail, env: &impl EvalEnv) -> Option<JumpTarget> {
     let Tail::Match(target) = tail else {
         return None;
     };
@@ -218,7 +114,7 @@ pub fn decide_match(tail: &Tail, env: &impl Env) -> Option<JumpTarget> {
 /// Resolve a projection out of a known aggregate to the element (or length/byte)
 /// it reads. Aggregates are immutable, so this is always sound; out-of-bounds
 /// access would trap, so it is left unfolded.
-pub fn project<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+pub fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {
@@ -244,7 +140,7 @@ pub fn project<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
 /// Forward an aggregate element. A scalar is inlined so it cascades through
 /// further folds; anything else is forwarded as the element itself, leaving the
 /// consumer to alias it (folding) or use it directly (interpretation).
-fn forward<E: Env>(elem: &E::Elem, env: &E) -> Evaluated<E::Elem> {
+fn forward<E: EvalEnv>(elem: &E::Elem, env: &E) -> Evaluated<E::Elem> {
     match env.scalar(elem) {
         Some(data) => Evaluated::Scalar(data),
         None => Evaluated::Elem(elem.clone()),
@@ -256,7 +152,7 @@ fn forward<E: Env>(elem: &E::Elem, env: &E) -> Evaluated<E::Elem> {
 /// [`project`] — or `Io`), or the operation would trap at runtime —
 /// `evaluate_pure_calls` promotes that `None` into an interpreter abort so the
 /// trap remains observable.
-pub fn eval<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+pub fn eval<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {
@@ -286,7 +182,7 @@ pub fn eval<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
 
 /// The scalar- and `Bin`-resulting operations, mirroring `code_emitter`'s
 /// lowering — including 31-bit wrapping and the value-dependent traps.
-fn eval_scalar<E: Env>(code: &Code, env: &E) -> Option<Scalar> {
+fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
     use Code::*;
 
     match code {

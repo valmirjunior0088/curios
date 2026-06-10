@@ -7,11 +7,16 @@
 //!   out the structural recursion or the `Code` operand match itself.
 //! - [`harvest`] — metadata-harvesting functions (uses, references) built on the
 //!   read-only walker.
+//! - [`eval_env`] — the [`EvalEnv`] abstraction evaluation reads operands through,
+//!   and its literal-map instance ([`Lits`]).
+//! - [`scalar_eval`] — the wasm-faithful `Code` evaluator both folding and
+//!   interpretation share, generic over an [`EvalEnv`].
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
 //! - [`evaluate_pure_calls`] — interprets pure-callee direct/indirect calls
 //!   whose arguments are all literal, replacing them with the materialised
-//!   result plus a `Jump` to the original resume.
+//!   result plus a `Jump` to the original resume; its purity classifier and
+//!   interpreter live beside it in [`purity`] and [`interp`].
 //! - [`hoist_literals`] — lifts bytestrings and closed aggregates into shared
 //!   module consts.
 //! - [`specialize_calls`] — clones a function per closure shape passed into a
@@ -36,6 +41,9 @@ pub use walk::*;
 mod harvest;
 pub use harvest::*;
 
+mod eval_env;
+pub use eval_env::*;
+
 mod scalar_eval;
 pub use scalar_eval::*;
 
@@ -44,6 +52,12 @@ pub use copy_propagation::*;
 
 mod constant_folding;
 pub use constant_folding::*;
+
+mod purity;
+pub use purity::*;
+
+mod interp;
+pub use interp::*;
 
 mod evaluate_pure_calls;
 pub use evaluate_pure_calls::*;
