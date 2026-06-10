@@ -168,9 +168,7 @@ fn pick_callee(
     let entry = module.entry();
 
     if let Some((name, _)) = module.funcs().iter().find(|(name, _)| {
-        Some(name) != entry
-            && counts.get(name) == Some(&1)
-            && !is_in_direct_call_cycle(name, graph)
+        Some(name) != entry && counts.get(name) == Some(&1) && !is_in_direct_call_cycle(name, graph)
     }) {
         return Some((name.clone(), Tier::Single));
     }
@@ -297,7 +295,7 @@ fn inline_at(host: &mut Region, callee: &Func, suffix: &str) {
     let mut body = callee.region.clone();
     walk_region_mut(
         &mut body,
-        &mut Freshen {
+        &mut FreshenUses {
             bound: &bound,
             suffix,
         },
@@ -321,41 +319,13 @@ fn inline_at(host: &mut Region, callee: &Func, suffix: &str) {
 }
 
 /// Every value name *bound* in a function body: its parameters plus every
-/// prealloc, value, and block-parameter binder in the tree. A name not in this
-/// set is free — a module const — and must not be renamed.
+/// prealloc, value, and block-parameter binder in the tree (the latter via the
+/// shared [`harvest::bound_values`]). A name not in this set is free — a module
+/// const — and must not be renamed.
 fn bound_values(func: &Func) -> HashSet<ValueName> {
-    let mut bound: HashSet<ValueName> = func.params.iter().map(|p| p.name.clone()).collect();
-    collect_bound(&func.region, &mut bound);
+    let mut bound = harvest::bound_values(&func.region);
+    bound.extend(func.params.iter().map(|p| p.name.clone()));
     bound
-}
-
-fn collect_bound(region: &Region, bound: &mut HashSet<ValueName>) {
-    for (name, _) in &region.preallocs {
-        bound.insert(name.clone());
-    }
-    for (name, _) in &region.values {
-        bound.insert(name.clone());
-    }
-    for (_, block) in &region.blocks {
-        for param in &block.params {
-            bound.insert(param.clone());
-        }
-        collect_bound(&block.region, bound);
-    }
-}
-
-/// Renames value *uses* via the shared mutable walker.
-struct Freshen<'a> {
-    bound: &'a HashSet<ValueName>,
-    suffix: &'a str,
-}
-
-impl SinkMut for Freshen<'_> {
-    fn value_use(&mut self, name: &mut ValueName) {
-        if self.bound.contains(name) {
-            *name = mangle::suffixed_value(name, self.suffix);
-        }
-    }
 }
 
 /// Renames everything the use-walker does not reach: value binders, block names

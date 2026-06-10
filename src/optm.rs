@@ -28,6 +28,8 @@
 //!   multi-site rule dissolves small callees (e.g. the primitive wrappers)
 //!   at every site.
 //! - [`jump_threading`] — merges single-predecessor blocks into their predecessor.
+//! - [`tag_threading`] — threads a jump through the match its known-tag
+//!   argument already decides, specializing the join block per edge.
 //! - [`dead_argument_elimination`] — drops unused function parameters and closure
 //!   captures, finishing type erasure.
 //! - [`dead_code_elimination`] — drops unused bindings and unreachable
@@ -77,6 +79,9 @@ pub use function_inlining::*;
 mod jump_threading;
 pub use jump_threading::*;
 
+mod tag_threading;
+pub use tag_threading::*;
+
 mod dead_argument_elimination;
 pub use dead_argument_elimination::*;
 
@@ -103,17 +108,24 @@ use super::cont::*;
 ///    callee into its one call site; jump threading dissolves the leftover
 ///    continuation blocks; a settle round (copy propagation + folding) collapses
 ///    the literal arguments now sitting next to the primitive ops they feed.
-/// 4. **Partially evaluate pure calls.** The gap inlining cannot close: a
+/// 4. **Thread decided matches.** Inlining left constructor-then-eliminate
+///    chains joined at multi-predecessor match blocks folding cannot decide
+///    (the `Result` re-wrap in every parser combinator): known-tag threading
+///    retargets each deciding edge straight to its arm, then a jump threading
+///    and settle round collapse the spliced clones — exposing the intermediate
+///    constructors as dead.
+/// 5. **Partially evaluate pure calls.** The gap inlining cannot close: a
 ///    statically-pure `Direct` callee with all-literal arguments is interpreted
 ///    at compile time and replaced by its materialised result — dissolving
 ///    recursive callees (the parser combinator in `examples/crs_printf.rs`)
 ///    single-site inlining can never reach. A settle round follows.
-/// 5. **Dissolve residual wrappers.** A second inlining round: the size-bounded
+/// 6. **Dissolve residual wrappers.** A second inlining round: the size-bounded
 ///    multi-site rule splices the tiny primitive wrappers called from several
-///    specialized closures at every site. A settle round follows.
-/// 6. **Hoist constants.** Every bytestring and closed aggregate becomes a
+///    specialized closures at every site. A settle round follows, and a second
+///    known-tag threading round catches the joins the new splices exposed.
+/// 7. **Hoist constants.** Every bytestring and closed aggregate becomes a
 ///    shared module const, built once at startup instead of per execution.
-/// 7. **Final cleanup.** Folding's decided matches and forwarded projections
+/// 8. **Final cleanup.** Folding's decided matches and forwarded projections
 ///    left alias bindings and single-predecessor arms behind: a second jump
 ///    threading and a final copy propagation collapse them, dead-argument
 ///    elimination finishes type erasure, and dead-code elimination — last, so
@@ -136,20 +148,30 @@ pub fn optimize(mut module: Module) -> Module {
     propagate_copies(&mut module);
     fold_constants(&mut module);
 
-    // 4. Partially evaluate pure calls.
+    // 4. Thread decided matches.
+    thread_known_tags(&mut module);
+    thread_jumps(&mut module);
+    propagate_copies(&mut module);
+    fold_constants(&mut module);
+
+    // 5. Partially evaluate pure calls.
     evaluate_pure_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
 
-    // 5. Dissolve residual wrappers.
+    // 6. Dissolve residual wrappers.
     inline_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+    thread_known_tags(&mut module);
+    thread_jumps(&mut module);
+    propagate_copies(&mut module);
+    fold_constants(&mut module);
 
-    // 6. Hoist constants.
+    // 7. Hoist constants.
     hoist_literals(&mut module);
 
-    // 7. Final cleanup.
+    // 8. Final cleanup.
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     eliminate_dead_arguments(&mut module);

@@ -628,7 +628,6 @@ fn rebound_region(base: &Region, mut rebinds: Vec<(ValueName, Value)>) -> Region
     region
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

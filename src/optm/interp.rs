@@ -164,7 +164,12 @@ impl<'a> Interp<'a> {
     /// `Direct`/`Indirect` calls recurse into Rust frames (one per actual
     /// function invocation), so the host stack tracks logical call depth rather
     /// than total tail transitions.
-    pub fn run_body(&mut self, region: &Region, body_resume: &BlockName, mut frame: Frame) -> Outcome {
+    pub fn run_body(
+        &mut self,
+        region: &Region,
+        body_resume: &BlockName,
+        mut frame: Frame,
+    ) -> Outcome {
         if self.call_depth == 0 {
             return Outcome::GaveUp;
         }
@@ -417,4 +422,3 @@ pub fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
         ),
     })
 }
-

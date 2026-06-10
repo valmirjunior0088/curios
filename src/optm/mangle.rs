@@ -64,6 +64,13 @@ pub fn capture_param(param: &ValueName, index: usize) -> ValueName {
     ValueName::from(format!("{param}@cap#{index}"))
 }
 
+/// The freshening suffix for a decided join-block clone
+/// ([`tag_threading`](super::tag_threading)). `index` is a per-body counter,
+/// so two splices in the same body can never collide.
+pub fn thread_suffix(index: usize) -> String {
+    format!("@thread#{index}")
+}
+
 /// An interned module const ([`hoist_literals`](super::hoist_literals)).
 pub fn hoisted_const(kind: &str, index: usize) -> ValueName {
     ValueName::from(format!("lit@{kind}#{index}"))
@@ -74,4 +81,3 @@ pub fn hoisted_const(kind: &str, index: usize) -> ValueName {
 pub fn eval_result(index: usize) -> ValueName {
     ValueName::from(format!("v@eval#{index}"))
 }
-

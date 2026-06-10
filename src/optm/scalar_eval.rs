@@ -18,7 +18,6 @@
 //! two passes need — `literals`, `simplify`, `eval`, `project`, `decide_match` —
 //! are `pub`.
 
-
 use super::*;
 
 /// What [`eval_scalar`] produces: a scalar or bytestring, owned outright. A
@@ -127,12 +126,8 @@ pub fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
             .bin(b)?
             .get(env.nat(i)? as usize)
             .map(|byte| Evaluated::Scalar(Scalar::Nat(*byte as u32))),
-        ArrLen(a) => {
-            fits31u(env.arr(a)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n)))
-        }
-        BinLen(b) => {
-            fits31u(env.bin(b)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n)))
-        }
+        ArrLen(a) => fits31u(env.arr(a)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
+        BinLen(b) => fits31u(env.bin(b)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
         _ => None,
     }
 }

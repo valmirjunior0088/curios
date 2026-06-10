@@ -262,6 +262,25 @@ pub trait SinkMut {
     fn value_use(&mut self, name: &mut ValueName);
 }
 
+/// The shared use-renamer for subtree clones: suffixes every value use whose
+/// name is *bound* in the cloned subtree, leaving free names (enclosing-scope
+/// and module-const references) untouched. Binders and block names are not
+/// use positions, so each cloning pass renames those by hand to its own rules
+/// ([`function_inlining`](super::function_inlining) maps the resume sentinel,
+/// [`tag_threading`](super::tag_threading) gates on the bound block set).
+pub struct FreshenUses<'a> {
+    pub bound: &'a std::collections::HashSet<ValueName>,
+    pub suffix: &'a str,
+}
+
+impl SinkMut for FreshenUses<'_> {
+    fn value_use(&mut self, name: &mut ValueName) {
+        if self.bound.contains(name) {
+            *name = mangle::suffixed_value(name, self.suffix);
+        }
+    }
+}
+
 /// Walk a region and every nested block, offering each operand for rewriting.
 pub fn walk_region_mut(region: &mut Region, sink: &mut impl SinkMut) {
     // Prealloc shells reference a `ClsrName`, never a value use — nothing to rewrite.

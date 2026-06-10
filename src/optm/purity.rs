@@ -169,7 +169,6 @@ fn propagates(
         || scan.clsr_refs.iter().any(|c| impure_clsrs.contains(c))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
