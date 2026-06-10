@@ -283,6 +283,83 @@ enum Snapshot {
 
 type Frame = HashMap<ValueName, Snapshot>;
 
+/// The frame is the interpreter's [`Env`]: scalar lookups read snapshots, and an
+/// aggregate's elements are themselves snapshots — so the shared evaluator's
+/// projections and `Arr` builders work directly on runtime values, with no
+/// projection of the frame into a name-keyed literal map.
+impl Env for Frame {
+    type Elem = Snapshot;
+
+    fn nat(&self, name: &ValueName) -> Option<u32> {
+        match self.get(name)? {
+            Snapshot::Nat(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn int(&self, name: &ValueName) -> Option<i32> {
+        match self.get(name)? {
+            Snapshot::Int(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn flt(&self, name: &ValueName) -> Option<f32> {
+        match self.get(name)? {
+            Snapshot::Flt(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn bin(&self, name: &ValueName) -> Option<&[u8]> {
+        match self.get(name)? {
+            Snapshot::Bin(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    fn arr(&self, name: &ValueName) -> Option<&[Snapshot]> {
+        match self.get(name)? {
+            Snapshot::Arr(elems) => Some(elems),
+            _ => None,
+        }
+    }
+
+    fn tpl(&self, name: &ValueName) -> Option<&[Snapshot]> {
+        match self.get(name)? {
+            Snapshot::Tpl(elems) => Some(elems),
+            _ => None,
+        }
+    }
+
+    fn elem(&self, name: &ValueName) -> Option<Snapshot> {
+        self.get(name).cloned()
+    }
+
+    fn scalar(&self, elem: &Snapshot) -> Option<Data> {
+        match elem {
+            Snapshot::Nat(value) => Some(Data::Nat(*value)),
+            Snapshot::Int(value) => Some(Data::Int(*value)),
+            Snapshot::Flt(value) => Some(Data::Flt(*value)),
+            _ => None,
+        }
+    }
+}
+
+/// A snapshot from a `Data` that owns its content outright — the `Scalar` side
+/// of an [`Evaluated`], which never carries aggregate element names.
+fn owned_snapshot(data: Data) -> Snapshot {
+    match data {
+        Data::Nat(value) => Snapshot::Nat(value),
+        Data::Int(value) => Snapshot::Int(value),
+        Data::Flt(value) => Snapshot::Flt(value),
+        Data::Bin(bytes) => Snapshot::Bin(Rc::new(bytes)),
+        Data::Arr(_) | Data::Tpl(_) | Data::Clsr(..) => {
+            unreachable!("Evaluated::Scalar only carries scalars and bytestrings")
+        }
+    }
+}
+
 enum Outcome {
     Returned(Snapshot),
     GaveUp,
@@ -431,17 +508,16 @@ impl<'a> Interp<'a> {
         match value {
             Value::Alias(source) => frame.get(source).cloned(),
             Value::Pure(data) => materialise_data(data, frame),
-            Value::Eval(code) => {
-                // Delegate to `scalar_eval` — the same wasm-faithful arithmetic
-                // and aggregate logic the constant folder uses, so traps line up.
-                let lits = lits_from_frame(frame);
-                let replacement = simplify(code, &lits)?;
-                match replacement {
-                    Value::Pure(data) => materialise_data(&data, frame),
-                    Value::Alias(source) => frame.get(&source).cloned(),
-                    Value::Eval(_) => None,
-                }
-            }
+            // Delegate to `scalar_eval` — the same wasm-faithful arithmetic and
+            // aggregate logic the constant folder uses, so traps line up. The
+            // frame is the environment directly: an aggregate's elements are
+            // snapshots, so projections and `Arr` builders work on any element,
+            // not just scalars.
+            Value::Eval(code) => Some(match simplify(code, frame)? {
+                Evaluated::Scalar(data) => owned_snapshot(data),
+                Evaluated::Arr(elems) => Snapshot::Arr(Rc::new(elems)),
+                Evaluated::Elem(snap) => snap,
+            }),
         }
     }
 
@@ -564,69 +640,6 @@ fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
             c.clone(),
             Rc::new(RefCell::new(resolve_names(captures, frame)?)),
         ),
-    })
-}
-
-/// Project the frame down to a `scalar_eval::Lits` (scalars + `Bin` + aggregate
-/// element-name lists), so `simplify` can reuse its existing literal-lookup
-/// machinery without learning about `Snapshot`. Closures are deliberately
-/// omitted — no `Code` operation reads a closure's structure.
-fn lits_from_frame(frame: &Frame) -> Lits {
-    let mut lits = Lits::new();
-    for (name, snap) in frame {
-        match snap {
-            Snapshot::Nat(n) => {
-                lits.insert(name.clone(), Data::Nat(*n));
-            }
-            Snapshot::Int(i) => {
-                lits.insert(name.clone(), Data::Int(*i));
-            }
-            Snapshot::Flt(f) => {
-                lits.insert(name.clone(), Data::Flt(*f));
-            }
-            Snapshot::Bin(bytes) => {
-                lits.insert(name.clone(), Data::Bin((**bytes).clone()));
-            }
-            Snapshot::Tpl(elems) => {
-                let elem_names = elt_lits(name, elems, &mut lits);
-                lits.insert(name.clone(), Data::Tpl(elem_names));
-            }
-            Snapshot::Arr(elems) => {
-                let elem_names = elt_lits(name, elems, &mut lits);
-                lits.insert(name.clone(), Data::Arr(elem_names));
-            }
-            Snapshot::Clsr(_, _) => {}
-        }
-    }
-    lits
-}
-
-/// Synthetic names for an aggregate's elements (unique because the owning
-/// binding's name is unique within the frame), recording a scalar/Bin entry for
-/// each element that has one. Non-scalar elements are left out and `simplify`
-/// bails when it can't find them, which is the right semantics — a folded
-/// `TplGet` over a tuple of non-literals stays unfolded.
-fn elt_lits(name: &ValueName, elems: &[Snapshot], lits: &mut Lits) -> Vec<ValueName> {
-    elems
-        .iter()
-        .enumerate()
-        .map(|(i, elem)| {
-            let elem_name = mangle::frame_elt(name, i);
-            if let Some(d) = scalar_data(elem) {
-                lits.insert(elem_name.clone(), d);
-            }
-            elem_name
-        })
-        .collect()
-}
-
-fn scalar_data(snap: &Snapshot) -> Option<Data> {
-    Some(match snap {
-        Snapshot::Nat(n) => Data::Nat(*n),
-        Snapshot::Int(i) => Data::Int(*i),
-        Snapshot::Flt(f) => Data::Flt(*f),
-        Snapshot::Bin(bytes) => Data::Bin((**bytes).clone()),
-        _ => return None,
     })
 }
 
@@ -1233,6 +1246,70 @@ mod tests {
         // Two fresh scalar bindings (3 and 4) for the tuple's elements.
         assert!(find_pure(&main.values, &Data::Nat(3)));
         assert!(find_pure(&main.values, &Data::Nat(4)));
+        assert!(matches!(&main.tail, Tail::Jump(_)));
+    }
+
+    #[test]
+    fn evaluates_projection_of_a_non_scalar_element() {
+        // f(a, b) nests a tuple inside a tuple, projects the *aggregate* element
+        // back out, then projects a scalar from it. The frame-as-Env evaluator
+        // forwards the inner tuple as a snapshot; the old Lits projection of the
+        // frame could only forward scalars and gave up here.
+        let mut module = Module::new();
+        module.add_func(
+            FuncName::from("main"),
+            Func {
+                params: vec![],
+                resume: b("rm"),
+                region: Region {
+                    preallocs: vec![],
+                    values: vec![
+                        (v("x"), Value::Pure(Data::Nat(20))),
+                        (v("y"), Value::Pure(Data::Nat(22))),
+                    ],
+                    blocks: vec![(
+                        b("cont"),
+                        Block {
+                            params: vec![v("res")],
+                            region: region(vec![], jump("rm", vec![v("res")])),
+                        },
+                    )],
+                    tail: Tail::Call(CallTarget::Direct {
+                        target: FuncName::from("f"),
+                        params: vec![v("x"), v("y")],
+                        resume: b("cont"),
+                    }),
+                },
+            },
+        );
+        module.set_entry(FuncName::from("main"));
+        module.add_func(
+            FuncName::from("f"),
+            func(
+                vec![v("a"), v("b")],
+                "rf",
+                region(
+                    vec![
+                        (v("inner"), Value::Pure(Data::Tpl(vec![v("a"), v("b")]))),
+                        (v("outer"), Value::Pure(Data::Tpl(vec![v("inner")]))),
+                        (v("proj"), Value::Eval(Code::TplGet(v("outer"), 0))),
+                        (v("first"), Value::Eval(Code::TplGet(v("proj"), 0))),
+                        (v("second"), Value::Eval(Code::TplGet(v("proj"), 1))),
+                        (v("sum"), Value::Eval(Code::NatAdd(v("first"), v("second")))),
+                    ],
+                    jump("rf", vec![v("sum")]),
+                ),
+            ),
+        );
+
+        evaluate_pure_calls(&mut module);
+
+        let main = main_region(&module);
+        assert!(
+            find_pure(&main.values, &Data::Nat(42)),
+            "expected Pure(Nat(42)) in main, got {:?}",
+            main.values,
+        );
         assert!(matches!(&main.tail, Tail::Jump(_)));
     }
 

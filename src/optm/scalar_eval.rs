@@ -1,18 +1,22 @@
-//! Wasm-faithful evaluator for `Code` operations against a literal environment.
+//! Wasm-faithful evaluator for `Code` operations against an abstract environment.
 //!
 //! Owns the arithmetic, bitwise, conversion, and aggregate-builder semantics that
 //! `cont/to_wasm/code_emitter` lowers — and the value-dependent trap conditions
-//! that go with them. Two passes consume it:
+//! that go with them. Two passes consume it through the [`Env`] trait:
 //!
-//! - `constant_folding` runs it across each region, replacing every `Value::Eval`
-//!   whose operands are literal with its result (or with the projected element of
-//!   a known aggregate).
-//! - `evaluate_pure_calls` runs the same primitives inside its interpreter, so the
-//!   trap and host-boundary set is identical between compile-time folding and
-//!   compile-time interpretation.
+//! - `constant_folding` evaluates against a region's literal bindings ([`Lits`],
+//!   where an aggregate element is a `ValueName`), replacing every `Value::Eval`
+//!   whose operands are literal with its result.
+//! - `evaluate_pure_calls` evaluates against its interpreter frame (where an
+//!   aggregate element is a runtime snapshot), so the trap and host-boundary set
+//!   is identical between compile-time folding and compile-time interpretation.
 //!
-//! The leaf operations are kept private; the entry points the two passes need —
-//! `literals`, `simplify`, `eval`, `project`, `decide_match` — are `pub`.
+//! The two consumers represent aggregate *elements* differently, so the
+//! environment carries an associated [`Env::Elem`] type and results come back as
+//! an [`Evaluated`] over it: an owned scalar, a fresh array of elements, or a
+//! forwarded element. The leaf operations are kept private; the entry points the
+//! two passes need — `literals`, `simplify`, `eval`, `project`, `decide_match` —
+//! are `pub`.
 
 use {super::*, std::collections::HashMap};
 
@@ -39,246 +43,327 @@ fn collect_literals(region: &Region, lits: &mut Lits) {
     }
 }
 
-/// The replacement for an `Eval`, if any: a folded scalar literal, or a forwarded
-/// aggregate projection.
-pub fn simplify(code: &Code, lits: &Lits) -> Option<Value> {
-    if let Some(data) = eval(code, lits) {
-        return Some(Value::Pure(data));
+/// The environment an evaluation runs against: scalar lookups by operand name,
+/// aggregate lookups yielding the environment's own element representation.
+pub trait Env {
+    /// What an aggregate holds: a `ValueName` when folding against [`Lits`], a
+    /// runtime snapshot when interpreting against a frame.
+    type Elem: Clone;
+
+    fn nat(&self, name: &ValueName) -> Option<u32>;
+    fn int(&self, name: &ValueName) -> Option<i32>;
+    fn flt(&self, name: &ValueName) -> Option<f32>;
+    fn bin(&self, name: &ValueName) -> Option<&[u8]>;
+    fn arr(&self, name: &ValueName) -> Option<&[Self::Elem]>;
+    fn tpl(&self, name: &ValueName) -> Option<&[Self::Elem]>;
+
+    /// The element handle for an operand name — `ArrAppend` appends by reference.
+    fn elem(&self, name: &ValueName) -> Option<Self::Elem>;
+
+    /// The scalar behind an element handle, if it is one (`Nat`/`Int`/`Flt` —
+    /// not `Bin`, which is forwarded by handle to avoid copying). Inlined when a
+    /// projection forwards the element, so it cascades through further folds.
+    fn scalar(&self, elem: &Self::Elem) -> Option<Data>;
+}
+
+impl Env for Lits {
+    type Elem = ValueName;
+
+    fn nat(&self, name: &ValueName) -> Option<u32> {
+        match self.get(name)? {
+            Data::Nat(value) => Some(*value),
+            _ => None,
+        }
     }
 
-    project(code, lits)
+    fn int(&self, name: &ValueName) -> Option<i32> {
+        match self.get(name)? {
+            Data::Int(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn flt(&self, name: &ValueName) -> Option<f32> {
+        match self.get(name)? {
+            Data::Flt(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn bin(&self, name: &ValueName) -> Option<&[u8]> {
+        match self.get(name)? {
+            Data::Bin(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    fn arr(&self, name: &ValueName) -> Option<&[ValueName]> {
+        match self.get(name)? {
+            Data::Arr(elems) => Some(elems),
+            _ => None,
+        }
+    }
+
+    fn tpl(&self, name: &ValueName) -> Option<&[ValueName]> {
+        match self.get(name)? {
+            Data::Tpl(elems) => Some(elems),
+            _ => None,
+        }
+    }
+
+    fn elem(&self, name: &ValueName) -> Option<ValueName> {
+        Some(name.clone())
+    }
+
+    fn scalar(&self, elem: &ValueName) -> Option<Data> {
+        match self.get(elem)? {
+            data @ (Data::Nat(_) | Data::Int(_) | Data::Flt(_)) => Some(data.clone()),
+            _ => None,
+        }
+    }
+}
+
+/// The result of evaluating or projecting a `Code` operation.
+pub enum Evaluated<E> {
+    /// A scalar or bytestring, owned outright.
+    Scalar(Data),
+    /// A fresh array of environment elements (`Arr` concat/slice/append).
+    Arr(Vec<E>),
+    /// A forwarded element — a projection out of a known aggregate whose target
+    /// is not an inlinable scalar.
+    Elem(E),
+}
+
+/// The replacement for an `Eval`, if any: a folded result, or a forwarded
+/// aggregate projection.
+pub fn simplify<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+    eval(code, env).or_else(|| project(code, env))
 }
 
 /// The arm a `Match` takes when its operand is a known `Nat` tag: the matching
 /// case, else the default. A tag with neither is left unfolded.
-pub fn decide_match(tail: &Tail, lits: &Lits) -> Option<JumpTarget> {
+pub fn decide_match(tail: &Tail, env: &impl Env) -> Option<JumpTarget> {
     let Tail::Match(target) = tail else {
         return None;
     };
-    let Data::Nat(tag) = lits.get(&target.operand)? else {
-        return None;
-    };
+    let tag = env.nat(&target.operand)?;
 
-    target.cases.get(tag).or(target.default.as_ref()).cloned()
+    target.cases.get(&tag).or(target.default.as_ref()).cloned()
 }
 
 /// Resolve a projection out of a known aggregate to the element (or length/byte)
 /// it reads. Aggregates are immutable, so this is always sound; out-of-bounds
 /// access would trap, so it is left unfolded.
-pub fn project(code: &Code, lits: &Lits) -> Option<Value> {
+pub fn project<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {
-        TplGet(t, index) => tpl(lits, t)?.get(*index).map(|elem| forward(elem, lits)),
-        ArrGet(a, i) => arr(lits, a)?
-            .get(nat(lits, i)? as usize)
-            .map(|elem| forward(elem, lits)),
-        BinGet(b, i) => bin(lits, b)?
-            .get(nat(lits, i)? as usize)
-            .map(|byte| Value::Pure(Data::Nat(*byte as u32))),
-        ArrLen(a) => fits31u(arr(lits, a)?.len() as u64).map(|n| Value::Pure(Data::Nat(n))),
-        BinLen(b) => fits31u(bin(lits, b)?.len() as u64).map(|n| Value::Pure(Data::Nat(n))),
+        TplGet(t, index) => env.tpl(t)?.get(*index).map(|elem| forward(elem, env)),
+        ArrGet(a, i) => env
+            .arr(a)?
+            .get(env.nat(i)? as usize)
+            .map(|elem| forward(elem, env)),
+        BinGet(b, i) => env
+            .bin(b)?
+            .get(env.nat(i)? as usize)
+            .map(|byte| Evaluated::Scalar(Data::Nat(*byte as u32))),
+        ArrLen(a) => {
+            fits31u(env.arr(a)?.len() as u64).map(|n| Evaluated::Scalar(Data::Nat(n)))
+        }
+        BinLen(b) => {
+            fits31u(env.bin(b)?.len() as u64).map(|n| Evaluated::Scalar(Data::Nat(n)))
+        }
         _ => None,
     }
 }
 
-/// Forward an aggregate element. A scalar literal is inlined as a `Pure` so it
-/// cascades through further folds; anything else is forwarded by name, leaving
-/// copy propagation and dead-code elimination to collapse the alias and reclaim
-/// the now-dead aggregate.
-fn forward(elem: &ValueName, lits: &Lits) -> Value {
-    match lits.get(elem) {
-        Some(data @ (Data::Nat(_) | Data::Int(_) | Data::Flt(_))) => Value::Pure(data.clone()),
-        _ => Value::Alias(elem.clone()),
+/// Forward an aggregate element. A scalar is inlined so it cascades through
+/// further folds; anything else is forwarded as the element itself, leaving the
+/// consumer to alias it (folding) or use it directly (interpretation).
+fn forward<E: Env>(elem: &E::Elem, env: &E) -> Evaluated<E::Elem> {
+    match env.scalar(elem) {
+        Some(data) => Evaluated::Scalar(data),
+        None => Evaluated::Elem(elem.clone()),
     }
 }
 
-fn tpl<'a>(lits: &'a Lits, name: &ValueName) -> Option<&'a [ValueName]> {
-    match lits.get(name)? {
-        Data::Tpl(elems) => Some(elems),
-        _ => None,
+/// Evaluate a `Code` operation against the environment. Returns `None` when an
+/// operand is non-literal, the operation is unsupported (projection — handled by
+/// [`project`] — or `Io`), or the operation would trap at runtime —
+/// `evaluate_pure_calls` promotes that `None` into an interpreter abort so the
+/// trap remains observable.
+pub fn eval<E: Env>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+    use Code::*;
+
+    match code {
+        // `Arr` builders — total given in-bounds literal indices; they yield a
+        // fresh array of elements, so they cascade through further projection
+        // and concatenation.
+        ArrConcat(operands) => {
+            let mut elems = Vec::new();
+            for name in operands {
+                elems.extend_from_slice(env.arr(name)?);
+            }
+            Some(Evaluated::Arr(elems))
+        }
+        ArrSlice(a, start, end) => {
+            arr_slice(env.arr(a)?, env.nat(start)?, env.nat(end)?).map(Evaluated::Arr)
+        }
+        ArrAppend(a, elem) => {
+            let mut elems = env.arr(a)?.to_vec();
+            elems.push(env.elem(elem)?);
+            Some(Evaluated::Arr(elems))
+        }
+
+        // Everything else yields an owned scalar or bytestring.
+        _ => eval_scalar(code, env).map(Evaluated::Scalar),
     }
 }
 
-fn arr<'a>(lits: &'a Lits, name: &ValueName) -> Option<&'a [ValueName]> {
-    match lits.get(name)? {
-        Data::Arr(elems) => Some(elems),
-        _ => None,
-    }
-}
-
-fn bin<'a>(lits: &'a Lits, name: &ValueName) -> Option<&'a [u8]> {
-    match lits.get(name)? {
-        Data::Bin(bytes) => Some(bytes),
-        _ => None,
-    }
-}
-
-/// Evaluate a `Code` operation against the literal environment. Returns `None`
-/// when an operand is non-literal, the operation is unsupported (projection,
-/// `*ToStr`, `Io`), or the operation would trap at runtime — `evaluate_pure_calls`
-/// promotes that `None` into an interpreter abort so the trap remains observable.
-pub fn eval(code: &Code, lits: &Lits) -> Option<Data> {
+/// The scalar- and `Bin`-resulting operations, mirroring `code_emitter`'s
+/// lowering — including 31-bit wrapping and the value-dependent traps.
+fn eval_scalar<E: Env>(code: &Code, env: &E) -> Option<Data> {
     use Code::*;
 
     match code {
         // Nat — 31-bit unsigned.
-        NatAdd(a, b) => fits31u(nat(lits, a)? as u64 + nat(lits, b)? as u64).map(Data::Nat),
-        NatSub(a, b) => Some(Data::Nat(nat(lits, a)?.saturating_sub(nat(lits, b)?))),
-        NatMul(a, b) => fits31u(nat(lits, a)? as u64 * nat(lits, b)? as u64).map(Data::Nat),
-        NatDiv(a, b) => Some(Data::Nat(nat(lits, a)? / (nonzero_u(nat(lits, b)?)?))),
-        NatRem(a, b) => Some(Data::Nat(nat(lits, a)? % (nonzero_u(nat(lits, b)?)?))),
-        NatAnd(a, b) => Some(Data::Nat(nat(lits, a)? & nat(lits, b)?)),
-        NatOr(a, b) => Some(Data::Nat(nat(lits, a)? | nat(lits, b)?)),
-        NatXor(a, b) => Some(Data::Nat(nat(lits, a)? ^ nat(lits, b)?)),
-        NatEql(a, b) => Some(bln(nat(lits, a)? == nat(lits, b)?)),
-        NatNeq(a, b) => Some(bln(nat(lits, a)? != nat(lits, b)?)),
-        NatLt(a, b) => Some(bln(nat(lits, a)? < nat(lits, b)?)),
-        NatGt(a, b) => Some(bln(nat(lits, a)? > nat(lits, b)?)),
-        NatLte(a, b) => Some(bln(nat(lits, a)? <= nat(lits, b)?)),
-        NatGte(a, b) => Some(bln(nat(lits, a)? >= nat(lits, b)?)),
+        NatAdd(a, b) => fits31u(env.nat(a)? as u64 + env.nat(b)? as u64).map(Data::Nat),
+        NatSub(a, b) => Some(Data::Nat(env.nat(a)?.saturating_sub(env.nat(b)?))),
+        NatMul(a, b) => fits31u(env.nat(a)? as u64 * env.nat(b)? as u64).map(Data::Nat),
+        NatDiv(a, b) => Some(Data::Nat(env.nat(a)? / (nonzero_u(env.nat(b)?)?))),
+        NatRem(a, b) => Some(Data::Nat(env.nat(a)? % (nonzero_u(env.nat(b)?)?))),
+        NatAnd(a, b) => Some(Data::Nat(env.nat(a)? & env.nat(b)?)),
+        NatOr(a, b) => Some(Data::Nat(env.nat(a)? | env.nat(b)?)),
+        NatXor(a, b) => Some(Data::Nat(env.nat(a)? ^ env.nat(b)?)),
+        NatEql(a, b) => Some(bln(env.nat(a)? == env.nat(b)?)),
+        NatNeq(a, b) => Some(bln(env.nat(a)? != env.nat(b)?)),
+        NatLt(a, b) => Some(bln(env.nat(a)? < env.nat(b)?)),
+        NatGt(a, b) => Some(bln(env.nat(a)? > env.nat(b)?)),
+        NatLte(a, b) => Some(bln(env.nat(a)? <= env.nat(b)?)),
+        NatGte(a, b) => Some(bln(env.nat(a)? >= env.nat(b)?)),
 
         // Int — 31-bit signed.
-        IntAdd(a, b) => fits31s(int(lits, a)? as i64 + int(lits, b)? as i64).map(Data::Int),
-        IntSub(a, b) => fits31s(int(lits, a)? as i64 - int(lits, b)? as i64).map(Data::Int),
-        IntMul(a, b) => fits31s(int(lits, a)? as i64 * int(lits, b)? as i64).map(Data::Int),
+        IntAdd(a, b) => fits31s(env.int(a)? as i64 + env.int(b)? as i64).map(Data::Int),
+        IntSub(a, b) => fits31s(env.int(a)? as i64 - env.int(b)? as i64).map(Data::Int),
+        IntMul(a, b) => fits31s(env.int(a)? as i64 * env.int(b)? as i64).map(Data::Int),
         IntDiv(a, b) => {
-            fits31s(int(lits, a)? as i64 / (nonzero_s(int(lits, b)?)?) as i64).map(Data::Int)
+            fits31s(env.int(a)? as i64 / (nonzero_s(env.int(b)?)?) as i64).map(Data::Int)
         }
-        IntRem(a, b) => Some(Data::Int(int(lits, a)? % (nonzero_s(int(lits, b)?)?))),
-        IntEql(a, b) => Some(bln(int(lits, a)? == int(lits, b)?)),
-        IntNeq(a, b) => Some(bln(int(lits, a)? != int(lits, b)?)),
-        IntLt(a, b) => Some(bln(int(lits, a)? < int(lits, b)?)),
-        IntGt(a, b) => Some(bln(int(lits, a)? > int(lits, b)?)),
-        IntLte(a, b) => Some(bln(int(lits, a)? <= int(lits, b)?)),
-        IntGte(a, b) => Some(bln(int(lits, a)? >= int(lits, b)?)),
+        IntRem(a, b) => Some(Data::Int(env.int(a)? % (nonzero_s(env.int(b)?)?))),
+        IntEql(a, b) => Some(bln(env.int(a)? == env.int(b)?)),
+        IntNeq(a, b) => Some(bln(env.int(a)? != env.int(b)?)),
+        IntLt(a, b) => Some(bln(env.int(a)? < env.int(b)?)),
+        IntGt(a, b) => Some(bln(env.int(a)? > env.int(b)?)),
+        IntLte(a, b) => Some(bln(env.int(a)? <= env.int(b)?)),
+        IntGte(a, b) => Some(bln(env.int(a)? >= env.int(b)?)),
 
         // Flt — f32, total.
-        FltAdd(a, b) => Some(Data::Flt(flt(lits, a)? + flt(lits, b)?)),
-        FltSub(a, b) => Some(Data::Flt(flt(lits, a)? - flt(lits, b)?)),
-        FltMul(a, b) => Some(Data::Flt(flt(lits, a)? * flt(lits, b)?)),
-        FltDiv(a, b) => Some(Data::Flt(flt(lits, a)? / flt(lits, b)?)),
-        FltNeg(a) => Some(Data::Flt(-flt(lits, a)?)),
-        FltAbs(a) => Some(Data::Flt(flt(lits, a)?.abs())),
-        FltSqrt(a) => Some(Data::Flt(flt(lits, a)?.sqrt())),
-        FltFloor(a) => Some(Data::Flt(flt(lits, a)?.floor())),
-        FltCeil(a) => Some(Data::Flt(flt(lits, a)?.ceil())),
-        FltTrunc(a) => Some(Data::Flt(flt(lits, a)?.trunc())),
-        FltCopysign(a, b) => Some(Data::Flt(flt(lits, a)?.copysign(flt(lits, b)?))),
-        FltEql(a, b) => Some(bln(flt(lits, a)? == flt(lits, b)?)),
-        FltNeq(a, b) => Some(bln(flt(lits, a)? != flt(lits, b)?)),
-        FltLt(a, b) => Some(bln(flt(lits, a)? < flt(lits, b)?)),
-        FltGt(a, b) => Some(bln(flt(lits, a)? > flt(lits, b)?)),
-        FltLte(a, b) => Some(bln(flt(lits, a)? <= flt(lits, b)?)),
-        FltGte(a, b) => Some(bln(flt(lits, a)? >= flt(lits, b)?)),
+        FltAdd(a, b) => Some(Data::Flt(env.flt(a)? + env.flt(b)?)),
+        FltSub(a, b) => Some(Data::Flt(env.flt(a)? - env.flt(b)?)),
+        FltMul(a, b) => Some(Data::Flt(env.flt(a)? * env.flt(b)?)),
+        FltDiv(a, b) => Some(Data::Flt(env.flt(a)? / env.flt(b)?)),
+        FltNeg(a) => Some(Data::Flt(-env.flt(a)?)),
+        FltAbs(a) => Some(Data::Flt(env.flt(a)?.abs())),
+        FltSqrt(a) => Some(Data::Flt(env.flt(a)?.sqrt())),
+        FltFloor(a) => Some(Data::Flt(env.flt(a)?.floor())),
+        FltCeil(a) => Some(Data::Flt(env.flt(a)?.ceil())),
+        FltTrunc(a) => Some(Data::Flt(env.flt(a)?.trunc())),
+        FltCopysign(a, b) => Some(Data::Flt(env.flt(a)?.copysign(env.flt(b)?))),
+        FltEql(a, b) => Some(bln(env.flt(a)? == env.flt(b)?)),
+        FltNeq(a, b) => Some(bln(env.flt(a)? != env.flt(b)?)),
+        FltLt(a, b) => Some(bln(env.flt(a)? < env.flt(b)?)),
+        FltGt(a, b) => Some(bln(env.flt(a)? > env.flt(b)?)),
+        FltLte(a, b) => Some(bln(env.flt(a)? <= env.flt(b)?)),
+        FltGte(a, b) => Some(bln(env.flt(a)? >= env.flt(b)?)),
 
         // Nat — shifts, rotates, and bit scans. A left shift or rotate can push a
         // set bit into position 31, which the backend trap-checks; the logical
         // right shift and the scans always land back inside 31 bits.
-        NatShl(a, b) => fits31u(nat(lits, a)?.wrapping_shl(nat(lits, b)?) as u64).map(Data::Nat),
-        NatShr(a, b) => Some(Data::Nat(nat(lits, a)?.wrapping_shr(nat(lits, b)?))),
-        NatRotl(a, b) => fits31u(nat(lits, a)?.rotate_left(nat(lits, b)?) as u64).map(Data::Nat),
-        NatRotr(a, b) => fits31u(nat(lits, a)?.rotate_right(nat(lits, b)?) as u64).map(Data::Nat),
-        NatClz(a) => Some(Data::Nat(nat(lits, a)?.leading_zeros())),
-        NatCtz(a) => Some(Data::Nat(nat(lits, a)?.trailing_zeros())),
-        NatPopcnt(a) => Some(Data::Nat(nat(lits, a)?.count_ones())),
-        NatEqz(a) => Some(bln(nat(lits, a)? == 0)),
+        NatShl(a, b) => fits31u(env.nat(a)?.wrapping_shl(env.nat(b)?) as u64).map(Data::Nat),
+        NatShr(a, b) => Some(Data::Nat(env.nat(a)?.wrapping_shr(env.nat(b)?))),
+        NatRotl(a, b) => fits31u(env.nat(a)?.rotate_left(env.nat(b)?) as u64).map(Data::Nat),
+        NatRotr(a, b) => fits31u(env.nat(a)?.rotate_right(env.nat(b)?) as u64).map(Data::Nat),
+        NatClz(a) => Some(Data::Nat(env.nat(a)?.leading_zeros())),
+        NatCtz(a) => Some(Data::Nat(env.nat(a)?.trailing_zeros())),
+        NatPopcnt(a) => Some(Data::Nat(env.nat(a)?.count_ones())),
+        NatEqz(a) => Some(bln(env.nat(a)? == 0)),
 
         // Int — bitwise, shifts, rotates, and bit scans. Bitwise, right shift, and
         // the scans are total once the result is reduced to its 31-bit payload
         // (`wrap31s`); the left shift and rotates trap-check like `Int` arithmetic.
-        IntAnd(a, b) => Some(Data::Int(wrap31s(int(lits, a)? & int(lits, b)?))),
-        IntOr(a, b) => Some(Data::Int(wrap31s(int(lits, a)? | int(lits, b)?))),
-        IntXor(a, b) => Some(Data::Int(wrap31s(int(lits, a)? ^ int(lits, b)?))),
+        IntAnd(a, b) => Some(Data::Int(wrap31s(env.int(a)? & env.int(b)?))),
+        IntOr(a, b) => Some(Data::Int(wrap31s(env.int(a)? | env.int(b)?))),
+        IntXor(a, b) => Some(Data::Int(wrap31s(env.int(a)? ^ env.int(b)?))),
         IntShl(a, b) => {
-            fits31s(int(lits, a)?.wrapping_shl(int(lits, b)? as u32) as i64).map(Data::Int)
+            fits31s(env.int(a)?.wrapping_shl(env.int(b)? as u32) as i64).map(Data::Int)
         }
         IntShr(a, b) => Some(Data::Int(wrap31s(
-            int(lits, a)?.wrapping_shr(int(lits, b)? as u32),
+            env.int(a)?.wrapping_shr(env.int(b)? as u32),
         ))),
         IntRotl(a, b) => {
-            let rotated = (int(lits, a)? as u32).rotate_left(int(lits, b)? as u32) as i32;
+            let rotated = (env.int(a)? as u32).rotate_left(env.int(b)? as u32) as i32;
             fits31s(rotated as i64).map(Data::Int)
         }
         IntRotr(a, b) => {
-            let rotated = (int(lits, a)? as u32).rotate_right(int(lits, b)? as u32) as i32;
+            let rotated = (env.int(a)? as u32).rotate_right(env.int(b)? as u32) as i32;
             fits31s(rotated as i64).map(Data::Int)
         }
-        IntClz(a) => Some(Data::Int((int(lits, a)? as u32).leading_zeros() as i32)),
-        IntCtz(a) => Some(Data::Int((int(lits, a)? as u32).trailing_zeros() as i32)),
-        IntPopcnt(a) => Some(Data::Int((int(lits, a)? as u32).count_ones() as i32)),
-        IntEqz(a) => Some(bln(int(lits, a)? == 0)),
+        IntClz(a) => Some(Data::Int((env.int(a)? as u32).leading_zeros() as i32)),
+        IntCtz(a) => Some(Data::Int((env.int(a)? as u32).trailing_zeros() as i32)),
+        IntPopcnt(a) => Some(Data::Int((env.int(a)? as u32).count_ones() as i32)),
+        IntEqz(a) => Some(bln(env.int(a)? == 0)),
 
         // Flt — min/max are folded only when neither operand is NaN, the one case
         // where they *value*-diverge (wasm yields NaN, Rust yields the operand);
         // nearest rounds half-to-even, matching `f32.nearest` on every input.
-        FltMin(a, b) => flt_minmax(flt(lits, a)?, flt(lits, b)?, f32::min),
-        FltMax(a, b) => flt_minmax(flt(lits, a)?, flt(lits, b)?, f32::max),
-        FltNearest(a) => Some(Data::Flt(flt(lits, a)?.round_ties_even())),
+        FltMin(a, b) => flt_minmax(env.flt(a)?, env.flt(b)?, f32::min),
+        FltMax(a, b) => flt_minmax(env.flt(a)?, env.flt(b)?, f32::max),
+        FltNearest(a) => Some(Data::Flt(env.flt(a)?.round_ties_even())),
 
         // Conversions. The int↔int casts reinterpret the 31-bit payload exactly as
         // the backend does (`ref.i31` then `i31.get_{u,s}`), so a high `Nat` reads
         // back as a negative `Int` and a negative `Int` as a large `Nat`. The
         // float→int casts truncate toward zero and trap-check the 31-bit range.
-        NatToInt(a) => Some(Data::Int(wrap31s(nat(lits, a)? as i32))),
-        NatToFlt(a) => Some(Data::Flt(nat(lits, a)? as f32)),
-        IntToNat(a) => Some(Data::Nat(int(lits, a)? as u32 & 0x7FFF_FFFF)),
-        IntToFlt(a) => Some(Data::Flt(int(lits, a)? as f32)),
-        FltToNat(a) => flt_to_nat(flt(lits, a)?),
-        FltToInt(a) => flt_to_int(flt(lits, a)?),
+        NatToInt(a) => Some(Data::Int(wrap31s(env.nat(a)? as i32))),
+        NatToFlt(a) => Some(Data::Flt(env.nat(a)? as f32)),
+        IntToNat(a) => Some(Data::Nat(env.int(a)? as u32 & 0x7FFF_FFFF)),
+        IntToFlt(a) => Some(Data::Flt(env.int(a)? as f32)),
+        FltToNat(a) => flt_to_nat(env.flt(a)?),
+        FltToInt(a) => flt_to_int(env.flt(a)?),
 
         // Number → string. Deterministic — every value formats. The output must
         // match `src/run/host.rs`'s free functions byte-for-byte so compile-time
         // folding and runtime conversion agree.
-        NatToStr(a) => Some(Data::Bin(format!("{}", nat(lits, a)?).into_bytes())),
-        IntToStr(a) => Some(Data::Bin(format!("{:+}", int(lits, a)?).into_bytes())),
-        FltToStr(a) => Some(Data::Bin(format!("{:+}", flt(lits, a)?).into_bytes())),
+        NatToStr(a) => Some(Data::Bin(format!("{}", env.nat(a)?).into_bytes())),
+        IntToStr(a) => Some(Data::Bin(format!("{:+}", env.int(a)?).into_bytes())),
+        FltToStr(a) => Some(Data::Bin(format!("{:+}", env.flt(a)?).into_bytes())),
 
         // Bytewise equality — total whenever both operands are known.
-        BinEql(a, b) => Some(bln(bin(lits, a)? == bin(lits, b)?)),
+        BinEql(a, b) => Some(bln(env.bin(a)? == env.bin(b)?)),
 
         // Variadic concatenation — total, so always foldable when every operand is
         // a literal of the matching kind.
         BinConcat(operands) => {
             let mut bytes = Vec::new();
             for name in operands {
-                match lits.get(name)? {
-                    Data::Bin(part) => bytes.extend_from_slice(part),
-                    _ => return None,
-                }
+                bytes.extend_from_slice(env.bin(name)?);
             }
             Some(Data::Bin(bytes))
         }
-        ArrConcat(operands) => {
-            let mut elems = Vec::new();
-            for name in operands {
-                match lits.get(name)? {
-                    Data::Arr(part) => elems.extend_from_slice(part),
-                    _ => return None,
-                }
-            }
-            Some(Data::Arr(elems))
-        }
 
-        // Aggregate builders. A slice needs in-bounds literal indices; an append
-        // needs a literal byte for `Bin`, while `Arr` appends any element by
-        // reference. Each yields a fresh literal aggregate, so it cascades through
-        // further projection and concatenation just like the constructors above.
-        BinSlice(b, start, end) => bin_slice(bin(lits, b)?, nat(lits, start)?, nat(lits, end)?),
-        ArrSlice(a, start, end) => arr_slice(arr(lits, a)?, nat(lits, start)?, nat(lits, end)?),
+        // `Bin` builders. A slice needs in-bounds literal indices; an append needs
+        // a literal byte. Each yields a fresh literal bytestring, so it cascades
+        // through further projection and concatenation.
+        BinSlice(b, start, end) => bin_slice(env.bin(b)?, env.nat(start)?, env.nat(end)?),
         BinAppend(b, byte) => {
-            let mut bytes = bin(lits, b)?.to_vec();
-            bytes.push(nat(lits, byte)? as u8);
+            let mut bytes = env.bin(b)?.to_vec();
+            bytes.push(env.nat(byte)? as u8);
             Some(Data::Bin(bytes))
         }
-        ArrAppend(a, elem) => {
-            let mut elems = arr(lits, a)?.to_vec();
-            elems.push(elem.clone());
-            Some(Data::Arr(elems))
-        }
 
-        // `*ToStr` (runtime formatter), `Io`, and aggregate *projection* (handled
-        // in `project`) are intentionally left untouched.
+        // Aggregate *projection* is handled in `project`; the `Arr` builders are
+        // handled in `eval` (their results carry elements, not owned data); `Io`
+        // has no `Code` form. Anything unsupported is left untouched.
         _ => None,
     }
 }
@@ -319,32 +404,11 @@ fn bin_slice(bytes: &[u8], start: u32, end: u32) -> Option<Data> {
     (start <= end && end <= bytes.len()).then(|| Data::Bin(bytes[start..end].to_vec()))
 }
 
-/// `elems[start..end]` as a fresh `Arr`, preserving element references, when the
+/// `elems[start..end]` as a fresh element list, preserving the elements, when the
 /// bounds are in range; an out-of-range slice traps, so it is left unfolded.
-fn arr_slice(elems: &[ValueName], start: u32, end: u32) -> Option<Data> {
+fn arr_slice<E: Clone>(elems: &[E], start: u32, end: u32) -> Option<Vec<E>> {
     let (start, end) = (start as usize, end as usize);
-    (start <= end && end <= elems.len()).then(|| Data::Arr(elems[start..end].to_vec()))
-}
-
-fn nat(lits: &Lits, name: &ValueName) -> Option<u32> {
-    match lits.get(name)? {
-        Data::Nat(value) => Some(*value),
-        _ => None,
-    }
-}
-
-fn int(lits: &Lits, name: &ValueName) -> Option<i32> {
-    match lits.get(name)? {
-        Data::Int(value) => Some(*value),
-        _ => None,
-    }
-}
-
-fn flt(lits: &Lits, name: &ValueName) -> Option<f32> {
-    match lits.get(name)? {
-        Data::Flt(value) => Some(*value),
-        _ => None,
-    }
+    (start <= end && end <= elems.len()).then(|| elems[start..end].to_vec())
 }
 
 /// The i31ref representation of a `Bln`.

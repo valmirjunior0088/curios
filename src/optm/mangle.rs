@@ -75,9 +75,3 @@ pub fn eval_result(index: usize) -> ValueName {
     ValueName::from(format!("v@eval#{index}"))
 }
 
-/// A synthetic name for an aggregate element projected out of an interpreter
-/// frame ([`evaluate_pure_calls`](super::evaluate_pure_calls)); unique because
-/// the owning binding's name is unique within the frame.
-pub fn frame_elt(name: &ValueName, index: usize) -> ValueName {
-    ValueName::from(format!("{name}@elt#{index}"))
-}

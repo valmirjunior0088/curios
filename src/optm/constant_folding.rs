@@ -86,7 +86,11 @@ fn fold_region(region: &mut Region, lits: &Lits) -> bool {
         if let Value::Eval(code) = value
             && let Some(replacement) = simplify(code, lits)
         {
-            *value = replacement;
+            *value = match replacement {
+                Evaluated::Scalar(data) => Value::Pure(data),
+                Evaluated::Arr(elems) => Value::Pure(Data::Arr(elems)),
+                Evaluated::Elem(source) => Value::Alias(source),
+            };
             changed = true;
         }
     }
