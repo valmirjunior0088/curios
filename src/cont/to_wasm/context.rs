@@ -547,6 +547,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 resume,
             }) => self.call_indirect_instrs(target, params, resume),
             cont::Tail::Host(host) => self.host_instrs(host),
+            cont::Tail::Unreachable => vec![wasm::Instr::Unreachable],
         }
     }
 

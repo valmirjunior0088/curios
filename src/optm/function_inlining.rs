@@ -403,6 +403,7 @@ fn freshen_tail_blocks(tail: &mut Tail, sentinel: &BlockName, resume: &BlockName
         | Tail::Host(HostTarget::IoRead { resume: r }) => {
             freshen_block(r, sentinel, resume, suffix);
         }
+        Tail::Unreachable => {}
     }
 }
 

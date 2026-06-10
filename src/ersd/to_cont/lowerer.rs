@@ -54,6 +54,7 @@ fn is_synchronous(term: &ersd::Term) -> bool {
         &**term,
         ersd::Subterm::Func(_)
             | ersd::Subterm::Erased
+            | ersd::Subterm::Unreachable
             | ersd::Subterm::Atom(_)
             | ersd::Subterm::Name(_)
     )
@@ -223,6 +224,9 @@ impl Work<'_, '_, '_> {
         match &**term {
             ersd::Subterm::Name(name) => frame.find(name.as_str()),
             ersd::Subterm::Erased => self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
+            ersd::Subterm::Unreachable => {
+                panic!("unreachable Ersd term cannot be lowered in pure-name position")
+            }
             ersd::Subterm::Prim(ersd::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
             ersd::Subterm::Prim(ersd::Prim::Host(_)) => unreachable!(
                 "host primitive reached pure-name context — pure-name lowering cannot \
@@ -297,6 +301,7 @@ impl Work<'_, '_, '_> {
 
                 cont.call(self, value)
             }
+            ersd::Subterm::Unreachable => cont::Tail::Unreachable,
             ersd::Subterm::Prim(prim) => lower_value_prim(self, prim, frame, cont),
             ersd::Subterm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
@@ -572,6 +577,7 @@ impl Work<'_, '_, '_> {
         resume: &cont::BlockName,
     ) -> cont::Tail {
         match &**term {
+            ersd::Subterm::Unreachable => cont::Tail::Unreachable,
             ersd::Subterm::Apply(apply) => self.lower_value_name(
                 &apply.head,
                 frame,

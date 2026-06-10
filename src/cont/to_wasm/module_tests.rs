@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn lowers_unreachable_tail_to_trap() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![],
+                blocks: vec![],
+                tail: cont::Tail::Unreachable,
+            },
+        },
+    );
+
+    assert!(traps(&module));
+}
+
+#[test]
 fn lowers_and_runs_mutually_recursive_tuple() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));

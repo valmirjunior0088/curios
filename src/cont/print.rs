@@ -610,6 +610,7 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
             ]),
             HostTarget::IoRead { resume } => flat([pure("Io.read "), print_block_name(resume)]),
         },
+        Tail::Unreachable => pure("unreachable"),
     }
 }
 

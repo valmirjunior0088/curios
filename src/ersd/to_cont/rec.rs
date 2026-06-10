@@ -19,7 +19,7 @@ pub fn free_names(term: &ersd::Term) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
 
     match &**term {
-        ersd::Subterm::Erased | ersd::Subterm::Atom(_) => {}
+        ersd::Subterm::Erased | ersd::Subterm::Unreachable | ersd::Subterm::Atom(_) => {}
         ersd::Subterm::Name(name) => {
             names.insert(name.as_str().to_owned());
         }

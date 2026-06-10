@@ -178,6 +178,7 @@ pub enum Tail {
     Match(MatchTarget),
     Call(CallTarget),
     Host(HostTarget),
+    Unreachable,
 }
 
 #[derive(Debug, Clone)]

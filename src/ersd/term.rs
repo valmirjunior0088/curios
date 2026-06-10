@@ -128,6 +128,7 @@ pub struct Rec {
 #[derive(Debug)]
 pub enum Subterm {
     Erased,
+    Unreachable,
     Prim(Prim),
     NatMatch(NatMatch),
     Func(Func),

@@ -141,7 +141,7 @@ fn scan_region(region: &Region, scan: &mut BodyScan) {
         Tail::Host(_) => {
             scan.has_host_tail = true;
         }
-        Tail::Jump(_) | Tail::Match(_) => {}
+        Tail::Jump(_) | Tail::Match(_) | Tail::Unreachable => {}
     }
 
     for (_, block) in &region.blocks {
@@ -520,7 +520,7 @@ impl<'a> Interp<'a> {
                 };
                 Ok((resume.clone(), vec![snap]))
             }
-            Tail::Host(_) => Err(Outcome::GaveUp),
+            Tail::Host(_) | Tail::Unreachable => Err(Outcome::GaveUp),
         }
     }
 }

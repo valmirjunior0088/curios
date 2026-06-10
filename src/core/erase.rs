@@ -487,11 +487,10 @@ fn erase_union_match(
         .map(|tag| {
             // A tag with no arm was pruned by elaborate (Rung C verified the
             // case impossible at the scrutinee's indices). Its dispatch slot
-            // still exists positionally; the body is unreachable at runtime
-            // — filled with the erased unit (a dedicated trap instruction
-            // through `cont`/`optm`/`wasm` is future work).
+            // still exists positionally, but reaching it is a compiler bug or
+            // corrupted runtime tag, so lower it to a real trap.
             let Some(scope) = cases.get(tag) else {
-                return Ok(ersd::Subterm::Erased.into());
+                return Ok(ersd::Subterm::Unreachable.into());
             };
             let telescope = inductive
                 .instantiate(tag, &params)

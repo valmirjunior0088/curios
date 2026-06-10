@@ -141,6 +141,25 @@ mod tests {
         )
     }
 
+    fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
+        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+        let mut ersd = String::new();
+        let mut cont = String::new();
+
+        compile_entrypoint(
+            Duration::from_secs(5),
+            &entrypoint,
+            &text::NullLoader,
+            |stage| match stage {
+                Stage::Ersd(stage) => ersd = format!("{stage}"),
+                Stage::Cont(stage) => cont = format!("{stage}"),
+                _ => {}
+            },
+        )?;
+
+        Ok((ersd, cont))
+    }
+
     #[test]
     fn meta_free_prelude_program_compiles_without_overflow() {
         // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
@@ -740,6 +759,34 @@ mod tests {
         "#;
 
         assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn impossible_union_arm_lowers_to_unreachable() {
+        let source = r#"
+            use /sys/{Nat, Bin};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+            end
+            let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
+                match v : T
+                | cons(j, x, xs) => x
+                end;
+            let v : Vec(Bin, 1) = Vec/cons("a", Vec/nil());
+            first(v)
+        "#;
+
+        let (ersd, cont) = compile_printed_stages(source).unwrap();
+
+        assert!(
+            ersd.contains("unreachable"),
+            "expected Ersd output to contain unreachable, got {ersd}",
+        );
+        assert!(
+            cont.contains("unreachable"),
+            "expected Cont output to contain unreachable, got {cont}",
+        );
     }
 
     #[test]

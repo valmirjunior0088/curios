@@ -90,6 +90,7 @@ pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
         Tail::Call(CallTarget::Direct { resume, .. })
         | Tail::Call(CallTarget::Indirect { resume, .. }) => vec![resume],
         Tail::Host(host) => vec![host.resume()],
+        Tail::Unreachable => vec![],
     }
 }
 
@@ -115,6 +116,7 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
         }
         Tail::Host(HostTarget::IoPrint { value, .. }) => sink.value_use(value),
         Tail::Host(HostTarget::IoRead { .. }) => {}
+        Tail::Unreachable => {}
     }
 }
 
@@ -291,6 +293,7 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
         }
         Tail::Host(HostTarget::IoPrint { value, .. }) => sink.value_use(value),
         Tail::Host(HostTarget::IoRead { .. }) => {}
+        Tail::Unreachable => {}
     }
 }
 

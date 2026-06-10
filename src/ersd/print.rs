@@ -168,6 +168,7 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
 fn print_term<'a>(term: &'a Term) -> Printer<'a> {
     match &**term {
         Subterm::Erased => pure("_"),
+        Subterm::Unreachable => pure("unreachable"),
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::NatMatch(NatMatch::Induction {
             head,
