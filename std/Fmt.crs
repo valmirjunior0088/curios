@@ -7,12 +7,12 @@ pub union Fmt
 | nat(Fmt)
 end
 
-pub rec format_type_with(result: Type, f: Fmt) -> Type =
+pub rec format_type_with(T: Type, f: Fmt) -> Type =
     match f
-    | nil() => result
-    | lit(_, rest) => format_type_with(result, rest)
-    | str(rest) => Bin -> format_type_with(result, rest)
-    | nat(rest) => Nat -> format_type_with(result, rest)
+    | nil() => T
+    | lit(_, rest) => format_type_with(T, rest)
+    | str(rest) => Bin -> format_type_with(T, rest)
+    | nat(rest) => Nat -> format_type_with(T, rest)
     end;
 
 let is_not_pct(byte : Nat) -> Bln =
@@ -55,7 +55,7 @@ pub let parse(input : Bin) -> Fmt =
     end;
 
 rec go_with(T : Type, finish : Bin -> T, f : Fmt, acc : Bin) -> format_type_with(T, f) =
-    match f : format_type_with(T, f)
+    match f : (f) => format_type_with(T, f)
     | nil() => finish(acc)
     | lit(bytes, rest) => go_with(T, finish, rest, Bin/concat(acc, bytes))
     | str(rest) => (s) => go_with(T, finish, rest, Bin/concat(acc, s))
