@@ -225,10 +225,10 @@ fn vec_cons_with_nat_succ() {
             | pred + 1, ih => { T, ih }
             end;
 
-        let cons(T : Type, n : sys/Nat, x : T, xs : Vec(T, n)) -> Vec(T, n + 1) =
+        let cons(T : Type, n : sys/Nat, x : T, xs : Vec(T, n)) -> Vec(T, sys/Nat/succ(n)) =
             (x, xs);
 
-        let head(T : Type, n : sys/Nat, xs : Vec(T, n + 1)) -> T =
+        let head(T : Type, n : sys/Nat, xs : Vec(T, sys/Nat/succ(n))) -> T =
             xs.0;
 
         let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, ());
@@ -249,7 +249,7 @@ fn folds_constant_arg_through_let_function() {
     // `main`. Without the interim DCE before `inline_calls`, `specialize_calls`
     // leaves a dead closure body in `module.clsrs` whose direct call to the
     // lifted clone of `f` inflates the inliner's call-site count, blocking the
-    // splice that ultimately lets constant folding see `3` next to the `+ 1`.
+    // splice that ultimately lets constant folding see `3` next to the successor.
     use crate::{cont, text};
 
     let source = r#"
@@ -389,7 +389,7 @@ fn indexed_vec_append_executes() {
         use /sys/{Nat, Bin, Io};
         union Vec(T : Type) : (n : Nat)
         | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end
         rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
             match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))

@@ -6,7 +6,7 @@ use /std/{Nat};
 -- are written `Vec/cons(x, xs)`.
 pub union Vec(T : Type) : (n : Nat)
 | nil() : (0)
-| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end
 
 pub use Vec/*;
@@ -16,7 +16,7 @@ pub use Vec/*;
 pub let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat = n;
 
 -- The motive binds the index where it naturally appears: each arm checks at
--- its case's target (`0`, `j + 1`), and the whole match at the scrutinee's
+-- its case's target (`0`, `Nat/succ(j)`), and the whole match at the scrutinee's
 -- actual length.
 pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
     match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
@@ -30,14 +30,14 @@ pub rec map(@A : Type, @B : Type, @n : Nat, f : A -> B, v : Vec(A, n)) -> Vec(B,
     | cons(j, x, xs) => Vec/cons(f(x), map(f, xs))
     end;
 
--- At `n + 1` the nil arm is provably impossible and simply omitted: the
+-- At `Nat/succ(n)` the nil arm is provably impossible and simply omitted: the
 -- checker verifies the omission, and `cons`'s length binder is pinned to `n`.
-pub let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+pub let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
     match v : T
     | cons(j, x, xs) => x
     end;
 
-pub let rest(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> Vec(T, n) =
+pub let rest(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Vec(T, n) =
     match v : Vec(T, n)
     | cons(j, x, xs) => xs
     end;

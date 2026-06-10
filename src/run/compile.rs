@@ -405,7 +405,7 @@ mod tests {
                     match m : Id(B)
                     | wrap(x) => f(x)
                     end;
-            let direct = bind(Id/wrap(1), (x) => Id/wrap(x + 1));
+            let direct = bind(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
             let sugared =
                 with bind
                 let v = Id/wrap(3)!;
@@ -534,7 +534,7 @@ mod tests {
     fn indexed_union_declares_constructs_and_matches() {
         // Phase 1 of INDICES.md, end to end: an indexed `Vec` declares (head
         // index telescope, named/`@` payload binders, per-case targets),
-        // constructs with `@T`/`@m` inferred — `?m + 1` unifies against the
+        // constructs with `@T`/`@m` inferred — `Nat/succ(?m)` unifies against the
         // annotation's `2` — and matches under a constant motive (Rung 0:
         // arms are typed from the constructor telescopes; indices ride
         // along), lowering through to wasm.
@@ -542,7 +542,7 @@ mod tests {
             use /sys/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             rec len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
                 match v : Nat
@@ -583,14 +583,14 @@ mod tests {
     fn indexed_union_motive_binds_the_index() {
         // Rung A: the annotated motive `(v : Vec(T, k)) => Vec(T, Nat/add(k, m))`
         // binds the length index in its natural slot; each arm checks against
-        // the motive at that case's target index (`0` for nil, `j + 1` for
+        // the motive at that case's target index (`0` for nil, `Nat/succ(j)` for
         // cons), and the whole match at the scrutinee's actual index. The cons
         // arm converges via `Nat/add`'s definitional successor peeling.
         let source = r#"
             use /sys/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
                 match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
@@ -616,7 +616,7 @@ mod tests {
             use /sys/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
         "#;
 
@@ -638,8 +638,8 @@ mod tests {
 
         let index_slot = format!(
             r#"{union_decl}
-            let f(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> Nat =
-                match v : (v : Vec(T, n + 1)) => Nat
+            let f(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Nat =
+                match v : (v : Vec(T, Nat/succ(n))) => Nat
                 | nil() => 0
                 | cons(m, x, xs) => 1
                 end;
@@ -683,7 +683,7 @@ mod tests {
             use /sys/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             union Eq(A : Type) : (x : A, y : A)
             | refl(z : A) : (z, z)
@@ -714,23 +714,23 @@ mod tests {
 
     #[test]
     fn inversion_prunes_impossible_arms_and_solves_binders() {
-        // Rung C: at `Vec(T, n + 1)` the nil arm's target `0` clashes
+        // Rung C: at `Vec(T, Nat/succ(n))` the nil arm's target `0` clashes
         // definitely with the successor spine, so the arm is omitted —
         // checker-verified, no `impossible` keyword — and erase fills its
         // dispatch slot with an unreachable body. In the cons arm the
-        // unifier decomposes `n + 1 ~ j + 1` and pins `j := n`, which is
+        // unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is
         // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
         let source = r#"
             use /sys/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
-            let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+            let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
                 match v : T
                 | cons(j, x, xs) => x
                 end;
-            let rest(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> Vec(T, n) =
+            let rest(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Vec(T, n) =
                 match v : Vec(T, n)
                 | cons(j, x, xs) => xs
                 end;
@@ -750,7 +750,7 @@ mod tests {
             use /sys/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
                 match v : Nat
@@ -805,13 +805,13 @@ mod tests {
     #[test]
     fn indexed_union_index_mismatch_is_rejected() {
         // A two-element vector annotated at length 3: the per-case target
-        // `m + 1` propagates through conversion until the index clash
+        // `Nat/succ(m)` propagates through conversion until the index clash
         // surfaces as an ordinary type mismatch.
         let source = r#"
             use /sys/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             let v : Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/nil()));
             0
@@ -831,7 +831,7 @@ mod tests {
             use /sys/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil()
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             0
         "#;
@@ -858,7 +858,7 @@ mod tests {
             use /sys/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0, 1)
-            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
             0
         "#;

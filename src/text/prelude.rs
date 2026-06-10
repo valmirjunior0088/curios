@@ -1,6 +1,6 @@
 use super::{
-    Error, LetSignature, Loader, Module, Name, Plicity, Prim, Qualifier, Subterm, Term, TopItem,
-    TopLet, TopMod, TupleType,
+    Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm,
+    Term, TopItem, TopLet, TopMod, TupleType,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -114,8 +114,18 @@ fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Prim) -> TopI
     pub_fn(label, vec![("a", input)], output, prim(ctor(name("a"))))
 }
 
+fn nat_succ() -> TopItem {
+    pub_fn(
+        "succ",
+        vec![("a", nat())],
+        nat(),
+        prim(Prim::Nat(Nat::Succ(NatLiteral::number(1usize), name("a")))),
+    )
+}
+
 fn nat_ops() -> Vec<TopItem> {
     vec![
+        nat_succ(),
         binary("eql", nat(), bln(), Prim::NatEql),
         binary("neq", nat(), bln(), Prim::NatNeq),
         binary("add", nat(), nat(), Prim::NatAdd),

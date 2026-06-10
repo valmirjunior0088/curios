@@ -159,21 +159,6 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// Successor as the infix `+`: a nat literal on either side of a base term
-// produces `Nat::Succ(literal, base)`. Whitespace around `+` is conventional
-// (keeps `n + 1` distinct from the `+1` int literal at a glance).
-fn parse_nat_succ<'a>() -> Parser<'a, Term> {
-    let lit_first = catch(parse_nat_literal().and_drop(parse_literal("+")))
-        .and(parse_atomic_term())
-        .map(|(spine, base)| Subterm::Prim(Prim::Nat(Nat::Succ(spine, base))));
-
-    let base_first = catch(parse_atomic_term().and_drop(parse_literal("+")))
-        .and(parse_nat_literal())
-        .map(|(base, spine)| Subterm::Prim(Prim::Nat(Nat::Succ(spine, base))));
-
-    lit_first.or(base_first).map(Into::into)
-}
-
 fn parse_nat_literal<'a>() -> Parser<'a, NatLiteral> {
     catch(
         take_exact("'")
@@ -834,7 +819,6 @@ fn parse_term_inner<'a>() -> Parser<'a, Term> {
             .or(parse_match())
             .or(parse_func_type())
             .or(parse_func())
-            .or(parse_nat_succ())
             .or(parse_atomic_term()),
     )
 }

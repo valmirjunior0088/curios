@@ -36,7 +36,7 @@ A `match` over `Nat` uses the `| 0` / `| pred + 1, ih` pattern to recurse throug
 let fact(n : Nat) -> Nat =
     match n : Nat
     | 0 => 1
-    | pred + 1, ih => Nat/mul(pred + 1, ih)
+    | pred + 1, ih => Nat/mul(Nat/succ(pred), ih)
     end;
 ```
 
@@ -215,30 +215,30 @@ let one  : Vec(Nat, 1) = (42, ());
 let two  : Vec(Nat, 2) = (1, (2, ()));
 ```
 
-`head` is only defined for non-empty vectors. `n + 1` is successor syntax, so `Vec(T, n + 1)` is the type of a vector with at least one element:
+`head` is only defined for non-empty vectors. `Nat/succ(n)` is the successor of `n`, so `Vec(T, Nat/succ(n))` is the type of a vector with at least one element:
 
 ```
-let head(T : Type, n : Nat, v : Vec(T, n + 1)) -> T =
+let head(T : Type, n : Nat, v : Vec(T, Nat/succ(n))) -> T =
     v.0;
 ```
 
-`Vec(T, n + 1)` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+`Vec(T, Nat/succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
 The same shape is also available as a declared *indexed union* — this is what `/std/Vec` is:
 
 ```
 union Vec(T : Type) : (n : Nat)
 | nil() : (0)
-| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end
 
-let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
     match v : T
     | cons(j, x, xs) => x
     end;
 ```
 
-The head declares the index (`: (n : Nat)`), each case states the index it inhabits, and matching exploits that: at length `n + 1` the `nil` arm is provably impossible and is simply omitted — the checker verifies the omission. A dependent result threads the index through the motive, written like the lambda it is:
+The head declares the index (`: (n : Nat)`), each case states the index it inhabits, and matching exploits that: at length `Nat/succ(n)` the `nil` arm is provably impossible and is simply omitted — the checker verifies the omission. A dependent result threads the index through the motive, written like the lambda it is:
 
 ```
 rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =

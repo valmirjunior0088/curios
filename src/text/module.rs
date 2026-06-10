@@ -62,8 +62,8 @@ pub struct TopCase {
     /// from a later payload's type).
     pub payload: Vec<(Plicity, Option<String>, Term)>,
     /// The parenthesized index expressions after the payload — the case's
-    /// terminal `: Vec(T, m + 1)` with the mandatory part elided to
-    /// `: (m + 1)`. Present iff the union head declares indices.
+    /// terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to
+    /// `: (Nat/succ(m))`. Present iff the union head declares indices.
     pub target: Option<Vec<Term>>,
 }
 

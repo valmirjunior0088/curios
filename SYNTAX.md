@@ -51,7 +51,7 @@ Declares a group of mutually recursive bindings. Each binding in the group indep
 pub rec fact(n : /sys/Nat) -> /sys/Nat =
     match n : /sys/Nat
     | 0 => 1
-    | pred + 1, ih => /sys/Nat/mul(pred + 1, ih)
+    | pred + 1, ih => /sys/Nat/mul(/sys/Nat/succ(pred), ih)
     end;
 ```
 
@@ -106,7 +106,7 @@ parenthesized index expressions it inhabits.
 ```
 pub union Vec(T : Type) : (n : Nat)
 | nil() : (0)
-| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end
 ```
 
@@ -376,10 +376,10 @@ end
 Matching an *indexed* union gets three further behaviours, by the shape of each scrutinee index:
 
 - a **variable** index is refined to the case's target inside each arm, so hypotheses mentioning it reduce there (`match p : Vec(Bin, m)` through an `Eq(Nat, n, m)` learns `n := z`, `m := z` in the `refl` arm);
-- a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`n + 1` against `cons`'s `j + 1` pins `j := n`), and a case whose target *definitely clashes* (`nil`'s `0` against `n + 1`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
+- a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`Nat/succ(n)` against `cons`'s `Nat/succ(j)` pins `j := n`), and a case whose target *definitely clashes* (`nil`'s `0` against `Nat/succ(n)`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
 
 ```
-let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
     match v : T
     | cons(j, x, xs) => x
     end;
@@ -543,6 +543,7 @@ These are normal path references. After `use /sys/{Nat, Bin};`, the same calls c
 
 | Operation            | Arity | Description           | Returns    |
 | -------------------- | ----- | --------------------- | ---------- |
+| `/sys/Nat/succ(a)`   | 1     | Successor             | `/sys/Nat` |
 | `/sys/Nat/add(a, b)` | 2     | Addition              | `/sys/Nat` |
 | `/sys/Nat/sub(a, b)` | 2     | Subtraction           | `/sys/Nat` |
 | `/sys/Nat/mul(a, b)` | 2     | Multiplication        | `/sys/Nat` |
@@ -558,7 +559,7 @@ These are normal path references. After `use /sys/{Nat, Bin};`, the same calls c
 | `/sys/Nat/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
 | `/sys/Nat/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
 
-Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively). Successor syntax is infix over a natural literal and a base term: `n + 1`, `2 + n`.
+Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively). Use `/sys/Nat/succ(a)` for the successor of a natural number.
 
 ### Int
 
