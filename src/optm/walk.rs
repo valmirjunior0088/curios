@@ -3,12 +3,12 @@ use super::*;
 /// A read-only traversal of a Cont region tree.
 ///
 /// The walker owns the recursion and the (large) per-node enumeration — notably
-/// the `Code` operand match — so no pass spells them out itself. The shared and
-/// mutable walkers each carry a copy of that enumeration (`walk_code` /
-/// `walk_code_mut`, `walk_tail` / `walk_tail_mut`): when a `Code` or `Tail`
-/// variant is added, both must be updated in step. A [`Sink`] only reacts to the
-/// leaf events it cares about; every method defaults to a no-op, so a harvester
-/// overrides just the ones it needs.
+/// the `Code` operand match, written once in [`walk_code_operands!`] and shared
+/// by both walkers. The smaller `Tail`/`Data` walkers are genuinely asymmetric
+/// (only the read-only side fires `func_ref`/`clsr_ref` events), so those pairs
+/// are kept in step by hand when a variant is added. A [`Sink`] only reacts to
+/// the leaf events it cares about; every method defaults to a no-op, so a
+/// harvester overrides just the ones it needs.
 ///
 /// Binders — block parameters and the names on the left of `values`/`preallocs`
 /// — are deliberately *not* reported as uses; only operand (use) positions fire
@@ -127,108 +127,123 @@ fn walk_jump(target: &JumpTarget, sink: &mut impl Sink) {
     walk_uses(&target.params, sink);
 }
 
+/// The `Code` operand enumeration, written once and instantiated for both
+/// walkers: matching a `&Code` binds `&ValueName` operands and feeds
+/// [`Sink::value_use`]; matching a `&mut Code` binds `&mut ValueName` and feeds
+/// [`SinkMut::value_use`] — the same source text serves both, by match
+/// ergonomics.
+macro_rules! walk_code_operands {
+    ($code:expr, $sink:expr) => {{
+        use Code::*;
+
+        match $code {
+            // Binary operands.
+            NatEql(a, b)
+            | NatNeq(a, b)
+            | NatAdd(a, b)
+            | NatSub(a, b)
+            | NatMul(a, b)
+            | NatLt(a, b)
+            | NatDiv(a, b)
+            | NatRem(a, b)
+            | NatGt(a, b)
+            | NatLte(a, b)
+            | NatGte(a, b)
+            | NatAnd(a, b)
+            | NatOr(a, b)
+            | NatXor(a, b)
+            | NatShl(a, b)
+            | NatShr(a, b)
+            | NatRotl(a, b)
+            | NatRotr(a, b)
+            | IntEql(a, b)
+            | IntNeq(a, b)
+            | IntAdd(a, b)
+            | IntSub(a, b)
+            | IntMul(a, b)
+            | IntDiv(a, b)
+            | IntRem(a, b)
+            | IntLt(a, b)
+            | IntGt(a, b)
+            | IntLte(a, b)
+            | IntGte(a, b)
+            | IntAnd(a, b)
+            | IntOr(a, b)
+            | IntXor(a, b)
+            | IntShl(a, b)
+            | IntShr(a, b)
+            | IntRotl(a, b)
+            | IntRotr(a, b)
+            | FltAdd(a, b)
+            | FltSub(a, b)
+            | FltMul(a, b)
+            | FltDiv(a, b)
+            | FltEql(a, b)
+            | FltNeq(a, b)
+            | FltLt(a, b)
+            | FltGt(a, b)
+            | FltLte(a, b)
+            | FltGte(a, b)
+            | FltMin(a, b)
+            | FltMax(a, b)
+            | FltCopysign(a, b)
+            | BinEql(a, b)
+            | BinGet(a, b)
+            | BinAppend(a, b)
+            | ArrGet(a, b)
+            | ArrAppend(a, b) => {
+                $sink.value_use(a);
+                $sink.value_use(b);
+            }
+
+            // Ternary operands.
+            BinSlice(a, b, c) | ArrSlice(a, b, c) => {
+                $sink.value_use(a);
+                $sink.value_use(b);
+                $sink.value_use(c);
+            }
+
+            // Unary operands.
+            NatClz(a)
+            | NatCtz(a)
+            | NatPopcnt(a)
+            | NatEqz(a)
+            | NatToStr(a)
+            | NatToInt(a)
+            | NatToFlt(a)
+            | IntClz(a)
+            | IntCtz(a)
+            | IntPopcnt(a)
+            | IntEqz(a)
+            | IntToStr(a)
+            | IntToNat(a)
+            | IntToFlt(a)
+            | FltNeg(a)
+            | FltAbs(a)
+            | FltSqrt(a)
+            | FltFloor(a)
+            | FltCeil(a)
+            | FltTrunc(a)
+            | FltNearest(a)
+            | FltToStr(a)
+            | FltToNat(a)
+            | FltToInt(a)
+            | BinLen(a)
+            | ArrLen(a)
+            | TplGet(a, _) => $sink.value_use(a),
+
+            // Variadic operands.
+            BinConcat(operands) | ArrConcat(operands) => {
+                for name in operands {
+                    $sink.value_use(name);
+                }
+            }
+        }
+    }};
+}
+
 fn walk_code(code: &Code, sink: &mut impl Sink) {
-    use Code::*;
-
-    match code {
-        // Binary operands.
-        NatEql(a, b)
-        | NatNeq(a, b)
-        | NatAdd(a, b)
-        | NatSub(a, b)
-        | NatMul(a, b)
-        | NatLt(a, b)
-        | NatDiv(a, b)
-        | NatRem(a, b)
-        | NatGt(a, b)
-        | NatLte(a, b)
-        | NatGte(a, b)
-        | NatAnd(a, b)
-        | NatOr(a, b)
-        | NatXor(a, b)
-        | NatShl(a, b)
-        | NatShr(a, b)
-        | NatRotl(a, b)
-        | NatRotr(a, b)
-        | IntEql(a, b)
-        | IntNeq(a, b)
-        | IntAdd(a, b)
-        | IntSub(a, b)
-        | IntMul(a, b)
-        | IntDiv(a, b)
-        | IntRem(a, b)
-        | IntLt(a, b)
-        | IntGt(a, b)
-        | IntLte(a, b)
-        | IntGte(a, b)
-        | IntAnd(a, b)
-        | IntOr(a, b)
-        | IntXor(a, b)
-        | IntShl(a, b)
-        | IntShr(a, b)
-        | IntRotl(a, b)
-        | IntRotr(a, b)
-        | FltAdd(a, b)
-        | FltSub(a, b)
-        | FltMul(a, b)
-        | FltDiv(a, b)
-        | FltEql(a, b)
-        | FltNeq(a, b)
-        | FltLt(a, b)
-        | FltGt(a, b)
-        | FltLte(a, b)
-        | FltGte(a, b)
-        | FltMin(a, b)
-        | FltMax(a, b)
-        | FltCopysign(a, b)
-        | BinEql(a, b)
-        | BinGet(a, b)
-        | BinAppend(a, b)
-        | ArrGet(a, b)
-        | ArrAppend(a, b) => {
-            sink.value_use(a);
-            sink.value_use(b);
-        }
-
-        // Ternary operands.
-        BinSlice(a, b, c) | ArrSlice(a, b, c) => {
-            sink.value_use(a);
-            sink.value_use(b);
-            sink.value_use(c);
-        }
-
-        // Unary operands.
-        NatClz(a)
-        | NatCtz(a)
-        | NatPopcnt(a)
-        | NatEqz(a)
-        | NatToStr(a)
-        | NatToInt(a)
-        | NatToFlt(a)
-        | IntClz(a)
-        | IntCtz(a)
-        | IntPopcnt(a)
-        | IntEqz(a)
-        | IntToStr(a)
-        | IntToNat(a)
-        | IntToFlt(a)
-        | FltNeg(a)
-        | FltAbs(a)
-        | FltSqrt(a)
-        | FltFloor(a)
-        | FltCeil(a)
-        | FltTrunc(a)
-        | FltNearest(a)
-        | FltToStr(a)
-        | FltToNat(a)
-        | FltToInt(a)
-        | BinLen(a)
-        | ArrLen(a)
-        | TplGet(a, _) => sink.value_use(a),
-
-        // Variadic operands.
-        BinConcat(operands) | ArrConcat(operands) => walk_uses(operands, sink),
-    }
+    walk_code_operands!(code, sink)
 }
 
 fn walk_uses(names: &[ValueName], sink: &mut impl Sink) {
@@ -305,107 +320,7 @@ fn walk_jump_mut(target: &mut JumpTarget, sink: &mut impl SinkMut) {
 }
 
 fn walk_code_mut(code: &mut Code, sink: &mut impl SinkMut) {
-    use Code::*;
-
-    match code {
-        // Binary operands.
-        NatEql(a, b)
-        | NatNeq(a, b)
-        | NatAdd(a, b)
-        | NatSub(a, b)
-        | NatMul(a, b)
-        | NatLt(a, b)
-        | NatDiv(a, b)
-        | NatRem(a, b)
-        | NatGt(a, b)
-        | NatLte(a, b)
-        | NatGte(a, b)
-        | NatAnd(a, b)
-        | NatOr(a, b)
-        | NatXor(a, b)
-        | NatShl(a, b)
-        | NatShr(a, b)
-        | NatRotl(a, b)
-        | NatRotr(a, b)
-        | IntEql(a, b)
-        | IntNeq(a, b)
-        | IntAdd(a, b)
-        | IntSub(a, b)
-        | IntMul(a, b)
-        | IntDiv(a, b)
-        | IntRem(a, b)
-        | IntLt(a, b)
-        | IntGt(a, b)
-        | IntLte(a, b)
-        | IntGte(a, b)
-        | IntAnd(a, b)
-        | IntOr(a, b)
-        | IntXor(a, b)
-        | IntShl(a, b)
-        | IntShr(a, b)
-        | IntRotl(a, b)
-        | IntRotr(a, b)
-        | FltAdd(a, b)
-        | FltSub(a, b)
-        | FltMul(a, b)
-        | FltDiv(a, b)
-        | FltEql(a, b)
-        | FltNeq(a, b)
-        | FltLt(a, b)
-        | FltGt(a, b)
-        | FltLte(a, b)
-        | FltGte(a, b)
-        | FltMin(a, b)
-        | FltMax(a, b)
-        | FltCopysign(a, b)
-        | BinEql(a, b)
-        | BinGet(a, b)
-        | BinAppend(a, b)
-        | ArrGet(a, b)
-        | ArrAppend(a, b) => {
-            sink.value_use(a);
-            sink.value_use(b);
-        }
-
-        // Ternary operands.
-        BinSlice(a, b, c) | ArrSlice(a, b, c) => {
-            sink.value_use(a);
-            sink.value_use(b);
-            sink.value_use(c);
-        }
-
-        // Unary operands.
-        NatClz(a)
-        | NatCtz(a)
-        | NatPopcnt(a)
-        | NatEqz(a)
-        | NatToStr(a)
-        | NatToInt(a)
-        | NatToFlt(a)
-        | IntClz(a)
-        | IntCtz(a)
-        | IntPopcnt(a)
-        | IntEqz(a)
-        | IntToStr(a)
-        | IntToNat(a)
-        | IntToFlt(a)
-        | FltNeg(a)
-        | FltAbs(a)
-        | FltSqrt(a)
-        | FltFloor(a)
-        | FltCeil(a)
-        | FltTrunc(a)
-        | FltNearest(a)
-        | FltToStr(a)
-        | FltToNat(a)
-        | FltToInt(a)
-        | BinLen(a)
-        | ArrLen(a)
-        | TplGet(a, _) => sink.value_use(a),
-
-        // Variadic operands.
-        BinConcat(operands) | ArrConcat(operands) => walk_uses_mut(operands, sink),
-    }
+    walk_code_operands!(code, sink)
 }
 
 fn walk_uses_mut(names: &mut [ValueName], sink: &mut impl SinkMut) {
