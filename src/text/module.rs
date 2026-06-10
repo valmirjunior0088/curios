@@ -1,5 +1,5 @@
 use {
-    super::{LetSignature, Name, Term},
+    super::{LetSignature, Name, Plicity, Term},
     crate::Span,
 };
 
@@ -55,7 +55,16 @@ pub struct TopLet {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase {
     pub label: String,
-    pub payload_types: Vec<Term>,
+    /// Payload binders. The name is optional (`success(A)` stays positional);
+    /// it is required when a later payload type or the case target mentions
+    /// the binder. A *named* binder may carry `@`, making it implicit at the
+    /// value-constructor function (`cons(@m : Nat, ...)` — `m` is recoverable
+    /// from a later payload's type).
+    pub payload: Vec<(Plicity, Option<String>, Term)>,
+    /// The parenthesized index expressions after the payload — the case's
+    /// terminal `: Vec(T, m + 1)` with the mandatory part elided to
+    /// `: (m + 1)`. Present iff the union head declares indices.
+    pub target: Option<Vec<Term>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +76,10 @@ pub struct TopUnion {
     /// every value constructor (the desugar applies the marks), with the
     /// call-site `@` available to supply one positionally when wanted.
     pub params: Vec<(String, Term)>,
+    /// The head's index telescope, `union Vec(T : Type) : (n : Nat)`. Names
+    /// are optional and documentary — needed only when a later index's type
+    /// depends on an earlier one; they are *not* in scope in the cases.
+    pub indices: Vec<(Option<String>, Term)>,
     pub cases: Vec<TopCase>,
 }
 

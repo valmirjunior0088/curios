@@ -1,9 +1,10 @@
 use {
     super::{
         Apply, Atom, Cases, Match, Context, Definition, Error, Func, FuncType, ImplicitOrigin,
-        Item, Let, Many, Metavar, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, Variant, UnionType, Var,
-        check_motive, elaborate_prim, expect, reduce_with, refine_head,
+        Inductive, Invert, Item, Let, Many, Metavar, Module, MotivePattern, MotiveSlot, Nat,
+        Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        Variant, UnionType, Var, case_target_indices, check_motive, convert_with, elaborate_prim,
+        expect, invert_indices, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -401,7 +402,7 @@ fn elaborate_prim_head(
 fn seed_motive(
     context: &mut Context,
     term: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     head: &Term,
     mode: &Mode,
 ) -> Result<(), Error> {
@@ -415,7 +416,7 @@ fn seed_motive(
 fn elaborate_nat_induction(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     zero_case: &Term,
     succ_case: &Scope<Two>,
     term: &Term,
@@ -475,7 +476,7 @@ fn elaborate_nat_induction(
 fn elaborate_nat_dispatch(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
@@ -543,7 +544,9 @@ fn elaborate_match(
         Cases::NatDispatch { cases, default } => {
             elaborate_nat_dispatch(context, head, motive, cases, default, term, mode)
         }
-        Cases::Union(cases) => elaborate_union_match(context, head, motive, cases, term, mode),
+        Cases::Union { cases, pattern } => {
+            elaborate_union_match(context, head, motive, cases, pattern.as_ref(), term, mode)
+        }
     }
 }
 
@@ -551,7 +554,7 @@ fn elaborate_match(
 fn elaborate_bln_match(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     false_case: &Term,
     true_case: &Term,
     term: &Term,
@@ -621,34 +624,48 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
 }
 
 /// Type a primitive inductive type against its registry entry: the parameters
-/// are checked pointwise (dependently) against the declaration's parameter
-/// telescope, and the whole node is a `Type`.
+/// and indices are checked pointwise (dependently) as one flat argument list
+/// through the declaration's full index telescope (whose leading binders are
+/// the parameters), and the whole node is a `Type`.
 fn elaborate_union_type(
     context: &mut Context,
     ut: &UnionType,
     term: &Term,
 ) -> Result<(Term, Term), Error> {
-    let UnionType { name, params } = ut;
+    let UnionType {
+        name,
+        params,
+        indices,
+    } = ut;
 
     let Some(inductive) = context.inductive(name).cloned() else {
         return Err(Error::unbound_variable(Term::var(Var::free(name))));
     };
 
-    if params.len() != inductive.params.len() {
+    let args: Vec<Term> = params.iter().chain(indices.iter()).cloned().collect();
+
+    if args.len() != inductive.indices.len() {
         return Err(Error::wrong_number_of_arguments(
             term.clone(),
-            inductive.params.len(),
-            params.len(),
+            inductive.indices.len(),
+            args.len(),
         ));
     }
 
-    let mut elaborated = Vec::with_capacity(params.len());
-    inductive.params.walk(params, |param, ty| {
-        elaborated.push(check(context, param, ty.clone())?);
+    let mut elaborated = Vec::with_capacity(args.len());
+    inductive.indices.walk(&args, |arg, ty| {
+        elaborated.push(check(context, arg, ty.clone())?);
         Ok(())
     })?;
 
-    Ok((Term::union_type(name, elaborated), Term::type_()))
+    Ok((
+        Term::union_type(
+            name,
+            elaborated[..params.len()].iter().cloned(),
+            elaborated[params.len()..].iter().cloned(),
+        ),
+        Term::type_(),
+    ))
 }
 
 /// Type a primitive constructor value against its registry signature: the
@@ -705,19 +722,32 @@ fn elaborate_variant(
 /// typed directly from the constructor's registry telescope instantiated at
 /// the scrutinee type's parameters — no projections from a stuck payload —
 /// and each arm's binder count is statically checked against that telescope.
+///
+/// With a plain motive (no pattern) the discipline is constant/scrutinee-only:
+/// arms check against `motive(variant)`, the match has type `motive(head)`,
+/// and any indices ride along inertly. The annotated type-pattern motive
+/// (Rung A of the indexed-union ladder) additionally binds the scrutinee's
+/// indices: each arm checks against the motive at *that case's* target
+/// indices, and the whole match types at the scrutinee's *actual* indices.
+#[allow(clippy::too_many_arguments)]
 fn elaborate_union_match(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
+    pattern: Option<&MotivePattern>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let (name, params) = match &*head_type {
-        Subterm::UnionType(UnionType { name, params }) => (name.clone(), params.clone()),
+    let (name, params, actual_indices) = match &*head_type {
+        Subterm::UnionType(UnionType {
+            name,
+            params,
+            indices,
+        }) => (name.clone(), params.clone(), indices.clone()),
         other => return Err(Error::not_a_union_type(term.clone(), other.clone())),
     };
 
@@ -725,11 +755,41 @@ fn elaborate_union_match(
         return Err(Error::unbound_variable(Term::var(Var::free(&name))));
     };
 
-    let motive_elaborated = check_motive(context, &head_type, motive)?;
+    let (motive_elaborated, pattern_elaborated, plan) = match pattern {
+        None => (check_motive(context, &head_type, motive)?, None, vec![]),
+        Some(pattern) => {
+            let (motive_elaborated, pattern_elaborated, plan) =
+                check_union_motive(context, &inductive, &name, &params, motive, pattern, term)?;
+            (motive_elaborated, Some(pattern_elaborated), plan)
+        }
+    };
 
-    seed_motive(context, term, motive, head, &mode)?;
+    // The match's own type: the motive at the scrutinee itself — and, for a
+    // pattern motive, at the scrutinee's actual parameters and indices.
+    let result_args = plan
+        .iter()
+        .map(|slot| match slot {
+            SlotPlan::Param(i) => params[*i].clone(),
+            SlotPlan::Index(j) => actual_indices[*j].clone(),
+        })
+        .collect::<Vec<_>>();
+    let result_refs = result_args.iter().chain([head]).collect::<Vec<_>>();
+    let result_type = motive.open(&result_refs);
 
-    if cases.len() != inductive.constructors.len() {
+    // The seed (`seed_motive`'s job, generalized over the pattern binders):
+    // in checking mode, pin the motive — a bare metavar when elided — to the
+    // expected type before the arms are checked.
+    if let Mode::Check(expected) = &mode {
+        expect(context, term, &result_type, expected)?;
+    }
+
+    // Every written arm must name a constructor; coverage is decided per
+    // constructor below — a missing arm is legal iff inversion proves it
+    // impossible (Rung C).
+    if cases
+        .keys()
+        .any(|tag| !inductive.constructors.contains_key(tag))
+    {
         return Err(Error::match_arity_mismatch(
             term.clone(),
             inductive.constructors.len(),
@@ -740,7 +800,39 @@ fn elaborate_union_match(
     let mut cases_elaborated = BTreeMap::new();
     for tag in inductive.constructors.keys() {
         let Some(scope) = cases.get(tag) else {
-            return Err(Error::match_case_missing(term.clone(), tag.clone()));
+            // An unindexed union has nothing to invert: every arm is
+            // reachable and a missing one is plainly missing.
+            if actual_indices.is_empty() {
+                return Err(Error::match_case_missing(term.clone(), tag.clone()));
+            }
+
+            // Rung C — checker-verified omission: a missing arm is accepted
+            // iff first-order inversion of the scrutinee's actual indices
+            // against this case's targets finds a *definite* clash. The arm
+            // is then pruned (erase fills its slot with an unreachable
+            // body); anything short of definite keeps the arm mandatory.
+            let telescope = inductive
+                .instantiate(tag, &params)
+                .expect("constructor instantiates at its inductive's parameters");
+
+            let labels = (0..telescope.len())
+                .map(|_| context.fresh(None))
+                .collect::<Vec<_>>();
+            let vars = labels
+                .iter()
+                .map(|label| Term::var(Var::free(label)))
+                .collect::<Vec<_>>();
+            let ix_c = case_target_indices(telescope, &vars);
+
+            match invert_indices(context, &actual_indices, &ix_c, &labels)? {
+                Invert::Impossible => continue,
+                Invert::Solved(_) => {
+                    return Err(Error::missing_arm_not_impossible(
+                        term.clone(),
+                        tag.clone(),
+                    ));
+                }
+            }
         };
 
         let telescope = inductive
@@ -786,6 +878,16 @@ fn elaborate_union_match(
                 }
             }
 
+            // This case's target indices: the terminal of its (instantiated,
+            // opened) signature states them over the payload binders.
+            let ix_c = match &telescope {
+                Telescope::Done(terminal) => match &***terminal {
+                    Subterm::UnionType(UnionType { indices, .. }) => indices.clone(),
+                    _ => unreachable!("constructor terminal is its union type"),
+                },
+                Telescope::Cons(..) => unreachable!("arity checked above"),
+            };
+
             // Refinement propagates `head := ctor_val` to other occurrences of
             // the scrutinee in the arm body; the binder types themselves came
             // from the telescope above.
@@ -793,7 +895,43 @@ fn elaborate_union_match(
                 Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
             refine_head(context, head, &ctor_val);
 
-            let expected = motive.open(&[&ctor_val]);
+            // Rung B — definitional learning: a scrutinee index that is a
+            // stable key (`refine_head`'s Var/Proj restriction) reduces,
+            // inside this arm, to the case's target index — the same
+            // counterfactual, frame-scoped move as `head := ctor_val`.
+            // Refinements never justify the typing (the motive application
+            // does); they are convertibility aids, so context hypotheses
+            // mentioning the key reduce at the arm's index.
+            for (actual, target) in actual_indices.iter().zip(&ix_c) {
+                refine_head(context, actual, target);
+            }
+
+            // Rung C — inversion, arm side: a scrutinee index in constructor
+            // form pins arm binders to forced values (`m + 1 ~ n + 1` pins
+            // `m := n`), registered as the same frame-scoped reducts. A
+            // definite clash here means the arm is unreachable; it was
+            // written, so it is simply checked as is.
+            if let Invert::Solved(solutions) =
+                invert_indices(context, &actual_indices, &ix_c, &labels)?
+            {
+                for (label, solution) in solutions {
+                    context.refine(&label, &solution);
+                }
+            }
+
+            // The motive at this case: pattern binders take the actual
+            // parameters and the case's target indices; the scrutinee takes
+            // the constructed value.
+            let arm_args = plan
+                .iter()
+                .map(|slot| match slot {
+                    SlotPlan::Param(i) => params[*i].clone(),
+                    SlotPlan::Index(j) => ix_c[*j].clone(),
+                })
+                .collect::<Vec<_>>();
+            let arm_refs = arm_args.iter().chain([&ctor_val]).collect::<Vec<_>>();
+            let expected = motive.open(&arm_refs);
+
             let var_refs = vars.iter().collect::<Vec<_>>();
             check(context, &scope.open(&var_refs), expected)
         })?;
@@ -808,11 +946,194 @@ fn elaborate_union_match(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: Cases::Union(cases_elaborated),
+        cases: Cases::Union {
+            cases: cases_elaborated,
+            pattern: pattern_elaborated,
+        },
     })
     .into();
 
-    Ok((rebuilt, motive.open(&[head])))
+    Ok((rebuilt, result_type))
+}
+
+/// How each binder of an annotated motive scope (scrutinee excluded) maps to
+/// the union's flat argument list: a parameter position (opened with the
+/// actual parameter everywhere) or an index position (opened with the case's
+/// target index in arms, the scrutinee's actual index for the match itself).
+enum SlotPlan {
+    Param(usize),
+    Index(usize),
+}
+
+/// Check the annotated type-pattern motive of a union match: validate the
+/// pattern against the registry (parameter slots verbatim-or-binder, index
+/// slots binder-only), then check the motive body as a type family over the
+/// index binders and the scrutinee.
+///
+/// Index binders are assumed at the registry's index telescope instantiated
+/// at the scrutinee's actual parameters, each later type opened with the
+/// earlier binder; the scrutinee binder is assumed at
+/// `UnionType(name, params, index-vars)`. No unification anywhere — the
+/// eliminator's discipline.
+fn check_union_motive(
+    context: &mut Context,
+    inductive: &Inductive,
+    name: &str,
+    params: &[Term],
+    motive: &Scope<Many>,
+    pattern: &MotivePattern,
+    term: &Term,
+) -> Result<(Scope<Many>, MotivePattern, Vec<SlotPlan>), Error> {
+    let n_params = inductive.params.len();
+    let n_indices = inductive.indices.len() - n_params;
+
+    if pattern.name != name {
+        return Err(Error::motive_wrong_union(
+            term.clone(),
+            pattern.name.clone(),
+            name.to_string(),
+        ));
+    }
+
+    if pattern.slots.len() != n_params + n_indices {
+        return Err(Error::motive_pattern_arity(
+            term.clone(),
+            n_params + n_indices,
+            pattern.slots.len(),
+        ));
+    }
+
+    // Each parameter's declared type at the actual parameters, for checking
+    // verbatim slots.
+    let mut param_types = Vec::with_capacity(n_params);
+    inductive.params.clone().walk(params, |_, ty| {
+        param_types.push(ty.clone());
+        Ok(())
+    })?;
+
+    let mut plan = Vec::new();
+    let mut slots_elaborated = Vec::new();
+
+    for (position, slot) in pattern.slots.iter().enumerate() {
+        match (slot, position < n_params) {
+            // A parameter slot binder is legal — it binds the actual
+            // parameter, which the scrutinee's type fixes anyway.
+            (MotiveSlot::Binder, true) => {
+                plan.push(SlotPlan::Param(position));
+                slots_elaborated.push(MotiveSlot::Binder);
+            }
+            (MotiveSlot::Binder, false) => {
+                plan.push(SlotPlan::Index(position - n_params));
+                slots_elaborated.push(MotiveSlot::Binder);
+            }
+            // A verbatim parameter must be the actual parameter — written
+            // out for the reader, checked for the checker.
+            (MotiveSlot::Term(t), true) => {
+                let elaborated = check(context, t, param_types[position].clone())?;
+                if !convert_with(context, &elaborated, &params[position])? {
+                    return Err(Error::motive_param_mismatch(
+                        term.clone(),
+                        elaborated,
+                        params[position].clone(),
+                    ));
+                }
+                slots_elaborated.push(MotiveSlot::Term(elaborated));
+            }
+            // An index slot states nothing — it binds. Constraining an index
+            // is the declaration's job (case targets), not the motive's.
+            (MotiveSlot::Term(t), false) => {
+                return Err(Error::motive_index_slot_not_binder(
+                    term.clone(),
+                    t.clone(),
+                ));
+            }
+        }
+    }
+
+    // The lowering closes one motive binder per binder slot, then the
+    // scrutinee; a mismatch is a lowering bug, not user error.
+    assert_eq!(
+        plan.len() + 1,
+        motive.arity(),
+        "motive scope arity matches its pattern's binder slots"
+    );
+
+    let hints = motive
+        .label_iter()
+        .map(|l| l.map(str::to_string))
+        .collect::<Vec<_>>();
+    let labels = hints
+        .iter()
+        .map(|hint| context.fresh(hint.as_deref()))
+        .collect::<Vec<_>>();
+
+    let motive_elaborated = context.with_frame(|context| {
+        // Peel the parameter binders off the full index telescope, leaving
+        // the index types at the actual parameters.
+        let mut ix_telescope = inductive.indices.clone();
+        for param in params {
+            ix_telescope = match ix_telescope {
+                Telescope::Cons(_, rest) => rest.open(&[param]),
+                Telescope::Done(_) => unreachable!("index telescope leads with the parameters"),
+            };
+        }
+
+        let mut index_vars = Vec::with_capacity(n_indices);
+        for (slot, label) in plan.iter().zip(&labels) {
+            let var = Term::var(Var::free(label));
+            match slot {
+                // A parameter binder is an *alias* of the actual parameter —
+                // defined, not assumed, so the motive body's uses of it are
+                // convertible with the index types (which are instantiated at
+                // the actual parameters directly).
+                SlotPlan::Param(i) => {
+                    context.define_assuming(label, &param_types[*i], &params[*i])
+                }
+                SlotPlan::Index(_) => {
+                    ix_telescope = match ix_telescope {
+                        Telescope::Cons(ty, rest) => {
+                            context.assume(label, &ty);
+                            rest.open(&[&var])
+                        }
+                        Telescope::Done(_) => {
+                            unreachable!("index slot count equals the index telescope's")
+                        }
+                    };
+                    index_vars.push(var);
+                }
+            }
+        }
+
+        let scrutinee_label = labels.last().expect("motive binds at least the scrutinee");
+        context.assume(
+            scrutinee_label,
+            &Term::union_type(name, params.to_vec(), index_vars),
+        );
+
+        let var_terms = labels
+            .iter()
+            .map(|label| Term::var(Var::free(label)))
+            .collect::<Vec<_>>();
+        let var_refs = var_terms.iter().collect::<Vec<_>>();
+        let body = elaborate(
+            context,
+            &motive.open(&var_refs),
+            Mode::Check(Term::type_()),
+        )?
+        .0;
+
+        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        Ok(Scope::close(Many(labels.len()), &label_strs, body))
+    })?;
+
+    Ok((
+        motive_elaborated,
+        MotivePattern {
+            name: name.to_string(),
+            slots: slots_elaborated,
+        },
+        plan,
+    ))
 }
 
 fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term, Term), Error> {

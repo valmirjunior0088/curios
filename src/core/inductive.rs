@@ -18,10 +18,19 @@ pub struct Inductive {
     /// `union Result(A : Type, E : Type)`. Ends in `()` like a `TupleType`'s
     /// telescope: there is no trailing body, only binders.
     pub params: Telescope<()>,
+    /// The declaration's *full* index telescope — the parameter binders first
+    /// (index types may depend on them), then the index binders from the
+    /// head's `: (...)` group, e.g. `(T : Type, n : Nat)` for
+    /// `union Vec(T : Type) : (n : Nat)`. Empty-beyond-params for an
+    /// unindexed union. Like `constructors`, instantiate at known parameters
+    /// by peeling the leading `params.len()` binders.
+    pub indices: Telescope<()>,
     /// Per-constructor signatures, keyed by tag. Each telescope is the
     /// constructor's *full* signature — the parameter binders first, then the
     /// payload binders, terminating in the constructed type. E.g.
     /// `success ↦ (A : Type, E : Type, _0 : A) -> UnionType { Result, [A, E] }`.
+    /// For an indexed union the terminal is *per-case*: its indices are that
+    /// case's target expressions over the payload binders.
     /// Instantiating a constructor at known parameters peels the leading
     /// `params.len()` binders by opening each with the corresponding parameter.
     pub constructors: BTreeMap<Atom, Telescope<Term>>,

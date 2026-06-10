@@ -95,7 +95,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
 - Application `f(a, b)`
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
-- The unified `match x : k => T | … end` eliminator covering unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`)
+- The unified `match x : motive | … end` eliminator covering unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`); the motive ladder is `: T`, `: (x) => T`, or — union scrutinees — the index-binding `: (x : Vec(T, k)) => T`
 - `e.0`, `e.1` (field access / Σ-elimination)
 - Holes `?`, which elaborate to fresh metavariables solved by bidirectional type checking
 - Monadic sequencing sugar: `with bind body` plus postfix `!`, desugared before core elaboration by re-elaborating the bind at each bang site
@@ -125,13 +125,13 @@ The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoa
 
 **Term elaboration** (`to_core/elaborate.rs`): syntactic translation from `text::Term` to `core::Term`. The binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices; a `union` match lowers to a primitive `core::UnionMatch` whose arms carry their binders as scopes. No type-directed work.
 
-`to_core` returns `Result<core::Module, text::Error>`, where `core::Module { items, inductives, type_, body }` carries flat top-level definitions, the inductive registry (each `union` declaration's parameter telescope and per-constructor signatures, consulted by elaboration and erasure), the optional entrypoint type annotation, and the entrypoint body. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+`to_core` returns `Result<core::Module, text::Error>`, where `core::Module { items, inductives, metavars, type_, body }` carries flat top-level definitions, the inductive registry (each `union` declaration's parameter telescope, index telescope, and per-constructor signatures, consulted by elaboration and erasure), the metavariable floor, the optional entrypoint type annotation, and the entrypoint body. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
 The three union lowerings are:
 
-- a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope and per-constructor signatures
+- a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope, the index telescope, and per-constructor signatures (for an indexed union each signature terminates in its *per-case* `UnionType`, indices stated by that case's target)
 - a **constructor function** → a function whose body is the primitive `Variant` normal form
-- a union **match** → a primitive `Match` with `Cases::Union` (arm binders typed from the registry telescopes during core elaboration, with static arity checking)
+- a union **match** → a primitive `Match` with `Cases::Union` (arm binders typed from the registry telescopes during core elaboration, with static arity checking; an annotated motive's type-pattern rides along for positional validation, and index information flows through refinement and the restricted inverter in `core/invert.rs`)
 
 ---
 
@@ -146,7 +146,7 @@ The central `core::Term` enum:
 | `Type`                         | The sort (no universe hierarchy)                             |
 | `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application |
 | `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access   |
-| `Match`                        | The unified eliminator: one scrutinee + motive, with `Cases::{Bln, NatInduction, NatDispatch, Union}` |
+| `Match`                        | The unified eliminator: one scrutinee + motive (`Scope<Many>` — arity 1 except an index-binding union motive), with `Cases::{Bln, NatInduction, NatDispatch, Union}` |
 | `UnionType` / `Variant`        | Nominal (inductive) unions: the type and constructor values  |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                |
 | `Prim`                         | Built-in values and operations                               |
@@ -162,9 +162,9 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 | `A`       | Used by                                                                  |
 | --------- | ------------------------------------------------------------------------ |
-| `One`     | `NatMatch` (motive), `Match` (motive), `BlnMatch` (motive), `Let` (tail) |
-| `Two`     | `NatMatch::Induction` (succ_case — binds `pred` and `ih`)                |
-| `Many(n)` | `Func` (parameters), `Rec` (items and tail)                              |
+| `One`     | `Let` (tail), `Telescope` links                                          |
+| `Two`     | `Cases::NatInduction` (succ_case — binds `pred` and `ih`)                |
+| `Many(n)` | `Func` (parameters), `Rec` (items and tail), `Match` (motive), union arms |
 
 The `Bound` trait describes types that can sit under a `Scope` — its required method is `traverse(&self, visit: &mut Visit<F>) -> Self`, and it provides `shift`, `capture`, `release`, `free_vars` as default methods on top. `Term`, `()`, and `Telescope<B>` all implement `Bound`. A `Visit<F>` struct threads de Bruijn depth and a per-variable rewrite closure (`F: FnMut(depth, &Var) -> Option<Term>`, returning a replacement or `None`) through the whole tree.
 

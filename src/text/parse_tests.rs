@@ -443,9 +443,11 @@ fn parse_top_union_single_variant() {
             is_pub: false,
             label: "Foo".to_string(),
             params: vec![],
+            indices: vec![],
             cases: vec![TopCase {
                 label: "bar".to_string(),
-                payload_types: vec![],
+                payload: vec![],
+                target: None,
             }],
         }])]
     );
@@ -538,10 +540,9 @@ fn parse_union_match_nullary_and_unary() {
             .unwrap(),
         Subterm::Match(Match::Union(UnionMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Some(Motive {
-                label: None,
-                body: Subterm::Name(Name::from(["Bin".to_string()])).into(),
-            }),
+            motive: Some(Motive::Constant(
+                Subterm::Name(Name::from(["Bin".to_string()])).into()
+            )),
             cases: [
                 (
                     "null".to_string(),
@@ -573,10 +574,9 @@ fn parse_union_match_multi_binder() {
             .unwrap(),
         Subterm::Match(Match::Union(UnionMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Some(Motive {
-                label: None,
-                body: Subterm::Name(Name::from(["T".to_string()])).into(),
-            }),
+            motive: Some(Motive::Constant(
+                Subterm::Name(Name::from(["T".to_string()])).into()
+            )),
             cases: [(
                 "lit".to_string(),
                 UnionCase {

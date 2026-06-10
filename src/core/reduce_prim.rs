@@ -137,13 +137,51 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |l, r| l.eql(&r).map(|b| Prim::Bln(!b)),
             Prim::NatNeq,
         ),
-        Prim::NatAdd(left, right) => reduce_nat_binary(
-            context,
-            left,
-            right,
-            |l, r| l.checked_add(r).map(Prim::Nat),
-            Prim::NatAdd,
-        ),
+        // Addition gets more than literal folding: the unit laws and
+        // successor peeling are sound ℕ identities, and making them
+        // *definitional* is what lets symbolic index arithmetic converge —
+        // `Nat/add(j + 1, m)` reduces to `(Nat/add(j, m)) + 1`, so an indexed
+        // constructor's target meets the motive's expected index without any
+        // unification. Each step moves a literal spine outward, so the
+        // rewrite terminates.
+        Prim::NatAdd(left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+
+            if let (Some(l), Some(r)) = (left.as_nat(), right.as_nat())
+                && let Some(sum) = l.checked_add(r)
+            {
+                return Ok(Subterm::Prim(Prim::Nat(sum)));
+            }
+
+            if matches!(&*left, Subterm::Prim(Prim::Nat(Nat::Zero))) {
+                return Ok(Term::unwrap_or_clone(right));
+            }
+            if matches!(&*right, Subterm::Prim(Prim::Nat(Nat::Zero))) {
+                return Ok(Term::unwrap_or_clone(left));
+            }
+
+            if let Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) = &*left {
+                return reduce_prim(
+                    context,
+                    &Prim::Nat(Nat::Succ(
+                        spine.clone(),
+                        Term::prim(Prim::nat_add(inner.clone(), right)),
+                    )),
+                );
+            }
+            if let Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) = &*right {
+                return reduce_prim(
+                    context,
+                    &Prim::Nat(Nat::Succ(
+                        spine.clone(),
+                        Term::prim(Prim::nat_add(left, inner.clone())),
+                    )),
+                );
+            }
+
+            Ok(Subterm::Prim(Prim::nat_add(left, right)))
+        }
         Prim::NatSub(left, right) => reduce_nat_binary(
             context,
             left,

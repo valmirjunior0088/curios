@@ -26,6 +26,9 @@ pub use Option/{let Option};
 pub mod Lst;
 pub use Lst/{let Lst};
 
+pub mod Vec;
+pub use Vec/{let Vec};
+
 pub mod Flt;
 pub use Flt/{let Flt};
 

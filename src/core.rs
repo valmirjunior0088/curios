@@ -59,6 +59,9 @@ pub use typing::*;
 #[cfg(test)]
 mod typing_tests;
 
+mod invert;
+pub use invert::*;
+
 mod elaborate_prim;
 use elaborate_prim::*;
 

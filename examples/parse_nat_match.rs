@@ -15,7 +15,7 @@ fn main() {
         | lbrace()
         | other()
         end
-        match 91 : _ => Token
+        match 91 : Token
         | '"' => Token/quote()
         | '[' => Token/lbracket()
         | '{' => Token/lbrace()

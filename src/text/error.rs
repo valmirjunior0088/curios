@@ -53,6 +53,9 @@ pub enum Error {
     /// A postfix `!` appeared outside any `with` body, so there is no bind
     /// function to sequence it with.
     BangOutsideWith,
+    /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
+    /// union scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
+    AnnotatedMotiveNotUnion,
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -126,6 +129,12 @@ impl fmt::Display for Error {
             }
             Error::BangOutsideWith => {
                 write!(f, "postfix `!` used outside a `with` block")
+            }
+            Error::AnnotatedMotiveNotUnion => {
+                write!(
+                    f,
+                    "an annotated motive `(x : T(...)) => P` is only legal on a union match"
+                )
             }
             Error::ModuleLoadFailed { label, cause } => {
                 write!(f, "failed to load module {label}:\n{}", cause.format())

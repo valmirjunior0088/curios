@@ -441,12 +441,48 @@ fn parse_func<'a>() -> Parser<'a, Term> {
     .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }
 
+// The motive ladder, binder parenthesized in every form (the bare-label
+// `x => P` form is retired): `(x) => P`, `(x : Vec(T, k)) => P`, or a
+// constant term. The catches span through `=>` so a constant motive that
+// merely *starts* with a paren (a tuple type, a Π type) backtracks cleanly.
 fn parse_motive<'a>() -> Parser<'a, Motive> {
-    catch(parse_identifier().and_drop(parse_literal("=>")))
-        .map(|label| Some(label.to_string()))
-        .or(pure(None))
-        .and(lazy(parse_term))
-        .map(|(label, body)| Motive { label, body })
+    catch(
+        parse_literal("(")
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal(")"))
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+    .map(|(label, body): (&str, Term)| Motive::Scrutinee {
+        label: label.to_string(),
+        body,
+    })
+    .or(catch(
+        parse_literal("(")
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal(":"))
+            .and(parse_name())
+            .and(
+                catch(
+                    parse_literal("(")
+                        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                        .and_drop(parse_literal(")")),
+                )
+                .or(pure(vec![])),
+            )
+            .and_drop(parse_literal(")"))
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+    .map(
+        |(((label, name), slots), body): (((&str, Name), Vec<Term>), Term)| Motive::Annotated {
+            label: label.to_string(),
+            name,
+            slots,
+            body,
+        },
+    ))
+    .or(lazy(parse_term).map(Motive::Constant))
 }
 
 fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Motive>)> {
@@ -578,9 +614,12 @@ fn parse_union_match_branch<'a>() -> Parser<'a, (String, UnionCase)> {
         })
 }
 
+// Zero arms are legal: under inversion (Rung C) every impossible arm is
+// silently omittable, and a scrutinee whose indices clash with *every*
+// constructor's target eliminates with no arms at all.
 fn parse_union_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(many1(parse_union_match_branch))
+        .and(many0(parse_union_match_branch))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), branches)| {
             Subterm::Match(Match::Union(UnionMatch {
@@ -973,18 +1012,45 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+// A payload binder: `@m : Nat` (named, implicit at the constructor function),
+// `m : Nat` (named), or a bare type (positional). `@` requires a name — a
+// positional binder has nothing for a later type or the target to mention.
+fn parse_union_payload_field<'a>() -> Parser<'a, (Plicity, Option<String>, Term)> {
+    catch(
+        parse_plicity()
+            .and(parse_identifier())
+            .and_drop(parse_literal(":")),
+    )
+    .and(lazy(parse_term))
+    .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, Some(name.to_string()), ty))
+    .or(lazy(parse_term).map(|ty| (Plicity::Explicit, None, ty)))
+}
+
 fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
     parse_literal("|")
         .and_keep(parse_identifier())
         .and(
             parse_literal("(")
-                .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                .and_keep(sep_by0(parse_union_payload_field, || parse_literal(",")))
                 .and_drop(parse_literal(")")),
         )
-        .map(|(label, payload_types): (&str, Vec<Term>)| TopCase {
-            label: label.to_string(),
-            payload_types: payload_types.into_iter().collect(),
-        })
+        // The case target: `: (index-exprs)` — the terminal with its
+        // mandatory part (the union name and the parameters) elided.
+        .and(
+            catch(parse_literal(":"))
+                .and_keep(parse_literal("("))
+                .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                .and_drop(parse_literal(")"))
+                .map(Some)
+                .or(pure(None)),
+        )
+        .map(
+            |((label, payload), target): ((&str, Vec<_>), Option<Vec<Term>>)| TopCase {
+                label: label.to_string(),
+                payload,
+                target,
+            },
+        )
 }
 
 // A union parameter is a plain `name : type` — no `@`: the desugar already
@@ -998,6 +1064,16 @@ fn parse_union_param<'a>() -> Parser<'a, (String, Term)> {
         .map(|(name, ty): (&str, Term)| (name.to_string(), ty))
 }
 
+// A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is
+// documentary (and a dependency hook for later entries) — never in scope in
+// the cases — so it is optional and never takes `@`.
+fn parse_union_index<'a>() -> Parser<'a, (Option<String>, Term)> {
+    catch(parse_identifier().and_drop(parse_literal(":")))
+        .and(lazy(parse_term))
+        .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
+        .or(lazy(parse_term).map(|ty| (None, ty)))
+}
+
 fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
     parse_identifier()
         .and(
@@ -1008,12 +1084,55 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
             )
             .or(pure(vec![])),
         )
+        // The head's index telescope: `: (n : Nat)` after the parameters.
+        .and(
+            catch(parse_literal(":"))
+                .and_keep(parse_literal("("))
+                .and_keep(sep_by0(parse_union_index, || parse_literal(",")))
+                .and_drop(parse_literal(")"))
+                .or(pure(vec![])),
+        )
         .and(many1(parse_top_union_case))
-        .map(move |((label, params), cases)| TopUnion {
-            is_pub,
-            label: label.to_string(),
-            params: params.into_iter().collect(),
-            cases,
+        .flat_map(move |(((label, params), indices), cases)| {
+            // Targets are required on every case iff the head declares
+            // indices, with arity equal to the index telescope's.
+            for case in &cases {
+                match (&case.target, indices.len()) {
+                    (None, 0) => {}
+                    (None, _) => {
+                        return fail(format!(
+                            "case '{}' of indexed union '{label}' must state its \
+                             index target: `{}(...) : (...)`",
+                            case.label, case.label,
+                        ));
+                    }
+                    (Some(_), 0) => {
+                        return fail(format!(
+                            "case '{}' states an index target, but union '{label}' \
+                             declares no indices",
+                            case.label,
+                        ));
+                    }
+                    (Some(target), arity) if target.len() != arity => {
+                        return fail(format!(
+                            "case '{}' of union '{label}' states {} index \
+                             expression(s), but the head declares {arity}",
+                            case.label,
+                            target.len(),
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+
+            let label = label.to_string();
+            pure(TopUnion {
+                is_pub,
+                label,
+                params,
+                indices,
+                cases,
+            })
         })
 }
 

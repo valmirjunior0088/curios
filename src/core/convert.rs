@@ -322,11 +322,18 @@ impl Convert {
         this: UnionType,
         that: UnionType,
     ) -> Result<bool, ReduceError> {
-        if this.name != that.name || this.params.len() != that.params.len() {
+        if this.name != that.name
+            || this.params.len() != that.params.len()
+            || this.indices.len() != that.indices.len()
+        {
             return Ok(false);
         }
 
         for (a, b) in this.params.into_iter().zip(that.params) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        for (a, b) in this.indices.into_iter().zip(that.indices) {
             self.enqueue(Term::type_(), a, b);
         }
 
@@ -365,11 +372,21 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_(), this.head, that.head);
 
-        let label = Term::var(Var::free(context.fresh(None)));
+        // The motive's arity is 1 except for an annotated union-match motive
+        // (pattern binders then the scrutinee); different arities are
+        // structurally distinct.
+        if this.motive.arity() != that.motive.arity() {
+            return Ok(false);
+        }
+
+        let labels = (0..this.motive.arity())
+            .map(|_| Term::var(Var::free(context.fresh(None))))
+            .collect::<Vec<_>>();
+        let label_refs = labels.iter().collect::<Vec<_>>();
         self.enqueue(
             Term::type_(),
-            this.motive.open(&[&label]),
-            that.motive.open(&[&label]),
+            this.motive.open(&label_refs),
+            that.motive.open(&label_refs),
         );
 
         match (this.cases, that.cases) {
@@ -436,7 +453,16 @@ impl Convert {
                 Ok(true)
             }
 
-            (Cases::Union(this_cases), Cases::Union(that_cases)) => {
+            // The pattern is elaboration-time data, fully reflected in the
+            // motive scope once checked — convertibility ignores it.
+            (
+                Cases::Union {
+                    cases: this_cases, ..
+                },
+                Cases::Union {
+                    cases: that_cases, ..
+                },
+            ) => {
                 if this_cases.len() != that_cases.len() {
                     return Ok(false);
                 }

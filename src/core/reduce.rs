@@ -175,7 +175,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // inline evaluated definition internals (including local-`let`
         // annotation holes that elaboration never births) into types that
         // flow on to `zonk`.
-        Cases::Union(cases) => {
+        Cases::Union { cases, pattern } => {
             let head_reduced = reduce(context, head.clone())?;
 
             if let Subterm::Variant(ctor) = &*head_reduced
@@ -192,7 +192,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head_reduced,
                 motive,
-                cases: Cases::Union(cases),
+                cases: Cases::Union { cases, pattern },
             }))))
         }
     }

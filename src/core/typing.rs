@@ -1,4 +1,4 @@
-use super::{Context, Error, Mode, One, Prim, Proj, Scope, Subterm, Term, Var, elaborate};
+use super::{Context, Error, Many, Mode, Prim, Proj, Scope, Subterm, Term, Var, elaborate};
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
 /// as a thin shim so the many existing call sites (this module, `erase*.rs`,
@@ -53,15 +53,17 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) {
 }
 
 /// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,
-/// returning the rebuilt motive. Shared by every match form. Runs the motive
-/// through `elaborate` in `Check(Type)` mode — erase is downstream lowering now
-/// and no longer type-checks (§6) — and re-closes the elaborated body so the
-/// motive carries its solved/re-closed form (§9).
+/// returning the rebuilt motive. Shared by every match form whose motive binds
+/// only the scrutinee (arity 1) — an annotated union-match motive goes through
+/// `check_union_motive` instead. Runs the motive through `elaborate` in
+/// `Check(Type)` mode — erase is downstream lowering now and no longer
+/// type-checks (§6) — and re-closes the elaborated body so the motive carries
+/// its solved/re-closed form (§9).
 pub fn check_motive(
     context: &mut Context,
     head_type: &Term,
-    motive: &Scope<One>,
-) -> Result<Scope<One>, Error> {
+    motive: &Scope<Many>,
+) -> Result<Scope<Many>, Error> {
     let label = context.fresh(motive.first_label());
 
     context.with_frame(|context| {
@@ -72,7 +74,7 @@ pub fn check_motive(
             Mode::Check(Term::type_()),
         )?
         .0;
-        Ok(Scope::close(One, &[label.as_str()], body))
+        Ok(Scope::close(Many(1), &[label.as_str()], body))
     })
 }
 

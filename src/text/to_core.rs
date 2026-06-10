@@ -212,9 +212,11 @@ fn process_items(
             TopItem::Union(unions) => {
                 // Step 1: type bindings as one rec group. A union's type
                 // binding wraps a primitive `UnionType` normal form in a
-                // `Func` over its type parameters (so `Result(Nat, Bin)`
-                // beta-reduces to `UnionType { Result, [Nat, Bin] }`), and its
-                // shape is recorded in the inductive registry.
+                // `Func` over its type parameters and indices (so
+                // `Result(Nat, Bin)` beta-reduces to `UnionType { Result,
+                // [Nat, Bin] }` and `Vec(Bin, 3)` to `UnionType { Vec, [Bin],
+                // [3] }`), and its shape is recorded in the inductive
+                // registry.
                 let type_flat_items = unions
                     .iter()
                     .map(|u| {
@@ -232,24 +234,54 @@ fn process_items(
                             .map(|(n, _)| core::Term::var(core::Var::free(n)))
                             .collect::<Vec<_>>();
 
+                        // The head's index telescope. Unnamed entries get a
+                        // positional placeholder — the name only matters for
+                        // dependency capture among the index types.
+                        let index_tys = u
+                            .indices
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (n, t))| {
+                                let n = n.clone().unwrap_or_else(|| format!("_{i}"));
+                                Ok((n, elaborate.term(t)?))
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?;
+                        let index_vars = index_tys
+                            .iter()
+                            .map(|(n, _)| core::Term::var(core::Var::free(n)))
+                            .collect::<Vec<_>>();
+
                         // Registry entry: the parameter telescope plus each
                         // constructor's full signature `(params..., payload...)
-                        // -> UnionType { name, params }`. `Telescope::build`
-                        // captures the parameter labels in the payload types
-                        // and the terminal, mirroring `func_type`.
+                        // -> UnionType { name, params, indices }`, where the
+                        // terminal's indices are that *case's* target
+                        // expressions over its payload binders.
+                        // `Telescope::build` captures the parameter and
+                        // payload labels in the payload types and the
+                        // terminal, mirroring `func_type`.
                         let constructors = u
                             .cases
                             .iter()
                             .map(|c| {
                                 let fields = c
-                                    .payload_types
+                                    .payload
                                     .iter()
                                     .enumerate()
-                                    .map(|(i, t)| Ok((format!("_{i}"), elaborate.term(t)?)))
+                                    .map(|(i, (_, n, t))| {
+                                        let n =
+                                            n.clone().unwrap_or_else(|| format!("_{i}"));
+                                        Ok((n, elaborate.term(t)?))
+                                    })
+                                    .collect::<Result<Vec<_>, Error>>()?;
+                                let target = c
+                                    .target
+                                    .iter()
+                                    .flatten()
+                                    .map(|t| elaborate.term(t))
                                     .collect::<Result<Vec<_>, Error>>()?;
                                 let signature = core::Telescope::build(
                                     param_tys.iter().cloned().chain(fields),
-                                    core::Term::union_type(&name, param_vars.clone()),
+                                    core::Term::union_type(&name, param_vars.clone(), target),
                                 );
                                 Ok((core::Atom::from(c.label.as_str()), signature))
                             })
@@ -259,18 +291,30 @@ fn process_items(
                             name.clone(),
                             core::Inductive {
                                 params: core::Telescope::build(param_tys.clone(), ()),
+                                indices: core::Telescope::build(
+                                    param_tys.iter().cloned().chain(index_tys.iter().cloned()),
+                                    (),
+                                ),
                                 constructors,
                             },
                         );
 
-                        let union = core::Term::union_type(&name, param_vars);
+                        let union = core::Term::union_type(&name, param_vars, index_vars);
 
-                        let (type_, body) = if u.params.is_empty() {
+                        // The type constructor is flat and explicit over
+                        // params then indices: `Vec : (T : Type, n : Nat)
+                        // -> Type`. Use sites never distinguish the two.
+                        let binder_tys: Vec<_> = param_tys
+                            .iter()
+                            .cloned()
+                            .chain(index_tys.iter().cloned())
+                            .collect();
+                        let (type_, body) = if binder_tys.is_empty() {
                             (core::Term::type_(), union)
                         } else {
                             (
-                                core::Term::func_type(param_tys.clone(), core::Term::type_()),
-                                core::Term::func(param_tys, union),
+                                core::Term::func_type(binder_tys.clone(), core::Term::type_()),
+                                core::Term::func(binder_tys, union),
                             )
                         };
 
@@ -287,45 +331,62 @@ fn process_items(
                 // Step 2: constructor bindings. Each is a function whose body
                 // injects the variant as a tagged tuple.
                 for u in unions {
-                    // Output type term `T` or `T(A, ...)`, elaborated as a name ref.
-                    let output_type: Term = if u.params.is_empty() {
-                        Subterm::Name(Name::from(vec![u.label.clone()])).into()
-                    } else {
-                        Subterm::Apply(Apply {
-                            head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
-                            // The type constructor takes its parameters
-                            // explicitly — types are written out.
-                            params: u
-                                .params
-                                .iter()
-                                .map(|(n, _)| {
-                                    (
-                                        core::Plicity::Explicit,
-                                        Subterm::Name(Name::from(vec![n.clone()])).into(),
-                                    )
-                                })
-                                .collect(),
-                        })
-                        .into()
-                    };
-
                     for c in &u.cases {
-                        let k = c.payload_types.len();
                         let elaborate = Elaborate::new(context);
+
+                        // Per-case payload binder names: the declared name, or
+                        // a positional placeholder.
+                        let payload_name = |i: usize, n: &Option<String>| {
+                            n.clone().unwrap_or_else(|| format!("_{i}"))
+                        };
+
+                        // Output type term `T`, `T(A, ...)`, or — indexed —
+                        // the case's full terminal `T(A, ..., target...)`,
+                        // elaborated as a name ref applied to the parameters
+                        // and the target's index expressions.
+                        let output_args: Vec<(core::Plicity, Term)> = u
+                            .params
+                            .iter()
+                            .map(|(n, _)| {
+                                (
+                                    core::Plicity::Explicit,
+                                    Subterm::Name(Name::from(vec![n.clone()])).into(),
+                                )
+                            })
+                            .chain(
+                                c.target
+                                    .iter()
+                                    .flatten()
+                                    .map(|t| (core::Plicity::Explicit, t.clone())),
+                            )
+                            .collect();
+                        let output_type: Term = if output_args.is_empty() {
+                            Subterm::Name(Name::from(vec![u.label.clone()])).into()
+                        } else {
+                            Subterm::Apply(Apply {
+                                head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
+                                // The type constructor takes its parameters
+                                // (and indices) explicitly — types are
+                                // written out.
+                                params: output_args,
+                            })
+                            .into()
+                        };
 
                         // Constructor type: (params..., _0 : T_0, ...) -> T.
                         // Every union parameter is implicit at the value
                         // constructor — `Result/success(42)` infers them, the
                         // call-site `@` supplies one positionally — while the
-                        // payload binders stay explicit.
+                        // payload binders keep their declared marks (`@m`
+                        // makes one implicit; the default is explicit).
                         let param_tys = u
                             .params
                             .iter()
                             .map(|(n, t)| {
                                 Ok((core::Plicity::Implicit, n.clone(), elaborate.term(t)?))
                             })
-                            .chain(c.payload_types.iter().enumerate().map(|(i, t)| {
-                                Ok((core::Plicity::Explicit, format!("_{i}"), elaborate.term(t)?))
+                            .chain(c.payload.iter().enumerate().map(|(i, (p, n, t))| {
+                                Ok((*p, payload_name(i, n), elaborate.term(t)?))
                             }))
                             .collect::<Result<Vec<_>, Error>>()?;
                         let ctor_type = core::Term::func_type_marked(
@@ -335,8 +396,13 @@ fn process_items(
 
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
-                        let args: Vec<core::Term> = (0..k)
-                            .map(|i| core::Term::var(core::Var::free(format!("_{i}"))))
+                        let args: Vec<core::Term> = c
+                            .payload
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (_, n, _))| {
+                                core::Term::var(core::Var::free(payload_name(i, n)))
+                            })
                             .collect();
                         let inject = core::Term::variant(
                             context.prefixed(&u.label).join(),

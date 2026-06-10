@@ -562,8 +562,14 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             print_term(head, depth),
             pure(format!(").{index}")),
         ]),
-        Subterm::UnionType(UnionType { name, params }) => {
-            if params.is_empty() {
+        // Params then indices, one flat argument list — exactly how the
+        // type-constructor function is applied at use sites.
+        Subterm::UnionType(UnionType {
+            name,
+            params,
+            indices,
+        }) => {
+            if params.is_empty() && indices.is_empty() {
                 pure(name)
             } else {
                 flat([
@@ -572,6 +578,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     sep_flat(
                         params
                             .into_iter()
+                            .chain(indices)
                             .map(|p| print_term(p, depth))
                             .collect::<Vec<_>>(),
                         || pure(", "),
@@ -607,7 +614,18 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             motive,
             cases,
         }) => {
-            let (motive_label, motive) = open_scope_one(motive, depth);
+            // Arity 1 everywhere except an annotated union-match motive,
+            // whose pattern binders precede the scrutinee binder.
+            let motive_labels = motive
+                .label_iter()
+                .enumerate()
+                .map(|(i, l)| l.map(str::to_string).unwrap_or_else(|| label_at(depth + i)))
+                .collect::<Vec<_>>();
+            let motive_terms = label_terms(&motive_labels);
+            let motive_refs = motive_terms.iter().collect::<Vec<_>>();
+            let motive_arity = motive_labels.len();
+            let motive_label = motive_labels.join(", ");
+            let motive = motive.open(&motive_refs);
 
             // Shared `<keyword> head : label => motive;` prefix; the keyword
             // and arm bodies depend on the case kind.
@@ -615,7 +633,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 Cases::Bln { .. } => "Bln.match ",
                 Cases::NatInduction { .. } => "Nat.fold ",
                 Cases::NatDispatch { .. } => "Nat.match ",
-                Cases::Union(_) => "match ",
+                Cases::Union { .. } => "match ",
             };
 
             let prefix = flat([
@@ -624,7 +642,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(" : "),
                 pure(motive_label),
                 pure(" => "),
-                print_term(motive, depth + 1),
+                print_term(motive, depth + motive_arity),
                 pure(";"),
             ]);
 
@@ -672,7 +690,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         indent(flat([print_term(default, depth), pure(";")])),
                     ])
                 }
-                Cases::Union(cases) => flat(
+                Cases::Union { cases, .. } => flat(
                     cases
                         .into_iter()
                         .map(|(atom, scope)| {

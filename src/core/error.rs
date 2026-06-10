@@ -164,6 +164,39 @@ pub enum Error {
     NatOverflow {
         value: BigUint,
     },
+    /// A union match's annotated motive names a different union than the
+    /// scrutinee's type.
+    MotiveWrongUnion {
+        term: Box<Term>,
+        written: String,
+        actual: String,
+    },
+    /// The annotated motive's slot count differs from the union's flat
+    /// argument list (parameters then indices).
+    MotivePatternArity {
+        term: Box<Term>,
+        expected: usize,
+        got: usize,
+    },
+    /// A verbatim term written in a parameter slot of an annotated motive is
+    /// not convertible with the scrutinee's actual parameter.
+    MotiveParamMismatch {
+        term: Box<Term>,
+        written: Box<Term>,
+        actual: Box<Term>,
+    },
+    /// An index slot of an annotated motive must bind (a fresh name or `_`)
+    /// — index constraints belong to the declaration's case targets.
+    MotiveIndexSlotNotBinder {
+        term: Box<Term>,
+        slot: Box<Term>,
+    },
+    /// An arm of an indexed-union match was omitted, but inversion could not
+    /// prove the case impossible at the scrutinee's indices.
+    MissingArmNotImpossible {
+        term: Box<Term>,
+        tag: Atom,
+    },
     Located {
         span: Span,
         error: Box<Error>,
@@ -350,6 +383,48 @@ impl Error {
         Self::NatOverflow { value }
     }
 
+    pub fn motive_wrong_union<T: Into<Term>>(term: T, written: String, actual: String) -> Self {
+        Self::MotiveWrongUnion {
+            term: Box::new(term.into()),
+            written,
+            actual,
+        }
+    }
+
+    pub fn motive_pattern_arity<T: Into<Term>>(term: T, expected: usize, got: usize) -> Self {
+        Self::MotivePatternArity {
+            term: Box::new(term.into()),
+            expected,
+            got,
+        }
+    }
+
+    pub fn motive_param_mismatch<T: Into<Term>, U: Into<Term>>(
+        term: T,
+        written: U,
+        actual: U,
+    ) -> Self {
+        Self::MotiveParamMismatch {
+            term: Box::new(term.into()),
+            written: Box::new(written.into()),
+            actual: Box::new(actual.into()),
+        }
+    }
+
+    pub fn motive_index_slot_not_binder<T: Into<Term>, U: Into<Term>>(term: T, slot: U) -> Self {
+        Self::MotiveIndexSlotNotBinder {
+            term: Box::new(term.into()),
+            slot: Box::new(slot.into()),
+        }
+    }
+
+    pub fn missing_arm_not_impossible<T: Into<Term>>(term: T, tag: Atom) -> Self {
+        Self::MissingArmNotImpossible {
+            term: Box::new(term.into()),
+            tag,
+        }
+    }
+
     pub fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } => self,
@@ -491,6 +566,40 @@ impl fmt::Display for Error {
             }
             Error::NatOverflow { value } => {
                 write!(f, "Nat literal {value} overflows u32 at the erase boundary")
+            }
+            Error::MotiveWrongUnion {
+                written, actual, ..
+            } => {
+                write!(
+                    f,
+                    "motive annotation names '{written}', but the scrutinee is a '{actual}'"
+                )
+            }
+            Error::MotivePatternArity { expected, got, .. } => {
+                write!(
+                    f,
+                    "motive annotation has {got} argument slot(s), but the union takes {expected} (parameters, then indices)"
+                )
+            }
+            Error::MotiveParamMismatch {
+                written, actual, ..
+            } => {
+                write!(
+                    f,
+                    "motive annotation fixes a parameter to\n  {written}\nbut the scrutinee's is\n  {actual}"
+                )
+            }
+            Error::MotiveIndexSlotNotBinder { slot, .. } => {
+                write!(
+                    f,
+                    "an index slot of a motive annotation must bind a fresh name (or `_`), but `{slot}` was written; indices are constrained by the declaration's case targets, not the motive"
+                )
+            }
+            Error::MissingArmNotImpossible { tag, .. } => {
+                write!(
+                    f,
+                    "missing arm '{tag}': its index target is not provably impossible at the scrutinee's indices — write the arm"
+                )
             }
             Error::BinGetOutOfBounds { len, index } => {
                 write!(f, "Bin.get index {index} out of bounds (length {len})")

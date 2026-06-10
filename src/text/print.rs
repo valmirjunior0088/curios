@@ -17,15 +17,40 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
     }
 }
 
-/// Prints a match's optional motive: ` : label => body` (or ` : body` when
-/// unlabelled), or nothing at all when the motive was omitted in the source.
+/// Prints a match's optional motive — the parenthesized ladder: ` : body`,
+/// ` : (x) => body`, ` : (x : Vec(T, k)) => body` — or nothing at all when
+/// the motive was omitted in the source.
 fn print_motive(motive: Option<Motive>) -> Printer<'static> {
     match motive {
-        Some(Motive {
-            label: Some(label),
+        Some(Motive::Constant(body)) => flat([pure(" : "), print_term(body)]),
+        Some(Motive::Scrutinee { label, body }) => flat([
+            pure(" : ("),
+            pure(label),
+            pure(") => "),
+            print_term(body),
+        ]),
+        Some(Motive::Annotated {
+            label,
+            name,
+            slots,
             body,
-        }) => flat([pure(" : "), pure(label), pure(" => "), print_term(body)]),
-        Some(Motive { label: None, body }) => flat([pure(" : "), print_term(body)]),
+        }) => flat([
+            pure(" : ("),
+            pure(label),
+            pure(" : "),
+            pure(name.join()),
+            if slots.is_empty() {
+                pure("")
+            } else {
+                flat([
+                    pure("("),
+                    sep_flat(slots.into_iter().map(print_term), || pure(", ")),
+                    pure(")"),
+                ])
+            },
+            pure(") => "),
+            print_term(body),
+        ]),
         None => pure(""),
     }
 }
@@ -524,13 +549,52 @@ fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
 }
 
 fn print_top_union_case(case: TopCase) -> Printer<'static> {
+    let payload = sep_flat(
+        case.payload.into_iter().map(|(plicity, name, ty)| {
+            flat([
+                pure(match plicity {
+                    Plicity::Implicit => "@",
+                    Plicity::Explicit => "",
+                }),
+                match name {
+                    Some(name) => flat([pure(name), pure(" : "), print_term(ty)]),
+                    None => print_term(ty),
+                },
+            ])
+        }),
+        || pure(", "),
+    );
+
+    let target = match case.target {
+        Some(exprs) => flat([
+            pure(" : ("),
+            sep_flat(exprs.into_iter().map(print_term), || pure(", ")),
+            pure(")"),
+        ]),
+        None => pure(""),
+    };
+
     flat([
         pure(format!("\n| {}(", case.label)),
-        flat(
-            case.payload_types
-                .into_iter()
-                .map(|t| print_term(t))
-                .collect::<Vec<_>>(),
+        payload,
+        pure(")"),
+        target,
+    ])
+}
+
+fn print_top_union_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'static> {
+    if indices.is_empty() {
+        return pure("");
+    }
+
+    flat([
+        pure(" : ("),
+        sep_flat(
+            indices.into_iter().map(|(name, ty)| match name {
+                Some(name) => flat([pure(name), pure(" : "), print_term(ty)]),
+                None => print_term(ty),
+            }),
+            || pure(", "),
         ),
         pure(")"),
     ])
@@ -545,6 +609,7 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
         print_pub(first.is_pub),
         pure("union "),
         pure(first.label),
+        print_top_union_indices(first.indices),
         flat(
             first
                 .cases
@@ -560,6 +625,7 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
                         print_pub(u.is_pub),
                         pure("and "),
                         pure(u.label),
+                        print_top_union_indices(u.indices),
                         flat(
                             u.cases
                                 .into_iter()

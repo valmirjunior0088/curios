@@ -57,7 +57,7 @@ fn io_read() {
 fn triangular_sum() {
     let source = r#"
         let result : sys/Nat =
-            match 5 : _ => sys/Nat
+            match 5 : sys/Nat
             | 0 => 0
             | pred + 1, ih => sys/Nat/add(ih, pred)
             end;
@@ -76,7 +76,7 @@ fn triangular_sum() {
 fn match_omitted_motive_infers() {
     // The same induction as `triangular_sum`, but with the motive omitted. It is
     // non-dependent (every arm has type `sys/Nat`), so the synthesized metavar
-    // motive is solved by the arms — no explicit `: _ => sys/Nat` needed.
+    // motive is solved by the arms — no explicit `: sys/Nat` needed.
     let source = r#"
         let result : sys/Nat =
             match 5
@@ -373,4 +373,41 @@ fn printf_partial_evaluation_reduces_residual() {
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"Alice is 30".to_vec()]
     );
+}
+
+#[test]
+fn indexed_vec_append_executes() {
+    // Rung A of the indexed-union ladder, *executed*: `append`'s motive binds
+    // the length index (`(v : Vec(T, k)) => Vec(T, Nat/add(k, m))`), the
+    // `cons` arm meets it through the definitional successor-peeling of
+    // `Nat/add`, and the implicit index arguments of the recursive call are
+    // solved to the arm's *first* binder. Running (not just compiling) guards
+    // the zonk realignment of multi-binder arm scopes: with the in-group
+    // order flipped, the solved indices silently referenced the wrong binder
+    // and the program trapped at runtime.
+    let source = r#"
+        use /sys/{Nat, Bin, Io};
+        union Vec(T : Type) : (n : Nat)
+        | nil() : (0)
+        | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+        end
+        rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
+            match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
+            | nil() => w
+            | cons(j, x, xs) => Vec/cons(x, append(xs, w))
+            end;
+        rec total(@n : Nat, v : Vec(Nat, n), acc : Nat) -> Nat =
+            match v : Nat
+            | nil() => acc
+            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            end;
+        let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
+        let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());
+        let c : Vec(Nat, 3) = append(a, b);
+        Io/print(Nat/to_str(total(c, 0)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
 }

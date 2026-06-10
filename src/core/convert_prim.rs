@@ -10,11 +10,24 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltType, Prim::FltType)
         | (Prim::BinType, Prim::BinType) => Ok(true),
         (Prim::Nat(Nat::Zero), Prim::Nat(Nat::Zero)) => Ok(true),
+        // Successor is injective, so the shared literal spine peels off
+        // exactly; the leftover rides on the longer side. This is what lets
+        // a flex tail solve through a spine difference — `2 ~ ?n + 1`
+        // becomes `1 ~ ?n`.
         (Prim::Nat(Nat::Succ(spine_l, il)), Prim::Nat(Nat::Succ(spine_r, ir))) => {
-            if spine_l != spine_r {
-                return Ok(false);
+            match spine_l.cmp(&spine_r) {
+                std::cmp::Ordering::Equal => cmp.enqueue(Term::type_(), il, ir),
+                std::cmp::Ordering::Greater => cmp.enqueue(
+                    Term::type_(),
+                    Term::prim(Prim::Nat(Nat::Succ(spine_l - spine_r, il))),
+                    ir,
+                ),
+                std::cmp::Ordering::Less => cmp.enqueue(
+                    Term::type_(),
+                    il,
+                    Term::prim(Prim::Nat(Nat::Succ(spine_r - spine_l, ir))),
+                ),
             }
-            cmp.enqueue(Term::type_(), il, ir);
             Ok(true)
         }
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),

@@ -164,12 +164,9 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     // `Cases::Union`, carrying the arm binders as scopes; core
                     // elaboration types the binders from the scrutinee type's
                     // registry telescopes.
-                    let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
-
-                    core::Term::union_match(
+                    self.union_match(
                         self.term(&um.head)?,
-                        motive_label,
-                        motive_body,
+                        &um.motive,
                         um.cases
                             .iter()
                             .map(|(label, case)| {
@@ -180,7 +177,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                                 ))
                             })
                             .collect::<Result<Vec<_>, Error>>()?,
-                    )
+                    )?
                 }
             },
             Subterm::Let(let_) => core::Term::let_(
@@ -400,12 +397,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                 // type-directed dispatch downstream), swapping `collect` on the
                 // head and `region` on the arm bodies.
                 let head = self.collect(&um.head, bind, binds)?;
-                let (motive_label, motive_body) = self.motive_parts(&um.motive)?;
 
-                core::Term::union_match(
+                self.union_match(
                     head,
-                    motive_label,
-                    motive_body,
+                    &um.motive,
                     um.cases
                         .iter()
                         .map(|(label, case)| {
@@ -416,7 +411,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                             ))
                         })
                         .collect::<Result<Vec<_>, Error>>()?,
-                )
+                )?
             }
         })
     }
@@ -461,14 +456,84 @@ impl<'a, 'b> Elaborate<'a, 'b> {
     /// match constructors. An omitted motive (`None`) lowers to an unlabelled
     /// fresh metavariable body — the same as writing `: _` — so a non-dependent
     /// match infers its motive by unifying the arms against that metavariable.
+    /// The annotated form is union-only and goes through `union_match` instead.
     fn motive_parts<'m>(
         &self,
         motive: &'m Option<Motive>,
     ) -> Result<(Option<&'m str>, core::Term), Error> {
         match motive {
-            Some(motive) => Ok((motive.label.as_deref(), self.term(&motive.body)?)),
+            Some(Motive::Constant(body)) => Ok((None, self.term(body)?)),
+            Some(Motive::Scrutinee { label, body }) => Ok((Some(label), self.term(body)?)),
+            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotUnion),
             None => Ok((None, core::Term::metavar(self.context.fresh_metavar()))),
         }
+    }
+
+    /// Builds the core union match for both lowering paths (`subterm` and
+    /// `match_region`). A plain motive goes through `motive_parts`; the
+    /// annotated type-pattern form resolves its union name, classifies its
+    /// slots — a bare identifier that resolves to no module binding is a
+    /// binder candidate (locals are invisible here; core elaboration
+    /// validates positionally against the registry), anything else verbatim —
+    /// and closes the motive body over the binder labels then the scrutinee.
+    fn union_match(
+        &self,
+        head: core::Term,
+        motive: &Option<Motive>,
+        cases: Vec<(core::Atom, Vec<String>, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        let Some(Motive::Annotated {
+            label,
+            name,
+            slots,
+            body,
+        }) = motive
+        else {
+            let (label, body) = self.motive_parts(motive)?;
+            return Ok(core::Term::union_match(head, label, body, cases));
+        };
+
+        // Resolve the annotation's union name exactly like a term reference.
+        let resolved = if name.is_abs() || !name.is_single() {
+            self.context.resolve_term_name(name)?.join()
+        } else {
+            match self.context.bindings().get(name.head()) {
+                Some(full) => full.join(),
+                None => name.head().to_string(),
+            }
+        };
+
+        let mut binders = Vec::new();
+        let mut pattern_slots = Vec::new();
+        for slot in slots {
+            match slot.as_subterm() {
+                // A single unqualified identifier naming no module binding:
+                // a binder candidate. (One that *does* name a module binding
+                // — `Vec(Nat, k)`'s `Nat` — must stay a reference: binding it
+                // would capture the global's occurrences in `P`.)
+                Subterm::Name(n)
+                    if n.is_single()
+                        && !n.is_abs()
+                        && self.context.bindings().get(n.head()).is_none() =>
+                {
+                    binders.push(n.head().to_string());
+                    pattern_slots.push(core::MotiveSlot::Binder);
+                }
+                _ => pattern_slots.push(core::MotiveSlot::Term(self.term(slot)?)),
+            }
+        }
+
+        Ok(core::Term::union_match_motive(
+            head,
+            binders,
+            label,
+            self.term(body)?,
+            core::MotivePattern {
+                name: resolved,
+                slots: pattern_slots,
+            },
+            cases,
+        ))
     }
 
     pub fn prim(&self, prim: &Prim) -> Result<core::Prim, Error> {

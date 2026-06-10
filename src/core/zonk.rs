@@ -1,7 +1,7 @@
 use super::{
     Apply, Cases, Match, Arity, Bound, Context, Definition, Error, Func, FuncType, Inductive, Item,
-    Let, Metavar, Module, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
-    Tuple, TupleType, Variant, UnionType,
+    Let, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm,
+    Telescope, Term, Tuple, TupleType, Variant, UnionType,
 };
 
 /// Placeholder label pushed onto the binder stack for an unnamed (constant) scope
@@ -11,9 +11,17 @@ use super::{
 /// `/`-joined paths), so `capture` never rewrites anything against it.
 const UNNAMED_BINDER: &str = "";
 
-/// Enter `scope`'s body with its binders pushed onto the stack, innermost last.
+/// Enter `scope`'s body with its binders pushed onto the stack.
 /// `capture` at a metavariable splice (see [`zonk_term`]) reads this stack to
-/// realign a solution's free locals to the de Bruijn indices they now sit under.
+/// realign a solution's free locals to the de Bruijn indices they now sit
+/// under, after one flat reversal of the whole stack.
+///
+/// Within a single multi-binder (`Many`/`Two`) scope, `Scope::close` maps the
+/// label at position `i` to bound index `i` — the group's labels are *not*
+/// innermost-first among themselves. The splice site's flat reversal is right
+/// for the group-to-group nesting but would flip the order inside a group, so
+/// each group is pushed reversed here: the two reversals cancel within the
+/// group and compose correctly across groups.
 fn enter_scope<A, B>(
     binders: &[String],
     scope: &Scope<A, B>,
@@ -25,7 +33,7 @@ where
 {
     let mut extended = binders.to_vec();
     match scope.names() {
-        Some(names) => extended.extend(names.iter().cloned()),
+        Some(names) => extended.extend(names.iter().rev().cloned()),
         None => extended.extend(std::iter::repeat_n(
             UNNAMED_BINDER.to_string(),
             scope.arity(),
@@ -77,6 +85,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 name.clone(),
                 Inductive {
                     params: inductive.params.zonk(context, &[])?,
+                    indices: inductive.indices.zonk(context, &[])?,
                     constructors: inductive
                         .constructors
                         .iter()
@@ -226,9 +235,14 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             index: *index,
         }),
 
-        Subterm::UnionType(UnionType { name, params }) => Subterm::UnionType(UnionType {
+        Subterm::UnionType(UnionType {
+            name,
+            params,
+            indices,
+        }) => Subterm::UnionType(UnionType {
             name: name.clone(),
             params: zonk_terms(context, params, binders)?,
+            indices: zonk_terms(context, indices, binders)?,
         }),
 
         Subterm::Variant(Variant {
@@ -274,8 +288,8 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default, binders)?,
                 },
-                Cases::Union(cases) => Cases::Union(
-                    cases
+                Cases::Union { cases, pattern } => Cases::Union {
+                    cases: cases
                         .iter()
                         .map(|(atom, scope)| {
                             Ok((
@@ -286,7 +300,27 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
                             ))
                         })
                         .collect::<Result<_, Error>>()?,
-                ),
+                    pattern: pattern
+                        .as_ref()
+                        .map(|p| {
+                            Ok(MotivePattern {
+                                name: p.name.clone(),
+                                slots: p
+                                    .slots
+                                    .iter()
+                                    .map(|slot| {
+                                        Ok(match slot {
+                                            MotiveSlot::Binder => MotiveSlot::Binder,
+                                            MotiveSlot::Term(t) => MotiveSlot::Term(zonk_term(
+                                                context, t, binders,
+                                            )?),
+                                        })
+                                    })
+                                    .collect::<Result<_, Error>>()?,
+                            })
+                        })
+                        .transpose()?,
+                },
             },
         }),
 

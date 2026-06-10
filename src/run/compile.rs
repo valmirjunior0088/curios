@@ -531,6 +531,345 @@ mod tests {
     }
 
     #[test]
+    fn indexed_union_declares_constructs_and_matches() {
+        // Phase 1 of INDICES.md, end to end: an indexed `Vec` declares (head
+        // index telescope, named/`@` payload binders, per-case targets),
+        // constructs with `@T`/`@m` inferred — `?m + 1` unifies against the
+        // annotation's `2` — and matches under a constant motive (Rung 0:
+        // arms are typed from the constructor telescopes; indices ride
+        // along), lowering through to wasm.
+        let source = r#"
+            use /sys/{Nat};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            rec len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+                match v : Nat
+                | nil() => 0
+                | cons(m, x, xs) => Nat/add(len(xs), 1)
+                end;
+            let v : Vec(Nat, 2) = Vec/cons(10, Vec/cons(20, Vec/nil()));
+            len(v)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn indexed_union_without_params_and_unnamed_index_lowers() {
+        // The head's index names are optional (`: (Nat)`), and a union can be
+        // indexed without being parameterized. Targets are arbitrary index
+        // expressions — here distinct literals — and conversion compares them
+        // pointwise: `Tag(7)` accepts `Tag/b` and the match dispatches on the
+        // tag as ever.
+        let source = r#"
+            use /sys/{Nat, Bin};
+            union Tag : (Nat)
+            | a() : (0)
+            | b() : (7)
+            end
+            let t : Tag(7) = Tag/b();
+            match t : Bin
+            | a() => "a"
+            | b() => "b"
+            end
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn indexed_union_motive_binds_the_index() {
+        // Rung A: the annotated motive `(v : Vec(T, k)) => Vec(T, Nat/add(k, m))`
+        // binds the length index in its natural slot; each arm checks against
+        // the motive at that case's target index (`0` for nil, `j + 1` for
+        // cons), and the whole match at the scrutinee's actual index. The cons
+        // arm converges via `Nat/add`'s definitional successor peeling.
+        let source = r#"
+            use /sys/{Nat};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
+                match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
+                | nil() => w
+                | cons(j, x, xs) => Vec/cons(x, append(xs, w))
+                end;
+            let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
+            let b : Vec(Nat, 1) = Vec/cons(3, Vec/nil());
+            let c : Vec(Nat, 3) = append(a, b);
+            0
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn motive_pattern_slots_are_validated() {
+        // The annotated motive's slots are validated positionally against the
+        // registry: slot count must cover parameters then indices; an index
+        // slot must bind (a fresh name or `_`); a verbatim parameter must be
+        // the scrutinee's actual parameter.
+        let union_decl = r#"
+            use /sys/{Nat, Bin};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+        "#;
+
+        let arity = format!(
+            r#"{union_decl}
+            let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+                match v : (v : Vec(T)) => Nat
+                | nil() => 0
+                | cons(m, x, xs) => 1
+                end;
+            0
+        "#
+        );
+        let error = compile(&arity, None).unwrap_err();
+        assert!(
+            error.contains("argument slot(s)"),
+            "unexpected error: {error}"
+        );
+
+        let index_slot = format!(
+            r#"{union_decl}
+            let f(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> Nat =
+                match v : (v : Vec(T, n + 1)) => Nat
+                | nil() => 0
+                | cons(m, x, xs) => 1
+                end;
+            0
+        "#
+        );
+        let error = compile(&index_slot, None).unwrap_err();
+        assert!(
+            error.contains("must bind a fresh name"),
+            "unexpected error: {error}"
+        );
+
+        let param = format!(
+            r#"{union_decl}
+            let f(@n : Nat, v : Vec(Nat, n)) -> Nat =
+                match v : (v : Vec(Bin, k)) => Nat
+                | nil() => 0
+                | cons(m, x, xs) => 1
+                end;
+            0
+        "#
+        );
+        let error = compile(&param, None).unwrap_err();
+        assert!(
+            error.contains("fixes a parameter"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn index_refinement_learns_inside_the_arm() {
+        // Rung B: a scrutinee index that is a stable key is refined to the
+        // case's target inside the arm. Three faces of it:
+        // - `subst` casts `Vec(Bin, n)` to `Vec(Bin, m)` through an
+        //   `Eq(Nat, n, m)` under a *constant* motive — the equality is
+        //   learned (`n := z`, `m := z`), not eliminated;
+        // - `sym` is J-style elimination from the pattern motive alone;
+        // - `f`'s nil arm uses a hypothesis demanding `Vec(T, 0)` — legal
+        //   because the arm refines `n := 0`.
+        let source = r#"
+            use /sys/{Nat, Bin};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            union Eq(A : Type) : (x : A, y : A)
+            | refl(z : A) : (z, z)
+            end
+            let subst(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
+                match p : Vec(Bin, m)
+                | refl(z) => v
+                end;
+            let sym(@A : Type, @x : A, @y : A, p : Eq(A, x, y)) -> Eq(A, y, x) =
+                match p : (q : Eq(A, s, t)) => Eq(A, t, s)
+                | refl(z) => Eq/refl(z)
+                end;
+            let zonly(@T : Type, v : Vec(T, 0)) -> Nat = 9;
+            let f(@T : Type, @n : Nat, v : Vec(T, n), w : Vec(T, n)) -> Nat =
+                match v : Nat
+                | nil() => zonly(w)
+                | cons(j, x, xs) => 1
+                end;
+            let a : Vec(Bin, 0) = Vec/nil();
+            let p : Eq(Nat, 0, 0) = Eq/refl(0);
+            let b : Vec(Bin, 0) = subst(p, a);
+            let q : Eq(Nat, 3, 3) = sym(Eq/refl(3));
+            f(Vec/nil(@Bin), Vec/nil())
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn inversion_prunes_impossible_arms_and_solves_binders() {
+        // Rung C: at `Vec(T, n + 1)` the nil arm's target `0` clashes
+        // definitely with the successor spine, so the arm is omitted —
+        // checker-verified, no `impossible` keyword — and erase fills its
+        // dispatch slot with an unreachable body. In the cons arm the
+        // unifier decomposes `n + 1 ~ j + 1` and pins `j := n`, which is
+        // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
+        let source = r#"
+            use /sys/{Nat, Bin};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+                match v : T
+                | cons(j, x, xs) => x
+                end;
+            let rest(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> Vec(T, n) =
+                match v : Vec(T, n)
+                | cons(j, x, xs) => xs
+                end;
+            let v : Vec(Bin, 2) = Vec/cons("a", Vec/cons("b", Vec/nil()));
+            let w : Vec(Bin, 1) = rest(v);
+            first(w)
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn omission_requires_a_definite_clash() {
+        // An opaque index proves nothing: omitting nil at `Vec(T, n)` is
+        // rejected with the explanation as the error.
+        let opaque = r#"
+            use /sys/{Nat};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+                match v : Nat
+                | cons(j, x, xs) => 1
+                end;
+            0
+        "#;
+        let error = compile(opaque, None).unwrap_err();
+        assert!(
+            error.contains("not provably impossible"),
+            "unexpected error: {error}"
+        );
+
+        // The non-linear refusal — no K through the back door: `same`'s
+        // target `(z, z)` constrains two positions with one binder, which
+        // the unifier refuses, so the arm stays mandatory even at the
+        // plainly-uninhabited `Foo(3, 4)`. The flip side: `diff`'s target
+        // `(0, 1)` clashes against literals `(5, 5)` and prunes.
+        let nonlinear = r#"
+            use /sys/{Nat, Bin};
+            union Foo : (x : Nat, y : Nat)
+            | same(z : Nat) : (z, z)
+            | diff() : (0, 1)
+            end
+            let f(q : Foo(3, 4)) -> Bin =
+                match q : Bin
+                | diff() => "d"
+                end;
+            0
+        "#;
+        let error = compile(nonlinear, None).unwrap_err();
+        assert!(
+            error.contains("missing arm 'same'"),
+            "unexpected error: {error}"
+        );
+
+        let prunes = r#"
+            use /sys/{Nat, Bin};
+            union Foo : (x : Nat, y : Nat)
+            | same(z : Nat) : (z, z)
+            | diff() : (0, 1)
+            end
+            let g(q : Foo(5, 5)) -> Bin =
+                match q : Bin
+                | same(z) => "s"
+                end;
+            g(Foo/same(5))
+        "#;
+        assert!(compile(prunes, None).is_ok());
+    }
+
+    #[test]
+    fn indexed_union_index_mismatch_is_rejected() {
+        // A two-element vector annotated at length 3: the per-case target
+        // `m + 1` propagates through conversion until the index clash
+        // surfaces as an ordinary type mismatch.
+        let source = r#"
+            use /sys/{Nat};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            let v : Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/nil()));
+            0
+        "#;
+
+        let error = compile(source, None).unwrap_err();
+
+        assert!(error.contains("type mismatch"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn indexed_union_targets_are_required_and_arity_checked() {
+        // A case of an indexed union without its `: (...)` target is a parse
+        // error, as is a target whose arity differs from the head's index
+        // telescope, or a target on an unindexed union.
+        let missing = r#"
+            use /sys/{Nat};
+            union Vec(T : Type) : (n : Nat)
+            | nil()
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            0
+        "#;
+        let error = missing.parse::<text::Entrypoint>().unwrap_err();
+        assert!(
+            format!("{error:?}").contains("must state its index target"),
+            "unexpected error: {error:?}"
+        );
+
+        let surplus = r#"
+            use /sys/{Nat};
+            union Pair(A : Type)
+            | pair(A, A) : (0)
+            end
+            0
+        "#;
+        let error = surplus.parse::<text::Entrypoint>().unwrap_err();
+        assert!(
+            format!("{error:?}").contains("declares no indices"),
+            "unexpected error: {error:?}"
+        );
+
+        let arity = r#"
+            use /sys/{Nat};
+            union Vec(T : Type) : (n : Nat)
+            | nil() : (0, 1)
+            | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+            end
+            0
+        "#;
+        let error = arity.parse::<text::Entrypoint>().unwrap_err();
+        assert!(
+            format!("{error:?}").contains("but the head declares 1"),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[test]
     fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
         // `Arr/map((pair) => pair.0, xs)`: the inserted implicit `?A` is the
         // lambda's domain *and* `xs`'s element type, but `xs : Arr(?A)` is checked

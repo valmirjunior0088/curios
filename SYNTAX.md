@@ -96,6 +96,36 @@ pub and Forest(A : Type)
 end
 ```
 
+#### Indices
+
+A union may declare an **index telescope** after a `:` in its head. A
+parameter is uniform — every constructor targets the same instantiation — but
+an index is *constrained per case*: each case states, after its payload, the
+parenthesized index expressions it inhabits.
+
+```
+pub union Vec(T : Type) : (n : Nat)
+| nil() : (0)
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+end
+```
+
+- The head's index names (`n`) are documentary — needed only when a later
+  index's type depends on an earlier one; they are not in scope in the cases.
+  `: (Nat)` is equally legal.
+- A case target states *only* the index expressions — never the union name or
+  the parameters, which are forced uniform by construction. Targets are
+  required on every case exactly when the head declares indices, with arity
+  matching the index telescope's.
+- Payload binders may be named (`m : Nat`) — required when a later payload
+  type or the target mentions them — and a named binder may carry `@`, making
+  it implicit at the value constructor (`m` above is recoverable from `xs`,
+  so values are written `Vec/cons(x, xs)`).
+
+The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) ->
+Type`, applied `Vec(Bin, 3)` — so use sites never distinguish parameters from
+indices.
+
 ### Submodule
 
 External reference (the module is loaded from a file):
@@ -296,7 +326,15 @@ match head : motive
 end
 ```
 
-The `motive` gives the result type. It may name the scrutinee — `label => Type` — or omit the name when the result type does not depend on the scrutinee — just `Type`. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
+The `motive` gives the result type — one grammar growing, with the binder parenthesized in every form (motives look exactly like the lambdas they morally are):
+
+```
+match v : P                          -- constant: the result does not depend on v
+match v : (x) => P                   -- depends on the scrutinee
+match v : (x : Vec(T, k)) => P       -- union scrutinees: depends on the indices too
+```
+
+In the annotated form the binder's type is the scrutinee's type with its index slots opened — index binders appear where they naturally live. Parameter slots take the actual parameter written verbatim (checked), `_`, or a name binding it; index slots take a fresh name or `_`. The motive may also be omitted entirely when the arms determine it. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
 
 **Booleans** — both branches required, either order:
 
@@ -334,6 +372,22 @@ match r : A
 | err(_) => default
 end
 ```
+
+Matching an *indexed* union gets three further behaviours, by the shape of each scrutinee index:
+
+- a **variable** index is refined to the case's target inside each arm, so hypotheses mentioning it reduce there (`match p : Vec(Bin, m)` through an `Eq(Nat, n, m)` learns `n := z`, `m := z` in the `refl` arm);
+- a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`n + 1` against `cons`'s `j + 1` pins `j := n`), and a case whose target *definitely clashes* (`nil`'s `0` against `n + 1`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
+
+```
+let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+    match v : T
+    | cons(j, x, xs) => x
+    end;
+```
+
+- an **opaque** index (an application like `f(x)`) carries information only through the motive.
+
+The inverter is deliberately small — first-order, constructor forms, each binder constraining one position — and anything beyond that simply keeps the arm mandatory.
 
 ### Field access
 

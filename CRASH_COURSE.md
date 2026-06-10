@@ -169,17 +169,17 @@ id(@Bin, "hi")  -- T supplied positionally with @
 Union parameters work this way out of the box: `Result/ok(42)` infers the
 type arguments; only the *type* `Result(Nat, Bin)` is written out.
 
-The motive in `match` is the same mechanism: `match head : label => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
+The motive in `match` is the same mechanism: `match head : (label) => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
 ```
 let ReturnType(flag : Bln) -> Type =
-    match flag : _ => Type
+    match flag : Type
     | true => Nat
     | false => Bin
     end;
 
 let default_for(flag : Bln) -> ReturnType(flag) =
-    match flag : f => ReturnType(f)
+    match flag : (f) => ReturnType(f)
     | true => 0
     | false => ""
     end;
@@ -223,6 +223,32 @@ let head(T : Type, n : Nat, v : Vec(T, n + 1)) -> T =
 ```
 
 `Vec(T, n + 1)` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+
+The same shape is also available as a declared *indexed union* — this is what `/std/Vec` is:
+
+```
+union Vec(T : Type) : (n : Nat)
+| nil() : (0)
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
+end
+
+let first(@T : Type, @n : Nat, v : Vec(T, Nat/add(n, 1))) -> T =
+    match v : T
+    | cons(j, x, xs) => x
+    end;
+```
+
+The head declares the index (`: (n : Nat)`), each case states the index it inhabits, and matching exploits that: at length `n + 1` the `nil` arm is provably impossible and is simply omitted — the checker verifies the omission. A dependent result threads the index through the motive, written like the lambda it is:
+
+```
+rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
+    match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
+    | nil() => w
+    | cons(j, x, xs) => Vec/cons(x, append(xs, w))
+    end;
+```
+
+Which to reach for: the *recursion-computed* type reduces definitionally — `Vec(Nat, 2)` literally **is** `{ Nat, { Nat, {} } }`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The *indexed union* is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
 
 ## Payoff: typed format strings
 

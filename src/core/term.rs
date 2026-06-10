@@ -204,15 +204,18 @@ impl Term {
         }))
     }
 
-    pub fn union_type<N, I, P>(name: N, params: I) -> Self
+    pub fn union_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
     where
         N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
     {
         Self::from(Subterm::UnionType(UnionType {
             name: name.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
+            indices: indices.into_iter().map(|i| i.into()).collect(),
         }))
     }
 
@@ -250,23 +253,70 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
+                Some(l) => Scope::close(Many(1), &[l], motive.into()),
+                None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::Union(
-                cases
-                    .into_iter()
-                    .map(|(atom, binders, body)| {
-                        let binders = binders.into_iter().map(Into::into).collect::<Vec<_>>();
-                        let binders = binders.iter().map(String::as_str).collect::<Vec<_>>();
-                        (
-                            atom.into(),
-                            Scope::close(Many(binders.len()), &binders, body.into()),
-                        )
-                    })
-                    .collect(),
-            ),
+            cases: Cases::Union {
+                cases: Self::union_cases(cases),
+                pattern: None,
+            },
         }))
+    }
+
+    /// A union match with the annotated type-pattern motive: the motive body
+    /// is closed over the pattern's binder labels (slot order) then the
+    /// scrutinee label. `binders` must list one label per
+    /// [`MotiveSlot::Binder`] in `pattern.slots`, in order.
+    pub fn union_match_motive<H, M, I, A, L, B>(
+        head: H,
+        binders: Vec<String>,
+        scrutinee_label: &str,
+        motive: M,
+        pattern: MotivePattern,
+        cases: I,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (A, Vec<L>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+    {
+        let labels = binders
+            .iter()
+            .map(String::as_str)
+            .chain([scrutinee_label])
+            .collect::<Vec<_>>();
+
+        Self::from(Subterm::Match(Match {
+            head: head.into(),
+            motive: Scope::close(Many(labels.len()), &labels, motive.into()),
+            cases: Cases::Union {
+                cases: Self::union_cases(cases),
+                pattern: Some(pattern),
+            },
+        }))
+    }
+
+    fn union_cases<I, A, L, B>(cases: I) -> BTreeMap<Atom, Scope<Many>>
+    where
+        I: IntoIterator<Item = (A, Vec<L>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+    {
+        cases
+            .into_iter()
+            .map(|(atom, binders, body)| {
+                let binders = binders.into_iter().map(Into::into).collect::<Vec<_>>();
+                let binders = binders.iter().map(String::as_str).collect::<Vec<_>>();
+                (
+                    atom.into(),
+                    Scope::close(Many(binders.len()), &binders, body.into()),
+                )
+            })
+            .collect()
     }
 
     pub fn bln_match<H, M, F, T>(
@@ -285,8 +335,8 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
+                Some(l) => Scope::close(Many(1), &[l], motive.into()),
+                None => Scope::constant(Many(1), motive.into()),
             },
             cases: Cases::Bln {
                 false_case: false_case.into(),
@@ -318,8 +368,8 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
+                Some(l) => Scope::close(Many(1), &[l], motive.into()),
+                None => Scope::constant(Many(1), motive.into()),
             },
             cases: Cases::NatInduction {
                 zero_case: zero_case.into(),
@@ -349,8 +399,8 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: match motive_label {
-                Some(l) => Scope::close(One, &[l], motive.into()),
-                None => Scope::constant(One, motive.into()),
+                Some(l) => Scope::close(Many(1), &[l], motive.into()),
+                None => Scope::constant(Many(1), motive.into()),
             },
             cases: Cases::NatDispatch {
                 cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
@@ -514,11 +564,18 @@ pub struct Proj {
 /// automatically-generated type-constructor function's body. Users never write
 /// one directly — they write `Result(A, E)` and the type-constructor function
 /// reduces to this. Two `UnionType`s are convertible iff same `name` and
-/// pointwise-convertible `params`.
+/// pointwise-convertible `params` and `indices`.
+///
+/// `params` are uniform across constructors; `indices` are the per-case
+/// constrained binders — each constructor's registry terminal states its own
+/// index expressions. Use sites never distinguish them (`Vec(Bin, 3)` is one
+/// flat application of the type-constructor function); the split lives here
+/// and in the registry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UnionType {
     pub name: String,
     pub params: Vec<Term>,
+    pub indices: Vec<Term>,
 }
 
 /// A constructor application as a primitive normal form. Built inside the
@@ -539,11 +596,44 @@ pub struct Variant {
 
 /// The unified eliminator: every match form shares a scrutinee and a motive
 /// and differs only in its [`Cases`] payload.
+///
+/// The motive's arity is 1 (the scrutinee binder) for every form except a
+/// union match with an annotated type-pattern motive, where the pattern's
+/// binder slots precede the scrutinee binder (in slot order, scrutinee last).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Match {
     pub head: Term,
-    pub motive: Scope<One>,
+    pub motive: Scope<Many>,
     pub cases: Cases,
+}
+
+/// The written type-pattern of an annotated union-match motive,
+/// `match v : (x : Vec(T, k)) => P`. Slots are positional over the union's
+/// flat argument list (parameters then indices — told apart via the registry
+/// during elaboration, which consumes and validates the pattern):
+///
+/// - a parameter slot may be a verbatim [`MotiveSlot::Term`] (checked
+///   convertible with the scrutinee's actual parameter) or a binder (opened
+///   with the actual parameter);
+/// - an index slot must be a binder — that is the point of the form.
+///
+/// Binder labels live in the motive scope itself; `slots` records which
+/// positions bind and carries the verbatim terms.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MotivePattern {
+    /// The (resolved) union name the annotation wrote — checked against the
+    /// scrutinee's actual union.
+    pub name: String,
+    pub slots: Vec<MotiveSlot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MotiveSlot {
+    /// `_` or a bare identifier: occupies the next binder of the motive
+    /// scope, in slot order before the scrutinee binder.
+    Binder,
+    /// Any other written term — parameters only.
+    Term(Term),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -562,8 +652,12 @@ pub enum Cases {
         default: Term,
     },
     /// The primitive eliminator of a nominal union: one arm per constructor,
-    /// each arm's arity equal to that constructor's payload arity.
-    Union(BTreeMap<Atom, Scope<Many>>),
+    /// each arm's arity equal to that constructor's payload arity. `pattern`
+    /// is `Some` iff the surface motive was the annotated type-pattern form.
+    Union {
+        cases: BTreeMap<Atom, Scope<Many>>,
+        pattern: Option<MotivePattern>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -679,8 +773,11 @@ impl Subterm {
                 fields.iter().for_each(|f| f.collect_metavars(ids));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
-            Subterm::UnionType(UnionType { params, .. }) => {
+            Subterm::UnionType(UnionType {
+                params, indices, ..
+            }) => {
                 params.iter().for_each(|p| p.collect_metavars(ids));
+                indices.iter().for_each(|i| i.collect_metavars(ids));
             }
             Subterm::Variant(Variant {
                 params, payload, ..
@@ -714,8 +811,13 @@ impl Subterm {
                         cases.values().for_each(|b| b.collect_metavars(ids));
                         default.collect_metavars(ids);
                     }
-                    Cases::Union(cases) => {
+                    Cases::Union { cases, pattern } => {
                         cases.values().for_each(|s| s.body().collect_metavars(ids));
+                        pattern.iter().flat_map(|p| &p.slots).for_each(|slot| {
+                            if let MotiveSlot::Term(t) = slot {
+                                t.collect_metavars(ids);
+                            }
+                        });
                     }
                 }
             }
@@ -825,9 +927,14 @@ impl Bound for Subterm {
                 head: visit.visit_subterm(head),
                 index: *index,
             }),
-            Subterm::UnionType(UnionType { name, params }) => Subterm::UnionType(UnionType {
+            Subterm::UnionType(UnionType {
+                name,
+                params,
+                indices,
+            }) => Subterm::UnionType(UnionType {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
+                indices: indices.iter().map(|i| visit.visit_subterm(i)).collect(),
             }),
             Subterm::Variant(Variant {
                 name,
@@ -869,12 +976,27 @@ impl Bound for Subterm {
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
-                    Cases::Union(cases) => Cases::Union(
-                        cases
+                    Cases::Union { cases, pattern } => Cases::Union {
+                        cases: cases
                             .iter()
                             .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
                             .collect(),
-                    ),
+                        // Verbatim slot terms live in the enclosing scope
+                        // (outside the motive's binders), like `head`.
+                        pattern: pattern.as_ref().map(|p| MotivePattern {
+                            name: p.name.clone(),
+                            slots: p
+                                .slots
+                                .iter()
+                                .map(|slot| match slot {
+                                    MotiveSlot::Binder => MotiveSlot::Binder,
+                                    MotiveSlot::Term(t) => {
+                                        MotiveSlot::Term(visit.visit_subterm(t))
+                                    }
+                                })
+                                .collect(),
+                        }),
+                    },
                 },
             }),
             Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
@@ -909,7 +1031,9 @@ impl Bound for Subterm {
             Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
-            Subterm::UnionType(UnionType { params, .. }) => max_reach(params),
+            Subterm::UnionType(UnionType {
+                params, indices, ..
+            }) => max_reach(params).max(max_reach(indices)),
             Subterm::Variant(Variant {
                 params, payload, ..
             }) => max_reach(params).max(max_reach(payload)),
@@ -929,7 +1053,18 @@ impl Bound for Subterm {
                 Cases::NatDispatch { cases, default } => {
                     max_reach(cases.values()).max(default.reach())
                 }
-                Cases::Union(cases) => cases.values().map(|s| s.reach()).max().unwrap_or(0),
+                Cases::Union { cases, pattern } => cases
+                    .values()
+                    .map(|s| s.reach())
+                    .max()
+                    .unwrap_or(0)
+                    .max(pattern.iter().flat_map(|p| &p.slots).fold(
+                        0,
+                        |acc, slot| match slot {
+                            MotiveSlot::Binder => acc,
+                            MotiveSlot::Term(t) => acc.max(t.reach()),
+                        },
+                    )),
             }),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())
@@ -1366,7 +1501,11 @@ mod tests {
         assert_eq!(ctor.metavars(), BTreeSet::from([1, 2]));
         assert_eq!(format!("{ctor}"), "Result/success(?2)");
 
-        let type_ = Term::union_type("Result", [Term::prim(Prim::NatType), Term::metavar(3)]);
+        let type_ = Term::union_type(
+            "Result",
+            [Term::prim(Prim::NatType), Term::metavar(3)],
+            Vec::<Term>::new(),
+        );
         assert_eq!(type_.metavars(), BTreeSet::from([3]));
         assert_eq!(format!("{type_}"), "Result(Nat, ?3)");
     }
@@ -1423,7 +1562,7 @@ mod tests {
     #[test]
     fn union_variants_reach_spans_components() {
         assert_eq!(
-            Term::union_type("Result", [Term::var(Var::bound(2))]).reach(),
+            Term::union_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),
             3
         );
         assert_eq!(

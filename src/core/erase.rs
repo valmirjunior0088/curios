@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module, Nat,
-        One, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        Variant, UnionType, Var, erase_prim, expect_prim_head, infer, reduce_with,
-        refine_head,
+        Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module,
+        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
+        Tuple, TupleType, Two, Variant, UnionType, Var, erase_prim, expect_prim_head, infer,
+        reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -201,7 +201,7 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
 fn erase_nat_induction(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     zero_case: &Term,
     succ_case: &Scope<Two>,
     term: &Term,
@@ -254,7 +254,7 @@ fn erase_nat_induction(
 fn erase_nat_dispatch(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     cases: &BTreeMap<u32, Term>,
     default: &Term,
     term: &Term,
@@ -313,7 +313,9 @@ fn erase_match(
         Cases::NatDispatch { cases, default } => {
             erase_nat_dispatch(context, head, motive, cases, default, term, expected)
         }
-        Cases::Union(cases) => erase_union_match(context, head, motive, cases, expected),
+        Cases::Union { cases, pattern } => {
+            erase_union_match(context, head, motive, cases, pattern.as_ref(), expected)
+        }
     }
 }
 
@@ -321,7 +323,7 @@ fn erase_match(
 fn erase_bln_match(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     false_case: &Term,
     true_case: &Term,
     term: &Term,
@@ -440,15 +442,20 @@ fn erase_variant(
 fn erase_union_match(
     context: &mut Context,
     head: &Term,
-    motive: &Scope<One>,
+    motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
+    pattern: Option<&MotivePattern>,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let (name, params) = match &*head_type {
-        Subterm::UnionType(UnionType { name, params }) => (name.clone(), params.clone()),
+    let (name, params, actual_indices) = match &*head_type {
+        Subterm::UnionType(UnionType {
+            name,
+            params,
+            indices,
+        }) => (name.clone(), params.clone(), indices.clone()),
         _ => unreachable!("erase: union match scrutinee checked by elaborate"),
     };
 
@@ -457,19 +464,36 @@ fn erase_union_match(
         .cloned()
         .expect("erase: scrutinee type names a registered inductive");
 
-    assert_eq!(
-        cases.len(),
-        inductive.constructors.len(),
-        "erase: union match arm count checked by elaborate",
-    );
+    // The pattern's binder slots, positionally (validated by elaborate):
+    // `true` marks a parameter position (opened with the actual parameter),
+    // `false` an index position (opened with the case's target index).
+    let binder_slots: Vec<(bool, usize)> = pattern
+        .map(|p| {
+            let n_params = inductive.params.len();
+            p.slots
+                .iter()
+                .enumerate()
+                .filter_map(|(position, slot)| match slot {
+                    MotiveSlot::Binder if position < n_params => Some((true, position)),
+                    MotiveSlot::Binder => Some((false, position - n_params)),
+                    MotiveSlot::Term(_) => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     let cases_erased = inductive
         .constructors
         .keys()
         .map(|tag| {
-            let scope = cases
-                .get(tag)
-                .expect("erase: union match arm presence checked by elaborate");
+            // A tag with no arm was pruned by elaborate (Rung C verified the
+            // case impossible at the scrutinee's indices). Its dispatch slot
+            // still exists positionally; the body is unreachable at runtime
+            // — filled with the erased unit (a dedicated trap instruction
+            // through `cont`/`optm`/`wasm` is future work).
+            let Some(scope) = cases.get(tag) else {
+                return Ok(ersd::Subterm::Erased.into());
+            };
             let telescope = inductive
                 .instantiate(tag, &params)
                 .expect("erase: constructor instantiates at its inductive's parameters");
@@ -501,11 +525,37 @@ fn erase_union_match(
                     }
                 }
 
+                // This case's target indices, for opening a pattern motive.
+                let ix_c = match &telescope {
+                    Telescope::Done(terminal) => match &***terminal {
+                        Subterm::UnionType(UnionType { indices, .. }) => indices.clone(),
+                        _ => unreachable!("erase: constructor terminal is its union type"),
+                    },
+                    Telescope::Cons(..) => {
+                        unreachable!("erase: constructor arity checked by elaborate")
+                    }
+                };
+
                 let ctor_val =
                     Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
                 refine_head(context, head, &ctor_val);
 
-                let expected = motive.open(&[&ctor_val]);
+                // Rung B, mirrored from elaborate: key-shaped scrutinee
+                // indices reduce to the case's targets inside the arm, so
+                // types erased here converge the same way they checked.
+                for (actual, target) in actual_indices.iter().zip(&ix_c) {
+                    refine_head(context, actual, target);
+                }
+
+                let arm_args = binder_slots
+                    .iter()
+                    .map(|&(is_param, i)| match is_param {
+                        true => params[i].clone(),
+                        false => ix_c[i].clone(),
+                    })
+                    .collect::<Vec<_>>();
+                let arm_refs = arm_args.iter().chain([&ctor_val]).collect::<Vec<_>>();
+                let expected = motive.open(&arm_refs);
                 let var_refs = vars.iter().collect::<Vec<_>>();
                 let body = erase(context, &scope.open(&var_refs), &expected)?;
 

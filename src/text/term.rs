@@ -96,10 +96,31 @@ pub struct Tuple {
     pub fields: Vec<Term>,
 }
 
+/// A match's motive ladder — one grammar growing, the binder parenthesized
+/// in every form (motives look exactly like the lambdas they morally are):
+///
+/// - `match v : P` — constant;
+/// - `match v : (x) => P` — depends on the scrutinee;
+/// - `match v : (x : Vec(T, k)) => P` — the annotated type-pattern form,
+///   union scrutinees only: binds the indices where they naturally appear.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Motive {
-    pub label: Option<String>,
-    pub body: Term,
+pub enum Motive {
+    Constant(Term),
+    Scrutinee {
+        label: String,
+        body: Term,
+    },
+    Annotated {
+        label: String,
+        /// The union type the annotation names.
+        name: Name,
+        /// The written argument slots, positionally (parameters then
+        /// indices); a bare unresolvable identifier is a binder, anything
+        /// else verbatim — classified at lowering, validated positionally
+        /// by core elaboration against the registry.
+        slots: Vec<Term>,
+        body: Term,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
