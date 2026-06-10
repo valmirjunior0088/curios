@@ -75,11 +75,16 @@ pub fn evaluate_pure_calls(module: &mut Module) {
         pure_clsrs: &pure_clsrs,
     };
 
+    // One counter for the whole pass: materialised result names must be unique
+    // module-wide, because two rewritten call sites can share a function body and
+    // every downstream pass keys its flat per-body maps by value name.
+    let counter = Entropy::<usize>::new();
+
     for (_, func) in module.funcs_mut() {
-        rewrite_region(&mut func.region, &ctx);
+        rewrite_region(&mut func.region, &ctx, &counter);
     }
     for (_, clsr) in module.clsrs_mut() {
-        rewrite_region(&mut clsr.region, &ctx);
+        rewrite_region(&mut clsr.region, &ctx, &counter);
     }
 }
 
@@ -639,13 +644,13 @@ fn scalar_data(snap: &Snapshot) -> Option<Data> {
 
 /// Walk `region` and every nested block, attempting to rewrite the tail of each
 /// one whose tail is a literal-argument call to a pure target.
-fn rewrite_region(region: &mut Region, ctx: &Ctx<'_>) {
-    if let Some(rewrite) = try_evaluate_tail(region, ctx) {
+fn rewrite_region(region: &mut Region, ctx: &Ctx<'_>, counter: &Entropy) {
+    if let Some(rewrite) = try_evaluate_tail(region, ctx, counter) {
         region.values.extend(rewrite.new_values);
         region.tail = rewrite.new_tail;
     }
     for (_, block) in &mut region.blocks {
-        rewrite_region(&mut block.region, ctx);
+        rewrite_region(&mut block.region, ctx, counter);
     }
 }
 
@@ -660,7 +665,7 @@ struct Rewrite {
 /// and every argument is a known literal, interpret the call to a single
 /// `Snapshot` and materialise that as a list of fresh bindings plus a jump to
 /// the original resume.
-fn try_evaluate_tail(region: &Region, ctx: &Ctx<'_>) -> Option<Rewrite> {
+fn try_evaluate_tail(region: &Region, ctx: &Ctx<'_>, counter: &Entropy) -> Option<Rewrite> {
     let lits = literals(region);
 
     let (callee_outcome, resume) = match &region.tail {
@@ -731,12 +736,12 @@ fn try_evaluate_tail(region: &Region, ctx: &Ctx<'_>) -> Option<Rewrite> {
         return None;
     };
 
-    // Materialise the result snapshot. Fresh names use a per-rewrite counter
-    // suffixed `@eval#N` so they can't collide with the host region's `vN`.
+    // Materialise the result snapshot. Fresh names use the pass-wide counter
+    // suffixed `@eval#N`: the suffix keeps them clear of the host region's `vN`,
+    // and the shared counter keeps two rewrites in one body from colliding.
     let mut new_values: Vec<(ValueName, Value)> = Vec::new();
-    let counter = Entropy::<usize>::new();
-    let mut visited: HashMap<*const (), ValueName> = HashMap::new();
-    let top = materialise_snapshot(&snap, &counter, &mut new_values, &mut visited)?;
+    let mut visited: HashSet<*const ()> = HashSet::new();
+    let top = materialise_snapshot(&snap, counter, &mut new_values, &mut visited)?;
 
     Some(Rewrite {
         new_values,
@@ -763,7 +768,7 @@ fn materialise_snapshot(
     snap: &Snapshot,
     counter: &Entropy,
     out: &mut Vec<(ValueName, Value)>,
-    visited: &mut HashMap<*const (), ValueName>,
+    visited: &mut HashSet<*const ()>,
 ) -> Option<ValueName> {
     let data = match snap {
         Snapshot::Nat(n) => Data::Nat(*n),
@@ -772,10 +777,9 @@ fn materialise_snapshot(
         Snapshot::Bin(bytes) => Data::Bin((**bytes).clone()),
         Snapshot::Arr(elems) => {
             let key = Rc::as_ptr(elems) as *const ();
-            if visited.contains_key(&key) {
+            if !visited.insert(key) {
                 return None;
             }
-            visited.insert(key, ValueName::from("__pending__"));
             let names: Option<Vec<ValueName>> = elems
                 .iter()
                 .map(|e| materialise_snapshot(e, counter, out, visited))
@@ -785,10 +789,9 @@ fn materialise_snapshot(
         }
         Snapshot::Tpl(elems) => {
             let key = Rc::as_ptr(elems) as *const ();
-            if visited.contains_key(&key) {
+            if !visited.insert(key) {
                 return None;
             }
-            visited.insert(key, ValueName::from("__pending__"));
             let names: Option<Vec<ValueName>> = elems
                 .iter()
                 .map(|e| materialise_snapshot(e, counter, out, visited))
@@ -798,10 +801,9 @@ fn materialise_snapshot(
         }
         Snapshot::Clsr(c, captures) => {
             let key = Rc::as_ptr(captures) as *const ();
-            if visited.contains_key(&key) {
+            if !visited.insert(key) {
                 return None;
             }
-            visited.insert(key, ValueName::from("__pending__"));
             let cap_snaps = captures.borrow();
             let names: Option<Vec<ValueName>> = cap_snaps
                 .iter()
@@ -1368,6 +1370,92 @@ mod tests {
                 .any(|(_, v)| matches!(v, Value::Pure(Data::Bin(b)) if b == b"7")),
             "expected a Pure(Bin(\"7\")) binding from the folded NatToStr, got {:?}",
             region.values,
+        );
+    }
+
+    #[test]
+    fn two_rewrites_in_one_body_mint_distinct_names() {
+        // main's root tail calls f(41), and the continuation block's tail calls
+        // f(41) again. Both sites are rewritten in one pass; the materialised
+        // bindings land in two regions of the *same* body, so their names must
+        // differ — every downstream pass keys flat per-body maps by value name.
+        let mut module = Module::new();
+        module.add_func(
+            FuncName::from("main"),
+            Func {
+                params: vec![],
+                resume: b("rm"),
+                region: Region {
+                    preallocs: vec![],
+                    values: vec![(v("a"), Value::Pure(Data::Nat(41)))],
+                    blocks: vec![(
+                        b("cont"),
+                        Block {
+                            params: vec![v("res")],
+                            region: Region {
+                                preallocs: vec![],
+                                values: vec![(v("a2"), Value::Pure(Data::Nat(41)))],
+                                blocks: vec![(
+                                    b("cont2"),
+                                    Block {
+                                        params: vec![v("res2")],
+                                        region: region(vec![], jump("rm", vec![v("res2")])),
+                                    },
+                                )],
+                                tail: Tail::Call(CallTarget::Direct {
+                                    target: FuncName::from("f"),
+                                    params: vec![v("a2")],
+                                    resume: b("cont2"),
+                                }),
+                            },
+                        },
+                    )],
+                    tail: Tail::Call(CallTarget::Direct {
+                        target: FuncName::from("f"),
+                        params: vec![v("a")],
+                        resume: b("cont"),
+                    }),
+                },
+            },
+        );
+        module.set_entry(FuncName::from("main"));
+        module.add_func(
+            FuncName::from("f"),
+            func(
+                vec![v("n")],
+                "rf",
+                region(
+                    vec![
+                        (v("one"), Value::Pure(Data::Nat(1))),
+                        (v("sum"), Value::Eval(Code::NatAdd(v("n"), v("one")))),
+                    ],
+                    jump("rf", vec![v("sum")]),
+                ),
+            ),
+        );
+
+        evaluate_pure_calls(&mut module);
+
+        // Both call sites folded to jumps.
+        let main = main_region(&module);
+        assert!(matches!(&main.tail, Tail::Jump(_)));
+        let (_, cont) = &main.blocks[0];
+        assert!(matches!(&cont.region.tail, Tail::Jump(_)));
+
+        // No value name is bound twice anywhere in the body.
+        fn collect_names(region: &Region, names: &mut Vec<ValueName>) {
+            names.extend(region.values.iter().map(|(n, _)| n.clone()));
+            for (_, block) in &region.blocks {
+                collect_names(&block.region, names);
+            }
+        }
+        let mut names = Vec::new();
+        collect_names(main, &mut names);
+        let unique: HashSet<&ValueName> = names.iter().collect();
+        assert_eq!(
+            unique.len(),
+            names.len(),
+            "duplicate value names in one body: {names:?}",
         );
     }
 
