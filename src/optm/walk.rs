@@ -3,9 +3,12 @@ use super::*;
 /// A read-only traversal of a Cont region tree.
 ///
 /// The walker owns the recursion and the (large) per-node enumeration — notably
-/// the `Code` operand match, which therefore lives in exactly one place. A
-/// [`Sink`] only reacts to the leaf events it cares about; every method defaults
-/// to a no-op, so a harvester overrides just the ones it needs.
+/// the `Code` operand match — so no pass spells them out itself. The shared and
+/// mutable walkers each carry a copy of that enumeration (`walk_code` /
+/// `walk_code_mut`, `walk_tail` / `walk_tail_mut`): when a `Code` or `Tail`
+/// variant is added, both must be updated in step. A [`Sink`] only reacts to the
+/// leaf events it cares about; every method defaults to a no-op, so a harvester
+/// overrides just the ones it needs.
 ///
 /// Binders — block parameters and the names on the left of `values`/`preallocs`
 /// — are deliberately *not* reported as uses; only operand (use) positions fire

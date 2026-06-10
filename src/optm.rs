@@ -3,8 +3,8 @@
 //! - [`mangle`] — the one place pass-minted names are constructed; documents
 //!   the shared `base@tag#item` grammar.
 //! - [`walk`] — the traversal engine: a closed walker over the region tree with
-//!   read-only (`Sink`) and rewriting (`SinkMut`) variants; the one place the
-//!   structural recursion and the `Code` operand match live.
+//!   read-only (`Sink`) and rewriting (`SinkMut`) variants, so no pass spells
+//!   out the structural recursion or the `Code` operand match itself.
 //! - [`harvest`] — metadata-harvesting functions (uses, references) built on the
 //!   read-only walker.
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
@@ -73,59 +73,69 @@ use super::cont::*;
 
 /// Run the optimization pipeline and return the rewritten module.
 ///
-/// Copy propagation runs first so that constant folding and closure lifting see
-/// real value identities. Closure lifting then turns known closures into direct
-/// calls — which exposes higher-order callees as direct calls carrying known
-/// closures in their candidate parameters, so specialization can clone them per
-/// closure shape; a second lift devirtualizes the calls those clones expose. With
-/// the higher-order layer flattened, an interim dead-code elimination sweeps the
-/// specialization residue — once `specialize_calls` rewrites a closure's allocation
-/// site to call the lifted clone directly, the original specialized closure body
-/// becomes unreachable but its direct calls still inflate `inline_calls`' count of
-/// call sites, so the sweep ensures the single-call-site rule sees accurate counts.
-/// Inlining then splices the resulting callees into their one call site — which,
-/// together with jump threading dissolving the leftover continuation blocks,
-/// finally brings literal arguments next to the primitive ops the prelude wraps,
-/// so a second copy-propagation and folding pass can collapse them. Partial
-/// evaluation then closes the gap inlining cannot — when a `Direct` call's
-/// target is statically pure and every argument is a literal, the callee is
-/// interpreted at compile time and replaced by the materialised result plus a
-/// jump to the original resume, dissolving recursive callees (the parser
-/// combinator in `examples/crs_printf.rs`) that single-call-site inlining
-/// could never reach. A follow-up copy-propagation and folding pass settles
-/// the freshly-introduced literals. With the parser collapsed, a second
-/// inlining round picks up the residual primitive wrappers — each a tiny
-/// (size ≤ 8) function called from several specialized closures — and
-/// splices them at every site via its size-bounded multi-site rule, with
-/// one more copy-propagation and folding pass settling the spliced material
-/// before hoisting lifts every bytestring and closed aggregate into a
-/// shared module const so it is built once at startup instead of on each
-/// execution.
-/// Folding also forwards
-/// aggregate projections and decides matches on known tags, which leaves alias
-/// bindings and freshly single-predecessor arms behind; a second jump threading and
-/// a final copy propagation collapse those, so dead-code elimination — running last
-/// to sweep the alias, literal, and closure bindings the earlier passes leave
-/// behind — can reclaim the now-unreferenced aggregates and untaken arms along with
-/// everything else dead.
+/// The pipeline is staged: each stage exposes the work the next one acts on.
+///
+/// 1. **Settle identities.** Copy propagation eliminates renames so folding and
+///    closure lifting see a value's real identity; folding collapses what is
+///    already literal.
+/// 2. **Flatten the higher-order layer.** Lifting turns known closures into
+///    direct calls, which exposes higher-order callees as direct calls carrying
+///    known closures in their candidate parameters; specialization clones them
+///    per closure shape; a second lift devirtualizes the calls those clones
+///    expose. An interim dead-code elimination then sweeps the specialization
+///    residue — the orphaned original closures still carry direct calls that
+///    would inflate `inline_calls`' call-site counts.
+/// 3. **Dissolve call boundaries.** Single-site inlining splices each remaining
+///    callee into its one call site; jump threading dissolves the leftover
+///    continuation blocks; a settle round (copy propagation + folding) collapses
+///    the literal arguments now sitting next to the primitive ops they feed.
+/// 4. **Partially evaluate pure calls.** The gap inlining cannot close: a
+///    statically-pure `Direct` callee with all-literal arguments is interpreted
+///    at compile time and replaced by its materialised result — dissolving
+///    recursive callees (the parser combinator in `examples/crs_printf.rs`)
+///    single-site inlining can never reach. A settle round follows.
+/// 5. **Dissolve residual wrappers.** A second inlining round: the size-bounded
+///    multi-site rule splices the tiny primitive wrappers called from several
+///    specialized closures at every site. A settle round follows.
+/// 6. **Hoist constants.** Every bytestring and closed aggregate becomes a
+///    shared module const, built once at startup instead of per execution.
+/// 7. **Final cleanup.** Folding's decided matches and forwarded projections
+///    left alias bindings and single-predecessor arms behind: a second jump
+///    threading and a final copy propagation collapse them, dead-argument
+///    elimination finishes type erasure, and dead-code elimination — last, so
+///    it sees everything — reclaims the unreferenced bindings, aggregates,
+///    closures, and untaken arms.
 pub fn optimize(mut module: Module) -> Module {
+    // 1. Settle identities.
     propagate_copies(&mut module);
     fold_constants(&mut module);
+
+    // 2. Flatten the higher-order layer.
     lift_closures(&mut module);
     specialize_calls(&mut module);
     lift_closures(&mut module);
     eliminate_dead_code(&mut module);
+
+    // 3. Dissolve call boundaries.
     inline_calls(&mut module);
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+
+    // 4. Partially evaluate pure calls.
     evaluate_pure_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+
+    // 5. Dissolve residual wrappers.
     inline_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+
+    // 6. Hoist constants.
     hoist_literals(&mut module);
+
+    // 7. Final cleanup.
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     eliminate_dead_arguments(&mut module);
