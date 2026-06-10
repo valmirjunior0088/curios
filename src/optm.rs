@@ -1,5 +1,7 @@
 //! Cont → Cont optimization. `optm.rs` is a façade over its submodules:
 //!
+//! - [`mangle`] — the one place pass-minted names are constructed; documents
+//!   the shared `base@tag#item` grammar.
 //! - [`walk`] — the traversal engine: a closed walker over the region tree with
 //!   read-only (`Sink`) and rewriting (`SinkMut`) variants; the one place the
 //!   structural recursion and the `Code` operand match live.
@@ -25,6 +27,8 @@
 //!   captures, finishing type erasure.
 //! - [`dead_code_elimination`] — drops unused bindings and unreachable
 //!   functions, closures, and consts.
+
+mod mangle;
 
 mod walk;
 pub use walk::*;

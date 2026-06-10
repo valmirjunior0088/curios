@@ -89,7 +89,7 @@ pub fn inline_calls(module: &mut Module) {
 
         match tier {
             Tier::Single => {
-                let suffix = format!("@{callee_name}");
+                let suffix = mangle::inline_suffix(&callee_name);
                 if !splice_in_module(module, &callee_name, &callee, &suffix) {
                     return;
                 }
@@ -99,7 +99,7 @@ pub fn inline_calls(module: &mut Module) {
                 for _ in 0..total {
                     let n = counter.entry(callee_name.clone()).or_insert(0);
                     *n += 1;
-                    let suffix = format!("@{callee_name}#{n}");
+                    let suffix = mangle::inline_site_suffix(&callee_name, *n);
                     if !splice_in_module(module, &callee_name, &callee, &suffix) {
                         break;
                     }
@@ -308,7 +308,7 @@ fn inline_at(host: &mut Region, callee: &Func, suffix: &str) {
     // these aliases on its next run.
     let param_aliases = callee.params.iter().zip(&args).map(|(param, arg)| {
         (
-            suffixed_value(&param.name, suffix),
+            mangle::suffixed_value(&param.name, suffix),
             Value::Alias(arg.clone()),
         )
     });
@@ -344,10 +344,6 @@ fn collect_bound(region: &Region, bound: &mut HashSet<ValueName>) {
     }
 }
 
-fn suffixed_value(name: &ValueName, suffix: &str) -> ValueName {
-    ValueName::from(format!("{name}{suffix}"))
-}
-
 /// Renames value *uses* via the shared mutable walker.
 struct Freshen<'a> {
     bound: &'a HashSet<ValueName>,
@@ -357,7 +353,7 @@ struct Freshen<'a> {
 impl SinkMut for Freshen<'_> {
     fn value_use(&mut self, name: &mut ValueName) {
         if self.bound.contains(name) {
-            *name = suffixed_value(name, self.suffix);
+            *name = mangle::suffixed_value(name, self.suffix);
         }
     }
 }
@@ -392,7 +388,7 @@ fn freshen_structure(
 
 fn freshen_value(name: &mut ValueName, bound: &HashSet<ValueName>, suffix: &str) {
     if bound.contains(name) {
-        *name = suffixed_value(name, suffix);
+        *name = mangle::suffixed_value(name, suffix);
     }
 }
 
@@ -400,7 +396,7 @@ fn freshen_block(name: &mut BlockName, sentinel: &BlockName, resume: &BlockName,
     *name = if name == sentinel {
         resume.clone()
     } else {
-        BlockName::from(format!("{name}{suffix}"))
+        mangle::suffixed_block(name, suffix)
     };
 }
 

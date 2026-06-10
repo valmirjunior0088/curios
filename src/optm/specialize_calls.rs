@@ -24,10 +24,10 @@ use {
 /// ```
 /// becomes
 /// ```text
-///   Func f@spec__0_c { params:[e, n], .. }      // candidate param dropped...
+///   Func f@spec#0=c { params:[e, n], .. }      // candidate param dropped...
 ///       let p = c{e};                           //  ...rebuilt from a threaded capture,
 ///       ... p(n) ...                            //     now a KNOWN closure.
-///   f@spec__0_c(env, k)   (direct)
+///   f@spec#0=c(env, k)   (direct)
 /// ```
 ///
 /// The pass does not devirtualize `p(n)` itself: it only makes `p` a known
@@ -527,22 +527,12 @@ fn collect_known(region: &Region, known: &mut Known) {
 /// A clone's name is a pure function of its base and shape key, so equal keys map
 /// to one clone (the memo) and a self-reference's key resolves back to its own clone.
 fn specialized_func_name(base: &FuncName, resolved: &[(usize, Shape)]) -> FuncName {
-    FuncName::from(specialized_label(base, resolved))
+    FuncName::from(mangle::specialized_label(base, resolved))
 }
 
 /// The closure-clone mirror of [`specialized_func_name`].
 fn specialized_clsr_name(base: &ClsrName, resolved: &[(usize, Shape)]) -> ClsrName {
-    ClsrName::from(specialized_label(base, resolved))
-}
-
-fn specialized_label(base: impl std::fmt::Display, resolved: &[(usize, Shape)]) -> String {
-    let mut name = format!("{base}@spec");
-
-    for (position, shape) in resolved {
-        name.push_str(&format!("__{position}_{shape}"));
-    }
-
-    name
+    ClsrName::from(mangle::specialized_label(base, resolved))
 }
 
 // --- Clone construction -----------------------------------------------------
@@ -613,7 +603,7 @@ fn specialize_arguments(
             Some(Shape::Clsr(clsr)) => {
                 let arity = fields.get(clsr).expect("specialized closure present").len();
                 let captures: Vec<ValueName> = (0..arity)
-                    .map(|field| capture_param(&arg.name, field))
+                    .map(|field| mangle::capture_param(&arg.name, field))
                     .collect();
 
                 // The threaded captures are plain non-candidate arguments.
@@ -638,9 +628,6 @@ fn rebound_region(base: &Region, mut rebinds: Vec<(ValueName, Value)>) -> Region
     region
 }
 
-fn capture_param(param: &ValueName, index: usize) -> ValueName {
-    ValueName::from(format!("{param}@cap{index}"))
-}
 
 #[cfg(test)]
 mod tests {
@@ -744,7 +731,7 @@ mod tests {
         // The call is retargeted to the clone, with `clo` expanded into `env`.
         match &func_named(&module, "main").unwrap().region.tail {
             Tail::Call(CallTarget::Direct { target, params, .. }) => {
-                assert_eq!(target.as_str(), "f@spec__0_c");
+                assert_eq!(target.as_str(), "f@spec#0=c");
                 assert_eq!(params, &vec![v("env"), v("k")]);
             }
             other => panic!("expected direct call to clone, got {other:?}"),
@@ -752,12 +739,12 @@ mod tests {
 
         // The clone drops `p`, takes the threaded capture as a leading param, and
         // rebuilds the closure so `p` is a known `Data::Clsr`.
-        let clone = func_named(&module, "f@spec__0_c").expect("clone present");
-        assert_eq!(clone.params, vec![v("p@cap0"), v("n")]);
+        let clone = func_named(&module, "f@spec#0=c").expect("clone present");
+        assert_eq!(clone.params, vec![v("p@cap#0"), v("n")]);
         assert!(matches!(
             &clone.region.values[0],
             (name, Value::Pure(Data::Clsr(c, caps)))
-                if name == &v("p") && c.as_str() == "c" && caps == &vec![v("p@cap0")]
+                if name == &v("p") && c.as_str() == "c" && caps == &vec![v("p@cap#0")]
         ));
     }
 
@@ -797,14 +784,14 @@ mod tests {
         // The call drops the unit argument entirely.
         match &func_named(&module, "main").unwrap().region.tail {
             Tail::Call(CallTarget::Direct { target, params, .. }) => {
-                assert_eq!(target.as_str(), "f@spec__0_unit");
+                assert_eq!(target.as_str(), "f@spec#0=unit");
                 assert_eq!(params, &vec![v("k")]);
             }
             other => panic!("expected direct call to clone, got {other:?}"),
         }
 
         // The clone takes only `n`, and rebinds `u` to the unit constant.
-        let clone = func_named(&module, "f@spec__0_unit").expect("clone present");
+        let clone = func_named(&module, "f@spec#0=unit").expect("clone present");
         assert_eq!(clone.params, vec![v("n")]);
         assert!(matches!(
             &clone.region.values[0],
@@ -832,7 +819,7 @@ mod tests {
 
         specialize_calls(&mut module);
 
-        assert!(func_named(&module, "f@spec__0_c").is_none());
+        assert!(func_named(&module, "f@spec#0=c").is_none());
         assert_eq!(module.funcs().len(), 2);
         assert!(matches!(
             &func_named(&module, "main").unwrap().region.tail,
@@ -898,11 +885,11 @@ mod tests {
 
         // The clone's own recursive call targets the clone, with `p` expanded into
         // the threaded capture rather than passed as a closure.
-        let clone = func_named(&module, "f@spec__0_c").expect("clone present");
+        let clone = func_named(&module, "f@spec#0=c").expect("clone present");
         match &clone.region.blocks[0].1.region.tail {
             Tail::Call(CallTarget::Direct { target, params, .. }) => {
-                assert_eq!(target.as_str(), "f@spec__0_c");
-                assert_eq!(params, &vec![v("p@cap0"), v("n")]);
+                assert_eq!(target.as_str(), "f@spec#0=c");
+                assert_eq!(params, &vec![v("p@cap#0"), v("n")]);
             }
             other => panic!("expected specialized self-call, got {other:?}"),
         }
@@ -966,19 +953,19 @@ mod tests {
         assert!(matches!(
             oclo,
             (name, Value::Pure(Data::Clsr(c, caps)))
-                if name == &v("oclo") && c.as_str() == "outer@spec__0_inner"
+                if name == &v("oclo") && c.as_str() == "outer@spec#0=inner"
                     && caps == &vec![v("env"), v("k")]
         ));
 
         // The clone drops `p`, takes its threaded capture as a leading field, keeps
         // `q`, and rebuilds the closure so `p` is a known `Data::Clsr`.
-        let clone = clsr_named(&module, "outer@spec__0_inner").expect("clone present");
-        assert_eq!(clone.fields, vec![v("p@cap0"), v("q")]);
+        let clone = clsr_named(&module, "outer@spec#0=inner").expect("clone present");
+        assert_eq!(clone.fields, vec![v("p@cap#0"), v("q")]);
         assert_eq!(clone.params, vec![v("m")]);
         assert!(matches!(
             &clone.region.values[0],
             (name, Value::Pure(Data::Clsr(c, caps)))
-                if name == &v("p") && c.as_str() == "inner" && caps == &vec![v("p@cap0")]
+                if name == &v("p") && c.as_str() == "inner" && caps == &vec![v("p@cap#0")]
         ));
     }
 
@@ -1022,11 +1009,11 @@ mod tests {
         assert!(matches!(
             oclo,
             (name, Value::Pure(Data::Clsr(c, caps)))
-                if name == &v("oclo") && c.as_str() == "outer@spec__0_unit" && caps == &vec![v("k")]
+                if name == &v("oclo") && c.as_str() == "outer@spec#0=unit" && caps == &vec![v("k")]
         ));
 
         // The clone takes only `q`, and rebinds `u` to the unit constant.
-        let clone = clsr_named(&module, "outer@spec__0_unit").expect("clone present");
+        let clone = clsr_named(&module, "outer@spec#0=unit").expect("clone present");
         assert_eq!(clone.fields, vec![v("q")]);
         assert!(matches!(
             &clone.region.values[0],
@@ -1104,11 +1091,11 @@ mod tests {
         specialize_calls(&mut module);
 
         // One clone, its self-capture threaded; the allocation retargets to it.
-        let clone = clsr_named(&module, "c@spec__0_c").expect("clone present");
-        assert_eq!(clone.fields, vec![v("f@cap0")]);
+        let clone = clsr_named(&module, "c@spec#0=c").expect("clone present");
+        assert_eq!(clone.fields, vec![v("f@cap#0")]);
         assert!(matches!(
             &func_named(&module, "main").unwrap().region.values[0],
-            (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec__0_c",
+            (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec#0=c",
         ));
     }
 
@@ -1192,7 +1179,7 @@ mod tests {
             }
             other => panic!("expected an unspecialized call, got {other:?}"),
         }
-        assert!(func_named(&module, "f@spec__0_c").is_none());
+        assert!(func_named(&module, "f@spec#0=c").is_none());
     }
 
     #[test]
@@ -1233,11 +1220,11 @@ mod tests {
         let region = &func_named(&module, "main").unwrap().region;
         assert!(matches!(
             &region.values[0],
-            (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec__0_c",
+            (_, Value::Pure(Data::Clsr(name, _))) if name.as_str() == "c@spec#0=c",
         ));
         assert!(matches!(
             &region.preallocs[0],
-            (_, Prealloc::Clsr(name)) if name.as_str() == "c@spec__0_c",
+            (_, Prealloc::Clsr(name)) if name.as_str() == "c@spec#0=c",
         ));
     }
 }

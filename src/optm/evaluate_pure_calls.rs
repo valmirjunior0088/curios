@@ -573,12 +573,6 @@ fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
 /// omitted — no `Code` operation reads a closure's structure.
 fn lits_from_frame(frame: &Frame) -> Lits {
     let mut lits = Lits::new();
-    // Mint synthetic names for aggregate elements that scalar_eval needs to look
-    // up by name. We give each element a per-frame-unique synthetic name and
-    // record a corresponding scalar/Bin entry; non-scalar elements are left out
-    // and `simplify` will bail when it can't find them, which is the right
-    // semantics (a folded `TplGet` over a tuple of non-literals stays unfolded).
-    let synth = Entropy::<usize>::new();
     for (name, snap) in frame {
         match snap {
             Snapshot::Nat(n) => {
@@ -594,37 +588,36 @@ fn lits_from_frame(frame: &Frame) -> Lits {
                 lits.insert(name.clone(), Data::Bin((**bytes).clone()));
             }
             Snapshot::Tpl(elems) => {
-                let elem_names: Vec<ValueName> = elems
-                    .iter()
-                    .enumerate()
-                    .map(|(i, elem)| {
-                        let elem_name = ValueName::from(format!("{name}@elt{i}#{}", synth.fresh()));
-                        if let Some(d) = scalar_data(elem) {
-                            lits.insert(elem_name.clone(), d);
-                        }
-                        elem_name
-                    })
-                    .collect();
+                let elem_names = elt_lits(name, elems, &mut lits);
                 lits.insert(name.clone(), Data::Tpl(elem_names));
             }
             Snapshot::Arr(elems) => {
-                let elem_names: Vec<ValueName> = elems
-                    .iter()
-                    .enumerate()
-                    .map(|(i, elem)| {
-                        let elem_name = ValueName::from(format!("{name}@elt{i}#{}", synth.fresh()));
-                        if let Some(d) = scalar_data(elem) {
-                            lits.insert(elem_name.clone(), d);
-                        }
-                        elem_name
-                    })
-                    .collect();
+                let elem_names = elt_lits(name, elems, &mut lits);
                 lits.insert(name.clone(), Data::Arr(elem_names));
             }
             Snapshot::Clsr(_, _) => {}
         }
     }
     lits
+}
+
+/// Synthetic names for an aggregate's elements (unique because the owning
+/// binding's name is unique within the frame), recording a scalar/Bin entry for
+/// each element that has one. Non-scalar elements are left out and `simplify`
+/// bails when it can't find them, which is the right semantics — a folded
+/// `TplGet` over a tuple of non-literals stays unfolded.
+fn elt_lits(name: &ValueName, elems: &[Snapshot], lits: &mut Lits) -> Vec<ValueName> {
+    elems
+        .iter()
+        .enumerate()
+        .map(|(i, elem)| {
+            let elem_name = mangle::frame_elt(name, i);
+            if let Some(d) = scalar_data(elem) {
+                lits.insert(elem_name.clone(), d);
+            }
+            elem_name
+        })
+        .collect()
 }
 
 fn scalar_data(snap: &Snapshot) -> Option<Data> {
@@ -811,7 +804,7 @@ fn materialise_snapshot(
         }
     };
 
-    let name = ValueName::from(format!("v@eval#{}", counter.fresh()));
+    let name = mangle::eval_result(counter.fresh());
     out.push((name.clone(), Value::Pure(data)));
     Some(name)
 }

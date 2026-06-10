@@ -25,8 +25,8 @@ use {
 /// global). Standalone scalars are *not* hoisted (an inline `i31` is cheaper than a
 /// `global.get`); a scalar becomes a const only as the leaf of a hoisted aggregate.
 ///
-/// Each distinct constant becomes one const named `lit$<kind>$<n>` (the `lit$`
-/// prefix cannot collide with the lowerer's `v…`/`b…` body names), deduplicated
+/// Each distinct constant becomes one const named `lit@<kind>#<n>` (the `@`
+/// marker cannot collide with the lowerer's `v…`/`b…` body names), deduplicated
 /// structurally across the whole module, and each hoisted binding is rewritten to a
 /// `Value::Alias` of it. Copy propagation then collapses the alias into its uses and
 /// dead-code elimination reclaims any const left unreferenced (its const→const and
@@ -285,7 +285,7 @@ impl Interner {
 
         let kind = kind_of(&data);
         let index = self.counters.entry(kind).or_insert(0);
-        let name = ValueName::from(format!("lit${kind}${index}"));
+        let name = mangle::hoisted_const(kind, *index);
         *index += 1;
 
         self.dedup.insert(key, name.clone());
@@ -410,15 +410,15 @@ mod tests {
             .map(|(name, data)| (name.as_string(), data.clone()))
             .collect();
         assert_eq!(consts.len(), 2);
-        assert_eq!(consts[0].0, "lit$bin$0");
+        assert_eq!(consts[0].0, "lit@bin#0");
         assert!(matches!(&consts[0].1, Data::Bin(bytes) if bytes == &vec![1, 2, 3]));
-        assert_eq!(consts[1].0, "lit$bin$1");
+        assert_eq!(consts[1].0, "lit@bin#1");
         assert!(matches!(&consts[1].1, Data::Bin(bytes) if bytes == &vec![9]));
 
         let values = &main_region(&module).values;
-        assert_eq!(alias(&values[0].1), &v("lit$bin$0"));
-        assert_eq!(alias(&values[1].1), &v("lit$bin$1"));
-        assert_eq!(alias(&values[2].1), &v("lit$bin$0"));
+        assert_eq!(alias(&values[0].1), &v("lit@bin#0"));
+        assert_eq!(alias(&values[1].1), &v("lit@bin#1"));
+        assert_eq!(alias(&values[2].1), &v("lit@bin#0"));
     }
 
     #[test]
@@ -433,7 +433,7 @@ mod tests {
 
         assert_eq!(module.consts().len(), 1);
         let (_, block) = &main_region(&module).blocks[0];
-        assert_eq!(alias(&block.region.values[0].1), &v("lit$bin$0"));
+        assert_eq!(alias(&block.region.values[0].1), &v("lit@bin#0"));
     }
 
     #[test]
@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn hoists_closed_tuple_lifting_scalar_leaves_in_dependency_order() {
-        // a=1; b=2; t=(a,b) → consts lit$nat$0, lit$nat$1, lit$tpl$0 (leaves first).
+        // a=1; b=2; t=(a,b) → consts lit@nat#0, lit@nat#1, lit@tpl#0 (leaves first).
         let mut module = main_func(region(
             vec![
                 (v("a"), Value::Pure(Data::Nat(1))),
@@ -468,10 +468,10 @@ mod tests {
 
         assert_eq!(
             const_names(&module),
-            vec!["lit$nat$0", "lit$nat$1", "lit$tpl$0"]
+            vec!["lit@nat#0", "lit@nat#1", "lit@tpl#0"]
         );
         match &module.consts()[2].1 {
-            Data::Tpl(elems) => assert_eq!(elems, &vec![v("lit$nat$0"), v("lit$nat$1")]),
+            Data::Tpl(elems) => assert_eq!(elems, &vec![v("lit@nat#0"), v("lit@nat#1")]),
             other => panic!("expected tuple const, got {other:?}"),
         }
 
@@ -479,7 +479,7 @@ mod tests {
         let values = &main_region(&module).values;
         assert!(matches!(&values[0].1, Value::Pure(Data::Nat(1))));
         assert!(matches!(&values[1].1, Value::Pure(Data::Nat(2))));
-        assert_eq!(alias(&values[2].1), &v("lit$tpl$0"));
+        assert_eq!(alias(&values[2].1), &v("lit@tpl#0"));
     }
 
     #[test]
@@ -498,11 +498,11 @@ mod tests {
 
         assert_eq!(
             const_names(&module),
-            vec!["lit$nat$0", "lit$arr$0", "lit$tpl$0"]
+            vec!["lit@nat#0", "lit@arr#0", "lit@tpl#0"]
         );
         let values = &main_region(&module).values;
-        assert_eq!(alias(&values[1].1), &v("lit$arr$0"));
-        assert_eq!(alias(&values[2].1), &v("lit$tpl$0"));
+        assert_eq!(alias(&values[1].1), &v("lit@arr#0"));
+        assert_eq!(alias(&values[2].1), &v("lit@tpl#0"));
     }
 
     #[test]
@@ -520,15 +520,15 @@ mod tests {
 
         hoist_literals(&mut module);
 
-        assert_eq!(const_names(&module), vec!["lit$int$0", "lit$clsr$0"]);
+        assert_eq!(const_names(&module), vec!["lit@int#0", "lit@clsr#0"]);
         match &module.consts()[1].1 {
             Data::Clsr(clsr, captures) => {
                 assert_eq!(clsr.as_str(), "c");
-                assert_eq!(captures, &vec![v("lit$int$0")]);
+                assert_eq!(captures, &vec![v("lit@int#0")]);
             }
             other => panic!("expected closure const, got {other:?}"),
         }
-        assert_eq!(alias(&main_region(&module).values[1].1), &v("lit$clsr$0"));
+        assert_eq!(alias(&main_region(&module).values[1].1), &v("lit@clsr#0"));
     }
 
     #[test]
@@ -603,6 +603,6 @@ mod tests {
         hoist_literals(&mut module);
 
         // One scalar const and one tuple const, shared by both bodies.
-        assert_eq!(const_names(&module), vec!["lit$nat$0", "lit$tpl$0"]);
+        assert_eq!(const_names(&module), vec!["lit@nat#0", "lit@tpl#0"]);
     }
 }

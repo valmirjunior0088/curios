@@ -11,8 +11,8 @@ use {
 ///
 /// ```text
 ///   let v = c{a, b};        Clsr c { fields: [x, y], params: [p], .. }
-///   v(arg)  (indirect)  ->  c_lifted(a, b, arg)  (direct, to)
-///                           Func c_lifted { params: [x, y, p], .. }
+///   v(arg)  (indirect)  ->  c@lifted(a, b, arg)  (direct, to)
+///                           Func c@lifted { params: [x, y, p], .. }
 /// ```
 ///
 /// Because `call_direct_instrs` and `call_indirect_instrs` share their `resume`
@@ -43,11 +43,6 @@ pub fn lift_closures(module: &mut Module) {
     for (name, func) in lift_funcs(module, &to_lift) {
         module.add_func(name, func);
     }
-}
-
-/// The function a closure is lifted to.
-fn lifted_name(clsr: &ClsrName) -> FuncName {
-    FuncName::from(format!("{clsr}_lifted"))
 }
 
 // --- Devirtualization -------------------------------------------------------
@@ -107,7 +102,7 @@ fn rewrite_tail(tail: &mut Tail, known: &Known, to_lift: &mut HashSet<ClsrName>)
             to_lift.insert(clsr.clone());
 
             Tail::Call(CallTarget::Direct {
-                target: lifted_name(clsr),
+                target: mangle::lifted(clsr),
                 params: lifted_params,
                 resume: resume.clone(),
             })
@@ -142,7 +137,7 @@ fn lift_funcs(module: &Module, to_lift: &HashSet<ClsrName>) -> Vec<(FuncName, Fu
                 region: clsr.region.clone(),
             };
 
-            (lifted_name(name), func)
+            (mangle::lifted(name), func)
         })
         .collect()
 }
@@ -242,7 +237,7 @@ mod tests {
                 params,
                 resume,
             }) => {
-                assert_eq!(target.as_str(), "c0_lifted");
+                assert_eq!(target.as_str(), "c0@lifted");
                 assert_eq!(params, &vec![v("a"), v("arg")]);
                 assert_eq!(resume.as_str(), "b1");
             }
@@ -250,7 +245,7 @@ mod tests {
         }
 
         // The lifted function takes the captured fields as leading params.
-        let lifted = func_named(&module, "c0_lifted").expect("lifted func");
+        let lifted = func_named(&module, "c0@lifted").expect("lifted func");
         assert_eq!(lifted.params, vec![v("f"), v("p")]);
     }
 
@@ -279,7 +274,7 @@ mod tests {
             main_tail(&module),
             Tail::Call(CallTarget::Indirect { .. })
         ));
-        assert!(func_named(&module, "g_lifted").is_none());
+        assert!(func_named(&module, "g@lifted").is_none());
         assert_eq!(module.funcs().len(), 1);
     }
 }
