@@ -64,6 +64,20 @@ pub fn capture_param(param: &ValueName, index: usize) -> ValueName {
     ValueName::from(format!("{param}@cap#{index}"))
 }
 
+/// The loop header block a converted self-tail-recursive function jumps to
+/// ([`tail_recursion`](super::tail_recursion)). One per body: conversion
+/// consumes every self-call, so a body is never converted twice.
+pub fn loop_header() -> BlockName {
+    BlockName::from("b@loop")
+}
+
+/// The fresh outer parameter standing in for a converted function's original
+/// parameter, which the loop header block takes over
+/// ([`tail_recursion`](super::tail_recursion)).
+pub fn loop_param(param: &ValueName) -> ValueName {
+    ValueName::from(format!("{param}@loop"))
+}
+
 /// The freshening suffix for a decided join-block clone
 /// ([`tag_threading`](super::tag_threading)). `index` is a per-body counter,
 /// so two splices in the same body can never collide.

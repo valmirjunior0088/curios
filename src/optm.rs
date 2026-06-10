@@ -23,6 +23,9 @@
 //!   candidate parameter, so closure lifting can devirtualize through it.
 //! - [`closure_lifting`] — turns known closures into functions and devirtualizes
 //!   their call sites.
+//! - [`tail_recursion`] — rewrites a function whose every direct self-call is
+//!   a tail call into a loop (a header block plus backward jumps), taking it
+//!   out of the direct-call cycles that exclude it from inlining.
 //! - [`function_inlining`] — splices a callee's body into its call sites; a
 //!   single-call-site rule unfolds any-sized callees once, and a size-bounded
 //!   multi-site rule dissolves small callees (e.g. the primitive wrappers)
@@ -73,6 +76,9 @@ pub use specialize_calls::*;
 mod closure_lifting;
 pub use closure_lifting::*;
 
+mod tail_recursion;
+pub use tail_recursion::*;
+
 mod function_inlining;
 pub use function_inlining::*;
 
@@ -104,7 +110,10 @@ use super::cont::*;
 ///    expose. An interim dead-code elimination then sweeps the specialization
 ///    residue — the orphaned original closures still carry direct calls that
 ///    would inflate `inline_calls`' call-site counts.
-/// 3. **Dissolve call boundaries.** Single-site inlining splices each remaining
+/// 3. **Dissolve call boundaries.** Tail-recursion conversion first rewrites
+///    each function whose self-calls (made direct by the self-capture seed in
+///    lifting) are all tail calls into a loop, removing it from the cycles
+///    inlining refuses. Then single-site inlining splices each remaining
 ///    callee into its one call site; jump threading dissolves the leftover
 ///    continuation blocks; a settle round (copy propagation + folding) collapses
 ///    the literal arguments now sitting next to the primitive ops they feed.
@@ -143,6 +152,7 @@ pub fn optimize(mut module: Module) -> Module {
     eliminate_dead_code(&mut module);
 
     // 3. Dissolve call boundaries.
+    convert_tail_recursion(&mut module);
     inline_calls(&mut module);
     thread_jumps(&mut module);
     propagate_copies(&mut module);
