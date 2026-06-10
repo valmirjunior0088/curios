@@ -157,12 +157,16 @@ impl Sink for Counts {
 /// Pick the next callee to inline. Tier 1 (single call site, not in a cycle) is
 /// preferred over Tier 2 (size ≤ [`SIZE_THRESHOLD`], ≥1 call site, not in a
 /// cycle) so the cheaper, history-preserving path always wins when applicable.
+/// The entrypoint is never picked: it is the host's entry contract, and both
+/// tiers delete the callee after splicing.
 fn pick_callee(module: &Module, counts: &HashMap<FuncName, usize>) -> Option<(FuncName, Tier)> {
-    if let Some((name, _)) = module
-        .funcs()
-        .iter()
-        .find(|(name, _)| counts.get(name) == Some(&1) && !is_in_direct_call_cycle(name, module))
-    {
+    let entry = module.entry();
+
+    if let Some((name, _)) = module.funcs().iter().find(|(name, _)| {
+        Some(name) != entry
+            && counts.get(name) == Some(&1)
+            && !is_in_direct_call_cycle(name, module)
+    }) {
         return Some((name.clone(), Tier::Single));
     }
 
@@ -170,7 +174,8 @@ fn pick_callee(module: &Module, counts: &HashMap<FuncName, usize>) -> Option<(Fu
         .funcs()
         .iter()
         .find(|(name, func)| {
-            counts.get(name).copied().unwrap_or(0) >= 1
+            Some(name) != entry
+                && counts.get(name).copied().unwrap_or(0) >= 1
                 && body_size(func) <= SIZE_THRESHOLD
                 && !is_in_direct_call_cycle(name, module)
         })
@@ -790,6 +795,39 @@ mod tests {
             .expect("k present");
         assert!(k_block.region.values.iter().any(|(n, _)| n == &v("v0@f#2")));
         assert!(k_block.region.values.iter().any(|(n, _)| n == &v("p@f#2")));
+    }
+
+    #[test]
+    fn never_inlines_the_entrypoint() {
+        // `helper` direct-calls the entry `main`, giving it exactly one call
+        // site — Tier 1 territory by count. Inlining would splice and *delete*
+        // the entrypoint, so it must be skipped.
+        let main = func(
+            vec![],
+            "rm",
+            region(
+                vec![(v("r"), Value::Pure(Data::Nat(0)))],
+                vec![],
+                ret("rm", v("r")),
+            ),
+        );
+        let helper = func(
+            vec![],
+            "rh",
+            region(vec![], vec![], direct("main", vec![], "rh")),
+        );
+
+        let mut module = Module::new();
+        module.add_func(FuncName::from("main"), main);
+        module.add_func(FuncName::from("helper"), helper);
+        module.set_entry(FuncName::from("main"));
+
+        inline_calls(&mut module);
+
+        assert!(
+            func_named(&module, "main").is_some(),
+            "the entrypoint must survive inlining"
+        );
     }
 
     #[test]
