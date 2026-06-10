@@ -29,6 +29,12 @@ pub use Lst/{let Lst};
 pub mod Vec;
 pub use Vec/{let Vec};
 
+pub mod Eq;
+pub use Eq/{let Eq};
+
+pub mod Void;
+pub use Void/{let Void};
+
 pub mod Flt;
 pub use Flt/{let Flt};
 

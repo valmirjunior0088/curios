@@ -1,0 +1,32 @@
+-- Propositional equality: `Eq(A, x, y)` is inhabited exactly when `x` and `y`
+-- are equal, and its only constructor pins both indices to the same value.
+-- Matching on a proof refines the indices inside the arm (`x := z`, `y := z`),
+-- which is what makes the eliminators below typecheck.
+pub union Eq(A : Type) : (x : A, y : A)
+| refl(@z : A) : (z, z)
+end
+
+pub use Eq/*;
+
+pub let sym(@A : Type, @x : A, @y : A, p : Eq(A, x, y)) -> Eq(A, y, x) =
+    match p : (q : Eq(A, s, t)) => Eq(A, t, s)
+    | refl(z) => Eq/refl()
+    end;
+
+-- A constant motive suffices: the `refl` arm learns `y := w` and `z := w`,
+-- at which point `p` already has the demanded type.
+pub let trans(@A : Type, @x : A, @y : A, @z : A, p : Eq(A, x, y), q : Eq(A, y, z)) -> Eq(A, x, z) =
+    match q : Eq(A, x, z)
+    | refl(w) => p
+    end;
+
+pub let cong(@A : Type, @B : Type, @x : A, @y : A, f : A -> B, p : Eq(A, x, y)) -> Eq(B, f(x), f(y)) =
+    match p : Eq(B, f(x), f(y))
+    | refl(z) => Eq/refl()
+    end;
+
+-- Transport: rewrite `x` to `y` under an arbitrary predicate `P`.
+pub let subst(@A : Type, @x : A, @y : A, P : A -> Type, p : Eq(A, x, y), v : P(x)) -> P(y) =
+    match p : P(y)
+    | refl(z) => v
+    end;

@@ -157,8 +157,7 @@ let id(T : Type, x : T) -> T = x;
 
 In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id(Nat, 42)` or `id(Bin, "hello")`. There are no angle brackets.
 
-Passing types by hand gets old, so a binder marked `@` is *implicit* — an
-automatic `?` the elaborator fills by inference at each call site:
+Passing types by hand gets old, so a binder marked `@` is _implicit_ — an automatic `?` the elaborator fills by inference at each call site:
 
 ```
 let id(@T : Type, x : T) -> T = x;
@@ -166,8 +165,7 @@ id(42)          -- T inferred as Nat
 id(@Bin, "hi")  -- T supplied positionally with @
 ```
 
-Union parameters work this way out of the box: `Result/ok(42)` infers the
-type arguments; only the *type* `Result(Nat, Bin)` is written out.
+Union parameters work this way out of the box: `Result/ok(42)` infers the type arguments; only the _type_ `Result(Nat, Bin)` is written out.
 
 The motive in `match` is the same mechanism: `match head : (label) => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
@@ -224,7 +222,7 @@ let head(T : Type, n : Nat, v : Vec(T, Nat/succ(n))) -> T =
 
 `Vec(T, Nat/succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
-The same shape is also available as a declared *indexed union* — this is what `/std/Vec` is:
+The same shape is also available as a declared _indexed union_ — this is what `/std/Vec` is:
 
 ```
 union Vec(T : Type) : (n : Nat)
@@ -248,7 +246,7 @@ rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T
     end;
 ```
 
-Which to reach for: the *recursion-computed* type reduces definitionally — `Vec(Nat, 2)` literally **is** `{ Nat, { Nat, {} } }`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The *indexed union* is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
+Which to reach for: the _recursion-computed_ type reduces definitionally — `Vec(Nat, 2)` literally **is** `{ Nat, { Nat, {} } }`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The _indexed union_ is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
 
 ## Payoff: typed format strings
 
@@ -267,3 +265,7 @@ Length-indexed vectors rule out bounds errors. The same mechanism rules out vari
 ```
 
 The `examples/crs_printf.rs` program exercises the successful case with host input (`Io/read` + `Str/trim`) and asserts the same output, then checks that the ill-typed `%d` example is rejected. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, union values, and arrays to encode and decode a `Json` tree.
+
+## Where to next
+
+Everything in this document used dependent types to make _programs_ safer. The same machinery — and no new syntax — also writes _proofs_: stating `add(n, 0) = n` as a type and convincing the checker it holds for every `n`. That story is `PROOFS_101.md`, which picks up exactly where this document leaves off.

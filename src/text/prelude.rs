@@ -363,6 +363,8 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Option"], include_str!("../../std/Option.crs")),
     (&["std", "Lst"], include_str!("../../std/Lst.crs")),
     (&["std", "Vec"], include_str!("../../std/Vec.crs")),
+    (&["std", "Eq"], include_str!("../../std/Eq.crs")),
+    (&["std", "Void"], include_str!("../../std/Void.crs")),
     (&["std", "Flt"], include_str!("../../std/Flt.crs")),
     (&["std", "Str"], include_str!("../../std/Str.crs")),
     (&["std", "Parse"], include_str!("../../std/Parse.crs")),

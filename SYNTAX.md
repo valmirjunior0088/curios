@@ -76,13 +76,24 @@ pub union Result(A : Type, B : Type)
 end
 ```
 
-Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The union's parameters are *implicit* at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors. A payload-less case uses empty parentheses:
+Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The union's parameters are _implicit_ at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors. A payload-less case uses empty parentheses:
 
 ```
 pub union Option(A : Type)
 | none()
 | some(A)
 end
+```
+
+A union may declare zero cases, making the type uninhabited. Its eliminator is a `match` with zero arms — with no constructors every omission is vacuously justified, so the match checks at any motive:
+
+```
+union Void
+end
+
+let absurd(@A : Type, v : Void) -> A =
+    match v : A
+    end;
 ```
 
 Mutually recursive unions are declared with `and` and are closed by a single `end`:
@@ -98,10 +109,7 @@ end
 
 #### Indices
 
-A union may declare an **index telescope** after a `:` in its head. A
-parameter is uniform — every constructor targets the same instantiation — but
-an index is *constrained per case*: each case states, after its payload, the
-parenthesized index expressions it inhabits.
+A union may declare an **index telescope** after a `:` in its head. A parameter is uniform — every constructor targets the same instantiation — but an index is _constrained per case_: each case states, after its payload, the parenthesized index expressions it inhabits.
 
 ```
 pub union Vec(T : Type) : (n : Nat)
@@ -110,21 +118,11 @@ pub union Vec(T : Type) : (n : Nat)
 end
 ```
 
-- The head's index names (`n`) are documentary — needed only when a later
-  index's type depends on an earlier one; they are not in scope in the cases.
-  `: (Nat)` is equally legal.
-- A case target states *only* the index expressions — never the union name or
-  the parameters, which are forced uniform by construction. Targets are
-  required on every case exactly when the head declares indices, with arity
-  matching the index telescope's.
-- Payload binders may be named (`m : Nat`) — required when a later payload
-  type or the target mentions them — and a named binder may carry `@`, making
-  it implicit at the value constructor (`m` above is recoverable from `xs`,
-  so values are written `Vec/cons(x, xs)`).
+- The head's index names (`n`) are documentary — needed only when a later index's type depends on an earlier one; they are not in scope in the cases. `: (Nat)` is equally legal.
+- A case target states _only_ the index expressions — never the union name or the parameters, which are forced uniform by construction. Targets are required on every case exactly when the head declares indices, with arity matching the index telescope's.
+- Payload binders may be named (`m : Nat`) — required when a later payload type or the target mentions them — and a named binder may carry `@`, making it implicit at the value constructor (`m` above is recoverable from `xs`, so values are written `Vec/cons(x, xs)`).
 
-The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) ->
-Type`, applied `Vec(Bin, 3)` — so use sites never distinguish parameters from
-indices.
+The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) -> Type`, applied `Vec(Bin, 3)` — so use sites never distinguish parameters from indices.
 
 ### Submodule
 
@@ -205,13 +203,7 @@ Arguments are arbitrary terms — there is no need to parenthesise compound argu
 (a : A, b : B) => body
 ```
 
-Introduces a function. Parameters are parenthesised and comma-separated, and each
-may carry an optional type annotation. `(x) => body` is shorthand for
-`(x : _) => body`: the omitted domain is solved from the expected function type
-when the lambda is checked, or synthesized from the annotation when the lambda is
-in inference position (for instance, the body of a typeless `let`). A lambda whose
-domain cannot be determined — a bare `(x) => body` with no expected type — is
-rejected. All parameters are in scope in `body`.
+Introduces a function. Parameters are parenthesised and comma-separated, and each may carry an optional type annotation. `(x) => body` is shorthand for `(x : _) => body`: the omitted domain is solved from the expected function type when the lambda is checked, or synthesized from the annotation when the lambda is in inference position (for instance, the body of a typeless `let`). A lambda whose domain cannot be determined — a bare `(x) => body` with no expected type — is rejected. All parameters are in scope in `body`.
 
 ### Holes
 
@@ -236,27 +228,17 @@ id(5)           -- T is inferred
 id(@Nat, 5)     -- T is given
 ```
 
-A binder marked `@` is an implicit parameter: **an automatic `?`**. At every
-call site the elaborator fills it with a fresh hole unless an `@`-argument
-supplies it. Nothing else changes — conversion ignores the marks entirely, so
-a value of an implicit type flows anywhere its arity fits.
+A binder marked `@` is an implicit parameter: **an automatic `?`**. At every call site the elaborator fills it with a fresh hole unless an `@`-argument supplies it. Nothing else changes — conversion ignores the marks entirely, so a value of an implicit type flows anywhere its arity fits.
 
-Implicit parameters may appear anywhere in the telescope, not just as a
-prefix; `@` marks work the same in standalone Π-types (`rec` signatures,
-annotations):
+Implicit parameters may appear anywhere in the telescope, not just as a prefix; `@` marks work the same in standalone Π-types (`rec` signatures, annotations):
 
 ```
 rec bind : (@A : Type, @B : Type) -> (Parse(A), A -> Parse(B)) -> Parse(B) = …;
 ```
 
-Call sites follow a two-queue rule: plain arguments fill the explicit binders
-in telescope order, `@`-arguments fill the implicit binders in telescope
-order, matched independently — `f(@Nat, x)` and `f(x, @Nat)` are the same
-call. An implicit the elaborator cannot infer is rejected with the binder's
-name; supply it explicitly with `@`.
+Call sites follow a two-queue rule: plain arguments fill the explicit binders in telescope order, `@`-arguments fill the implicit binders in telescope order, matched independently — `f(@Nat, x)` and `f(x, @Nat)` are the same call. An implicit the elaborator cannot infer is rejected with the binder's name; supply it explicitly with `@`.
 
-Union parameters need no marks: they are implicit at the value constructors
-and explicit at the type constructor by definition (see Union above).
+Union parameters need no marks: they are implicit at the value constructors and explicit at the type constructor by definition (see Union above).
 
 ### Local let
 
@@ -265,9 +247,7 @@ let name : Type = body;
 tail
 ```
 
-Binds `name` to `body` for the rest of `tail`. The semicolon is required. The type
-annotation is **optional for a local `let`** — `let name = body;` infers it from
-`body` (equivalently, write `: _`):
+Binds `name` to `body` for the rest of `tail`. The semicolon is required. The type annotation is **optional for a local `let`** — `let name = body;` infers it from `body` (equivalently, write `: _`):
 
 ```
 let n = 5;                 -- n : Nat, inferred
@@ -275,11 +255,7 @@ let f = (x : Nat) => x;    -- f : (Nat) -> Nat, inferred from the annotation
 tail
 ```
 
-The body must be inferable: a bare `let f = (x) => x;` (nothing constrains the
-domain), or a tuple with no annotation, is rejected. Top-level `let` and every
-`rec` binding (local or top-level) still require an explicit type — a `rec` group's
-mutually recursive types cannot be inferred from their bodies. The
-function-definition shorthand is also available locally:
+The body must be inferable: a bare `let f = (x) => x;` (nothing constrains the domain), or a tuple with no annotation, is rejected. Top-level `let` and every `rec` binding (local or top-level) still require an explicit type — a `rec` group's mutually recursive types cannot be inferred from their bodies. The function-definition shorthand is also available locally:
 
 ```
 let add(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat = /sys/Nat/add(a, b);
@@ -373,10 +349,10 @@ match r : A
 end
 ```
 
-Matching an *indexed* union gets three further behaviours, by the shape of each scrutinee index:
+Matching an _indexed_ union gets three further behaviours, by the shape of each scrutinee index:
 
 - a **variable** index is refined to the case's target inside each arm, so hypotheses mentioning it reduce there (`match p : Vec(Bin, m)` through an `Eq(Nat, n, m)` learns `n := z`, `m := z` in the `refl` arm);
-- a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`Nat/succ(n)` against `cons`'s `Nat/succ(j)` pins `j := n`), and a case whose target *definitely clashes* (`nil`'s `0` against `Nat/succ(n)`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
+- a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`Nat/succ(n)` against `cons`'s `Nat/succ(j)` pins `j := n`), and a case whose target _definitely clashes_ (`nil`'s `0` against `Nat/succ(n)`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
 
 ```
 let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
@@ -620,13 +596,13 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Arr
 
-| Operation                      | Arity | Description                    | Returns       |
-| ------------------------------ | ----- | ------------------------------ | ------------- |
-| `/sys/Arr/len(a)`              | 1     | Element count                  | `/sys/Nat`    |
-| `/sys/Arr/get(a, i)`           | 2     | Element at index `i`           | `T`           |
+| Operation                       | Arity | Description                    | Returns       |
+| ------------------------------- | ----- | ------------------------------ | ------------- |
+| `/sys/Arr/len(a)`               | 1     | Element count                  | `/sys/Nat`    |
+| `/sys/Arr/get(a, i)`            | 2     | Element at index `i`           | `T`           |
 | `/sys/Arr/slice(a, start, end)` | 3     | Subarray from `start` to `end` | `/sys/Arr(T)` |
-| `/sys/Arr/append(a, elem)`     | 2     | Append a single element        | `/sys/Arr(T)` |
-| `/sys/Arr/concat(a, b)`        | 2     | Concatenate two arrays         | `/sys/Arr(T)` |
+| `/sys/Arr/append(a, elem)`      | 2     | Append a single element        | `/sys/Arr(T)` |
+| `/sys/Arr/concat(a, b)`         | 2     | Concatenate two arrays         | `/sys/Arr(T)` |
 
 `Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more:
 
@@ -646,7 +622,7 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Sum types
 
-Use `union` to declare a sum type. A union is a primitive *nominal* (inductive) type: two unions are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
+Use `union` to declare a sum type. A union is a primitive _nominal_ (inductive) type: two unions are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
 
 **Definition**
 
@@ -666,9 +642,7 @@ let good : Result(Nat, Bin) = Result/ok(42);
 let bad  : Result(Nat, Bin) = Result/err("something went wrong");
 ```
 
-The union's type parameters are implicit at the constructors — inference fills
-them from the payload or the expected type. Supply one positionally with a
-call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`.
+The union's type parameters are implicit at the constructors — inference fills them from the payload or the expected type. Supply one positionally with a call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`.
 
 **Elimination**
 

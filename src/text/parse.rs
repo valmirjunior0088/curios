@@ -1076,7 +1076,7 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
                 .and_drop(parse_literal(")"))
                 .or(pure(vec![])),
         )
-        .and(many1(parse_top_union_case))
+        .and(many0(parse_top_union_case))
         .flat_map(move |(((label, params), indices), cases)| {
             // Targets are required on every case iff the head declares
             // indices, with arity equal to the index telescope's.

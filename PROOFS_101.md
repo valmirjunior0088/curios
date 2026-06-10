@@ -1,0 +1,171 @@
+# Proofs 101
+
+This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (unions, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Bin, Eq, Vec, Io};`.
+
+## A proof is a test that checks every input
+
+In Rust, you gain confidence that `add(n, 0) == n` by testing it:
+
+```rust
+#[test]
+fn add_zero() {
+    assert_eq!(add(7, 0), 7); // checks one n per run
+}
+```
+
+In Curios, you can state it as a type and prove it:
+
+```
+let add_zero(n : Nat) -> Eq(Nat, Nat/add(n, 0), n) = …;
+```
+
+If this definition type-checks, the equation holds for **every** `n` — the check happens at compile time, once. And because proofs are erased along with all other type-level data, `add_zero` costs nothing at runtime. A test samples; a proof quantifies.
+
+The rest of this document builds up to that definition and past it.
+
+## Propositions are types
+
+The trick underneath everything: a proposition is encoded as a _type_, and proving it means _writing a value of that type_. The type checker is the proof checker.
+
+The trivially true proposition is the empty tuple — `()` proves it:
+
+```
+let trivially_true : {} = ();
+```
+
+The false proposition is a type with no values — a `union` with zero cases:
+
+```
+union Void
+end
+```
+
+Nothing constructs a `Void`, so merely holding one is a contradiction. Eliminating it is a `match` with zero arms: there are no constructors, so every arm is vacuously covered and the match checks at _any_ motive — from the absurd, anything follows:
+
+```
+let absurd(@A : Type, contradiction : Void) -> A =
+    match contradiction : A
+    end;
+```
+
+Negation is a function into `Void` — "a proof of `P` would be absurd":
+
+```
+let Not(P : Type) -> Type = P -> Void;
+```
+
+All three ship in the standard library as `/std/Void` (`Void`, `Void/absurd`, `Void/Not`); this document declares them inline so every snippet stands on its own.
+
+## Equality is an indexed union
+
+`/std/Eq` is the workhorse proposition. It is an ordinary indexed union, two pages after `CRASH_COURSE.md` taught you `Vec`:
+
+```
+union Eq(A : Type) : (x : A, y : A)
+| refl(@z : A) : (z, z)
+end
+```
+
+Read it as: `Eq(A, x, y)` is the proposition "`x` equals `y`", and its only constructor lives at indices `(z, z)` — both sides the same. So a proof exists exactly when the checker can see the sides are equal. The payload is implicit (`@z`), pinned by the type you check against:
+
+```
+let two_is_two : Eq(Nat, 2, 2) = Eq/refl();
+```
+
+`Eq(Nat, 2, 3)` rejects `Eq/refl()` with a `TypeMismatch`: the constructor demands both indices be the same `z`, and `2` and `3` are not.
+
+Matching is where proofs pay rent. As with any indexed union, **matching refines the indices inside the arm**: scrutinizing a `p : Eq(A, x, y)` makes `x` and `y` the same thing in the `refl` arm, so obligations that were stuck now reduce. Symmetry is the whole technique in four lines:
+
+```
+let sym(@A : Type, @x : A, @y : A, p : Eq(A, x, y)) -> Eq(A, y, x) =
+    match p : (q : Eq(A, s, t)) => Eq(A, t, s)
+    | refl(z) => Eq/refl()
+    end;
+```
+
+Inside the arm both `s` and `t` are `z`, so the demanded `Eq(A, t, s)` is `Eq(A, z, z)` — which `Eq/refl()` proves. `/std/Eq` ships the basic kit, all built the same way:
+
+| Name    | Statement                                             |
+| ------- | ----------------------------------------------------- |
+| `sym`   | `Eq(A, x, y) -> Eq(A, y, x)`                          |
+| `trans` | `Eq(A, x, y) -> Eq(A, y, z) -> Eq(A, x, z)`           |
+| `cong`  | `Eq(A, x, y) -> Eq(B, f(x), f(y))` for any `f`        |
+| `subst` | `Eq(A, x, y) -> P(x) -> P(y)` for any `P : A -> Type` |
+
+```
+let flipped : Eq(Nat, 2, 2) = Eq/sym(two_is_two);
+let chained : Eq(Nat, 2, 2) = Eq/trans(two_is_two, flipped);
+```
+
+## Induction is `match` with `ih`
+
+`CRASH_COURSE.md` introduced `| pred + 1, ih` as "the result already computed for the predecessor". When the result is a _proof_, `ih` is literally the **induction hypothesis**. Here is the promised theorem:
+
+```
+let succ_f(n : Nat) -> Nat = Nat/succ(n);
+
+let add_zero(n : Nat) -> Eq(Nat, Nat/add(n, 0), n) =
+    match n : (m) => Eq(Nat, Nat/add(m, 0), m)
+    | 0 => Eq/refl()
+    | pred + 1, ih => Eq/cong(succ_f, ih)
+    end;
+```
+
+Walking through it:
+
+- The **motive** `(m) => Eq(Nat, Nat/add(m, 0), m)` states what is being proven at each value — it is the induction _statement_.
+- The **base case** must prove `Eq(Nat, Nat/add(0, 0), 0)`. `Nat/add(0, 0)` reduces to `0` during checking, so `Eq/refl()` closes it.
+- The **inductive step** holds `ih : Eq(Nat, Nat/add(pred, 0), pred)` and must prove the statement at `pred + 1`. The checker knows `Nat/add(Nat/succ(pred), 0)` is `Nat/succ(Nat/add(pred, 0))` definitionally, so applying `cong` with `succ_f` to `ih` lands exactly there.
+
+No induction keyword, no tactics — the same `match` you compute with, aimed at a proposition.
+
+## Proving things false
+
+To prove a negation, accept the impossible proof and derive `Void`. The first instinct — eliminate it like `Void`, with a zero-arm match, since no constructor fits the indices — does not get past the checker:
+
+```
+let zero_is_not_one(p : Eq(Nat, 0, 1)) -> Void =
+    match p : Void
+    end;
+-- rejected: missing arm 'refl': its index target is not provably
+-- impossible at the scrutinee's indices — write the arm
+```
+
+Arm omission is verified by the index inverter, and the inverter is deliberately small: each constructor binder may constrain _one_ index position. `refl`'s `z` pins both positions at once, which is beyond it, so the arm stays mandatory. (Contrast `Vec`, where omitting `nil` at length `Nat/succ(n)` works — there `0` clashes with a constructor form in a single position.)
+
+The standard route is to _discriminate and transport_: write a predicate that distinguishes the two sides, then carry a trivial proof across the equality with `subst`:
+
+```
+let IsZero(n : Nat) -> Type =
+    match n : Type
+    | 0 => {}
+    | pred + 1, _ => Void
+    end;
+
+let zero_is_not_one : Not(Eq(Nat, 0, 1)) =
+    (p) => Eq/subst(IsZero, p, ());
+```
+
+`IsZero(0)` is `{}`, so `()` proves it; `subst` rewrites along `p : Eq(Nat, 0, 1)` to produce `IsZero(1)` — which is `Void`. The supposed proof of `0 = 1` has been converted into the absurd, which is exactly what `Not` asked for. Note the proof of a negation is just a lambda.
+
+## Payoff: proofs that move data
+
+So far the proofs proved things _about_ programs. They also work _inside_ programs: `subst` can re-type real data along an equality, replacing what Rust would handle with a runtime check or an `unsafe` transmute.
+
+```
+let BinVec(k : Nat) -> Type = Vec(Bin, k);
+
+let cast(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
+    Eq/subst(BinVec, p, v);
+```
+
+`cast` changes a vector's _type_ — its length index — without touching the value, and only when handed evidence the lengths agree. Combined with `add_zero`, it dissolves the kind of index bookkeeping that piles up around length-indexed structures:
+
+```
+let single : Vec(Bin, 1) = Vec/cons("hi", Vec/nil());
+let recast : Vec(Bin, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
+```
+
+`Vec(Bin, Nat/add(1, 0))` and `Vec(Bin, 1)` are the same length, but the checker wants the _types_ to convert — `sym(add_zero(1))` is the evidence, and it erases: at runtime `recast` **is** `single`.
+
+Every snippet in this document is compiled, run, and its two rejections asserted by `examples/crs_proofs.rs`.

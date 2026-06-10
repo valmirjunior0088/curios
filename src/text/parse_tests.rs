@@ -465,6 +465,21 @@ fn parse_top_union_single_variant() {
 }
 
 #[test]
+fn parse_top_union_empty() {
+    let m = "union Void\nend".parse::<Module>().unwrap();
+    assert_eq!(
+        m.items,
+        vec![TopItem::Union(vec![TopUnion {
+            is_pub: false,
+            label: "Void".to_string(),
+            params: vec![],
+            indices: vec![],
+            cases: vec![],
+        }])]
+    );
+}
+
+#[test]
 fn parse_top_union_multi_variant() {
     let m = "pub union Color\n| red()\n| green()\n| blue()\nend"
         .parse::<Module>()

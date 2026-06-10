@@ -2,7 +2,7 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~46,500 lines in `src/`, ~1,840 lines in top-level Rust examples, plus ~750 lines of Curios standard library in `std.crs` and `std/`.
+**Codebase size:** ~46,500 lines in `src/`, ~2,070 lines in top-level Rust examples, plus ~770 lines of Curios standard library in `std.crs` and `std/`.
 
 ---
 
@@ -129,7 +129,7 @@ The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoa
 
 The three union lowerings are:
 
-- a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope, the index telescope, and per-constructor signatures (for an indexed union each signature terminates in its *per-case* `UnionType`, indices stated by that case's target)
+- a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope, the index telescope, and per-constructor signatures (for an indexed union each signature terminates in its _per-case_ `UnionType`, indices stated by that case's target)
 - a **constructor function** → a function whose body is the primitive `Variant` normal form
 - a union **match** → a primitive `Match` with `Cases::Union` (arm binders typed from the registry telescopes during core elaboration, with static arity checking; an annotated motive's type-pattern rides along for positional validation, and index information flows through refinement and the restricted inverter in `core/invert.rs`)
 
@@ -141,16 +141,16 @@ The three union lowerings are:
 
 The central `core::Term` enum:
 
-| Variant                        | Role                                                         |
-| ------------------------------ | ------------------------------------------------------------ |
-| `Type`                         | The sort (no universe hierarchy)                             |
-| `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application |
-| `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access   |
+| Variant                        | Role                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Type`                         | The sort (no universe hierarchy)                                                                                                                       |
+| `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application                                                                                           |
+| `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access                                                                                             |
 | `Match`                        | The unified eliminator: one scrutinee + motive (`Scope<Many>` — arity 1 except an index-binding union motive), with `Cases::{Bln, Nat, Switch, Union}` |
-| `UnionType` / `Variant`        | Nominal (inductive) unions: the type and constructor values  |
-| `Let` / `Rec`                  | Bindings and mutual recursion                                |
-| `Prim`                         | Built-in values and operations                               |
-| `Var`                          | Variables (free or bound)                                    |
+| `UnionType` / `Variant`        | Nominal (inductive) unions: the type and constructor values                                                                                            |
+| `Let` / `Rec`                  | Bindings and mutual recursion                                                                                                                          |
+| `Prim`                         | Built-in values and operations                                                                                                                         |
+| `Var`                          | Variables (free or bound)                                                                                                                              |
 
 ### De Bruijn indices and `Scope<A: Arity, B: Bound>`
 
@@ -160,10 +160,10 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 
 `Scope<A: Arity, B: Bound = Term>` handles all binder arities and is generic over its body type. The body parameter `B` is what makes the cons-style telescope possible — see below.
 
-| `A`       | Used by                                                                  |
-| --------- | ------------------------------------------------------------------------ |
-| `One`     | `Let` (tail), `Telescope` links                                          |
-| `Two`     | `Cases::Nat` (succ_case — binds `pred` and `ih`)                         |
+| `A`       | Used by                                                                   |
+| --------- | ------------------------------------------------------------------------- |
+| `One`     | `Let` (tail), `Telescope` links                                           |
+| `Two`     | `Cases::Nat` (succ_case — binds `pred` and `ih`)                          |
 | `Many(n)` | `Func` (parameters), `Rec` (items and tail), `Match` (motive), union arms |
 
 The `Bound` trait describes types that can sit under a `Scope` — its required method is `traverse(&self, visit: &mut Visit<F>) -> Self`, and it provides `shift`, `capture`, `release`, `free_vars` as default methods on top. `Term`, `()`, and `Telescope<B>` all implement `Bound`. A `Visit<F>` struct threads de Bruijn depth and a per-variable rewrite closure (`F: FnMut(depth, &Var) -> Option<Term>`, returning a replacement or `None`) through the whole tree.
@@ -209,10 +209,10 @@ Maintains separate stacks for **assumptions** (name → type) and **definitions*
 
 Erasure is performed by `core::erase_module` after elaboration and zonking. The output is `ersd::Module`.
 
-| Removed                                                | Preserved                                             |
-| ------------------------------------------------------ | ----------------------------------------------------- |
+| Removed                                                 | Preserved                                             |
+| ------------------------------------------------------- | ----------------------------------------------------- |
 | `Type`, `FuncType`, `TupleType`, `UnionType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
-| Type annotations on binders                            | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`            |
+| Type annotations on binders                             | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`            |
 
 `Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `Cases::Bln` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
 
@@ -271,8 +271,7 @@ The defining property of this IR: continuations are **block labels** scoped to t
 
 ### Lowering strategy
 
-`lower_tail(term, frame, resume, ...)` — lowers `term` in tail position (the result goes to `resume`).
-`lower_to_name(term, frame, ..., cont)` — lowers `term` in value position, passing the resulting `ValueName` to a continuation.
+`lower_tail(term, frame, resume, ...)` — lowers `term` in tail position (the result goes to `resume`). `lower_to_name(term, frame, ..., cont)` — lowers `term` in value position, passing the resulting `ValueName` to a continuation.
 
 When a call appears in value position, the lowerer creates a **join block** that receives the result as a block parameter, normalizing the CFG into SSA-like form.
 
@@ -440,12 +439,12 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Testing
 
-449 tests across the library crate, covering every layer:
+453 tests across the library crate, covering every layer:
 
 | Layer            | What is tested                                                                                                                                                                                                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Term operations  | `Scope` open/close symmetry, shift, capture, release                                                                                                                                                                                                                             |
-| Parsing          | Round-trips: rec groups, unions, tuples, function types, primitives, field access                                                                                                                                                                                                 |
+| Parsing          | Round-trips: rec groups, unions, tuples, function types, primitives, field access                                                                                                                                                                                                |
 | Reduction        | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                                                                                                                                             |
 | Type checking    | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                                                                                                                                          |
 | Erasure          | Primitive, tuple, array, binary type erasure                                                                                                                                                                                                                                     |
@@ -460,7 +459,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Reading order
 
-1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
+1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions); `crs_proofs.rs` is the entry point for indexed unions and proofs (`/std/Eq`, `/std/Void`, induction, checked rejections). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
 2. **`src/text/term.rs`** — the surface AST; variants mirror the language syntax with all variables as plain strings.
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
 4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes a flat `core::Module`: how `Scope::close` turns string labels into de Bruijn indices, how `union` lowers to type + constructor bindings, and how the inductive registry records parameters, indices, and constructor signatures for later elaboration and erasure.

@@ -732,6 +732,23 @@ mod tests {
     }
 
     #[test]
+    fn empty_union_lowers_and_vacuous_match_eliminates_it() {
+        // A union may declare zero cases — `Void`. Its eliminator is a match
+        // with zero arms: every omission is vacuously justified, so the match
+        // checks at any motive and lowers through erasure and codegen.
+        let source = r#"
+            union Void
+            end
+            let absurd(A : Type, v : Void) -> A =
+                match v : A
+                end;
+            5
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
     fn inversion_prunes_impossible_arms_and_solves_binders() {
         // Rung C: at `Vec(T, Nat/succ(n))` the nil arm's target `0` clashes
         // definitely with the successor spine, so the arm is omitted —

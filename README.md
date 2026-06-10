@@ -73,3 +73,4 @@ Passing the wrong type is a compile-time error, not a runtime failure:
 - [ARCHITECTURE.md](ARCHITECTURE.md) — full architectural overview of the compiler pipeline, from parsing through type checking, erasure, CPS lowering, and WebAssembly code generation, including a "Reading order" guide for newcomers.
 - [SYNTAX.md](SYNTAX.md) — language syntax reference covering lexical basics, all term and type forms, primitive operations, and idioms for sum types and recursive types.
 - [CRASH_COURSE.md](CRASH_COURSE.md) — guided introduction for Rust programmers, building from familiar constructs up to dependent function types and length-indexed vectors.
+- [PROOFS_101.md](PROOFS_101.md) — follow-up to the crash course on proving: propositions as types, equality via `/std/Eq`, induction with `match`, negation, and proofs that re-type data; every snippet is pinned by `examples/crs_proofs.rs`.
