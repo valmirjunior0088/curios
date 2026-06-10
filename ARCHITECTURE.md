@@ -267,7 +267,7 @@ Module
 | `Jump(target, params)`                  | unconditional branch to a block                                                                |
 | `Match(operand, cases, default)`        | sparse dispatch on a `u32` (tag index or nat)                                                  |
 | `Call(Direct/Indirect, params, resume)` | function call; `resume` is the block that receives the return value                            |
-| `Host(IoPrint/IoRead, resume)`          | host-provided IO primitive in tail position; the impure boundary that purity analysis stops at |
+| `Host(IoRead/IoWrite, resume)`          | host-provided IO primitive in tail position; the impure boundary that purity analysis stops at |
 
 ### Second-class continuations
 
@@ -384,18 +384,20 @@ The `Host` trait (`src/run/host.rs`) abstracts the IO side of the program:
 
 ```rust
 pub trait Host {
-    fn read(&self) -> Vec<u8>;
-    fn print(&self, bytes: &[u8]);
+    fn read(&self, handle: u32, count: u32) -> Vec<u8>;
+    fn write(&self, handle: u32, bytes: &[u8]);
 }
 ```
 
+The `handle` is the i32 token a `/sys/Io` value lowers to; `STDIN`/`STDOUT`/`STDERR` constants (0/1/2) name the well-known entries. `read` blocks until at least one byte is available and returns up to `count` bytes; an empty return means EOF.
+
 The number-to-`Bin` conversions live alongside the trait as free functions — `nat_to_str(u32)`, `int_to_str(i32)`, `flt_to_str(f32)` — not trait methods. The runtime wasm imports and the compile-time `scalar_eval` folder both call the same free functions, so the two paths cannot diverge.
 
-Two trait implementations ship: `StdioHost` writes to stdout and reads a line from stdin; `ChannelHost` routes `print` output through an `mpsc::Sender<Vec<u8>>` and serves `read` calls from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand for output-only simulation.
+Two trait implementations ship: `StdioHost` maps the stdin/stdout/stderr handles onto the real process streams (raw `Read::read` for stdin, so short reads behave POSIX-style); `ChannelHost` routes writes (stdout and stderr alike) through an `mpsc::Sender<Vec<u8>>` and serves reads from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines — each message is one line, a `\n` is appended on refill, and an internal leftover buffer serves `count`-byte slices so short reads never drop bytes. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand for output-only simulation.
 
-Up to five operations are wired as Wasmtime host imports under `"env"` by `run_wasm`: `nat_to_str`/`int_to_str`/`flt_to_str` (each emitted only if the codegen `Table` records the corresponding `_used()` flag — partial evaluation or constant folding may have eliminated every runtime call site) route directly to the free functions; `io_print` unpacks the `Bin` argument and calls `host.print()`; `io_read` calls `host.read()` and returns the result as a `Bin`. The `io_*` imports correspond to the `Tail::Host` variants (`IoPrint`/`IoRead`) introduced in [Stage 5](#stage-5--cps-lowering-srcersdto_cont).
+Up to five operations are wired as Wasmtime host imports under `"env"` by `run_wasm`: `nat_to_str`/`int_to_str`/`flt_to_str` (each emitted only if the codegen `Table` records the corresponding `_used()` flag — partial evaluation or constant folding may have eliminated every runtime call site) route directly to the free functions; `io_read` calls `host.read(handle, count)` and returns the result as a `Bin`; `io_write` unpacks the `Bin` argument and calls `host.write(handle, bytes)`. The `io_*` imports correspond to the `Tail::Host` variants (`IoRead`/`IoWrite`) introduced in [Stage 5](#stage-5--cps-lowering-srcersdto_cont).
 
-Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/print` and `/sys/Io/read` through the `Host`.
+Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/read` and `/sys/Io/write` on byte-stream handles through the `Host`.
 
 ---
 

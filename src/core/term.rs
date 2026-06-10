@@ -1085,7 +1085,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::IoRead => 0,
+        | Prim::IoType
+        | Prim::Io(_) => 0,
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.reach(),
 
@@ -1107,8 +1108,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::FltTrunc(t)
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
-        | Prim::ArrType(t)
-        | Prim::IoPrint(t) => t.reach(),
+        | Prim::ArrType(t) => t.reach(),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1147,7 +1147,9 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinEql(a, b)
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
-        | Prim::ArrLen(a, b) => a.reach().max(b.reach()),
+        | Prim::ArrLen(a, b)
+        | Prim::IoRead(a, b)
+        | Prim::IoWrite(a, b) => a.reach().max(b.reach()),
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
             a.reach().max(b.reach()).max(c.reach())
@@ -1172,7 +1174,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::IoRead => {}
+        | Prim::IoType
+        | Prim::Io(_) => {}
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.collect_metavars(ids),
 
@@ -1194,8 +1197,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::FltTrunc(t)
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
-        | Prim::ArrType(t)
-        | Prim::IoPrint(t) => t.collect_metavars(ids),
+        | Prim::ArrType(t) => t.collect_metavars(ids),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1234,7 +1236,9 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BinEql(a, b)
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
-        | Prim::ArrLen(a, b) => {
+        | Prim::ArrLen(a, b)
+        | Prim::IoRead(a, b)
+        | Prim::IoWrite(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
         }
@@ -1440,8 +1444,14 @@ where
             visit.visit_subterm(ty),
             operands.iter().map(|e| visit.visit_subterm(e)).collect(),
         ),
-        Prim::IoPrint(inner) => Prim::IoPrint(visit.visit_subterm(inner)),
-        Prim::IoRead => Prim::IoRead,
+        Prim::IoType => Prim::IoType,
+        Prim::Io(token) => Prim::Io(*token),
+        Prim::IoRead(handle, count) => {
+            Prim::IoRead(visit.visit_subterm(handle), visit.visit_subterm(count))
+        }
+        Prim::IoWrite(handle, bytes) => {
+            Prim::IoWrite(visit.visit_subterm(handle), visit.visit_subterm(bytes))
+        }
     }
 }
 

@@ -1,1 +1,63 @@
 pub use /sys/Io/*;
+pub use /sys/{Io};
+use /std/{Bin, Nat, Option};
+
+pub let print(b : Bin) -> {} =
+    write(stdout, b);
+
+-- A buffered reader: the handle plus bytes already read but not yet consumed.
+-- Threaded explicitly through `Buf` actions, exactly like `Parse` threads its
+-- (input, position) state.
+pub let Reader : Type = { Io, Bin };
+
+pub let reader(h : Io) -> Reader = (h, "");
+
+pub let Buf(A : Type) -> Type = Reader -> { Reader, A };
+
+pub let pure(@A : Type, a : A) -> Buf(A) =
+    (r) => (r, a);
+
+pub let bind(@A : Type, @B : Type) -> (Buf(A), A -> Buf(B)) -> Buf(B) =
+    (m, f) => (r) =>
+        let p = m(r);
+        f(p.1)(p.0);
+
+pub let run(@A : Type, m : Buf(A), h : Io) -> A =
+    m(reader(h)).1;
+
+-- Index of the first newline in `buf`, if any.
+let find_newline(buf : Bin) -> Option(Nat) =
+    let init : { Nat, Option(Nat) } = (0, Option/none());
+    let r =
+        Bin/fold(buf, init, (byte, acc) =>
+            match acc.1 : { Nat, Option(Nat) }
+            | some(_) => acc
+            | none() =>
+                match Nat/eql(byte, '\n')
+                | true => (acc.0, Option/some(acc.0))
+                | false => (Nat/add(acc.0, 1), Option/none())
+                end
+            end);
+    r.1;
+
+-- The next line, including its trailing newline; `none` means EOF. A final
+-- unterminated line before EOF is still delivered as `some`.
+pub rec read_line : Buf(Option(Bin)) =
+    (r) =>
+        match find_newline(r.1) : { Reader, Option(Bin) }
+        | some(i) =>
+            let stop = Nat/add(i, 1);
+            let line = Bin/slice(r.1, 0, stop);
+            let rest = Bin/slice(r.1, stop, Bin/len(r.1));
+            ((r.0, rest), Option/some(line))
+        | none() =>
+            let chunk = read(r.0, 1024);
+            match Nat/eql(Bin/len(chunk), 0)
+            | true =>
+                match Nat/eql(Bin/len(r.1), 0)
+                | true => (r, Option/none())
+                | false => ((r.0, ""), Option/some(r.1))
+                end
+            | false => read_line((r.0, Bin/concat(r.1, chunk)))
+            end
+        end;

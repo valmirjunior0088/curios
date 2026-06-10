@@ -560,26 +560,13 @@ impl<'a, 'b> Context<'a, 'b> {
         let mut output = Vec::new();
 
         match host {
-            cont::HostTarget::IoPrint { value, resume } => {
-                output.extend(self.load_value_instrs(value, LoadAs::Bin));
-                output.push(wasm::Instr::Call {
-                    func_name: self.table().io_print_func().clone(),
-                });
-
-                if self.is_resume(resume) {
-                    // The enclosing function's resume sentinel expects exactly
-                    // one value (the function's return). `Io.print` produces no
-                    // payload, so materialise a unit before returning.
-                    output.push(wasm::Instr::StructNew {
-                        type_name: self.table().find_tpl_type(0),
-                    });
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(0));
-                }
-            }
-            cont::HostTarget::IoRead { resume } => {
+            cont::HostTarget::IoRead {
+                handle,
+                count,
+                resume,
+            } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(count, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_read_func().clone(),
                 });
@@ -591,6 +578,30 @@ impl<'a, 'b> Context<'a, 'b> {
                 } else {
                     let block_data = self.find_block(resume);
                     output.extend(block_data.enter(1));
+                }
+            }
+            cont::HostTarget::IoWrite {
+                handle,
+                bytes,
+                resume,
+            } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(bytes, LoadAs::Bin));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_write_func().clone(),
+                });
+
+                if self.is_resume(resume) {
+                    // The enclosing function's resume sentinel expects exactly
+                    // one value (the function's return). `Io.write` produces no
+                    // payload, so materialise a unit before returning.
+                    output.push(wasm::Instr::StructNew {
+                        type_name: self.table().find_tpl_type(0),
+                    });
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+                    output.extend(block_data.enter(0));
                 }
             }
         }

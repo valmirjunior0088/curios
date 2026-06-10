@@ -1078,7 +1078,7 @@ mod tests {
     fn typecheck_accepts_a_well_typed_program() {
         // The fast path stops after `elaborate → zonk`; a well-typed program passes
         // without running erase/cont/optm/wasm.
-        assert!(typecheck("/sys/Io/print(/sys/Nat/to_str(0))").is_ok());
+        assert!(typecheck("/sys/Io/write(/sys/Io/stdout, /sys/Nat/to_str(0))").is_ok());
     }
 
     #[test]
@@ -1163,8 +1163,8 @@ mod tests {
         // never references is still type-checked, so its error is reported.
         let error = typecheck(
             r#"
-            let dead : /sys/Nat = /sys/Io/print("x");
-            /sys/Io/print("ok")
+            let dead : /sys/Nat = /sys/Io/write(/sys/Io/stdout, "x");
+            /sys/Io/write(/sys/Io/stdout, "ok")
             "#,
         )
         .unwrap_err();

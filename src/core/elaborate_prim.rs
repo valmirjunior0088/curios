@@ -313,11 +313,23 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::ArrConcat(type_, elaborated), list_type)
         }
-        Prim::IoPrint(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(bin_type))?.0;
-            (Prim::IoPrint(inner), Term::tuple_type_unit())
+        Prim::IoType => (prim.clone(), Term::type_()),
+        Prim::Io(_) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            (prim.clone(), io_type)
         }
-        Prim::IoRead => (prim.clone(), bin_type),
+        Prim::IoRead(handle, count) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let count = elaborate(context, count, Mode::Check(nat_type))?.0;
+            (Prim::IoRead(handle, count), bin_type)
+        }
+        Prim::IoWrite(handle, bytes) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let bytes = elaborate(context, bytes, Mode::Check(bin_type))?.0;
+            (Prim::IoWrite(handle, bytes), Term::tuple_type_unit())
+        }
     })
 }
 

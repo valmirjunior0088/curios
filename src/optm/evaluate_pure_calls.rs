@@ -271,9 +271,10 @@ mod tests {
         })
     }
 
-    fn io_print(value: ValueName, resume: &str) -> Tail {
-        Tail::Host(HostTarget::IoPrint {
-            value,
+    fn io_write(bytes: ValueName, resume: &str) -> Tail {
+        Tail::Host(HostTarget::IoWrite {
+            handle: bytes.clone(),
+            bytes,
             resume: b(resume),
         })
     }
@@ -590,7 +591,7 @@ mod tests {
         let mut module = module_with_main_calling("f", vec![(v("a"), Data::Nat(1))]);
         module.add_func(
             FuncName::from("f"),
-            func(vec![v("n")], "rf", region(vec![], io_print(v("n"), "rf"))),
+            func(vec![v("n")], "rf", region(vec![], io_write(v("n"), "rf"))),
         );
 
         evaluate_pure_calls(&mut module);

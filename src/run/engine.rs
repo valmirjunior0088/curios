@@ -73,8 +73,12 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let bin_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(bin_array_type)));
     let i32_to_bin_type = FuncType::new(engine, [ValType::I32], [bin_ref.clone()]);
     let f32_to_bin_type = FuncType::new(engine, [ValType::F32], [bin_ref.clone()]);
-    let unit_to_bin_type = FuncType::new(engine, [], [bin_ref.clone()]);
-    let bin_to_unit_type = FuncType::new(engine, [bin_ref], []);
+    let i32_i32_to_bin_type = FuncType::new(
+        engine,
+        [ValType::I32, ValType::I32],
+        [bin_ref.clone()],
+    );
+    let i32_bin_to_unit_type = FuncType::new(engine, [ValType::I32, bin_ref], []);
 
     let mut linker: Linker<()> = Linker::new(engine);
     let host = Arc::new(host);
@@ -97,16 +101,16 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         move |value| host.flt_to_le_bin(value)
     })?;
 
-    define_import(&mut linker, "io_read", unit_to_bin_type, {
+    define_import(&mut linker, "io_read", i32_i32_to_bin_type, {
         let host = host.clone();
 
-        move |(): ()| host.read()
+        move |(handle, count): (u32, u32)| host.read(handle, count)
     })?;
 
-    define_import(&mut linker, "io_print", bin_to_unit_type, {
+    define_import(&mut linker, "io_write", i32_bin_to_unit_type, {
         let host = host.clone();
 
-        move |bytes: Vec<u8>| host.print(&bytes)
+        move |(handle, bytes): (u32, Vec<u8>)| host.write(handle, &bytes)
     })?;
 
     let mut store = Store::new(engine, ());

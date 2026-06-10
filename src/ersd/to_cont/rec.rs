@@ -101,8 +101,16 @@ fn free_names_prim(prim: &ersd::Prim) -> BTreeSet<String> {
 
 fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
     match prim {
-        ersd::HostPrim::IoPrint(operand) => free_names(operand),
-        ersd::HostPrim::IoRead => BTreeSet::new(),
+        ersd::HostPrim::IoRead(handle, count) => {
+            let mut names = free_names(handle);
+            names.extend(free_names(count));
+            names
+        }
+        ersd::HostPrim::IoWrite(handle, bytes) => {
+            let mut names = free_names(handle);
+            names.extend(free_names(bytes));
+            names
+        }
     }
 }
 
@@ -110,7 +118,7 @@ fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
     use ersd::PurePrim::*;
 
     let operands: Vec<&ersd::Term> = match prim {
-        Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit => vec![],
+        Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) | Unit => vec![],
         NatToStr(a) | IntToStr(a) | FltToStr(a) | NatToInt(a) | NatToFlt(a) | IntToNat(a)
         | IntToFlt(a) | FltToNat(a) | FltToLeBin(a) | FltToInt(a) | FltNeg(a) | FltAbs(a)
         | FltSqrt(a) | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a)

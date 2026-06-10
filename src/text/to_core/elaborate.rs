@@ -599,8 +599,14 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::FltToStr(inner) => core::Prim::flt_to_str(self.term(inner)?),
             Prim::FltToLeBin(inner) => core::Prim::flt_to_le_bin(self.term(inner)?),
             Prim::NatToInt(inner) => core::Prim::nat_to_int(self.term(inner)?),
-            Prim::IoPrint(inner) => core::Prim::io_print(self.term(inner)?),
-            Prim::IoRead => core::Prim::IoRead,
+            Prim::IoType => core::Prim::IoType,
+            Prim::Io(token) => core::Prim::Io(*token),
+            Prim::IoRead(handle, count) => {
+                core::Prim::io_read(self.term(handle)?, self.term(count)?)
+            }
+            Prim::IoWrite(handle, bytes) => {
+                core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
+            }
             Prim::NatToFlt(inner) => core::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => core::Prim::int_to_nat(self.term(inner)?),
             Prim::IntToFlt(inner) => core::Prim::int_to_flt(self.term(inner)?),

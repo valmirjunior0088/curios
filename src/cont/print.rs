@@ -607,13 +607,30 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
             ],
         }),
         Tail::Host(host) => match host {
-            HostTarget::IoPrint { value, resume } => flat([
-                pure("Io.print "),
-                print_value_name(value),
+            HostTarget::IoRead {
+                handle,
+                count,
+                resume,
+            } => flat([
+                pure("Io.read "),
+                print_value_name(handle),
+                pure(" "),
+                print_value_name(count),
                 pure(" "),
                 print_block_name(resume),
             ]),
-            HostTarget::IoRead { resume } => flat([pure("Io.read "), print_block_name(resume)]),
+            HostTarget::IoWrite {
+                handle,
+                bytes,
+                resume,
+            } => flat([
+                pure("Io.write "),
+                print_value_name(handle),
+                pure(" "),
+                print_value_name(bytes),
+                pure(" "),
+                print_block_name(resume),
+            ]),
         },
         Tail::Unreachable => pure("unreachable"),
     }

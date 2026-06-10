@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, Write, stdin, stdout},
+    io::{Read, Write, stderr, stdin, stdout},
     sync::{
         Arc, Mutex,
         mpsc::{self, Receiver, RecvError, Sender},
@@ -23,28 +23,46 @@ pub fn flt_to_str(value: f32) -> Vec<u8> {
 }
 
 pub trait Host {
-    fn read(&self) -> Vec<u8>;
+    /// Read up to `count` bytes from `handle`, blocking until at least one
+    /// byte is available. An empty return means EOF — nothing else.
+    fn read(&self, handle: u32, count: u32) -> Vec<u8>;
 
-    fn print(&self, bytes: &[u8]);
+    /// Write `bytes` to `handle`.
+    fn write(&self, handle: u32, bytes: &[u8]);
 
     fn flt_to_le_bin(&self, value: f32) -> Vec<u8>;
 }
 
+/// The well-known handle tokens minted by the `/sys/Io` prelude constants.
+pub const STDIN: u32 = 0;
+pub const STDOUT: u32 = 1;
+pub const STDERR: u32 = 2;
+
 pub struct StdioHost;
 
 impl Host for StdioHost {
-    fn read(&self) -> Vec<u8> {
-        let mut line = String::new();
+    fn read(&self, handle: u32, count: u32) -> Vec<u8> {
+        if handle != STDIN {
+            return vec![];
+        }
 
-        match stdin().lock().read_line(&mut line) {
-            Ok(0) => vec![],
-            Ok(_) => line.into_bytes(),
+        let mut buffer = vec![0; count as usize];
+
+        match stdin().lock().read(&mut buffer) {
+            Ok(n) => {
+                buffer.truncate(n);
+                buffer
+            }
             Err(_) => vec![],
         }
     }
 
-    fn print(&self, bytes: &[u8]) {
-        stdout().write_all(bytes).unwrap();
+    fn write(&self, handle: u32, bytes: &[u8]) {
+        match handle {
+            STDOUT => stdout().write_all(bytes).unwrap(),
+            STDERR => stderr().write_all(bytes).unwrap(),
+            _ => {}
+        }
     }
 
     fn flt_to_le_bin(&self, value: f32) -> Vec<u8> {
@@ -54,6 +72,11 @@ impl Host for StdioHost {
 
 pub struct ChannelHost {
     input_receiver: Mutex<Receiver<Vec<u8>>>,
+    /// Bytes received from the channel but not yet consumed by `read` —
+    /// short reads must never drop the remainder of a message.
+    input_leftover: Mutex<Vec<u8>>,
+    /// Writes to stdout and stderr both land here; tests do not distinguish
+    /// the two streams.
     output_sender: Arc<Mutex<Sender<Vec<u8>>>>,
 }
 
@@ -73,6 +96,7 @@ impl ChannelHost {
         (
             ChannelHost {
                 input_receiver: Mutex::new(input_receiver),
+                input_leftover: Mutex::new(Vec::new()),
                 output_sender: Arc::new(Mutex::new(output_sender)),
             },
             output_receiver,
@@ -85,19 +109,38 @@ impl ChannelHost {
 }
 
 impl Host for ChannelHost {
-    fn read(&self) -> Vec<u8> {
-        match self.input_receiver.lock().unwrap().recv() {
-            Ok(line) => line.into_iter().chain([b'\n']).collect(),
-            Err(RecvError) => vec![],
+    fn read(&self, handle: u32, count: u32) -> Vec<u8> {
+        if handle != STDIN {
+            return vec![];
         }
+
+        let mut leftover = self.input_leftover.lock().unwrap();
+
+        // Each channel message is one injected line; the newline the terminal
+        // would deliver is appended here. Refill only when the buffer is dry,
+        // then serve up to `count` bytes and stash the rest.
+        if leftover.is_empty() {
+            match self.input_receiver.lock().unwrap().recv() {
+                Ok(line) => {
+                    leftover.extend(line);
+                    leftover.push(b'\n');
+                }
+                Err(RecvError) => return vec![],
+            }
+        }
+
+        let served = leftover.len().min(count as usize);
+        leftover.drain(..served).collect()
     }
 
-    fn print(&self, bytes: &[u8]) {
-        self.output_sender
-            .lock()
-            .unwrap()
-            .send(bytes.to_owned())
-            .unwrap();
+    fn write(&self, handle: u32, bytes: &[u8]) {
+        if handle == STDOUT || handle == STDERR {
+            self.output_sender
+                .lock()
+                .unwrap()
+                .send(bytes.to_owned())
+                .unwrap();
+        }
     }
 
     fn flt_to_le_bin(&self, value: f32) -> Vec<u8> {

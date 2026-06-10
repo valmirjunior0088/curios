@@ -132,28 +132,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
         });
 
-        if self.table.io_print_used() {
-            let io_print_type = wasm::TypeName::from("io_print_type");
-            self.module.add_type(
-                io_print_type.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([bin_ref.clone()]),
-                        outputs: wasm::ResultType::from([]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
-                "io_print",
-                wasm::Import::Func {
-                    func_name: self.table.io_print_func().clone(),
-                    type_name: io_print_type,
-                },
-            );
-        }
+        let i32_val = wasm::ValType::Num(wasm::NumType::I32);
 
         if self.table.io_read_used() {
             let io_read_type = wasm::TypeName::from("io_read_type");
@@ -163,8 +142,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     is_final: true,
                     super_types: vec![],
                     comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([]),
-                        outputs: wasm::ResultType::from([bin_ref]),
+                        inputs: wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                        outputs: wasm::ResultType::from([bin_ref.clone()]),
                     }),
                 },
             );
@@ -174,6 +153,29 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 wasm::Import::Func {
                     func_name: self.table.io_read_func().clone(),
                     type_name: io_read_type,
+                },
+            );
+        }
+
+        if self.table.io_write_used() {
+            let io_write_type = wasm::TypeName::from("io_write_type");
+            self.module.add_type(
+                io_write_type.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([i32_val, bin_ref]),
+                        outputs: wasm::ResultType::from([]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_write",
+                wasm::Import::Func {
+                    func_name: self.table.io_write_func().clone(),
+                    type_name: io_write_type,
                 },
             );
         }

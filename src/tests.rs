@@ -16,7 +16,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        sys/Io/print(sys/Int/to_str(score(pair)))
+        sys/Io/write(sys/Io/stdout, sys/Int/to_str(score(pair)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -30,7 +30,7 @@ fn end_to_end() {
 #[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
-        sys/Io/print(sys/Flt/to_le_bin(+1.5))
+        sys/Io/write(sys/Io/stdout, sys/Flt/to_le_bin(+1.5))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -42,13 +42,32 @@ fn flt_to_le_bin_prints_raw_bytes() {
 }
 
 #[test]
-fn io_print() {
+fn io_write() {
     let (system, receiver) = ChannelHost::out();
-    crate::run_text(Duration::from_secs(5), r#"sys/Io/print("hello")"#, system)
-        .expect("expected result");
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"sys/Io/write(sys/Io/stdout, "hello")"#,
+        system,
+    )
+    .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"hello".to_vec()]
+    );
+}
+
+#[test]
+fn io_write_stderr() {
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"sys/Io/write(sys/Io/stderr, "oops")"#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"oops".to_vec()]
     );
 }
 
@@ -57,13 +76,111 @@ fn io_read() {
     let (system, receiver) = ChannelHost::in_out(["hello"]);
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/print(sys/Io/read())"#,
+        r#"sys/Io/write(sys/Io/stdout, sys/Io/read(sys/Io/stdin, 1024))"#,
         system,
     )
     .expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"hello\n".to_vec()]
+    );
+}
+
+// `read(h, n)` is POSIX-shaped: each call returns 1..n available bytes (here
+// one injected line per refill, served in `n`-byte slices), and empty means
+// EOF — exercised by the third read.
+#[test]
+fn io_read_short_reads_and_eof() {
+    let source = r#"
+        use /std/{Io};
+        let a = Io/read(Io/stdin, 2);
+        let ra = Io/write(Io/stdout, a);
+        let b = Io/read(Io/stdin, 2);
+        let rb = Io/write(Io/stdout, b);
+        let c = Io/read(Io/stdin, 2);
+        Io/write(Io/stdout, c)
+        "#;
+
+    let (system, receiver) = ChannelHost::in_out(["abc"]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"ab".to_vec(), b"c\n".to_vec(), b"".to_vec()]
+    );
+}
+
+#[test]
+fn std_io_read_line_sequences_lines() {
+    let source = r#"
+        use /std/{Io, Option, Bin};
+        let program : Io/Buf({}) =
+            with Io/bind
+                let first = Io/read_line!;
+                let second = Io/read_line!;
+                match first : Io/Buf({})
+                | some(a) =>
+                    match second : Io/Buf({})
+                    | some(b) => Io/pure(Io/print(Bin/concat(a, b)))
+                    | none() => Io/pure(Io/print("missing"))
+                    end
+                | none() => Io/pure(Io/print("missing"))
+                end;
+        Io/run(program, Io/stdin)
+        "#;
+
+    let (system, receiver) = ChannelHost::in_out(["alpha", "beta"]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"alpha\nbeta\n".to_vec()]
+    );
+}
+
+#[test]
+fn std_io_read_line_signals_eof_with_none() {
+    let source = r#"
+        use /std/{Io, Option};
+        let program : Io/Buf({}) =
+            with Io/bind
+                let first = Io/read_line!;
+                let second = Io/read_line!;
+                match second : Io/Buf({})
+                | some(_) => Io/pure(Io/print("line"))
+                | none() => Io/pure(Io/print("eof"))
+                end;
+        Io/run(program, Io/stdin)
+        "#;
+
+    let (system, receiver) = ChannelHost::in_out(["only"]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"eof".to_vec()]
+    );
+}
+
+// A line longer than `read_line`'s 1024-byte refill chunk forces the buffer
+// to absorb one full chunk, miss the newline, and refill before slicing.
+#[test]
+fn std_io_read_line_spans_refills() {
+    let source = r#"
+        use /std/{Io, Option, Bin, Nat};
+        let program : Io/Buf({}) =
+            with Io/bind
+                let line = Io/read_line!;
+                match line : Io/Buf({})
+                | some(bytes) => Io/pure(Io/print(Nat/to_str(Bin/len(bytes))))
+                | none() => Io/pure(Io/print("eof"))
+                end;
+        Io/run(program, Io/stdin)
+        "#;
+
+    let long_line = "a".repeat(1500);
+    let (system, receiver) = ChannelHost::in_out([long_line.as_str()]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"1501".to_vec()]
     );
 }
 
@@ -75,7 +192,7 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1, ih => sys/Nat/add(ih, pred)
             end;
-        sys/Io/print(sys/Nat/to_str(result))
+        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(result))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -97,7 +214,7 @@ fn match_omitted_motive_infers() {
             | 0 => 0
             | pred + 1, ih => sys/Nat/add(ih, pred)
             end;
-        sys/Io/print(sys/Nat/to_str(result))
+        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(result))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -112,7 +229,7 @@ fn match_omitted_motive_infers() {
 fn multi_arg_function() {
     let source = r#"
         let add : (sys/Int, sys/Int) -> sys/Int = (x, y) => sys/Int/add(x, y);
-        sys/Io/print(sys/Int/to_str(add(+3, +4)))
+        sys/Io/write(sys/Io/stdout, sys/Int/to_str(add(+3, +4)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -127,7 +244,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : sys/Int -> sys/Int -> sys/Int = (x) => (y) => sys/Int/add(x, y);
-        sys/Io/print(sys/Int/to_str(add(+3)(+4)))
+        sys/Io/write(sys/Io/stdout, sys/Int/to_str(add(+3)(+4)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -149,7 +266,7 @@ fn with_identity_monad_sequences_bangs() {
         let a : sys/Nat = 3;
         let b : sys/Nat = 4;
         let result : sys/Nat = with bind sys/Nat/add(a!, b!);
-        sys/Io/print(sys/Nat/to_str(result))
+        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(result))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -246,7 +363,7 @@ fn vec_cons_with_nat_succ() {
             xs.0;
 
         let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, ());
-        sys/Io/print(sys/Nat/to_str(head(sys/Nat, 0, v)))
+        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(head(sys/Nat, 0, v)))
     "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -351,7 +468,7 @@ fn printf_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        let name = Str/trim(Io/read());
+        let name = Str/trim(Io/read(Io/stdin, 1024));
         Fmt/printf("%s is %d")(name)(30)
         "#;
 
@@ -418,7 +535,7 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat, 3) = append(a, b);
-        Io/print(Nat/to_str(total(c, 0)))
+        Io/write(Io/stdout, Nat/to_str(total(c, 0)))
         "#;
 
     let (system, receiver) = ChannelHost::out();

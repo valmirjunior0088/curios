@@ -371,11 +371,15 @@ pub fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(ersd::PurePrim::ArrConcat(erased)))
         }
-        Prim::IoPrint(inner) => Ok(host(ersd::HostPrim::IoPrint(erase(
-            context,
-            inner,
-            &bin_type(),
-        )?))),
-        Prim::IoRead => Ok(host(ersd::HostPrim::IoRead)),
+        Prim::IoType => Ok(ersd::Subterm::Erased.into()),
+        &Prim::Io(token) => Ok(pure(ersd::PurePrim::Io(token))),
+        Prim::IoRead(handle, count) => Ok(host(ersd::HostPrim::IoRead(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, count, &nat_type())?,
+        ))),
+        Prim::IoWrite(handle, bytes) => Ok(host(ersd::HostPrim::IoWrite(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, bytes, &bin_type())?,
+        ))),
     }
 }

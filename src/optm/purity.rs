@@ -188,9 +188,10 @@ mod tests {
         })
     }
 
-    fn io_print(value: ValueName, resume: &str) -> Tail {
-        Tail::Host(HostTarget::IoPrint {
-            value,
+    fn io_write(bytes: ValueName, resume: &str) -> Tail {
+        Tail::Host(HostTarget::IoWrite {
+            handle: bytes.clone(),
+            bytes,
             resume: b(resume),
         })
     }
@@ -252,7 +253,7 @@ mod tests {
         let mut module = Module::new();
         module.add_func(
             FuncName::from("f"),
-            func(vec![v("p")], "r", region(vec![], io_print(v("p"), "r"))),
+            func(vec![v("p")], "r", region(vec![], io_write(v("p"), "r"))),
         );
 
         let (pure, _) = purity(&module);
@@ -312,7 +313,7 @@ mod tests {
         let mut module = Module::new();
         module.add_func(
             FuncName::from("host"),
-            func(vec![v("p")], "r", region(vec![], io_print(v("p"), "r"))),
+            func(vec![v("p")], "r", region(vec![], io_write(v("p"), "r"))),
         );
         module.add_func(
             FuncName::from("caller"),
@@ -347,7 +348,7 @@ mod tests {
                 vec![],
                 vec![v("p")],
                 "r",
-                region(vec![], io_print(v("p"), "r")),
+                region(vec![], io_write(v("p"), "r")),
             ),
         );
         module.add_func(

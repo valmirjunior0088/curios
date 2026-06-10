@@ -5,6 +5,8 @@ fn lowers_and_runs_nat_add() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("FOUR"), cont::Data::Nat(4));
 
@@ -29,8 +31,9 @@ fn lowers_and_runs_nat_add() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -44,6 +47,8 @@ fn lowers_and_runs_nat_add() {
 fn lowers_and_runs_arr_len() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
@@ -73,8 +78,9 @@ fn lowers_and_runs_arr_len() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -88,6 +94,8 @@ fn lowers_and_runs_arr_len() {
 fn lowers_and_runs_arr_get() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
@@ -121,8 +129,9 @@ fn lowers_and_runs_arr_get() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -136,6 +145,8 @@ fn lowers_and_runs_arr_get() {
 fn lowers_and_runs_arr_slice() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
@@ -177,8 +188,9 @@ fn lowers_and_runs_arr_slice() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -192,6 +204,8 @@ fn lowers_and_runs_arr_slice() {
 fn lowers_and_runs_arr_concat() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
     module.add_const(cont::ValueName::from("TWO"), cont::Data::Nat(2));
@@ -233,8 +247,9 @@ fn lowers_and_runs_arr_concat() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -248,6 +263,8 @@ fn lowers_and_runs_arr_concat() {
 fn lowers_and_runs_flt_floor() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.9));
 
@@ -269,8 +286,9 @@ fn lowers_and_runs_flt_floor() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -284,6 +302,8 @@ fn lowers_and_runs_flt_floor() {
 fn lowers_and_runs_flt_ceil() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.1));
 
@@ -305,8 +325,9 @@ fn lowers_and_runs_flt_ceil() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -320,6 +341,8 @@ fn lowers_and_runs_flt_ceil() {
 fn lowers_and_runs_flt_trunc() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("X"), cont::Data::Flt(-2.9));
 
@@ -341,8 +364,9 @@ fn lowers_and_runs_flt_trunc() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -356,6 +380,8 @@ fn lowers_and_runs_flt_trunc() {
 fn lowers_and_runs_flt_nearest() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.5));
 
@@ -377,8 +403,9 @@ fn lowers_and_runs_flt_nearest() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -392,6 +419,8 @@ fn lowers_and_runs_flt_nearest() {
 fn lowers_and_runs_nat_div() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("TEN"), cont::Data::Nat(10));
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
@@ -417,8 +446,9 @@ fn lowers_and_runs_nat_div() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -432,6 +462,8 @@ fn lowers_and_runs_nat_div() {
 fn lowers_and_runs_nat_rem() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("TEN"), cont::Data::Nat(10));
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
@@ -457,8 +489,9 @@ fn lowers_and_runs_nat_rem() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -472,6 +505,8 @@ fn lowers_and_runs_nat_rem() {
 fn lowers_and_runs_nat_lt() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
@@ -497,8 +532,9 @@ fn lowers_and_runs_nat_lt() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -512,6 +548,8 @@ fn lowers_and_runs_nat_lt() {
 fn lowers_and_runs_int_neg() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("FIVE"), cont::Data::Int(5));
 
@@ -540,8 +578,9 @@ fn lowers_and_runs_int_neg() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -555,6 +594,8 @@ fn lowers_and_runs_int_neg() {
 fn lowers_and_runs_int_div() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("NEG7"), cont::Data::Int(-7));
     module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
@@ -580,8 +621,9 @@ fn lowers_and_runs_int_div() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -595,6 +637,8 @@ fn lowers_and_runs_int_div() {
 fn lowers_and_runs_int_lt() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("NEG1"), cont::Data::Int(-1));
     module.add_const(cont::ValueName::from("ZERO"), cont::Data::Int(0));
@@ -620,8 +664,9 @@ fn lowers_and_runs_int_lt() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -635,6 +680,8 @@ fn lowers_and_runs_int_lt() {
 fn lowers_and_runs_flt_div() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Flt(1.0));
     module.add_const(cont::ValueName::from("FOUR"), cont::Data::Flt(4.0));
@@ -660,8 +707,9 @@ fn lowers_and_runs_flt_div() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -675,6 +723,8 @@ fn lowers_and_runs_flt_div() {
 fn lowers_and_runs_flt_eql() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
     module.add_const(cont::ValueName::from("B"), cont::Data::Flt(1.5));
@@ -700,8 +750,9 @@ fn lowers_and_runs_flt_eql() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -715,6 +766,8 @@ fn lowers_and_runs_flt_eql() {
 fn lowers_and_runs_flt_sqrt() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("FOUR"), cont::Data::Flt(4.0));
 
@@ -736,8 +789,9 @@ fn lowers_and_runs_flt_sqrt() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -751,6 +805,8 @@ fn lowers_and_runs_flt_sqrt() {
 fn lowers_and_runs_int_to_flt() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Int(3));
 
@@ -772,8 +828,9 @@ fn lowers_and_runs_int_to_flt() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -787,6 +844,8 @@ fn lowers_and_runs_int_to_flt() {
 fn lowers_and_runs_nat_to_flt() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
 
@@ -808,8 +867,9 @@ fn lowers_and_runs_nat_to_flt() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -823,6 +883,8 @@ fn lowers_and_runs_nat_to_flt() {
 fn lowers_and_runs_flt_to_int() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE_SEVEN"), cont::Data::Flt(3.7));
 
@@ -846,8 +908,9 @@ fn lowers_and_runs_flt_to_int() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -861,6 +924,8 @@ fn lowers_and_runs_flt_to_int() {
 fn lowers_and_runs_nat_to_int() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
 
@@ -882,8 +947,9 @@ fn lowers_and_runs_nat_to_int() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -897,6 +963,8 @@ fn lowers_and_runs_nat_to_int() {
 fn lowers_and_runs_nat_neq() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
@@ -922,8 +990,9 @@ fn lowers_and_runs_nat_neq() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -937,6 +1006,8 @@ fn lowers_and_runs_nat_neq() {
 fn lowers_and_runs_int_neq() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("NEG1"), cont::Data::Int(-1));
     module.add_const(cont::ValueName::from("NEG1B"), cont::Data::Int(-1));
@@ -962,8 +1033,9 @@ fn lowers_and_runs_int_neq() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -977,6 +1049,8 @@ fn lowers_and_runs_int_neq() {
 fn lowers_and_runs_flt_neq() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Flt(1.0));
     module.add_const(cont::ValueName::from("TWO"), cont::Data::Flt(2.0));
@@ -1002,8 +1076,9 @@ fn lowers_and_runs_flt_neq() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1017,6 +1092,8 @@ fn lowers_and_runs_flt_neq() {
 fn lowers_and_runs_flt_min() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
     module.add_const(cont::ValueName::from("B"), cont::Data::Flt(2.5));
@@ -1042,8 +1119,9 @@ fn lowers_and_runs_flt_min() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1057,6 +1135,8 @@ fn lowers_and_runs_flt_min() {
 fn lowers_and_runs_flt_max() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
     module.add_const(cont::ValueName::from("B"), cont::Data::Flt(2.5));
@@ -1082,8 +1162,9 @@ fn lowers_and_runs_flt_max() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1097,6 +1178,8 @@ fn lowers_and_runs_flt_max() {
 fn lowers_and_runs_bin_len() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(
         cont::ValueName::from("HELLO"),
@@ -1121,8 +1204,9 @@ fn lowers_and_runs_bin_len() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1136,6 +1220,8 @@ fn lowers_and_runs_bin_len() {
 fn lowers_and_runs_bin_get() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(
         cont::ValueName::from("HELLO"),
@@ -1164,8 +1250,9 @@ fn lowers_and_runs_bin_get() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1179,6 +1266,8 @@ fn lowers_and_runs_bin_get() {
 fn lowers_and_runs_bin_append() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(
         cont::ValueName::from("HELLO"),
@@ -1215,8 +1304,9 @@ fn lowers_and_runs_bin_append() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1230,6 +1320,8 @@ fn lowers_and_runs_bin_append() {
 fn lowers_and_runs_bin_eql_equal() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(
         cont::ValueName::from("A"),
@@ -1261,8 +1353,9 @@ fn lowers_and_runs_bin_eql_equal() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1276,6 +1369,8 @@ fn lowers_and_runs_bin_eql_equal() {
 fn lowers_and_runs_bin_eql_unequal() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(
         cont::ValueName::from("A"),
@@ -1307,8 +1402,9 @@ fn lowers_and_runs_bin_eql_unequal() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1322,6 +1418,8 @@ fn lowers_and_runs_bin_eql_unequal() {
 fn lowers_and_runs_arr_append() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
 
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
@@ -1363,8 +1461,9 @@ fn lowers_and_runs_arr_append() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1377,6 +1476,8 @@ fn lowers_and_runs_arr_append() {
 fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
     module.add_const(cont::ValueName::from("LEFT"), cont::Data::Nat(left));
     module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Nat(right));
     module.add_func(
@@ -1394,8 +1495,9 @@ fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1500,6 +1602,8 @@ fn nat_mul_overflow_traps() {
 fn int_op_module(op: cont::Code, left: i32, right: i32) -> cont::Module {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
     module.add_const(cont::ValueName::from("LEFT"), cont::Data::Int(left));
     module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Int(right));
     module.add_func(
@@ -1517,8 +1621,9 @@ fn int_op_module(op: cont::Code, left: i32, right: i32) -> cont::Module {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },
@@ -1613,6 +1718,8 @@ fn int_div_overflow_traps() {
 fn flt_to_int_overflow_traps() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
     module.add_const(
         cont::ValueName::from("TOO_BIG"),
         cont::Data::Flt((MAX_INT as f32) + 1.0),
@@ -1635,8 +1742,9 @@ fn flt_to_int_overflow_traps() {
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoPrint {
-                    value: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
                     resume: cont::BlockName::from("r"),
                 }),
             },

@@ -208,8 +208,8 @@ pub struct Table<'a> {
     int_to_str: OnceCell<wasm::FuncName>,
     flt_to_str: OnceCell<wasm::FuncName>,
     flt_to_le_bin: OnceCell<wasm::FuncName>,
-    io_print: OnceCell<wasm::FuncName>,
     io_read: OnceCell<wasm::FuncName>,
+    io_write: OnceCell<wasm::FuncName>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -232,8 +232,8 @@ impl<'a> Table<'a> {
             int_to_str: OnceCell::new(),
             flt_to_str: OnceCell::new(),
             flt_to_le_bin: OnceCell::new(),
-            io_print: OnceCell::new(),
             io_read: OnceCell::new(),
+            io_write: OnceCell::new(),
             tpl_types: {
                 let max = module
                     .consts()
@@ -373,21 +373,21 @@ impl<'a> Table<'a> {
         self.flt_to_le_bin.get().is_some()
     }
 
-    pub fn io_print_func(&self) -> &wasm::FuncName {
-        self.io_print
-            .get_or_init(|| wasm::FuncName::from("io_print"))
-    }
-
-    pub fn io_print_used(&self) -> bool {
-        self.io_print.get().is_some()
-    }
-
     pub fn io_read_func(&self) -> &wasm::FuncName {
         self.io_read.get_or_init(|| wasm::FuncName::from("io_read"))
     }
 
     pub fn io_read_used(&self) -> bool {
         self.io_read.get().is_some()
+    }
+
+    pub fn io_write_func(&self) -> &wasm::FuncName {
+        self.io_write
+            .get_or_init(|| wasm::FuncName::from("io_write"))
+    }
+
+    pub fn io_write_used(&self) -> bool {
+        self.io_write.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

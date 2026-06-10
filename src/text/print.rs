@@ -219,8 +219,10 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         }
         Prim::ArrAppend(ty, list, elem) => print_prim_call("Arr.append", vec![ty, list, elem]),
         Prim::ArrConcat(ty, left, right) => print_prim_call("Arr.concat", vec![ty, left, right]),
-        Prim::IoPrint(operand) => print_prim_call("Io.print", vec![operand]),
-        Prim::IoRead => pure("Io.read"),
+        Prim::IoType => pure("Io"),
+        Prim::Io(token) => pure(format!("Io({token})")),
+        Prim::IoRead(handle, count) => print_prim_call("Io.read", vec![handle, count]),
+        Prim::IoWrite(handle, bytes) => print_prim_call("Io.write", vec![handle, bytes]),
     }
 }
 

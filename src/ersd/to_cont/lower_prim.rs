@@ -390,6 +390,8 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
 
             work.fresh(cont::Value::Eval(cont::Code::ArrConcat(names)))
         }
+        // Handle tokens are plain i32 scalars once types are gone.
+        ersd::PurePrim::Io(token) => work.fresh(cont::Value::Pure(cont::Data::Nat(*token))),
         ersd::PurePrim::Unit => work.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
     }
 }
@@ -402,32 +404,57 @@ pub fn lower_value_prim<'b>(
 ) -> cont::Tail {
     match prim {
         ersd::Prim::Pure(pure_prim) => lower_value_pure_prim(work, pure_prim, frame, cont),
-        ersd::Prim::Host(ersd::HostPrim::IoPrint(operand)) => work.lower_value_name(
-            operand,
+        ersd::Prim::Host(ersd::HostPrim::IoRead(handle, count)) => work.lower_value_name(
+            handle,
             frame,
-            Cont::new(move |work, value| {
-                // After `Io.print` completes the IR continues with `()` —
-                // the resume block materialises that unit and hands it to
-                // the surrounding continuation.
-                let resume = work.fresh_block();
-                work.add_resume_block(resume.clone(), vec![], move |inner| {
-                    let unit = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
-                    cont.call(inner, unit)
-                });
-                cont::Tail::Host(cont::HostTarget::IoPrint { value, resume })
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    count,
+                    frame,
+                    Cont::new(move |work, count| {
+                        // The read `Bin` arrives as the resume block's lone param
+                        // and gets threaded straight into the surrounding
+                        // continuation.
+                        let resume = work.fresh_block();
+                        let read = work.fresh_value();
+                        let read_clone = read.clone();
+                        work.add_resume_block(resume.clone(), vec![read], move |inner| {
+                            cont.call(inner, read_clone)
+                        });
+                        cont::Tail::Host(cont::HostTarget::IoRead {
+                            handle,
+                            count,
+                            resume,
+                        })
+                    }),
+                )
             }),
         ),
-        ersd::Prim::Host(ersd::HostPrim::IoRead) => {
-            // The read `Bin` arrives as the resume block's lone param and gets
-            // threaded straight into the surrounding continuation.
-            let resume = work.fresh_block();
-            let read = work.fresh_value();
-            let read_clone = read.clone();
-            work.add_resume_block(resume.clone(), vec![read], move |inner| {
-                cont.call(inner, read_clone)
-            });
-            cont::Tail::Host(cont::HostTarget::IoRead { resume })
-        }
+        ersd::Prim::Host(ersd::HostPrim::IoWrite(handle, bytes)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    bytes,
+                    frame,
+                    Cont::new(move |work, bytes| {
+                        // After `Io.write` completes the IR continues with `()` —
+                        // the resume block materialises that unit and hands it to
+                        // the surrounding continuation.
+                        let resume = work.fresh_block();
+                        work.add_resume_block(resume.clone(), vec![], move |inner| {
+                            let unit = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
+                            cont.call(inner, unit)
+                        });
+                        cont::Tail::Host(cont::HostTarget::IoWrite {
+                            handle,
+                            bytes,
+                            resume,
+                        })
+                    }),
+                )
+            }),
+        ),
     }
 }
 
@@ -440,6 +467,12 @@ fn lower_value_pure_prim<'b>(
     match prim {
         ersd::PurePrim::Nat(value) => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Nat(*value)));
+
+            cont.call(work, value)
+        }
+        // Handle tokens are plain i32 scalars once types are gone.
+        ersd::PurePrim::Io(token) => {
+            let value = work.fresh(cont::Value::Pure(cont::Data::Nat(*token)));
 
             cont.call(work, value)
         }

@@ -126,8 +126,14 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(target);
             walk_uses(params, sink);
         }
-        Tail::Host(HostTarget::IoPrint { value, .. }) => sink.value_use(value),
-        Tail::Host(HostTarget::IoRead { .. }) => {}
+        Tail::Host(HostTarget::IoRead { handle, count, .. }) => {
+            sink.value_use(handle);
+            sink.value_use(count);
+        }
+        Tail::Host(HostTarget::IoWrite { handle, bytes, .. }) => {
+            sink.value_use(handle);
+            sink.value_use(bytes);
+        }
         Tail::Unreachable => {}
     }
 }
@@ -338,8 +344,14 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
             sink.value_use(target);
             walk_uses_mut(params, sink);
         }
-        Tail::Host(HostTarget::IoPrint { value, .. }) => sink.value_use(value),
-        Tail::Host(HostTarget::IoRead { .. }) => {}
+        Tail::Host(HostTarget::IoRead { handle, count, .. }) => {
+            sink.value_use(handle);
+            sink.value_use(count);
+        }
+        Tail::Host(HostTarget::IoWrite { handle, bytes, .. }) => {
+            sink.value_use(handle);
+            sink.value_use(bytes);
+        }
         Tail::Unreachable => {}
     }
 }

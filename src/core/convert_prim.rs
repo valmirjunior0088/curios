@@ -8,7 +8,9 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         (Prim::NatType, Prim::NatType)
         | (Prim::IntType, Prim::IntType)
         | (Prim::FltType, Prim::FltType)
-        | (Prim::BinType, Prim::BinType) => Ok(true),
+        | (Prim::BinType, Prim::BinType)
+        | (Prim::IoType, Prim::IoType) => Ok(true),
+        (Prim::Io(this), Prim::Io(that)) => Ok(this == that),
         (Prim::Nat(Nat::Zero), Prim::Nat(Nat::Zero)) => Ok(true),
         // Successor is injective, so the shared literal spine peels off
         // exactly; the leftover rides on the longer side. This is what lets

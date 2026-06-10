@@ -359,8 +359,15 @@ fn constrain_region(
                 seed(arg, liveness);
             }
         }
-        Tail::Host(HostTarget::IoPrint { value, .. }) => seed(value, liveness),
-        Tail::Host(HostTarget::IoRead { .. }) | Tail::Unreachable => {}
+        Tail::Host(HostTarget::IoRead { handle, count, .. }) => {
+            seed(handle, liveness);
+            seed(count, liveness);
+        }
+        Tail::Host(HostTarget::IoWrite { handle, bytes, .. }) => {
+            seed(handle, liveness);
+            seed(bytes, liveness);
+        }
+        Tail::Unreachable => {}
     }
 
     for (_, block) in &region.blocks {

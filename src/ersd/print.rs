@@ -155,14 +155,17 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
             pure("Arr.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
+        PurePrim::Io(token) => pure(format!("Io({token})")),
         PurePrim::Unit => pure("()"),
     }
 }
 
 fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
     match prim {
-        HostPrim::IoPrint(t) => flat([pure("Io.print "), print_term(t)]),
-        HostPrim::IoRead => pure("Io.read"),
+        HostPrim::IoRead(h, n) => flat([pure("Io.read "), print_term(h), pure(" "), print_term(n)]),
+        HostPrim::IoWrite(h, b) => {
+            flat([pure("Io.write "), print_term(h), pure(" "), print_term(b)])
+        }
     }
 }
 

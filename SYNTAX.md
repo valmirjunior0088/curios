@@ -8,7 +8,7 @@
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
 
-The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended `/sys` module, so `/sys/Nat`, `/sys/Bin`, and `/sys/Io/print` parse as ordinary paths. A source file can import those names with `use /sys/{Nat, Bin, Io};`. The standard library is prepended the same way under `/std` (its sources live in `std/` alongside the compiler) and re-exports the same API plus higher-level helpers.
+The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended `/sys` module, so `/sys/Nat`, `/sys/Bin`, and `/sys/Io/write` parse as ordinary paths. A source file can import those names with `use /sys/{Nat, Bin, Io};`. The standard library is prepended the same way under `/std` (its sources live in `std/` alongside the compiler) and re-exports the same API plus higher-level helpers.
 
 **Whitespace** (spaces, tabs, newlines) is insignificant except as a separator between tokens.
 
@@ -614,10 +614,17 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Io
 
-| Operation          | Arity | Description                                                        | Returns    |
-| ------------------ | ----- | ------------------------------------------------------------------ | ---------- |
-| `/sys/Io/print(a)` | 1     | Print `a : /sys/Bin` to stdout                                     | `{}`       |
-| `/sys/Io/read()`   | 0     | Read a line from stdin (`\n` included); empty `/sys/Bin` means EOF | `/sys/Bin` |
+`/sys/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `read` and `write` work on any handle.
+
+| Operation             | Arity | Description                                                                           | Returns    |
+| --------------------- | ----- | ------------------------------------------------------------------------------------- | ---------- |
+| `/sys/Io/stdin`       | —     | The standard input handle                                                              | `/sys/Io`  |
+| `/sys/Io/stdout`      | —     | The standard output handle                                                             | `/sys/Io`  |
+| `/sys/Io/stderr`      | —     | The standard error handle                                                              | `/sys/Io`  |
+| `/sys/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available; empty = EOF   | `/sys/Bin` |
+| `/sys/Io/write(h, b)` | 2     | Write `b : /sys/Bin` to `h`                                                            | `{}`       |
+
+`/std/Io` layers the safe conveniences on top: `print(b)` writes to stdout, and a buffered reader (`Reader`, the `Buf` state monad with `bind`/`pure`/`run`, and `read_line : Buf(Option(Bin))`) handles line splitting and EOF — `read_line` returns the line including its trailing `\n`, or `none` at end of input.
 
 ## Idioms
 

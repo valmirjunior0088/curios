@@ -426,8 +426,20 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::IoPrint(inner) => flat([pure("Io.print "), print_term(inner, depth)]),
-        Prim::IoRead => pure("Io.read"),
+        Prim::IoType => pure("Io"),
+        Prim::Io(token) => pure(format!("Io({token})")),
+        Prim::IoRead(handle, count) => flat([
+            pure("Io.read "),
+            print_term(handle, depth),
+            pure(" "),
+            print_term(count, depth),
+        ]),
+        Prim::IoWrite(handle, bytes) => flat([
+            pure("Io.write "),
+            print_term(handle, depth),
+            pure(" "),
+            print_term(bytes, depth),
+        ]),
     }
 }
 

@@ -37,6 +37,10 @@ fn bln() -> Term {
     prim(Prim::BlnType)
 }
 
+fn io() -> Term {
+    prim(Prim::IoType)
+}
+
 fn unit() -> Term {
     Subterm::TupleType(TupleType { fields: vec![] }).into()
 }
@@ -273,13 +277,21 @@ fn arr_ops() -> Vec<TopItem> {
 
 fn io_ops() -> Vec<TopItem> {
     vec![
+        pub_let("stdin", io(), prim(Prim::Io(0))),
+        pub_let("stdout", io(), prim(Prim::Io(1))),
+        pub_let("stderr", io(), prim(Prim::Io(2))),
         pub_fn(
-            "print",
-            vec![("b", bin())],
-            unit(),
-            prim(Prim::IoPrint(name("b"))),
+            "read",
+            vec![("h", io()), ("n", nat())],
+            bin(),
+            prim(Prim::IoRead(name("h"), name("n"))),
         ),
-        pub_fn("read", vec![], bin(), prim(Prim::IoRead)),
+        pub_fn(
+            "write",
+            vec![("h", io()), ("b", bin())],
+            unit(),
+            prim(Prim::IoWrite(name("h"), name("b"))),
+        ),
     ]
 }
 
@@ -293,6 +305,7 @@ fn sys_module() -> Module {
             pub_let("Flt", type_(), flt()),
             pub_let("Bin", type_(), bin()),
             pub_let("Bln", type_(), bln()),
+            pub_let("Io", type_(), io()),
             pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
             pub_mod("Nat", nat_ops()),
             pub_mod("Int", int_ops()),

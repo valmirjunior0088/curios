@@ -69,13 +69,14 @@ pub enum PurePrim {
     ArrSlice(Term, Term, Term),
     ArrAppend(Term, Term),
     ArrConcat(Vec<Term>),
+    Io(u32),
     Unit,
 }
 
 #[derive(Debug)]
 pub enum HostPrim {
-    IoPrint(Term),
-    IoRead,
+    IoRead(Term, Term),
+    IoWrite(Term, Term),
 }
 
 #[derive(Debug)]

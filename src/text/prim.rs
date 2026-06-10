@@ -76,8 +76,10 @@ pub enum Prim {
     ArrSlice(Term, Term, Term, Term),
     ArrAppend(Term, Term, Term),
     ArrConcat(Term, Term, Term),
-    IoPrint(Term),
-    IoRead,
+    IoType,
+    Io(u32),
+    IoRead(Term, Term),
+    IoWrite(Term, Term),
 }
 
 impl Prim {
@@ -572,10 +574,19 @@ impl Prim {
         Self::ArrConcat(type_.into(), left.into(), right.into())
     }
 
-    pub fn io_print<T>(inner: T) -> Self
+    pub fn io_read<H, N>(handle: H, count: N) -> Self
     where
-        T: Into<Term>,
+        H: Into<Term>,
+        N: Into<Term>,
     {
-        Self::IoPrint(inner.into())
+        Self::IoRead(handle.into(), count.into())
+    }
+
+    pub fn io_write<H, B>(handle: H, bytes: B) -> Self
+    where
+        H: Into<Term>,
+        B: Into<Term>,
+    {
+        Self::IoWrite(handle.into(), bytes.into())
     }
 }

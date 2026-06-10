@@ -701,13 +701,16 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 None => Subterm::Prim(Prim::arr_concat(type_, reduced)),
             })
         }
-        Prim::IoPrint(inner) => Err(ReduceError::IoAtTypeLevel {
-            kind: "IoPrint",
-            span: inner.span(),
-        }),
-        Prim::IoRead => Err(ReduceError::IoAtTypeLevel {
+        // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
+        Prim::IoType => Ok(Subterm::Prim(Prim::IoType)),
+        Prim::Io(token) => Ok(Subterm::Prim(Prim::Io(*token))),
+        Prim::IoRead(handle, _) => Err(ReduceError::IoAtTypeLevel {
             kind: "IoRead",
-            span: None,
+            span: handle.span(),
+        }),
+        Prim::IoWrite(handle, _) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoWrite",
+            span: handle.span(),
         }),
     }
 }

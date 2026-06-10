@@ -362,7 +362,8 @@ fn zonk_prim(context: &Context, prim: &Prim, binders: &[String]) -> Result<Prim,
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::IoRead => prim.clone(),
+        | Prim::IoType
+        | Prim::Io(_) => prim.clone(),
 
         Prim::Nat(Nat::Succ(spine, inner)) => Prim::Nat(Nat::Succ(
             spine.clone(),
@@ -574,7 +575,14 @@ fn zonk_prim(context: &Context, prim: &Prim, binders: &[String]) -> Result<Prim,
             zonk_terms(context, operands, binders)?,
         ),
 
-        Prim::IoPrint(t) => Prim::IoPrint(zonk_term(context, t, binders)?),
+        Prim::IoRead(a, b) => Prim::IoRead(
+            zonk_term(context, a, binders)?,
+            zonk_term(context, b, binders)?,
+        ),
+        Prim::IoWrite(a, b) => Prim::IoWrite(
+            zonk_term(context, a, binders)?,
+            zonk_term(context, b, binders)?,
+        ),
     })
 }
 

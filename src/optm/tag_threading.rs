@@ -375,8 +375,8 @@ fn freshen_tail_blocks(tail: &mut Tail, bound_blocks: &HashSet<BlockName>, suffi
         | Tail::Call(CallTarget::Indirect { resume, .. }) => {
             freshen_block(resume, bound_blocks, suffix);
         }
-        Tail::Host(HostTarget::IoPrint { resume, .. })
-        | Tail::Host(HostTarget::IoRead { resume }) => {
+        Tail::Host(HostTarget::IoRead { resume, .. })
+        | Tail::Host(HostTarget::IoWrite { resume, .. }) => {
             freshen_block(resume, bound_blocks, suffix);
         }
         Tail::Unreachable => {}

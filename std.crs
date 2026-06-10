@@ -14,6 +14,7 @@ pub mod Bln;
 pub use Bln/{let Bln};
 
 pub mod Io;
+pub use Io/{let Io};
 
 pub mod Char;
 

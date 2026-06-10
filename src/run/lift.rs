@@ -28,6 +28,17 @@ impl Lift for f32 {
     }
 }
 
+// Pairs lift positionally: each component consumes one param slot. (Every
+// single-value impl above reads `params[0]`, so slicing re-aligns them.)
+impl<A: Lift, B: Lift> Lift for (A, B) {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok((
+            A::lift(caller, &params[0..1])?,
+            B::lift(caller, &params[1..2])?,
+        ))
+    }
+}
+
 impl Lift for Vec<u8> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let Val::AnyRef(Some(anyref)) = &params[0] else {
