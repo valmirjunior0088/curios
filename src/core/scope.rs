@@ -190,7 +190,7 @@ impl Bound for () {
 
 // === Scope ===================================================================
 
-pub struct Scope<A: Arity, B: Bound> {
+pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
     names: Option<Vec<String>>,
     body: Box<B>,

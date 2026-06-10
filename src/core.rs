@@ -1,4 +1,5 @@
 mod scope;
+pub use scope::*;
 
 mod int;
 pub use int::*;

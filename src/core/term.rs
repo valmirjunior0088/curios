@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Flt, Int, Nat, Prim, scope::Visit},
+    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Two, Var, Visit},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -10,15 +10,6 @@ use {
         rc::Rc,
     },
 };
-
-pub use super::scope::{Arity, Bound, Many, One, Two, Var};
-
-/// `core`-stage scope: a body binding `A` de Bruijn variables. Defaults its body
-/// to [`Term`], so existing `Scope<One>` / `Scope<Many>` call sites are unchanged.
-pub type Scope<A, B = Term> = super::scope::Scope<A, B>;
-
-/// `core`-stage telescope of dependent binders ending in a body of type `B`.
-pub type Telescope<B> = super::scope::Telescope<B>;
 
 #[derive(Debug, Clone)]
 pub struct Term {
