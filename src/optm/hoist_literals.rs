@@ -38,7 +38,7 @@ use {
 /// (`BinEql` is bytewise), so sharing one instance across every use — and across
 /// bodies, via dedup — is observationally identical to rebuilding it.
 pub fn hoist_literals(module: &mut Module) {
-    let mut interner = Interner::default();
+    let mut interner = Interner::over(module.consts());
 
     // Collect against the (immutably borrowed) bodies, recording per body which
     // bindings to rewrite; the interner accumulates the new consts it owns.
@@ -211,29 +211,20 @@ fn lower_data(
     memo: &mut HashMap<ValueName, ValueName>,
     stack: &mut HashSet<ValueName>,
 ) -> Option<ValueName> {
-    let (key, emit) = match data {
-        Data::Nat(value) => (ConstKey::Nat(*value), Data::Nat(*value)),
-        Data::Int(value) => (ConstKey::Int(*value), Data::Int(*value)),
-        Data::Flt(value) => (ConstKey::Flt(value.to_bits()), Data::Flt(*value)),
-        Data::Bin(bytes) => (ConstKey::Bin(bytes.clone()), Data::Bin(bytes.clone())),
-        Data::Arr(elems) => {
-            let lowered = lower_children(elems, defs, interner, memo, stack)?;
-            (ConstKey::Arr(lowered.clone()), Data::Arr(lowered))
-        }
-        Data::Tpl(elems) => {
-            let lowered = lower_children(elems, defs, interner, memo, stack)?;
-            (ConstKey::Tpl(lowered.clone()), Data::Tpl(lowered))
-        }
-        Data::Clsr(clsr, captures) => {
-            let lowered = lower_children(captures, defs, interner, memo, stack)?;
-            (
-                ConstKey::Clsr(clsr.clone(), lowered.clone()),
-                Data::Clsr(clsr.clone(), lowered),
-            )
-        }
+    let emit = match data {
+        Data::Nat(value) => Data::Nat(*value),
+        Data::Int(value) => Data::Int(*value),
+        Data::Flt(value) => Data::Flt(*value),
+        Data::Bin(bytes) => Data::Bin(bytes.clone()),
+        Data::Arr(elems) => Data::Arr(lower_children(elems, defs, interner, memo, stack)?),
+        Data::Tpl(elems) => Data::Tpl(lower_children(elems, defs, interner, memo, stack)?),
+        Data::Clsr(clsr, captures) => Data::Clsr(
+            clsr.clone(),
+            lower_children(captures, defs, interner, memo, stack)?,
+        ),
     };
 
-    Some(interner.intern(key, emit))
+    Some(interner.intern(emit))
 }
 
 /// Lower every child to a const name, failing the whole aggregate if any child is
@@ -267,26 +258,69 @@ enum ConstKey {
     Clsr(ClsrName, Vec<ValueName>),
 }
 
+/// A constant's hashable identity, derived from its emitted `Data` — an aggregate
+/// variant holds its already-lowered child const names, which is exactly the shape
+/// a module const's `Data` already has, so existing consts key directly.
+fn key_of(data: &Data) -> ConstKey {
+    match data {
+        Data::Nat(value) => ConstKey::Nat(*value),
+        Data::Int(value) => ConstKey::Int(*value),
+        Data::Flt(value) => ConstKey::Flt(value.to_bits()),
+        Data::Bin(bytes) => ConstKey::Bin(bytes.clone()),
+        Data::Arr(elems) => ConstKey::Arr(elems.clone()),
+        Data::Tpl(elems) => ConstKey::Tpl(elems.clone()),
+        Data::Clsr(clsr, captures) => ConstKey::Clsr(clsr.clone(), captures.clone()),
+    }
+}
+
 /// Mints one const per distinct constant, module-wide. `consts` is in mint order;
 /// because a child is always interned before its parent, that order is topological
 /// (leaves first) — the order wasm global initializers require.
-#[derive(Default)]
 struct Interner {
     dedup: HashMap<ConstKey, ValueName>,
     consts: Vec<(ValueName, Data)>,
     counters: HashMap<&'static str, usize>,
+    taken: HashSet<ValueName>,
 }
 
 impl Interner {
-    fn intern(&mut self, key: ConstKey, data: Data) -> ValueName {
+    /// An interner pre-populated with the module's existing consts, so a re-run
+    /// reuses an existing const for an identical value and can never mint a name
+    /// that is already taken — even if dead-code elimination left the surviving
+    /// indices sparse.
+    fn over(existing: &[(ValueName, Data)]) -> Self {
+        let mut interner = Self {
+            dedup: HashMap::new(),
+            consts: Vec::new(),
+            counters: HashMap::new(),
+            taken: HashSet::new(),
+        };
+
+        for (name, data) in existing {
+            interner.dedup.insert(key_of(data), name.clone());
+            interner.taken.insert(name.clone());
+        }
+
+        interner
+    }
+
+    fn intern(&mut self, data: Data) -> ValueName {
+        let key = key_of(&data);
+
         if let Some(name) = self.dedup.get(&key) {
             return name.clone();
         }
 
         let kind = kind_of(&data);
         let index = self.counters.entry(kind).or_insert(0);
-        let name = mangle::hoisted_const(kind, *index);
-        *index += 1;
+        let name = loop {
+            let candidate = mangle::hoisted_const(kind, *index);
+            *index += 1;
+
+            if !self.taken.contains(&candidate) {
+                break candidate;
+            }
+        };
 
         self.dedup.insert(key, name.clone());
         self.consts.push((name.clone(), data));
@@ -577,6 +611,40 @@ mod tests {
             &main_region(&module).values[0].1,
             Value::Pure(Data::Clsr(..))
         ));
+    }
+
+    #[test]
+    fn rerun_reuses_existing_consts_and_never_remints_a_taken_name() {
+        // First run hoists [1,2,3] into lit@bin#0. A later function introduces the
+        // same bytestring plus a new one; the second run must alias the existing
+        // const for the duplicate and mint a non-colliding name for the new value.
+        let mut module = main_func(region(
+            vec![(v("v0"), Value::Pure(Data::Bin(vec![1, 2, 3])))],
+            vec![],
+        ));
+        hoist_literals(&mut module);
+        assert_eq!(const_names(&module), vec!["lit@bin#0"]);
+
+        module.add_func(
+            FuncName::from("late"),
+            Func {
+                params: vec![],
+                resume: BlockName::from("rl"),
+                region: region(
+                    vec![
+                        (v("w0"), Value::Pure(Data::Bin(vec![1, 2, 3]))),
+                        (v("w1"), Value::Pure(Data::Bin(vec![9]))),
+                    ],
+                    vec![],
+                ),
+            },
+        );
+        hoist_literals(&mut module);
+
+        assert_eq!(const_names(&module), vec!["lit@bin#0", "lit@bin#1"]);
+        let late = &module.funcs()[1].1.region;
+        assert_eq!(alias(&late.values[0].1), &v("lit@bin#0"));
+        assert_eq!(alias(&late.values[1].1), &v("lit@bin#1"));
     }
 
     #[test]

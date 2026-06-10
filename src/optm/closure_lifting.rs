@@ -124,7 +124,15 @@ fn lift_funcs(module: &Module, to_lift: &HashSet<ClsrName>) -> Vec<(FuncName, Fu
     module
         .clsrs()
         .iter()
-        .filter(|(name, _)| to_lift.contains(name))
+        .filter(|(name, _)| {
+            // A closure lifted on an earlier run already has its function —
+            // `add_func` is a plain push, so re-adding would shadow it.
+            to_lift.contains(name)
+                && !module
+                    .funcs()
+                    .iter()
+                    .any(|(present, _)| present == &mangle::lifted(name))
+        })
         .map(|(name, clsr)| {
             // Captures become leading parameters — as `Argument`s, their
             // candidate flags ride along with the names for free.
@@ -247,6 +255,63 @@ mod tests {
         // The lifted function takes the captured fields as leading params.
         let lifted = func_named(&module, "c0@lifted").expect("lifted func");
         assert_eq!(lifted.params, vec![v("f"), v("p")]);
+    }
+
+    #[test]
+    fn second_lift_does_not_duplicate_an_existing_lifted_func() {
+        // Run 1 lifts c0. A later pass exposes a *new* known call site of the
+        // same closure; run 2 devirtualizes it but must not push a second
+        // c0@lifted — `add_func` is a plain push, so a twin would shadow.
+        let mut module = Module::new();
+        module.add_func(
+            FuncName::from("main"),
+            main_with(
+                vec![
+                    (v("a"), Value::Pure(Data::Nat(1))),
+                    (
+                        v("clo"),
+                        Value::Pure(Data::Clsr(ClsrName::from("c0"), vec![v("a")])),
+                    ),
+                ],
+                indirect("clo", vec![]),
+            ),
+        );
+        module.add_clsr(ClsrName::from("c0"), clsr(vec![v("f")], vec![]));
+
+        lift_closures(&mut module);
+
+        module.add_func(
+            FuncName::from("late"),
+            main_with(
+                vec![
+                    (v("b"), Value::Pure(Data::Nat(2))),
+                    (
+                        v("clo2"),
+                        Value::Pure(Data::Clsr(ClsrName::from("c0"), vec![v("b")])),
+                    ),
+                ],
+                indirect("clo2", vec![]),
+            ),
+        );
+
+        lift_closures(&mut module);
+
+        let lifted_count = module
+            .funcs()
+            .iter()
+            .filter(|(name, _)| name.as_str() == "c0@lifted")
+            .count();
+        assert_eq!(lifted_count, 1, "c0@lifted must exist exactly once");
+
+        // Both call sites target the one lifted function.
+        for func_name in ["main", "late"] {
+            match &func_named(&module, func_name).unwrap().region.tail {
+                Tail::Call(CallTarget::Direct { target, .. }) => {
+                    assert_eq!(target.as_str(), "c0@lifted");
+                }
+                other => panic!("expected direct call in {func_name}, got {other:?}"),
+            }
+        }
     }
 
     #[test]
