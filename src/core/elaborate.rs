@@ -39,7 +39,10 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
                 let domain = check(context, &ty, Term::type_())?;
                 let name = context.fresh(rest.first_label());
                 let x = Term::var(Var::free(&name));
-                context.assume(&name, &ty);
+                // Assume the *rebuilt* domain: insertion saturates applications
+                // during elaboration, and a lowered (under-applied) type leaking
+                // into later reduction would open a telescope at the wrong arity.
+                context.assume(&name, &domain);
                 domains.push((name, domain));
                 walk(context, rest.open(&[&x]), domains)
             }
@@ -58,6 +61,17 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
     );
 
     Ok((rebuilt, Term::type_()))
+}
+
+/// A binder's user-facing name. The head's function type is the *rebuilt* one,
+/// whose binders were re-closed under `fresh`-minted labels (`T#1`); reports
+/// should name the binder as written, and `#` cannot occur in an identifier.
+fn binder_name(label: &str) -> String {
+    match label.split_once('#') {
+        Some(("", _)) => "_".to_string(),
+        Some((name, _)) => name.to_string(),
+        None => label.to_string(),
+    }
 }
 
 fn elaborate_apply(
@@ -124,7 +138,7 @@ fn elaborate_apply(
                     let arg = match marked.pop_front() {
                         Some(arg) => check(context, &arg, ty.clone())?,
                         None => {
-                            let binder = rest.first_label().unwrap_or("_").to_string();
+                            let binder = binder_name(rest.first_label().unwrap_or("_"));
                             context.fresh_metavar(
                                 ty.clone(),
                                 term.span(),
@@ -186,7 +200,7 @@ fn elaborate_apply(
                 Plicity::Implicit => match marked.pop_front() {
                     Some(arg) => arg,
                     None => {
-                        let binder = rest.first_label().unwrap_or("_").to_string();
+                        let binder = binder_name(rest.first_label().unwrap_or("_"));
                         context.fresh_metavar(
                             ty.clone(),
                             term.span(),
@@ -349,7 +363,8 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
                 let field = check(context, &ty, Term::type_())?;
                 let name = context.fresh(rest.first_label());
                 let x = Term::var(Var::free(&name));
-                context.assume(&name, &ty);
+                // The *rebuilt* field type, as in `elaborate_func_type`.
+                context.assume(&name, &field);
                 fields.push((name, field));
                 walk(context, rest.open(&[&x]), fields)
             }
@@ -421,9 +436,12 @@ fn elaborate_nat_match(
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::NatType)?;
 
-    let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
+    // Everything below opens the *rebuilt* motive: insertion saturates
+    // applications during elaboration, and a lowered (under-applied) motive
+    // body reaching the reducer would open a telescope at the wrong arity.
+    let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
-    seed_motive(context, term, motive, head, &mode)?;
+    seed_motive(context, term, &motive, head, &mode)?;
 
     let zero_elaborated = check(
         context,
@@ -457,9 +475,10 @@ fn elaborate_nat_match(
 
     let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
+    let result_type = motive.open(&[head]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive: motive_elaborated,
+        motive,
         cases: Cases::Nat {
             zero_case: zero_elaborated,
             succ_case: succ_elaborated,
@@ -467,7 +486,7 @@ fn elaborate_nat_match(
     })
     .into();
 
-    Ok((rebuilt, motive.open(&[head])))
+    Ok((rebuilt, result_type))
 }
 
 fn elaborate_switch(
@@ -481,9 +500,10 @@ fn elaborate_switch(
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::NatType)?;
 
-    let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
+    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
+    let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
-    seed_motive(context, term, motive, head, &mode)?;
+    seed_motive(context, term, &motive, head, &mode)?;
 
     let mut cases_elaborated = BTreeMap::new();
     for (n, body) in cases {
@@ -504,9 +524,10 @@ fn elaborate_switch(
 
     let default_elaborated = check(context, default, motive.open(&[head]))?;
 
+    let result_type = motive.open(&[head]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive: motive_elaborated,
+        motive,
         cases: Cases::Switch {
             cases: cases_elaborated,
             default: default_elaborated,
@@ -514,7 +535,7 @@ fn elaborate_switch(
     })
     .into();
 
-    Ok((rebuilt, motive.open(&[head])))
+    Ok((rebuilt, result_type))
 }
 
 fn elaborate_match(
@@ -559,9 +580,10 @@ fn elaborate_bln_match(
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::BlnType)?;
 
-    let motive_elaborated = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
+    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
+    let motive = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
 
-    seed_motive(context, term, motive, head, &mode)?;
+    seed_motive(context, term, &motive, head, &mode)?;
 
     let false_elaborated = context.with_frame(|context| {
         refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into());
@@ -581,9 +603,10 @@ fn elaborate_bln_match(
         )
     })?;
 
+    let result_type = motive.open(&[head]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive: motive_elaborated,
+        motive,
         cases: Cases::Bln {
             false_case: false_elaborated,
             true_case: true_elaborated,
@@ -591,7 +614,7 @@ fn elaborate_bln_match(
     })
     .into();
 
-    Ok((rebuilt, motive.open(&[head])))
+    Ok((rebuilt, result_type))
 }
 
 fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Term, Term), Error> {
@@ -762,7 +785,8 @@ fn elaborate_union_match(
     };
 
     // The match's own type: the motive at the scrutinee itself — and, for a
-    // pattern motive, at the scrutinee's actual parameters and indices.
+    // pattern motive, at the scrutinee's actual parameters and indices. Opened
+    // from the *rebuilt* motive, as in `elaborate_nat_match`.
     let result_args = plan
         .iter()
         .map(|slot| match slot {
@@ -771,7 +795,7 @@ fn elaborate_union_match(
         })
         .collect::<Vec<_>>();
     let result_refs = result_args.iter().chain([head]).collect::<Vec<_>>();
-    let result_type = motive.open(&result_refs);
+    let result_type = motive_elaborated.open(&result_refs);
 
     // The seed (`seed_motive`'s job, generalized over the pattern binders):
     // in checking mode, pin the motive — a bare metavar when elided — to the
@@ -923,7 +947,7 @@ fn elaborate_union_match(
                 })
                 .collect::<Vec<_>>();
             let arm_refs = arm_args.iter().chain([&ctor_val]).collect::<Vec<_>>();
-            let expected = motive.open(&arm_refs);
+            let expected = motive_elaborated.open(&arm_refs);
 
             let var_refs = vars.iter().collect::<Vec<_>>();
             check(context, &scope.open(&var_refs), expected)
@@ -1133,10 +1157,14 @@ fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term,
             let (body_elaborated, inferred) = elaborate(context, body, Mode::Infer)?;
             (inferred.clone(), body_elaborated, inferred)
         }
+        // The body is checked against — and the binder assumed at — the
+        // *rebuilt* annotation: insertion saturates applications during
+        // elaboration, and a lowered (under-applied) type reaching the
+        // reducer would open a telescope at the wrong arity.
         _ => {
             let type_elaborated = check(context, type_, Term::type_())?;
-            let body_elaborated = check(context, body, type_.clone())?;
-            (type_elaborated, body_elaborated, type_.clone())
+            let body_elaborated = check(context, body, type_elaborated.clone())?;
+            (type_elaborated.clone(), body_elaborated, type_elaborated)
         }
     };
 
@@ -1196,12 +1224,22 @@ fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Term, 
                 types_elaborated.push(check(context, type_, Term::type_())?);
             }
 
+            // Upgrade the assumptions to the *rebuilt* signatures before any
+            // body is checked: insertion saturates applications during
+            // elaboration, and a lowered (under-applied) type reaching the
+            // reducer would open a telescope at the wrong arity. The lowered
+            // forms were only needed above, while the signatures checked each
+            // other.
+            for (label, type_) in labels.iter().zip(&types_elaborated) {
+                context.reassume(label, type_);
+            }
+
             for (label, (_, body)) in labels.iter().zip(items.iter()) {
                 context.define(label, body);
             }
 
             let mut bodies_elaborated = Vec::with_capacity(items.len());
-            for (type_, body) in &items {
+            for ((_, body), type_) in items.iter().zip(&types_elaborated) {
                 bodies_elaborated.push(check(context, body, type_.clone())?);
             }
 
@@ -1284,7 +1322,12 @@ fn elaborate_func_check(
         match (body, type_) {
             (Telescope::Done(body), Telescope::Done(output)) => check(context, &body, *output),
             (Telescope::Cons(domain, body_rest), Telescope::Cons(type_, type_rest)) => {
-                check(context, &domain, Term::type_())?;
+                // Unify the *rebuilt* annotation against the expected domain:
+                // `expect` reduces both sides, and a lowered (under-applied)
+                // domain would open a telescope at the wrong arity. An omitted
+                // annotation is a hole either way — `check` births it and
+                // `expect` then solves it to the expected domain, as before.
+                let domain = check(context, &domain, Term::type_())?;
                 expect(context, term, &domain, &type_)?;
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::var(Var::free(&name));
@@ -1449,14 +1492,14 @@ fn elaborate_metavar(
 /// `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
     let type_ = check(context, &def.type_, Term::type_())?;
-    let body = check(context, &def.body, def.type_.clone())?;
+    let body = check(context, &def.body, type_.clone())?;
 
-    // Define the *rebuilt* body, not the lowered one: implicit-argument
-    // insertion saturates applications during elaboration, and the untyped
-    // reducer (type-level evaluation in later items' types) would meet the
-    // lowered body's under-applied calls and open a telescope at the wrong
-    // arity. Pre-insertion the two were interchangeable; no longer.
-    context.define_assuming(&def.name, &def.type_, &body);
+    // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones:
+    // implicit-argument insertion saturates applications during elaboration,
+    // and the untyped reducer (type-level evaluation in later items' types)
+    // would meet a lowered form's under-applied calls and open a telescope at
+    // the wrong arity. Pre-insertion the two were interchangeable; no longer.
+    context.define_assuming(&def.name, &type_, &body);
 
     Ok(Definition {
         name: def.name.clone(),
@@ -1483,13 +1526,21 @@ fn elaborate_module_rec(
         types.push(check(context, &def.type_, Term::type_())?);
     }
 
+    // Upgrade the assumptions to the *rebuilt* signatures before any body is
+    // checked (see `elaborate_rec`): a lowered (under-applied) type must not
+    // leak into later reduction. The lowered forms were only needed above,
+    // while the signatures checked each other.
+    for (def, type_) in defs.iter().zip(&types) {
+        context.reassume(&def.name, type_);
+    }
+
     for def in defs {
         context.define(&def.name, &def.body);
     }
 
     let mut bodies = Vec::with_capacity(defs.len());
-    for def in defs {
-        bodies.push(check(context, &def.body, def.type_.clone())?);
+    for (def, type_) in defs.iter().zip(&types) {
+        bodies.push(check(context, &def.body, type_.clone())?);
     }
 
     // Re-define every member with its rebuilt body: insertion saturates

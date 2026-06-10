@@ -160,6 +160,27 @@ impl Context {
             .insert(label, type_.clone());
     }
 
+    /// Replace the type of an existing assumption in place — the innermost
+    /// binding of `label`. Used by the `rec` elaborators: a group's signatures
+    /// must be assumed (lowered) before they can be elaborated, since members
+    /// reference each other, and are then upgraded here to their rebuilt forms
+    /// — implicit insertion makes the two no longer interchangeable, and a
+    /// lowered type must never leak into later reduction.
+    pub fn reassume(&mut self, label: &str, type_: &Term) {
+        if let Some(entry) = self.local.iter_mut().rev().find(|(name, _)| name == label) {
+            entry.1 = type_.clone();
+        }
+
+        if let Some(assumptions) = self
+            .assumptions
+            .iter_mut()
+            .rev()
+            .find(|assumptions| assumptions.contains_key(label))
+        {
+            assumptions.insert(label.to_string(), type_.clone());
+        }
+    }
+
     /// The local assumption context in binding order — the Γ a metavariable
     /// freezes at birth (§5). Includes every `assume`d binder currently in
     /// scope, across all open frames.
