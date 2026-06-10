@@ -64,6 +64,15 @@ pub fn walk_data_refs(data: &Data, sink: &mut impl Sink) {
     walk_data(data, sink);
 }
 
+/// Walk a single `Value`'s operands, firing [`Sink::value_use`] for each.
+/// Exposed so a pass that classifies *where* a name occurs (value operands vs.
+/// call/jump arguments) can reuse the operand enumeration on values alone and
+/// handle tails itself (see
+/// [`dead_argument_elimination`](super::dead_argument_elimination)).
+pub fn walk_value_uses(value: &Value, sink: &mut impl Sink) {
+    walk_value(value, sink);
+}
+
 fn walk_data(data: &Data, sink: &mut impl Sink) {
     match data {
         Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => {}

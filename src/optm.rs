@@ -128,7 +128,13 @@ use super::cont::*;
 ///    at compile time and replaced by its materialised result — dissolving
 ///    recursive callees (the parser combinator in `examples/crs_printf.rs`)
 ///    single-site inlining can never reach. A settle round follows.
-/// 6. **Dissolve residual wrappers.** A second inlining round: the size-bounded
+/// 6. **Shed recursion residue, then dissolve residual wrappers.** A
+///    dead-argument round first drops the self-fed arguments the converted
+///    loops no longer use (chiefly the devirtualized self-closure each loop
+///    still threads around), and the dead-code sweep that follows reclaims the
+///    orphaned closure twins *and the call sites inside them* — often leaving a
+///    loop with a single caller for the next step. Then a second inlining
+///    round: the single-site rule fuses those loops, and the size-bounded
 ///    multi-site rule splices the tiny primitive wrappers called from several
 ///    specialized closures at every site. A settle round follows, and a second
 ///    known-tag threading round catches the joins the new splices exposed.
@@ -169,7 +175,9 @@ pub fn optimize(mut module: Module) -> Module {
     propagate_copies(&mut module);
     fold_constants(&mut module);
 
-    // 6. Dissolve residual wrappers.
+    // 6. Shed recursion residue, then dissolve residual wrappers.
+    eliminate_dead_arguments(&mut module);
+    eliminate_dead_code(&mut module);
     inline_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
