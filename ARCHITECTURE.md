@@ -42,13 +42,13 @@ The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trai
 
 | Stage                   | Key file(s)                                                            | Lines  |
 | ----------------------- | ---------------------------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                                        | 1,218  |
+| Parsing                 | `text/parse.rs`                                                        | 1,202  |
 | Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)                           | ~2,280 |
-| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~3,080 |
+| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~3,130 |
 | Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers                 | ~1,980 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                                              | 903    |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                                              | 908    |
 | CPS optimization        | `optm.rs` + `optm/` (13 files)                                         | ~7,720 |
-| WASM codegen            | `cont/to_wasm/` (9 files)                                              | ~6,040 |
+| WASM codegen            | `cont/to_wasm/` (9 files)                                              | ~6,100 |
 | Binary serialization    | `wasm/writer.rs`                                                       | 1,716  |
 
 ---
@@ -199,7 +199,7 @@ Each `Cons` carries one parameter type and a `Scope<One, …>` that binds exactl
 
 ### Two-level context (`context.rs`)
 
-Maintains separate stacks for **assumptions** (name → type) and **definitions** (name → value). `with_frame(f)` handles nested scopes. A monotonically increasing entropy counter generates fresh names during type checking.
+Maintains separate stacks for **assumptions** (name → type) and **definitions** (name → value). `with_frame(f)` handles nested scopes. A shared `Entropy` counter (see [Utility layer](#utility-layer)) generates fresh names during type checking.
 
 ---
 
@@ -230,9 +230,9 @@ Key differences from `core`:
 
 ## Stage 5 — CPS lowering (`src/ersd/to_cont/`)
 
-**Key files:** `lowerer.rs`, `builder.rs`, `conts.rs`, `rec.rs`, `lower_prim.rs`, `frame.rs`, `entropy.rs`, `to_cont.rs`
+**Key files:** `lowerer.rs`, `builder.rs`, `conts.rs`, `rec.rs`, `lower_prim.rs`, `frame.rs`, `to_cont.rs`
 
-This is one of the more complex transformations in the pipeline: `lowerer.rs` is 903 lines, and the full `ersd/to_cont` implementation is roughly 1,900 lines.
+This is one of the more complex transformations in the pipeline: `lowerer.rs` is 908 lines, and the full `ersd/to_cont` implementation is roughly 2,050 lines.
 
 ### CPS IR structure
 
@@ -279,7 +279,7 @@ When a call appears in value position, the lowerer creates a **join block** that
 
 ### Frame and entropy
 
-`Frame` is a `HashMap<String, ValueName>` representing the current scope. `Entropy<T>` is a counter-based stream of fresh names, with separate streams for values, blocks, closures, and functions.
+`Frame` is a `HashMap<String, ValueName>` representing the current scope. Fresh names come from the shared `Entropy<T>` counter (`src/entropy.rs` — see [Utility layer](#utility-layer)): `frame.rs` bundles per-function value and block streams as `FrameEntropy`, and the lowerer keeps one module-wide stream for closure names.
 
 ---
 
@@ -400,7 +400,8 @@ Wasmtime is configured with reference types, function references, GC, and tail c
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/monads/parser.rs`  | Monadic parser combinators: `Parser<'a, A>`, `.or()`, `.and()`, `.flat_map()`, `lazy`, `many0/1`, `sep_by0/1`, `take_while`, etc. Used for both surface syntax and WAT parsing.                                       |
 | `src/monads/printer.rs` | Mirror of the parser: `Printer<'a>` combinators (`pure`, `flat`, `indent`, `sep_flat`) driven by `run_printer`. Used in all `print.rs` modules.                                                                       |
-| `src/macros.rs`         | `name!(Foo)` — generates a newtype `pub struct Foo { pub string: String }` with `From<A: Into<String>>`, `Debug`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`. Used for all name types across all stages. |
+| `src/macros.rs`         | `name!(Foo)` — generates a newtype `pub struct Foo { pub string: String }` with `From<A: Into<String>>`, `Debug`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`. Used for all name types across all stages. The `name!(Foo, "prefix")` form additionally implements `Mint`, so the name can be generated by `Entropy`.   |
+| `src/entropy.rs`        | `Entropy<T>` — the shared gensym source: a `Cell`-backed monotonic counter whose `fresh()` mints a `T: Mint` (raw `usize` ids by default). Every fresh-name need in the pipeline draws from one: metavariables and binder labels in `text/to_core`, fresh names in the core `Context`, value/block/closure names in CPS lowering, synthesized bindings in `optm/evaluate_pure_calls`, and WASM codegen locals.      |
 
 ---
 
