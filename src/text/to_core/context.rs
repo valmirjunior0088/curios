@@ -1,10 +1,10 @@
 use {
     super::interface::PublicInterface,
     crate::{
-        core,
+        Entropy, core,
         text::{Error, Name, Qualifier},
     },
-    std::{cell::Cell, collections::HashMap},
+    std::collections::HashMap,
 };
 
 #[derive(Clone)]
@@ -101,12 +101,12 @@ pub struct Context<'a> {
     // `Context` via `nested`) must draw from the same monotonic source. Shared
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
     // `Elaborate`'s immutable `&Context` borrow.
-    metavars: &'a Cell<usize>,
+    metavars: &'a Entropy,
     // Sibling counter for fresh continuation-binder names minted while desugaring
     // `with`/`!` blocks. Threaded (not a process-global atomic) for determinism:
     // `core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
     // tests must be order-stable.
-    binders: &'a Cell<usize>,
+    binders: &'a Entropy,
 }
 
 fn attach(error: Error, name: &Name) -> Error {
@@ -120,8 +120,8 @@ impl<'a> Context<'a> {
     pub fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
-        metavars: &'a Cell<usize>,
-        binders: &'a Cell<usize>,
+        metavars: &'a Entropy,
+        binders: &'a Entropy,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
@@ -148,18 +148,14 @@ impl<'a> Context<'a> {
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
     pub fn fresh_metavar(&self) -> usize {
-        let id = self.metavars.get();
-        self.metavars.set(id + 1);
-        id
+        self.metavars.fresh()
     }
 
     /// Mint a fresh continuation-binder name for `with`/`!` desugaring. The `#`
     /// sigil is illegal in source identifiers, so it cannot collide with user
     /// names or qualified references.
     pub fn fresh_binder(&self) -> String {
-        let id = self.binders.get();
-        self.binders.set(id + 1);
-        format!("#{id}")
+        format!("#{}", self.binders.fresh())
     }
 
     pub fn prefixed(&self, label: &str) -> Qualifier {

@@ -1,4 +1,7 @@
-use {super::Entropy, crate::cont, std::collections::HashMap};
+use {
+    crate::{Entropy, cont},
+    std::collections::HashMap,
+};
 
 #[derive(Debug)]
 pub struct FrameEntropy {
@@ -8,7 +11,7 @@ pub struct FrameEntropy {
 
 impl FrameEntropy {
     pub fn new() -> (Self, cont::BlockName) {
-        let mut blocks = Entropy::<cont::BlockName>::new();
+        let blocks = Entropy::<cont::BlockName>::new();
         let resume = blocks.fresh();
 
         (

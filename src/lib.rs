@@ -1,5 +1,8 @@
 mod macros;
 
+mod entropy;
+pub use entropy::*;
+
 mod span;
 pub use span::*;
 

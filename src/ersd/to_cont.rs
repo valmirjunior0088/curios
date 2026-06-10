@@ -1,6 +1,3 @@
-mod entropy;
-use entropy::*;
-
 mod frame;
 use frame::*;
 

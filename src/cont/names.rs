@@ -1,6 +1,6 @@
 use crate::macros::name;
 
-name!(ValueName);
-name!(BlockName);
-name!(ClsrName);
+name!(ValueName, "v");
+name!(BlockName, "b");
+name!(ClsrName, "c");
 name!(FuncName);

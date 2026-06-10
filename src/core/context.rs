@@ -1,6 +1,6 @@
 use {
     super::{Bound, ImplicitOrigin, Inductive, Term},
-    crate::Span,
+    crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, HashMap},
         time::{Duration, Instant},
@@ -34,7 +34,7 @@ pub struct MetaStore {
 
 #[derive(Debug)]
 pub struct Context {
-    entropy: usize,
+    entropy: Entropy,
     deadline: Instant,
     reductions: HashMap<Term, Term>,
     assumptions: Vec<HashMap<String, Term>>,
@@ -54,7 +54,7 @@ pub struct Context {
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` from `Module::metavars` so
     // core-minted ids sit strictly above `to_core`'s.
-    next_metavar: usize,
+    next_metavar: Entropy,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
@@ -71,7 +71,7 @@ impl Context {
     // timeout bounds total work, not per-call work.
     pub fn new(timeout: Duration) -> Self {
         Self {
-            entropy: 0,
+            entropy: Entropy::<usize>::new(),
             deadline: Instant::now() + timeout,
             reductions: HashMap::new(),
             assumptions: vec![HashMap::new()],
@@ -82,14 +82,13 @@ impl Context {
             local: Vec::new(),
             local_marks: Vec::new(),
             metas: MetaStore::default(),
-            next_metavar: 0,
+            next_metavar: Entropy::<usize>::new(),
             inductives: BTreeMap::new(),
         }
     }
 
     pub fn fresh(&mut self, hint: Option<&str>) -> String {
-        let counter = self.entropy;
-        self.entropy += 1;
+        let counter = self.entropy.fresh();
 
         match hint {
             Some(h) => format!("{h}#{counter}"),
@@ -339,7 +338,7 @@ impl Context {
     /// `>= floor`. Called by `elaborate_module` with `Module::metavars` (the
     /// count `to_core` minted) before any item is elaborated.
     pub fn seed_metavars(&mut self, floor: usize) {
-        self.next_metavar = self.next_metavar.max(floor);
+        self.next_metavar.seed(floor);
     }
 
     /// Mint a metavariable for an omitted implicit argument and birth it
@@ -353,8 +352,7 @@ impl Context {
         span: Option<Span>,
         origin: ImplicitOrigin,
     ) -> Term {
-        let id = self.next_metavar;
-        self.next_metavar += 1;
+        let id = self.next_metavar.fresh();
 
         let telescope = self.local_context().to_vec();
         self.birth_metavar(id, telescope, result, span.clone());

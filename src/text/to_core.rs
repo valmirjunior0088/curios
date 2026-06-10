@@ -8,7 +8,7 @@ mod interface;
 
 use {
     super::*,
-    crate::core,
+    crate::{Entropy, core},
     std::{
         collections::{BTreeMap, HashMap, HashSet},
         rc::Rc,
@@ -604,8 +604,8 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
 
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
-    let metavars = std::cell::Cell::new(0);
-    let binders = std::cell::Cell::new(0);
+    let metavars = Entropy::<usize>::new();
+    let binders = Entropy::<usize>::new();
     let mut context = Context::new(&table, &public, &metavars, &binders);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
@@ -649,7 +649,7 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
     Ok(core::Module {
         items,
         inductives,
-        metavars: metavars.get(),
+        metavars: metavars.count(),
         type_,
         body: tail,
     })

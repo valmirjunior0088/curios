@@ -1,10 +1,9 @@
 use {
     super::{
-        Backpatch, Cont, ContMany, Emit, Entropy, Frame, FrameEntropy, RecBody, RegionBuilder,
-        free_names, lower_pure_prim, lower_value_prim, rec_computed_order,
-        unsupported_sync_rec_item,
+        Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, RecBody, RegionBuilder, free_names,
+        lower_pure_prim, lower_value_prim, rec_computed_order, unsupported_sync_rec_item,
     },
-    crate::{cont, ersd},
+    crate::{Entropy, cont, ersd},
     std::collections::{BTreeMap, HashMap},
 };
 

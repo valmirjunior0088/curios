@@ -1,9 +1,9 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
-    crate::{cont, wasm},
+    crate::{Entropy, cont, wasm},
     std::{
         collections::{BTreeMap, HashMap},
-        iter, mem,
+        iter,
     },
 };
 
@@ -19,14 +19,14 @@ pub enum Context<'a, 'b> {
     Clsr {
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
-        entropy: usize,
+        entropy: Entropy,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
         frames: Vec<Frame<'a>>,
     },
     Func {
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
-        entropy: usize,
+        entropy: Entropy,
         locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
         frames: Vec<Frame<'a>>,
     },
@@ -57,7 +57,7 @@ impl<'a, 'b> Context<'a, 'b> {
         Self::Clsr {
             table,
             data,
-            entropy: 0,
+            entropy: Entropy::<usize>::new(),
             locals,
             frames: Vec::new(),
         }
@@ -71,7 +71,7 @@ impl<'a, 'b> Context<'a, 'b> {
         Self::Func {
             table,
             data,
-            entropy: 0,
+            entropy: Entropy::<usize>::new(),
             locals,
             frames: Vec::new(),
         }
@@ -123,7 +123,7 @@ impl<'a, 'b> Context<'a, 'b> {
             | Self::Func {
                 entropy, locals, ..
             } => {
-                let entropy = mem::replace(entropy, *entropy + 1);
+                let entropy = entropy.fresh();
                 let local_name = if string.is_empty() {
                     wasm::LocalName::from(format!("{entropy}"))
                 } else {

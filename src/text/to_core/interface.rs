@@ -1,6 +1,9 @@
 use {
     super::ModuleInfo,
-    crate::text::{Entrypoint, Error, GroupItem, Module, Name, Qualifier, TopItem, UseGroup},
+    crate::{
+        Entropy,
+        text::{Entrypoint, Error, GroupItem, Module, Name, Qualifier, TopItem, UseGroup},
+    },
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
@@ -65,7 +68,7 @@ pub fn resolve(
 ) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
     let mut public = HashMap::new();
     let mut pub_uses = Vec::new();
-    let mut counter = 0;
+    let counter = Entropy::<usize>::new();
 
     seed(
         &entrypoint.module.items,
@@ -74,7 +77,7 @@ pub fn resolve(
         table,
         &mut public,
         &mut pub_uses,
-        &mut counter,
+        &counter,
     )?;
 
     fixed_point(&mut public, table, &pub_uses)?;
@@ -95,7 +98,7 @@ fn seed(
     table: &mut HashMap<Qualifier, ModuleInfo>,
     public: &mut HashMap<Qualifier, PublicInterface>,
     pub_uses: &mut Vec<PubUse>,
-    counter: &mut usize,
+    counter: &Entropy,
 ) -> Result<(), Error> {
     let mut interface = PublicInterface::new();
     let info = table
@@ -131,11 +134,10 @@ fn seed(
             TopItem::Use(use_item) if use_item.is_pub => {
                 pub_uses.push(PubUse {
                     module: prefix.clone(),
-                    id: *counter,
+                    id: counter.fresh(),
                     name: use_item.name.clone(),
                     group: use_item.group.clone(),
                 });
-                *counter += 1;
             }
             TopItem::Union(unions) => {
                 for union in unions {

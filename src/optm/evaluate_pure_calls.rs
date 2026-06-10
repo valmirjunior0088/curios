@@ -22,6 +22,7 @@
 
 use {
     super::*,
+    crate::Entropy,
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
@@ -575,11 +576,7 @@ fn lits_from_frame(frame: &Frame) -> Lits {
     // record a corresponding scalar/Bin entry; non-scalar elements are left out
     // and `simplify` will bail when it can't find them, which is the right
     // semantics (a folded `TplGet` over a tuple of non-literals stays unfolded).
-    let mut synth = 0usize;
-    let mut fresh = |frame_name: &ValueName, idx: usize| -> ValueName {
-        synth += 1;
-        ValueName::from(format!("{frame_name}@elt{idx}#{synth}"))
-    };
+    let synth = Entropy::<usize>::new();
     for (name, snap) in frame {
         match snap {
             Snapshot::Nat(n) => {
@@ -599,7 +596,7 @@ fn lits_from_frame(frame: &Frame) -> Lits {
                     .iter()
                     .enumerate()
                     .map(|(i, elem)| {
-                        let elem_name = fresh(name, i);
+                        let elem_name = ValueName::from(format!("{name}@elt{i}#{}", synth.fresh()));
                         if let Some(d) = scalar_data(elem) {
                             lits.insert(elem_name.clone(), d);
                         }
@@ -613,7 +610,7 @@ fn lits_from_frame(frame: &Frame) -> Lits {
                     .iter()
                     .enumerate()
                     .map(|(i, elem)| {
-                        let elem_name = fresh(name, i);
+                        let elem_name = ValueName::from(format!("{name}@elt{i}#{}", synth.fresh()));
                         if let Some(d) = scalar_data(elem) {
                             lits.insert(elem_name.clone(), d);
                         }
@@ -737,9 +734,9 @@ fn try_evaluate_tail(region: &Region, ctx: &Ctx<'_>) -> Option<Rewrite> {
     // Materialise the result snapshot. Fresh names use a per-rewrite counter
     // suffixed `@eval#N` so they can't collide with the host region's `vN`.
     let mut new_values: Vec<(ValueName, Value)> = Vec::new();
-    let mut counter = 0usize;
+    let counter = Entropy::<usize>::new();
     let mut visited: HashMap<*const (), ValueName> = HashMap::new();
-    let top = materialise_snapshot(&snap, &mut counter, &mut new_values, &mut visited)?;
+    let top = materialise_snapshot(&snap, &counter, &mut new_values, &mut visited)?;
 
     Some(Rewrite {
         new_values,
@@ -764,7 +761,7 @@ fn collect_literal_args(params: &[ValueName], lits: &Lits) -> Option<Vec<Data>> 
 /// finite IR representation exists, so the rewrite is discarded.
 fn materialise_snapshot(
     snap: &Snapshot,
-    counter: &mut usize,
+    counter: &Entropy,
     out: &mut Vec<(ValueName, Value)>,
     visited: &mut HashMap<*const (), ValueName>,
 ) -> Option<ValueName> {
@@ -815,8 +812,7 @@ fn materialise_snapshot(
         }
     };
 
-    let name = ValueName::from(format!("v@eval#{counter}"));
-    *counter += 1;
+    let name = ValueName::from(format!("v@eval#{}", counter.fresh()));
     out.push((name.clone(), Value::Pure(data)));
     Some(name)
 }

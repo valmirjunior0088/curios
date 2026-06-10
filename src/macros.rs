@@ -29,6 +29,16 @@ macro_rules! name {
             }
         }
     };
+
+    ($name:ident, $prefix:literal) => {
+        name!($name);
+
+        impl crate::Mint for $name {
+            fn mint(entropy: usize) -> Self {
+                Self::from(format!(concat!($prefix, "{}"), entropy))
+            }
+        }
+    };
 }
 
 pub(super) use name;
