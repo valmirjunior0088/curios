@@ -154,6 +154,19 @@ fn dce_module(module: &mut Module) {
         .map(|(name, data)| (name.clone(), data.clone()))
         .collect();
 
+    // Index funcs and clsrs by name so each worklist item is one hash lookup
+    // instead of a linear scan of the module.
+    let funcs = module
+        .funcs()
+        .iter()
+        .map(|(n, f)| (n, f))
+        .collect::<HashMap<_, _>>();
+    let clsrs = module
+        .clsrs()
+        .iter()
+        .map(|(n, c)| (n, c))
+        .collect::<HashMap<_, _>>();
+
     let mut keep_funcs: HashSet<FuncName> = HashSet::new();
     let mut keep_clsrs: HashSet<ClsrName> = HashSet::new();
     let mut used_values: HashSet<ValueName> = HashSet::new();
@@ -165,17 +178,13 @@ fn dce_module(module: &mut Module) {
 
     loop {
         let refs = if let Some(name) = work_funcs.pop() {
-            module
-                .funcs()
-                .iter()
-                .find(|(n, _)| *n == name)
-                .map(|(_, func)| harvest::region_refs(&func.region))
+            funcs
+                .get(&name)
+                .map(|func| harvest::region_refs(&func.region))
         } else if let Some(name) = work_clsrs.pop() {
-            module
-                .clsrs()
-                .iter()
-                .find(|(n, _)| *n == name)
-                .map(|(_, clsr)| harvest::region_refs(&clsr.region))
+            clsrs
+                .get(&name)
+                .map(|clsr| harvest::region_refs(&clsr.region))
         } else if let Some(name) = work_consts.pop() {
             consts.get(&name).map(harvest::data_refs)
         } else {

@@ -75,8 +75,9 @@ pub fn inline_calls(module: &mut Module) {
     let mut counter: HashMap<FuncName, usize> = HashMap::new();
     loop {
         let counts = direct_call_counts(module);
+        let graph = call_graph(module);
 
-        let Some((callee_name, tier)) = pick_callee(module, &counts) else {
+        let Some((callee_name, tier)) = pick_callee(module, &counts, &graph) else {
             return;
         };
 
@@ -159,13 +160,17 @@ impl Sink for Counts {
 /// cycle) so the cheaper, history-preserving path always wins when applicable.
 /// The entrypoint is never picked: it is the host's entry contract, and both
 /// tiers delete the callee after splicing.
-fn pick_callee(module: &Module, counts: &HashMap<FuncName, usize>) -> Option<(FuncName, Tier)> {
+fn pick_callee(
+    module: &Module,
+    counts: &HashMap<FuncName, usize>,
+    graph: &CallGraph,
+) -> Option<(FuncName, Tier)> {
     let entry = module.entry();
 
     if let Some((name, _)) = module.funcs().iter().find(|(name, _)| {
         Some(name) != entry
             && counts.get(name) == Some(&1)
-            && !is_in_direct_call_cycle(name, module)
+            && !is_in_direct_call_cycle(name, graph)
     }) {
         return Some((name.clone(), Tier::Single));
     }
@@ -177,7 +182,7 @@ fn pick_callee(module: &Module, counts: &HashMap<FuncName, usize>) -> Option<(Fu
             Some(name) != entry
                 && counts.get(name).copied().unwrap_or(0) >= 1
                 && body_size(func) <= SIZE_THRESHOLD
-                && !is_in_direct_call_cycle(name, module)
+                && !is_in_direct_call_cycle(name, graph)
         })
         .map(|(name, _)| (name.clone(), Tier::Multi))
 }
@@ -199,29 +204,39 @@ fn body_size(func: &Func) -> usize {
     region_size(&func.region)
 }
 
+/// The direct-call graph over `Func`s: each function's `Tail::Call(Direct)`
+/// targets, harvested once per `inline_calls` iteration so cycle checks walk
+/// hash sets instead of re-harvesting region trees per candidate.
+type CallGraph = HashMap<FuncName, HashSet<FuncName>>;
+
+fn call_graph(module: &Module) -> CallGraph {
+    module
+        .funcs()
+        .iter()
+        .map(|(name, func)| (name.clone(), harvest::region_refs(&func.region).funcs))
+        .collect()
+}
+
 /// Whether `start` sits in a non-trivial SCC of the direct-call graph (or has a
 /// self-loop). Nodes are `Func`s only; edges are `Tail::Call(Direct)` targets
 /// in a func's region tree. Closures (called indirectly) are not nodes, so
 /// cycles routed through a closure do not exclude a callee — only direct-call
 /// cycles do.
-fn is_in_direct_call_cycle(start: &FuncName, module: &Module) -> bool {
-    let Some(start_func) = find_func(module, start) else {
+fn is_in_direct_call_cycle(start: &FuncName, graph: &CallGraph) -> bool {
+    let Some(edges) = graph.get(start) else {
         return false;
     };
-    let mut visited: HashSet<FuncName> = HashSet::new();
-    let mut stack: Vec<FuncName> = harvest::region_refs(&start_func.region)
-        .funcs
-        .into_iter()
-        .collect();
+    let mut visited = HashSet::<&FuncName>::new();
+    let mut stack = edges.iter().collect::<Vec<_>>();
     while let Some(name) = stack.pop() {
-        if &name == start {
+        if name == start {
             return true;
         }
-        if !visited.insert(name.clone()) {
+        if !visited.insert(name) {
             continue;
         }
-        if let Some(func) = find_func(module, &name) {
-            stack.extend(harvest::region_refs(&func.region).funcs);
+        if let Some(next) = graph.get(name) {
+            stack.extend(next.iter());
         }
     }
     false

@@ -736,8 +736,8 @@ fn try_evaluate_tail(region: &Region, ctx: &Ctx<'_>, counter: &Entropy) -> Optio
     // Materialise the result snapshot. Fresh names use the pass-wide counter
     // suffixed `@eval#N`: the suffix keeps them clear of the host region's `vN`,
     // and the shared counter keeps two rewrites in one body from colliding.
-    let mut new_values: Vec<(ValueName, Value)> = Vec::new();
-    let mut visited: HashSet<*const ()> = HashSet::new();
+    let mut new_values = Vec::<(ValueName, Value)>::new();
+    let mut visited = HashSet::<*const ()>::new();
     let top = materialise_snapshot(&snap, counter, &mut new_values, &mut visited)?;
 
     Some(Rewrite {
