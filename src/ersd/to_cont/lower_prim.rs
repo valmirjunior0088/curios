@@ -330,6 +330,9 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::FltToStr(operand) => {
             lower_pure_unary_code(work, operand, frame, cont::Code::FltToStr)
         }
+        ersd::PurePrim::FltToLeBin(operand) => {
+            lower_pure_unary_code(work, operand, frame, cont::Code::FltToLeBin)
+        }
         ersd::PurePrim::NatToInt(operand) => {
             lower_pure_unary_code(work, operand, frame, cont::Code::NatToInt)
         }
@@ -581,6 +584,9 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::FltToStr(operand) => {
             lower_unary_code(work, operand, frame, cont, cont::Code::FltToStr)
+        }
+        ersd::PurePrim::FltToLeBin(operand) => {
+            lower_unary_code(work, operand, frame, cont, cont::Code::FltToLeBin)
         }
         ersd::PurePrim::NatToInt(operand) => {
             lower_unary_code(work, operand, frame, cont, cont::Code::NatToInt)

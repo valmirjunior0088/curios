@@ -581,6 +581,7 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 | `/sys/Flt/nearest(a)` | 1     | Round to nearest      | `/sys/Flt` |
 | `/sys/Flt/to_nat(a)`  | 1     | Convert to Nat        | `/sys/Nat` |
 | `/sys/Flt/to_int(a)`  | 1     | Convert to Int        | `/sys/Int` |
+| `/sys/Flt/to_le_bin(a)` | 1   | Convert to Bin bytes   | `/sys/Bin` |
 | `/sys/Flt/to_str(a)`  | 1     | Convert to Bin        | `/sys/Bin` |
 
 ### Bin

@@ -82,8 +82,14 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         move |value| super::host::int_to_str(value)
     })?;
 
-    define_import(&mut linker, "flt_to_str", f32_to_bin_type, {
+    define_import(&mut linker, "flt_to_str", f32_to_bin_type.clone(), {
         move |value| super::host::flt_to_str(value)
+    })?;
+
+    define_import(&mut linker, "flt_to_le_bin", f32_to_bin_type, {
+        let host = host.clone();
+
+        move |value| host.flt_to_le_bin(value)
     })?;
 
     define_import(&mut linker, "io_read", unit_to_bin_type, {

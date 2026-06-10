@@ -255,6 +255,11 @@ pub fn erase_prim(
             inner,
             &flt_type(),
         )?))),
+        Prim::FltToLeBin(inner) => Ok(pure(ersd::PurePrim::FltToLeBin(erase(
+            context,
+            inner,
+            &flt_type(),
+        )?))),
         Prim::NatToInt(inner) => Ok(pure(ersd::PurePrim::NatToInt(erase(
             context,
             inner,

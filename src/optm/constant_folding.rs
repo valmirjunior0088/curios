@@ -343,6 +343,21 @@ mod tests {
     }
 
     #[test]
+    fn folds_flt_to_le_bin() {
+        let data = folded(
+            vec![
+                (v("a"), Value::Pure(Data::Flt(1.5))),
+                (v("b"), Value::Eval(Code::FltToLeBin(v("a")))),
+            ],
+            "b",
+        );
+        match data {
+            Data::Bin(bytes) => assert_eq!(bytes, 1.5f32.to_le_bytes().to_vec()),
+            other => panic!("expected bin, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn folds_bin_concat() {
         let data = folded(
             vec![

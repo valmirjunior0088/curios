@@ -54,6 +54,7 @@ pub enum PurePrim {
     IntToNat(Term),
     IntToFlt(Term),
     FltToNat(Term),
+    FltToLeBin(Term),
     FltToInt(Term),
     Bin(Vec<u8>),
     BinLen(Term),

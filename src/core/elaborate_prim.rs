@@ -162,6 +162,10 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
             (Prim::FltToStr(inner), bin_type)
         }
+        Prim::FltToLeBin(inner) => {
+            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
+            (Prim::FltToLeBin(inner), bin_type)
+        }
         Prim::NatToInt(inner) => {
             let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
             (Prim::NatToInt(inner), int_type)

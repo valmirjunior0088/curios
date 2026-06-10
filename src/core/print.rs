@@ -329,6 +329,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::FltTrunc(inner) => flat([pure("Flt.trunc "), print_term(inner, depth)]),
         Prim::FltNearest(inner) => flat([pure("Flt.nearest "), print_term(inner, depth)]),
         Prim::FltToStr(inner) => flat([pure("Flt.to_str "), print_term(inner, depth)]),
+        Prim::FltToLeBin(inner) => flat([pure("Flt.to_le_bin "), print_term(inner, depth)]),
         Prim::NatToInt(inner) => flat([pure("Nat.to_int "), print_term(inner, depth)]),
         Prim::NatToFlt(inner) => flat([pure("Nat.to_flt "), print_term(inner, depth)]),
         Prim::IntToNat(inner) => flat([pure("Int.to_nat "), print_term(inner, depth)]),

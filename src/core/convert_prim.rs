@@ -90,6 +90,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::NatToStr(this), Prim::NatToStr(that))
         | (Prim::IntToStr(this), Prim::IntToStr(that))
         | (Prim::FltToStr(this), Prim::FltToStr(that))
+        | (Prim::FltToLeBin(this), Prim::FltToLeBin(that))
         | (Prim::NatToInt(this), Prim::NatToInt(that))
         | (Prim::NatToFlt(this), Prim::NatToFlt(that))
         | (Prim::IntToNat(this), Prim::IntToNat(that))

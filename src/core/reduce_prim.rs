@@ -448,6 +448,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |v| Prim::Bin(format!("{v}").into_bytes()),
             Prim::FltToStr,
         ),
+        Prim::FltToLeBin(inner) => reduce_flt_unary(
+            context,
+            inner,
+            |v| Prim::Bin(v.to_f32().to_le_bytes().to_vec()),
+            Prim::FltToLeBin,
+        ),
         Prim::NatToInt(inner) => reduce_nat_unary(
             context,
             inner,

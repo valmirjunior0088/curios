@@ -207,6 +207,7 @@ pub struct Table<'a> {
     nat_to_str: OnceCell<wasm::FuncName>,
     int_to_str: OnceCell<wasm::FuncName>,
     flt_to_str: OnceCell<wasm::FuncName>,
+    flt_to_le_bin: OnceCell<wasm::FuncName>,
     io_print: OnceCell<wasm::FuncName>,
     io_read: OnceCell<wasm::FuncName>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
@@ -230,6 +231,7 @@ impl<'a> Table<'a> {
             nat_to_str: OnceCell::new(),
             int_to_str: OnceCell::new(),
             flt_to_str: OnceCell::new(),
+            flt_to_le_bin: OnceCell::new(),
             io_print: OnceCell::new(),
             io_read: OnceCell::new(),
             tpl_types: {
@@ -350,6 +352,11 @@ impl<'a> Table<'a> {
             .get_or_init(|| wasm::FuncName::from("flt_to_str"))
     }
 
+    pub fn flt_to_le_bin_func(&self) -> &wasm::FuncName {
+        self.flt_to_le_bin
+            .get_or_init(|| wasm::FuncName::from("flt_to_le_bin"))
+    }
+
     pub fn nat_to_str_used(&self) -> bool {
         self.nat_to_str.get().is_some()
     }
@@ -360,6 +367,10 @@ impl<'a> Table<'a> {
 
     pub fn flt_to_str_used(&self) -> bool {
         self.flt_to_str.get().is_some()
+    }
+
+    pub fn flt_to_le_bin_used(&self) -> bool {
+        self.flt_to_le_bin.get().is_some()
     }
 
     pub fn io_print_func(&self) -> &wasm::FuncName {

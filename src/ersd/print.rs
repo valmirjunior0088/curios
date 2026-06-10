@@ -81,6 +81,7 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
         PurePrim::FltTrunc(t) => flat([pure("Flt.trunc "), print_term(t)]),
         PurePrim::FltNearest(t) => flat([pure("Flt.nearest "), print_term(t)]),
         PurePrim::FltToStr(t) => flat([pure("Flt.to_str "), print_term(t)]),
+        PurePrim::FltToLeBin(t) => flat([pure("Flt.to_le_bin "), print_term(t)]),
         PurePrim::NatToInt(t) => flat([pure("Nat.to_int "), print_term(t)]),
         PurePrim::NatToFlt(t) => flat([pure("Nat.to_flt "), print_term(t)]),
         PurePrim::IntToNat(t) => flat([pure("Int.to_nat "), print_term(t)]),

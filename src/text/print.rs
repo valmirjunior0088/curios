@@ -168,6 +168,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltTrunc(operand) => print_prim_call("Flt.trunc", vec![operand]),
         Prim::FltNearest(operand) => print_prim_call("Flt.nearest", vec![operand]),
         Prim::FltToStr(operand) => print_prim_call("Flt.to_str", vec![operand]),
+        Prim::FltToLeBin(operand) => print_prim_call("Flt.to_le_bin", vec![operand]),
         Prim::NatToInt(operand) => print_prim_call("Nat.to_int", vec![operand]),
         Prim::NatToFlt(operand) => print_prim_call("Nat.to_flt", vec![operand]),
         Prim::IntToNat(operand) => print_prim_call("Int.to_nat", vec![operand]),

@@ -59,6 +59,7 @@ pub enum Prim {
     IntToNat(Term),
     IntToFlt(Term),
     FltToNat(Term),
+    FltToLeBin(Term),
     FltToInt(Term),
     BinType,
     Bin(Vec<u8>),
@@ -462,6 +463,13 @@ impl Prim {
         T: Into<Term>,
     {
         Self::FltToStr(inner.into())
+    }
+
+    pub fn flt_to_le_bin<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::FltToLeBin(inner.into())
     }
 
     pub fn bin_len<B>(bin: B) -> Self

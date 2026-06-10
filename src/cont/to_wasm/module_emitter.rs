@@ -88,7 +88,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     super_types: vec![],
                     comp_type: wasm::CompType::Func(wasm::FuncType {
                         inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::F32)]),
-                        outputs: wasm::ResultType::from([bin_ref]),
+                        outputs: wasm::ResultType::from([bin_ref.clone()]),
                     }),
                 },
             );
@@ -98,6 +98,29 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 wasm::Import::Func {
                     func_name: self.table.flt_to_str_func().clone(),
                     type_name: flt_to_str_type,
+                },
+            );
+        }
+
+        if self.table.flt_to_le_bin_used() {
+            let flt_to_le_bin_type = wasm::TypeName::from("flt_to_le_bin_type");
+            self.module.add_type(
+                flt_to_le_bin_type.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::F32)]),
+                        outputs: wasm::ResultType::from([bin_ref]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "flt_to_le_bin",
+                wasm::Import::Func {
+                    func_name: self.table.flt_to_le_bin_func().clone(),
+                    type_name: flt_to_le_bin_type,
                 },
             );
         }

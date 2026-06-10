@@ -112,8 +112,9 @@ fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
     let operands: Vec<&ersd::Term> = match prim {
         Nat(_) | Int(_) | Flt(_) | Bin(_) | Unit => vec![],
         NatToStr(a) | IntToStr(a) | FltToStr(a) | NatToInt(a) | NatToFlt(a) | IntToNat(a)
-        | IntToFlt(a) | FltToNat(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a)
-        | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => {
+        | IntToFlt(a) | FltToNat(a) | FltToLeBin(a) | FltToInt(a) | FltNeg(a) | FltAbs(a)
+        | FltSqrt(a) | FltFloor(a) | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a)
+        | ArrLen(a) => {
             vec![a]
         }
         NatEql(a, b)

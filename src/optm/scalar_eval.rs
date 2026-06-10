@@ -292,6 +292,7 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
         NatToStr(a) => Some(Scalar::Bin(format!("{}", env.nat(a)?).into_bytes())),
         IntToStr(a) => Some(Scalar::Bin(format!("{:+}", env.int(a)?).into_bytes())),
         FltToStr(a) => Some(Scalar::Bin(format!("{:+}", env.flt(a)?).into_bytes())),
+        FltToLeBin(a) => Some(Scalar::Bin(env.flt(a)?.to_le_bytes().to_vec())),
 
         // Bytewise equality — total whenever both operands are known.
         BinEql(a, b) => Some(Scalar::bln(env.bin(a)? == env.bin(b)?)),

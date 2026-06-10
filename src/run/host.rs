@@ -26,6 +26,8 @@ pub trait Host {
     fn read(&self) -> Vec<u8>;
 
     fn print(&self, bytes: &[u8]);
+
+    fn flt_to_le_bin(&self, value: f32) -> Vec<u8>;
 }
 
 pub struct StdioHost;
@@ -43,6 +45,10 @@ impl Host for StdioHost {
 
     fn print(&self, bytes: &[u8]) {
         stdout().write_all(bytes).unwrap();
+    }
+
+    fn flt_to_le_bin(&self, value: f32) -> Vec<u8> {
+        value.to_le_bytes().to_vec()
     }
 }
 
@@ -92,5 +98,9 @@ impl Host for ChannelHost {
             .unwrap()
             .send(bytes.to_owned())
             .unwrap();
+    }
+
+    fn flt_to_le_bin(&self, value: f32) -> Vec<u8> {
+        value.to_le_bytes().to_vec()
     }
 }

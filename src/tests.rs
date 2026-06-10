@@ -28,6 +28,20 @@ fn end_to_end() {
 }
 
 #[test]
+fn flt_to_le_bin_prints_raw_bytes() {
+    let source = r#"
+        sys/Io/print(sys/Flt/to_le_bin(+1.5))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![1.5f32.to_le_bytes().to_vec()]
+    );
+}
+
+#[test]
 fn io_print() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), r#"sys/Io/print("hello")"#, system)

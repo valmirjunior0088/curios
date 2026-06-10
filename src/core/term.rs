@@ -1101,6 +1101,7 @@ fn prim_reach(prim: &Prim) -> usize {
         Prim::NatToStr(t)
         | Prim::IntToStr(t)
         | Prim::FltToStr(t)
+        | Prim::FltToLeBin(t)
         | Prim::NatToInt(t)
         | Prim::NatToFlt(t)
         | Prim::IntToNat(t)
@@ -1187,6 +1188,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         Prim::NatToStr(t)
         | Prim::IntToStr(t)
         | Prim::FltToStr(t)
+        | Prim::FltToLeBin(t)
         | Prim::NatToInt(t)
         | Prim::NatToFlt(t)
         | Prim::IntToNat(t)
@@ -1397,6 +1399,7 @@ where
         Prim::NatToStr(inner) => Prim::NatToStr(visit.visit_subterm(inner)),
         Prim::IntToStr(inner) => Prim::IntToStr(visit.visit_subterm(inner)),
         Prim::FltToStr(inner) => Prim::FltToStr(visit.visit_subterm(inner)),
+        Prim::FltToLeBin(inner) => Prim::FltToLeBin(visit.visit_subterm(inner)),
         Prim::NatToInt(inner) => Prim::NatToInt(visit.visit_subterm(inner)),
         Prim::NatToFlt(inner) => Prim::NatToFlt(visit.visit_subterm(inner)),
         Prim::IntToNat(inner) => Prim::IntToNat(visit.visit_subterm(inner)),

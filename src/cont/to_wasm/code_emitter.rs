@@ -896,6 +896,15 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
+            cont::Code::FltToLeBin(operand) => {
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::Call {
+                    func_name: self.context.table().flt_to_le_bin_func().clone(),
+                });
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::FltToNat(operand) => {
                 let local_name = self
                     .context
