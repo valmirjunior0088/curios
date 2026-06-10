@@ -1,10 +1,7 @@
 use {
     super::{Name, Plicity, Prim},
     crate::Span,
-    std::{
-        collections::BTreeMap,
-        ops::Deref,
-    },
+    std::{collections::BTreeMap, ops::Deref},
 };
 
 #[derive(Debug, Clone)]

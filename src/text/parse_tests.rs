@@ -12,7 +12,11 @@ fn parse_rec_func_and_apply() {
                 signature: LetSignature::Name {
                     type_: Some(
                         Subterm::FuncType(FuncType {
-                            params: vec![(Plicity::Explicit, Some("x".to_string()), Subterm::Type.into())],
+                            params: vec![(
+                                Plicity::Explicit,
+                                Some("x".to_string()),
+                                Subterm::Type.into()
+                            )],
                             output: Subterm::Type.into(),
                         })
                         .into(),
@@ -26,7 +30,10 @@ fn parse_rec_func_and_apply() {
             }],
             tail: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["id".to_string()])).into(),
-                params: vec![(Plicity::Explicit, Subterm::Name(Name::from(["a".to_string()])).into())],
+                params: vec![(
+                    Plicity::Explicit,
+                    Subterm::Name(Name::from(["a".to_string()])).into()
+                )],
             })
             .into(),
         })
@@ -167,7 +174,11 @@ fn parse_top_rec_mixed_pub() {
                 signature: LetSignature::Name {
                     type_: Some(
                         Subterm::FuncType(FuncType {
-                            params: vec![(Plicity::Explicit, Some("x".to_string()), Subterm::Type.into())],
+                            params: vec![(
+                                Plicity::Explicit,
+                                Some("x".to_string()),
+                                Subterm::Type.into()
+                            )],
                             output: Subterm::Type.into(),
                         })
                         .into(),
@@ -500,7 +511,9 @@ fn parse_implicit_marks_on_binders_and_arguments() {
 
 #[test]
 fn parse_implicit_marks_on_let_shorthand_and_union_params() {
-    let m = "let foo(@T : Type, x : T) -> T = x;".parse::<Module>().unwrap();
+    let m = "let foo(@T : Type, x : T) -> T = x;"
+        .parse::<Module>()
+        .unwrap();
     match &m.items[0] {
         TopItem::Let(TopLet {
             signature: LetSignature::Func { params, .. },

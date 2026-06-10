@@ -1080,9 +1080,8 @@ mod tests {
     #[test]
     fn prune_keeps_reachable_library_and_transitive_deps() {
         // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
-        let names = core_item_names(
-            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, \"1\")",
-        );
+        let names =
+            core_item_names("use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, \"1\")");
 
         assert!(
             names.iter().any(|name| name.starts_with("std/Json")),

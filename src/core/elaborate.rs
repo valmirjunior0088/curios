@@ -1,10 +1,10 @@
 use {
     super::{
-        Apply, Atom, Cases, Match, Context, Definition, Error, Func, FuncType, ImplicitOrigin,
-        Inductive, Invert, Item, Let, Many, Metavar, Module, MotivePattern, MotiveSlot, Nat,
-        Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        Variant, UnionType, Var, case_target_indices, check_motive, convert_with, elaborate_prim,
-        expect, invert_indices, reduce_with, refine_head,
+        Apply, Atom, Cases, Context, Definition, Error, Func, FuncType, ImplicitOrigin, Inductive,
+        Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Plicity,
+        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, UnionType, Var,
+        Variant, case_target_indices, check_motive, convert_with, elaborate_prim, expect,
+        invert_indices, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -109,11 +109,8 @@ fn elaborate_apply(
             other => return Err(Error::not_a_function(term.clone(), other.clone())),
         };
 
-        let all_implicit = !ft.plicities.is_empty()
-            && ft
-                .plicities
-                .iter()
-                .all(|p| matches!(p, Plicity::Implicit));
+        let all_implicit =
+            !ft.plicities.is_empty() && ft.plicities.iter().all(|p| matches!(p, Plicity::Implicit));
         if !all_implicit || plain.is_empty() {
             break ft;
         }
@@ -827,10 +824,7 @@ fn elaborate_union_match(
             match invert_indices(context, &actual_indices, &ix_c, &labels)? {
                 Invert::Impossible => continue,
                 Invert::Solved(_) => {
-                    return Err(Error::missing_arm_not_impossible(
-                        term.clone(),
-                        tag.clone(),
-                    ));
+                    return Err(Error::missing_arm_not_impossible(term.clone(), tag.clone()));
                 }
             }
         };
@@ -891,8 +885,7 @@ fn elaborate_union_match(
             // Refinement propagates `head := ctor_val` to other occurrences of
             // the scrutinee in the arm body; the binder types themselves came
             // from the telescope above.
-            let ctor_val =
-                Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
+            let ctor_val = Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
             refine_head(context, head, &ctor_val);
 
             // Rung B — definitional learning: a scrutinee index that is a
@@ -1042,10 +1035,7 @@ fn check_union_motive(
             // An index slot states nothing — it binds. Constraining an index
             // is the declaration's job (case targets), not the motive's.
             (MotiveSlot::Term(t), false) => {
-                return Err(Error::motive_index_slot_not_binder(
-                    term.clone(),
-                    t.clone(),
-                ));
+                return Err(Error::motive_index_slot_not_binder(term.clone(), t.clone()));
             }
         }
     }
@@ -1086,9 +1076,7 @@ fn check_union_motive(
                 // defined, not assumed, so the motive body's uses of it are
                 // convertible with the index types (which are instantiated at
                 // the actual parameters directly).
-                SlotPlan::Param(i) => {
-                    context.define_assuming(label, &param_types[*i], &params[*i])
-                }
+                SlotPlan::Param(i) => context.define_assuming(label, &param_types[*i], &params[*i]),
                 SlotPlan::Index(_) => {
                     ix_telescope = match ix_telescope {
                         Telescope::Cons(ty, rest) => {
@@ -1115,12 +1103,7 @@ fn check_union_motive(
             .map(|label| Term::var(Var::free(label)))
             .collect::<Vec<_>>();
         let var_refs = var_terms.iter().collect::<Vec<_>>();
-        let body = elaborate(
-            context,
-            &motive.open(&var_refs),
-            Mode::Check(Term::type_()),
-        )?
-        .0;
+        let body = elaborate(context, &motive.open(&var_refs), Mode::Check(Term::type_()))?.0;
 
         let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         Ok(Scope::close(Many(labels.len()), &label_strs, body))

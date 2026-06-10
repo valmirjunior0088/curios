@@ -262,10 +262,7 @@ fn reduce_lst_append_adds_element() {
 fn reduce_proj_beta_reduces() {
     let mut context = context();
 
-    let term: Term = Term::proj(
-        Term::tuple([nat(1), nat(2)]),
-        1,
-    );
+    let term: Term = Term::proj(Term::tuple([nat(1), nat(2)]), 1);
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(2)));
 }

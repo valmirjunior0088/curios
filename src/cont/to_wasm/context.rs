@@ -327,33 +327,7 @@ impl<'a, 'b> Context<'a, 'b> {
             output.push(wasm::Instr::Return);
         } else {
             let block_data = self.find_block(&target.target);
-
-            if target.params.len() != block_data.params.len() {
-                panic!(
-                    "block `{}` expects {} params, got {}",
-                    target.target,
-                    block_data.params.len(),
-                    target.params.len(),
-                );
-            }
-
-            for (_, local_data) in block_data.params.iter().rev() {
-                output.push(wasm::Instr::LocalSet {
-                    local_name: local_data.local_name.clone(),
-                });
-            }
-
-            output.push(wasm::Instr::I32Const {
-                value: block_data.index as i32,
-            });
-
-            output.push(wasm::Instr::LocalSet {
-                local_name: block_data.dispatcher_local.clone(),
-            });
-
-            output.push(wasm::Instr::Br {
-                label_name: block_data.dispatcher_label.clone(),
-            });
+            output.extend(block_data.enter(target.params.len()));
         }
 
         output
@@ -510,34 +484,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 func_name: self.table().find_func(target).func_name(),
             });
 
-            let block_data = self.find_block(resume);
-
-            if block_data.params.len() != 1 {
-                panic!(
-                    "block `{}` expects {} params, got {}",
-                    resume,
-                    block_data.params.len(),
-                    1,
-                );
-            }
-
-            for (_, local_data) in block_data.params.iter().rev() {
-                output.push(wasm::Instr::LocalSet {
-                    local_name: local_data.local_name.clone(),
-                });
-            }
-
-            output.push(wasm::Instr::I32Const {
-                value: block_data.index as i32,
-            });
-
-            output.push(wasm::Instr::LocalSet {
-                local_name: block_data.dispatcher_local.clone(),
-            });
-
-            output.push(wasm::Instr::Br {
-                label_name: block_data.dispatcher_label.clone(),
-            });
+            output.extend(self.find_block(resume).enter(1));
         }
 
         output
@@ -579,33 +526,7 @@ impl<'a, 'b> Context<'a, 'b> {
             });
 
             let block_data = self.find_block(resume);
-
-            if block_data.params.len() != 1 {
-                panic!(
-                    "block `{}` expects {} params, got {}",
-                    resume,
-                    block_data.params.len(),
-                    1,
-                );
-            }
-
-            for (_, local_data) in block_data.params.iter().rev() {
-                output.push(wasm::Instr::LocalSet {
-                    local_name: local_data.local_name.clone(),
-                });
-            }
-
-            output.push(wasm::Instr::I32Const {
-                value: block_data.index as i32,
-            });
-
-            output.push(wasm::Instr::LocalSet {
-                local_name: block_data.dispatcher_local.clone(),
-            });
-
-            output.push(wasm::Instr::Br {
-                label_name: block_data.dispatcher_label.clone(),
-            });
+            output.extend(block_data.enter(1));
         }
 
         output
@@ -654,26 +575,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.push(wasm::Instr::Return);
                 } else {
                     let block_data = self.find_block(resume);
-
-                    if !block_data.params.is_empty() {
-                        panic!(
-                            "Io.print resume `{}` expects 0 params, got {}",
-                            resume,
-                            block_data.params.len(),
-                        );
-                    }
-
-                    output.push(wasm::Instr::I32Const {
-                        value: block_data.index as i32,
-                    });
-
-                    output.push(wasm::Instr::LocalSet {
-                        local_name: block_data.dispatcher_local.clone(),
-                    });
-
-                    output.push(wasm::Instr::Br {
-                        label_name: block_data.dispatcher_label.clone(),
-                    });
+                    output.extend(block_data.enter(0));
                 }
             }
             cont::HostTarget::IoRead { resume } => {
@@ -687,32 +589,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.push(wasm::Instr::Return);
                 } else {
                     let block_data = self.find_block(resume);
-
-                    if block_data.params.len() != 1 {
-                        panic!(
-                            "Io.read resume `{}` expects 1 param, got {}",
-                            resume,
-                            block_data.params.len(),
-                        );
-                    }
-
-                    for (_, local_data) in block_data.params.iter().rev() {
-                        output.push(wasm::Instr::LocalSet {
-                            local_name: local_data.local_name.clone(),
-                        });
-                    }
-
-                    output.push(wasm::Instr::I32Const {
-                        value: block_data.index as i32,
-                    });
-
-                    output.push(wasm::Instr::LocalSet {
-                        local_name: block_data.dispatcher_local.clone(),
-                    });
-
-                    output.push(wasm::Instr::Br {
-                        label_name: block_data.dispatcher_label.clone(),
-                    });
+                    output.extend(block_data.enter(1));
                 }
             }
         }
@@ -720,10 +597,10 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn flow_instrs(
+    pub fn bloink_instrs(
         &self,
-        dispatcher_local: wasm::LocalName,
-        dispatcher_label: wasm::LabelName,
+        bloink_local: wasm::LocalName,
+        bloink_label: wasm::LabelName,
         regions: Vec<(wasm::LabelName, Vec<wasm::Instr>)>,
         tail: &'a cont::Tail,
     ) -> Vec<wasm::Instr> {
@@ -731,7 +608,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
         let instructions = vec![
             wasm::Instr::LocalGet {
-                local_name: dispatcher_local.clone(),
+                local_name: bloink_local.clone(),
             },
             wasm::Instr::BrTable {
                 label_names: regions
@@ -759,10 +636,10 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![
             wasm::Instr::I32Const { value: -1 },
             wasm::Instr::LocalSet {
-                local_name: dispatcher_local,
+                local_name: bloink_local,
             },
             wasm::Instr::Loop {
-                label_name: dispatcher_label,
+                label_name: bloink_label,
                 block_type: wasm::BlockType::Empty,
                 instructions,
             },

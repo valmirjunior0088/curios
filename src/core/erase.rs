@@ -1,9 +1,8 @@
 use {
     super::{
-        Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module,
-        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term,
-        Tuple, TupleType, Two, Variant, UnionType, Var, erase_prim, expect_prim_head, infer,
-        reduce_with, refine_head,
+        Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module, MotivePattern,
+        MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        UnionType, Var, Variant, erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -561,18 +560,22 @@ fn erase_union_match(
 
                 // Bind each payload binder to its flat-record slot:
                 // `let x_i = head.(i + 1); …` (innermost-last, so fold in reverse).
-                labels.iter().enumerate().rev().try_fold(body, |tail, (i, label)| {
-                    Ok(ersd::Subterm::Let(ersd::Let {
-                        name: label.clone(),
-                        body: ersd::Subterm::Proj(ersd::Proj {
-                            head: erase(context, head, &head_type)?,
-                            index: i + 1,
+                labels
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .try_fold(body, |tail, (i, label)| {
+                        Ok(ersd::Subterm::Let(ersd::Let {
+                            name: label.clone(),
+                            body: ersd::Subterm::Proj(ersd::Proj {
+                                head: erase(context, head, &head_type)?,
+                                index: i + 1,
+                            })
+                            .into(),
+                            tail,
                         })
-                        .into(),
-                        tail,
+                        .into())
                     })
-                    .into())
-                })
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
@@ -740,10 +743,9 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::Match(m) => erase_match(context, m, term, expected),
         // Type formers all erase to a runtime unit; they carry nothing to lower
         // and were already checked by `elaborate`.
-        Subterm::Type
-        | Subterm::FuncType(_)
-        | Subterm::TupleType(_)
-        | Subterm::UnionType(_) => Ok(ersd::Subterm::Erased.into()),
+        Subterm::Type | Subterm::FuncType(_) | Subterm::TupleType(_) | Subterm::UnionType(_) => {
+            Ok(ersd::Subterm::Erased.into())
+        }
         Subterm::Variant(uc) => erase_variant(context, uc, expected),
         Subterm::Func(func) => erase_func(context, func, term, expected),
         Subterm::Apply(apply) => erase_apply(context, apply, term, expected),

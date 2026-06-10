@@ -1,8 +1,7 @@
 use {
     super::{
-        Apply, Cases, Match, Context, Func, FuncType, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, Variant, UnionType,
-        Var, convert_prim, infer, reduce,
+        Apply, Cases, Context, Func, FuncType, Match, Proj, Rec, ReduceError, Subterm, Telescope,
+        Term, Tuple, TupleType, UnionType, Var, Variant, convert_prim, infer, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -44,7 +43,9 @@ fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, Red
             };
 
             match Term::unwrap_or_clone(reduce(context, head_type)?) {
-                Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == params.len() => {
+                Subterm::FuncType(FuncType { telescope, .. })
+                    if telescope.len() == params.len() =>
+                {
                     let refs = params.iter().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
                 }
@@ -81,7 +82,9 @@ fn apply_param_types(
     };
 
     let telescope = match Term::unwrap_or_clone(reduce(context, head_type)?) {
-        Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == params.len() => telescope,
+        Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == params.len() => {
+            telescope
+        }
         _ => return Ok(None),
     };
 
@@ -340,11 +343,7 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_variant(
-        &mut self,
-        this: Variant,
-        that: Variant,
-    ) -> Result<bool, ReduceError> {
+    fn compare_variant(&mut self, this: Variant, that: Variant) -> Result<bool, ReduceError> {
         if this.name != that.name
             || this.tag != that.tag
             || this.params.len() != that.params.len()

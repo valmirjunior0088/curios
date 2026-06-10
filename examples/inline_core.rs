@@ -32,10 +32,7 @@ fn main() {
             core::Term::let_(
                 "p",
                 core::Term::var(core::Var::free("tuple_ty")),
-                core::Term::tuple([
-                    core::Term::prim(core::Prim::Bln(true)),
-                    core::Term::type_(),
-                ]),
+                core::Term::tuple([core::Term::prim(core::Prim::Bln(true)), core::Term::type_()]),
                 core::Term::let_(
                     "flag",
                     core::Term::prim(core::Prim::BlnType),

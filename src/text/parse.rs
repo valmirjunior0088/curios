@@ -1,10 +1,9 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
-        NatMatch, Plicity, Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem,
-        TopLet,
-        TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, GroupItem, Let, LetSignature,
+        LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj,
+        Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse,
+        Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
     crate::{
         Source,
@@ -375,13 +374,14 @@ fn parse_plicity<'a>() -> Parser<'a, Plicity> {
 }
 
 fn parse_func_type_param<'a>() -> Parser<'a, (Plicity, Option<String>, Term)> {
-    parse_plicity().and(
-        catch(parse_identifier().and_drop(parse_literal(":")))
-            .and(lazy(parse_term))
-            .map(|(label, ty): (&str, Term)| (Some(label.to_string()), ty))
-            .or(lazy(parse_term).map(|ty| (None, ty))),
-    )
-    .map(|(plicity, (label, ty))| (plicity, label, ty))
+    parse_plicity()
+        .and(
+            catch(parse_identifier().and_drop(parse_literal(":")))
+                .and(lazy(parse_term))
+                .map(|(label, ty): (&str, Term)| (Some(label.to_string()), ty))
+                .or(lazy(parse_term).map(|ty| (None, ty))),
+        )
+        .map(|(plicity, (label, ty))| (plicity, label, ty))
 }
 
 fn parse_paren_func_type<'a>() -> Parser<'a, Term> {

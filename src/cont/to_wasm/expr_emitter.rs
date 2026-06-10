@@ -364,29 +364,24 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     fn emit_let_blocks(
         &mut self,
-        dispatcher_local: wasm::LocalName,
-        dispatcher_label: wasm::LabelName,
+        bloink_local: wasm::LocalName,
+        bloink_label: wasm::LabelName,
         blocks: Vec<(&'a cont::BlockName, BlockData<'a>)>,
         tail: &'a cont::Tail,
     ) {
         let regions = blocks
             .iter()
             .map(|(_, block_data)| {
-                self.emit_region(
-                    block_data.params.iter().cloned().collect(),
-                    block_data.region,
-                );
+                self.emit_region(block_data.params_map(), block_data.region);
 
                 (block_data.label_name.clone(), self.context.leave_frame())
             })
             .collect();
 
-        self.emit_instrs(self.context.flow_instrs(
-            dispatcher_local,
-            dispatcher_label,
-            regions,
-            tail,
-        ));
+        self.emit_instrs(
+            self.context
+                .bloink_instrs(bloink_local, bloink_label, regions, tail),
+        );
     }
 
     fn emit_region(
@@ -407,12 +402,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             self.emit_let_values(&region.values);
             self.emit_instrs(self.context.tail_instrs(&region.tail));
         } else {
-            let dispatcher_local = self
+            let bloink_local = self
                 .context
                 .push_local("", wasm::ValType::Num(wasm::NumType::I32));
 
-            let dispatcher_label =
-                wasm::LabelName::from(format!("region${}", dispatcher_local.as_str()));
+            let bloink_label = wasm::LabelName::from(format!("region${}", bloink_local.as_str()));
 
             let blocks = region
                 .blocks
@@ -430,11 +424,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
                             (value_name, LocalData::new(local_name, true))
                         })
-                        .collect();
+                        .collect::<Vec<_>>();
 
                     let block_data = BlockData::new(
-                        dispatcher_label.clone(),
-                        dispatcher_local.clone(),
+                        bloink_label.clone(),
+                        bloink_local.clone(),
                         index,
                         block_name,
                         block_params,
@@ -445,12 +439,17 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 })
                 .collect::<Vec<_>>();
 
+            let frame_blocks = blocks
+                .iter()
+                .map(|(block_name, block_data)| (*block_name, block_data.clone()))
+                .collect::<Vec<_>>();
+
             self.context
-                .enter_frame(Frame::new(params, preallocs, blocks.clone()));
+                .enter_frame(Frame::new(params, preallocs, frame_blocks));
 
             self.emit_preallocs(&region.preallocs);
             self.emit_let_values(&region.values);
-            self.emit_let_blocks(dispatcher_local, dispatcher_label, blocks, &region.tail);
+            self.emit_let_blocks(bloink_local, bloink_label, blocks, &region.tail);
         }
     }
 

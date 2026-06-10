@@ -57,6 +57,8 @@ impl Inductive {
     /// constructors in sorted (BTreeMap key) order — the order in which a
     /// union match's lowered cases are laid out.
     pub fn tag_index(&self, tag: &Atom) -> Option<usize> {
-        self.constructors.keys().position(|candidate| candidate == tag)
+        self.constructors
+            .keys()
+            .position(|candidate| candidate == tag)
     }
 }

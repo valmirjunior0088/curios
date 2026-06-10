@@ -20,31 +20,65 @@ impl LocalData {
 
 #[derive(Debug, Clone)]
 pub struct BlockData<'a> {
-    pub dispatcher_label: wasm::LabelName,
-    pub dispatcher_local: wasm::LocalName,
-    pub index: usize,
+    bloink_label: wasm::LabelName,
+    bloink_local: wasm::LocalName,
+    index: usize,
     pub label_name: wasm::LabelName,
-    pub params: Vec<(&'a cont::ValueName, LocalData)>,
+    params: Vec<(&'a cont::ValueName, LocalData)>,
     pub region: &'a cont::Region,
 }
 
 impl<'a> BlockData<'a> {
     pub fn new(
-        dispatcher_label: wasm::LabelName,
-        dispatcher_local: wasm::LocalName,
+        bloink_label: wasm::LabelName,
+        bloink_local: wasm::LocalName,
         index: usize,
         block_name: &'a cont::BlockName,
         params: Vec<(&'a cont::ValueName, LocalData)>,
         region: &'a cont::Region,
     ) -> Self {
         Self {
-            dispatcher_label,
-            dispatcher_local,
+            bloink_label,
+            bloink_local,
             index,
             label_name: wasm::LabelName::from(format!("${}", block_name)),
             params,
             region,
         }
+    }
+
+    pub fn enter(&self, arity: usize) -> Vec<wasm::Instr> {
+        assert_eq!(
+            self.params.len(),
+            arity,
+            "block `{}` expects {} params, got {}",
+            self.label_name,
+            self.params.len(),
+            arity,
+        );
+
+        self.params
+            .iter()
+            .rev()
+            .map(|(_, local_data)| wasm::Instr::LocalSet {
+                local_name: local_data.local_name.clone(),
+            })
+            .chain([
+                wasm::Instr::I32Const {
+                    value: self.index as i32,
+                },
+                wasm::Instr::LocalSet {
+                    local_name: self.bloink_local.clone(),
+                },
+                wasm::Instr::Br {
+                    label_name: self.bloink_label.clone(),
+                },
+            ])
+            .collect()
+    }
+
+    pub fn params_map(&self) -> HashMap<&'a cont::ValueName, LocalData> {
+        self.params.iter().cloned().collect()
     }
 }
 

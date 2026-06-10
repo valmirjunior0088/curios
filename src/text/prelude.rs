@@ -209,13 +209,20 @@ fn arr_ops() -> Vec<TopItem> {
     vec![
         pub_fn_marked(
             "len",
-            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "a", arr_of(name("T")))],
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "a", arr_of(name("T"))),
+            ],
             nat(),
             prim(Prim::ArrLen(name("T"), name("a"))),
         ),
         pub_fn_marked(
             "get",
-            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "a", arr_of(name("T"))), (Plicity::Explicit, "i", nat())],
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "i", nat()),
+            ],
             name("T"),
             prim(Prim::ArrGet(name("T"), name("a"), name("i"))),
         ),
@@ -232,7 +239,11 @@ fn arr_ops() -> Vec<TopItem> {
         ),
         pub_fn_marked(
             "append",
-            vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "a", arr_of(name("T"))), (Plicity::Explicit, "x", name("T"))],
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "x", name("T")),
+            ],
             arr_of(name("T")),
             prim(Prim::ArrAppend(name("T"), name("a"), name("x"))),
         ),

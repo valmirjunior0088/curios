@@ -1,7 +1,7 @@
 use super::{
-    Apply, Cases, Match, Arity, Bound, Context, Definition, Error, Func, FuncType, Inductive, Item,
-    Let, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm,
-    Telescope, Term, Tuple, TupleType, Variant, UnionType,
+    Apply, Arity, Bound, Cases, Context, Definition, Error, Func, FuncType, Inductive, Item, Let,
+    Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm,
+    Telescope, Term, Tuple, TupleType, UnionType, Variant,
 };
 
 /// Placeholder label pushed onto the binder stack for an unnamed (constant) scope
@@ -311,9 +311,9 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
                                     .map(|slot| {
                                         Ok(match slot {
                                             MotiveSlot::Binder => MotiveSlot::Binder,
-                                            MotiveSlot::Term(t) => MotiveSlot::Term(zonk_term(
-                                                context, t, binders,
-                                            )?),
+                                            MotiveSlot::Term(t) => {
+                                                MotiveSlot::Term(zonk_term(context, t, binders)?)
+                                            }
                                         })
                                     })
                                     .collect::<Result<_, Error>>()?,

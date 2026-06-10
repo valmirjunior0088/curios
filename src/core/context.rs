@@ -134,9 +134,7 @@ impl Context {
         let refinement_projections = self.refinement_projections.pop().unwrap();
         self.local.truncate(self.local_marks.pop().unwrap());
 
-        if !definitions.is_empty()
-            || !refinements.is_empty()
-            || !refinement_projections.is_empty()
+        if !definitions.is_empty() || !refinements.is_empty() || !refinement_projections.is_empty()
         {
             self.reductions.clear();
         }

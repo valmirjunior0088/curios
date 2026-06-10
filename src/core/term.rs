@@ -990,9 +990,7 @@ impl Bound for Subterm {
                                 .iter()
                                 .map(|slot| match slot {
                                     MotiveSlot::Binder => MotiveSlot::Binder,
-                                    MotiveSlot::Term(t) => {
-                                        MotiveSlot::Term(visit.visit_subterm(t))
-                                    }
+                                    MotiveSlot::Term(t) => MotiveSlot::Term(visit.visit_subterm(t)),
                                 })
                                 .collect(),
                         }),
@@ -1053,18 +1051,17 @@ impl Bound for Subterm {
                 Cases::NatDispatch { cases, default } => {
                     max_reach(cases.values()).max(default.reach())
                 }
-                Cases::Union { cases, pattern } => cases
-                    .values()
-                    .map(|s| s.reach())
-                    .max()
-                    .unwrap_or(0)
-                    .max(pattern.iter().flat_map(|p| &p.slots).fold(
-                        0,
-                        |acc, slot| match slot {
-                            MotiveSlot::Binder => acc,
-                            MotiveSlot::Term(t) => acc.max(t.reach()),
-                        },
-                    )),
+                Cases::Union { cases, pattern } => {
+                    cases.values().map(|s| s.reach()).max().unwrap_or(0).max(
+                        pattern
+                            .iter()
+                            .flat_map(|p| &p.slots)
+                            .fold(0, |acc, slot| match slot {
+                                MotiveSlot::Binder => acc,
+                                MotiveSlot::Term(t) => acc.max(t.reach()),
+                            }),
+                    )
+                }
             }),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())
@@ -1492,12 +1489,7 @@ mod tests {
 
     #[test]
     fn variant_collects_metavars_and_prints_as_function_call() {
-        let ctor = Term::variant(
-            "Result",
-            [Term::metavar(1)],
-            "success",
-            [Term::metavar(2)],
-        );
+        let ctor = Term::variant("Result", [Term::metavar(1)], "success", [Term::metavar(2)]);
         assert_eq!(ctor.metavars(), BTreeSet::from([1, 2]));
         assert_eq!(format!("{ctor}"), "Result/success(?2)");
 
@@ -1547,11 +1539,7 @@ mod tests {
             Term::var(Var::free("r")),
             None,
             Term::type_(),
-            [(
-                "success",
-                vec!["value"],
-                Term::var(Var::free("value")),
-            )],
+            [("success", vec!["value"], Term::var(Var::free("value")))],
         );
 
         let free = term.free_vars();

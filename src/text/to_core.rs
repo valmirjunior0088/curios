@@ -268,8 +268,7 @@ fn process_items(
                                     .iter()
                                     .enumerate()
                                     .map(|(i, (_, n, t))| {
-                                        let n =
-                                            n.clone().unwrap_or_else(|| format!("_{i}"));
+                                        let n = n.clone().unwrap_or_else(|| format!("_{i}"));
                                         Ok((n, elaborate.term(t)?))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
@@ -413,10 +412,8 @@ fn process_items(
                             args,
                         );
                         // The lambda binds every parameter regardless of mark.
-                        let ctor_body = core::Term::func(
-                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
-                            inject,
-                        );
+                        let ctor_body =
+                            core::Term::func(param_tys.into_iter().map(|(_, n, t)| (n, t)), inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),

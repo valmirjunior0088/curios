@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType,
-        GroupItem, Let, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity,
-        Prim, Proj, Rec, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple,
-        TupleType, UnionCase, UnionMatch, UseGroup, With,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, GroupItem, Let, LetSignature,
+        Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec, Subterm, Term,
+        TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase,
+        UnionMatch, UseGroup, With,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -23,12 +23,9 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
 fn print_motive(motive: Option<Motive>) -> Printer<'static> {
     match motive {
         Some(Motive::Constant(body)) => flat([pure(" : "), print_term(body)]),
-        Some(Motive::Scrutinee { label, body }) => flat([
-            pure(" : ("),
-            pure(label),
-            pure(") => "),
-            print_term(body),
-        ]),
+        Some(Motive::Scrutinee { label, body }) => {
+            flat([pure(" : ("), pure(label), pure(") => "), print_term(body)])
+        }
         Some(Motive::Annotated {
             label,
             name,
