@@ -405,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "curios"
-version = "0.0.4"
+version = "0.1.0"
 dependencies = [
  "clap",
  "curios",

@@ -1,6 +1,6 @@
 [package]
 name = "curios"
-version = "0.0.4"
+version = "0.1.0"
 edition = "2024"
 description = "Work-in-progress functional dependently typed programming language"
 
