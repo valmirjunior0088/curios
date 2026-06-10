@@ -253,7 +253,6 @@ fn materialise_snapshot(
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
 
@@ -290,15 +289,6 @@ mod tests {
 
     fn func(params: Vec<ValueName>, resume: &str, region: Region) -> Func {
         Func {
-            params: params.into_iter().map(Into::into).collect(),
-            resume: b(resume),
-            region,
-        }
-    }
-
-    fn clsr(fields: Vec<ValueName>, params: Vec<ValueName>, resume: &str, region: Region) -> Clsr {
-        Clsr {
-            fields: fields.into_iter().map(Into::into).collect(),
             params: params.into_iter().map(Into::into).collect(),
             resume: b(resume),
             region,
