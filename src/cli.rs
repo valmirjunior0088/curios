@@ -99,7 +99,12 @@ fn default_output_path(input_path: &Path) -> PathBuf {
 }
 
 fn emit_executable(module: &wasm::Module, output_path: &Path) -> Result<(), String> {
-    fs::write(output_path, wasm::to_bytes(module))
+    let bytes = wasm::to_bytes(module);
+
+    #[cfg(feature = "binaryen")]
+    let bytes = super::binaryen::optimize(bytes);
+
+    fs::write(output_path, bytes)
         .map_err(|error| format!("failed to write {}: {error}", output_path.display()))
 }
 

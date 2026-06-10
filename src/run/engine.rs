@@ -61,7 +61,12 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
 ) -> Result<(Store<()>, Instance), String> {
     let engine = shared_engine();
 
-    let module = Module::from_binary(engine, &wasm::to_bytes(module))
+    let bytes = wasm::to_bytes(module);
+
+    #[cfg(feature = "binaryen")]
+    let bytes = crate::binaryen::optimize(bytes);
+
+    let module = Module::from_binary(engine, &bytes)
         .map_err(|error| format!("failed to load wasm module: {error}"))?;
 
     let bin_array_type = ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8));

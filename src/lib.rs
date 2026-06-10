@@ -21,6 +21,9 @@ pub mod optm;
 
 pub mod wasm;
 
+#[cfg(feature = "binaryen")]
+pub mod binaryen;
+
 #[cfg(feature = "run")]
 mod run;
 #[cfg(feature = "run")]

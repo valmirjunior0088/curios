@@ -20,6 +20,8 @@ Or, if you have a local clone:
 cargo install --path .
 ```
 
+Building from source compiles the vendored [Binaryen](https://github.com/WebAssembly/binaryen) optimizer, which requires CMake and a C++17 compiler. To build without them, disable the `binaryen` feature (compiled modules are then emitted unoptimized): `cargo install --path . --no-default-features --features cli`.
+
 ## Usage
 
 ```
