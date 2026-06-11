@@ -8,7 +8,7 @@ mod interface;
 
 use {
     super::*,
-    crate::{Entropy, core},
+    crate::{Entropy, core, core::Bound},
     std::{
         collections::{BTreeMap, HashMap, HashSet},
         rc::Rc,
@@ -460,6 +460,7 @@ fn order_flat_items(
     items: Vec<FlatItem>,
     referenced: &HashSet<String>,
     library_roots: &HashSet<String>,
+    inductives: &BTreeMap<String, core::Inductive>,
 ) -> Vec<FlatItem> {
     // Index every declared qualifier to the node that owns it (a rec group owns
     // all its members).
@@ -473,13 +474,26 @@ fn order_flat_items(
         })
         .collect();
 
-    // A node depends on the nodes declaring its free vars; self-edges and free
-    // vars naming no local declaration (primitives, externals) contribute none.
+    // A node depends on the nodes declaring its free vars. A union's
+    // declaration is wider than its items: the registry entry's constructor
+    // payload and target types are elaborated alongside the type-binding
+    // group (`core::elaborate_module_rec` rebuilds the registry telescopes
+    // there), so a node declaring a registered name references everything its
+    // registry entry does, too — those names live nowhere in the type
+    // binding's own `type_`/`body`. Self-edges and free vars naming no local
+    // declaration (primitives, externals) contribute none.
     let deps: Vec<HashSet<usize>> = items
         .iter()
         .enumerate()
         .map(|(node, item)| {
-            flat_item_free_vars(item)
+            let mut names = flat_item_free_vars(item);
+            for declared in flat_item_names(item) {
+                if let Some(inductive) = inductives.get(&declared) {
+                    names.extend(inductive_free_vars(inductive));
+                }
+            }
+
+            names
                 .iter()
                 .filter_map(|name| owner.get(name).copied())
                 .filter(|&dep| dep != node)
@@ -568,6 +582,25 @@ fn flat_item_free_vars(item: &FlatItem) -> HashSet<String> {
                 .into_iter()
                 .chain(let_.body.free_vars())
         })
+        .collect()
+}
+
+/// The external references of an inductive registry entry: every free var of
+/// its telescopes. Binder names (parameters, payload binders) are captured by
+/// `Telescope::build` and never appear here; the index types' references also
+/// live in the type binding's own signature, but are included for robustness.
+fn inductive_free_vars(inductive: &core::Inductive) -> HashSet<String> {
+    inductive
+        .params
+        .free_vars()
+        .into_iter()
+        .chain(inductive.indices.free_vars())
+        .chain(
+            inductive
+                .constructors
+                .values()
+                .flat_map(|signature| signature.free_vars()),
+        )
         .collect()
 }
 
@@ -662,7 +695,7 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
         .collect();
     let library_roots: HashSet<String> = roots.iter().cloned().collect();
 
-    let items = order_flat_items(flat_items, &referenced, &library_roots)
+    let items = order_flat_items(flat_items, &referenced, &library_roots, &inductives)
         .into_iter()
         .map(flat_item_to_core)
         .collect();

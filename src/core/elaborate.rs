@@ -1,11 +1,10 @@
 use {
     super::{
         Apply, Atom, Cases, Context, Definition, Error, Field, Func, FuncType, ImplicitOrigin,
-        Inductive,
-        Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, ParkedWork, Plicity,
-        Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, UnionType, Var,
-        Variant, case_target_indices, check_motive, convert_with, drain_parked, elaborate_prim,
-        expect, invert_indices, reduce_with, refine_head,
+        Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat,
+        ParkedWork, Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType,
+        Two, UnionType, Var, Variant, case_target_indices, check_motive, convert_with,
+        drain_parked, elaborate_prim, expect, invert_indices, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -847,7 +846,10 @@ fn elaborate_union_match(
             SlotPlan::Index(j) => actual_indices[*j].clone(),
         })
         .collect::<Vec<_>>();
-    let result_refs = result_args.iter().chain([&head_elaborated]).collect::<Vec<_>>();
+    let result_refs = result_args
+        .iter()
+        .chain([&head_elaborated])
+        .collect::<Vec<_>>();
     let result_type = motive_elaborated.open(&result_refs);
 
     // The seed (`seed_motive`'s job, generalized over the pattern binders):
@@ -1596,6 +1598,130 @@ fn elaborate_metavar(
     }
 }
 
+/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
+/// types. `to_core` records the declaration's lowered spellings, and a lowered
+/// type must never leak into later reduction: implicit insertion saturates
+/// applications during elaboration, and an under-applied index type (e.g.
+/// `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at
+/// the wrong arity the first time `reduce` meets the registry copy.
+///
+/// Called from `elaborate_module_rec` after the group's signatures are
+/// reassumed rebuilt and *before* any body is checked — index types may
+/// mention the group's own members (resolved through the assumed signatures),
+/// and the type-constructor bodies' `UnionType` nodes check their arguments
+/// against this very telescope. A name with no registry entry is an ordinary
+/// binding; no-op.
+fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), Error> {
+    let Some(inductive) = context.inductive(name).cloned() else {
+        return Ok(());
+    };
+
+    let n_params = inductive.params.len();
+    let labels = inductive
+        .indices
+        .labels()
+        .iter()
+        .map(|label| label.to_string())
+        .collect::<Vec<_>>();
+
+    // Walk the full (params-first) index telescope, checking each entry type
+    // against `Type` under the earlier binders — the same gensym-then-relabel
+    // discipline as `elaborate_tuple_type`.
+    let mut entries = Vec::new();
+    context.with_frame(|context| {
+        let mut telescope = inductive.indices.clone();
+        loop {
+            match telescope {
+                Telescope::Done(_) => break Ok::<_, Error>(()),
+                Telescope::Cons(ty, rest) => {
+                    let rebuilt = check(context, &ty, Term::type_())?;
+                    let label = context.fresh(rest.first_label());
+                    context.assume(&label, &rebuilt);
+                    telescope = rest.open(&[&Term::var(Var::free(&label))]);
+                    entries.push((label, rebuilt));
+                }
+            }
+        }
+    })?;
+
+    let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let params =
+        Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
+    let indices = Telescope::build(entries, ()).relabel(&label_refs);
+
+    context.register_inductive(
+        name,
+        Inductive {
+            params,
+            indices,
+            constructors: inductive.constructors,
+        },
+    );
+
+    Ok(())
+}
+
+/// Rebuild a registry entry's constructor signatures with *elaborated* types —
+/// the second phase of the registry rebuild (see
+/// [`elaborate_inductive_indices`]). Payload types may apply the union group's
+/// type constructors, so this runs from `elaborate_module_rec` only after the
+/// group's rebuilt bodies are defined; each terminal — the constructed
+/// `UnionType` normal form — routes through `elaborate_union_type`, which
+/// checks the parameters and the case's target indices against the
+/// already-rebuilt index telescope and returns another `UnionType` node, the
+/// shape `case_target_indices` and the match elaborators rely on.
+fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result<(), Error> {
+    let Some(inductive) = context.inductive(name).cloned() else {
+        return Ok(());
+    };
+
+    let mut constructors = BTreeMap::new();
+    for (tag, signature) in &inductive.constructors {
+        let labels = signature
+            .labels()
+            .iter()
+            .map(|label| label.to_string())
+            .collect::<Vec<_>>();
+
+        let (entries, terminal) = context.with_frame(|context| {
+            let mut telescope = signature.clone();
+            let mut entries = Vec::new();
+            loop {
+                match telescope {
+                    Telescope::Done(terminal) => {
+                        let terminal = check(context, &terminal, Term::type_())?;
+                        break Ok::<_, Error>((entries, terminal));
+                    }
+                    Telescope::Cons(ty, rest) => {
+                        let rebuilt = check(context, &ty, Term::type_())?;
+                        let label = context.fresh(rest.first_label());
+                        context.assume(&label, &rebuilt);
+                        telescope = rest.open(&[&Term::var(Var::free(&label))]);
+                        entries.push((label, rebuilt));
+                    }
+                }
+            }
+        })?;
+
+        let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        constructors.insert(
+            tag.clone(),
+            Telescope::build(entries, terminal).relabel(&label_refs),
+        );
+    }
+
+    context.register_inductive(
+        name,
+        Inductive {
+            params: inductive.params,
+            indices: inductive.indices,
+            constructors,
+        },
+    );
+
+    Ok(())
+}
+
 /// Type-check a single non-recursive top-level definition, `define` it into the
 /// *current* (persistent base) frame, and return its rebuilt form. The flat
 /// analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail
@@ -1647,6 +1773,14 @@ fn elaborate_module_rec(
         context.reassume(&def.name, type_);
     }
 
+    // A union's type bindings always lower as one `rec` group whose member
+    // names are the registry keys. Rebuild the registry index telescopes here
+    // — after the rebuilt signatures are assumed (index types may mention the
+    // group), before any body's `UnionType` node checks against them.
+    for def in defs {
+        elaborate_inductive_indices(context, &def.name)?;
+    }
+
     for def in defs {
         context.define(&def.name, &def.body);
     }
@@ -1662,6 +1796,13 @@ fn elaborate_module_rec(
     // originals were only needed above, while the members checked each other.
     for (def, body) in defs.iter().zip(&bodies) {
         context.define(&def.name, body);
+    }
+
+    // Registry rebuild, phase two: constructor payload types may apply the
+    // group's type constructors, so their signatures (and `UnionType`
+    // terminals) elaborate only now that the rebuilt bodies are defined.
+    for def in defs {
+        elaborate_inductive_constructors(context, &def.name)?;
     }
 
     Ok(defs
@@ -1717,9 +1858,25 @@ pub fn elaborate_module(
     drain_parked(context)?;
     let body_type = reduce_with(context, &body_type)?;
 
+    // The output module carries the *rebuilt* registry entries (pulled back
+    // from the context, where the per-group rebuild re-registered them), so
+    // `zonk_module` and `erase` see elaborated telescopes. An entry whose
+    // declaring item was pruned keeps its lowered form — nothing consults it.
+    let inductives = module
+        .inductives
+        .keys()
+        .map(|name| {
+            let inductive = context
+                .inductive(name)
+                .expect("every module entry was registered above")
+                .clone();
+            (name.clone(), inductive)
+        })
+        .collect();
+
     let module = Module {
         items,
-        inductives: module.inductives.clone(),
+        inductives,
         metavars: module.metavars,
         type_: module.type_.clone(),
         body,

@@ -104,6 +104,11 @@ pub struct Context {
     parked: Vec<ParkedGoal>,
     // Ids solved since the last `wake_parked` sweep: the wake signal.
     newly_solved: Vec<usize>,
+    // Journal of every committed solution id, in commit order — never
+    // consumed, only marked and rolled back. The watermark/rollback pair lets
+    // re-validation (§7.4) unwind solutions that landed while validating a
+    // candidate it then rejected.
+    solved_log: Vec<usize>,
     // While set, `expect` may not park: conversion is being used as a yes/no
     // oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
@@ -149,6 +154,7 @@ impl Context {
             inductives: BTreeMap::new(),
             parked: Vec::new(),
             newly_solved: Vec::new(),
+            solved_log: Vec::new(),
             suppress_parking: false,
             locals_stamp: Entropy::new(),
             identity_cache: None,
@@ -348,6 +354,19 @@ impl Context {
             .find_map(|p| p.get(&(base.clone(), index)))
     }
 
+    /// Whether any counterfactual refinement is currently registered (and not
+    /// already suppressed) — the gate for the refinement-free candidate
+    /// re-reduction in `Convert::solve_refinement_free`, so the common
+    /// refinement-free path pays nothing.
+    pub fn has_refinements(&self) -> bool {
+        !self.suppress_refinements
+            && (self.refinements.iter().any(|frame| !frame.is_empty())
+                || self
+                    .refinement_projections
+                    .iter()
+                    .any(|frame| !frame.is_empty()))
+    }
+
     /// Run `f` with refinements suppressed (re-validation, §7.4). Brackets the
     /// region with reduction-cache clears so refinement-applied and
     /// refinement-suppressed reducts never contaminate each other's cache.
@@ -497,13 +516,43 @@ impl Context {
     /// Commit a metavariable's solution. Clears the reduction cache, since a
     /// bare metavariable is `reach == 0` (hence cacheable) and may have cached
     /// as itself while unsolved (§7.2). Records the id as newly solved — the
-    /// wake signal for parked constraints (§8).
+    /// wake signal for parked constraints (§8) — and journals it for
+    /// [`Context::rollback_solutions`].
     pub fn solve_metavar(&mut self, id: usize, term: Term) {
         if let Some(Some(entry)) = self.metas.entries.get_mut(id) {
             entry.solution = Some(term);
             self.newly_solved.push(id);
+            self.solved_log.push(id);
             self.reductions.clear();
         }
+    }
+
+    /// Watermark for [`Context::rollback_solutions`]: how many solutions have
+    /// been committed so far.
+    pub fn solution_mark(&self) -> usize {
+        self.solved_log.len()
+    }
+
+    /// Unwind every solution committed since `mark` — the transactional
+    /// bracket around re-validation (§7.4). Validating a candidate runs full
+    /// elaboration, which can solve *other* metavariables along the way; if
+    /// the candidate is ultimately rejected, those nested solutions were
+    /// derived from an equation that never held and must not survive the
+    /// verdict. Removes the unwound ids from the wake signals and clears the
+    /// reduction cache, which may have cached reducts through them.
+    pub fn rollback_solutions(&mut self, mark: usize) {
+        if self.solved_log.len() <= mark {
+            return;
+        }
+
+        let unwound = self.solved_log.split_off(mark);
+        for id in &unwound {
+            if let Some(Some(entry)) = self.metas.entries.get_mut(*id) {
+                entry.solution = None;
+            }
+        }
+        self.newly_solved.retain(|id| !unwound.contains(id));
+        self.reductions.clear();
     }
 
     // === Parked constraints (§8) ============================================

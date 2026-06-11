@@ -954,3 +954,80 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     assert_eq!(context.metavar_solution(0), None);
     assert_eq!(context.metavar_solution(1), None);
 }
+
+#[test]
+fn rollback_solutions_unwinds_to_the_mark() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(1, vec![("a".into(), nat_type())], nat_type(), None);
+
+    context.solve_metavar(0, nat(1));
+    let mark = context.solution_mark();
+    context.solve_metavar(1, nat(2));
+
+    context.rollback_solutions(mark);
+
+    // The solution past the mark is unwound; the one before it survives. This
+    // is the bracket `solve` wraps around re-validation, so a rejected
+    // candidate's nested solves leave no fingerprints.
+    assert_eq!(context.metavar_solution(0), Some(&nat(1)));
+    assert_eq!(context.metavar_solution(1), None);
+}
+
+#[test]
+fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
+    let stuck: Term = Subterm::Prim(Prim::NatSub(m.clone(), nat(1))).into();
+
+    // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the
+    // subtraction. (`NatAdd` escapes via successor peeling; the other
+    // operators rely on this parking.)
+    let outcome = convert_outcome(&mut context, &Term::type_(), &stuck, &nat(0));
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+    assert_eq!(context.metavar_solution(0), None);
+
+    // Within one run, a sibling goal pins `?0 := 1`; the parked subtraction
+    // is retried, folds to `0`, and converts.
+    let this = Term::tuple([stuck, m]);
+    let that = Term::tuple([nat(0), nat(1)]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&nat(1)));
+}
+
+#[test]
+fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
+
+    // A union type against `Nat` is provably unequal whatever `?0` becomes —
+    // the heads are rigid — so the mismatch stays hard (and is reported at
+    // the use site, not deferred to the drain).
+    let union = Term::union_type("Vec", [m], Vec::<Term>::new());
+    let outcome = convert_outcome(&mut context, &Term::type_(), &union, &nat_type());
+    assert!(matches!(outcome, Ok(Outcome::Mismatch)));
+}
+
+#[test]
+fn arm_refinement_does_not_taint_a_committed_solution() {
+    let mut context = context();
+    context.assume("n", &nat_type());
+    context.birth_metavar(0, vec![("n".into(), nat_type())], nat_type(), None);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("n"))]);
+
+    // Inside a frame that counterfactually refines `n := 0` (a match arm),
+    // the goal `?0[n] ≈ n` still discharges — but the *committed* solution is
+    // the refinement-free `n`, not the arm-local `0`: a metavariable must not
+    // be pinned to a value that holds only counterfactually inside the arm.
+    let converts = context.with_frame(|context| {
+        context.refine("n", &nat(0));
+        conv(context, &occurrence, &Term::var(Var::free("n")))
+    });
+    assert_eq!(converts, Ok(true));
+    assert_eq!(
+        context.metavar_solution(0),
+        Some(&Term::var(Var::free("n")))
+    );
+}

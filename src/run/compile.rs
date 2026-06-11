@@ -1271,6 +1271,60 @@ mod tests {
     }
 
     #[test]
+    fn union_payload_relying_on_implicit_insertion_is_rebuilt() {
+        // The inductive registry used to keep `to_core`'s *lowered* payload and
+        // index types, so a type relying on implicit-argument insertion —
+        // `Eq(0, 1)` against `Eq`'s 3-ary type constructor — survived
+        // under-applied and panicked the `Telescope::open` arity assert the
+        // first time reduction met the registry copy. The registry telescopes
+        // are now rebuilt during `elaborate_module` (indices while the union
+        // group's signatures are assumed, constructors once its bodies are
+        // defined), so the payload elaborates like any other type.
+        let payload = r#"
+            union Eq(@A : Type) : (x : A, y : A)
+            | refl(z : A) : (z, z)
+            end
+            union Box
+            | mk(p : Eq(0, 1))
+            end
+            0
+        "#;
+        assert!(typecheck(payload).is_ok());
+
+        // Index types take the same path — and previously panicked even
+        // earlier, while the type-constructor binding itself elaborated
+        // (its body's `UnionType` node checks against the index telescope).
+        let index = r#"
+            union Eq(@A : Type) : (x : A, y : A)
+            | refl(z : A) : (z, z)
+            end
+            union Tag : (p : Eq(0, 0))
+            | mk() : (Eq/refl(0))
+            end
+            0
+        "#;
+        assert!(typecheck(index).is_ok());
+
+        // End to end: construct and eliminate through the rebuilt registry —
+        // the match arm's binder is typed from the rebuilt payload type, and
+        // the whole program lowers to wasm.
+        let through = r#"
+            use /sys/{Nat};
+            union Eq(@A : Type) : (x : A, y : A)
+            | refl(z : A) : (z, z)
+            end
+            union Box
+            | mk(p : Eq(0, 0))
+            end
+            let b : Box = Box/mk(Eq/refl(0));
+            match b : Nat
+            | mk(p) => 7
+            end
+        "#;
+        assert!(compile(through, None).is_ok());
+    }
+
+    #[test]
     fn prune_still_typechecks_dead_user_definitions() {
         // The prune is root-restricted: a user-authored top-level binding the body
         // never references is still type-checked, so its error is reported.

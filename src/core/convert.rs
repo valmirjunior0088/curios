@@ -152,6 +152,12 @@ fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
         .collect::<Vec<_>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
 
+    // The definitions deliberately land in the *enclosing* frame: the opened
+    // tail is enqueued rather than compared eagerly, so the bindings must
+    // outlive this call for the queued goal (and anything it spawns) to
+    // reduce through them. The labels are entropy-fresh, so nothing can
+    // collide. (Each `define` clears the reduction cache, but nothing reduces
+    // between them, so the repeat clears hit an already-empty map.)
     for (label, (_, body)) in labels.iter().zip(rec.items.iter()) {
         context.define(label, &body.open(&label_refs));
     }
@@ -906,7 +912,11 @@ impl Convert {
         // against the metavariable's frozen type, under its birth context Γ,
         // as an *oracle* — counterfactual refinements and constraint parking
         // both suppressed (see `Context::with_oracle`). Stable definitions
-        // are kept.
+        // are kept. The validation run itself can solve *other* metavariables
+        // (inference may mint and pin fresh implicits); the mark/rollback
+        // bracket unwinds those if the candidate is rejected, so a failed
+        // oracle leaves no fingerprints.
+        let mark = context.solution_mark();
         let revalidated = context.with_frame(|context| {
             for (name, ty) in telescope.iter() {
                 context.assume(name, ty);
@@ -921,12 +931,72 @@ impl Convert {
         })?;
 
         if !revalidated {
+            context.rollback_solutions(mark);
             return Ok(Solved::Failed);
         }
 
         context.solve_metavar(id, inverted);
         self.progress = true;
         Ok(Solved::Done)
+    }
+
+    /// Solve flex–rigid with a *refinement-free* candidate. The drain reduces
+    /// goals under the live frame, where counterfactual match-arm refinements
+    /// apply — sound for discharging a goal, but not for committing a
+    /// solution: a metavariable must not be pinned to a value that holds only
+    /// counterfactually inside an arm (`?k := 0` because the nil arm refined
+    /// `n := 0`). When refinements are in scope, re-reduce the original rigid
+    /// term with them suppressed and solve against that spelling; refinements
+    /// only ever *add* reductions, so a solution found this way still
+    /// discharges the refined goal. A goal whose verdict changes under
+    /// suppression is the refinement's doing — nothing is globally forced, so
+    /// it postpones rather than failing or committing.
+    fn solve_refinement_free(
+        &mut self,
+        context: &mut Context,
+        metavar: &Metavar,
+        rigid: &Term,
+        rigid_raw: &Term,
+    ) -> Result<Solved, ReduceError> {
+        if !context.has_refinements() {
+            return self.solve(context, metavar, rigid);
+        }
+
+        let suppressed =
+            context.with_suppressed_refinements(|context| reduce(context, rigid_raw.clone()))?;
+
+        // Refinements made no difference for this term: the unguarded path,
+        // hard verdicts included.
+        if suppressed == *rigid {
+            return self.solve(context, metavar, rigid);
+        }
+
+        // The unrefined spelling is itself flexible — only the refinement
+        // made the side look rigid. Undecided.
+        if Self::as_metavar(&suppressed).is_some() {
+            return Ok(Solved::Postponed);
+        }
+
+        Ok(match self.solve(context, metavar, &suppressed)? {
+            Solved::Done => Solved::Done,
+            // A verdict the refinement-free spelling cannot reach (out of
+            // scope, ill-typed at the birth context) is not a hard failure of
+            // the goal — the refined spelling may still discharge it once the
+            // metavariable is pinned elsewhere.
+            Solved::Postponed | Solved::Failed => Solved::Postponed,
+        })
+    }
+
+    /// `true` iff `term` — already in weak-head normal form, so a foldable
+    /// literal would have folded — is a primitive operation still carrying an
+    /// unsolved metavariable: the stuck-on-a-metavariable shape whose
+    /// structural mismatches are undecided rather than definite.
+    fn prim_blocked_on_metavar(context: &Context, term: &Term) -> bool {
+        matches!(&**term, Subterm::Prim(_))
+            && term
+                .metavars()
+                .iter()
+                .any(|id| context.metavar_solution(*id).is_none())
     }
 
     fn outcome(&mut self, context: &mut Context) -> Result<Outcome, ReduceError> {
@@ -957,6 +1027,13 @@ impl Convert {
     /// when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
+            // The unreduced spellings, kept for the flex–rigid case: the
+            // reductions below apply counterfactual match-arm refinements,
+            // and a candidate *solution* must be derived without them (see
+            // `solve_refinement_free`).
+            let this_raw = this.clone();
+            let that_raw = that.clone();
+
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
             let type_ = reduce(context, type_)?;
@@ -1003,22 +1080,26 @@ impl Convert {
                     self.blocked.push(Goal { type_, this, that });
                     continue;
                 }
-                (Some(metavar), None) => match self.solve(context, &metavar, &that)? {
-                    Solved::Done => continue,
-                    Solved::Postponed => {
-                        self.blocked.push(Goal { type_, this, that });
-                        continue;
+                (Some(metavar), None) => {
+                    match self.solve_refinement_free(context, &metavar, &that, &that_raw)? {
+                        Solved::Done => continue,
+                        Solved::Postponed => {
+                            self.blocked.push(Goal { type_, this, that });
+                            continue;
+                        }
+                        Solved::Failed => return Ok(false),
                     }
-                    Solved::Failed => return Ok(false),
-                },
-                (None, Some(metavar)) => match self.solve(context, &metavar, &this)? {
-                    Solved::Done => continue,
-                    Solved::Postponed => {
-                        self.blocked.push(Goal { type_, this, that });
-                        continue;
+                }
+                (None, Some(metavar)) => {
+                    match self.solve_refinement_free(context, &metavar, &this, &this_raw)? {
+                        Solved::Done => continue,
+                        Solved::Postponed => {
+                            self.blocked.push(Goal { type_, this, that });
+                            continue;
+                        }
+                        Solved::Failed => return Ok(false),
                     }
-                    Solved::Failed => return Ok(false),
-                },
+                }
                 (None, None) => {}
             }
 
@@ -1095,6 +1176,22 @@ impl Convert {
             };
 
             if !ok {
+                // A structural mismatch where a side is a primitive stuck on
+                // an unsolved metavariable is undecided, not provably unequal:
+                // solving the metavariable may fold the operation (`?m - 1`
+                // against `0` folds once `?m := 1` lands), which no structural
+                // rule anticipates. Park the goal instead of failing — rigid-
+                // head disagreements, which no solution can repair, still
+                // mismatch here. The goal leaves `history` so a retry after
+                // fresh progress is not skipped as already-handled.
+                if Self::prim_blocked_on_metavar(context, &goal.this)
+                    || Self::prim_blocked_on_metavar(context, &goal.that)
+                {
+                    self.history.remove(&goal);
+                    self.blocked.push(goal);
+                    continue;
+                }
+
                 return Ok(false);
             }
         }
