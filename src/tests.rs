@@ -785,3 +785,59 @@ fn parked_constraints_still_reject_the_unsolvable() {
     let (system, _receiver) = ChannelHost::out();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
+
+#[test]
+fn omitted_motive_infers_over_a_compound_scrutinee() {
+    // The motive hole's scope is opened with the scrutinee — a non-pattern
+    // spine entry when the scrutinee is compound. Occurrence abstraction in
+    // `solve` rewrites the scrutinee's occurrences in the expected type to
+    // the motive binder, so the dependent motive infers where it previously
+    // had to be spelled.
+    let source = r#"
+        use /std/{Nat, Vec, Io};
+        rec build(n : Nat) -> Vec(Nat, n) =
+            match n : (m) => Vec(Nat, m)
+            | 0 => Vec/nil()
+            | pred + 1, ih => Vec/cons(0, ih)
+            end;
+        let d(k : Nat) -> Vec(Nat, Nat/add(k, k)) =
+            match Nat/add(k, k)
+            | 0 => Vec/nil()
+            | pred + 1, ih => build(Nat/succ(pred))
+            end;
+        Io/print(Nat/to_str(Vec/len(d(2))))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"4".to_vec()]);
+}
+
+#[test]
+fn bare_tuple_continuation_tail_infers() {
+    // The recorded dead-end from the result-directed elaboration work: a bare
+    // tuple in a monadic continuation's tail, its expected type a metavariable
+    // pinned only by the *outer* apply's result unification. The in-apply
+    // postponement defers the tuple, the constraint store parks the flex–flex
+    // codomain pair across the inner apply, and the outer pin wakes both.
+    let source = r#"
+        use /std/{Parse, Nat, Bin, Io};
+        let pairer : Parse({ Nat, Nat }) =
+            Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
+        rec with_sugar : Parse({ Nat, Nat }) =
+            with Parse/bind
+                let a = Parse/any_byte!;
+                Parse/pure((a, 0));
+        match Parse/run(pairer, "hi")
+        | success(pair) => Io/print(Nat/to_str(pair.0))
+        | failure(_) => Io/print("error")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"104".to_vec()]
+    );
+}

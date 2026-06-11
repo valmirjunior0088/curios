@@ -559,6 +559,11 @@ pub struct Visit<F> {
     depth: usize,
     prune: bool,
     visit: F,
+    // An optional *term-level* pre-hook, consulted at every recursion point
+    // before descending: `Some(replacement)` substitutes the whole node (and
+    // is not descended into). Incompatible with pruning, which may skip the
+    // very nodes the hook would match.
+    rewrite: Option<Box<dyn FnMut(usize, &Term) -> Option<Term>>>,
 }
 
 impl<F> Visit<F>
@@ -570,6 +575,7 @@ where
             depth: 0,
             prune: false,
             visit,
+            rewrite: None,
         }
     }
 
@@ -583,6 +589,19 @@ where
             depth: 0,
             prune: true,
             visit,
+            rewrite: None,
+        }
+    }
+
+    /// Like `new`, additionally carrying a term-level rewrite hook fired at
+    /// every recursion point. Note the root term reaches `traverse` directly,
+    /// not through `visit_subterm` — callers must check it themselves.
+    pub fn rewriting(visit: F, rewrite: Box<dyn FnMut(usize, &Term) -> Option<Term>>) -> Self {
+        Self {
+            depth: 0,
+            prune: false,
+            visit,
+            rewrite: Some(rewrite),
         }
     }
 
@@ -600,6 +619,12 @@ where
     }
 
     pub fn visit_subterm(&mut self, term: &Term) -> Term {
+        if let Some(rewrite) = &mut self.rewrite {
+            if let Some(replacement) = rewrite(self.depth, term) {
+                return replacement;
+            }
+        }
+
         term.traverse(self)
     }
 

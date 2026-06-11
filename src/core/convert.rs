@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Bound, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant, Visit,
         convert_prim, infer, reduce,
     },
     std::{
@@ -668,6 +668,31 @@ impl Convert {
         }
     }
 
+    /// Replace every occurrence of a subject term in `t` — matched by the
+    /// same term equality conversion uses, at any depth (binder names are
+    /// entropy-fresh, so a free-named subject cannot be captured by an inner
+    /// scope) — with its birth binder's name. Top-down: an outer match wins
+    /// and is not descended into. Subjects are pairwise distinct by
+    /// construction, so the match is unambiguous. (A subject that is exactly
+    /// a scope's whole body is missed — scope bodies bypass `visit_subterm` —
+    /// which the round-trip verification in `solve` catches conservatively.)
+    fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
+        if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
+            return Term::var(Var::free(name));
+        }
+
+        let owned = subjects.to_vec();
+        t.traverse(&mut Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term: &Term| {
+                owned
+                    .iter()
+                    .find(|(s, _)| s == term)
+                    .map(|(_, name)| Term::var(Var::free(name.as_str())))
+            }),
+        ))
+    }
+
     /// `Some(metavar)` iff `term` is an unsolved bare metavariable head.
     /// (`reduce` already resolves solved metavariables, so a metavariable
     /// surviving to weak-head normal form is necessarily unsolved.)
@@ -773,16 +798,39 @@ impl Convert {
                 .collect()
         };
 
+        // Non-pattern entries that are meta-free and pairwise distinct become
+        // *abstraction subjects*: every occurrence of the entry inside the
+        // candidate rewrites to the entry's birth binder, extending inversion
+        // beyond the pattern fragment (the practical "abstracting over
+        // non-variable terms" move; the choice of all occurrences is checked
+        // by the round-trip verification below and by re-validation). An
+        // entry embedding a metavariable, or equal to another entry, stays
+        // ambiguous, and the candidate may not depend on it.
+        let subjects: Vec<(Term, String)> = entries
+            .iter()
+            .zip(&telescope)
+            .filter(|(entry, _)| !matches!(&***entry, Subterm::Var(_)))
+            .filter(|(entry, _)| entry.metavars().is_empty())
+            .filter(|(entry, _)| entries.iter().filter(|e| *e == *entry).count() == 1)
+            .map(|(entry, (birth, _))| (entry.clone(), birth.clone()))
+            .collect();
+
+        let abstracted = match subjects.is_empty() {
+            true => t.clone(),
+            false => Self::abstract_occurrences(t, &subjects),
+        };
+
         // Scope check, through the inversion: every free variable of the
-        // candidate must correspond to exactly one birth binder. A name that
-        // is no entry at all can never become one — out of scope; a name only
-        // reachable through a non-pattern or duplicated slot is not provably
-        // determined — postpone.
+        // (abstracted) candidate must correspond to exactly one birth binder.
+        // A name that is no entry at all can never become one — out of scope;
+        // a name only reachable through a non-pattern or duplicated slot is
+        // not provably determined — postpone.
         let allowed = image
             .iter()
             .map(|(name, _)| name.clone())
+            .chain(subjects.iter().map(|(_, birth)| birth.clone()))
             .collect::<HashSet<_>>();
-        for name in t.free_vars() {
+        for name in abstracted.free_vars() {
             if allowed.contains(&name) {
                 continue;
             }
@@ -795,9 +843,9 @@ impl Convert {
         }
 
         // Invert, storing the solution in birth-named form. The identity
-        // renaming (every invertible entry still its own birth binder) skips
-        // the rewrite.
-        let inverted = if image.iter().all(|(img, birth)| img == birth) {
+        // renaming (every invertible entry still its own birth binder, and
+        // nothing abstracted) skips the rewrite.
+        let inverted = if subjects.is_empty() && image.iter().all(|(img, birth)| img == birth) {
             t.clone()
         } else {
             let labels = image
@@ -809,8 +857,24 @@ impl Convert {
                 .map(|(_, birth)| Term::var(Var::free(*birth)))
                 .collect::<Vec<_>>();
             let refs = birth_vars.iter().collect::<Vec<_>>();
-            t.capture(&labels).release(&refs)
+            abstracted.capture(&labels).release(&refs)
         };
+
+        // The equation must hold by construction: resolving the candidate
+        // solution back through this occurrence's spine must reproduce the
+        // candidate exactly. This guards the whole abstraction/inversion pair
+        // — a missed occurrence or an unfaithful rename postpones instead of
+        // committing a wrong solution.
+        if !metavar.spine.is_empty() {
+            let labels = telescope
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>();
+            let refs = entries.iter().collect::<Vec<_>>();
+            if inverted.capture(&labels).release(&refs) != *t {
+                return Ok(Solved::Postponed);
+            }
+        }
 
         // Re-validation (§7.4): the (inverted) candidate must type-check
         // against the metavariable's frozen type, under its birth context Γ,

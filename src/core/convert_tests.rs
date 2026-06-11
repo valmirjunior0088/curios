@@ -816,3 +816,26 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
     assert_eq!(context.metavar_solution(1), Some(&Term::var(Var::free("b"))));
 }
 
+#[test]
+fn solve_abstracts_a_non_pattern_occurrence() {
+    let mut context = context();
+    context.birth_metavar(
+        0,
+        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        nat_type(),
+        None,
+    );
+    // A reduce-stable compound (a tuple is a normal form): occurrence
+    // matching is syntactic and the candidate side arrives *reduced*, so a
+    // compound the reducer rewrites (`z + 1` successor-peels, say) would no
+    // longer match its unreduced spine-entry spelling and conservatively
+    // postpone instead.
+    let compound = Term::tuple([Term::var(Var::free("z"))]);
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
+
+    // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the
+    // non-pattern entry, which abstracts to its birth binder `b`.
+    assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("b"))));
+}
