@@ -93,8 +93,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     let super::ParkedGoal {
         goal,
         origin,
-        assumptions,
-        definitions,
+        frame,
         ..
     } = parked;
 
@@ -105,12 +104,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     }
 
     let outcome = context.with_frame(|context| {
-        for (name, type_) in &assumptions {
-            context.assume(name, type_);
-        }
-        for (name, value) in &definitions {
-            context.define(name, value);
-        }
+        context.restore_frame(&frame);
 
         Ok(match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
             super::Outcome::Converts => Retry::Converts,
@@ -134,7 +128,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         Retry::Mismatch(this, that) => Err(Error::type_mismatch(origin, this, that)),
         Retry::Blocked(goals) => {
             for goal in goals {
-                context.repark(goal, origin.clone(), assumptions.clone(), definitions.clone());
+                context.repark(goal, origin.clone(), frame.clone());
             }
             Ok(())
         }

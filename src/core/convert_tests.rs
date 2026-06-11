@@ -839,3 +839,51 @@ fn solve_abstracts_a_non_pattern_occurrence() {
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("b"))));
 }
+
+// === Parked-constraint retries ==============================================
+
+#[test]
+fn parked_goals_retry_under_their_frozen_refinements() {
+    let mut context = context();
+
+    // Park (inside an arm-like frame) a goal that converts only through the
+    // frame's counterfactual refinement: `b` reduces to `Nat` via `refine`,
+    // not via any definition.
+    context.with_frame(|context| {
+        context.assume("b", &Term::type_());
+        context.refine("b", &nat_type());
+        context.park(
+            Goal {
+                type_: Term::type_(),
+                this: Term::var(Var::free("b")),
+                that: nat_type(),
+            },
+            Term::var(Var::free("b")),
+        );
+    });
+
+    // The frame is gone; the drain retries under the frozen one, where the
+    // refinement still holds and the goal converts.
+    assert!(drain_parked(&mut context).is_ok());
+}
+
+#[test]
+fn parked_goals_without_their_refinement_mismatch() {
+    let mut context = context();
+
+    // Control: the same goal parked without the refinement cannot convert,
+    // and the drain reports it at its origin.
+    context.with_frame(|context| {
+        context.assume("b", &Term::type_());
+        context.park(
+            Goal {
+                type_: Term::type_(),
+                this: Term::var(Var::free("b")),
+                that: nat_type(),
+            },
+            Term::var(Var::free("b")),
+        );
+    });
+
+    assert!(drain_parked(&mut context).is_err());
+}

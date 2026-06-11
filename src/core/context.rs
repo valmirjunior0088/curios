@@ -32,24 +32,31 @@ pub struct MetaStore {
     entries: Vec<Option<MetaEntry>>,
 }
 
+/// The local frame a parked problem froze at park time: assumptions (in
+/// binding order), and the non-base-frame definitions, counterfactual
+/// refinements, and projection refinements (each outermost frame first, so
+/// reapplying in order reproduces the shadowing). A retry must run under the
+/// same equalities its origin saw — including the arm-local refinements —
+/// while solution re-validation independently suppresses them, keeping
+/// committed solutions refinement-free.
+#[derive(Debug, Clone)]
+pub struct FrozenFrame {
+    pub assumptions: Vec<(String, Term)>,
+    pub definitions: Vec<(String, Term)>,
+    pub refinements: Vec<(String, Term)>,
+    pub refinement_projections: Vec<((Term, usize), Term)>,
+}
+
 /// A conversion constraint that quiesced blocked on unsolved metavariables,
 /// parked by `expect` to outlive its call (§8). Like a [`MetaEntry`], it
-/// freezes the local frame it was born under — assumptions *and* local
-/// definitions, since retry-time reduction needs both. Counterfactual
-/// refinements are deliberately not frozen: solutions are
-/// refinement-independent by design (re-validation suppresses them), so a
-/// retry without them can only conservatively fail, never wrongly succeed.
+/// freezes the local frame it was born under.
 #[derive(Debug)]
 pub struct ParkedGoal {
     pub goal: Goal,
     /// The term `expect` was checking; its span anchors the eventual error if
     /// the constraint never resolves.
     pub origin: Term,
-    /// The local assumption context frozen at park time, in binding order.
-    pub assumptions: Vec<(String, Term)>,
-    /// The non-base-frame definitions frozen at park time (outermost frame
-    /// first, so re-defining in order reproduces the shadowing).
-    pub definitions: Vec<(String, Term)>,
+    pub frame: FrozenFrame,
     /// The unsolved metavariables either side mentions — solving any of them
     /// is the wake signal.
     pub watching: BTreeSet<usize>,
@@ -451,35 +458,59 @@ impl Context {
 
     // === Parked constraints (§8) ============================================
 
-    /// Park a blocked conversion goal: freeze the live local frame around it
-    /// (the way `fresh_metavar` freezes Γ — assumptions plus the local
-    /// definitions retry-time reduction will need) and record which unsolved
-    /// metavariables could unblock it.
-    pub fn park(&mut self, goal: Goal, origin: Term) {
-        let assumptions = self.local.clone();
-        // The base frame persists for the whole elaboration; only the local
-        // frames pop before a retry can happen. Outermost first, so
-        // re-defining in order reproduces the shadowing.
-        let definitions = self
-            .definitions
-            .iter()
-            .skip(1)
-            .flat_map(|frame| frame.iter().map(|(n, t)| (n.clone(), t.clone())))
-            .collect();
+    /// Freeze the live local frame (the way `fresh_metavar` freezes Γ): the
+    /// base frame persists for the whole elaboration, so only the local
+    /// frames — which pop before a retry can happen — are captured.
+    pub fn freeze_frame(&self) -> FrozenFrame {
+        let flatten = |frames: &[HashMap<String, Term>]| {
+            frames
+                .iter()
+                .skip(1)
+                .flat_map(|frame| frame.iter().map(|(n, t)| (n.clone(), t.clone())))
+                .collect::<Vec<_>>()
+        };
 
-        self.repark(goal, origin, assumptions, definitions);
+        FrozenFrame {
+            assumptions: self.local.clone(),
+            definitions: flatten(&self.definitions),
+            refinements: flatten(&self.refinements),
+            refinement_projections: self
+                .refinement_projections
+                .iter()
+                .skip(1)
+                .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
+                .collect(),
+        }
+    }
+
+    /// Reapply a frozen frame inside a fresh `with_frame`, restoring the
+    /// equalities the parked problem's origin saw.
+    pub fn restore_frame(&mut self, frame: &FrozenFrame) {
+        for (name, type_) in &frame.assumptions {
+            self.assume(name, type_);
+        }
+        for (name, value) in &frame.definitions {
+            self.define(name, value);
+        }
+        for (name, value) in &frame.refinements {
+            self.refine(name, value);
+        }
+        for ((base, index), value) in &frame.refinement_projections {
+            self.refine_projection(base.clone(), *index, value.clone());
+        }
+    }
+
+    /// Park a blocked conversion goal: freeze the live local frame around it
+    /// and record which unsolved metavariables could unblock it.
+    pub fn park(&mut self, goal: Goal, origin: Term) {
+        let frame = self.freeze_frame();
+        self.repark(goal, origin, frame);
     }
 
     /// Re-park a goal that is still blocked after a retry, keeping its
     /// originally frozen frame. The watch set is recomputed from the goal's
     /// current unsolved metavariables.
-    pub fn repark(
-        &mut self,
-        goal: Goal,
-        origin: Term,
-        assumptions: Vec<(String, Term)>,
-        definitions: Vec<(String, Term)>,
-    ) {
+    pub fn repark(&mut self, goal: Goal, origin: Term, frame: FrozenFrame) {
         let watching = goal
             .this
             .metavars()
@@ -491,8 +522,7 @@ impl Context {
         self.parked.push(ParkedGoal {
             goal,
             origin,
-            assumptions,
-            definitions,
+            frame,
             watching,
         });
     }
