@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Atom, Cases, Context, Definition, Error, Field, Func, FuncType, ImplicitOrigin,
         Inductive,
-        Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Plicity,
+        Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, ParkedWork, Plicity,
         Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, UnionType, Var,
         Variant, case_target_indices, check_motive, convert_with, drain_parked, elaborate_prim,
         expect, invert_indices, reduce_with, refine_head,
@@ -1337,6 +1337,31 @@ fn elaborate_func(
     }
 }
 
+/// Park a whole *checking problem* (§8): a checked-only introduction form
+/// met an expected type whose structure is still an unsolved metavariable —
+/// possibly pinned by a constraint parked moments ago. A fresh placeholder
+/// metavariable stands in the rebuilt tree; once the expected type's metas
+/// solve, the problem re-checks under its frozen frame and the placeholder is
+/// solved with the rebuilt term (the spine machinery splices it wherever the
+/// occurrence travelled).
+fn park_checking(
+    context: &mut Context,
+    term: &Term,
+    expected: &Term,
+) -> Result<(Term, Term), Error> {
+    let (placeholder, stand_in) = context.fresh_placeholder(expected.clone(), term.span());
+    context.park(
+        ParkedWork::Checking {
+            term: term.clone(),
+            expected: expected.clone(),
+            placeholder,
+        },
+        term.clone(),
+    );
+
+    Ok((stand_in, expected.clone()))
+}
+
 /// Check a lambda against an expected function type. Walk the lambda's own
 /// telescope (whose `Done` is the body) alongside the expected type's telescope
 /// (whose `Done` is the output type) in lockstep. Each parameter's domain is
@@ -1354,6 +1379,9 @@ fn elaborate_func_check(
 ) -> Result<(Term, Term), Error> {
     let ft = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
         Subterm::FuncType(ft) => ft,
+        Subterm::Metavar(_) if !context.parking_suppressed() => {
+            return park_checking(context, term, &expected);
+        }
         _ => return Err(Error::not_a_function_type(term.clone(), expected.clone())),
     };
 
@@ -1466,6 +1494,9 @@ fn elaborate_tuple(
 
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
         Subterm::TupleType(TupleType { telescope }) => telescope,
+        Subterm::Metavar(_) if !context.parking_suppressed() => {
+            return park_checking(context, term, &expected);
+        }
         _ => {
             return Err(Error::not_a_tuple_type(
                 Term::from(Subterm::Tuple(tuple.clone())),

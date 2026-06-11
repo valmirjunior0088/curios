@@ -847,11 +847,11 @@ fn parked_goals_retry_under_their_frozen_refinements() {
         context.assume("b", &Term::type_());
         context.refine("b", &nat_type());
         context.park(
-            Goal {
+            ParkedWork::Conversion(Goal {
                 type_: Term::type_(),
                 this: Term::var(Var::free("b")),
                 that: nat_type(),
-            },
+            }),
             Term::var(Var::free("b")),
         );
     });
@@ -870,11 +870,11 @@ fn parked_goals_without_their_refinement_mismatch() {
     context.with_frame(|context| {
         context.assume("b", &Term::type_());
         context.park(
-            Goal {
+            ParkedWork::Conversion(Goal {
                 type_: Term::type_(),
                 this: Term::var(Var::free("b")),
                 that: nat_type(),
-            },
+            }),
             Term::var(Var::free("b")),
         );
     });

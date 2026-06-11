@@ -57,7 +57,7 @@ pub fn expect(
             }
 
             for goal in goals {
-                context.park(goal, term.clone());
+                context.park(super::ParkedWork::Conversion(goal), term.clone());
             }
             retry_parked(context)
         }
@@ -91,11 +91,20 @@ pub fn retry_parked(context: &mut Context) -> Result<(), Error> {
 
 fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Error> {
     let super::ParkedGoal {
-        goal,
+        work,
         origin,
         frame,
         ..
     } = parked;
+
+    let goal = match work {
+        super::ParkedWork::Conversion(goal) => goal,
+        super::ParkedWork::Checking {
+            term,
+            expected,
+            placeholder,
+        } => return retry_checking(context, term, expected, placeholder, origin, frame),
+    };
 
     enum Retry {
         Converts,
@@ -128,8 +137,54 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
         Retry::Mismatch(this, that) => Err(Error::type_mismatch(origin, this, that)),
         Retry::Blocked(goals) => {
             for goal in goals {
-                context.repark(goal, origin.clone(), frame.clone());
+                context.repark(
+                    super::ParkedWork::Conversion(goal),
+                    origin.clone(),
+                    frame.clone(),
+                );
             }
+            Ok(())
+        }
+    }
+}
+
+/// Retry a parked *checking problem*: under the frozen frame, the expected
+/// type either still reduces to a bare metavariable (re-park) or has gained
+/// structure — run the check for real and solve the placeholder with the
+/// rebuilt term. Errors propagate carrying the term's own spans.
+fn retry_checking(
+    context: &mut Context,
+    term: Term,
+    expected: Term,
+    placeholder: usize,
+    origin: Term,
+    frame: super::FrozenFrame,
+) -> Result<(), Error> {
+    let rebuilt = context.with_frame(|context| {
+        context.restore_frame(&frame);
+
+        if matches!(&*reduce_with(context, &expected)?, Subterm::Metavar(_)) {
+            return Ok(None);
+        }
+
+        elaborate(context, &term, Mode::Check(expected.clone())).map(|(rebuilt, _)| Some(rebuilt))
+    })?;
+
+    match rebuilt {
+        Some(rebuilt) => {
+            context.solve_metavar(placeholder, rebuilt);
+            Ok(())
+        }
+        None => {
+            context.repark(
+                super::ParkedWork::Checking {
+                    term,
+                    expected,
+                    placeholder,
+                },
+                origin,
+                frame,
+            );
             Ok(())
         }
     }
@@ -159,9 +214,14 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
         // first at its origin.
         if context.parked_len() >= before && !context.has_newly_solved() {
             if let Some(parked) = context.take_parked().into_iter().next() {
-                let this = resolved_for_display(context, &parked.goal.this);
-                let that = resolved_for_display(context, &parked.goal.that);
-                return Err(Error::type_mismatch(parked.origin, this, that));
+                return Err(match parked.work {
+                    super::ParkedWork::Conversion(goal) => {
+                        let this = resolved_for_display(context, &goal.this);
+                        let that = resolved_for_display(context, &goal.that);
+                        Error::type_mismatch(parked.origin, this, that)
+                    }
+                    super::ParkedWork::Checking { .. } => Error::cannot_infer(parked.origin),
+                });
             }
             return Ok(());
         }

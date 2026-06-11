@@ -841,3 +841,41 @@ fn bare_tuple_continuation_tail_infers() {
         vec![b"104".to_vec()]
     );
 }
+
+#[test]
+fn checking_problem_parks_until_an_outer_pin_lands() {
+    // The constraint store's own window: the inner apply's output expect
+    // parks (provisional success), so the postponed tuple re-check meets a
+    // still-unsolved expected type — it now parks as a *checking problem*
+    // behind a placeholder metavariable, and the outer annotation's pin wakes
+    // it. Before ParkedWork::Checking this was a NotATupleType error.
+    let source = r#"
+        use /std/{Nat, Lst, Io};
+        let mk(@A : Type, a : A) -> Lst(A) = Lst/cons(a, Lst/nil());
+        let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
+        let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
+        match v : Nat
+        | nil() => 0
+        | cons(p, rest) => Io/write(Io/stdout, Nat/to_str(p.1))
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+}
+
+#[test]
+fn checking_problem_without_a_pin_still_rejects() {
+    // A checking problem whose expected type is never pinned drains as a
+    // cannot-infer at the tuple's own span — parked, not silently accepted.
+    let source = r#"
+        use /std/{Nat, Io};
+        let swallow(@A : Type, a : A) -> Nat = 0;
+        let n : Nat = swallow((1, 2));
+        Io/write(Io/stdout, Nat/to_str(n))
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}

@@ -47,18 +47,36 @@ pub struct FrozenFrame {
     pub refinement_projections: Vec<((Term, usize), Term)>,
 }
 
-/// A conversion constraint that quiesced blocked on unsolved metavariables,
-/// parked by `expect` to outlive its call (§8). Like a [`MetaEntry`], it
-/// freezes the local frame it was born under.
+/// The work a parked problem will retry (§8).
+#[derive(Debug)]
+pub enum ParkedWork {
+    /// A conversion constraint that quiesced blocked on unsolved
+    /// metavariables.
+    Conversion(Goal),
+    /// A whole checking problem: a checked-only introduction form met an
+    /// expected type whose structure is still an unsolved metavariable. The
+    /// `placeholder` metavariable stands in for the rebuilt term in the tree
+    /// and is solved with it once the check can run — the spine machinery
+    /// then splices it everywhere the occurrence travelled.
+    Checking {
+        term: Term,
+        expected: Term,
+        placeholder: usize,
+    },
+}
+
+/// A problem parked by `expect` (or a blocked intro-form check) to outlive
+/// its call (§8). Like a [`MetaEntry`], it freezes the local frame it was
+/// born under.
 #[derive(Debug)]
 pub struct ParkedGoal {
-    pub goal: Goal,
-    /// The term `expect` was checking; its span anchors the eventual error if
-    /// the constraint never resolves.
+    pub work: ParkedWork,
+    /// The term being checked at park time; its span anchors the eventual
+    /// error if the problem never resolves.
     pub origin: Term,
     pub frame: FrozenFrame,
-    /// The unsolved metavariables either side mentions — solving any of them
-    /// is the wake signal.
+    /// The unsolved metavariables whose solutions could unblock this —
+    /// solving any of them is the wake signal.
     pub watching: BTreeSet<usize>,
 }
 
@@ -500,31 +518,61 @@ impl Context {
         }
     }
 
-    /// Park a blocked conversion goal: freeze the live local frame around it
-    /// and record which unsolved metavariables could unblock it.
-    pub fn park(&mut self, goal: Goal, origin: Term) {
+    /// Park blocked work: freeze the live local frame around it and record
+    /// which unsolved metavariables could unblock it.
+    pub fn park(&mut self, work: ParkedWork, origin: Term) {
         let frame = self.freeze_frame();
-        self.repark(goal, origin, frame);
+        self.repark(work, origin, frame);
     }
 
-    /// Re-park a goal that is still blocked after a retry, keeping its
-    /// originally frozen frame. The watch set is recomputed from the goal's
+    /// Re-park work that is still blocked after a retry, keeping its
+    /// originally frozen frame. The watch set is recomputed from the work's
     /// current unsolved metavariables.
-    pub fn repark(&mut self, goal: Goal, origin: Term, frame: FrozenFrame) {
-        let watching = goal
-            .this
-            .metavars()
-            .into_iter()
-            .chain(goal.that.metavars())
-            .filter(|id| self.metavar_solution(*id).is_none())
-            .collect();
+    pub fn repark(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
+        let watching = match &work {
+            ParkedWork::Conversion(goal) => goal
+                .this
+                .metavars()
+                .into_iter()
+                .chain(goal.that.metavars())
+                .filter(|id| self.metavar_solution(*id).is_none())
+                .collect(),
+            ParkedWork::Checking { expected, .. } => expected
+                .metavars()
+                .into_iter()
+                .filter(|id| self.metavar_solution(*id).is_none())
+                .collect(),
+        };
 
         self.parked.push(ParkedGoal {
-            goal,
+            work,
             origin,
             frame,
             watching,
         });
+    }
+
+    /// Mint the placeholder metavariable for a parked checking problem (§8):
+    /// birthed like any hole — frozen Γ, identity spine — with no insertion
+    /// provenance. If it survives unsolved, the item drain reports the parked
+    /// problem at its origin before zonk could ever meet the placeholder.
+    pub fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (usize, Term) {
+        let id = self.next_metavar.fresh();
+
+        let telescope = self.local_context().to_vec();
+        let spine = telescope
+            .iter()
+            .map(|(name, _)| Term::var(Var::free(name)))
+            .collect();
+        self.birth_metavar(id, telescope, result, span.clone());
+
+        let term = Term::metavar_birthed(id, None, spine);
+        let term = match span {
+            Some(span) => term.with_span(span),
+            None => term,
+        };
+
+        (id, term)
     }
 
     /// Take the parked goals woken by solutions landed since the last sweep.
