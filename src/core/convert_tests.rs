@@ -677,3 +677,142 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     );
     assert_eq!(context.metavar_solution(0), Some(&five));
 }
+
+// === Spine inversion (contextual metavariables) =============================
+
+fn nat_type() -> Term {
+    Term::prim(Prim::NatType)
+}
+
+#[test]
+fn solve_inverts_a_renaming() {
+    let mut context = context();
+    // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the
+    // live name `y` (the enclosing binders were re-closed and reopened).
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
+
+    // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named
+    // form: `a`, not `y`.
+    assert_eq!(conv(&mut context, &occurrence, &Term::var(Var::free("y"))), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("a"))));
+}
+
+#[test]
+fn solve_through_an_identity_spine_matches_legacy() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
+
+    // The identity spine behaves exactly like the empty (legacy bare-hole)
+    // spine: the candidate is stored unchanged.
+    assert_eq!(conv(&mut context, &occurrence, &nat(1)), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&nat(1)));
+}
+
+#[test]
+fn solve_postpones_a_duplicated_renaming() {
+    let mut context = context();
+    context.birth_metavar(
+        0,
+        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        nat_type(),
+        None,
+    );
+    // Both entries are the same live name: which birth binder `y` stands for
+    // is ambiguous, so a candidate mentioning it is undecided, not unequal.
+    let occurrence = Term::metavar_birthed(
+        0,
+        None,
+        vec![Term::var(Var::free("y")), Term::var(Var::free("y"))],
+    );
+
+    let outcome = convert_outcome(
+        &mut context,
+        &Term::type_(),
+        &occurrence,
+        &Term::var(Var::free("y")),
+    );
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn solve_prunes_dependence_on_a_non_pattern_entry() {
+    let mut context = context();
+    context.birth_metavar(
+        0,
+        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        nat_type(),
+        None,
+    );
+    // First slot a pattern variable, second a compound term: the candidate
+    // may depend on the first but not (yet) on the second.
+    let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
+
+    // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
+    assert_eq!(conv(&mut context, &occurrence, &Term::var(Var::free("y"))), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("a"))));
+}
+
+#[test]
+fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
+    let mut context = context();
+    context.birth_metavar(
+        0,
+        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        nat_type(),
+        None,
+    );
+    let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound]);
+
+    // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot
+    // (and is not an occurrence of the whole entry): undecided.
+    let outcome = convert_outcome(
+        &mut context,
+        &Term::type_(),
+        &occurrence,
+        &Term::var(Var::free("z")),
+    );
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn solve_rejects_an_out_of_image_variable() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
+
+    // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard
+    // mismatch, not a postponement.
+    let outcome = convert_outcome(
+        &mut context,
+        &Term::type_(),
+        &occurrence,
+        &Term::var(Var::free("z")),
+    );
+    assert!(matches!(outcome, Ok(Outcome::Mismatch)));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
+    let mut context = context();
+    // ?0 is already solved to its own binder, so an occurrence ?0[y] stands
+    // for `y` — a perfectly good pattern variable hiding behind a node.
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.solve_metavar(0, Term::var(Var::free("a")));
+    let entry = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
+
+    context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type(), None);
+    let occurrence = Term::metavar_birthed(1, None, vec![entry]);
+
+    // ?1[?0[y]] ≟ y — the entry resolves to `y` and inverts to `b`.
+    assert_eq!(conv(&mut context, &occurrence, &Term::var(Var::free("y"))), Ok(true));
+    assert_eq!(context.metavar_solution(1), Some(&Term::var(Var::free("b"))));
+}
+

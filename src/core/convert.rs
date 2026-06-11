@@ -715,27 +715,45 @@ impl Convert {
         let telescope = entry.telescope.clone();
         let result = entry.result.clone();
 
+        assert!(
+            metavar.spine.is_empty() || metavar.spine.len() == telescope.len(),
+            "metavariable spine arity diverged from its birth telescope"
+        );
+
+        // Resolve *solved-metavariable* entries to their values first — a
+        // solved entry stands for its (possibly variable) value, and chains
+        // terminate because the occurs check forbids solution cycles. Entries
+        // are otherwise deliberately unreduced: a name backed by a definition
+        // must stay that name, or an obviously-invertible renaming looks
+        // flexible.
+        let entries = metavar
+            .spine
+            .iter()
+            .map(|term| {
+                let mut entry = term.clone();
+                while let Subterm::Metavar(m) = &*entry {
+                    match context.resolve_metavar(m) {
+                        Some(resolved) => entry = resolved,
+                        None => break,
+                    }
+                }
+                entry
+            })
+            .collect::<Vec<_>>();
+
         // Invert the spine through its *pattern* entries — a syntactic free
-        // variable (deliberately unreduced: a name backed by a definition must
-        // stay that name) whose name no other entry shares. A non-variable or
+        // variable whose name no other entry shares. A non-variable or
         // duplicated entry is simply not invertible; the solution then may not
         // depend on that slot, which the scope check below enforces — pruning
         // in its simplest form. An empty spine (a never-rebuilt hole) is the
         // identity renaming over the whole telescope.
-        let image: Vec<(String, &str)> = if metavar.spine.is_empty() {
+        let image: Vec<(String, &str)> = if entries.is_empty() {
             telescope
                 .iter()
                 .map(|(name, _)| (name.clone(), name.as_str()))
                 .collect()
         } else {
-            assert_eq!(
-                metavar.spine.len(),
-                telescope.len(),
-                "metavariable spine arity diverged from its birth telescope"
-            );
-
-            let names = metavar
-                .spine
+            let names = entries
                 .iter()
                 .map(|term| match &**term {
                     Subterm::Var(var) => var.as_free(),
@@ -768,11 +786,8 @@ impl Convert {
             if allowed.contains(&name) {
                 continue;
             }
-            let mentioned = metavar.spine.is_empty()
-                || metavar
-                    .spine
-                    .iter()
-                    .any(|entry| entry.free_vars().contains(&name));
+            let mentioned = entries.is_empty()
+                || entries.iter().any(|entry| entry.free_vars().contains(&name));
             return Ok(match mentioned {
                 true => Solved::Postponed,
                 false => Solved::Failed,
