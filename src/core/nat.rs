@@ -51,12 +51,22 @@ impl Nat {
         Some(Self::new(self.to_big_uint()? * other.to_big_uint()?))
     }
 
+    /// `None` on a symbolic operand *or* a zero divisor — never a panic; the
+    /// reducer reports the zero-divisor case before folding.
     pub fn checked_div(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? / other.to_big_uint()?))
+        let left = self.to_big_uint()?;
+        let right = other.to_big_uint()?;
+
+        (!right.is_zero()).then(|| Self::new(left / right))
     }
 
+    /// `None` on a symbolic operand or a zero divisor, like
+    /// [`Nat::checked_div`].
     pub fn checked_rem(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? % other.to_big_uint()?))
+        let left = self.to_big_uint()?;
+        let right = other.to_big_uint()?;
+
+        (!right.is_zero()).then(|| Self::new(left % right))
     }
 
     pub fn eql(&self, other: &Self) -> Option<bool> {

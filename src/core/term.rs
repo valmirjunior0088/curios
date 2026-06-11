@@ -802,7 +802,7 @@ impl Subterm {
 
     pub fn as_int(&self) -> Option<Int> {
         match self {
-            Subterm::Prim(Prim::Int(value)) => Some(*value),
+            Subterm::Prim(Prim::Int(value)) => Some(value.clone()),
             _ => None,
         }
     }
@@ -1434,7 +1434,7 @@ where
             Prim::NatGte(visit.visit_subterm(left), visit.visit_subterm(right))
         }
         Prim::IntType => Prim::IntType,
-        Prim::Int(value) => Prim::Int(*value),
+        Prim::Int(value) => Prim::Int(value.clone()),
         Prim::IntEql(left, right) => {
             Prim::IntEql(visit.visit_subterm(left), visit.visit_subterm(right))
         }

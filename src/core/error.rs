@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Term},
+    super::{Atom, Int, Term},
     crate::Span,
     num_bigint::BigUint,
     std::fmt,
@@ -34,6 +34,15 @@ pub enum ReduceError {
         kind: &'static str,
         span: Option<Span>,
     },
+    /// A `Nat`/`Int` division whose divisor reduced to literal zero —
+    /// mathematically undefined, so reported like
+    /// [`ReduceError::BinGetOutOfBounds`] rather than panicking the fold.
+    /// (Runtime *range* limits, by contrast, never error at the type level:
+    /// `Nat`/`Int` folds are unbounded there.)
+    DivisionByZero {
+        kind: &'static str,
+        span: Option<Span>,
+    },
 }
 
 #[derive(Debug)]
@@ -64,6 +73,9 @@ pub enum Error {
         end: usize,
     },
     IoAtTypeLevel {
+        kind: &'static str,
+    },
+    DivisionByZero {
         kind: &'static str,
     },
     TypeMismatch {
@@ -178,6 +190,14 @@ pub enum Error {
     },
     NatOverflow {
         value: BigUint,
+    },
+    /// An `Int` literal that survived to `erase` but does not fit `ersd`'s
+    /// `i32` carrier — the type level is unbounded, so the representation
+    /// narrowing lives at the erase boundary, like [`Error::NatOverflow`]'s
+    /// u32. (The runtime's own i31 limit is enforced where it appears:
+    /// `cont` → wasm lowering.)
+    IntOverflow {
+        value: Box<Int>,
     },
     /// A union match's annotated motive names a different union than the
     /// scrutinee's type.
@@ -431,6 +451,12 @@ impl Error {
         Self::NatOverflow { value }
     }
 
+    pub fn int_overflow(value: Int) -> Self {
+        Self::IntOverflow {
+            value: Box::new(value),
+        }
+    }
+
     pub fn motive_wrong_union<T: Into<Term>>(term: T, written: String, actual: String) -> Self {
         Self::MotiveWrongUnion {
             term: Box::new(term.into()),
@@ -649,6 +675,9 @@ impl fmt::Display for Error {
             Error::NatOverflow { value } => {
                 write!(f, "Nat literal {value} overflows u32 at the erase boundary")
             }
+            Error::IntOverflow { value } => {
+                write!(f, "Int literal {value:+} overflows i32 at the erase boundary")
+            }
             Error::MotiveWrongUnion {
                 written, actual, ..
             } => {
@@ -704,6 +733,9 @@ impl fmt::Display for Error {
             Error::IoAtTypeLevel { kind } => {
                 write!(f, "{kind} cannot appear at the type level")
             }
+            Error::DivisionByZero { kind } => {
+                write!(f, "division by zero in {kind}")
+            }
             Error::Located { error, .. } => {
                 write!(f, "{error}")
             }
@@ -734,6 +766,7 @@ impl ReduceError {
                 span,
             } => Error::ArrSliceOutOfRange { len, start, end }.at_opt(span),
             Self::IoAtTypeLevel { kind, span } => Error::IoAtTypeLevel { kind }.at_opt(span),
+            Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
         }
     }
 }

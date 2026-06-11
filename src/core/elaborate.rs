@@ -1726,9 +1726,9 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
 /// *current* (persistent base) frame, and return its rebuilt form. The flat
 /// analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail
 /// recursion: the binding must stay in scope for every later item and the
-/// entrypoint body. The original body is `define`d (domain-blind reduction makes
-/// it interchangeable with the rebuilt one); the rebuilt `Definition` flows on to
-/// `zonk`/`erase`.
+/// entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes
+/// the lowered one no longer interchangeable; see the comment below), and the
+/// rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
     let type_ = check(context, &def.type_, Term::type_())?;
     let body = check(context, &def.body, type_.clone())?;

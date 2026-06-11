@@ -1,7 +1,7 @@
 use {
     super::erase,
     crate::{
-        core::{Context, Error, Nat, Prim, Subterm, Term, reduce_with},
+        core::{Context, Error, Int, Nat, Prim, Subterm, Term, reduce_with},
         ersd,
     },
     num_bigint::BigUint,
@@ -10,6 +10,15 @@ use {
 
 fn narrow_nat(k: &BigUint) -> Result<u32, Error> {
     k.to_u32().ok_or_else(|| Error::nat_overflow(k.clone()))
+}
+
+/// Narrow an unbounded type-level `Int` to `ersd`'s `i32` carrier, like
+/// [`narrow_nat`]'s u32. The runtime's own i31 limit is enforced where it
+/// appears, in the `cont` → wasm lowering.
+fn narrow_int(value: &Int) -> Result<i32, Error> {
+    value
+        .to_i32()
+        .ok_or_else(|| Error::int_overflow(value.clone()))
 }
 
 fn prim_type(prim: Prim) -> Term {
@@ -110,7 +119,7 @@ pub fn erase_prim(
             erase(context, right, &nat_type())?,
         ))),
         Prim::IntType => Ok(ersd::Subterm::Erased.into()),
-        &Prim::Int(value) => Ok(pure(ersd::PurePrim::Int(value.to_i32()))),
+        Prim::Int(value) => Ok(pure(ersd::PurePrim::Int(narrow_int(value)?))),
         Prim::IntEql(left, right) => Ok(pure(ersd::PurePrim::IntEql(
             erase(context, left, &int_type())?,
             erase(context, right, &int_type())?,

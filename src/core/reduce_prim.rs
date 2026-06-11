@@ -1,7 +1,7 @@
 use {
     super::reduce,
     crate::core::{Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term},
-    num_traits::ToPrimitive,
+    num_traits::{ToPrimitive, Zero},
 };
 
 /// Reduce both operands of a `Nat` binary primitive, then either `fold` the two literals or
@@ -27,6 +27,41 @@ fn reduce_nat_binary(
     }))
 }
 
+/// `Nat/div`/`Nat/rem`: like [`reduce_nat_binary`], but partial — a divisor
+/// that reduces to literal zero is a reported error (the type-level mirror of
+/// the runtime trap, following `BinGet`'s pattern), never a Rust panic. A
+/// symbolic operand still rebuilds the neutral term.
+fn reduce_nat_division(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    kind: &'static str,
+    fold: impl FnOnce(Nat, Nat) -> Option<Nat>,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, ReduceError> {
+    let span = right.span().or_else(|| left.span());
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    if right
+        .as_nat()
+        .and_then(|divisor| divisor.to_big_uint())
+        .is_some_and(|divisor| divisor.is_zero())
+    {
+        return Err(ReduceError::DivisionByZero { kind, span });
+    }
+
+    let folded = match (left.as_nat(), right.as_nat()) {
+        (Some(l), Some(r)) => fold(l, r).map(Prim::Nat),
+        _ => None,
+    };
+
+    Ok(Subterm::Prim(match folded {
+        Some(prim) => prim,
+        None => rebuild(left, right),
+    }))
+}
+
 /// `Int` counterpart of [`reduce_nat_binary`].
 fn reduce_int_binary(
     context: &mut Context,
@@ -41,6 +76,37 @@ fn reduce_int_binary(
     Ok(Subterm::Prim(match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => fold(l, r),
         _ => rebuild(left, right),
+    }))
+}
+
+/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that
+/// reduces to literal zero is a reported error — mathematically undefined,
+/// following `BinGet`'s pattern. The fold itself is exact and total past
+/// that: the type level pretends ℤ (see [`Int`]).
+fn reduce_int_division(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    kind: &'static str,
+    fold: impl FnOnce(Int, Int) -> Option<Int>,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, ReduceError> {
+    let span = right.span().or_else(|| left.span());
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    if right.as_int().is_some_and(|divisor| divisor.is_zero()) {
+        return Err(ReduceError::DivisionByZero { kind, span });
+    }
+
+    let folded = match (left.as_int(), right.as_int()) {
+        (Some(l), Some(r)) => fold(l, r).map(Prim::Int),
+        _ => None,
+    };
+
+    Ok(Subterm::Prim(match folded {
+        Some(prim) => prim,
+        None => rebuild(left, right),
     }))
 }
 
@@ -77,17 +143,19 @@ fn reduce_nat_unary(
     }))
 }
 
-/// `Int` counterpart of [`reduce_nat_unary`].
+/// `Int` counterpart of [`reduce_nat_unary`]. The fold's `None` rebuilds the
+/// neutral term: with `Int` unbounded at the type level, a conversion of a
+/// value the target cannot represent simply stays stuck.
 fn reduce_int_unary(
     context: &mut Context,
     inner: &Term,
-    fold: impl FnOnce(Int) -> Prim,
+    fold: impl FnOnce(Int) -> Option<Prim>,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
     let inner = reduce(context, inner.clone())?;
 
-    Ok(Subterm::Prim(match inner.as_int() {
-        Some(value) => fold(value),
+    Ok(Subterm::Prim(match inner.as_int().and_then(fold) {
+        Some(prim) => prim,
         None => rebuild(inner),
     }))
 }
@@ -203,20 +271,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |l, r| l.lt(&r).map(Prim::Bln),
             Prim::NatLt,
         ),
-        Prim::NatDiv(left, right) => reduce_nat_binary(
-            context,
-            left,
-            right,
-            |l, r| l.checked_div(r).map(Prim::Nat),
-            Prim::NatDiv,
-        ),
-        Prim::NatRem(left, right) => reduce_nat_binary(
-            context,
-            left,
-            right,
-            |l, r| l.checked_rem(r).map(Prim::Nat),
-            Prim::NatRem,
-        ),
+        Prim::NatDiv(left, right) => {
+            reduce_nat_division(context, left, right, "Nat/div", Nat::checked_div, Prim::NatDiv)
+        }
+        Prim::NatRem(left, right) => {
+            reduce_nat_division(context, left, right, "Nat/rem", Nat::checked_rem, Prim::NatRem)
+        }
         Prim::NatGt(left, right) => reduce_nat_binary(
             context,
             left,
@@ -239,7 +299,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             Prim::NatGte,
         ),
         Prim::IntType => Ok(Subterm::Prim(Prim::IntType)),
-        Prim::Int(value) => Ok(Subterm::Prim(Prim::Int(*value))),
+        Prim::Int(value) => Ok(Subterm::Prim(Prim::Int(value.clone()))),
         Prim::IntEql(left, right) => reduce_int_binary(
             context,
             left,
@@ -275,20 +335,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |left, right| Prim::Int(left * right),
             Prim::IntMul,
         ),
-        Prim::IntDiv(left, right) => reduce_int_binary(
-            context,
-            left,
-            right,
-            |left, right| Prim::Int(left / right),
-            Prim::IntDiv,
-        ),
-        Prim::IntRem(left, right) => reduce_int_binary(
-            context,
-            left,
-            right,
-            |left, right| Prim::Int(left % right),
-            Prim::IntRem,
-        ),
+        Prim::IntDiv(left, right) => {
+            reduce_int_division(context, left, right, "Int/div", Int::checked_div, Prim::IntDiv)
+        }
+        Prim::IntRem(left, right) => {
+            reduce_int_division(context, left, right, "Int/rem", Int::checked_rem, Prim::IntRem)
+        }
         Prim::IntLt(left, right) => reduce_int_binary(
             context,
             left,
@@ -439,7 +491,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::IntToStr(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Prim::Bin(format!("{v}").into_bytes()),
+            |v| Some(Prim::Bin(format!("{v}").into_bytes())),
             Prim::IntToStr,
         ),
         Prim::FltToStr(inner) => reduce_flt_unary(
@@ -481,13 +533,13 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::IntToNat(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Prim::Nat(Nat::new(v.to_i32() as u32)),
+            |v| Some(Prim::Nat(Nat::new(v.to_i32()? as u32))),
             Prim::IntToNat,
         ),
         Prim::IntToFlt(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Prim::Flt(Flt::from_f32(v.to_i32() as f32)),
+            |v| Some(Prim::Flt(Flt::from_f32(v.to_i32()? as f32))),
             Prim::IntToFlt,
         ),
         Prim::FltToNat(inner) => reduce_flt_unary(
@@ -496,12 +548,18 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |flt| Prim::Nat(Nat::new(flt.to_f32() as u32)),
             Prim::FltToNat,
         ),
-        Prim::FltToInt(inner) => reduce_flt_unary(
-            context,
-            inner,
-            |flt| Prim::Int(Int::new(flt.to_f32() as i64)),
-            Prim::FltToInt,
-        ),
+        // Exact — the type level pretends ℤ, so no finite float is out of
+        // range. A float with no integer part at all (NaN, ±inf) folds to
+        // nothing and the term stays stuck.
+        Prim::FltToInt(inner) => {
+            let inner = reduce(context, inner.clone())?;
+            Ok(Subterm::Prim(
+                match inner.as_flt().and_then(|v| Int::from_f32_trunc(v.to_f32())) {
+                    Some(int) => Prim::Int(int),
+                    None => Prim::FltToInt(inner),
+                },
+            ))
+        }
         Prim::BinType => Ok(Subterm::Prim(Prim::BinType)),
         Prim::Bin(bytes) => Ok(Subterm::Prim(Prim::Bin(bytes.clone()))),
         Prim::BinLen(bin) => {

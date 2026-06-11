@@ -179,7 +179,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::NatToStr(inner) => flat([pure("Nat.to_str "), print_term(inner, depth)]),
         Prim::IntType => pure("Int"),
-        Prim::Int(value) => pure(format!("{:+}", value.to_i32())),
+        Prim::Int(value) => pure(format!("{value:+}")),
         Prim::IntEql(left, right) => flat([
             pure("Int.eql "),
             print_term(left, depth),

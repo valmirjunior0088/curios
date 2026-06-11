@@ -395,3 +395,154 @@ fn refinement_is_suppressible() {
     let reduced = context.with_suppressed_refinements(|context| reduce(context, b.clone()));
     assert_eq!(reduced, Ok(b));
 }
+
+// === Type-level partial arithmetic ===========================================
+//
+// A literal zero divisor is mathematically undefined and reports through a
+// `ReduceError` (the `BinGet` pattern, span and all) — never a Rust panic.
+// Runtime *range* limits, by contrast, never error here: `Nat`/`Int` are
+// unbounded at the type level, folds compute exactly, and the 31-bit
+// narrowing is enforced downstream (`ersd`'s carriers at the erase boundary,
+// the i31 traps in `cont` → wasm).
+
+#[test]
+fn reduce_nat_div_by_zero_reports() {
+    let mut context = context();
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::nat_div(
+                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+                Subterm::Prim(Prim::Nat(Nat::new(0usize))),
+            )),
+        ),
+        Err(ReduceError::DivisionByZero {
+            kind: "Nat/div",
+            span: None,
+        })
+    );
+
+    // The divisor alone forces the trap: a neutral dividend still reports.
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::nat_div(
+                Term::var(Var::free("x")),
+                Term::prim(Prim::Nat(Nat::new(0usize))),
+            )),
+        ),
+        Err(ReduceError::DivisionByZero {
+            kind: "Nat/div",
+            span: None,
+        })
+    );
+
+    // A symbolic divisor is not a zero divisor: the term just stays stuck.
+    let stuck = Term::prim(Prim::nat_div(
+        Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+        Subterm::Var(Var::free("y")),
+    ));
+    assert_eq!(reduce(&mut context, stuck.clone()), Ok(stuck));
+}
+
+#[test]
+fn reduce_nat_rem_by_zero_reports() {
+    let mut context = context();
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::nat_rem(
+                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+                Subterm::Prim(Prim::Nat(Nat::new(0usize))),
+            )),
+        ),
+        Err(ReduceError::DivisionByZero {
+            kind: "Nat/rem",
+            span: None,
+        })
+    );
+}
+
+#[test]
+fn reduce_int_div_by_zero_reports() {
+    let mut context = context();
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::int_div(
+                Subterm::Prim(Prim::Int(Int::new(1))),
+                Subterm::Prim(Prim::Int(Int::new(0))),
+            )),
+        ),
+        Err(ReduceError::DivisionByZero {
+            kind: "Int/div",
+            span: None,
+        })
+    );
+
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::int_rem(
+                Subterm::Prim(Prim::Int(Int::new(1))),
+                Subterm::Prim(Prim::Int(Int::new(0))),
+            )),
+        ),
+        Err(ReduceError::DivisionByZero {
+            kind: "Int/rem",
+            span: None,
+        })
+    );
+}
+
+#[test]
+fn reduce_int_arithmetic_is_unbounded() {
+    let mut context = context();
+
+    // Past the runtime's i31 range the type level keeps computing exactly —
+    // the limit is the runtime's, enforced downstream, not the checker's.
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::int_add(
+                Subterm::Prim(Prim::Int(Int::new((1i64 << 30) - 1))),
+                Subterm::Prim(Prim::Int(Int::new(1))),
+            )),
+        ),
+        Ok(Term::prim(Prim::Int(Int::new(1i64 << 30))))
+    );
+
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::int_mul(
+                Subterm::Prim(Prim::Int(Int::new(1i64 << 30))),
+                Subterm::Prim(Prim::Int(Int::new(1i64 << 30))),
+            )),
+        ),
+        Ok(Term::prim(Prim::Int(Int::new(1i64 << 60))))
+    );
+}
+
+#[test]
+fn reduce_flt_to_int_is_exact_or_stuck() {
+    let mut context = context();
+
+    // 2^31 is exactly representable in f32 and folds exactly, well past i31.
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
+                2147483648.0
+            ))))),
+        ),
+        Ok(Term::prim(Prim::Int(Int::new(1i64 << 31))))
+    );
+
+    // NaN has no integer part — no value to pretend, so the fold stays stuck
+    // (the runtime's trunc would trap).
+    let nan = Term::prim(Prim::FltToInt(Term::prim(Prim::Flt(Flt::from_f32(
+        f32::NAN,
+    )))));
+    assert_eq!(reduce(&mut context, nan.clone()), Ok(nan));
+}

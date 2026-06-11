@@ -68,6 +68,13 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 ])
             }
             &cont::Data::Int(value) => {
+                // In-range iff bit 30 agrees with the sign bit — the signed
+                // analogue of the `Nat` check above; `RefI31` would otherwise
+                // silently wrap the literal to 31 bits.
+                if value >> 30 != value >> 31 {
+                    panic!("Int literal {value} exceeds i31ref range");
+                }
+
                 self.emit_instrs([wasm::Instr::I32Const { value }, wasm::Instr::RefI31])
             }
             &cont::Data::Flt(value) => self.emit_instrs([

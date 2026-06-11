@@ -1031,3 +1031,23 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
         Some(&Term::var(Var::free("n")))
     );
 }
+
+#[test]
+fn eta_at_unit_trusts_the_goal_type_label() {
+    let mut context = context();
+
+    // Pinned wart, internal to the conversion API: when one side is the unit
+    // tuple literal `()`, `eta_expand_tuple` enqueues one goal per field —
+    // zero — and succeeds *without ever confirming the goal's type reduces to
+    // `{}`. So the kernel, asked directly, judges `() ≈ 1` at type `Nat`.
+    // Elaboration never produces a heterotyped goal (both sides of every
+    // `expect`/index comparison were checked at the same type), so this is
+    // not reachable from the surface language — but the conversion entry
+    // point is only sound under that caller invariant. If η-at-unit ever
+    // gates on the type actually being a 0-ary tuple type, flip this to
+    // `Ok(false)`.
+    assert_eq!(
+        convert(&mut context, &nat_type(), &Term::tuple_unit(), &nat(1)),
+        Ok(true)
+    );
+}
