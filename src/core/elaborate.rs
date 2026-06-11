@@ -261,7 +261,7 @@ fn elaborate_apply(
     // bare node past its rebuild (and a lowered term toward the reducer).
     // A postponed intro form stays lowered for now; its holes are unbirthed,
     // and its rebuilt form lands after the output `expect` pins its metas.
-    let mut postponed: Vec<(usize, Term, Term)> = Vec::new();
+    let mut postponed = Vec::new();
     let mut slot = 0usize;
     let (mut elaborated, output) = ft.telescope.clone().walk_map(params, |arg, ty| {
         let index = slot;

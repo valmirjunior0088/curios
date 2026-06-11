@@ -776,7 +776,7 @@ impl Convert {
         // duplicated entry is simply not invertible; the solution then may not
         // depend on that slot, which the scope check below enforces — pruning
         // in its simplest form.
-        let image: Vec<(String, &str)> = {
+        let image: Vec<_> = {
             let names = entries
                 .iter()
                 .map(|term| match &**term {
@@ -809,7 +809,7 @@ impl Convert {
         // exposes it at a whnf position (the candidate's root arrives reduced
         // while deep positions do not) — except a reduced form that is a bare
         // variable, which would collide with the renaming machinery.
-        let mut subjects: Vec<(Term, String)> = Vec::new();
+        let mut subjects = Vec::new();
         for (entry, (birth, _)) in entries.iter().zip(&telescope) {
             if matches!(&**entry, Subterm::Var(_))
                 || !entry.metavars().is_empty()
