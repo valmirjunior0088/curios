@@ -105,6 +105,12 @@ pub struct Context {
     // While set, `expect` may not park: conversion is being used as a yes/no
     // oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
+    // Diagnostic: total (name, type) cells cloned into frozen metavariable
+    // telescopes. Grows quadratically in top-level items today (every meta
+    // clones the full local Γ, which grows per item); a structural-sharing
+    // fix would collapse it to linear — the regression test watching this
+    // ratio flips on that day.
+    frozen_telescope_cells: usize,
     metas: MetaStore,
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` from `Module::metavars` so
@@ -142,6 +148,7 @@ impl Context {
             parked: Vec::new(),
             newly_solved: Vec::new(),
             suppress_parking: false,
+            frozen_telescope_cells: 0,
         }
     }
 
@@ -384,6 +391,8 @@ impl Context {
             self.metas.entries.resize_with(id + 1, || None);
         }
 
+        self.frozen_telescope_cells += telescope.len();
+
         self.metas.entries[id] = Some(MetaEntry {
             telescope,
             result,
@@ -424,6 +433,10 @@ impl Context {
             Some(span) => metavar.with_span(span),
             None => metavar,
         }
+    }
+
+    pub fn frozen_telescope_cells(&self) -> usize {
+        self.frozen_telescope_cells
     }
 
     pub fn metavar_entry(&self, id: usize) -> Option<&MetaEntry> {

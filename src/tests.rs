@@ -879,3 +879,45 @@ fn checking_problem_without_a_pin_still_rejects() {
     let (system, _receiver) = ChannelHost::out();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
+
+#[test]
+fn metavariable_telescope_freezing_is_quadratic_in_items() {
+    // The spine-pruning/structural-sharing wontfix's witness, pinned as a
+    // deterministic count (timing flakes under parallel tests): every minted
+    // metavariable clones the full local Γ, which grows by one per top-level
+    // item, so total frozen cells grow quadratically — doubling the items
+    // roughly quadruples the cells (quadrupling items: ~16x, against ~4x for linear; the prelude Γ dilutes the constant). The intended fix (Rc-share the frozen
+    // telescope) collapses the clone count to linear; when it lands, the
+    // ratio drops toward 2 and this test should flip (and `bench_check`
+    // should show the elaboration curve flattening).
+    fn frozen_cells(items: usize) -> usize {
+        let mut source = String::from("use /std/{Nat, Vec, Io};\n");
+        for i in 0..items {
+            source.push_str(&format!(
+                "let v{i} : Vec(Nat, 2) = Vec/cons({i}, Vec/cons({i}, Vec/nil()));\n"
+            ));
+        }
+        source.push_str("Io/print(\"ok\")\n");
+
+        let entrypoint = source
+            .parse::<crate::text::Entrypoint>()
+            .expect("witness source parses");
+        let module = crate::text::to_core(&entrypoint, &crate::text::prelude(&crate::text::NullLoader))
+            .expect("witness source lowers");
+
+        let mut context = crate::core::Context::new(Duration::from_secs(30));
+        crate::core::elaborate_module(&mut context, &module, crate::core::Mode::Infer)
+            .expect("witness source elaborates");
+        context.frozen_telescope_cells()
+    }
+
+    let small = frozen_cells(16);
+    let large = frozen_cells(64);
+    let ratio = large as f64 / small as f64;
+    eprintln!("cells: {small} -> {large} (ratio {ratio:.2})");
+    assert!(
+        ratio > 6.0,
+        "telescope freezing no longer quadratic (ratio {ratio:.2}) — \
+         structural sharing landed? retire this witness and re-baseline bench_check"
+    );
+}

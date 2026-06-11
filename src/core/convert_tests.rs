@@ -932,3 +932,25 @@ fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
     let outcome = convert_outcome(&mut context, &Term::type_(), &this, &that);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
 }
+
+#[test]
+fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
+    // The intersection wontfix's witness, pinned: two *distinct* unsolved
+    // metavariables over compatible telescopes, met through the same live
+    // name. Flex–flex assignment (`?0 := ?1` through the renaming) would
+    // discharge this; v1 does no intersection, so the pair parks and — with
+    // nothing else to pin either head — stays undecided. When intersection
+    // is built, this test should flip to `Converts` with `?0` solved to an
+    // occurrence of `?1` (and this comment retired).
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type(), None);
+
+    let this = Term::metavar_birthed(0, None, vec![Term::var(Var::free("x"))]);
+    let that = Term::metavar_birthed(1, None, vec![Term::var(Var::free("x"))]);
+
+    let outcome = convert_outcome(&mut context, &Term::type_(), &this, &that);
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+    assert_eq!(context.metavar_solution(0), None);
+    assert_eq!(context.metavar_solution(1), None);
+}
