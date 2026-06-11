@@ -825,11 +825,8 @@ fn solve_abstracts_a_non_pattern_occurrence() {
         nat_type(),
         None,
     );
-    // A reduce-stable compound (a tuple is a normal form): occurrence
-    // matching is syntactic and the candidate side arrives *reduced*, so a
-    // compound the reducer rewrites (`z + 1` successor-peels, say) would no
-    // longer match its unreduced spine-entry spelling and conservatively
-    // postpone instead.
+    // A reduce-stable compound (a tuple is a normal form), matched by the
+    // raw spelling; the reduced-spelling case is the next test.
     let compound = Term::tuple([Term::var(Var::free("z"))]);
     let occurrence =
         Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
@@ -886,4 +883,25 @@ fn parked_goals_without_their_refinement_mismatch() {
     });
 
     assert!(drain_parked(&mut context).is_err());
+}
+
+#[test]
+fn solve_abstracts_a_reduced_spelling_occurrence() {
+    let mut context = context();
+    context.birth_metavar(
+        0,
+        vec![("a".into(), nat_type()), ("b".into(), nat_type())],
+        nat_type(),
+        None,
+    );
+    // `z + 1` successor-peels under reduction, and the candidate side arrives
+    // reduced — each subject contributes both spellings, so the occurrence
+    // still abstracts, and the round-trip verification accepts the pair by
+    // definitional (not syntactic) equality.
+    let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
+    let occurrence =
+        Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
+
+    assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("b"))));
 }

@@ -461,7 +461,7 @@ fn elaborate_nat_match(
     // body reaching the reducer would open a telescope at the wrong arity.
     let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
-    seed_motive(context, term, &motive, head, &mode)?;
+    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     let zero_elaborated = check(
         context,
@@ -495,7 +495,7 @@ fn elaborate_nat_match(
 
     let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
-    let result_type = motive.open(&[head]);
+    let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
@@ -523,7 +523,7 @@ fn elaborate_switch(
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
 
-    seed_motive(context, term, &motive, head, &mode)?;
+    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     let mut cases_elaborated = BTreeMap::new();
     for (n, body) in cases {
@@ -542,9 +542,9 @@ fn elaborate_switch(
         cases_elaborated.insert(*n, body);
     }
 
-    let default_elaborated = check(context, default, motive.open(&[head]))?;
+    let default_elaborated = check(context, default, motive.open(&[&head_elaborated]))?;
 
-    let result_type = motive.open(&[head]);
+    let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
@@ -603,7 +603,7 @@ fn elaborate_bln_match(
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
 
-    seed_motive(context, term, &motive, head, &mode)?;
+    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     let false_elaborated = context.with_frame(|context| {
         refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into());
@@ -623,7 +623,7 @@ fn elaborate_bln_match(
         )
     })?;
 
-    let result_type = motive.open(&[head]);
+    let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
@@ -839,7 +839,7 @@ fn elaborate_union_match(
             SlotPlan::Index(j) => actual_indices[*j].clone(),
         })
         .collect::<Vec<_>>();
-    let result_refs = result_args.iter().chain([head]).collect::<Vec<_>>();
+    let result_refs = result_args.iter().chain([&head_elaborated]).collect::<Vec<_>>();
     let result_type = motive_elaborated.open(&result_refs);
 
     // The seed (`seed_motive`'s job, generalized over the pattern binders):

@@ -805,15 +805,37 @@ impl Convert {
         // non-variable terms" move; the choice of all occurrences is checked
         // by the round-trip verification below and by re-validation). An
         // entry embedding a metavariable, or equal to another entry, stays
-        // ambiguous, and the candidate may not depend on it.
-        let subjects: Vec<(Term, String)> = entries
-            .iter()
-            .zip(&telescope)
-            .filter(|(entry, _)| !matches!(&***entry, Subterm::Var(_)))
-            .filter(|(entry, _)| entry.metavars().is_empty())
-            .filter(|(entry, _)| entries.iter().filter(|e| *e == *entry).count() == 1)
-            .map(|(entry, (birth, _))| (entry.clone(), birth.clone()))
-            .collect();
+        // ambiguous, and the candidate may not depend on it. Each subject
+        // contributes both its spellings — as written, and as the reducer
+        // exposes it at a whnf position (the candidate's root arrives reduced
+        // while deep positions do not) — except a reduced form that is a bare
+        // variable, which would collide with the renaming machinery.
+        let mut subjects: Vec<(Term, String)> = Vec::new();
+        for (entry, (birth, _)) in entries.iter().zip(&telescope) {
+            if matches!(&**entry, Subterm::Var(_))
+                || !entry.metavars().is_empty()
+                || entries.iter().filter(|e| *e == entry).count() != 1
+            {
+                continue;
+            }
+
+            subjects.push((entry.clone(), birth.clone()));
+
+            // An entry the type level may not reduce (an effectful scrutinee,
+            // say) simply contributes no reduced spelling — only preemption
+            // propagates.
+            let reduced = match reduce(context, entry.clone()) {
+                Ok(reduced) => reduced,
+                Err(ReduceError::Preempted) => return Err(ReduceError::Preempted),
+                Err(_) => continue,
+            };
+            let ambiguous = matches!(&*reduced, Subterm::Var(_))
+                || entries.iter().any(|e| *e == reduced)
+                || subjects.iter().any(|(s, _)| *s == reduced);
+            if !ambiguous {
+                subjects.push((reduced, birth.clone()));
+            }
+        }
 
         let abstracted = match subjects.is_empty() {
             true => t.clone(),
@@ -862,16 +884,21 @@ impl Convert {
 
         // The equation must hold by construction: resolving the candidate
         // solution back through this occurrence's spine must reproduce the
-        // candidate exactly. This guards the whole abstraction/inversion pair
-        // — a missed occurrence or an unfaithful rename postpones instead of
-        // committing a wrong solution.
+        // candidate. This guards the whole abstraction/inversion pair — a
+        // missed occurrence or an unfaithful rename postpones instead of
+        // committing a wrong solution. Syntactic equality is the fast path;
+        // an abstraction that matched a *reduced* spelling resolves back to
+        // the raw one, so the fallback criterion is definitional — a strict
+        // conversion, which cannot solve anything here since both sides are
+        // meta-free past the embedded guard.
         if !metavar.spine.is_empty() {
             let labels = telescope
                 .iter()
                 .map(|(name, _)| name.as_str())
                 .collect::<Vec<_>>();
             let refs = entries.iter().collect::<Vec<_>>();
-            if inverted.capture(&labels).release(&refs) != *t {
+            let resolved = inverted.capture(&labels).release(&refs);
+            if resolved != *t && !convert(context, &Term::type_(), &resolved, t)? {
                 return Ok(Solved::Postponed);
             }
         }
