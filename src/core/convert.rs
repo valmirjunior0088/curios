@@ -878,22 +878,19 @@ impl Convert {
 
         // Re-validation (§7.4): the (inverted) candidate must type-check
         // against the metavariable's frozen type, under its birth context Γ,
-        // with counterfactual refinements suppressed. Stable definitions are
-        // kept. Parking is suppressed too: re-validation is a yes/no oracle,
-        // and the `infer` below runs full elaboration — a constraint parked
-        // (provisional success) inside it would leak into the verdict.
+        // as an *oracle* — counterfactual refinements and constraint parking
+        // both suppressed (see `Context::with_oracle`). Stable definitions
+        // are kept.
         let revalidated = context.with_frame(|context| {
             for (name, ty) in &telescope {
                 context.assume(name, ty);
             }
 
-            context.with_suppressed_parking(|context| {
-                context.with_suppressed_refinements(|context| match infer(context, &inverted) {
-                    Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
-                    // A meta-free, well-scoped candidate that fails to synthesize is
-                    // not validly typed here — reject the solution.
-                    Err(_) => Ok(false),
-                })
+            context.with_oracle(|context| match infer(context, &inverted) {
+                Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
+                // A meta-free, well-scoped candidate that fails to synthesize is
+                // not validly typed here — reject the solution.
+                Err(_) => Ok(false),
             })
         })?;
 

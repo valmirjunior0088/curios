@@ -531,10 +531,18 @@ impl Context {
         self.suppress_parking
     }
 
-    /// Run `f` with parking suppressed: `expect` then treats `Blocked` as a
-    /// mismatch, as it did before the store existed. Used wherever conversion
-    /// acts as a yes/no oracle around full elaboration (re-validation).
-    pub fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    /// Run `f` as a yes/no *oracle* around full elaboration (re-validation):
+    /// parking is suppressed — `expect` treats `Blocked` as a mismatch and
+    /// `retry_parked` is a no-op, so provisional success can neither leak into
+    /// the verdict nor consume a parked obligation whose error the oracle
+    /// would swallow — and counterfactual refinements are suppressed with it.
+    /// The two suppressions are a package: an oracle that set only one would
+    /// be subtly unsound, which is why the parking half has no public setter.
+    pub fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.with_suppressed_parking(|context| context.with_suppressed_refinements(f))
+    }
+
+    fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.suppress_parking;
         self.suppress_parking = true;
 
