@@ -3,6 +3,7 @@ use {
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
+        rc::Rc,
         time::{Duration, Instant},
     },
 };
@@ -13,7 +14,8 @@ use {
 pub struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with
     /// birth-time types. Drives the scope check and re-validation (§7.3–§7.4).
-    pub telescope: Vec<(String, Term)>,
+    /// `Rc`-shared: every meta born under the same Γ shares one allocation.
+    pub telescope: Rc<Vec<(String, Term)>>,
     /// The metavariable's type — the `expected` it was checked against at birth.
     pub result: Term,
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a
@@ -105,12 +107,12 @@ pub struct Context {
     // While set, `expect` may not park: conversion is being used as a yes/no
     // oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
-    // Diagnostic: total (name, type) cells cloned into frozen metavariable
-    // telescopes. Grows quadratically in top-level items today (every meta
-    // clones the full local Γ, which grows per item); a structural-sharing
-    // fix would collapse it to linear — the regression test watching this
-    // ratio flips on that day.
-    frozen_telescope_cells: usize,
+    // One tick per mutation of `local` (assume, frame exit, reassume) —
+    // an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads.
+    // Invalidates `identity_cache`, which shares the frozen telescope and
+    // identity spine between every meta born under an unchanged Γ.
+    locals_stamp: Entropy,
+    identity_cache: Option<(usize, Rc<Vec<(String, Term)>>, Rc<Vec<Term>>)>,
     metas: MetaStore,
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` from `Module::metavars` so
@@ -148,7 +150,8 @@ impl Context {
             parked: Vec::new(),
             newly_solved: Vec::new(),
             suppress_parking: false,
-            frozen_telescope_cells: 0,
+            locals_stamp: Entropy::new(),
+            identity_cache: None,
         }
     }
 
@@ -192,6 +195,7 @@ impl Context {
     }
 
     fn leave_frame(&mut self) {
+        self.locals_stamp.fresh();
         self.assumptions.pop().unwrap();
         let definitions = self.definitions.pop().unwrap();
         let refinements = self.refinements.pop().unwrap();
@@ -217,6 +221,7 @@ impl Context {
         A: Into<String>,
     {
         let label = label.into();
+        self.locals_stamp.fresh();
         self.local.push((label.clone(), type_.clone()));
         self.assumptions
             .last_mut()
@@ -231,6 +236,7 @@ impl Context {
     /// — implicit insertion makes the two no longer interchangeable, and a
     /// lowered type must never leak into later reduction.
     pub fn reassume(&mut self, label: &str, type_: &Term) {
+        self.locals_stamp.fresh();
         if let Some(entry) = self.local.iter_mut().rev().find(|(name, _)| name == label) {
             entry.1 = type_.clone();
         }
@@ -383,7 +389,7 @@ impl Context {
     pub fn birth_metavar(
         &mut self,
         id: usize,
-        telescope: Vec<(String, Term)>,
+        telescope: impl Into<Rc<Vec<(String, Term)>>>,
         result: Term,
         span: Option<Span>,
     ) {
@@ -391,14 +397,35 @@ impl Context {
             self.metas.entries.resize_with(id + 1, || None);
         }
 
-        self.frozen_telescope_cells += telescope.len();
-
         self.metas.entries[id] = Some(MetaEntry {
-            telescope,
+            telescope: telescope.into(),
             result,
             solution: None,
             span,
         });
+    }
+
+    /// The frozen telescope and identity spine for the *current* Γ, shared:
+    /// rebuilt only when `local` has changed since the last birth, so minting
+    /// a metavariable is O(1) amortized instead of O(|Γ|) per mint — the
+    /// difference between linear and quadratic elaboration over a module.
+    pub fn identity_snapshot(&mut self) -> (Rc<Vec<(String, Term)>>, Rc<Vec<Term>>) {
+        if let Some((stamp, telescope, spine)) = &self.identity_cache {
+            if *stamp == self.locals_stamp.count() {
+                return (telescope.clone(), spine.clone());
+            }
+        }
+
+        let telescope = Rc::new(self.local.clone());
+        let spine = Rc::new(
+            telescope
+                .iter()
+                .map(|(name, _)| Term::var(Var::free(name)))
+                .collect::<Vec<_>>(),
+        );
+        self.identity_cache = Some((self.locals_stamp.count(), telescope.clone(), spine.clone()));
+
+        (telescope, spine)
     }
 
     /// Raise the minting floor: every id `fresh_metavar` hands out will be
@@ -421,11 +448,7 @@ impl Context {
     ) -> Term {
         let id = self.next_metavar.fresh();
 
-        let telescope = self.local_context().to_vec();
-        let spine = telescope
-            .iter()
-            .map(|(name, _)| Term::var(Var::free(name)))
-            .collect();
+        let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result, span.clone());
 
         let metavar = Term::metavar_inserted(id, origin, spine);
@@ -433,10 +456,6 @@ impl Context {
             Some(span) => metavar.with_span(span),
             None => metavar,
         }
-    }
-
-    pub fn frozen_telescope_cells(&self) -> usize {
-        self.frozen_telescope_cells
     }
 
     pub fn metavar_entry(&self, id: usize) -> Option<&MetaEntry> {
@@ -572,11 +591,7 @@ impl Context {
     pub fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (usize, Term) {
         let id = self.next_metavar.fresh();
 
-        let telescope = self.local_context().to_vec();
-        let spine = telescope
-            .iter()
-            .map(|(name, _)| Term::var(Var::free(name)))
-            .collect();
+        let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result, span.clone());
 
         let term = Term::metavar_birthed(id, None, spine);

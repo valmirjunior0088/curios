@@ -119,7 +119,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
 
     let entry = context.metavar_entry(0).expect("hole was born");
     assert_eq!(entry.result, nat());
-    assert_eq!(entry.telescope, vec![("x".to_string(), nat())]);
+    assert_eq!(*entry.telescope, vec![("x".to_string(), nat())]);
 }
 
 #[test]

@@ -787,7 +787,7 @@ impl Convert {
 
             names
                 .iter()
-                .zip(&telescope)
+                .zip(telescope.iter())
                 .filter_map(|(name, (birth, _))| {
                     let name = (*name)?;
                     // A duplicated image name is ambiguous to invert.
@@ -810,7 +810,7 @@ impl Convert {
         // while deep positions do not) — except a reduced form that is a bare
         // variable, which would collide with the renaming machinery.
         let mut subjects = Vec::new();
-        for (entry, (birth, _)) in entries.iter().zip(&telescope) {
+        for (entry, (birth, _)) in entries.iter().zip(telescope.iter()) {
             if matches!(&**entry, Subterm::Var(_))
                 || !entry.metavars().is_empty()
                 || entries.iter().filter(|e| *e == entry).count() != 1
@@ -908,7 +908,7 @@ impl Convert {
         // both suppressed (see `Context::with_oracle`). Stable definitions
         // are kept.
         let revalidated = context.with_frame(|context| {
-            for (name, ty) in &telescope {
+            for (name, ty) in telescope.iter() {
                 context.assume(name, ty);
             }
 
@@ -983,11 +983,11 @@ impl Convert {
                         && this_m
                             .spine
                             .iter()
-                            .chain(&that_m.spine)
+                            .chain(that_m.spine.iter())
                             .all(|entry| entry.metavars().is_empty())
                     {
                         let mut entrywise = true;
-                        for (a, b) in this_m.spine.iter().zip(&that_m.spine) {
+                        for (a, b) in this_m.spine.iter().zip(that_m.spine.iter()) {
                             if !convert(context, &Term::type_(), a, b)? {
                                 entrywise = false;
                                 break;

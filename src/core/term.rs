@@ -64,24 +64,36 @@ impl Term {
         Self::from(Subterm::Metavar(Metavar {
             id,
             origin: None,
-            spine: Vec::new(),
+            spine: Rc::new(Vec::new()),
         }))
     }
 
     /// A metavariable minted for an omitted implicit argument, carrying its
     /// insertion provenance (see [`Metavar::origin`]) and its birth spine.
-    pub fn metavar_inserted(id: usize, origin: ImplicitOrigin, spine: Vec<Term>) -> Self {
+    pub fn metavar_inserted(
+        id: usize,
+        origin: ImplicitOrigin,
+        spine: impl Into<Rc<Vec<Term>>>,
+    ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id,
             origin: Some(origin),
-            spine,
+            spine: spine.into(),
         }))
     }
 
     /// A hole rebuilt at its birth point with the identity spine over its
     /// frozen telescope (see [`Metavar::spine`]).
-    pub fn metavar_birthed(id: usize, origin: Option<ImplicitOrigin>, spine: Vec<Term>) -> Self {
-        Self::from(Subterm::Metavar(Metavar { id, origin, spine }))
+    pub fn metavar_birthed(
+        id: usize,
+        origin: Option<ImplicitOrigin>,
+        spine: impl Into<Rc<Vec<Term>>>,
+    ) -> Self {
+        Self::from(Subterm::Metavar(Metavar {
+            id,
+            origin,
+            spine: spine.into(),
+        }))
     }
 
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
@@ -750,11 +762,15 @@ pub struct ImplicitOrigin {
 /// re-closing under fresh names — which is what lets a solution mentioning a
 /// sibling binder resolve correctly wherever the occurrence ends up. An empty
 /// spine is a not-yet-birthed `to_core` hole and resolves as the identity.
+///
+/// The spine is `Rc`-shared: every meta born under the same Γ shares one
+/// identity-spine allocation (see `Context::identity_snapshot`), which is what
+/// keeps minting metavariables O(1) instead of O(|Γ|).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Metavar {
     pub id: usize,
     pub origin: Option<ImplicitOrigin>,
-    pub spine: Vec<Term>,
+    pub spine: Rc<Vec<Term>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1069,19 +1085,48 @@ impl Bound for Subterm {
             }),
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
             // The spine is ordinary term content: visiting it is what keeps
-            // the delayed substitution aligned through `close`/`open`.
-            Subterm::Metavar(Metavar { id, origin, spine }) => Subterm::Metavar(Metavar {
-                id: *id,
-                origin: origin.clone(),
-                spine: spine.iter().map(|t| visit.visit_subterm(t)).collect(),
-            }),
+            // the delayed substitution aligned through `close`/`open`. Spines
+            // are wide (one entry per birth binder) and overwhelmingly
+            // identity (bare variables a visit does not touch), so entries
+            // are copy-on-write — an untouched `Var` is an `Rc` bump, never a
+            // rebuild — and an entirely untouched spine reuses its shared
+            // allocation. This is what keeps per-traversal cost flat for the
+            // common meta instead of O(|Γ|) allocations.
+            Subterm::Metavar(Metavar { id, origin, spine }) => {
+                let mut touched = false;
+                let visited = spine
+                    .iter()
+                    .map(|t| match &**t {
+                        Subterm::Var(var) => match visit.call(var) {
+                            Some(rewritten) => {
+                                touched = true;
+                                Term::from(rewritten)
+                            }
+                            None => t.clone(),
+                        },
+                        _ => {
+                            let rebuilt = visit.visit_subterm(t);
+                            touched = touched || rebuilt != *t;
+                            rebuilt
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                Subterm::Metavar(Metavar {
+                    id: *id,
+                    origin: origin.clone(),
+                    spine: match touched {
+                        true => Rc::new(visited),
+                        false => spine.clone(),
+                    },
+                })
+            }
         }
     }
 
     fn reach(&self) -> usize {
         match self {
             Subterm::Type => 0,
-            Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine),
+            Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,

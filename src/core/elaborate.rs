@@ -1572,14 +1572,11 @@ fn elaborate_metavar(
                 expect(context, term, &result, &expected)?;
                 Ok((term.clone(), expected))
             } else {
-                let telescope = context.local_context().to_vec();
                 // Rebuild the hole with the identity spine over its frozen
                 // telescope: the rebuilt term is what flows downstream, so
                 // every surviving occurrence carries the delayed substitution.
-                let spine = telescope
-                    .iter()
-                    .map(|(name, _)| Term::var(Var::free(name)))
-                    .collect();
+                // Telescope and spine are the shared per-Γ snapshot.
+                let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, expected.clone(), term.span());
 
                 let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
