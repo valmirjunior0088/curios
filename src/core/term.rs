@@ -175,7 +175,10 @@ impl Term {
     }
 
     pub fn tuple_unit() -> Self {
-        Self::from(Subterm::Tuple(Tuple { fields: vec![] }))
+        Self::from(Subterm::Tuple(Tuple {
+            fields: vec![],
+            names: vec![],
+        }))
     }
 
     pub fn tuple<I, T>(fields: I) -> Self
@@ -185,13 +188,41 @@ impl Term {
     {
         Self::from(Subterm::Tuple(Tuple {
             fields: fields.into_iter().map(|t| t.into()).collect(),
+            names: vec![],
         }))
+    }
+
+    pub fn tuple_named<I, T>(fields: I) -> Self
+    where
+        I: IntoIterator<Item = (Option<String>, T)>,
+        T: Into<Term>,
+    {
+        let (mut names, fields): (Vec<_>, Vec<_>) = fields
+            .into_iter()
+            .map(|(name, term)| (name, term.into()))
+            .unzip();
+
+        // A literal with no written names is the same term as a positional
+        // one — keep the all-positional normal form (`names` empty) so
+        // syntactic equality does not split on how the literal was spelled.
+        if names.iter().all(Option::is_none) {
+            names = vec![];
+        }
+
+        Self::from(Subterm::Tuple(Tuple { fields, names }))
     }
 
     pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
-            index,
+            field: Field::Index(index),
+        }))
+    }
+
+    pub fn proj_label<H: Into<Term>, L: Into<String>>(head: H, label: L) -> Self {
+        Self::from(Subterm::Proj(Proj {
+            head: head.into(),
+            field: Field::Label(label.into()),
         }))
     }
 
@@ -540,15 +571,30 @@ pub struct TupleType {
     pub telescope: Telescope<()>,
 }
 
+/// `names` carries the literal's written field names (`(status = 0, …)`) from
+/// `to_core` to elaboration, which checks them against the expected tuple
+/// type's labels and rebuilds the literal name-free. Empty means "no names
+/// written" — the invariant for every internally-built and post-elaboration
+/// tuple.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tuple {
     pub fields: Vec<Term>,
+    pub names: Vec<Option<String>>,
+}
+
+/// A projection's field is positional in every post-elaboration term; the
+/// `Label` form exists only between `to_core` and `elaborate`, which resolves
+/// it against the head's tuple type and rebuilds it as `Index`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Field {
+    Index(usize),
+    Label(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Proj {
     pub head: Term,
-    pub index: usize,
+    pub field: Field,
 }
 
 /// An inductive type as a primitive normal form. Built inside the
@@ -760,7 +806,7 @@ impl Subterm {
                 params.iter().for_each(|p| p.collect_metavars(ids));
             }
             Subterm::TupleType(TupleType { telescope }) => telescope_metavars(telescope, ids),
-            Subterm::Tuple(Tuple { fields }) => {
+            Subterm::Tuple(Tuple { fields, .. }) => {
                 fields.iter().for_each(|f| f.collect_metavars(ids));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
@@ -911,12 +957,13 @@ impl Bound for Subterm {
             Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
                 telescope: telescope.traverse(visit),
             }),
-            Subterm::Tuple(Tuple { fields }) => Subterm::Tuple(Tuple {
+            Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
                 fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),
+                names: names.clone(),
             }),
-            Subterm::Proj(Proj { head, index }) => Subterm::Proj(Proj {
+            Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {
                 head: visit.visit_subterm(head),
-                index: *index,
+                field: field.clone(),
             }),
             Subterm::UnionType(UnionType {
                 name,
@@ -1018,7 +1065,7 @@ impl Bound for Subterm {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
             Subterm::Apply(Apply { head, params, .. }) => head.reach().max(max_reach(params)),
             Subterm::TupleType(TupleType { telescope }) => telescope.reach(),
-            Subterm::Tuple(Tuple { fields }) => max_reach(fields),
+            Subterm::Tuple(Tuple { fields, .. }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
             Subterm::UnionType(UnionType {
                 params, indices, ..
@@ -1626,14 +1673,14 @@ mod tests {
         );
 
         let stored_field = match &**scope.body() {
-            Subterm::Tuple(Tuple { fields }) => fields[1].clone(),
+            Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
             _ => panic!("expected tuple body"),
         };
 
         let opened = scope.open(&[&Term::var(Var::free("y"))]);
 
         let opened_field = match &*opened {
-            Subterm::Tuple(Tuple { fields }) => fields[1].clone(),
+            Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
             _ => panic!("expected tuple result"),
         };
 

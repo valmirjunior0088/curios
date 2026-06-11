@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Atom, Cases, Definition, Flt, Func, FuncType, Item, Let, Match, Module, Nat, One,
-        Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        Apply, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match, Module, Nat,
+        One, Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
         UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -562,19 +562,27 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
-        Subterm::Tuple(Tuple { fields }) => flat([
-            pure("("),
-            sep_flat(
-                fields.into_iter().map(move |f| print_term(f, depth)),
-                || pure(", "),
-            ),
-            pure(")"),
-        ]),
-        Subterm::Proj(Proj { head, index }) => flat([
-            pure("("),
-            print_term(head, depth),
-            pure(format!(").{index}")),
-        ]),
+        Subterm::Tuple(Tuple { fields, names }) => {
+            let mut names = names.into_iter().chain(std::iter::repeat(None));
+            flat([
+                pure("("),
+                sep_flat(
+                    fields.into_iter().map(move |f| match names.next().flatten() {
+                        Some(name) => flat([pure(name), pure(" = "), print_term(f, depth)]),
+                        None => print_term(f, depth),
+                    }),
+                    || pure(", "),
+                ),
+                pure(")"),
+            ])
+        }
+        Subterm::Proj(Proj { head, field }) => {
+            let field = match field {
+                Field::Index(index) => format!(").{index}"),
+                Field::Label(label) => format!(").{label}"),
+            };
+            flat([pure("("), print_term(head, depth), pure(field)])
+        }
         // Params then indices, one flat argument list — exactly how the
         // type-constructor function is applied at use sites.
         Subterm::UnionType(UnionType {

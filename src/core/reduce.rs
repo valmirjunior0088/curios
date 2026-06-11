@@ -1,6 +1,7 @@
 use {
     super::{
-        Apply, Cases, Context, Func, Let, Match, Metavar, Nat, Prim, Proj, ReduceError, Subterm,
+        Apply, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, ReduceError,
+        Subterm,
         Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
@@ -31,12 +32,17 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 }
 
 fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError> {
-    let Proj { head, index } = proj;
+    let Proj { head, field } = proj;
+    // Label projections are resolved (and rebuilt positionally) by elaborate;
+    // reduction only ever sees post-elaboration terms.
+    let Field::Index(index) = field else {
+        unreachable!("unresolved label projection reached reduction");
+    };
     if let Some(v) = context.proj_reduct(&head, index) {
         return Ok(Reduce::Continue(v.clone()));
     }
     match Term::unwrap_or_clone(reduce(context, head)?) {
-        Subterm::Tuple(Tuple { fields }) => Ok(Reduce::Continue(
+        Subterm::Tuple(Tuple { fields, .. }) => Ok(Reduce::Continue(
             fields
                 .into_iter()
                 .nth(index)

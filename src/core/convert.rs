@@ -1,6 +1,7 @@
 use {
     super::{
-        Apply, Cases, Context, Func, FuncType, Match, Proj, Rec, ReduceError, Subterm, Telescope,
+        Apply, Cases, Context, Field, Func, FuncType, Match, Proj, Rec, ReduceError, Subterm,
+        Telescope,
         Term, Tuple, TupleType, UnionType, Var, Variant, convert_prim, infer, reduce,
     },
     std::{
@@ -52,7 +53,10 @@ fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, Red
                 _ => Ok(None),
             }
         }
-        Subterm::Proj(Proj { head, index }) => {
+        Subterm::Proj(Proj {
+            head,
+            field: Field::Index(index),
+        }) => {
             let Some(head_type) = synth_neutral(context, head)? else {
                 return Ok(None);
             };
@@ -268,6 +272,17 @@ impl Convert {
         ) -> Result<bool, ReduceError> {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
+                    // Field labels are part of a tuple type's identity:
+                    // `{ a : Nat } ≢ { Nat } ≢ { b : Nat }` (the unlabeled ""
+                    // is just another label). This is deliberately tuple-only —
+                    // function-type parameter names stay alpha-convertible
+                    // (see `compare_func_type`, where `first_label` feeds
+                    // freshness, never equality).
+                    if rest_a.first_label().unwrap_or_default()
+                        != rest_b.first_label().unwrap_or_default()
+                    {
+                        return Ok(false);
+                    }
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
                     let v = Term::var(Var::free(context.fresh(rest_a.first_label())));
                     let inner_a = rest_a.open(&[&v]);
@@ -313,7 +328,7 @@ impl Convert {
     }
 
     fn compare_proj(&mut self, this: Proj, that: Proj) -> Result<bool, ReduceError> {
-        if this.index != that.index {
+        if this.field != that.field {
             return Ok(false);
         }
         self.enqueue(Term::type_(), this.head, that.head);

@@ -48,6 +48,7 @@ fn zonk_resolves_a_metavariable_nested_in_a_structure() {
     // A tuple `{ ?0 }` zonks to `{ Nat }`.
     let term = Subterm::Tuple(Tuple {
         fields: vec![Term::metavar(0)],
+        names: vec![],
     })
     .into();
 
@@ -55,6 +56,7 @@ fn zonk_resolves_a_metavariable_nested_in_a_structure() {
 
     let expected = Subterm::Tuple(Tuple {
         fields: vec![nat()],
+        names: vec![],
     })
     .into();
 

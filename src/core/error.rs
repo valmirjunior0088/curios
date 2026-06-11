@@ -105,6 +105,21 @@ pub enum Error {
         index: usize,
         arity: usize,
     },
+    UnknownTupleLabel {
+        term: Box<Term>,
+        label: String,
+        available: Vec<String>,
+    },
+    DuplicateTupleLabel {
+        term: Box<Term>,
+        label: String,
+    },
+    TupleFieldNameMismatch {
+        term: Box<Term>,
+        written: String,
+        expected: String,
+        position: usize,
+    },
     NotNatType {
         term: Box<Term>,
         head_type: Box<Term>,
@@ -284,6 +299,39 @@ impl Error {
             term: Box::new(term.into()),
             index,
             arity,
+        }
+    }
+
+    pub fn unknown_tuple_label<T: Into<Term>>(
+        term: T,
+        label: String,
+        available: Vec<String>,
+    ) -> Self {
+        Self::UnknownTupleLabel {
+            term: Box::new(term.into()),
+            label,
+            available,
+        }
+    }
+
+    pub fn duplicate_tuple_label<T: Into<Term>>(term: T, label: String) -> Self {
+        Self::DuplicateTupleLabel {
+            term: Box::new(term.into()),
+            label,
+        }
+    }
+
+    pub fn tuple_field_name_mismatch<T: Into<Term>>(
+        term: T,
+        written: String,
+        expected: String,
+        position: usize,
+    ) -> Self {
+        Self::TupleFieldNameMismatch {
+            term: Box::new(term.into()),
+            written,
+            expected,
+            position,
         }
     }
 
@@ -507,6 +555,40 @@ impl fmt::Display for Error {
             }
             Error::TupleIndexOutOfBounds { index, arity, .. } => {
                 write!(f, "tuple index {index} out of bounds (arity {arity})")
+            }
+            Error::UnknownTupleLabel {
+                label, available, ..
+            } => {
+                if available.is_empty() {
+                    write!(f, "no field named '{label}' (the tuple type has no labeled fields)")
+                } else {
+                    write!(
+                        f,
+                        "no field named '{label}' (available: {})",
+                        available.join(", ")
+                    )
+                }
+            }
+            Error::DuplicateTupleLabel { label, .. } => {
+                write!(f, "duplicate field label '{label}' in tuple type")
+            }
+            Error::TupleFieldNameMismatch {
+                written,
+                expected,
+                position,
+                ..
+            } => {
+                if expected.is_empty() {
+                    write!(
+                        f,
+                        "field {position} is named '{written}' but the expected type has no label there"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "field {position} is named '{written}' but the expected type calls it '{expected}'"
+                    )
+                }
             }
             Error::NotNatType { head_type, .. } => {
                 write!(f, "expected Nat but got {head_type}")

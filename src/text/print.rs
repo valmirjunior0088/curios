@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, GroupItem, Let, LetSignature,
-        Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec, Subterm, Term,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
+        LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec,
+        Subterm, Term,
         TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase,
         UnionMatch, UseGroup, With,
     },
@@ -282,24 +283,32 @@ fn print_term(term: Term) -> Printer<'static> {
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Subterm::Tuple(Tuple { fields }) => {
+            let print_field = |(name, field): (Option<String>, Term)| match name {
+                Some(name) => flat([pure(name), pure(" = "), print_term(field)]),
+                None => print_term(field),
+            };
             if fields.len() == 1 {
+                let (name, field) = fields.into_iter().next().unwrap();
+                let trailer = if name.is_some() { ")" } else { ",)" };
                 flat([
                     pure("("),
-                    print_term(fields.into_iter().next().unwrap()),
-                    pure(",)"),
+                    print_field((name, field)),
+                    pure(trailer),
                 ])
             } else {
                 flat([
                     pure("("),
-                    sep_flat(fields.into_iter().map(|field| print_term(field)), || {
-                        pure(", ")
-                    }),
+                    sep_flat(fields.into_iter().map(print_field), || pure(", ")),
                     pure(")"),
                 ])
             }
         }
-        Subterm::Proj(Proj { head, index }) => {
-            flat([pure("("), print_term(head), pure(format!(").{index}"))])
+        Subterm::Proj(Proj { head, field }) => {
+            let field = match field {
+                Field::Index(index) => format!(").{index}"),
+                Field::Label(label) => format!(").{label}"),
+            };
+            flat([pure("("), print_term(head), pure(field)])
         }
         Subterm::Match(match_) => match match_ {
             Match::Bln(BlnMatch {

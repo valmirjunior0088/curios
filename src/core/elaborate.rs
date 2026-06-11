@@ -1,6 +1,7 @@
 use {
     super::{
-        Apply, Atom, Cases, Context, Definition, Error, Func, FuncType, ImplicitOrigin, Inductive,
+        Apply, Atom, Cases, Context, Definition, Error, Field, Func, FuncType, ImplicitOrigin,
+        Inductive,
         Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Plicity,
         Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, UnionType, Var,
         Variant, case_target_indices, check_motive, convert_with, elaborate_prim, expect,
@@ -371,10 +372,29 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
         }
     }
 
+    // Labels are part of the type's identity and the target of `.label`
+    // resolution, so they must be unique and survive the rebuild verbatim
+    // (the walk gensyms its binders to keep nested frames collision-free;
+    // `relabel` restores the written names afterwards).
+    let source_labels = tt.telescope.labels();
+    for (position, label) in source_labels.iter().enumerate() {
+        if !label.is_empty() && source_labels[..position].contains(label) {
+            return Err(Error::duplicate_tuple_label(
+                Term::from(Subterm::TupleType(tt.clone())),
+                label.to_string(),
+            ));
+        }
+    }
+
     let mut fields = Vec::new();
     context.with_frame(|context| walk(context, tt.telescope.clone(), &mut fields))?;
 
-    Ok((Term::tuple_type(fields), Term::type_()))
+    let telescope = Telescope::build(fields, ()).relabel(&source_labels);
+
+    Ok((
+        Subterm::TupleType(TupleType { telescope }).into(),
+        Term::type_(),
+    ))
 }
 
 /// Infer and rebuild a match scrutinee, requiring its reduced type to be the
@@ -618,7 +638,7 @@ fn elaborate_bln_match(
 }
 
 fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Term, Term), Error> {
-    let Proj { head, index } = proj;
+    let Proj { head, field } = proj;
 
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
@@ -628,19 +648,44 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
         other => return Err(Error::not_a_tuple(term.clone(), other.clone())),
     };
 
-    if *index >= telescope.len() {
+    // A label projection resolves to its position here and is rebuilt
+    // positionally — nothing below elaboration ever sees a label. Lookup is
+    // unambiguous because duplicate labels are rejected when the tuple type
+    // itself elaborates.
+    let index = match field {
+        Field::Index(index) => *index,
+        Field::Label(label) => {
+            let labels = telescope.labels();
+            match labels.iter().position(|l| l == label) {
+                Some(index) => index,
+                None => {
+                    return Err(Error::unknown_tuple_label(
+                        term.clone(),
+                        label.clone(),
+                        labels
+                            .iter()
+                            .filter(|l| !l.is_empty())
+                            .map(|l| l.to_string())
+                            .collect(),
+                    ));
+                }
+            }
+        }
+    };
+
+    if index >= telescope.len() {
         return Err(Error::tuple_index_out_of_bounds(
             term.clone(),
-            *index,
+            index,
             telescope.len(),
         ));
     }
 
     let field_type = telescope
-        .nth(*index, |j| Term::proj(head.clone(), j))
+        .nth(index, |j| Term::proj(head.clone(), j))
         .expect("index in range");
 
-    Ok((Term::proj(head, *index), field_type))
+    Ok((Term::proj(head, index), field_type))
 }
 
 /// Type a primitive inductive type against its registry entry: the parameters
@@ -1405,7 +1450,7 @@ fn elaborate_tuple(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Tuple { fields } = tuple;
+    let Tuple { fields, names } = tuple;
 
     let Mode::Check(expected) = mode else {
         return Err(Error::cannot_infer(term.clone()));
@@ -1427,6 +1472,24 @@ fn elaborate_tuple(
             type_telescope.len(),
             fields.len(),
         ));
+    }
+
+    // Written field names are checked positionally against the expected
+    // type's labels and then dropped — the rebuilt literal is name-free.
+    // Reordering is deliberately not supported: in a dependent telescope the
+    // written order is the checking order.
+    let labels = type_telescope.labels();
+    for (position, name) in names.iter().enumerate() {
+        let Some(name) = name else { continue };
+        let expected_label = labels.get(position).copied().unwrap_or_default();
+        if expected_label != name {
+            return Err(Error::tuple_field_name_mismatch(
+                Term::from(Subterm::Tuple(tuple.clone())),
+                name.clone(),
+                expected_label.to_string(),
+                position,
+            ));
+        }
     }
 
     fn walk(

@@ -226,13 +226,14 @@ fn zonk_subterm(context: &Context, term: &Term, binders: &[String]) -> Result<Su
             telescope: telescope.zonk(context, binders)?,
         }),
 
-        Subterm::Tuple(Tuple { fields }) => Subterm::Tuple(Tuple {
+        Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
             fields: zonk_terms(context, fields, binders)?,
+            names: names.clone(),
         }),
 
-        Subterm::Proj(Proj { head, index }) => Subterm::Proj(Proj {
+        Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {
             head: zonk_term(context, head, binders)?,
-            index: *index,
+            field: field.clone(),
         }),
 
         Subterm::UnionType(UnionType {

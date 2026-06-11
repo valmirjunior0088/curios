@@ -86,6 +86,31 @@ fn io_read() {
     );
 }
 
+// Named fields end to end: a dependent record (the vector's length indexes its
+// type) constructed with written names, consumed through `.label` and `.index`
+// access on the same value — both resolve to the same positional projection.
+#[test]
+fn named_fields_run_end_to_end() {
+    let source = r#"
+        use /std/{Vec, Nat, Io};
+        let p : { n : Nat, v : Vec(Nat, n) } =
+            (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
+        rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
+            match v : Nat
+            | nil() => acc
+            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            end;
+        Io/print(Nat/to_str(Nat/add(total(p.v, 0), Nat/mul(p.0, 0))))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"42".to_vec()]
+    );
+}
+
 // `read(h, n)` is POSIX-shaped: each call returns 1..n available bytes (here
 // one injected line per refill, served in `n`-byte slices), and empty means
 // EOF — exercised by the third read.

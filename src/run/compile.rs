@@ -1097,6 +1097,119 @@ mod tests {
         assert!(error.contains("cannot"), "unexpected error: {error}");
     }
 
+    // --- B2: named tuple fields ----------------------------------------------
+
+    #[test]
+    fn proj_by_label_resolves_to_its_position() {
+        // `.label` is elaboration-time sugar for the positional projection,
+        // so both spellings typecheck identically.
+        let source = r#"
+            use /sys/{Nat, Bin, Io};
+            let r : { status : Nat, payload : Bin } = (0, "ok");
+            let by_label : Bin = r.payload;
+            let by_index : Bin = r.1;
+            Io/write(Io/stdout, by_label)
+        "#;
+
+        assert!(typecheck(source).is_ok());
+    }
+
+    #[test]
+    fn proj_unknown_label_names_the_available_fields() {
+        let source = r#"
+            use /sys/{Nat, Bin};
+            let r : { status : Nat, payload : Bin } = (0, "ok");
+            r.body
+        "#;
+
+        let error = typecheck(source).unwrap_err();
+        assert!(
+            error.contains("no field named 'body'") && error.contains("status"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn duplicate_tuple_label_is_rejected() {
+        let source = r#"
+            use /sys/{Nat};
+            let r : { x : Nat, x : Nat } = (0, 1);
+            r.x
+        "#;
+
+        let error = typecheck(source).unwrap_err();
+        assert!(
+            error.contains("duplicate field label 'x'"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn tuple_labels_are_part_of_type_identity() {
+        // Same positional types, different label order: not convertible —
+        // this is what makes `.label` re-indexing impossible.
+        let reordered = r#"
+            use /sys/{Nat};
+            let p : { width : Nat, height : Nat } = (640, 480);
+            let q : { height : Nat, width : Nat } = p;
+            q.width
+        "#;
+        assert!(typecheck(reordered).is_err());
+
+        // Labeled and unlabeled spellings are distinct types too.
+        let unlabeled = r#"
+            use /sys/{Nat};
+            let p : { width : Nat, height : Nat } = (640, 480);
+            let q : { Nat, Nat } = p;
+            q.0
+        "#;
+        assert!(typecheck(unlabeled).is_err());
+    }
+
+    #[test]
+    fn named_construction_checks_against_the_labels() {
+        // Written names must match the expected type's labels positionally;
+        // bare fields are always accepted.
+        let source = r#"
+            use /sys/{Nat, Bin};
+            let r : { status : Nat, payload : Bin } = (status = 0, payload = "ok");
+            let mixed : { status : Nat, payload : Bin } = (status = 0, "ok");
+            r.status
+        "#;
+        assert!(typecheck(source).is_ok());
+
+        let wrong_name = r#"
+            use /sys/{Nat, Bin};
+            let r : { status : Nat, payload : Bin } = (code = 0, payload = "ok");
+            r.status
+        "#;
+        let error = typecheck(wrong_name).unwrap_err();
+        assert!(
+            error.contains("'code'") && error.contains("'status'"),
+            "unexpected error: {error}"
+        );
+
+        let unlabeled_type = r#"
+            use /sys/{Nat, Bin};
+            let r : { Nat, Bin } = (status = 0, "ok");
+            r.0
+        "#;
+        assert!(typecheck(unlabeled_type).is_err());
+    }
+
+    #[test]
+    fn dependent_record_projects_by_label() {
+        // Labels bind dependently: a later field's type mentions an earlier
+        // label, and label projection re-types through the dependency.
+        let source = r#"
+            let p : { T : Type, x : T } = (T = /sys/Nat, x = 3);
+            let v : p.T = p.x;
+            /sys/Io/write(/sys/Io/stdout, /sys/Nat/to_str(v))
+        "#;
+
+        assert!(typecheck(source).is_ok());
+    }
+
     // --- C: reachability prune of unused sys/std -----------------------------
 
     /// The `name`s of every top-level item in the lowered `core::Module`, captured

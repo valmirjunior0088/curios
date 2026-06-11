@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Func, FuncType, GroupItem, Let, LetSignature,
-        LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
+        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity,
+        Prim, Proj,
         Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse,
         Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
@@ -335,19 +336,32 @@ fn parse_tuple_type<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+fn parse_tuple_field<'a>() -> Parser<'a, (Option<String>, Term)> {
+    catch(parse_identifier().and_drop(parse_literal("=")))
+        .and(lazy(parse_term))
+        .map(|(name, term): (&str, Term)| (Some(name.to_string()), term))
+        .or(lazy(parse_term).map(|term| (None, term)))
+}
+
 fn parse_tuple<'a>() -> Parser<'a, Term> {
+    // Two committing prefixes distinguish a tuple literal from a parenthesized
+    // term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named
+    // first field alone (`(a = 1)` — the `=` already disambiguates, so the
+    // one-element form needs no trailing comma).
     catch(
         parse_literal("(")
-            .and_keep(lazy(parse_term))
+            .and_keep(parse_tuple_field())
             .and_drop(parse_literal(",")),
     )
-    .and(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+    .and(sep_by0(parse_tuple_field, || parse_literal(",")))
+    .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
+    .or(catch(
+        parse_literal("(").and_keep(parse_identifier().and_drop(parse_literal("="))),
+    )
+    .and(lazy(parse_term))
+    .map(|(name, term): (&str, Term)| vec![(Some(name.to_string()), term)]))
     .and_drop(parse_literal(")"))
-    .map(|(first, rest)| {
-        Subterm::Tuple(Tuple {
-            fields: iter::once(first).chain(rest).collect(),
-        })
-    })
+    .map(|fields| Subterm::Tuple(Tuple { fields }))
     .map(Into::into)
 }
 
@@ -719,12 +733,17 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_proj_suffix<'a>() -> Parser<'a, usize> {
-    catch(take_exact(".").and_keep(parse_usize().map_err("Expected numeric index after '.'")))
+fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
+    catch(take_exact(".").and_keep(
+        parse_usize()
+            .map(Field::Index)
+            .or(parse_identifier().map(|label| Field::Label(label.to_string())))
+            .map_err("Expected field index or label after '.'"),
+    ))
 }
 
 enum Suffix {
-    Proj(usize),
+    Proj(Field),
     Apply(Vec<(Plicity, Term)>),
     Bang,
 }
@@ -785,7 +804,7 @@ fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
                 suffixes
                     .into_iter()
                     .fold(head, |head, suffix| match suffix {
-                        Suffix::Proj(index) => Subterm::Proj(Proj { head, index }).into(),
+                        Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
                         Suffix::Apply(params) => Subterm::Apply(Apply { head, params }).into(),
                         Suffix::Bang => Subterm::Bang(head).into(),
                     })

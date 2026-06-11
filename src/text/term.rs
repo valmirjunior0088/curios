@@ -88,9 +88,12 @@ pub struct TupleType {
     pub fields: Vec<(Option<String>, Term)>,
 }
 
+/// Tuple literal fields may carry a name annotation (`(status = 0, handle = h)`);
+/// names are checked positionally against the expected tuple type's labels at
+/// elaboration and never survive past it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
-    pub fields: Vec<Term>,
+    pub fields: Vec<(Option<String>, Term)>,
 }
 
 /// A match's motive ladder — one grammar growing, the binder parenthesized
@@ -146,10 +149,19 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
+/// A projection names its field either positionally (`p.0`) or by the tuple
+/// type's label (`p.status`). Labels are resolved to positions during core
+/// elaboration; they never survive past it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Field {
+    Index(usize),
+    Label(String),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Proj {
     pub head: Term,
-    pub index: usize,
+    pub field: Field,
 }
 
 #[derive(Debug, Clone, PartialEq)]

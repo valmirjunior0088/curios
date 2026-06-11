@@ -1,4 +1,4 @@
-use super::{Context, Error, Many, Mode, Prim, Proj, Scope, Subterm, Term, Var, elaborate};
+use super::{Context, Error, Field, Many, Mode, Prim, Proj, Scope, Subterm, Term, Var, elaborate};
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
 /// as a thin shim so the many existing call sites (this module, `erase*.rs`,
@@ -45,7 +45,10 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) {
         Subterm::Var(var) => {
             context.refine(var.unwrap(), value);
         }
-        Subterm::Proj(Proj { head, index }) => {
+        Subterm::Proj(Proj {
+            head,
+            field: Field::Index(index),
+        }) => {
             context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {}

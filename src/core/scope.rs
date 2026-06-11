@@ -442,6 +442,42 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
+    /// The binder name at each position (`""` when unnamed), walking the spine
+    /// without opening — names are structural, no substitution needed.
+    pub fn labels(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut cur = self;
+        while let Telescope::Cons(_, rest) = cur {
+            out.push(rest.first_label().unwrap_or_default());
+            cur = &rest.body;
+        }
+        out
+    }
+
+    /// Replace the stored binder names along the spine. Pure metadata: the de
+    /// Bruijn structure is untouched, so this never changes what binds where —
+    /// it restores source labels after a rebuild that had to gensym its
+    /// binders (tuple-type labels are part of the type's identity and the
+    /// target of `.label` resolution, so they must survive elaboration
+    /// verbatim).
+    pub fn relabel(self, labels: &[&str]) -> Self {
+        match self {
+            Telescope::Done(body) => Telescope::Done(body),
+            Telescope::Cons(ty, rest) => {
+                let (label, rest_labels) = labels.split_first().expect("relabel arity");
+                let Scope { arity, body, .. } = rest;
+                Telescope::Cons(
+                    ty,
+                    Scope {
+                        arity,
+                        names: Some(vec![label.to_string()]),
+                        body: Box::new((*body).relabel(rest_labels)),
+                    },
+                )
+            }
+        }
+    }
+
     pub fn open(&self, args: &[&Term]) -> B {
         assert!(
             self.len() == args.len(),

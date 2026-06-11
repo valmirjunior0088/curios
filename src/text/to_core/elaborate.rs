@@ -3,7 +3,8 @@ use {
     crate::{
         core,
         text::{
-            BinLiteral, Error, Let, Match, Motive, Nat, NatLiteral, NatMatch, Prim, Subterm, Term,
+            BinLiteral, Error, Field, Let, Match, Motive, Nat, NatLiteral, NatMatch, Prim, Subterm,
+            Term,
         },
     },
     num_bigint::BigUint,
@@ -103,14 +104,20 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Subterm::Tuple(tuple) => core::Term::tuple(
+            Subterm::Tuple(tuple) => core::Term::tuple_named(
                 tuple
                     .fields
                     .iter()
-                    .map(|field| self.term(field))
+                    .map(|(name, field)| Ok((name.clone(), self.term(field)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Subterm::Proj(proj) => core::Term::proj(self.term(&proj.head)?, proj.index),
+            Subterm::Proj(proj) => {
+                let head = self.term(&proj.head)?;
+                match &proj.field {
+                    Field::Index(index) => core::Term::proj(head, *index),
+                    Field::Label(label) => core::Term::proj_label(head, label.clone()),
+                }
+            }
             Subterm::Match(match_) => match match_ {
                 Match::Bln(bm) => {
                     let (label, body) = self.motive_parts(&bm.motive)?;
@@ -291,15 +298,19 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .map(|(plicity, p)| Ok((*plicity, self.collect(p, bind, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Subterm::Tuple(tuple) => core::Term::tuple(
+            Subterm::Tuple(tuple) => core::Term::tuple_named(
                 tuple
                     .fields
                     .iter()
-                    .map(|f| self.collect(f, bind, binds))
+                    .map(|(name, f)| Ok((name.clone(), self.collect(f, bind, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Proj(proj) => {
-                core::Term::proj(self.collect(&proj.head, bind, binds)?, proj.index)
+                let head = self.collect(&proj.head, bind, binds)?;
+                match &proj.field {
+                    Field::Index(index) => core::Term::proj(head, *index),
+                    Field::Label(label) => core::Term::proj_label(head, label.clone()),
+                }
             }
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).

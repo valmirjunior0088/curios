@@ -367,14 +367,15 @@ The inverter is deliberately small — first-order, constructor forms, each bind
 
 ### Field access
 
-Reads a field from a tuple by numeric index:
+Reads a field from a tuple by numeric index or, when the tuple type labels the field, by its label:
 
 ```
 e.0
 e.1
+e.status
 ```
 
-Indices are zero-based. Chains are supported: `e.0.1` reads field 1 of field 0 of `e`.
+Indices are zero-based. A label is sugar for the position it names — `e.status` and `e.0` on a `{ status : Nat, ... }` value elaborate to the same projection, and both spellings remain valid on labeled tuples. Unlabeled fields are accessible by index only. Chains are supported and may mix forms: `e.inner.1` reads field 1 of the `inner` field of `e`.
 
 ## Types
 
@@ -406,9 +407,16 @@ Dependent, one or more named parameters (each parameter may be mentioned by late
 ```
 { A, B }
 { label1 : A, label2 : B }
+{ n : Nat, v : Vec(Bin, n) }
 ```
 
-Fields may optionally be named. Labels are used for documentation only; they do not affect the type's identity. The empty tuple type `{}` (whose only value is `()`) serves as a unit.
+Fields may optionally be named, and labels do three jobs:
+
+- **They bind dependently**: a later field's type may mention an earlier label, making the tuple a dependent record — `{ n : Nat, v : Vec(Bin, n) }` only accepts a vector whose length is the first field.
+- **They are projectable**: `p.n` is sugar for the positional `p.0` (see [Field access](#field-access)).
+- **They are part of the type's identity**: `{ a : Nat }`, `{ b : Nat }`, and `{ Nat }` are three distinct types, and two labeled spellings must agree label-for-label to be convertible. (Function-type parameter names carry no such weight — they stay alpha-convertible.)
+
+Labels must be unique within a type. The empty tuple type `{}` (whose only value is `()`) serves as a unit.
 
 ### Array type
 
@@ -500,9 +508,13 @@ Boolean literals. Their type is `/sys/Bln`.
 (a,)
 (a, b)
 (a, b, c)
+(status = 0, payload = "ok")
+(status = 0, "ok")
 ```
 
-Zero or more elements. A trailing comma is required for the one-element case to distinguish it from a parenthesized expression.
+Zero or more elements. A trailing comma is required for the one-element case to distinguish it from a parenthesized expression — unless the field is named (`(a = x)`), where the `=` already disambiguates.
+
+Fields may carry name annotations. Each written name is checked positionally against the expected tuple type's label at that position (no reordering — in a dependent telescope the written order is the checking order); named and bare fields mix freely. Names are validated and dropped at elaboration: tuple *values* are always positional.
 
 ## Primitive operations
 

@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Atom, Cases, Context, Error, Func, Item, Let, Many, Match, Module, MotivePattern,
-        MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
+        Apply, Atom, Cases, Context, Error, Field, Func, Item, Let, Many, Match, Module,
+        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
+        TupleType, Two,
         UnionType, Var, Variant, erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
@@ -157,7 +158,7 @@ fn erase_apply(
 }
 
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
-    let Tuple { fields } = tuple;
+    let Tuple { fields, .. } = tuple;
 
     // Elaborate already checked this tuple against a tuple type of matching
     // arity (§9); the telescope is re-derived here only to lower the fields.
@@ -364,7 +365,11 @@ fn erase_proj(
     _term: &Term,
     _expected: &Term,
 ) -> Result<ersd::Term, Error> {
-    let Proj { head, index } = proj;
+    let Proj { head, field } = proj;
+    // Labels are resolved by elaborate; erase runs strictly downstream.
+    let Field::Index(index) = field else {
+        unreachable!("unresolved label projection reached erase");
+    };
 
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;

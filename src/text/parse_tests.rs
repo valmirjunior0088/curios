@@ -388,7 +388,7 @@ fn parse_proj_numeric_suffix() {
         "(r).0".parse::<Term>().unwrap(),
         Term::from(Subterm::Proj(Proj {
             head: Subterm::Name(Name::from(["r".to_string()])).into(),
-            index: 0,
+            field: Field::Index(0),
         }))
     );
 }
@@ -400,10 +400,10 @@ fn parse_proj_chained_suffixes() {
         Term::from(Subterm::Proj(Proj {
             head: Subterm::Proj(Proj {
                 head: Subterm::Name(Name::from(["r".to_string()])).into(),
-                index: 1,
+                field: Field::Index(1),
             })
             .into(),
-            index: 0,
+            field: Field::Index(0),
         }))
     );
 }
@@ -414,7 +414,67 @@ fn parse_proj_on_name_directly() {
         "r.2".parse::<Term>().unwrap(),
         Term::from(Subterm::Proj(Proj {
             head: Subterm::Name(Name::from(["r".to_string()])).into(),
-            index: 2,
+            field: Field::Index(2),
+        }))
+    );
+}
+
+#[test]
+fn parse_proj_label_suffix() {
+    assert_eq!(
+        "r.status".parse::<Term>().unwrap(),
+        Term::from(Subterm::Proj(Proj {
+            head: Subterm::Name(Name::from(["r".to_string()])).into(),
+            field: Field::Label("status".to_string()),
+        }))
+    );
+}
+
+#[test]
+fn parse_proj_chained_mixed_fields() {
+    assert_eq!(
+        "r.inner.0".parse::<Term>().unwrap(),
+        Term::from(Subterm::Proj(Proj {
+            head: Subterm::Proj(Proj {
+                head: Subterm::Name(Name::from(["r".to_string()])).into(),
+                field: Field::Label("inner".to_string()),
+            })
+            .into(),
+            field: Field::Index(0),
+        }))
+    );
+}
+
+#[test]
+fn parse_named_tuple_single_needs_no_trailing_comma() {
+    assert_eq!(
+        "(a = x)".parse::<Term>().unwrap(),
+        Term::from(Subterm::Tuple(Tuple {
+            fields: vec![(
+                Some("a".to_string()),
+                Subterm::Name(Name::from(["x".to_string()])).into()
+            )],
+        }))
+    );
+    // A bare parenthesized name stays a parenthesized term, not a tuple.
+    assert_eq!(
+        "(x)".parse::<Term>().unwrap(),
+        Term::from(Subterm::Name(Name::from(["x".to_string()])))
+    );
+}
+
+#[test]
+fn parse_named_tuple_mixed_fields() {
+    assert_eq!(
+        "(a = x, y)".parse::<Term>().unwrap(),
+        Term::from(Subterm::Tuple(Tuple {
+            fields: vec![
+                (
+                    Some("a".to_string()),
+                    Subterm::Name(Name::from(["x".to_string()])).into()
+                ),
+                (None, Subterm::Name(Name::from(["y".to_string()])).into()),
+            ],
         }))
     );
 }
@@ -440,7 +500,7 @@ fn parse_one_tuple() {
     assert_eq!(
         "(x,)".parse::<Term>().unwrap(),
         Term::from(Subterm::Tuple(Tuple {
-            fields: vec![Subterm::Name(Name::from(["x".to_string()])).into()],
+            fields: vec![(None, Subterm::Name(Name::from(["x".to_string()])).into())],
         }))
     );
 }
@@ -887,7 +947,7 @@ fn bang_binds_tighter_than_projection() {
         Subterm::Bang(
             Subterm::Proj(Proj {
                 head: name("p"),
-                index: 0,
+                field: Field::Index(0),
             })
             .into()
         )
@@ -898,7 +958,7 @@ fn bang_binds_tighter_than_projection() {
         "x!.0".parse::<Term>().unwrap(),
         Subterm::Proj(Proj {
             head: Subterm::Bang(name("x")).into(),
-            index: 0,
+            field: Field::Index(0),
         })
         .into()
     );
