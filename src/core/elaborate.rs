@@ -255,16 +255,24 @@ fn elaborate_apply(
         Mode::Infer => false,
     };
 
-    let mut elaborated = Vec::with_capacity(params.len());
+    // The telescope is opened with the *rebuilt* argument at every eager
+    // slot, so later entry types and the output carry rebuilt spellings only
+    // — a lowered copy spliced into the output would smuggle a birthed hole's
+    // bare node past its rebuild (and a lowered term toward the reducer).
+    // A postponed intro form stays lowered for now; its holes are unbirthed,
+    // and its rebuilt form lands after the output `expect` pins its metas.
     let mut postponed: Vec<(usize, Term, Term)> = Vec::new();
-    let output = ft.telescope.clone().walk(params, |arg, ty| {
+    let mut slot = 0usize;
+    let (mut elaborated, output) = ft.telescope.clone().walk_map(params, |arg, ty| {
+        let index = slot;
+        slot += 1;
+
         if checking && blocked_on_metavar(context, arg, ty, &result_metavars, expected_ground)? {
-            postponed.push((elaborated.len(), arg.clone(), ty.clone()));
-            elaborated.push(arg.clone());
+            postponed.push((index, arg.clone(), ty.clone()));
+            Ok(arg.clone())
         } else {
-            elaborated.push(check(context, arg, ty.clone())?);
+            check(context, arg, ty.clone())
         }
-        Ok(())
     })?;
 
     if let Mode::Check(expected) = &mode {

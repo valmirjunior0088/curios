@@ -740,8 +740,13 @@ impl Convert {
         let telescope = entry.telescope.clone();
         let result = entry.result.clone();
 
-        assert!(
-            metavar.spine.is_empty() || metavar.spine.len() == telescope.len(),
+        // Every birthed occurrence carries its full spine: `elaborate_apply`
+        // opens telescopes with rebuilt arguments, so no lowered bare copy of
+        // a birthed hole survives into compared types. (An empty telescope's
+        // identity spine is legitimately empty.)
+        assert_eq!(
+            metavar.spine.len(),
+            telescope.len(),
             "metavariable spine arity diverged from its birth telescope"
         );
 
@@ -770,17 +775,8 @@ impl Convert {
         // variable whose name no other entry shares. A non-variable or
         // duplicated entry is simply not invertible; the solution then may not
         // depend on that slot, which the scope check below enforces — pruning
-        // in its simplest form. An empty spine is *not* legacy debris: a
-        // birthed hole's lowered node legitimately survives bare inside its
-        // own birth scope (e.g. `elaborate_apply` builds the output type from
-        // the lowered arguments), where the identity renaming is exactly
-        // right.
-        let image: Vec<(String, &str)> = if entries.is_empty() {
-            telescope
-                .iter()
-                .map(|(name, _)| (name.clone(), name.as_str()))
-                .collect()
-        } else {
+        // in its simplest form.
+        let image: Vec<(String, &str)> = {
             let names = entries
                 .iter()
                 .map(|term| match &**term {

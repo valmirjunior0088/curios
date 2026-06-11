@@ -647,11 +647,9 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     // but re-validation suppresses refinements, leaving `t` abstract, so `5 : t`
     // fails and the solution is rejected — the program is unsound otherwise.
     let t = Term::var(Var::free("t"));
+    let occurrence = Term::metavar_birthed(0, None, vec![t.clone()]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
-    assert_eq!(
-        convert(&mut context, &t, &Term::metavar(0), &five),
-        Ok(false)
-    );
+    assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
     assert_eq!(context.metavar_solution(0), None);
 }
 
@@ -671,11 +669,9 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     );
 
     let nat = Term::prim(Prim::NatType);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("t"))]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
-    assert_eq!(
-        convert(&mut context, &nat, &Term::metavar(0), &five),
-        Ok(true)
-    );
+    assert_eq!(convert(&mut context, &nat, &occurrence, &five), Ok(true));
     assert_eq!(context.metavar_solution(0), Some(&five));
 }
 

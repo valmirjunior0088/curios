@@ -527,6 +527,38 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
+    /// Like [`Telescope::walk`], but each entry is opened with the term `f`
+    /// *returns* for that slot rather than the given argument — the rebuilt
+    /// rather than the lowered spelling, say — so later entry types and the
+    /// body carry the mapped forms. Returns the mapped arguments alongside
+    /// the body.
+    pub fn walk_map<F, E>(self, args: &[Term], mut f: F) -> Result<(Vec<Term>, B), E>
+    where
+        F: FnMut(&Term, &Term) -> Result<Term, E>,
+    {
+        assert!(
+            self.len() == args.len(),
+            "telescope arity mismatch in `walk_map`: expected {}, got {}",
+            self.len(),
+            args.len()
+        );
+
+        let mut mapped = Vec::with_capacity(args.len());
+        let mut tele = self;
+        let mut i = 0;
+        loop {
+            match tele {
+                Telescope::Done(body) => return Ok((mapped, *body)),
+                Telescope::Cons(ty, rest) => {
+                    let term = f(&args[i], &ty)?;
+                    tele = rest.open(&[&term]);
+                    mapped.push(term);
+                    i += 1;
+                }
+            }
+        }
+    }
+
     pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
     where
         F: FnMut(usize) -> Term,
