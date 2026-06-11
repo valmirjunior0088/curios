@@ -17,6 +17,14 @@ pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<b
         .map_err(|error| error.into_error(|| Error::convert_preempted(this.clone(), that.clone())))
 }
 
+/// Best-effort display form for a mismatch report: substitute the solutions
+/// that have landed, so the message names the actual disagreement rather than
+/// the metavariables it arrived wrapped in. An unsolved metavariable makes
+/// `zonk` fail, in which case the raw spelling is kept.
+fn resolved_for_display(context: &Context, term: &Term) -> Term {
+    super::zonk(context, term).unwrap_or_else(|_| term.clone())
+}
+
 pub fn expect(
     context: &mut Context,
     term: &Term,
@@ -32,8 +40,8 @@ pub fn expect(
         super::Outcome::Converts => retry_parked(context),
         super::Outcome::Mismatch => Err(Error::type_mismatch(
             term.clone(),
-            inferred.clone(),
-            expected.clone(),
+            resolved_for_display(context, inferred),
+            resolved_for_display(context, expected),
         )),
         // Undecided: blocked on unsolved metavariables. Park the goals to be
         // retried when a watched metavariable is solved (§8) and succeed
@@ -43,8 +51,8 @@ pub fn expect(
             if context.parking_suppressed() {
                 return Err(Error::type_mismatch(
                     term.clone(),
-                    inferred.clone(),
-                    expected.clone(),
+                    resolved_for_display(context, inferred),
+                    resolved_for_display(context, expected),
                 ));
             }
 
@@ -157,11 +165,9 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
         // first at its origin.
         if context.parked_len() >= before && !context.has_newly_solved() {
             if let Some(parked) = context.take_parked().into_iter().next() {
-                return Err(Error::type_mismatch(
-                    parked.origin,
-                    parked.goal.this,
-                    parked.goal.that,
-                ));
+                let this = resolved_for_display(context, &parked.goal.this);
+                let that = resolved_for_display(context, &parked.goal.that);
+                return Err(Error::type_mismatch(parked.origin, this, that));
             }
             return Ok(());
         }

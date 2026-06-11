@@ -804,7 +804,31 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Subterm::Var(var) => print_var(var),
-        Subterm::Metavar(metavar) => pure(format!("?{}", metavar.id)),
+        // Identity and renaming spines (every entry a variable) are the
+        // uninteresting common case and print as the bare id; a spine carrying
+        // anything else is exactly the one worth seeing.
+        Subterm::Metavar(metavar) => {
+            if metavar
+                .spine
+                .iter()
+                .all(|entry| matches!(&**entry, Subterm::Var(_)))
+            {
+                pure(format!("?{}", metavar.id))
+            } else {
+                flat([
+                    pure(format!("?{}[", metavar.id)),
+                    sep_flat(
+                        metavar
+                            .spine
+                            .iter()
+                            .map(|entry| print_term(entry.clone(), depth))
+                            .collect::<Vec<_>>(),
+                        || pure(", "),
+                    ),
+                    pure("]"),
+                ])
+            }
+        }
     }
 }
 
