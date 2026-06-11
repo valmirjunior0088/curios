@@ -2,7 +2,23 @@
 
 Curios is a from-scratch compiler for a dependently-typed functional language targeting WebAssembly, implemented in Rust with required numeric support from `num-bigint` and `num-traits`, plus optional CLI/runtime dependencies (`clap`, `wasmtime`). It implements its own type checker, CPS lowering, WASM binary serializer, and parser combinator library.
 
-**Codebase size:** ~46,500 lines in `src/`, ~2,070 lines in top-level Rust examples, plus ~770 lines of Curios standard library in `std.crs` and `std/`.
+- [Pipeline](#pipeline)
+- [Design invariants](#design-invariants)
+- [Module layout](#module-layout)
+- [Stage 1 — Parsing](#stage-1--parsing-srctext)
+- [Stage 2 — Resolution & elaboration](#stage-2--resolution--elaboration-srctextto_core)
+- [Stage 3 — Core type system](#stage-3--core-type-system-srccore)
+- [Stage 4 — Type erasure](#stage-4--type-erasure-srcersd)
+- [Stage 5 — CPS lowering](#stage-5--cps-lowering-srcersdto_cont)
+- [Stage 6 — CPS optimization](#stage-6--cps-optimization-srcoptm)
+- [Stage 7 — WebAssembly codegen](#stage-7--webassembly-codegen-srccontto_wasm)
+- [Stage 8 — Serialization & Binaryen](#stage-8--serialization--binaryen-srcwasm-srcbinaryenrs)
+- [Execution](#execution-srcrunrs-and-srcrun)
+- [Utility layer](#utility-layer)
+- [Error reporting](#error-reporting)
+- [CLI](#cli-srcclirs)
+- [Testing](#testing)
+- [Reading order](#reading-order)
 
 ---
 
@@ -43,17 +59,30 @@ result                    printed by src/run.rs
 
 The de Bruijn machinery (`Scope`, `Telescope`, `Var`, the `Bound` traversal trait) lives in `src/core/scope.rs` — see [Stage 3](#stage-3--core-type-system-srccore).
 
-| Stage                   | Key file(s)                                                            | Lines  |
-| ----------------------- | ---------------------------------------------------------------------- | ------ |
-| Parsing                 | `text/parse.rs`                                                        | 1,202  |
-| Resolution + desugaring | `text/to_core.rs`, `text/to_core/` (4 files)                           | ~2,280 |
-| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` | ~3,130 |
-| Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers                 | ~1,980 |
-| CPS lowering            | `ersd/to_cont/lowerer.rs`                                              | 908    |
-| CPS optimization        | `optm.rs` + `optm/` (18 files)                                         | ~9,080 |
-| WASM codegen            | `cont/to_wasm/` (9 files)                                              | ~6,100 |
-| Binary serialization    | `wasm/writer.rs`                                                       | 1,716  |
-| WASM optimization       | `binaryen.rs` + `binaryen/sys.rs` (vendored Binaryen in `binaryen/`)   | ~120   |
+Key files by area (not 1:1 with the stages — normalization serves stage 3 throughout):
+
+| Area                    | Key file(s)                                                            |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Parsing                 | `text/parse.rs`                                                        |
+| Resolution + desugaring | `text/to_core.rs`, `text/to_core/`                                     |
+| Type checking + erasure | `core/elaborate.rs`, `core/zonk.rs`, `core/erase.rs`, `core/typing.rs` |
+| Normalization           | `core/reduce.rs`, `core/convert.rs`, primitive helpers                 |
+| CPS lowering            | `ersd/to_cont/lowerer.rs`                                              |
+| CPS optimization        | `optm.rs` + `optm/` (one file per pass)                                |
+| WASM codegen            | `cont/to_wasm/`                                                        |
+| Binary serialization    | `wasm/writer.rs`                                                       |
+| WASM optimization       | `binaryen.rs` + `binaryen/sys.rs` (vendored Binaryen in `binaryen/`)   |
+
+---
+
+## Design invariants
+
+Cross-cutting decisions the code depends on but cannot state in any single place:
+
+- **Union `match` reduction is call-by-name.** A selected arm's binders are bound to _projections of the original head term_ (`head.(i + 1)`), never to the reduced payload values — substituting reduced payloads would inline evaluated definition internals into types that flow on to `zonk` (`src/core/reduce.rs`).
+- **Only rebuilt terms flow downstream.** Elaboration returns _rebuilt_ terms; implicit insertion saturates applications, so a lowered (pre-insertion) type or body is no longer interchangeable with its rebuilt form and must never leak into later reduction. `rec` groups assume lowered signatures to break the cycle, then upgrade them in place via `Context::reassume` (`src/core/context.rs`).
+- **Continuations are second-class.** Block labels scoped to a region, never values — this is what lets CPS map onto WASM structured control flow without reification (see [Stage 5](#stage-5--cps-lowering-srcersdto_cont)).
+- **Binaryen runs with an exact feature set.** `src/binaryen.rs` enables exactly the features the pipeline targets and Wasmtime's engine enables — never `BinaryenFeatureAll`, which lets the optimizer emit post-GC proposals (e.g. exact reference types) the runtime rejects. Binaryen's settings are process-global and its optimizer is not thread-safe across modules, so the whole sequence runs under a lock. The vendored tree keeps `third_party/llvm-project` (DWARF support) because the Outlining pass includes LLVM suffix-tree headers unconditionally (`build.rs`).
 
 ---
 
@@ -236,7 +265,7 @@ Key differences from `core`:
 
 **Key files:** `lowerer.rs`, `builder.rs`, `conts.rs`, `rec.rs`, `lower_prim.rs`, `frame.rs`, `to_cont.rs`
 
-This is one of the more complex transformations in the pipeline: `lowerer.rs` is 908 lines, and the full `ersd/to_cont` implementation is roughly 2,050 lines.
+This is one of the more complex transformations in the pipeline; `lowerer.rs` is its largest single file.
 
 ### CPS IR structure
 
@@ -315,11 +344,18 @@ A `cont::Module` → `cont::Module` transform: `optm::optimize` (`src/optm.rs`) 
 | `eliminate_dead_arguments` | `dead_argument_elimination.rs` | Drops unused function parameters and closure captures, finishing type erasure                                                                                                                                                                                                                                                 |
 | `eliminate_dead_code`      | `dead_code_elimination.rs`     | Drops unused bindings and unreachable functions, closures, and consts                                                                                                                                                                                                                                                         |
 
-`optimize` (`src/optm.rs`) interleaves and repeats these in a 29-step sequence. After the initial `propagate_copies`/`fold_constants`, `lift_closures` runs both before and after `specialize_calls` (specialization exposes fresh known-closure shapes to lift), then an **interim `eliminate_dead_code`** sweeps the specialization residue so the single-call-site rule in `inline_calls` sees accurate counts. The first `inline_calls` round brings literal arguments next to the primitive ops the prelude wraps, and `thread_jumps`/`propagate_copies`/`fold_constants` collapse them. `thread_known_tags` then resolves the constructor-then-eliminate joins inlining exposed — the multi-predecessor match blocks folding cannot decide — followed by its own `thread_jumps`/settle round to collapse the spliced clones. `evaluate_pure_calls` next closes the gap inlining cannot — dissolving recursive pure callees by interpretation — and a `propagate_copies`/`fold_constants` round settles the freshly-introduced literals. A **second `inline_calls`** round picks up the residual primitive wrappers via its Tier 2 size-bounded rule, with a settle round plus a second `thread_known_tags` round catching the joins the new splices exposed, before `hoist_literals` lifts every bytestring and closed aggregate into a shared module const. `thread_jumps` and a final `propagate_copies` collapse the alias bindings and freshly single-predecessor arms that folding leaves behind, then `eliminate_dead_arguments` and `eliminate_dead_code` run last to reclaim everything dead.
+`optimize` (`src/optm.rs`) interleaves and repeats these passes in a fixed sequence — the code is the source of truth for the exact order; what matters architecturally is _why_ the orderings hold:
+
+- `lift_closures` runs both **before and after** `specialize_calls`: specialization exposes fresh known-closure shapes to lift.
+- An **interim `eliminate_dead_code`** sweeps the specialization residue so the single-call-site rule in `inline_calls` sees accurate counts.
+- `inline_calls` runs **twice**: the first round brings literal arguments next to the primitive ops the prelude wraps (then `thread_jumps`/`propagate_copies`/`fold_constants` collapse them); the second picks up residual primitive wrappers via the Tier 2 size-bounded rule.
+- `thread_known_tags` follows each inlining round, because inlining is what exposes the constructor-then-eliminate joins — multi-predecessor match blocks folding cannot decide.
+- `evaluate_pure_calls` sits between the two inlining rounds and closes the gap inlining cannot: recursive pure callees dissolve by interpretation, not splicing.
+- `hoist_literals` waits until every bytestring and closed aggregate has reached its final shape; `eliminate_dead_arguments` and `eliminate_dead_code` run last to reclaim everything dead.
 
 ---
 
-## Stage 7 — WebAssembly codegen (`src/cont/to_wasm/`, `src/wasm/`)
+## Stage 7 — WebAssembly codegen (`src/cont/to_wasm/`)
 
 **Key files:** `cont/to_wasm.rs`, `cont/to_wasm/table.rs`, `cont/to_wasm/context.rs`, `cont/to_wasm/frame.rs`, `cont/to_wasm/expr_emitter.rs`, `cont/to_wasm/code_emitter.rs`, `cont/to_wasm/module_emitter.rs`
 
@@ -358,9 +394,17 @@ Direct calls use `return_call`; indirect calls use `return_call_ref`. This elimi
 
 The `LoadAs` enum (`Null`, `NonNull`, `Concrete(TypeName)`, `Int`, `Flt`, `Bin`, `Arr`) drives which cast or unboxing sequence the emitter generates for each value.
 
+---
+
+## Stage 8 — Serialization & Binaryen (`src/wasm/`, `src/binaryen.rs`)
+
 ### Binary serialization (`src/wasm/writer.rs`)
 
-The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings. `wasm/writer.rs` is 1,716 lines, with helper modules under `wasm/writer/`.
+The compiler writes WASM binary directly — no `wasm-encoder` or similar library. Implements LEB128 (signed and unsigned), IEEE 754 single/double, and all WASM section encodings, with helper modules under `wasm/writer/`.
+
+### Binaryen optimization (`src/binaryen.rs`)
+
+Deliberately the last stage: `binaryen::optimize` consumes and produces serialized module bytes after the writer and knows nothing about any Curios IR — semantic optimization belongs in `optm`. The vendored Binaryen 130 (`binaryen/` at the repo root) is built and statically linked by `build.rs` via CMake, behind the default-on `binaryen` Cargo feature; building without it (`--no-default-features --features cli`) emits unoptimized modules. The module is read with the exact feature set the pipeline targets, optimized closed-world at optimize level 2 / shrink level 1, validated, and re-serialized. See [Design invariants](#design-invariants) for why the feature set is exact and the sequence is serialized under a lock.
 
 ### WAT parser (`src/wasm/parse.rs`)
 
@@ -395,7 +439,10 @@ The `handle` is the i32 token a `/sys/Io` value lowers to; `STDIN`/`STDOUT`/`STD
 
 The number-to-`Bin` conversions live alongside the trait as free functions — `nat_to_str(u32)`, `int_to_str(i32)`, `flt_to_str(f32)`, `flt_to_le_bin(f32)` — not trait methods. The runtime wasm imports and the compile-time `scalar_eval` folder both call the same free functions, so the two paths cannot diverge.
 
-Two trait implementations ship: `StdioHost` maps the stdin/stdout/stderr handles onto the real process streams (raw `Read::read` for stdin, so short reads behave POSIX-style) and backs file handles with `std::fs::File`; `ChannelHost` routes writes (stdout and stderr alike) through an `mpsc::Sender<Vec<u8>>`, serves stdin reads from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines — each message is one line, a `\n` is appended on refill, and an internal leftover buffer serves `count`-byte slices so short reads never drop bytes — and backs file handles with an in-memory filesystem. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand; `ChannelHost::with_fs(lines, files)` additionally pre-seeds the in-memory filesystem and returns it for post-run inspection.
+Two trait implementations ship:
+
+- **`StdioHost`** maps the stdin/stdout/stderr handles onto the real process streams (raw `Read::read` for stdin, so short reads behave POSIX-style) and backs file handles with `std::fs::File`.
+- **`ChannelHost`** routes writes (stdout and stderr alike) through an `mpsc::Sender<Vec<u8>>` and serves stdin reads from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines: each message is one line, a `\n` is appended on refill, and an internal leftover buffer serves `count`-byte slices so short reads never drop bytes. File handles are backed by an in-memory filesystem. Constructors: `ChannelHost::in_out(lines)` returns the host plus the matching output `Receiver`; `ChannelHost::out()` is the input-empty shorthand; `ChannelHost::with_fs(lines, files)` additionally pre-seeds the in-memory filesystem and returns it for post-run inspection.
 
 Up to eight operations are wired as Wasmtime host imports under `"env"` by `run_wasm`: the four conversions (each emitted only if the codegen `Table` records the corresponding `_used()` flag) route directly to the free functions; `io_open`/`io_close`/`io_read`/`io_write` route to the trait. Scalar *results* of the io imports cross the boundary pre-boxed as i31 refs (so generated code can land them directly in anyref block params); a two-result import's resume block packs `(status, payload)` into the `{ status, … }` record the prim's type promises. The `io_*` imports correspond to the `Tail::Host` variants introduced in [Stage 5](#stage-5--cps-lowering-srcersdto_cont).
 
@@ -430,13 +477,7 @@ Sources are built at the parse entry points: `FromStr` (`"...".parse()`) builds 
 
 ## CLI (`src/cli.rs`)
 
-A Clap wrapper around the run, check, and compile entry points. Top-level options precede a subcommand:
-
-```
-curios [--timeout <MILLIS>] [--print [STAGES]] run <input-path>
-curios [--timeout <MILLIS>] [--print [STAGES]] check <input-path>
-curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-path PATH]
-```
+A Clap wrapper around the run, check, and compile entry points. The usage synopsis lives in `README.md`; top-level options precede a subcommand, and the semantics are:
 
 - `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
 - `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,optm,wasm`. Bare `--print` selects all; omitting the flag prints none.
@@ -449,7 +490,7 @@ curios [--timeout <MILLIS>] [--print [STAGES]] compile <input-path> [--output-pa
 
 ## Testing
 
-453 tests across the library crate, covering every layer:
+The library-crate test suite covers every layer:
 
 | Layer            | What is tested                                                                                                                                                                                                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

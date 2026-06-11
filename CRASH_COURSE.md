@@ -74,17 +74,20 @@ Rust has structs and tuples as separate concepts. Curios has one aggregate type 
 -- Unnamed (like a Rust tuple)
 let point : { Nat, Nat } = (3, 4);
 
--- Named (like a Rust struct, but names are documentation only)
-let point : { x : Nat, y : Nat } = (3, 4);
+-- Named (like a Rust struct)
+let point : { x : Nat, y : Nat } = (x = 3, y = 4);
 ```
 
-There are no struct declarations. The type expression is the definition. Named and unnamed field types are identical to the type checker; labels exist only for readers.
+There are no struct declarations. The type expression is the definition, and labels are part of the type's identity: `{ x : Nat, y : Nat }`, `{ a : Nat, b : Nat }`, and `{ Nat, Nat }` are three distinct types. At the construction site the names are optional and checked positionally — `(3, 4)` builds the named point just as well, and a written name must match the label at that position (no reordering, unlike Rust struct literals).
 
-To extract a field, use dot notation:
+To extract a field, use dot notation — by position always, by label when the type names it:
 
 ```
 let x_coord(p : { Nat, Nat }) -> Nat =
     p.0;
+
+let x_coord(p : { x : Nat, y : Nat }) -> Nat =
+    p.x;
 ```
 
 ## Sum types

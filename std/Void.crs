@@ -1,13 +1,8 @@
--- The uninhabited type: a union with zero cases. No value of `Void` can be
--- constructed, so holding one is itself a contradiction — and eliminating it
--- is a match with zero arms, which checks at any motive.
 pub union Void
 end
 
--- From the absurd, anything follows.
 pub let absurd(@A : Type, contradiction : Void) -> A =
     match contradiction : A
     end;
 
--- Negation: a proof of `P` would be absurd.
 pub let Not(P : Type) -> Type = P -> Void;

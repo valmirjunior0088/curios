@@ -1,5 +1,14 @@
 # Curios Syntax Reference
 
+- [Lexical basics](#lexical-basics)
+- [Source files](#source-files)
+- [Top-level declarations](#top-level-declarations) — `let`, `rec`, `union`, `mod`, `use`
+- [Terms](#terms) — application, lambdas, holes, implicits, `let`/`rec`, `with`/`!`, `match`, field access
+- [Types](#types) — universe, function, tuple, array, primitives
+- [Literals](#literals)
+- [Idioms](#idioms) — sum types, recursive types
+- [Appendix: primitive operations](#appendix-primitive-operations) — the `/sys` tables
+
 ## Lexical basics
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
@@ -8,7 +17,7 @@
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
 
-The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended `/sys` module, so `/sys/Nat`, `/sys/Bin`, and `/sys/Io/write` parse as ordinary paths. A source file can import those names with `use /sys/{Nat, Bin, Io};`. The standard library is prepended the same way under `/std` (its sources live in `std/` alongside the compiler) and re-exports the same API plus higher-level helpers.
+The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended `/sys` module, so `/sys/Nat`, `/sys/Bin`, and `/sys/Io/write` parse as ordinary paths. A source file can import those names with `use /sys/{Nat, Bin, Io};`. The standard library is prepended the same way under `/std` (its sources live in `std/` alongside the compiler) and re-exports the same API plus higher-level helpers — see `STD.md` for its reference.
 
 **Whitespace** (spaces, tabs, newlines) is insignificant except as a separator between tokens.
 
@@ -516,7 +525,65 @@ Zero or more elements. A trailing comma is required for the one-element case to 
 
 Fields may carry name annotations. Each written name is checked positionally against the expected tuple type's label at that position (no reordering — in a dependent telescope the written order is the checking order); named and bare fields mix freely. Names are validated and dropped at elaboration: tuple *values* are always positional.
 
-## Primitive operations
+## Idioms
+
+### Sum types
+
+Use `union` to declare a sum type (see [Union](#union) for the declaration, parameter, and visibility rules). A union is a primitive _nominal_ (inductive) type: two unions are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
+
+Construction goes through the constructor module — `Result/ok(42)` — with the type parameters implicit (supply one positionally with a call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`). Eliminate with `match`; constructor branches bind the payload fields directly:
+
+```
+let unwrap_or(A : Type, r : Result(A, /sys/Bin), default : A) -> A =
+    match r : A
+    | ok(value) => value
+    | err(_) => default
+    end;
+```
+
+`end` closes the `match`; the trailing `;` closes the enclosing `let`.
+
+### Recursive types
+
+Recursive types are written as recursive unions. A union case may refer back to the union being declared.
+
+**Definition**
+
+```
+union List(A : Type)
+| nil()
+| cons(A, List(A))
+end
+```
+
+The `nil` branch has no payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
+
+**Construction**
+
+```
+let empty : List(Nat) = List/nil();
+let one   : List(Nat) = List/cons(1, List/nil());
+let three : List(Nat) =
+    List/cons(1,
+    List/cons(2,
+    List/cons(3, List/nil())));
+```
+
+**Elimination**
+
+A recursive function over the list is itself written with `rec`:
+
+```
+rec length(A : Type, list : List(A)) -> /sys/Nat =
+    match list : /sys/Nat
+    | nil() => 0
+    | cons(_, tail) => /sys/Nat/add(1, length(A, tail))
+    end;
+```
+
+`end` closes the `match`; the trailing `;` closes the top-level `rec` binding.
+
+## Appendix: primitive operations
 
 All primitive operations use call syntax: the operation name followed by parenthesised, comma-separated arguments. Arguments are arbitrary terms.
 
@@ -547,7 +614,7 @@ These are normal path references. After `use /sys/{Nat, Bin};`, the same calls c
 | `/sys/Nat/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
 | `/sys/Nat/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
 
-Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively). Use `/sys/Nat/succ(a)` for the successor of a natural number.
+Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively).
 
 ### Int
 
@@ -649,93 +716,4 @@ Failable operations report through a status code — errors are data; traps stay
 | 4      | already exists                                   |
 | 5      | other                                            |
 
-`/std/Io` layers the safe conveniences on top: `print(b)` writes to stdout (dropping the status), and a buffered reader (`Reader`, the `Buf` state monad with `bind`/`pure`/`run`, and `read_line : Buf(Option(Bin))`) handles line splitting and EOF — `read_line` returns the line including its trailing `\n`, or `none` at end of input (an IO error also ends the stream).
-
-`/std/File` exposes file IO as exactly two bracket-managed verbs — there is no `open` in std, so a handle can never leak from the safe layer (`/sys/Io/open` remains the explicit escape hatch):
-
-```
-File/using(path, mode, body)   -- (Bin, Mode, Io -> A) -> Result(A, Error): open, run, close
-File/read_all(path)            -- Bin -> Result(Bin, Error): whole contents
-```
-
-with `union Mode | read() | write() | append() end` and `union Error | not_found() | permission_denied() | exists() | other(Nat) end`. (The bracket is named `using` because `with` is the sequencing keyword.) Programs run with the invoking user's filesystem access — there is no sandbox.
-
-## Idioms
-
-### Sum types
-
-Use `union` to declare a sum type. A union is a primitive _nominal_ (inductive) type: two unions are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
-
-**Definition**
-
-```
-union Result(A : Type, B : Type)
-| ok(A)
-| err(B)
-end
-```
-
-The union binds the type name `Result` and a constructor module `Result` containing `ok` and `err`.
-
-**Construction**
-
-```
-let good : Result(Nat, Bin) = Result/ok(42);
-let bad  : Result(Nat, Bin) = Result/err("something went wrong");
-```
-
-The union's type parameters are implicit at the constructors — inference fills them from the payload or the expected type. Supply one positionally with a call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`.
-
-**Elimination**
-
-Use `match` on the union value. Constructor branches bind the payload fields directly:
-
-```
-let unwrap_or(A : Type, r : Result(A, /sys/Bin), default : A) -> A =
-    match r : A
-    | ok(value) => value
-    | err(_) => default
-    end;
-```
-
-`end` closes the `match`; the trailing `;` closes the enclosing `let`.
-
-### Recursive types
-
-Recursive types are written as recursive unions. A union case may refer back to the union being declared.
-
-**Definition**
-
-```
-union List(A : Type)
-| nil()
-| cons(A, List(A))
-end
-```
-
-The `nil` branch has no payload. The `cons` branch holds the head element and a recursive `List(A)` tail.
-
-**Construction**
-
-```
-let empty : List(Nat) = List/nil();
-let one   : List(Nat) = List/cons(1, List/nil());
-let three : List(Nat) =
-    List/cons(1,
-    List/cons(2,
-    List/cons(3, List/nil())));
-```
-
-**Elimination**
-
-A recursive function over the list is itself written with `rec`:
-
-```
-rec length(A : Type, list : List(A)) -> /sys/Nat =
-    match list : /sys/Nat
-    | nil() => 0
-    | cons(_, tail) => /sys/Nat/add(1, length(A, tail))
-    end;
-```
-
-`end` closes the `match`; the trailing `;` closes the top-level `rec` binding.
+The standard library layers safe conveniences on top — `/std/Io` (printing, buffered line reading) and `/std/File` (bracket-managed file access) — documented in `STD.md`. Programs run with the invoking user's filesystem access; there is no sandbox.

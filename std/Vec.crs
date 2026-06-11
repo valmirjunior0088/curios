@@ -1,9 +1,5 @@
 use /std/{Nat};
 
--- A length-indexed vector: the head's `: (n : Nat)` declares the index, and
--- each case states the index expressions it inhabits. `cons`'s length binder
--- is implicit at the constructor (`@m` — recoverable from `xs`), so values
--- are written `Vec/cons(x, xs)`.
 pub union Vec(T : Type) : (n : Nat)
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -11,13 +7,8 @@ end
 
 pub use Vec/*;
 
--- The length is the index: `n` rides in implicitly with `v` and is simply
--- returned.
 pub let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat = n;
 
--- The motive binds the index where it naturally appears: each arm checks at
--- its case's target (`0`, `Nat/succ(j)`), and the whole match at the scrutinee's
--- actual length.
 pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
     match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
     | nil() => w
@@ -30,8 +21,6 @@ pub rec map(@A : Type, @B : Type, @n : Nat, f : A -> B, v : Vec(A, n)) -> Vec(B,
     | cons(j, x, xs) => Vec/cons(f(x), map(f, xs))
     end;
 
--- At `Nat/succ(n)` the nil arm is provably impossible and simply omitted: the
--- checker verifies the omission, and `cons`'s length binder is pinned to `n`.
 pub let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
     match v : T
     | cons(j, x, xs) => x
