@@ -972,10 +972,34 @@ impl Convert {
                 Self::as_metavar(&this).cloned(),
                 Self::as_metavar(&that).cloned(),
             ) {
-                (Some(_), Some(_)) => {
-                    // Distinct heads (equal ids are caught by `this == that`,
-                    // since an id occurs once and so carries one spine).
-                    // v1 flex–flex does no intersection: postpone.
+                (Some(this_m), Some(that_m)) => {
+                    // Same head, different spines (node duplication under
+                    // different openings): entrywise spine agreement is a
+                    // *sufficient* congruence condition. Probed only when
+                    // both spines are meta-free — a probe that could solve
+                    // metavariables would overcommit, since agreement is not
+                    // necessary for the goal to hold.
+                    if this_m.id == that_m.id
+                        && this_m
+                            .spine
+                            .iter()
+                            .chain(&that_m.spine)
+                            .all(|entry| entry.metavars().is_empty())
+                    {
+                        let mut entrywise = true;
+                        for (a, b) in this_m.spine.iter().zip(&that_m.spine) {
+                            if !convert(context, &Term::type_(), a, b)? {
+                                entrywise = false;
+                                break;
+                            }
+                        }
+                        if entrywise {
+                            continue;
+                        }
+                    }
+
+                    // Distinct heads (or an undecided probe): v1 flex–flex
+                    // does no intersection — postpone.
                     self.blocked.push(Goal { type_, this, that });
                     continue;
                 }

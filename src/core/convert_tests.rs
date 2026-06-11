@@ -902,3 +902,33 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("b"))));
 }
+
+#[test]
+fn flex_flex_same_id_converts_through_equal_spines() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+
+    // Two occurrences of the same unsolved metavariable whose spines differ
+    // syntactically but agree definitionally (`1 + 1` reduces to `2`): the
+    // congruence probe discharges the goal without solving anything.
+    let sum: Term = Subterm::Prim(Prim::nat_add(nat(1), nat(1))).into();
+    let this = Term::metavar_birthed(0, None, vec![sum]);
+    let that = Term::metavar_birthed(0, None, vec![nat(2)]);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
+fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
+    let mut context = context();
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+
+    // Disagreeing spines are not *unequal* — the solution may ignore the
+    // slot — so the pair parks rather than mismatching.
+    let this = Term::metavar_birthed(0, None, vec![nat(1)]);
+    let that = Term::metavar_birthed(0, None, vec![nat(2)]);
+
+    let outcome = convert_outcome(&mut context, &Term::type_(), &this, &that);
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+}
