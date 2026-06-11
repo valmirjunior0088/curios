@@ -367,6 +367,11 @@ fn constrain_region(
             seed(handle, liveness);
             seed(bytes, liveness);
         }
+        Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
+            seed(path, liveness);
+            seed(mode, liveness);
+        }
+        Tail::Host(HostTarget::IoClose { handle, .. }) => seed(handle, liveness),
         Tail::Unreachable => {}
     }
 

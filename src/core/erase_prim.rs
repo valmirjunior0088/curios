@@ -381,5 +381,14 @@ pub fn erase_prim(
             erase(context, handle, &prim_type(Prim::IoType))?,
             erase(context, bytes, &bin_type())?,
         ))),
+        Prim::IoOpen(path, mode) => Ok(host(ersd::HostPrim::IoOpen(
+            erase(context, path, &bin_type())?,
+            erase(context, mode, &nat_type())?,
+        ))),
+        Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
+            context,
+            handle,
+            &prim_type(Prim::IoType),
+        )?))),
     }
 }

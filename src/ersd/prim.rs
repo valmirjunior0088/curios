@@ -77,6 +77,8 @@ pub enum PurePrim {
 pub enum HostPrim {
     IoRead(Term, Term),
     IoWrite(Term, Term),
+    IoOpen(Term, Term),
+    IoClose(Term),
 }
 
 #[derive(Debug)]

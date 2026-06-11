@@ -584,6 +584,11 @@ fn zonk_prim(context: &Context, prim: &Prim, binders: &[String]) -> Result<Prim,
             zonk_term(context, a, binders)?,
             zonk_term(context, b, binders)?,
         ),
+        Prim::IoOpen(a, b) => Prim::IoOpen(
+            zonk_term(context, a, binders)?,
+            zonk_term(context, b, binders)?,
+        ),
+        Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a, binders)?),
     })
 }
 

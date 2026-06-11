@@ -571,14 +571,15 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_read_func().clone(),
                 });
 
-                if self.is_resume(resume) {
-                    // The read `Bin` is on the stack and matches the function's
-                    // resume-sentinel single-param shape.
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(1));
-                }
+                // A two-result host op's resume block defines a value (the
+                // packed status record), so it is never a bare forwarder and
+                // can never be threaded onto the single-value return sentinel.
+                assert!(
+                    !self.is_resume(resume),
+                    "two-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(2));
             }
             cont::HostTarget::IoWrite {
                 handle,
@@ -592,9 +593,40 @@ impl<'a, 'b> Context<'a, 'b> {
                 });
 
                 if self.is_resume(resume) {
-                    // The enclosing function's resume sentinel expects exactly
-                    // one value (the function's return). `Io.write` produces no
-                    // payload, so materialise a unit before returning.
+                    // The import returns the status pre-boxed as an i31 ref
+                    // (scalar results cross the boundary boxed so they can
+                    // land in anyref block params), so it already matches the
+                    // function's single-anyref return shape.
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+                    output.extend(block_data.enter(1));
+                }
+            }
+            cont::HostTarget::IoOpen { path, mode, resume } => {
+                output.extend(self.load_value_instrs(path, LoadAs::Bin));
+                output.extend(self.load_value_instrs(mode, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_open_func().clone(),
+                });
+
+                // Same two-result invariant as `IoRead`.
+                assert!(
+                    !self.is_resume(resume),
+                    "two-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(2));
+            }
+            cont::HostTarget::IoClose { handle, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_close_func().clone(),
+                });
+
+                if self.is_resume(resume) {
+                    // No payload: materialise a unit for the single-value
+                    // return sentinel.
                     output.push(wasm::Instr::StructNew {
                         type_name: self.table().find_tpl_type(0),
                     });

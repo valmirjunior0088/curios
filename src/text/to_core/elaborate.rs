@@ -618,6 +618,10 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::IoWrite(handle, bytes) => {
                 core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
             }
+            Prim::IoOpen(path, mode) => {
+                core::Prim::IoOpen(self.term(path)?, self.term(mode)?)
+            }
+            Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
             Prim::NatToFlt(inner) => core::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => core::Prim::int_to_nat(self.term(inner)?),
             Prim::IntToFlt(inner) => core::Prim::int_to_flt(self.term(inner)?),

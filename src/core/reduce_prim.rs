@@ -712,5 +712,13 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoWrite",
             span: handle.span(),
         }),
+        Prim::IoOpen(path, _) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoOpen",
+            span: path.span(),
+        }),
+        Prim::IoClose(handle) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoClose",
+            span: handle.span(),
+        }),
     }
 }

@@ -111,6 +111,12 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
             names.extend(free_names(bytes));
             names
         }
+        ersd::HostPrim::IoOpen(path, mode) => {
+            let mut names = free_names(path);
+            names.extend(free_names(mode));
+            names
+        }
+        ersd::HostPrim::IoClose(handle) => free_names(handle),
     }
 }
 

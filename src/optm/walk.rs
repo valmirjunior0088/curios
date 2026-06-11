@@ -134,6 +134,11 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(handle);
             sink.value_use(bytes);
         }
+        Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
+            sink.value_use(path);
+            sink.value_use(mode);
+        }
+        Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
         Tail::Unreachable => {}
     }
 }
@@ -352,6 +357,11 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
             sink.value_use(handle);
             sink.value_use(bytes);
         }
+        Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
+            sink.value_use(path);
+            sink.value_use(mode);
+        }
+        Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
         Tail::Unreachable => {}
     }
 }

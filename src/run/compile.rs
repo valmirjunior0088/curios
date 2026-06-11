@@ -1274,9 +1274,10 @@ mod tests {
     fn prune_still_typechecks_dead_user_definitions() {
         // The prune is root-restricted: a user-authored top-level binding the body
         // never references is still type-checked, so its error is reported.
+        // (`write` returns its `Nat` status, so `Bin` is the mismatch.)
         let error = typecheck(
             r#"
-            let dead : /sys/Nat = /sys/Io/write(/sys/Io/stdout, "x");
+            let dead : /sys/Bin = /sys/Io/write(/sys/Io/stdout, "x");
             /sys/Io/write(/sys/Io/stdout, "ok")
             "#,
         )

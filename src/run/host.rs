@@ -1,8 +1,13 @@
-use std::{
-    io::{Read, Write, stderr, stdin, stdout},
-    sync::{
-        Arc, Mutex,
-        mpsc::{self, Receiver, RecvError, Sender},
+use {
+    crate::Entropy,
+    std::{
+        collections::HashMap,
+        fs::{File, OpenOptions},
+        io::{ErrorKind, Read, Write, stderr, stdin, stdout},
+        sync::{
+            Arc, Mutex,
+            mpsc::{self, Receiver, RecvError, Sender},
+        },
     },
 };
 
@@ -22,15 +27,8 @@ pub fn flt_to_str(value: f32) -> Vec<u8> {
     format!("{value:+}").into_bytes()
 }
 
-pub trait Host {
-    /// Read up to `count` bytes from `handle`, blocking until at least one
-    /// byte is available. An empty return means EOF — nothing else.
-    fn read(&self, handle: u32, count: u32) -> Vec<u8>;
-
-    /// Write `bytes` to `handle`.
-    fn write(&self, handle: u32, bytes: &[u8]);
-
-    fn flt_to_le_bin(&self, value: f32) -> Vec<u8>;
+pub fn flt_to_le_bin(value: f32) -> Vec<u8> {
+    value.to_le_bytes().to_vec()
 }
 
 /// The well-known handle tokens minted by the `/sys/Io` prelude constants.
@@ -38,36 +36,154 @@ pub const STDIN: u32 = 0;
 pub const STDOUT: u32 = 1;
 pub const STDERR: u32 = 2;
 
-pub struct StdioHost;
+/// The status contract of failable IO ops, mirrored by `/std/File`'s `decode`.
+pub const STATUS_OK: u32 = 0;
+pub const STATUS_EOF: u32 = 1;
+pub const STATUS_NOT_FOUND: u32 = 2;
+pub const STATUS_PERMISSION_DENIED: u32 = 3;
+pub const STATUS_EXISTS: u32 = 4;
+pub const STATUS_OTHER: u32 = 5;
+
+/// The mode tokens of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` union.
+pub const MODE_READ: u32 = 0;
+pub const MODE_WRITE: u32 = 1;
+pub const MODE_APPEND: u32 = 2;
+
+fn status_of(kind: ErrorKind) -> u32 {
+    match kind {
+        ErrorKind::NotFound => STATUS_NOT_FOUND,
+        ErrorKind::PermissionDenied => STATUS_PERMISSION_DENIED,
+        ErrorKind::AlreadyExists => STATUS_EXISTS,
+        _ => STATUS_OTHER,
+    }
+}
+
+/// The handle-token gensym, seeded past the well-known stdio tokens. `Entropy`
+/// is `Cell`-backed, so the host's `Send + Sync` bound puts it behind a mutex.
+fn handle_entropy() -> Mutex<Entropy> {
+    let entropy = Entropy::new();
+    entropy.seed(STDERR as usize + 1);
+
+    Mutex::new(entropy)
+}
+
+fn fresh_handle(handles: &Mutex<Entropy>) -> u32 {
+    handles.lock().unwrap().fresh() as u32
+}
+
+pub trait Host {
+    /// Open the file at `path` with `MODE_*` semantics. Returns
+    /// `(status, handle)`; the handle is meaningful only when the status is
+    /// `STATUS_OK`.
+    fn open(&self, path: &[u8], mode: u32) -> (u32, u32);
+
+    /// Close `handle`. Closing an unknown handle is a no-op.
+    fn close(&self, handle: u32);
+
+    /// Read up to `count` bytes from `handle`, blocking until at least one
+    /// byte is available. Returns `(status, bytes)`: `STATUS_OK` with 1..count
+    /// bytes, `STATUS_EOF` with empty bytes, or an error status.
+    fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>);
+
+    /// Write `bytes` to `handle`, returning a status.
+    fn write(&self, handle: u32, bytes: &[u8]) -> u32;
+}
+
+pub struct StdioHost {
+    files: Mutex<HashMap<u32, File>>,
+    handles: Mutex<Entropy>,
+}
+
+impl Default for StdioHost {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StdioHost {
+    pub fn new() -> Self {
+        Self {
+            files: Mutex::new(HashMap::new()),
+            handles: handle_entropy(),
+        }
+    }
+}
 
 impl Host for StdioHost {
-    fn read(&self, handle: u32, count: u32) -> Vec<u8> {
-        if handle != STDIN {
-            return vec![];
-        }
+    fn open(&self, path: &[u8], mode: u32) -> (u32, u32) {
+        let path = String::from_utf8_lossy(path).into_owned();
 
+        let mut options = OpenOptions::new();
+
+        match mode {
+            MODE_READ => options.read(true),
+            MODE_WRITE => options.write(true).create(true).truncate(true),
+            MODE_APPEND => options.append(true).create(true),
+            _ => return (STATUS_OTHER, 0),
+        };
+
+        match options.open(&path) {
+            Ok(file) => {
+                let handle = fresh_handle(&self.handles);
+                self.files.lock().unwrap().insert(handle, file);
+
+                (STATUS_OK, handle)
+            }
+            Err(error) => (status_of(error.kind()), 0),
+        }
+    }
+
+    fn close(&self, handle: u32) {
+        self.files.lock().unwrap().remove(&handle);
+    }
+
+    fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
         let mut buffer = vec![0; count as usize];
 
-        match stdin().lock().read(&mut buffer) {
+        let result = match handle {
+            STDIN => stdin().lock().read(&mut buffer),
+            _ => match self.files.lock().unwrap().get_mut(&handle) {
+                Some(file) => file.read(&mut buffer),
+                None => return (STATUS_EOF, vec![]),
+            },
+        };
+
+        match result {
+            Ok(0) => (STATUS_EOF, vec![]),
             Ok(n) => {
                 buffer.truncate(n);
-                buffer
+
+                (STATUS_OK, buffer)
             }
-            Err(_) => vec![],
+            Err(error) => (status_of(error.kind()), vec![]),
         }
     }
 
-    fn write(&self, handle: u32, bytes: &[u8]) {
-        match handle {
-            STDOUT => stdout().write_all(bytes).unwrap(),
-            STDERR => stderr().write_all(bytes).unwrap(),
-            _ => {}
+    fn write(&self, handle: u32, bytes: &[u8]) -> u32 {
+        let result = match handle {
+            STDOUT => stdout().write_all(bytes),
+            STDERR => stderr().write_all(bytes),
+            _ => match self.files.lock().unwrap().get_mut(&handle) {
+                Some(file) => file.write_all(bytes),
+                None => return STATUS_OTHER,
+            },
+        };
+
+        match result {
+            Ok(()) => STATUS_OK,
+            Err(error) => status_of(error.kind()),
         }
     }
+}
 
-    fn flt_to_le_bin(&self, value: f32) -> Vec<u8> {
-        value.to_le_bytes().to_vec()
-    }
+/// The in-memory file map shared between a [`ChannelHost`] and the test that
+/// seeded it: path → contents, inspectable after the run.
+pub type ChannelFs = Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>;
+
+struct OpenFile {
+    path: Vec<u8>,
+    mode: u32,
+    position: usize,
 }
 
 pub struct ChannelHost {
@@ -78,13 +194,22 @@ pub struct ChannelHost {
     /// Writes to stdout and stderr both land here; tests do not distinguish
     /// the two streams.
     output_sender: Arc<Mutex<Sender<Vec<u8>>>>,
+    /// The in-memory filesystem backing `open`/`close` and file handles.
+    files: ChannelFs,
+    open_files: Mutex<HashMap<u32, OpenFile>>,
+    handles: Mutex<Entropy>,
 }
 
 impl ChannelHost {
-    pub fn in_out<L, I>(lines: I) -> (Self, Receiver<Vec<u8>>)
+    /// Like `in_out`, but pre-seeds the in-memory filesystem and returns it so
+    /// the test can inspect written files after the run.
+    pub fn with_fs<L, I, P, C, F>(lines: I, files: F) -> (Self, Receiver<Vec<u8>>, ChannelFs)
     where
         L: AsRef<[u8]>,
         I: IntoIterator<Item = L>,
+        P: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+        F: IntoIterator<Item = (P, C)>,
     {
         let (input_sender, input_receiver) = mpsc::channel();
         let (output_sender, output_receiver) = mpsc::channel();
@@ -93,14 +218,35 @@ impl ChannelHost {
             input_sender.send(line.as_ref().to_vec()).unwrap();
         }
 
+        let files = Arc::new(Mutex::new(
+            files
+                .into_iter()
+                .map(|(path, contents)| (path.as_ref().to_vec(), contents.as_ref().to_vec()))
+                .collect(),
+        ));
+
         (
             ChannelHost {
                 input_receiver: Mutex::new(input_receiver),
                 input_leftover: Mutex::new(Vec::new()),
                 output_sender: Arc::new(Mutex::new(output_sender)),
+                files: files.clone(),
+                open_files: Mutex::new(HashMap::new()),
+                handles: handle_entropy(),
             },
             output_receiver,
+            files,
         )
+    }
+
+    pub fn in_out<L, I>(lines: I) -> (Self, Receiver<Vec<u8>>)
+    where
+        L: AsRef<[u8]>,
+        I: IntoIterator<Item = L>,
+    {
+        let (host, output_receiver, _) = Self::with_fs(lines, [] as [(&[u8], &[u8]); 0]);
+
+        (host, output_receiver)
     }
 
     pub fn out() -> (Self, Receiver<Vec<u8>>) {
@@ -109,9 +255,66 @@ impl ChannelHost {
 }
 
 impl Host for ChannelHost {
-    fn read(&self, handle: u32, count: u32) -> Vec<u8> {
+    fn open(&self, path: &[u8], mode: u32) -> (u32, u32) {
+        let mut files = self.files.lock().unwrap();
+
+        match mode {
+            MODE_READ => {
+                if !files.contains_key(path) {
+                    return (STATUS_NOT_FOUND, 0);
+                }
+            }
+            MODE_WRITE => {
+                files.insert(path.to_vec(), vec![]);
+            }
+            MODE_APPEND => {
+                files.entry(path.to_vec()).or_default();
+            }
+            _ => return (STATUS_OTHER, 0),
+        }
+
+        let handle = fresh_handle(&self.handles);
+
+        self.open_files.lock().unwrap().insert(
+            handle,
+            OpenFile {
+                path: path.to_vec(),
+                mode,
+                position: 0,
+            },
+        );
+
+        (STATUS_OK, handle)
+    }
+
+    fn close(&self, handle: u32) {
+        self.open_files.lock().unwrap().remove(&handle);
+    }
+
+    fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
         if handle != STDIN {
-            return vec![];
+            let mut open_files = self.open_files.lock().unwrap();
+
+            let Some(open) = open_files.get_mut(&handle) else {
+                return (STATUS_EOF, vec![]);
+            };
+
+            if open.mode != MODE_READ {
+                return (STATUS_OTHER, vec![]);
+            }
+
+            let files = self.files.lock().unwrap();
+            let contents = files.get(&open.path).map(Vec::as_slice).unwrap_or(&[]);
+
+            if open.position >= contents.len() {
+                return (STATUS_EOF, vec![]);
+            }
+
+            let stop = contents.len().min(open.position + count as usize);
+            let bytes = contents[open.position..stop].to_vec();
+            open.position = stop;
+
+            return (STATUS_OK, bytes);
         }
 
         let mut leftover = self.input_leftover.lock().unwrap();
@@ -125,25 +328,43 @@ impl Host for ChannelHost {
                     leftover.extend(line);
                     leftover.push(b'\n');
                 }
-                Err(RecvError) => return vec![],
+                Err(RecvError) => return (STATUS_EOF, vec![]),
             }
         }
 
         let served = leftover.len().min(count as usize);
-        leftover.drain(..served).collect()
+
+        (STATUS_OK, leftover.drain(..served).collect())
     }
 
-    fn write(&self, handle: u32, bytes: &[u8]) {
+    fn write(&self, handle: u32, bytes: &[u8]) -> u32 {
         if handle == STDOUT || handle == STDERR {
             self.output_sender
                 .lock()
                 .unwrap()
                 .send(bytes.to_owned())
                 .unwrap();
-        }
-    }
 
-    fn flt_to_le_bin(&self, value: f32) -> Vec<u8> {
-        value.to_le_bytes().to_vec()
+            return STATUS_OK;
+        }
+
+        let open_files = self.open_files.lock().unwrap();
+
+        let Some(open) = open_files.get(&handle) else {
+            return STATUS_OTHER;
+        };
+
+        if open.mode == MODE_READ {
+            return STATUS_OTHER;
+        }
+
+        self.files
+            .lock()
+            .unwrap()
+            .entry(open.path.clone())
+            .or_default()
+            .extend_from_slice(bytes);
+
+        STATUS_OK
     }
 }

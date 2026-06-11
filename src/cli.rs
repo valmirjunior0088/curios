@@ -119,7 +119,7 @@ pub fn cli() -> Result<(), String> {
 
     match mode {
         Mode::Run { input_path } => {
-            run_wasm(&compile_file(timeout, &print, &input_path)?, StdioHost)?;
+            run_wasm(&compile_file(timeout, &print, &input_path)?, StdioHost::new())?;
         }
         Mode::Check { input_path } => {
             // Run the fast type-check-only path; fall through to the full pipeline

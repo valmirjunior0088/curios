@@ -1,4 +1,6 @@
-use wasmtime::{ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, Mutability, StorageType, Val};
+use wasmtime::{
+    AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, I31, Mutability, StorageType, Val,
+};
 
 pub trait Lower {
     fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
@@ -8,6 +10,36 @@ pub trait Lower {
 impl Lower for () {
     fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
         Ok(())
+    }
+}
+
+/// Scalar results cross the boundary pre-boxed as i31 refs so generated code
+/// can land them directly in anyref block params (see `emit_sys_imports`).
+impl Lower for u32 {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        results[0] = Val::AnyRef(Some(AnyRef::from_i31(
+            &mut *caller,
+            I31::wrapping_u32(self),
+        )));
+        Ok(())
+    }
+}
+
+// Pairs lower positionally: each component fills one result slot. (Every
+// single-value impl writes `results[0]`, so slicing re-aligns them.)
+impl<A: Lower, B: Lower> Lower for (A, B) {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        let (a, b) = self;
+        a.lower(caller, &mut results[0..1])?;
+        b.lower(caller, &mut results[1..2])
     }
 }
 

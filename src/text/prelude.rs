@@ -45,6 +45,16 @@ fn unit() -> Term {
     Subterm::TupleType(TupleType { fields: vec![] }).into()
 }
 
+fn record(fields: Vec<(&str, Term)>) -> Term {
+    Subterm::TupleType(TupleType {
+        fields: fields
+            .into_iter()
+            .map(|(label, type_)| (Some(label.to_string()), type_))
+            .collect(),
+    })
+    .into()
+}
+
 fn arr_of(elem: Term) -> Term {
     prim(Prim::ArrType(elem))
 }
@@ -283,14 +293,26 @@ fn io_ops() -> Vec<TopItem> {
         pub_fn(
             "read",
             vec![("h", io()), ("n", nat())],
-            bin(),
+            record(vec![("status", nat()), ("bytes", bin())]),
             prim(Prim::IoRead(name("h"), name("n"))),
         ),
         pub_fn(
             "write",
             vec![("h", io()), ("b", bin())],
-            unit(),
+            nat(),
             prim(Prim::IoWrite(name("h"), name("b"))),
+        ),
+        pub_fn(
+            "open",
+            vec![("path", bin()), ("mode", nat())],
+            record(vec![("status", nat()), ("handle", io())]),
+            prim(Prim::IoOpen(name("path"), name("mode"))),
+        ),
+        pub_fn(
+            "close",
+            vec![("h", io())],
+            unit(),
+            prim(Prim::IoClose(name("h"))),
         ),
     ]
 }
@@ -372,6 +394,7 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Int"], include_str!("../../std/Int.crs")),
     (&["std", "Bln"], include_str!("../../std/Bln.crs")),
     (&["std", "Io"], include_str!("../../std/Io.crs")),
+    (&["std", "File"], include_str!("../../std/File.crs")),
     (&["std", "Char"], include_str!("../../std/Char.crs")),
     (&["std", "Result"], include_str!("../../std/Result.crs")),
     (&["std", "Option"], include_str!("../../std/Option.crs")),

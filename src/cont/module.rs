@@ -157,18 +157,31 @@ pub enum CallTarget {
 /// as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub enum HostTarget {
-    /// Read up to `count` bytes from `handle`. Returns one `Bin` (empty means
-    /// EOF); `resume` takes a single block parameter bound to that `Bin`.
+    /// Read up to `count` bytes from `handle`. Returns (status, bytes);
+    /// `resume` takes two block parameters.
     IoRead {
         handle: ValueName,
         count: ValueName,
         resume: BlockName,
     },
-    /// Write `bytes` (a `Bin`) to `handle`. Returns no payload; `resume` takes
-    /// zero block parameters.
+    /// Write `bytes` (a `Bin`) to `handle`. Returns the status scalar;
+    /// `resume` takes one block parameter.
     IoWrite {
         handle: ValueName,
         bytes: ValueName,
+        resume: BlockName,
+    },
+    /// Open the file at `path` (a `Bin`) with `mode` (an i32 token). Returns
+    /// (status, handle); `resume` takes two block parameters.
+    IoOpen {
+        path: ValueName,
+        mode: ValueName,
+        resume: BlockName,
+    },
+    /// Close `handle`. Returns no payload; `resume` takes zero block
+    /// parameters.
+    IoClose {
+        handle: ValueName,
         resume: BlockName,
     },
 }
@@ -176,7 +189,10 @@ pub enum HostTarget {
 impl HostTarget {
     pub fn resume(&self) -> &BlockName {
         match self {
-            HostTarget::IoRead { resume, .. } | HostTarget::IoWrite { resume, .. } => resume,
+            HostTarget::IoRead { resume, .. }
+            | HostTarget::IoWrite { resume, .. }
+            | HostTarget::IoOpen { resume, .. }
+            | HostTarget::IoClose { resume, .. } => resume,
         }
     }
 }

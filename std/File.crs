@@ -1,0 +1,59 @@
+use /std/{Bin, Nat, Io, Result};
+
+pub union Mode
+| read()
+| write()
+| append()
+end
+
+pub use Mode/*;
+
+pub union Error
+| not_found()
+| permission_denied()
+| exists()
+| other(Nat)
+end
+
+pub use Error/*;
+
+let token(mode : Mode) -> Nat =
+    match mode : Nat
+    | read() => 0
+    | write() => 1
+    | append() => 2
+    end;
+
+-- The status contract of /sys/Io's failable ops (mirrored by the host):
+-- 0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other.
+let decode(status : Nat) -> Error =
+    match status : Error
+    | 2 => Error/not_found()
+    | 3 => Error/permission_denied()
+    | 4 => Error/exists()
+    | _ => Error/other(status)
+    end;
+
+-- The one doorway to a file handle: open, run `body`, close. (Named `using`
+-- because `with` is the do-notation keyword.) The handle never
+-- outlives the bracket — note that effects delayed past it (a `body` result
+-- that is itself a closure performing IO) would touch a closed handle.
+pub let using(@A : Type, path : Bin, mode : Mode, body : Io -> A) -> Result(A, Error) =
+    let r = Io/open(path, token(mode));
+    match Nat/eql(r.status, 0)
+    | true =>
+        let value = body(r.handle);
+        let closed = Io/close(r.handle);
+        Result/success(value)
+    | false => Result/failure(decode(r.status))
+    end;
+
+rec drain(h : Io, acc : Bin) -> Bin =
+    let r = Io/read(h, 4096);
+    match Nat/eql(r.status, 0)
+    | true => drain(h, Bin/concat(acc, r.bytes))
+    | false => acc
+    end;
+
+pub let read_all(path : Bin) -> Result(Bin, Error) =
+    using(path, Mode/read(), (h) => drain(h, ""));

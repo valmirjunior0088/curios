@@ -321,14 +321,34 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::IoRead(handle, count) => {
             let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
-            let count = elaborate(context, count, Mode::Check(nat_type))?.0;
-            (Prim::IoRead(handle, count), bin_type)
+            let count = elaborate(context, count, Mode::Check(nat_type.clone()))?.0;
+            // Failable host ops report through a status record: 0 ok, 1 eof
+            // (bytes empty ⟺ status 1), 2+ error. Labels are load-bearing —
+            // callers project `.status`/`.bytes`.
+            (
+                Prim::IoRead(handle, count),
+                Term::tuple_type([("status", nat_type), ("bytes", bin_type)]),
+            )
         }
         Prim::IoWrite(handle, bytes) => {
             let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             let bytes = elaborate(context, bytes, Mode::Check(bin_type))?.0;
-            (Prim::IoWrite(handle, bytes), Term::tuple_type_unit())
+            (Prim::IoWrite(handle, bytes), nat_type)
+        }
+        Prim::IoOpen(path, mode) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let path = elaborate(context, path, Mode::Check(bin_type))?.0;
+            let mode = elaborate(context, mode, Mode::Check(nat_type.clone()))?.0;
+            (
+                Prim::IoOpen(path, mode),
+                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
+            )
+        }
+        Prim::IoClose(handle) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            (Prim::IoClose(handle), Term::tuple_type_unit())
         }
     })
 }

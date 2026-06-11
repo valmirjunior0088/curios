@@ -80,6 +80,8 @@ pub enum Prim {
     Io(u32),
     IoRead(Term, Term),
     IoWrite(Term, Term),
+    IoOpen(Term, Term),
+    IoClose(Term),
 }
 
 impl Prim {

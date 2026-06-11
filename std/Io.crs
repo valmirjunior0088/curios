@@ -2,8 +2,10 @@ pub use /sys/Io/*;
 pub use /sys/{Io};
 use /std/{Bin, Nat, Option};
 
+-- Best-effort: the write status is dropped, like printing to a closed pipe.
 pub let print(b : Bin) -> {} =
-    write(stdout, b);
+    let status = write(stdout, b);
+    ();
 
 -- A buffered reader: the handle plus bytes already read but not yet consumed.
 -- Threaded explicitly through `Buf` actions, exactly like `Parse` threads its
@@ -51,13 +53,15 @@ pub rec read_line : Buf(Option(Bin)) =
             let rest = Bin/slice(r.1, stop, Bin/len(r.1));
             ((r.0, rest), Option/some(line))
         | none() =>
+            -- Any non-ok refill status (EOF or an IO error) ends the stream;
+            -- an error-propagating reader is future work.
             let chunk = read(r.0, 1024);
-            match Nat/eql(Bin/len(chunk), 0)
-            | true =>
+            match Nat/eql(chunk.status, 0)
+            | false =>
                 match Nat/eql(Bin/len(r.1), 0)
                 | true => (r, Option/none())
                 | false => ((r.0, ""), Option/some(r.1))
                 end
-            | false => read_line((r.0, Bin/concat(r.1, chunk)))
+            | true => read_line((r.0, Bin/concat(r.1, chunk.bytes)))
             end
         end;

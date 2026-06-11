@@ -631,6 +631,20 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
+            HostTarget::IoOpen { path, mode, resume } => flat([
+                pure("Io.open "),
+                print_value_name(path),
+                pure(" "),
+                print_value_name(mode),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoClose { handle, resume } => flat([
+                pure("Io.close "),
+                print_value_name(handle),
+                pure(" "),
+                print_block_name(resume),
+            ]),
         },
         Tail::Unreachable => pure("unreachable"),
     }

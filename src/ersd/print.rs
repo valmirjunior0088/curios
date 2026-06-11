@@ -166,6 +166,10 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
         HostPrim::IoWrite(h, b) => {
             flat([pure("Io.write "), print_term(h), pure(" "), print_term(b)])
         }
+        HostPrim::IoOpen(p, m) => {
+            flat([pure("Io.open "), print_term(p), pure(" "), print_term(m)])
+        }
+        HostPrim::IoClose(h) => flat([pure("Io.close "), print_term(h)]),
     }
 }
 

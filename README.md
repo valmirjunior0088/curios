@@ -49,6 +49,8 @@ let msg : /sys/Bin = "hello, world";
 curios run hello.crs
 ```
 
+Programs can read and write files through `/std/File` (and the raw `/sys/Io/open`); they run with the invoking user's filesystem access — there is no sandbox.
+
 ## Examples
 
 The `examples/` directory contains end-to-end Rust programs that drive the full compiler pipeline. Two are particularly instructive:

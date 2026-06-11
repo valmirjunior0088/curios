@@ -76,7 +76,7 @@ fn io_read() {
     let (system, receiver) = ChannelHost::in_out(["hello"]);
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stdout, sys/Io/read(sys/Io/stdin, 1024))"#,
+        r#"sys/Io/write(sys/Io/stdout, sys/Io/read(sys/Io/stdin, 1024).bytes)"#,
         system,
     )
     .expect("expected result");
@@ -112,25 +112,147 @@ fn named_fields_run_end_to_end() {
 }
 
 // `read(h, n)` is POSIX-shaped: each call returns 1..n available bytes (here
-// one injected line per refill, served in `n`-byte slices), and empty means
-// EOF — exercised by the third read.
+// one injected line per refill, served in `n`-byte slices) with status 0, and
+// EOF is status 1 with empty bytes — exercised by the third read.
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Io};
+        use /std/{Io, Nat};
         let a = Io/read(Io/stdin, 2);
-        let ra = Io/write(Io/stdout, a);
+        let ra = Io/write(Io/stdout, a.bytes);
         let b = Io/read(Io/stdin, 2);
-        let rb = Io/write(Io/stdout, b);
+        let rb = Io/write(Io/stdout, b.bytes);
         let c = Io/read(Io/stdin, 2);
-        Io/write(Io/stdout, c)
+        let rc = Io/write(Io/stdout, c.bytes);
+        Io/write(Io/stdout, Nat/to_str(c.status))
         "#;
 
     let (system, receiver) = ChannelHost::in_out(["abc"]);
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ab".to_vec(), b"c\n".to_vec(), b"".to_vec()]
+        vec![
+            b"ab".to_vec(),
+            b"c\n".to_vec(),
+            b"".to_vec(),
+            b"1".to_vec()
+        ]
+    );
+}
+
+#[test]
+fn file_read_all_reads_a_seeded_file() {
+    let source = r#"
+        use /std/{File, Io};
+        match File/read_all("data.txt")
+        | success(contents) => Io/print(contents)
+        | failure(_) => Io/print("error")
+        end
+        "#;
+
+    let (system, receiver, _fs) =
+        ChannelHost::with_fs::<&[u8], _, _, _, _>([], [("data.txt", "file contents")]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"file contents".to_vec()]
+    );
+}
+
+#[test]
+fn file_read_all_of_a_missing_path_is_not_found() {
+    let source = r#"
+        use /std/{File, Io};
+        match File/read_all("nope.txt")
+        | success(_) => Io/print("contents")
+        | failure(e) =>
+            match e : {}
+            | not_found() => Io/print("not found")
+            | permission_denied() => Io/print("denied")
+            | exists() => Io/print("exists")
+            | other(_) => Io/print("other")
+            end
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"not found".to_vec()]
+    );
+}
+
+#[test]
+fn file_with_write_mode_persists_through_close() {
+    let source = r#"
+        use /std/{File, Io};
+        match File/using("out.txt", File/write(), (h) => Io/write(h, "written"))
+        | success(_) => Io/print("ok")
+        | failure(_) => Io/print("error")
+        end
+        "#;
+
+    let (system, receiver, fs) = ChannelHost::with_fs::<&[u8], _, &[u8], &[u8], _>([], []);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"ok".to_vec()]
+    );
+    assert_eq!(
+        fs.lock().unwrap().get(b"out.txt".as_slice()),
+        Some(&b"written".to_vec())
+    );
+}
+
+// Matching on an effectful scrutinee must evaluate it exactly once — the
+// erased union match binds the scrutinee in a `let` and projects from it.
+// Append mode makes a second evaluation visible: it would append twice.
+#[test]
+fn effectful_match_scrutinee_runs_once() {
+    let source = r#"
+        use /std/{File, Io};
+        match File/using("log.txt", File/append(), (h) => Io/write(h, "x"))
+        | success(_) => Io/print("ok")
+        | failure(_) => Io/print("error")
+        end
+        "#;
+
+    let (system, receiver, fs) = ChannelHost::with_fs::<&[u8], _, &[u8], &[u8], _>([], []);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"ok".to_vec()]
+    );
+    assert_eq!(
+        fs.lock().unwrap().get(b"log.txt".as_slice()),
+        Some(&b"x".to_vec())
+    );
+}
+
+// The payoff of handle-generic std/Io: the buffered reader runs unchanged
+// over a file handle inside the bracket.
+#[test]
+fn read_line_works_over_a_file_handle() {
+    let source = r#"
+        use /std/{File, Io, Option, Bin};
+        let first_line(h : Io/Io) -> Bin =
+            match Io/read_line(Io/reader(h)).1
+            | some(line) => line
+            | none() => "empty"
+            end;
+        match File/using("lines.txt", File/read(), first_line)
+        | success(line) => Io/print(line)
+        | failure(_) => Io/print("error")
+        end
+        "#;
+
+    let (system, receiver, _fs) =
+        ChannelHost::with_fs::<&[u8], _, _, _, _>([], [("lines.txt", "first\nsecond\n")]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"first\n".to_vec()]
     );
 }
 
@@ -493,7 +615,7 @@ fn printf_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        let name = Str/trim(Io/read(Io/stdin, 1024));
+        let name = Str/trim(Io/read(Io/stdin, 1024).bytes);
         Fmt/printf("%s is %d")(name)(30)
         "#;
 

@@ -1155,7 +1155,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::FltTrunc(t)
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
-        | Prim::ArrType(t) => t.reach(),
+        | Prim::ArrType(t)
+        | Prim::IoClose(t) => t.reach(),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1196,7 +1197,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinAppend(a, b)
         | Prim::ArrLen(a, b)
         | Prim::IoRead(a, b)
-        | Prim::IoWrite(a, b) => a.reach().max(b.reach()),
+        | Prim::IoWrite(a, b)
+        | Prim::IoOpen(a, b) => a.reach().max(b.reach()),
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
             a.reach().max(b.reach()).max(c.reach())
@@ -1244,7 +1246,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::FltTrunc(t)
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
-        | Prim::ArrType(t) => t.collect_metavars(ids),
+        | Prim::ArrType(t)
+        | Prim::IoClose(t) => t.collect_metavars(ids),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1285,7 +1288,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BinAppend(a, b)
         | Prim::ArrLen(a, b)
         | Prim::IoRead(a, b)
-        | Prim::IoWrite(a, b) => {
+        | Prim::IoWrite(a, b)
+        | Prim::IoOpen(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
         }
@@ -1499,6 +1503,10 @@ where
         Prim::IoWrite(handle, bytes) => {
             Prim::IoWrite(visit.visit_subterm(handle), visit.visit_subterm(bytes))
         }
+        Prim::IoOpen(path, mode) => {
+            Prim::IoOpen(visit.visit_subterm(path), visit.visit_subterm(mode))
+        }
+        Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
     }
 }
 

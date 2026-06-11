@@ -440,6 +440,13 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(bytes, depth),
         ]),
+        Prim::IoOpen(path, mode) => flat([
+            pure("Io.open "),
+            print_term(path, depth),
+            pure(" "),
+            print_term(mode, depth),
+        ]),
+        Prim::IoClose(handle) => flat([pure("Io.close "), print_term(handle, depth)]),
     }
 }
 

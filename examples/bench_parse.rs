@@ -10,7 +10,7 @@ use {
 
 const DECODE: &str = r#"
     use /std/{Json, Io, Bin, Nat, Result};
-    let input : Bin = Io/read(Io/stdin, 1048576);
+    let input : Bin = Io/read(Io/stdin, 1048576).bytes;
     match Json/decode(input, 0) : {}
     | success(pair) => Io/print(Nat/to_str(pair.0))
     | failure(msg) => Io/print(msg)
@@ -19,7 +19,7 @@ const DECODE: &str = r#"
 
 const ROUNDTRIP: &str = r#"
     use /std/{Json, Io, Bin, Nat, Result};
-    let input : Bin = Io/read(Io/stdin, 1048576);
+    let input : Bin = Io/read(Io/stdin, 1048576).bytes;
     match Json/decode(input, 0) : {}
     | success(pair) => Io/print(Nat/to_str(Bin/len(Json/encode(pair.1))))
     | failure(msg) => Io/print(msg)

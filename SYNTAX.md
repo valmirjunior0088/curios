@@ -626,17 +626,39 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Io
 
-`/sys/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `read` and `write` work on any handle.
+`/sys/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `open` mints file handles; `read`, `write`, and `close` work on any handle.
 
-| Operation             | Arity | Description                                                                           | Returns    |
-| --------------------- | ----- | ------------------------------------------------------------------------------------- | ---------- |
-| `/sys/Io/stdin`       | —     | The standard input handle                                                              | `/sys/Io`  |
-| `/sys/Io/stdout`      | —     | The standard output handle                                                             | `/sys/Io`  |
-| `/sys/Io/stderr`      | —     | The standard error handle                                                              | `/sys/Io`  |
-| `/sys/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available; empty = EOF   | `/sys/Bin` |
-| `/sys/Io/write(h, b)` | 2     | Write `b : /sys/Bin` to `h`                                                            | `{}`       |
+| Operation             | Arity | Description                                                                          | Returns                              |
+| --------------------- | ----- | ------------------------------------------------------------------------------------ | ------------------------------------ |
+| `/sys/Io/stdin`       | —     | The standard input handle                                                             | `/sys/Io`                            |
+| `/sys/Io/stdout`      | —     | The standard output handle                                                            | `/sys/Io`                            |
+| `/sys/Io/stderr`      | —     | The standard error handle                                                             | `/sys/Io`                            |
+| `/sys/Io/open(p, m)`  | 2     | Open the file at path `p : /sys/Bin` with mode `m` (0 read, 1 write, 2 append)        | `{ status : Nat, handle : /sys/Io }` |
+| `/sys/Io/close(h)`    | 1     | Close `h`; closing an unknown handle is a no-op                                       | `{}`                                 |
+| `/sys/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available               | `{ status : Nat, bytes : /sys/Bin }` |
+| `/sys/Io/write(h, b)` | 2     | Write `b : /sys/Bin` to `h`                                                           | `/sys/Nat` (a status)                |
 
-`/std/Io` layers the safe conveniences on top: `print(b)` writes to stdout, and a buffered reader (`Reader`, the `Buf` state monad with `bind`/`pure`/`run`, and `read_line : Buf(Option(Bin))`) handles line splitting and EOF — `read_line` returns the line including its trailing `\n`, or `none` at end of input.
+Failable operations report through a status code — errors are data; traps stay reserved for programmer errors:
+
+| Status | Meaning                                          |
+| ------ | ------------------------------------------------ |
+| 0      | ok                                               |
+| 1      | end of input (`read` only; `bytes` is empty)     |
+| 2      | not found                                        |
+| 3      | permission denied                                |
+| 4      | already exists                                   |
+| 5      | other                                            |
+
+`/std/Io` layers the safe conveniences on top: `print(b)` writes to stdout (dropping the status), and a buffered reader (`Reader`, the `Buf` state monad with `bind`/`pure`/`run`, and `read_line : Buf(Option(Bin))`) handles line splitting and EOF — `read_line` returns the line including its trailing `\n`, or `none` at end of input (an IO error also ends the stream).
+
+`/std/File` exposes file IO as exactly two bracket-managed verbs — there is no `open` in std, so a handle can never leak from the safe layer (`/sys/Io/open` remains the explicit escape hatch):
+
+```
+File/using(path, mode, body)   -- (Bin, Mode, Io -> A) -> Result(A, Error): open, run, close
+File/read_all(path)            -- Bin -> Result(Bin, Error): whole contents
+```
+
+with `union Mode | read() | write() | append() end` and `union Error | not_found() | permission_denied() | exists() | other(Nat) end`. (The bracket is named `using` because `with` is the sequencing keyword.) Programs run with the invoking user's filesystem access — there is no sandbox.
 
 ## Idioms
 

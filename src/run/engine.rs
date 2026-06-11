@@ -71,46 +71,59 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
 
     let bin_array_type = ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8));
     let bin_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(bin_array_type)));
+    let i31_ref = ValType::Ref(RefType::new(false, HeapType::I31));
     let i32_to_bin_type = FuncType::new(engine, [ValType::I32], [bin_ref.clone()]);
     let f32_to_bin_type = FuncType::new(engine, [ValType::F32], [bin_ref.clone()]);
-    let i32_i32_to_bin_type = FuncType::new(
+    let io_read_type = FuncType::new(
         engine,
         [ValType::I32, ValType::I32],
-        [bin_ref.clone()],
+        [i31_ref.clone(), bin_ref.clone()],
     );
-    let i32_bin_to_unit_type = FuncType::new(engine, [ValType::I32, bin_ref], []);
+    let io_write_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_open_type = FuncType::new(engine, [bin_ref, ValType::I32], [i31_ref.clone(), i31_ref]);
+    let io_close_type = FuncType::new(engine, [ValType::I32], []);
 
     let mut linker: Linker<()> = Linker::new(engine);
     let host = Arc::new(host);
 
     define_import(&mut linker, "nat_to_str", i32_to_bin_type.clone(), {
-        move |value| super::host::nat_to_str(value)
+        move |value| super::nat_to_str(value)
     })?;
 
     define_import(&mut linker, "int_to_str", i32_to_bin_type, {
-        move |value| super::host::int_to_str(value)
+        move |value| super::int_to_str(value)
     })?;
 
     define_import(&mut linker, "flt_to_str", f32_to_bin_type.clone(), {
-        move |value| super::host::flt_to_str(value)
+        move |value| super::flt_to_str(value)
     })?;
 
     define_import(&mut linker, "flt_to_le_bin", f32_to_bin_type, {
-        let host = host.clone();
-
-        move |value| host.flt_to_le_bin(value)
+        move |value| super::flt_to_le_bin(value)
     })?;
 
-    define_import(&mut linker, "io_read", i32_i32_to_bin_type, {
+    define_import(&mut linker, "io_read", io_read_type, {
         let host = host.clone();
 
         move |(handle, count): (u32, u32)| host.read(handle, count)
     })?;
 
-    define_import(&mut linker, "io_write", i32_bin_to_unit_type, {
+    define_import(&mut linker, "io_write", io_write_type, {
         let host = host.clone();
 
         move |(handle, bytes): (u32, Vec<u8>)| host.write(handle, &bytes)
+    })?;
+
+    define_import(&mut linker, "io_open", io_open_type, {
+        let host = host.clone();
+
+        move |(path, mode): (Vec<u8>, u32)| host.open(&path, mode)
+    })?;
+
+    define_import(&mut linker, "io_close", io_close_type, {
+        let host = host.clone();
+
+        move |handle: u32| host.close(handle)
     })?;
 
     let mut store = Store::new(engine, ());

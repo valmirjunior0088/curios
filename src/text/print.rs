@@ -224,6 +224,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoRead(handle, count) => print_prim_call("Io.read", vec![handle, count]),
         Prim::IoWrite(handle, bytes) => print_prim_call("Io.write", vec![handle, bytes]),
+        Prim::IoOpen(path, mode) => print_prim_call("Io.open", vec![path, mode]),
+        Prim::IoClose(handle) => print_prim_call("Io.close", vec![handle]),
     }
 }
 

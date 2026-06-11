@@ -468,6 +468,8 @@ fn erase_union_match(
         .cloned()
         .expect("erase: scrutinee type names a registered inductive");
 
+    let scrutinee_label = context.fresh(Some("scrutinee"));
+
     // The pattern's binder slots, positionally (validated by elaborate):
     // `true` marks a parameter position (opened with the actual parameter),
     // `false` an index position (opened with the case's target index).
@@ -563,7 +565,10 @@ fn erase_union_match(
                 let body = erase(context, &scope.open(&var_refs), &expected)?;
 
                 // Bind each payload binder to its flat-record slot:
-                // `let x_i = head.(i + 1); …` (innermost-last, so fold in reverse).
+                // `let x_i = scrutinee.(i + 1); …` (innermost-last, so fold in
+                // reverse). Projections read the let-bound scrutinee — never a
+                // re-erased copy of the head term, which would re-execute an
+                // effectful scrutinee once per arm.
                 labels
                     .iter()
                     .enumerate()
@@ -572,7 +577,10 @@ fn erase_union_match(
                         Ok(ersd::Subterm::Let(ersd::Let {
                             name: label.clone(),
                             body: ersd::Subterm::Proj(ersd::Proj {
-                                head: erase(context, head, &head_type)?,
+                                head: ersd::Subterm::Name(ersd::Name::from(
+                                    scrutinee_label.as_str(),
+                                ))
+                                .into(),
                                 index: i + 1,
                             })
                             .into(),
@@ -584,13 +592,20 @@ fn erase_union_match(
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
-    Ok(ersd::Subterm::Match(ersd::Match {
-        head: ersd::Subterm::Proj(ersd::Proj {
-            head: erase(context, head, &head_type)?,
-            index: 0,
+    // The head term is erased (and thus evaluated) exactly once, shared by
+    // the tag dispatch and every arm's payload projections.
+    Ok(ersd::Subterm::Let(ersd::Let {
+        name: scrutinee_label.clone(),
+        body: erase(context, head, &head_type)?,
+        tail: ersd::Subterm::Match(ersd::Match {
+            head: ersd::Subterm::Proj(ersd::Proj {
+                head: ersd::Subterm::Name(ersd::Name::from(scrutinee_label.as_str())).into(),
+                index: 0,
+            })
+            .into(),
+            cases: cases_erased,
         })
         .into(),
-        cases: cases_erased,
     })
     .into())
 }

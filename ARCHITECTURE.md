@@ -384,20 +384,22 @@ The `Host` trait (`src/run/host.rs`) abstracts the IO side of the program:
 
 ```rust
 pub trait Host {
-    fn read(&self, handle: u32, count: u32) -> Vec<u8>;
-    fn write(&self, handle: u32, bytes: &[u8]);
+    fn open(&self, path: &[u8], mode: u32) -> (u32, u32);   // (status, handle)
+    fn close(&self, handle: u32);
+    fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>);
+    fn write(&self, handle: u32, bytes: &[u8]) -> u32;
 }
 ```
 
-The `handle` is the i32 token a `/sys/Io` value lowers to; `STDIN`/`STDOUT`/`STDERR` constants (0/1/2) name the well-known entries. `read` blocks until at least one byte is available and returns up to `count` bytes; an empty return means EOF.
+The `handle` is the i32 token a `/sys/Io` value lowers to; `STDIN`/`STDOUT`/`STDERR` constants (0/1/2) name the well-known entries and `open` mints fresh tokens from 3 up. Failable ops report through `STATUS_*` codes (0 ok, 1 eof, 2 not-found, 3 permission, 4 exists, 5 other — mirrored by `/std/File`'s `decode`); `read` blocks until at least one byte is available and returns up to `count` bytes, with eof as status 1 and empty bytes. There is no path sandbox: programs have the invoking user's filesystem access.
 
-The number-to-`Bin` conversions live alongside the trait as free functions — `nat_to_str(u32)`, `int_to_str(i32)`, `flt_to_str(f32)` — not trait methods. The runtime wasm imports and the compile-time `scalar_eval` folder both call the same free functions, so the two paths cannot diverge.
+The number-to-`Bin` conversions live alongside the trait as free functions — `nat_to_str(u32)`, `int_to_str(i32)`, `flt_to_str(f32)`, `flt_to_le_bin(f32)` — not trait methods. The runtime wasm imports and the compile-time `scalar_eval` folder both call the same free functions, so the two paths cannot diverge.
 
-Two trait implementations ship: `StdioHost` maps the stdin/stdout/stderr handles onto the real process streams (raw `Read::read` for stdin, so short reads behave POSIX-style); `ChannelHost` routes writes (stdout and stderr alike) through an `mpsc::Sender<Vec<u8>>` and serves reads from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines — each message is one line, a `\n` is appended on refill, and an internal leftover buffer serves `count`-byte slices so short reads never drop bytes. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand for output-only simulation.
+Two trait implementations ship: `StdioHost` maps the stdin/stdout/stderr handles onto the real process streams (raw `Read::read` for stdin, so short reads behave POSIX-style) and backs file handles with `std::fs::File`; `ChannelHost` routes writes (stdout and stderr alike) through an `mpsc::Sender<Vec<u8>>`, serves stdin reads from an `mpsc::Receiver<Vec<u8>>` pre-loaded with input lines — each message is one line, a `\n` is appended on refill, and an internal leftover buffer serves `count`-byte slices so short reads never drop bytes — and backs file handles with an in-memory filesystem. `ChannelHost::in_out(lines)` constructs the host and returns the matching output `Receiver` as a tuple; `ChannelHost::out()` is the input-empty shorthand; `ChannelHost::with_fs(lines, files)` additionally pre-seeds the in-memory filesystem and returns it for post-run inspection.
 
-Up to five operations are wired as Wasmtime host imports under `"env"` by `run_wasm`: `nat_to_str`/`int_to_str`/`flt_to_str` (each emitted only if the codegen `Table` records the corresponding `_used()` flag — partial evaluation or constant folding may have eliminated every runtime call site) route directly to the free functions; `io_read` calls `host.read(handle, count)` and returns the result as a `Bin`; `io_write` unpacks the `Bin` argument and calls `host.write(handle, bytes)`. The `io_*` imports correspond to the `Tail::Host` variants (`IoRead`/`IoWrite`) introduced in [Stage 5](#stage-5--cps-lowering-srcersdto_cont).
+Up to eight operations are wired as Wasmtime host imports under `"env"` by `run_wasm`: the four conversions (each emitted only if the codegen `Table` records the corresponding `_used()` flag) route directly to the free functions; `io_open`/`io_close`/`io_read`/`io_write` route to the trait. Scalar *results* of the io imports cross the boundary pre-boxed as i31 refs (so generated code can land them directly in anyref block params); a two-result import's resume block packs `(status, payload)` into the `{ status, … }` record the prim's type promises. The `io_*` imports correspond to the `Tail::Host` variants introduced in [Stage 5](#stage-5--cps-lowering-srcersdto_cont).
 
-Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via `/sys/Io/read` and `/sys/Io/write` on byte-stream handles through the `Host`.
+Wasmtime is configured with reference types, function references, GC, and tail calls. `run_wasm` returns `Result<(), String>`; all IO is performed via the `/sys/Io` handle operations through the `Host`.
 
 ---
 

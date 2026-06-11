@@ -386,7 +386,9 @@ fn freshen_tail_blocks(tail: &mut Tail, sentinel: &BlockName, resume: &BlockName
             freshen_block(r, sentinel, resume, suffix);
         }
         Tail::Host(HostTarget::IoRead { resume: r, .. })
-        | Tail::Host(HostTarget::IoWrite { resume: r, .. }) => {
+        | Tail::Host(HostTarget::IoWrite { resume: r, .. })
+        | Tail::Host(HostTarget::IoOpen { resume: r, .. })
+        | Tail::Host(HostTarget::IoClose { resume: r, .. }) => {
             freshen_block(r, sentinel, resume, suffix);
         }
         Tail::Unreachable => {}
