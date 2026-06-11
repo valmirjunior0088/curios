@@ -4,8 +4,8 @@ use {
         Inductive,
         Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Plicity,
         Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, UnionType, Var,
-        Variant, case_target_indices, check_motive, convert_with, elaborate_prim, expect,
-        invert_indices, reduce_with, refine_head,
+        Variant, case_target_indices, check_motive, convert_with, drain_parked, elaborate_prim,
+        expect, invert_indices, reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -1671,9 +1671,14 @@ pub fn elaborate_module(
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
             Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
         });
+        // Constraints parked during this item must resolve within it: drain
+        // here so an unresolvable one is attributed to its own definition and
+        // frozen frames do not accumulate across items (§8).
+        drain_parked(context)?;
     }
 
     let (body, body_type) = elaborate(context, &module.body, mode)?;
+    drain_parked(context)?;
     let body_type = reduce_with(context, &body_type)?;
 
     let module = Module {

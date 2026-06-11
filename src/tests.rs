@@ -738,3 +738,50 @@ fn implicit_union_type_param_rejects_explicit_spelling() {
     let (system, _receiver) = ChannelHost::out();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
+
+#[test]
+fn parked_constraints_let_nested_constructor_metas_resolve() {
+    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh
+    // metas as flex–flex pairs embedded under the union type. Before the
+    // constraint store (§8) the argument's `expect` failed at quiescence,
+    // seconds before the result-type unification would have pinned
+    // everything. Now the pairs park, the output `expect` solves the domain
+    // metas against the annotation, and the wake retries the parked pairs.
+    let source = r#"
+        use /sys/{Nat, Io};
+        union Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
+            match p : (q : Eq2(A, s, t)) => Eq2(t, s)
+            | refl(z) => Eq2/refl()
+            end;
+        let direct : Eq2(2, 2) = sym2(Eq2/refl());
+        let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
+        match chained : Nat
+        | refl(z) => Io/write(Io/stdout, Nat/to_str(z))
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"3".to_vec()]);
+}
+
+#[test]
+fn parked_constraints_still_reject_the_unsolvable() {
+    // An undecidable-at-first constraint that never resolves must still fail —
+    // at the item drain, attributed to its origin. `refl` forces both indices
+    // equal; `2` and `3` are not.
+    let source = r#"
+        use /sys/{Nat, Io};
+        union Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let bad : Eq2(2, 3) = Eq2/refl();
+        Io/write(Io/stdout, "no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}

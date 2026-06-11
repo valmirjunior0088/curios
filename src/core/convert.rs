@@ -27,7 +27,38 @@ pub fn convert(
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
-    Convert::new(type_.clone(), this.clone(), that.clone()).convert(context)
+    // The strict boolean-oracle view: "not yet decidable" is *not* "equal".
+    // Everything that needs a definite yes/no (re-validation, the inverter,
+    // type-level dispatch) uses this; only the elaboration turnaround
+    // (`expect`) may treat `Blocked` as provisional success by parking it.
+    Ok(matches!(
+        convert_outcome(context, type_, this, that)?,
+        Outcome::Converts
+    ))
+}
+
+pub fn convert_outcome(
+    context: &mut Context,
+    type_: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<Outcome, ReduceError> {
+    Convert::new(type_.clone(), this.clone(), that.clone()).outcome(context)
+}
+
+/// The verdict of a conversion run, distinguishing "provably unequal" from
+/// "not yet decidable" (§8).
+#[derive(Debug)]
+pub enum Outcome {
+    /// Definitionally equal.
+    Converts,
+    /// A hard structural mismatch — provably unequal, no solution can help.
+    Mismatch,
+    /// Quiesced with constraints still blocked on unsolved metavariables:
+    /// undecided either way. The blocked goals are surrendered to the caller
+    /// — the elaboration turnaround parks them on the `Context` to be retried
+    /// when a watched metavariable is solved.
+    Blocked(Vec<Goal>),
 }
 
 /// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating
@@ -129,7 +160,7 @@ fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Goal {
+pub struct Goal {
     pub type_: Term,
     pub this: Term,
     pub that: Term,
@@ -769,17 +800,21 @@ impl Convert {
         // Re-validation (§7.4): the (inverted) candidate must type-check
         // against the metavariable's frozen type, under its birth context Γ,
         // with counterfactual refinements suppressed. Stable definitions are
-        // kept.
+        // kept. Parking is suppressed too: re-validation is a yes/no oracle,
+        // and the `infer` below runs full elaboration — a constraint parked
+        // (provisional success) inside it would leak into the verdict.
         let revalidated = context.with_frame(|context| {
             for (name, ty) in &telescope {
                 context.assume(name, ty);
             }
 
-            context.with_suppressed_refinements(|context| match infer(context, &inverted) {
-                Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
-                // A meta-free, well-scoped candidate that fails to synthesize is
-                // not validly typed here — reject the solution.
-                Err(_) => Ok(false),
+            context.with_suppressed_parking(|context| {
+                context.with_suppressed_refinements(|context| match infer(context, &inverted) {
+                    Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
+                    // A meta-free, well-scoped candidate that fails to synthesize is
+                    // not validly typed here — reject the solution.
+                    Err(_) => Ok(false),
+                })
             })
         })?;
 
@@ -792,10 +827,10 @@ impl Convert {
         Ok(Solved::Done)
     }
 
-    fn convert(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
+    fn outcome(&mut self, context: &mut Context) -> Result<Outcome, ReduceError> {
         loop {
             if !self.drain(context)? {
-                return Ok(false);
+                return Ok(Outcome::Mismatch);
             }
 
             // Fixpoint: retry postponed constraints only when a fresh solution
@@ -808,9 +843,12 @@ impl Convert {
             }
         }
 
-        // A constraint still blocked at quiescence is an unsolved/residual
-        // constraint. Reject (zonking later pins the precise `cannot_infer`).
-        Ok(self.blocked.is_empty())
+        // A constraint still blocked at quiescence is undecided, not unequal:
+        // surrender it to the caller rather than conflating the two.
+        Ok(match self.blocked.is_empty() {
+            true => Outcome::Converts,
+            false => Outcome::Blocked(std::mem::take(&mut self.blocked)),
+        })
     }
 
     /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)`

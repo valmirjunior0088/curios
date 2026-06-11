@@ -23,13 +23,148 @@ pub fn expect(
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
-    match convert_with(context, inferred, expected)? {
-        true => Ok(()),
-        false => Err(Error::type_mismatch(
+    let outcome = super::convert_outcome(context, &Term::type_(), inferred, expected)
+        .map_err(|error| {
+            error.into_error(|| Error::convert_preempted(inferred.clone(), expected.clone()))
+        })?;
+
+    match outcome {
+        super::Outcome::Converts => retry_parked(context),
+        super::Outcome::Mismatch => Err(Error::type_mismatch(
             term.clone(),
             inferred.clone(),
             expected.clone(),
         )),
+        // Undecided: blocked on unsolved metavariables. Park the goals to be
+        // retried when a watched metavariable is solved (§8) and succeed
+        // provisionally — unless conversion is currently a yes/no oracle, in
+        // which case undecided must stay a mismatch.
+        super::Outcome::Blocked(goals) => {
+            if context.parking_suppressed() {
+                return Err(Error::type_mismatch(
+                    term.clone(),
+                    inferred.clone(),
+                    expected.clone(),
+                ));
+            }
+
+            for goal in goals {
+                context.park(goal, term.clone());
+            }
+            retry_parked(context)
+        }
+    }
+}
+
+/// Retry parked constraints woken by freshly landed solutions, to fixpoint
+/// (§8). A woken goal re-runs under its frozen frame: converts and is dropped,
+/// mismatches and errors at its origin, or re-parks still blocked. Each round
+/// consumes wake signals and ids solve exactly once, so this terminates.
+pub fn retry_parked(context: &mut Context) -> Result<(), Error> {
+    // Never retry inside an oracle: re-validation swallows errors
+    // (`Err(_) => false`), so a woken goal's mismatch would vanish along with
+    // the goal itself — a silently dropped obligation. The wake signals stay
+    // queued; the next unsuppressed turnaround retries them.
+    if context.parking_suppressed() {
+        return Ok(());
+    }
+
+    loop {
+        let woken = context.wake_parked();
+        if woken.is_empty() {
+            return Ok(());
+        }
+
+        for parked in woken {
+            retry_one(context, parked)?;
+        }
+    }
+}
+
+fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Error> {
+    let super::ParkedGoal {
+        goal,
+        origin,
+        assumptions,
+        definitions,
+        ..
+    } = parked;
+
+    enum Retry {
+        Converts,
+        Mismatch(Term, Term),
+        Blocked(Vec<super::Goal>),
+    }
+
+    let outcome = context.with_frame(|context| {
+        for (name, type_) in &assumptions {
+            context.assume(name, type_);
+        }
+        for (name, value) in &definitions {
+            context.define(name, value);
+        }
+
+        Ok(match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
+            super::Outcome::Converts => Retry::Converts,
+            // Report through whatever solutions have landed: the reduced
+            // sides name the actual disagreement, not the metavariables it
+            // arrived wrapped in.
+            super::Outcome::Mismatch => Retry::Mismatch(
+                super::reduce(context, goal.this.clone())?,
+                super::reduce(context, goal.that.clone())?,
+            ),
+            super::Outcome::Blocked(goals) => Retry::Blocked(goals),
+        })
+    });
+
+    let outcome = outcome.map_err(|error: super::ReduceError| {
+        error.into_error(|| Error::convert_preempted(goal.this.clone(), goal.that.clone()))
+    })?;
+
+    match outcome {
+        Retry::Converts => Ok(()),
+        Retry::Mismatch(this, that) => Err(Error::type_mismatch(origin, this, that)),
+        Retry::Blocked(goals) => {
+            for goal in goals {
+                context.repark(goal, origin.clone(), assumptions.clone(), definitions.clone());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Drain the parked store: retry everything to a fixpoint, then report any
+/// survivor as a mismatch at its origin. Run after each top-level item and
+/// after the entrypoint body, so an unresolvable constraint is attributed to
+/// the definition that produced it and frozen frames do not pile up.
+pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
+    loop {
+        retry_parked(context)?;
+
+        let remaining = context.take_parked();
+        if remaining.is_empty() {
+            return Ok(());
+        }
+
+        // Final sweep: attempt everything once more — a goal parked after the
+        // last solution landed has never been retried.
+        let before = remaining.len();
+        for parked in remaining {
+            retry_one(context, parked)?;
+        }
+
+        // No progress in a full sweep: the rest can never resolve. Report the
+        // first at its origin.
+        if context.parked_len() >= before && !context.has_newly_solved() {
+            if let Some(parked) = context.take_parked().into_iter().next() {
+                return Err(Error::type_mismatch(
+                    parked.origin,
+                    parked.goal.this,
+                    parked.goal.that,
+                ));
+            }
+            return Ok(());
+        }
     }
 }
 

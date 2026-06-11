@@ -1,8 +1,8 @@
 use {
-    super::{Bound, ImplicitOrigin, Inductive, Metavar, Term, Var},
+    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Term, Var},
     crate::{Entropy, Span},
     std::{
-        collections::{BTreeMap, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
         time::{Duration, Instant},
     },
 };
@@ -32,6 +32,29 @@ pub struct MetaStore {
     entries: Vec<Option<MetaEntry>>,
 }
 
+/// A conversion constraint that quiesced blocked on unsolved metavariables,
+/// parked by `expect` to outlive its call (§8). Like a [`MetaEntry`], it
+/// freezes the local frame it was born under — assumptions *and* local
+/// definitions, since retry-time reduction needs both. Counterfactual
+/// refinements are deliberately not frozen: solutions are
+/// refinement-independent by design (re-validation suppresses them), so a
+/// retry without them can only conservatively fail, never wrongly succeed.
+#[derive(Debug)]
+pub struct ParkedGoal {
+    pub goal: Goal,
+    /// The term `expect` was checking; its span anchors the eventual error if
+    /// the constraint never resolves.
+    pub origin: Term,
+    /// The local assumption context frozen at park time, in binding order.
+    pub assumptions: Vec<(String, Term)>,
+    /// The non-base-frame definitions frozen at park time (outermost frame
+    /// first, so re-defining in order reproduces the shadowing).
+    pub definitions: Vec<(String, Term)>,
+    /// The unsolved metavariables either side mentions — solving any of them
+    /// is the wake signal.
+    pub watching: BTreeSet<usize>,
+}
+
 #[derive(Debug)]
 pub struct Context {
     entropy: Entropy,
@@ -50,6 +73,13 @@ pub struct Context {
     // frames are delimited by `local_marks`.
     local: Vec<(String, Term)>,
     local_marks: Vec<usize>,
+    // Parked conversion constraints (§8) — frame-independent, like `metas`.
+    parked: Vec<ParkedGoal>,
+    // Ids solved since the last `wake_parked` sweep: the wake signal.
+    newly_solved: Vec<usize>,
+    // While set, `expect` may not park: conversion is being used as a yes/no
+    // oracle (re-validation) and provisional success would leak into it.
+    suppress_parking: bool,
     metas: MetaStore,
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` from `Module::metavars` so
@@ -84,6 +114,9 @@ impl Context {
             metas: MetaStore::default(),
             next_metavar: Entropy::<usize>::new(),
             inductives: BTreeMap::new(),
+            parked: Vec::new(),
+            newly_solved: Vec::new(),
+            suppress_parking: false,
         }
     }
 
@@ -406,11 +439,108 @@ impl Context {
 
     /// Commit a metavariable's solution. Clears the reduction cache, since a
     /// bare metavariable is `reach == 0` (hence cacheable) and may have cached
-    /// as itself while unsolved (§7.2).
+    /// as itself while unsolved (§7.2). Records the id as newly solved — the
+    /// wake signal for parked constraints (§8).
     pub fn solve_metavar(&mut self, id: usize, term: Term) {
         if let Some(Some(entry)) = self.metas.entries.get_mut(id) {
             entry.solution = Some(term);
+            self.newly_solved.push(id);
             self.reductions.clear();
         }
+    }
+
+    // === Parked constraints (§8) ============================================
+
+    /// Park a blocked conversion goal: freeze the live local frame around it
+    /// (the way `fresh_metavar` freezes Γ — assumptions plus the local
+    /// definitions retry-time reduction will need) and record which unsolved
+    /// metavariables could unblock it.
+    pub fn park(&mut self, goal: Goal, origin: Term) {
+        let assumptions = self.local.clone();
+        // The base frame persists for the whole elaboration; only the local
+        // frames pop before a retry can happen. Outermost first, so
+        // re-defining in order reproduces the shadowing.
+        let definitions = self
+            .definitions
+            .iter()
+            .skip(1)
+            .flat_map(|frame| frame.iter().map(|(n, t)| (n.clone(), t.clone())))
+            .collect();
+
+        self.repark(goal, origin, assumptions, definitions);
+    }
+
+    /// Re-park a goal that is still blocked after a retry, keeping its
+    /// originally frozen frame. The watch set is recomputed from the goal's
+    /// current unsolved metavariables.
+    pub fn repark(
+        &mut self,
+        goal: Goal,
+        origin: Term,
+        assumptions: Vec<(String, Term)>,
+        definitions: Vec<(String, Term)>,
+    ) {
+        let watching = goal
+            .this
+            .metavars()
+            .into_iter()
+            .chain(goal.that.metavars())
+            .filter(|id| self.metavar_solution(*id).is_none())
+            .collect();
+
+        self.parked.push(ParkedGoal {
+            goal,
+            origin,
+            assumptions,
+            definitions,
+            watching,
+        });
+    }
+
+    /// Take the parked goals woken by solutions landed since the last sweep.
+    /// Consumes the wake signals; empty when nothing new has been solved.
+    pub fn wake_parked(&mut self) -> Vec<ParkedGoal> {
+        if self.newly_solved.is_empty() || self.parked.is_empty() {
+            self.newly_solved.clear();
+            return Vec::new();
+        }
+
+        let solved = self.newly_solved.drain(..).collect::<BTreeSet<_>>();
+        let (woken, kept) = std::mem::take(&mut self.parked)
+            .into_iter()
+            .partition(|p| p.watching.iter().any(|id| solved.contains(id)));
+        self.parked = kept;
+
+        woken
+    }
+
+    /// Take every parked goal — the drain's final sweep.
+    pub fn take_parked(&mut self) -> Vec<ParkedGoal> {
+        std::mem::take(&mut self.parked)
+    }
+
+    pub fn parked_len(&self) -> usize {
+        self.parked.len()
+    }
+
+    pub fn has_newly_solved(&self) -> bool {
+        !self.newly_solved.is_empty()
+    }
+
+    pub fn parking_suppressed(&self) -> bool {
+        self.suppress_parking
+    }
+
+    /// Run `f` with parking suppressed: `expect` then treats `Blocked` as a
+    /// mismatch, as it did before the store existed. Used wherever conversion
+    /// acts as a yes/no oracle around full elaboration (re-validation).
+    pub fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let previous = self.suppress_parking;
+        self.suppress_parking = true;
+
+        let result = f(self);
+
+        self.suppress_parking = previous;
+        result
     }
 }
