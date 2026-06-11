@@ -5,7 +5,7 @@ use {
         Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Plicity,
         Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two, UnionType, Var,
         Variant, case_target_indices, check_motive, convert_with, elaborate_prim, expect,
-        invert_indices, reduce_with, refine_head,
+        invert_indices, reduce_with, refine_head, zonk,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -28,6 +28,29 @@ fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
 }
 
+/// Substitute already-solved metavariables into a freshly rebuilt subterm
+/// while the names they were solved under are still live — i.e. *before* the
+/// enclosing binders are re-closed. A solution may mention a sibling binder
+/// (an inserted union-type parameter solved to the enclosing `A`, say); once
+/// the telescope is closed and later reopened under fresh names, the recorded
+/// solution goes stale, and conversion — which resolves solutions raw, without
+/// `zonk`'s realignment — would compare two spellings of the same domain as
+/// distinct. Conservative: if any metavariable in `term` is still unsolved
+/// (or a solution itself embeds one, which `zonk` reports as an error), the
+/// term is returned untouched and the final `zonk` keeps the job.
+fn splice_solved(context: &Context, term: &Term) -> Term {
+    let metas = term.metavars();
+    if metas.is_empty()
+        || metas
+            .iter()
+            .any(|id| context.metavar_solution(*id).is_none())
+    {
+        return term.clone();
+    }
+
+    zonk(context, term).unwrap_or_else(|_| term.clone())
+}
+
 fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Term), Error> {
     fn walk(
         context: &mut Context,
@@ -35,9 +58,16 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
         domains: &mut Vec<(String, Term)>,
     ) -> Result<Term, Error> {
         match tele {
-            Telescope::Done(output) => check(context, &output, Term::type_()),
+            Telescope::Done(output) => {
+                let output = check(context, &output, Term::type_())?;
+                Ok(splice_solved(context, &output))
+            }
             Telescope::Cons(ty, rest) => {
+                // Splice solved metavariables (inserted implicit type-args)
+                // now, while their solutions' names are live: the rebuilt
+                // domain is about to be closed over this telescope's binders.
                 let domain = check(context, &ty, Term::type_())?;
+                let domain = splice_solved(context, &domain);
                 let name = context.fresh(rest.first_label());
                 let x = Term::var(Var::free(&name));
                 // Assume the *rebuilt* domain: insertion saturates applications
@@ -1419,7 +1449,11 @@ fn elaborate_func_infer(
         match body {
             Telescope::Done(body) => elaborate(context, &body, Mode::Infer),
             Telescope::Cons(domain, body_rest) => {
+                // Spliced for the same reason as `elaborate_func_type`: the
+                // rebuilt domain is re-closed into both the lambda and its
+                // synthesized type below.
                 let domain = check(context, &domain, Term::type_())?;
+                let domain = splice_solved(context, &domain);
 
                 if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(_)) {
                     return Err(Error::cannot_infer(term.clone()));

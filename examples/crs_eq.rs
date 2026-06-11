@@ -14,12 +14,12 @@ fn main() {
     let source = r#"
         use /std/{Nat, Eq, Io};
 
-        let p : Eq(Nat, 2, 2) = Eq/refl();
-        let s : Eq(Nat, 2, 2) = Eq/sym(p);
-        let t : Eq(Nat, 2, 2) = Eq/trans(p, s);
+        let p : Eq(2, 2) = Eq/refl();
+        let s : Eq(2, 2) = Eq/sym(p);
+        let t : Eq(2, 2) = Eq/trans(p, s);
 
         let bump(n : Nat) -> Nat = Nat/add(n, 1);
-        let c : Eq(Nat, bump(2), bump(2)) = Eq/cong(bump, p);
+        let c : Eq(bump(2), bump(2)) = Eq/cong(bump, p);
 
         let K(n : Nat) -> Type = Nat;
         let v : Nat = Eq/subst(K, p, 7);
@@ -62,12 +62,12 @@ fn main() {
         vec![b"ok".to_vec()]
     );
 
-    // `refl` only inhabits `Eq` at equal indices: claiming `Eq(Nat, 2, 3)`
+    // `refl` only inhabits `Eq` at equal indices: claiming `Eq(2, 3)`
     // is a compile-time `TypeMismatch`.
     let ill_typed = r#"
         use /std/{Nat, Eq};
 
-        let bad : Eq(Nat, 2, 3) = Eq/refl();
+        let bad : Eq(2, 3) = Eq/refl();
         bad
         "#;
 

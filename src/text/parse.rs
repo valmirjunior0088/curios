@@ -1056,15 +1056,16 @@ fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
         )
 }
 
-// A union parameter is a plain `name : type` — no `@`: the desugar already
-// makes every parameter implicit at the value constructors (and explicit at
-// the type constructor), so a declaration-site mark would have no job; the
-// call-site `@` is how one is supplied positionally.
-fn parse_union_param<'a>() -> Parser<'a, (String, Term)> {
-    parse_identifier()
+// A union parameter: `name : type`, or `@name : type` to make it implicit at
+// the type-constructor function (it is implicit at the value constructors
+// either way — the mark's only job is the type constructor, where unmarked
+// parameters are written out).
+fn parse_union_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
+    parse_plicity()
+        .and(parse_identifier())
         .and_drop(parse_literal(":"))
         .and(lazy(parse_term))
-        .map(|(name, ty): (&str, Term)| (name.to_string(), ty))
+        .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, name.to_string(), ty))
 }
 
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is

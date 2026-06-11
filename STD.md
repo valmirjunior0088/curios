@@ -158,20 +158,20 @@ In `first`/`rest` the `nil` arm is provably impossible at length `Nat/succ(n)` a
 
 ### `/std/Eq`
 
-Propositional equality: `Eq(A, x, y)` is inhabited exactly when `x` and `y` are equal, and its only constructor pins both indices to the same value. Matching on a proof refines the indices inside the arm (`x := z`, `y := z`), which is what makes the eliminators typecheck. See PROOFS_101.md for the full story.
+Propositional equality: `Eq(x, y)` is inhabited exactly when `x` and `y` are equal, and its only constructor pins both indices to the same value. The parameter is `@`-marked — implicit at the type, recoverable from the indices, pinned with `Eq(@Nat, x, y)` when wanted. Matching on a proof refines the indices inside the arm (`x := z`, `y := z`), which is what makes the eliminators typecheck. See PROOFS_101.md for the full story.
 
 ```
-pub union Eq(A : Type) : (x : A, y : A)
+pub union Eq(@A : Type) : (x : A, y : A)
 | refl(@z : A) : (z, z)
 end
 ```
 
 | Binding | Type | Description |
 | --- | --- | --- |
-| `sym(p)` | `Eq(A, x, y) -> Eq(A, y, x)` | Symmetry |
-| `trans(p, q)` | `(Eq(A, x, y), Eq(A, y, z)) -> Eq(A, x, z)` | Transitivity |
-| `cong(f, p)` | `(f : A -> B, Eq(A, x, y)) -> Eq(B, f(x), f(y))` | Congruence |
-| `subst(P, p, v)` | `(P : A -> Type, Eq(A, x, y), P(x)) -> P(y)` | Transport: rewrite `x` to `y` under an arbitrary predicate |
+| `sym(p)` | `Eq(x, y) -> Eq(y, x)` | Symmetry |
+| `trans(p, q)` | `(Eq(x, y), Eq(y, z)) -> Eq(x, z)` | Transitivity |
+| `cong(f, p)` | `(f : A -> B, Eq(x, y)) -> Eq(f(x), f(y))` | Congruence |
+| `subst(P, p, v)` | `(P : A -> Type, Eq(x, y), P(x)) -> P(y)` | Transport: rewrite `x` to `y` under an arbitrary predicate |
 
 (All `@A`/`@x`/`@y`/`@z` parameters elided above; they infer.)
 

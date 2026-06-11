@@ -600,13 +600,18 @@ fn parse_implicit_marks_on_let_shorthand_and_union_params() {
         other => panic!("expected a func let, got {other:?}"),
     }
 
-    // Union parameters carry no declaration-site marks — they are implicit at
-    // the constructors by definition — so `@` does not parse there.
-    assert!(
-        "union Result(@A : Type)\n| success(A)\nend"
-            .parse::<Module>()
-            .is_err()
-    );
+    // A union parameter may carry `@`, making it implicit at the type
+    // constructor (it is implicit at the value constructors either way).
+    let m = "union Result(@A : Type, E : Type)\n| success(A)\nend"
+        .parse::<Module>()
+        .unwrap();
+    match &m.items[0] {
+        TopItem::Union(unions) => {
+            assert_eq!(unions[0].params[0].0, Plicity::Implicit);
+            assert_eq!(unions[0].params[1].0, Plicity::Explicit);
+        }
+        other => panic!("expected a union, got {other:?}"),
+    }
 }
 
 #[test]

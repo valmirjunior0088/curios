@@ -71,11 +71,14 @@ pub struct TopCase {
 pub struct TopUnion {
     pub is_pub: bool,
     pub label: String,
-    /// Union parameters carry no plicity marks: they are *explicit* on the
-    /// type-constructor function (types are written out) and *implicit* on
-    /// every value constructor (the desugar applies the marks), with the
-    /// call-site `@` available to supply one positionally when wanted.
-    pub params: Vec<(String, Term)>,
+    /// Union parameters are *implicit* on every value constructor regardless
+    /// of any mark (the desugar applies those marks), with the call-site `@`
+    /// available to supply one positionally when wanted. On the
+    /// type-constructor function a parameter is *explicit* by default (types
+    /// are written out); a declaration-site `@` makes it implicit there too
+    /// (`union Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the
+    /// indices, so types are written `Eq(x, y)`).
+    pub params: Vec<(Plicity, String, Term)>,
     /// The head's index telescope, `union Vec(T : Type) : (n : Nat)`. Names
     /// are optional and documentary — needed only when a later index's type
     /// depends on an earlier one; they are *not* in scope in the cases.

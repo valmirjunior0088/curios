@@ -13,8 +13,8 @@ Consult these on demand when a specific question arises about the language, type
 - **`examples/`** — runnable Rust programs that drive the full pipeline end-to-end (parse → typecheck → erase → CPS → WASM → Wasmtime). Four worth knowing:
   - `crs_json_codec.rs` — encodes a `Json` tree to a `Bin`, round-trips through a parser, asserts byte-identical output; exercises the standard library (`std/Json`, `std/Parse`), union values, and arrays.
   - `crs_printf.rs` — reads `"Alice"` from stdin through `/sys/Io/read` on the `Io/stdin` handle, trims it, then runs `/std/Fmt/printf("%s is %d")(name)(30)`; also demonstrates the type-safety guarantee — passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`.
-  - `crs_eq.rs` — exercises `/std/Eq` (`refl` with its implicit payload, `sym`/`trans`/`cong`/`subst`), then asserts that claiming `Eq(Nat, 2, 3)` is a compile-time `TypeMismatch`.
-  - `crs_proofs.rs` — compiles and runs the complete program from `PROOFS_101.md`, and asserts its three rejections (`MissingArmNotImpossible` for a zero-arm match on `Eq(Nat, 0, 1)`, `TypeMismatch` for `refl` at unequal indices, `NotATupleType` for claiming `IsSorted` of an unsorted list).
+  - `crs_eq.rs` — exercises `/std/Eq` (`refl` with its implicit payload, `sym`/`trans`/`cong`/`subst`), then asserts that claiming `Eq(2, 3)` is a compile-time `TypeMismatch`.
+  - `crs_proofs.rs` — compiles and runs the complete program from `PROOFS_101.md`, and asserts its three rejections (`MissingArmNotImpossible` for a zero-arm match on `Eq(0, 1)`, `TypeMismatch` for `refl` at unequal indices, `NotATupleType` for claiming `IsSorted` of an unsorted list).
 
 # Project management
 

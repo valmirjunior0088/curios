@@ -85,7 +85,11 @@ pub union Result(A : Type, B : Type)
 end
 ```
 
-Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The union's parameters are _implicit_ at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors. A payload-less case uses empty parentheses:
+Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The union's parameters are _implicit_ at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors.
+
+A parameter marked `@` is implicit **at the type constructor as well** (at the value constructors every parameter is implicit regardless). Mark a parameter when it is recoverable at type use sites — `/std/Eq` declares `union Eq(@A : Type) : (x : A, y : A)`, since `A` is pinned by the indices, so the proposition is written `Eq(x, y)` (pin it with `Eq(@Nat, x, y)` when wanted). A parameter that only the use site can supply — `Vec`'s element type, say — stays unmarked.
+
+A payload-less case uses empty parentheses:
 
 ```
 pub union Option(A : Type)
@@ -319,7 +323,7 @@ match v : (x) => P                   -- depends on the scrutinee
 match v : (x : Vec(T, k)) => P       -- union scrutinees: depends on the indices too
 ```
 
-In the annotated form the binder's type is the scrutinee's type with its index slots opened — index binders appear where they naturally live. Parameter slots take the actual parameter written verbatim (checked), `_`, or a name binding it; index slots take a fresh name or `_`. The motive may also be omitted entirely when the arms determine it. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
+In the annotated form the binder's type is the scrutinee's type with its index slots opened — index binders appear where they naturally live. Parameter slots take the actual parameter written verbatim (checked), `_`, or a name binding it; index slots take a fresh name or `_`. The pattern spells **every** slot, `@`-marked parameters included — it is the eliminator's positional contract, not an application, so `match p : (q : Eq(A, s, t)) => …` writes the `A` slot that use sites elide. The motive may also be omitted entirely when the arms determine it. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
 
 **Booleans** — both branches required, either order:
 
@@ -360,7 +364,7 @@ end
 
 Matching an _indexed_ union gets three further behaviours, by the shape of each scrutinee index:
 
-- a **variable** index is refined to the case's target inside each arm, so hypotheses mentioning it reduce there (`match p : Vec(Bin, m)` through an `Eq(Nat, n, m)` learns `n := z`, `m := z` in the `refl` arm);
+- a **variable** index is refined to the case's target inside each arm, so hypotheses mentioning it reduce there (`match p : Vec(Bin, m)` through an `Eq(n, m)` learns `n := z`, `m := z` in the `refl` arm);
 - a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`Nat/succ(n)` against `cons`'s `Nat/succ(j)` pins `j := n`), and a case whose target _definitely clashes_ (`nil`'s `0` against `Nat/succ(n)`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
 
 ```

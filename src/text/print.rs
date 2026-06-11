@@ -593,6 +593,31 @@ fn print_top_union_case(case: TopCase) -> Printer<'static> {
     ])
 }
 
+fn print_top_union_params(params: Vec<(Plicity, String, Term)>) -> Printer<'static> {
+    if params.is_empty() {
+        return pure("");
+    }
+
+    flat([
+        pure("("),
+        sep_flat(
+            params.into_iter().map(|(plicity, name, ty)| {
+                flat([
+                    pure(match plicity {
+                        Plicity::Implicit => "@",
+                        Plicity::Explicit => "",
+                    }),
+                    pure(name),
+                    pure(" : "),
+                    print_term(ty),
+                ])
+            }),
+            || pure(", "),
+        ),
+        pure(")"),
+    ])
+}
+
 fn print_top_union_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'static> {
     if indices.is_empty() {
         return pure("");
@@ -620,6 +645,7 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
         print_pub(first.is_pub),
         pure("union "),
         pure(first.label),
+        print_top_union_params(first.params),
         print_top_union_indices(first.indices),
         flat(
             first
@@ -636,6 +662,7 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
                         print_pub(u.is_pub),
                         pure("and "),
                         pure(u.label),
+                        print_top_union_params(u.params),
                         print_top_union_indices(u.indices),
                         flat(
                             u.cases

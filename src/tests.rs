@@ -689,3 +689,51 @@ fn indexed_vec_append_executes() {
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
 }
+
+#[test]
+fn implicit_union_type_param_executes() {
+    // A `@`-marked union parameter is implicit at the type constructor too:
+    // `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and
+    // the eliminator's motive type-pattern still spells every slot. Running
+    // (not just checking) also guards the splice of solved implicit type-args
+    // into Π-domains before their binders re-close — without it the two
+    // spellings of the same domain compare as distinct.
+    let source = r#"
+        use /sys/{Nat, Bin, Io};
+        union Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
+            match p : (q : Eq2(A, s, t)) => Eq2(t, s)
+            | refl(z) => Eq2/refl()
+            end;
+        let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
+        let proof : Eq2(2, 2) = Eq2/refl();
+        let inferred : Eq2(2, 2) = sym2(proof);
+        match inferred : Nat
+        | refl(z) => Io/write(Io/stdout, Nat/to_str(z))
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+}
+
+#[test]
+fn implicit_union_type_param_rejects_explicit_spelling() {
+    // With `@A` implicit, the old explicit spelling queues `Nat` into the
+    // explicit slots — one argument too many, an error rather than a silent
+    // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
+    let source = r#"
+        use /sys/{Nat, Io};
+        union Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let bad : Eq2(Nat, 2, 2) = Eq2/refl();
+        Io/write(Io/stdout, "no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}

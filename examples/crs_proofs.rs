@@ -26,14 +26,14 @@ fn main() {
 
         let trivially_true : {} = ();
 
-        let two_is_two : Eq(Nat, 2, 2) = Eq/refl();
-        let flipped : Eq(Nat, 2, 2) = Eq/sym(two_is_two);
-        let chained : Eq(Nat, 2, 2) = Eq/trans(two_is_two, flipped);
+        let two_is_two : Eq(2, 2) = Eq/refl();
+        let flipped : Eq(2, 2) = Eq/sym(two_is_two);
+        let chained : Eq(2, 2) = Eq/trans(two_is_two, flipped);
 
         let succ_f(n : Nat) -> Nat = Nat/succ(n);
 
-        let add_zero(n : Nat) -> Eq(Nat, Nat/add(n, 0), n) =
-            match n : (m) => Eq(Nat, Nat/add(m, 0), m)
+        let add_zero(n : Nat) -> Eq(Nat/add(n, 0), n) =
+            match n : (m) => Eq(Nat/add(m, 0), m)
             | 0 => Eq/refl()
             | pred + 1, ih => Eq/cong(succ_f, ih)
             end;
@@ -44,12 +44,12 @@ fn main() {
             | pred + 1, _ => Void
             end;
 
-        let zero_is_not_one : Not(Eq(Nat, 0, 1)) =
+        let zero_is_not_one : Not(Eq(0, 1)) =
             (p) => Eq/subst(IsZero, p, ());
 
         let BinVec(k : Nat) -> Type = Vec(Bin, k);
 
-        let cast(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
+        let cast(@n : Nat, @m : Nat, p : Eq(n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
             Eq/subst(BinVec, p, v);
 
         let single : Vec(Bin, 1) = Vec/cons("hi", Vec/nil());
@@ -138,7 +138,7 @@ fn main() {
     );
 
     // PROOFS_101.md's two rejections. First: a zero-arm match on
-    // `Eq(Nat, 0, 1)` — `refl`'s binder pins both index positions, which is
+    // `Eq(0, 1)` — `refl`'s binder pins both index positions, which is
     // beyond the one-position-per-binder inverter, so the arm omission is
     // refused rather than verified.
     let zero_arm_match = r#"
@@ -146,7 +146,7 @@ fn main() {
 
         union Void
         end
-        let zero_is_not_one(p : Eq(Nat, 0, 1)) -> Void =
+        let zero_is_not_one(p : Eq(0, 1)) -> Void =
             match p : Void
             end;
         zero_is_not_one
@@ -157,11 +157,11 @@ fn main() {
     });
 
     // Second: `refl` only inhabits `Eq` at equal indices, so claiming
-    // `Eq(Nat, 2, 3)` is a `TypeMismatch`.
+    // `Eq(2, 3)` is a `TypeMismatch`.
     let unequal_refl = r#"
         use /std/{Nat, Eq};
 
-        let bad : Eq(Nat, 2, 3) = Eq/refl();
+        let bad : Eq(2, 3) = Eq/refl();
         bad
         "#;
 

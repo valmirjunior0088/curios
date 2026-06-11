@@ -226,12 +226,19 @@ fn process_items(
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(n, t)| Ok((n.clone(), elaborate.term(t)?)))
+                            .map(|(p, n, t)| Ok((*p, n.clone(), elaborate.term(t)?)))
                             .collect::<Result<Vec<_>, Error>>()?;
+                        // The registry and the `UnionType` normal form are
+                        // positional; plicity matters only on the generated
+                        // type-constructor function.
+                        let param_tys_unmarked = param_tys
+                            .iter()
+                            .map(|(_, n, t)| (n.clone(), t.clone()))
+                            .collect::<Vec<_>>();
                         let param_vars = u
                             .params
                             .iter()
-                            .map(|(n, _)| core::Term::var(core::Var::free(n)))
+                            .map(|(_, n, _)| core::Term::var(core::Var::free(n)))
                             .collect::<Vec<_>>();
 
                         // The head's index telescope. Unnamed entries get a
@@ -279,7 +286,7 @@ fn process_items(
                                     .map(|t| elaborate.term(t))
                                     .collect::<Result<Vec<_>, Error>>()?;
                                 let signature = core::Telescope::build(
-                                    param_tys.iter().cloned().chain(fields),
+                                    param_tys_unmarked.iter().cloned().chain(fields),
                                     core::Term::union_type(&name, param_vars.clone(), target),
                                 );
                                 Ok((core::Atom::from(c.label.as_str()), signature))
@@ -289,9 +296,12 @@ fn process_items(
                         inductives.insert(
                             name.clone(),
                             core::Inductive {
-                                params: core::Telescope::build(param_tys.clone(), ()),
+                                params: core::Telescope::build(param_tys_unmarked.clone(), ()),
                                 indices: core::Telescope::build(
-                                    param_tys.iter().cloned().chain(index_tys.iter().cloned()),
+                                    param_tys_unmarked
+                                        .iter()
+                                        .cloned()
+                                        .chain(index_tys.iter().cloned()),
                                     (),
                                 ),
                                 constructors,
@@ -300,20 +310,33 @@ fn process_items(
 
                         let union = core::Term::union_type(&name, param_vars, index_vars);
 
-                        // The type constructor is flat and explicit over
-                        // params then indices: `Vec : (T : Type, n : Nat)
-                        // -> Type`. Use sites never distinguish the two.
+                        // The type constructor is flat over params then
+                        // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
+                        // sites never distinguish the two. Parameters keep
+                        // their declared marks (`@` makes one implicit at use
+                        // sites); indices are always explicit.
                         let binder_tys: Vec<_> = param_tys
                             .iter()
                             .cloned()
-                            .chain(index_tys.iter().cloned())
+                            .chain(
+                                index_tys
+                                    .iter()
+                                    .cloned()
+                                    .map(|(n, t)| (core::Plicity::Explicit, n, t)),
+                            )
                             .collect();
                         let (type_, body) = if binder_tys.is_empty() {
                             (core::Term::type_(), union)
                         } else {
                             (
-                                core::Term::func_type(binder_tys.clone(), core::Term::type_()),
-                                core::Term::func(binder_tys, union),
+                                core::Term::func_type_marked(
+                                    binder_tys.clone(),
+                                    core::Term::type_(),
+                                ),
+                                core::Term::func(
+                                    binder_tys.into_iter().map(|(_, n, t)| (n, t)),
+                                    union,
+                                ),
                             )
                         };
 
@@ -346,11 +369,12 @@ fn process_items(
                         let output_args: Vec<(core::Plicity, Term)> = u
                             .params
                             .iter()
-                            .map(|(n, _)| {
-                                (
-                                    core::Plicity::Explicit,
-                                    Subterm::Name(Name::from(vec![n.clone()])).into(),
-                                )
+                            .map(|(p, n, _)| {
+                                // Each argument's mark must match its binder
+                                // on the type constructor (the two-queue
+                                // rule): an `@`-marked parameter is filled
+                                // from the implicit queue.
+                                (*p, Subterm::Name(Name::from(vec![n.clone()])).into())
                             })
                             .chain(
                                 c.target
@@ -364,9 +388,6 @@ fn process_items(
                         } else {
                             Subterm::Apply(Apply {
                                 head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
-                                // The type constructor takes its parameters
-                                // (and indices) explicitly — types are
-                                // written out.
                                 params: output_args,
                             })
                             .into()
@@ -381,7 +402,7 @@ fn process_items(
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(n, t)| {
+                            .map(|(_, n, t)| {
                                 Ok((core::Plicity::Implicit, n.clone(), elaborate.term(t)?))
                             })
                             .chain(c.payload.iter().enumerate().map(|(i, (p, n, t))| {
@@ -407,7 +428,7 @@ fn process_items(
                             context.prefixed(&u.label).join(),
                             u.params
                                 .iter()
-                                .map(|(n, _)| core::Term::var(core::Var::free(n))),
+                                .map(|(_, n, _)| core::Term::var(core::Var::free(n))),
                             core::Atom::from(c.label.as_str()),
                             args,
                         );

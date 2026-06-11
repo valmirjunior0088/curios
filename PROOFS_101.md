@@ -16,7 +16,7 @@ fn add_zero() {
 In Curios, you can state it as a type and prove it:
 
 ```
-let add_zero(n : Nat) -> Eq(Nat, Nat/add(n, 0), n) = …;
+let add_zero(n : Nat) -> Eq(Nat/add(n, 0), n) = …;
 ```
 
 If this definition type-checks, the equation holds for **every** `n` — the check happens at compile time, once. And because proofs are erased along with all other type-level data, `add_zero` costs nothing at runtime. A test samples; a proof quantifies.
@@ -61,40 +61,40 @@ All three ship in the standard library as `/std/Void` (`Void`, `Void/absurd`, `V
 `/std/Eq` is the workhorse proposition. It is an ordinary indexed union, two pages after `CRASH_COURSE.md` taught you `Vec`:
 
 ```
-union Eq(A : Type) : (x : A, y : A)
+union Eq(@A : Type) : (x : A, y : A)
 | refl(@z : A) : (z, z)
 end
 ```
 
-Read it as: `Eq(A, x, y)` is the proposition "`x` equals `y`", and its only constructor lives at indices `(z, z)` — both sides the same. So a proof exists exactly when the checker can see the sides are equal. The payload is implicit (`@z`), pinned by the type you check against:
+Read it as: `Eq(x, y)` is the proposition "`x` equals `y`", and its only constructor lives at indices `(z, z)` — both sides the same. So a proof exists exactly when the checker can see the sides are equal. The parameter is marked `@`, making it implicit at the type too — recoverable from the indices, written `Eq(@Nat, x, y)` only when you want it pinned. The payload is implicit as well (`@z`), pinned by the type you check against:
 
 ```
-let two_is_two : Eq(Nat, 2, 2) = Eq/refl();
+let two_is_two : Eq(2, 2) = Eq/refl();
 ```
 
-`Eq(Nat, 2, 3)` rejects `Eq/refl()` with a `TypeMismatch`: the constructor demands both indices be the same `z`, and `2` and `3` are not.
+`Eq(2, 3)` rejects `Eq/refl()` with a `TypeMismatch`: the constructor demands both indices be the same `z`, and `2` and `3` are not.
 
-Matching is where proofs pay rent. As with any indexed union, **matching refines the indices inside the arm**: scrutinizing a `p : Eq(A, x, y)` makes `x` and `y` the same thing in the `refl` arm, so obligations that were stuck now reduce. Symmetry is the whole technique in four lines:
+Matching is where proofs pay rent. As with any indexed union, **matching refines the indices inside the arm**: scrutinizing a `p : Eq(x, y)` makes `x` and `y` the same thing in the `refl` arm, so obligations that were stuck now reduce. Symmetry is the whole technique in four lines:
 
 ```
-let sym(@A : Type, @x : A, @y : A, p : Eq(A, x, y)) -> Eq(A, y, x) =
-    match p : (q : Eq(A, s, t)) => Eq(A, t, s)
+let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
+    match p : (q : Eq(A, s, t)) => Eq(t, s)
     | refl(z) => Eq/refl()
     end;
 ```
 
-Inside the arm both `s` and `t` are `z`, so the demanded `Eq(A, t, s)` is `Eq(A, z, z)` — which `Eq/refl()` proves. `/std/Eq` ships the basic kit, all built the same way:
+(One discipline to note: the motive's _type-pattern_ `Eq(A, s, t)` spells every slot, parameters included, even though use sites elide the implicit `A` — the pattern is the eliminator's positional contract, not an application.) Inside the arm both `s` and `t` are `z`, so the demanded `Eq(t, s)` is `Eq(z, z)` — which `Eq/refl()` proves. `/std/Eq` ships the basic kit, all built the same way:
 
-| Name    | Statement                                             |
-| ------- | ----------------------------------------------------- |
-| `sym`   | `Eq(A, x, y) -> Eq(A, y, x)`                          |
-| `trans` | `Eq(A, x, y) -> Eq(A, y, z) -> Eq(A, x, z)`           |
-| `cong`  | `Eq(A, x, y) -> Eq(B, f(x), f(y))` for any `f`        |
-| `subst` | `Eq(A, x, y) -> P(x) -> P(y)` for any `P : A -> Type` |
+| Name    | Statement                                          |
+| ------- | -------------------------------------------------- |
+| `sym`   | `Eq(x, y) -> Eq(y, x)`                             |
+| `trans` | `Eq(x, y) -> Eq(y, z) -> Eq(x, z)`                 |
+| `cong`  | `Eq(x, y) -> Eq(f(x), f(y))` for any `f`           |
+| `subst` | `Eq(x, y) -> P(x) -> P(y)` for any `P : A -> Type` |
 
 ```
-let flipped : Eq(Nat, 2, 2) = Eq/sym(two_is_two);
-let chained : Eq(Nat, 2, 2) = Eq/trans(two_is_two, flipped);
+let flipped : Eq(2, 2) = Eq/sym(two_is_two);
+let chained : Eq(2, 2) = Eq/trans(two_is_two, flipped);
 ```
 
 ## Induction is `match` with `ih`
@@ -104,8 +104,8 @@ let chained : Eq(Nat, 2, 2) = Eq/trans(two_is_two, flipped);
 ```
 let succ_f(n : Nat) -> Nat = Nat/succ(n);
 
-let add_zero(n : Nat) -> Eq(Nat, Nat/add(n, 0), n) =
-    match n : (m) => Eq(Nat, Nat/add(m, 0), m)
+let add_zero(n : Nat) -> Eq(Nat/add(n, 0), n) =
+    match n : (m) => Eq(Nat/add(m, 0), m)
     | 0 => Eq/refl()
     | pred + 1, ih => Eq/cong(succ_f, ih)
     end;
@@ -113,9 +113,9 @@ let add_zero(n : Nat) -> Eq(Nat, Nat/add(n, 0), n) =
 
 Walking through it:
 
-- The **motive** `(m) => Eq(Nat, Nat/add(m, 0), m)` states what is being proven at each value — it is the induction _statement_.
-- The **base case** must prove `Eq(Nat, Nat/add(0, 0), 0)`. `Nat/add(0, 0)` reduces to `0` during checking, so `Eq/refl()` closes it.
-- The **inductive step** holds `ih : Eq(Nat, Nat/add(pred, 0), pred)` and must prove the statement at `pred + 1`. The checker knows `Nat/add(Nat/succ(pred), 0)` is `Nat/succ(Nat/add(pred, 0))` definitionally, so applying `cong` with `succ_f` to `ih` lands exactly there.
+- The **motive** `(m) => Eq(Nat/add(m, 0), m)` states what is being proven at each value — it is the induction _statement_.
+- The **base case** must prove `Eq(Nat/add(0, 0), 0)`. `Nat/add(0, 0)` reduces to `0` during checking, so `Eq/refl()` closes it.
+- The **inductive step** holds `ih : Eq(Nat/add(pred, 0), pred)` and must prove the statement at `pred + 1`. The checker knows `Nat/add(Nat/succ(pred), 0)` is `Nat/succ(Nat/add(pred, 0))` definitionally, so applying `cong` with `succ_f` to `ih` lands exactly there.
 
 No induction keyword, no tactics — the same `match` you compute with, aimed at a proposition.
 
@@ -124,7 +124,7 @@ No induction keyword, no tactics — the same `match` you compute with, aimed at
 To prove a negation, accept the impossible proof and derive `Void`. The first instinct — eliminate it like `Void`, with a zero-arm match, since no constructor fits the indices — does not get past the checker:
 
 ```
-let zero_is_not_one(p : Eq(Nat, 0, 1)) -> Void =
+let zero_is_not_one(p : Eq(0, 1)) -> Void =
     match p : Void
     end;
 -- rejected: missing arm 'refl': its index target is not provably
@@ -142,11 +142,11 @@ let IsZero(n : Nat) -> Type =
     | pred + 1, _ => Void
     end;
 
-let zero_is_not_one : Not(Eq(Nat, 0, 1)) =
+let zero_is_not_one : Not(Eq(0, 1)) =
     (p) => Eq/subst(IsZero, p, ());
 ```
 
-`IsZero(0)` is `{}`, so `()` proves it; `subst` rewrites along `p : Eq(Nat, 0, 1)` to produce `IsZero(1)` — which is `Void`. The supposed proof of `0 = 1` has been converted into the absurd, which is exactly what `Not` asked for. Note the proof of a negation is just a lambda.
+`IsZero(0)` is `{}`, so `()` proves it; `subst` rewrites along `p : Eq(0, 1)` to produce `IsZero(1)` — which is `Void`. The supposed proof of `0 = 1` has been converted into the absurd, which is exactly what `Not` asked for. Note the proof of a negation is just a lambda.
 
 ## Payoff: proofs that move data
 
@@ -155,7 +155,7 @@ So far the proofs proved things _about_ programs. They also work _inside_ progra
 ```
 let BinVec(k : Nat) -> Type = Vec(Bin, k);
 
-let cast(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
+let cast(@n : Nat, @m : Nat, p : Eq(n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
     Eq/subst(BinVec, p, v);
 ```
 
