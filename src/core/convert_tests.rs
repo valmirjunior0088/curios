@@ -570,7 +570,8 @@ fn scope_check_allows_in_context_variable() {
     );
 
     let x = Term::var(Var::free("x"));
-    assert_eq!(conv(&mut context, &Term::metavar(0), &x), Ok(true));
+    let occurrence = Term::metavar_birthed(0, None, vec![x.clone()]);
+    assert_eq!(conv(&mut context, &occurrence, &x), Ok(true));
     assert_eq!(context.metavar_solution(0), Some(&x));
 }
 

@@ -770,8 +770,11 @@ impl Convert {
         // variable whose name no other entry shares. A non-variable or
         // duplicated entry is simply not invertible; the solution then may not
         // depend on that slot, which the scope check below enforces — pruning
-        // in its simplest form. An empty spine (a never-rebuilt hole) is the
-        // identity renaming over the whole telescope.
+        // in its simplest form. An empty spine is *not* legacy debris: a
+        // birthed hole's lowered node legitimately survives bare inside its
+        // own birth scope (e.g. `elaborate_apply` builds the output type from
+        // the lowered arguments), where the identity renaming is exactly
+        // right.
         let image: Vec<(String, &str)> = if entries.is_empty() {
             telescope
                 .iter()
