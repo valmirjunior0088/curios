@@ -49,10 +49,12 @@ where
 /// at its occurrence span. The result flows downstream to `erase`, which is then
 /// guaranteed never to meet a `Subterm::Metavar`.
 ///
-/// Substitution replaces a metavariable node by its solution. A solution may
-/// capture binders local to where the metavariable was born (e.g. a combinator's
-/// type parameter), so it is *not* in general a closed term; [`zonk_term`] realigns
-/// it to the de Bruijn indices of its splice site via the threaded binder stack.
+/// Substitution replaces a metavariable node by its solution. A solution is
+/// spelled with the birth telescope's names and is *not* in general a closed
+/// term; the occurrence's spine (its delayed substitution) records what each
+/// birth binder corresponds to at the splice site, so [`zonk_term`] resolves
+/// by rewriting the solution through it. Only a bare never-rebuilt hole falls
+/// back to realignment via the threaded binder stack.
 pub fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
     zonk_term(context, term, &[])
 }
@@ -127,7 +129,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 fn zonk_term(context: &Context, term: &Term, binders: &[String]) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution,
     // recursively zonked (the solution may itself mention solved metavariables).
-    if let Subterm::Metavar(Metavar { id, origin }) = &**term {
+    if let Subterm::Metavar(Metavar { id, origin, spine }) = &**term {
         let solution = context.metavar_solution(*id).ok_or_else(|| {
             // An unsolved metavariable the *elaborator* minted (an omitted
             // implicit argument) is reported by the binder it filled — the
@@ -154,16 +156,32 @@ fn zonk_term(context: &Context, term: &Term, binders: &[String]) -> Result<Term,
         // solution.
         let resolved = zonk_term(context, solution, &[])?;
 
-        // Realign the solution to this occurrence. A solution may legitimately
-        // mention binders local to where its metavariable was born (e.g. a
-        // combinator's type parameter `A`); it is stored in named form, but it is
-        // spliced into a context where those binders have been re-closed to de
-        // Bruijn indices. `capture` against the enclosing binder labels (innermost
-        // first) turns each such free name into its correct index. A closed
-        // solution matches no label and is left untouched — the original "solutions
-        // are closed" fast case, now a special case rather than an assumption.
-        let labels = binders.iter().rev().map(String::as_str).collect::<Vec<_>>();
-        let zonked = resolved.capture(&labels);
+        let zonked = if spine.is_empty() {
+            // A bare hole that never reached its birth point carries no spine;
+            // fall back to the label realignment: `capture` against the
+            // enclosing binder labels (innermost first) turns each free name
+            // the solution mentions into its index here. A closed solution
+            // matches no label and is left untouched.
+            let labels = binders.iter().rev().map(String::as_str).collect::<Vec<_>>();
+            resolved.capture(&labels)
+        } else {
+            // A contextual occurrence: the spine records, in this site's own
+            // (already de-Bruijn-correct) form, what each birth binder
+            // corresponds to here. Zonk the spine entries (they may embed
+            // solved metavariables), then splice the solution through them —
+            // birth names captured, spine terms released.
+            let entry = context
+                .metavar_entry(*id)
+                .expect("a solved metavariable has a birth entry");
+            let labels = entry
+                .telescope
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>();
+            let spine = zonk_terms(context, spine, binders)?;
+            let refs = spine.iter().collect::<Vec<_>>();
+            resolved.capture(&labels).release(&refs)
+        };
 
         // Carry the hole's span only if the solution carries none of its own.
         return Ok(match term.span() {

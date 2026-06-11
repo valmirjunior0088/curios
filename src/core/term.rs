@@ -61,16 +61,27 @@ impl Term {
     }
 
     pub fn metavar(id: usize) -> Self {
-        Self::from(Subterm::Metavar(Metavar { id, origin: None }))
+        Self::from(Subterm::Metavar(Metavar {
+            id,
+            origin: None,
+            spine: Vec::new(),
+        }))
     }
 
     /// A metavariable minted for an omitted implicit argument, carrying its
-    /// insertion provenance (see [`Metavar::origin`]).
-    pub fn metavar_inserted(id: usize, origin: ImplicitOrigin) -> Self {
+    /// insertion provenance (see [`Metavar::origin`]) and its birth spine.
+    pub fn metavar_inserted(id: usize, origin: ImplicitOrigin, spine: Vec<Term>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id,
             origin: Some(origin),
+            spine,
         }))
+    }
+
+    /// A hole rebuilt at its birth point with the identity spine over its
+    /// frozen telescope (see [`Metavar::spine`]).
+    pub fn metavar_birthed(id: usize, origin: Option<ImplicitOrigin>, spine: Vec<Term>) -> Self {
+        Self::from(Subterm::Metavar(Metavar { id, origin, spine }))
     }
 
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
@@ -720,11 +731,9 @@ pub struct ImplicitOrigin {
 }
 
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
-/// born from a surface hole `?` and (possibly) solved by unification. It is a
-/// global head carrying no de Bruijn index — like a free `Var`,
-/// it is inert under the `Visit` machinery (it holds no `Var`). The solution,
-/// when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`; the
-/// node itself is immutable.
+/// born from a surface hole `?` and (possibly) solved by unification. The
+/// solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by
+/// `id`, spelled with the *birth telescope's* free names.
 ///
 /// `origin` rides with the node: `Some` iff the elaborator minted this
 /// metavariable for an omitted implicit argument, in which case zonk's
@@ -732,10 +741,20 @@ pub struct ImplicitOrigin {
 /// minted exactly once (`to_core` holes with `None`, core insertions above the
 /// `Module::metavars` floor with `Some`), so every occurrence of an id carries
 /// the same origin and the derived equality never splits an id.
+///
+/// `spine` is the delayed substitution — one term per binder of the birth
+/// telescope (`MetaEntry::telescope` order), recording what that binder
+/// corresponds to at this occurrence. Identity (`Var::free(name)`) at birth.
+/// The entries are ordinary term content: `traverse` walks them, so `close`
+/// captures them and `open` substitutes them, and the mapping survives
+/// re-closing under fresh names — which is what lets a solution mentioning a
+/// sibling binder resolve correctly wherever the occurrence ends up. An empty
+/// spine is a not-yet-birthed `to_core` hole and resolves as the identity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Metavar {
     pub id: usize,
     pub origin: Option<ImplicitOrigin>,
+    pub spine: Vec<Term>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -794,8 +813,9 @@ impl Subterm {
 
     fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
         match self {
-            Subterm::Metavar(Metavar { id, .. }) => {
+            Subterm::Metavar(Metavar { id, spine, .. }) => {
                 ids.insert(*id);
+                spine.iter().for_each(|t| t.collect_metavars(ids));
             }
             Subterm::Type | Subterm::Var(_) => {}
             Subterm::Prim(prim) => prim_metavars(prim, ids),
@@ -1048,14 +1068,20 @@ impl Bound for Subterm {
                 tail: visit.visit_scope(tail),
             }),
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
-            // A metavariable holds no `Var`, so it is inert under every visit.
-            Subterm::Metavar(m) => Subterm::Metavar(m.clone()),
+            // The spine is ordinary term content: visiting it is what keeps
+            // the delayed substitution aligned through `close`/`open`.
+            Subterm::Metavar(Metavar { id, origin, spine }) => Subterm::Metavar(Metavar {
+                id: *id,
+                origin: origin.clone(),
+                spine: spine.iter().map(|t| visit.visit_subterm(t)).collect(),
+            }),
         }
     }
 
     fn reach(&self) -> usize {
         match self {
-            Subterm::Type | Subterm::Metavar(_) => 0,
+            Subterm::Type => 0,
+            Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine),
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,

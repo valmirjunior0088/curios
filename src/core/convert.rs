@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Cases, Context, Field, Func, FuncType, Match, Proj, Rec, ReduceError, Subterm,
-        Telescope,
-        Term, Tuple, TupleType, UnionType, Var, Variant, convert_prim, infer, reduce,
+        Apply, Bound, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
+        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant,
+        convert_prim, infer, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -637,21 +637,28 @@ impl Convert {
         }
     }
 
-    /// `Some(id)` iff `term` is an unsolved bare metavariable. (`reduce` already
-    /// resolves solved metavariables, so a metavariable surviving to weak-head
-    /// normal form is necessarily unsolved.)
-    fn as_metavar(term: &Term) -> Option<usize> {
+    /// `Some(metavar)` iff `term` is an unsolved bare metavariable head.
+    /// (`reduce` already resolves solved metavariables, so a metavariable
+    /// surviving to weak-head normal form is necessarily unsolved.)
+    fn as_metavar(term: &Term) -> Option<&Metavar> {
         match &**term {
-            Subterm::Metavar(metavar) => Some(metavar.id),
+            Subterm::Metavar(metavar) => Some(metavar),
             _ => None,
         }
     }
 
-    /// Solve a metavariable `id` against candidate `t` (the rigid side, already
-    /// in weak-head normal form). Implements §7.3: embedded-metavariable guard,
-    /// occurs check, scope check, and re-validation against the frozen birth
-    /// context, before committing.
-    fn solve(&mut self, context: &mut Context, id: usize, t: &Term) -> Result<Solved, ReduceError> {
+    /// Solve `?id[spine] ≈ t` (the rigid side, already in weak-head normal
+    /// form). Implements §7.3 in the pattern fragment: embedded-metavariable
+    /// guard, occurs check, spine-as-renaming inversion (which subsumes the
+    /// scope check), and re-validation against the frozen birth context,
+    /// before committing the solution in birth-named form.
+    fn solve(
+        &mut self,
+        context: &mut Context,
+        metavar: &Metavar,
+        t: &Term,
+    ) -> Result<Solved, ReduceError> {
+        let id = metavar.id;
         let metavars = t.metavars();
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
@@ -677,24 +684,98 @@ impl Convert {
         let telescope = entry.telescope.clone();
         let result = entry.result.clone();
 
-        // Scope check: the solution may only mention variables available to `id`.
-        let allowed = telescope
+        // Invert the spine through its *pattern* entries — a syntactic free
+        // variable (deliberately unreduced: a name backed by a definition must
+        // stay that name) whose name no other entry shares. A non-variable or
+        // duplicated entry is simply not invertible; the solution then may not
+        // depend on that slot, which the scope check below enforces — pruning
+        // in its simplest form. An empty spine (a never-rebuilt hole) is the
+        // identity renaming over the whole telescope.
+        let image: Vec<(String, &str)> = if metavar.spine.is_empty() {
+            telescope
+                .iter()
+                .map(|(name, _)| (name.clone(), name.as_str()))
+                .collect()
+        } else {
+            assert_eq!(
+                metavar.spine.len(),
+                telescope.len(),
+                "metavariable spine arity diverged from its birth telescope"
+            );
+
+            let names = metavar
+                .spine
+                .iter()
+                .map(|term| match &**term {
+                    Subterm::Var(var) => var.as_free(),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            names
+                .iter()
+                .zip(&telescope)
+                .filter_map(|(name, (birth, _))| {
+                    let name = (*name)?;
+                    // A duplicated image name is ambiguous to invert.
+                    let unique = names.iter().filter(|n| **n == Some(name)).count() == 1;
+                    unique.then(|| (name.to_string(), birth.as_str()))
+                })
+                .collect()
+        };
+
+        // Scope check, through the inversion: every free variable of the
+        // candidate must correspond to exactly one birth binder. A name that
+        // is no entry at all can never become one — out of scope; a name only
+        // reachable through a non-pattern or duplicated slot is not provably
+        // determined — postpone.
+        let allowed = image
             .iter()
             .map(|(name, _)| name.clone())
             .collect::<HashSet<_>>();
-        if !t.free_vars().iter().all(|name| allowed.contains(name)) {
-            return Ok(Solved::Failed);
+        for name in t.free_vars() {
+            if allowed.contains(&name) {
+                continue;
+            }
+            let mentioned = metavar.spine.is_empty()
+                || metavar
+                    .spine
+                    .iter()
+                    .any(|entry| entry.free_vars().contains(&name));
+            return Ok(match mentioned {
+                true => Solved::Postponed,
+                false => Solved::Failed,
+            });
         }
 
-        // Re-validation (§7.4): the candidate must type-check against the
-        // metavariable's frozen type, under its birth context Γ, with
-        // counterfactual refinements suppressed. Stable definitions are kept.
+        // Invert, storing the solution in birth-named form. The identity
+        // renaming (every invertible entry still its own birth binder) skips
+        // the rewrite.
+        let inverted = if image.iter().all(|(img, birth)| img == birth) {
+            t.clone()
+        } else {
+            let labels = image
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>();
+            let birth_vars = image
+                .iter()
+                .map(|(_, birth)| Term::var(Var::free(*birth)))
+                .collect::<Vec<_>>();
+            let refs = birth_vars.iter().collect::<Vec<_>>();
+            t.capture(&labels).release(&refs)
+        };
+
+        // Re-validation (§7.4): the (inverted) candidate must type-check
+        // against the metavariable's frozen type, under its birth context Γ,
+        // with counterfactual refinements suppressed. Stable definitions are
+        // kept.
         let revalidated = context.with_frame(|context| {
             for (name, ty) in &telescope {
                 context.assume(name, ty);
             }
 
-            context.with_suppressed_refinements(|context| match infer(context, t) {
+            context.with_suppressed_refinements(|context| match infer(context, &inverted) {
                 Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
                 // A meta-free, well-scoped candidate that fails to synthesize is
                 // not validly typed here — reject the solution.
@@ -706,7 +787,7 @@ impl Convert {
             return Ok(Solved::Failed);
         }
 
-        context.solve_metavar(id, t.clone());
+        context.solve_metavar(id, inverted);
         self.progress = true;
         Ok(Solved::Done)
     }
@@ -747,14 +828,18 @@ impl Convert {
             // Flexible heads are dispatched before history and before the
             // structural/η fallthrough — a flexible head must never be
             // η-expanded into a spine (§7.1).
-            match (Self::as_metavar(&this), Self::as_metavar(&that)) {
+            match (
+                Self::as_metavar(&this).cloned(),
+                Self::as_metavar(&that).cloned(),
+            ) {
                 (Some(_), Some(_)) => {
-                    // Distinct heads (equal ids are caught by `this == that`).
+                    // Distinct heads (equal ids are caught by `this == that`,
+                    // since an id occurs once and so carries one spine).
                     // v1 flex–flex does no intersection: postpone.
                     self.blocked.push(Goal { type_, this, that });
                     continue;
                 }
-                (Some(id), None) => match self.solve(context, id, &that)? {
+                (Some(metavar), None) => match self.solve(context, &metavar, &that)? {
                     Solved::Done => continue,
                     Solved::Postponed => {
                         self.blocked.push(Goal { type_, this, that });
@@ -762,7 +847,7 @@ impl Convert {
                     }
                     Solved::Failed => return Ok(false),
                 },
-                (None, Some(id)) => match self.solve(context, id, &this)? {
+                (None, Some(metavar)) => match self.solve(context, &metavar, &this)? {
                     Solved::Done => continue,
                     Solved::Postponed => {
                         self.blocked.push(Goal { type_, this, that });

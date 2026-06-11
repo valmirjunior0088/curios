@@ -214,8 +214,11 @@ fn reduce_var(context: &Context, var: Var) -> Reduce {
 }
 
 fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
-    match context.metavar_solution(metavar.id) {
-        Some(solution) => Reduce::Continue(solution.clone()),
+    // Resolution rewrites the (birth-named) solution through the occurrence's
+    // spine, so a solution mentioning a sibling binder lands on whatever that
+    // binder corresponds to here.
+    match context.resolve_metavar(&metavar) {
+        Some(solution) => Reduce::Continue(solution),
         None => Reduce::Break(Term::from(Subterm::Metavar(metavar))),
     }
 }

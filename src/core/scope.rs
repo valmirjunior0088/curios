@@ -82,7 +82,7 @@ impl Var {
         }
     }
 
-    fn as_free(&self) -> Option<&str> {
+    pub fn as_free(&self) -> Option<&str> {
         match &self.type_ {
             VarType::Free(label) => Some(label),
             VarType::Bound(_) => None,

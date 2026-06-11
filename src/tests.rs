@@ -695,8 +695,9 @@ fn implicit_union_type_param_executes() {
     // A `@`-marked union parameter is implicit at the type constructor too:
     // `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and
     // the eliminator's motive type-pattern still spells every slot. Running
-    // (not just checking) also guards the splice of solved implicit type-args
-    // into Π-domains before their binders re-close — without it the two
+    // (not just checking) also guards metavariable spines through the
+    // Π-domain close/reopen round trip: a solved implicit type-arg's solution
+    // names a sibling binder, and without the delayed substitution the two
     // spellings of the same domain compare as distinct.
     let source = r#"
         use /sys/{Nat, Bin, Io};

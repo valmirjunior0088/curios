@@ -1,5 +1,5 @@
 use {
-    super::{Bound, ImplicitOrigin, Inductive, Term},
+    super::{Bound, ImplicitOrigin, Inductive, Metavar, Term, Var},
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, HashMap},
@@ -355,9 +355,13 @@ impl Context {
         let id = self.next_metavar.fresh();
 
         let telescope = self.local_context().to_vec();
+        let spine = telescope
+            .iter()
+            .map(|(name, _)| Term::var(Var::free(name)))
+            .collect();
         self.birth_metavar(id, telescope, result, span.clone());
 
-        let metavar = Term::metavar_inserted(id, origin);
+        let metavar = Term::metavar_inserted(id, origin, spine);
         match span {
             Some(span) => metavar.with_span(span),
             None => metavar,
@@ -374,6 +378,30 @@ impl Context {
             .get(id)
             .and_then(Option::as_ref)
             .and_then(|e| e.solution.as_ref())
+    }
+
+    /// Resolve a solved metavariable *at its occurrence*: the stored solution
+    /// is spelled with the birth telescope's names, and the occurrence's spine
+    /// records what each of those binders corresponds to here — so resolution
+    /// is the solution with birth names rewritten through the spine. An empty
+    /// spine (a never-rebuilt `to_core` hole) resolves as the identity.
+    /// `None` while unsolved.
+    pub fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
+        let entry = self.metavar_entry(metavar.id)?;
+        let solution = entry.solution.as_ref()?;
+
+        if metavar.spine.is_empty() {
+            return Some(solution.clone());
+        }
+
+        let labels = entry
+            .telescope
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>();
+        let spine = metavar.spine.iter().collect::<Vec<_>>();
+
+        Some(solution.capture(&labels).release(&spine))
     }
 
     /// Commit a metavariable's solution. Clears the reduction cache, since a

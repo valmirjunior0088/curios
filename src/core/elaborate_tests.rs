@@ -108,7 +108,13 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     let hole = Term::metavar(0);
     let (term, type_) = elaborate(&mut context, &hole, Mode::Check(nat())).unwrap();
 
-    assert_eq!(term, hole);
+    // Birth rebuilds the hole with the identity spine over its frozen Γ — the
+    // delayed substitution that keeps its eventual solution aligned through
+    // every later `close`/`open`.
+    assert_eq!(
+        term,
+        Term::metavar_birthed(0, None, vec![Term::var(Var::free("x"))])
+    );
     assert_eq!(type_, nat());
 
     let entry = context.metavar_entry(0).expect("hole was born");
