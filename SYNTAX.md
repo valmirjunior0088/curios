@@ -445,11 +445,13 @@ A homogeneous array of elements of type `T`. Write `/sys/Arr(/sys/Arr(/sys/Nat))
 | ---------- | ---------------------------- |
 | `/sys/Bln` | Boolean                      |
 | `/sys/Nat` | Natural number               |
-| `/sys/Int` | Signed integer (i32)         |
+| `/sys/Int` | Signed integer               |
 | `/sys/Flt` | Single-precision float (f32) |
 | `/sys/Bin` | Byte sequence                |
 
-`Nat` literals are arbitrary precision while parsing and type-level reduction are in progress. Erasure narrows runtime `Nat` values to `u32`; WebAssembly code generation then represents them as packed `i31ref`, so emitted literals must fit in the signed 31-bit range.
+`Nat` and `Int` literals are arbitrary precision while parsing and type-level reduction are in progress — the type level computes in ℕ and ℤ. Erasure narrows runtime `Nat` values to `u32` and runtime `Int` values to `i32`; WebAssembly code generation then represents both as packed `i31ref`, so emitted literals must fit in the signed 31-bit range.
+
+`Nat/div`, `Nat/rem`, `Int/div`, and `Int/rem` with a divisor that reduces to literal zero at the type level are reported as a compile-time division-by-zero error rather than evaluated.
 
 ## Literals
 
@@ -527,7 +529,7 @@ Boolean literals. Their type is `/sys/Bln`.
 
 Zero or more elements. A trailing comma is required for the one-element case to distinguish it from a parenthesized expression — unless the field is named (`(a = x)`), where the `=` already disambiguates.
 
-Fields may carry name annotations. Each written name is checked positionally against the expected tuple type's label at that position (no reordering — in a dependent telescope the written order is the checking order); named and bare fields mix freely. Names are validated and dropped at elaboration: tuple *values* are always positional.
+Fields may carry name annotations. Each written name is checked positionally against the expected tuple type's label at that position (no reordering — in a dependent telescope the written order is the checking order); named and bare fields mix freely. Names are validated and dropped at elaboration: tuple _values_ are always positional.
 
 ## Idioms
 
@@ -641,31 +643,31 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 ### Flt
 
-| Operation             | Arity | Description           | Returns    |
-| --------------------- | ----- | --------------------- | ---------- |
-| `/sys/Flt/add(a, b)`  | 2     | Addition              | `/sys/Flt` |
-| `/sys/Flt/sub(a, b)`  | 2     | Subtraction           | `/sys/Flt` |
-| `/sys/Flt/mul(a, b)`  | 2     | Multiplication        | `/sys/Flt` |
-| `/sys/Flt/div(a, b)`  | 2     | Division              | `/sys/Flt` |
-| `/sys/Flt/eql(a, b)`  | 2     | Equality              | `/sys/Bln` |
-| `/sys/Flt/neq(a, b)`  | 2     | Inequality            | `/sys/Bln` |
-| `/sys/Flt/lt(a, b)`   | 2     | Less than             | `/sys/Bln` |
-| `/sys/Flt/gt(a, b)`   | 2     | Greater than          | `/sys/Bln` |
-| `/sys/Flt/lte(a, b)`  | 2     | Less than or equal    | `/sys/Bln` |
-| `/sys/Flt/gte(a, b)`  | 2     | Greater than or equal | `/sys/Bln` |
-| `/sys/Flt/min(a, b)`  | 2     | Minimum               | `/sys/Flt` |
-| `/sys/Flt/max(a, b)`  | 2     | Maximum               | `/sys/Flt` |
-| `/sys/Flt/neg(a)`     | 1     | Negation              | `/sys/Flt` |
-| `/sys/Flt/abs(a)`     | 1     | Absolute value        | `/sys/Flt` |
-| `/sys/Flt/sqrt(a)`    | 1     | Square root           | `/sys/Flt` |
-| `/sys/Flt/floor(a)`   | 1     | Floor                 | `/sys/Flt` |
-| `/sys/Flt/ceil(a)`    | 1     | Ceiling               | `/sys/Flt` |
-| `/sys/Flt/trunc(a)`   | 1     | Truncate toward zero  | `/sys/Flt` |
-| `/sys/Flt/nearest(a)` | 1     | Round to nearest      | `/sys/Flt` |
-| `/sys/Flt/to_nat(a)`  | 1     | Convert to Nat        | `/sys/Nat` |
-| `/sys/Flt/to_int(a)`  | 1     | Convert to Int        | `/sys/Int` |
-| `/sys/Flt/to_le_bin(a)` | 1   | Convert to Bin bytes   | `/sys/Bin` |
-| `/sys/Flt/to_str(a)`  | 1     | Convert to Bin        | `/sys/Bin` |
+| Operation               | Arity | Description           | Returns    |
+| ----------------------- | ----- | --------------------- | ---------- |
+| `/sys/Flt/add(a, b)`    | 2     | Addition              | `/sys/Flt` |
+| `/sys/Flt/sub(a, b)`    | 2     | Subtraction           | `/sys/Flt` |
+| `/sys/Flt/mul(a, b)`    | 2     | Multiplication        | `/sys/Flt` |
+| `/sys/Flt/div(a, b)`    | 2     | Division              | `/sys/Flt` |
+| `/sys/Flt/eql(a, b)`    | 2     | Equality              | `/sys/Bln` |
+| `/sys/Flt/neq(a, b)`    | 2     | Inequality            | `/sys/Bln` |
+| `/sys/Flt/lt(a, b)`     | 2     | Less than             | `/sys/Bln` |
+| `/sys/Flt/gt(a, b)`     | 2     | Greater than          | `/sys/Bln` |
+| `/sys/Flt/lte(a, b)`    | 2     | Less than or equal    | `/sys/Bln` |
+| `/sys/Flt/gte(a, b)`    | 2     | Greater than or equal | `/sys/Bln` |
+| `/sys/Flt/min(a, b)`    | 2     | Minimum               | `/sys/Flt` |
+| `/sys/Flt/max(a, b)`    | 2     | Maximum               | `/sys/Flt` |
+| `/sys/Flt/neg(a)`       | 1     | Negation              | `/sys/Flt` |
+| `/sys/Flt/abs(a)`       | 1     | Absolute value        | `/sys/Flt` |
+| `/sys/Flt/sqrt(a)`      | 1     | Square root           | `/sys/Flt` |
+| `/sys/Flt/floor(a)`     | 1     | Floor                 | `/sys/Flt` |
+| `/sys/Flt/ceil(a)`      | 1     | Ceiling               | `/sys/Flt` |
+| `/sys/Flt/trunc(a)`     | 1     | Truncate toward zero  | `/sys/Flt` |
+| `/sys/Flt/nearest(a)`   | 1     | Round to nearest      | `/sys/Flt` |
+| `/sys/Flt/to_nat(a)`    | 1     | Convert to Nat        | `/sys/Nat` |
+| `/sys/Flt/to_int(a)`    | 1     | Convert to Int        | `/sys/Int` |
+| `/sys/Flt/to_le_bin(a)` | 1     | Convert to Bin bytes  | `/sys/Bin` |
+| `/sys/Flt/to_str(a)`    | 1     | Convert to Bin        | `/sys/Bin` |
 
 ### Bin
 
@@ -699,25 +701,25 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 `/sys/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `open` mints file handles; `read`, `write`, and `close` work on any handle.
 
-| Operation             | Arity | Description                                                                          | Returns                              |
-| --------------------- | ----- | ------------------------------------------------------------------------------------ | ------------------------------------ |
-| `/sys/Io/stdin`       | —     | The standard input handle                                                             | `/sys/Io`                            |
-| `/sys/Io/stdout`      | —     | The standard output handle                                                            | `/sys/Io`                            |
-| `/sys/Io/stderr`      | —     | The standard error handle                                                             | `/sys/Io`                            |
-| `/sys/Io/open(p, m)`  | 2     | Open the file at path `p : /sys/Bin` with mode `m` (0 read, 1 write, 2 append)        | `{ status : Nat, handle : /sys/Io }` |
-| `/sys/Io/close(h)`    | 1     | Close `h`; closing an unknown handle is a no-op                                       | `{}`                                 |
-| `/sys/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available               | `{ status : Nat, bytes : /sys/Bin }` |
-| `/sys/Io/write(h, b)` | 2     | Write `b : /sys/Bin` to `h`                                                           | `/sys/Nat` (a status)                |
+| Operation             | Arity | Description                                                                    | Returns                              |
+| --------------------- | ----- | ------------------------------------------------------------------------------ | ------------------------------------ |
+| `/sys/Io/stdin`       | —     | The standard input handle                                                      | `/sys/Io`                            |
+| `/sys/Io/stdout`      | —     | The standard output handle                                                     | `/sys/Io`                            |
+| `/sys/Io/stderr`      | —     | The standard error handle                                                      | `/sys/Io`                            |
+| `/sys/Io/open(p, m)`  | 2     | Open the file at path `p : /sys/Bin` with mode `m` (0 read, 1 write, 2 append) | `{ status : Nat, handle : /sys/Io }` |
+| `/sys/Io/close(h)`    | 1     | Close `h`; closing an unknown handle is a no-op                                | `{}`                                 |
+| `/sys/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available        | `{ status : Nat, bytes : /sys/Bin }` |
+| `/sys/Io/write(h, b)` | 2     | Write `b : /sys/Bin` to `h`                                                    | `/sys/Nat` (a status)                |
 
 Failable operations report through a status code — errors are data; traps stay reserved for programmer errors:
 
-| Status | Meaning                                          |
-| ------ | ------------------------------------------------ |
-| 0      | ok                                               |
-| 1      | end of input (`read` only; `bytes` is empty)     |
-| 2      | not found                                        |
-| 3      | permission denied                                |
-| 4      | already exists                                   |
-| 5      | other                                            |
+| Status | Meaning                                      |
+| ------ | -------------------------------------------- |
+| 0      | ok                                           |
+| 1      | end of input (`read` only; `bytes` is empty) |
+| 2      | not found                                    |
+| 3      | permission denied                            |
+| 4      | already exists                               |
+| 5      | other                                        |
 
 The standard library layers safe conveniences on top — `/std/Io` (printing, buffered line reading) and `/std/File` (bracket-managed file access) — documented in `STD.md`. Programs run with the invoking user's filesystem access; there is no sandbox.

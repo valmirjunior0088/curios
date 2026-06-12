@@ -24,14 +24,14 @@ A dedicated GitHub Projects board named **Curios** (project `3`, owner `@me`) tr
 - Items carry no GitHub labels; they are organised by three single-select fields whose option spellings must match exactly:
   - **Status** — `Needs refinement`, `Ready to start`, `In progress`, `Finished`.
   - **Stage** — `1. Text → Core`, `2. Core → Ersd`, `3. Ersd → Cont`, `4. Cont → Cont`, `5. Cont → Wasm`, `6. Wasm → ()`, `7. Pre-release`, `8. Release`, `9. Post-release`.
-  - **Feature** — `Algebraic Effects`, `Error Messages`, `Type System`, `Primitive Types`, `Syntax Sugar`, `Optimizations`, `Tooling & Ecosystem`, `Testing & Documentation`, `Core Pipeline`, `IO`.
+  - **Feature** — `Error Messages`, `Type System`, `Primitive Types`, `Syntax Sugar`, `Optimizations`, `Tooling & Ecosystem`, `Testing & Documentation`, `Core Pipeline`, `IO`.
 - **Reads (querying the board):** prefer `gh api graphql` with a query that selects only the fields you need. `gh project item-list ... --format json` fetches every item with every column and `--jq` only filters _after_ that payload has already landed in context, so it does not reduce what you pay for. A targeted GraphQL read that returns just the relevant fields for just the relevant items is the cheaper path and is the preferred one here, the general CLI-first rule notwithstanding. When you do fall back to `item-list`, set `--limit` to the smallest number that covers the board (it defaults to 30; do not pad it to 100 reflexively).
 - **Mutations (changing items):** use the plain `gh project` CLI — `item-edit` with field and option IDs. Reach for `gh api graphql` only after confirming, via `--help`, that no CLI subcommand can express the mutation.
 - **Cached field and option IDs** (so you can skip the `field-list --format json` call before each `item-edit` — verify once with `gh project field-list 3 --owner @me --format json` if a mutation fails, in case the board schema changed):
   - Project ID: `PVT_kwHOARtF1c4BRKYq`
   - Status field: `PVTSSF_lAHOARtF1c4BRKYqzg_EgXc` — options: Needs refinement `946369b4`, Ready to start `518e4a26`, In progress `55e71cbd`, Finished `bdfec89e`
   - Stage field: `PVTSSF_lAHOARtF1c4BRKYqzg_EgX8` — options: 1. Text → Core `9a0c627a`, 2. Core → Ersd `eb5fc71b`, 3. Ersd → Cont `fdfef4a0`, 4. Cont → Cont `2f43ac5b`, 5. Cont → Wasm `8bacbc1d`, 6. Wasm → () `59a2e3c8`, 7. Pre-release `05f2a624`, 8. Release `5bb06bd7`, 9. Post-release `3f94b80e`
-  - Feature field: `PVTSSF_lAHOARtF1c4BRKYqzg_EgYA` — options: Algebraic Effects `8f119b1b`, Error Messages `b6c32338`, Type System `8ddc66dc`, Primitive Types `b8e9a6ac`, Syntax Sugar `ed5cd559`, Optimizations `788630eb`, Tooling & Ecosystem `bf71e23f`, Testing & Documentation `1155e352`, Core Pipeline `a860217c`, IO `9cd0e763`
+  - Feature field: `PVTSSF_lAHOARtF1c4BRKYqzg_EgYA` — options: Error Messages `c96c33d1`, Type System `1a11eb13`, Primitive Types `f28b7bb6`, Syntax Sugar `c3a05ace`, Optimizations `945065f5`, Tooling & Ecosystem `e07a5f8c`, Testing & Documentation `67528e86`, Core Pipeline `7ac641a4`, IO `30bfe2e2`
 
 # Working rules
 

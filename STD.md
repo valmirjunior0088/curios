@@ -15,46 +15,46 @@ Each scalar and collection module re-exports its `/sys` counterpart (`pub use /s
 
 ### `/std/Nat`
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `from_str(str)` | `Bin -> Nat` | Parse a decimal numeral |
-| `min(a, b)` | `(Nat, Nat) -> Nat` | Minimum |
+| Binding         | Type                | Description             |
+| --------------- | ------------------- | ----------------------- |
+| `from_str(str)` | `Bin -> Nat`        | Parse a decimal numeral |
+| `min(a, b)`     | `(Nat, Nat) -> Nat` | Minimum                 |
 
 ### `/std/Int`
 
-| Binding | Type | Description |
-| --- | --- | --- |
+| Binding         | Type         | Description                                       |
+| --------------- | ------------ | ------------------------------------------------- |
 | `from_str(str)` | `Bin -> Int` | Parse a decimal numeral with optional leading `-` |
-| `abs(n)` | `Int -> Nat` | Absolute value |
+| `abs(n)`        | `Int -> Nat` | Absolute value                                    |
 
 ### `/std/Flt`
 
-| Binding | Type | Description |
-| --- | --- | --- |
+| Binding         | Type         | Description                                                       |
+| --------------- | ------------ | ----------------------------------------------------------------- |
 | `from_str(str)` | `Bin -> Flt` | Parse a decimal `digits.digits` numeral with optional leading `-` |
 
 ### `/std/Bln`
 
-| Binding | Type | Description |
-| --- | --- | --- |
+| Binding     | Type         | Description           |
+| ----------- | ------------ | --------------------- |
 | `to_str(b)` | `Bln -> Bin` | `"true"` or `"false"` |
 
 ## Bytes and arrays
 
 ### `/std/Bin`
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `fold(str, init, f)` | `(@A : Type, Bin, A, (Nat, A) -> A) -> A` | Left fold over the bytes |
-| `concat_all(parts)` | `Arr(Bin) -> Bin` | Concatenate every part |
-| `join(sep, parts)` | `(Bin, Arr(Bin)) -> Bin` | Concatenate with a separator between parts |
+| Binding              | Type                                      | Description                                |
+| -------------------- | ----------------------------------------- | ------------------------------------------ |
+| `fold(str, init, f)` | `(@A : Type, Bin, A, (Nat, A) -> A) -> A` | Left fold over the bytes                   |
+| `concat_all(parts)`  | `Arr(Bin) -> Bin`                         | Concatenate every part                     |
+| `join(sep, parts)`   | `(Bin, Arr(Bin)) -> Bin`                  | Concatenate with a separator between parts |
 
 ### `/std/Arr`
 
-| Binding | Type | Description |
-| --- | --- | --- |
+| Binding              | Type                                                  | Description                 |
+| -------------------- | ----------------------------------------------------- | --------------------------- |
 | `fold(arr, init, f)` | `(@T : Type, @A : Type, Arr(T), A, (T, A) -> A) -> A` | Left fold over the elements |
-| `map(f, arr)` | `(@A : Type, @B : Type, A -> B, Arr(A)) -> Arr(B)` | Elementwise map |
+| `map(f, arr)`        | `(@A : Type, @B : Type, A -> B, Arr(A)) -> Arr(B)`    | Elementwise map             |
 
 ### `/std/Char`
 
@@ -62,11 +62,11 @@ Byte classifiers over ASCII code points (`Nat -> Bln`): `is_whitespace`, `is_dig
 
 ### `/std/Str`
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `trim_start(str)` | `Bin -> Nat` | Index of the first non-whitespace byte |
-| `trim_stop(str)` | `Bin -> Nat` | Index one past the last non-whitespace byte |
-| `trim(str)` | `Bin -> Bin` | The slice between the two |
+| Binding           | Type         | Description                                 |
+| ----------------- | ------------ | ------------------------------------------- |
+| `trim_start(str)` | `Bin -> Nat` | Index of the first non-whitespace byte      |
+| `trim_stop(str)`  | `Bin -> Nat` | Index one past the last non-whitespace byte |
+| `trim(str)`       | `Bin -> Bin` | The slice between the two                   |
 
 ## IO
 
@@ -74,16 +74,16 @@ Byte classifiers over ASCII code points (`Nat -> Bln`): `is_whitespace`, `is_dig
 
 Layers safe conveniences over the `/sys/Io` handle primitives (which it re-exports).
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `print(b)` | `Bin -> {}` | Write to stdout, best-effort: the write status is dropped, like printing to a closed pipe |
-| `Reader` | `Type` (`= { Io, Bin }`) | A buffered reader: the handle plus bytes already read but not yet consumed |
-| `reader(h)` | `Io -> Reader` | A fresh reader with an empty buffer |
-| `Buf(A)` | `Type -> Type` (`= Reader -> { Reader, A }`) | The buffered-reader state monad — the reader threads explicitly through actions, exactly like `Parse` threads its (input, position) state |
-| `pure(a)` | `(@A : Type, A) -> Buf(A)` | Lift a value |
-| `bind` | `(@A, @B) -> (Buf(A), A -> Buf(B)) -> Buf(B)` | Sequence two actions (use with `with Io/bind` blocks) |
-| `run(m, h)` | `(@A : Type, Buf(A), Io) -> A` | Run an action against a fresh reader on `h` |
-| `read_line` | `Buf(Option(Bin))` | The next line, including its trailing `\n`; `none` means end of input |
+| Binding     | Type                                          | Description                                                                                                                               |
+| ----------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `print(b)`  | `Bin -> {}`                                   | Write to stdout, best-effort: the write status is dropped, like printing to a closed pipe                                                 |
+| `Reader`    | `Type` (`= { Io, Bin }`)                      | A buffered reader: the handle plus bytes already read but not yet consumed                                                                |
+| `reader(h)` | `Io -> Reader`                                | A fresh reader with an empty buffer                                                                                                       |
+| `Buf(A)`    | `Type -> Type` (`= Reader -> { Reader, A }`)  | The buffered-reader state monad — the reader threads explicitly through actions, exactly like `Parse` threads its (input, position) state |
+| `pure(a)`   | `(@A : Type, A) -> Buf(A)`                    | Lift a value                                                                                                                              |
+| `bind`      | `(@A, @B) -> (Buf(A), A -> Buf(B)) -> Buf(B)` | Sequence two actions (use with `with Io/bind` blocks)                                                                                     |
+| `run(m, h)` | `(@A : Type, Buf(A), Io) -> A`                | Run an action against a fresh reader on `h`                                                                                               |
+| `read_line` | `Buf(Option(Bin))`                            | The next line, including its trailing `\n`; `none` means end of input                                                                     |
 
 `read_line` delivers a final unterminated line before EOF as `some`; any non-ok refill status (EOF or an IO error) ends the stream — an error-propagating reader is future work.
 
@@ -125,10 +125,10 @@ end
 
 The linked list, `nil()` / `cons(A, Lst(A))`, with:
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `len(l)` | `(@A : Type, Lst(A)) -> Nat` | Length |
-| `rev(l)` | `(@A : Type, Lst(A)) -> Lst(A)` | Reversal |
+| Binding     | Type                            | Description                |
+| ----------- | ------------------------------- | -------------------------- |
+| `len(l)`    | `(@A : Type, Lst(A)) -> Nat`    | Length                     |
+| `rev(l)`    | `(@A : Type, Lst(A)) -> Lst(A)` | Reversal                   |
 | `to_arr(l)` | `(@A : Type, Lst(A)) -> Arr(A)` | Conversion to a flat array |
 
 ### `/std/Vec`
@@ -144,13 +144,13 @@ end
 
 `cons`'s length binder is implicit at the constructor (`@m` is recoverable from `xs`), so values are written `Vec/cons(x, xs)`.
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `len(v)` | `(@T, @n : Nat, Vec(T, n)) -> Nat` | The length is the index: `n` rides in implicitly and is simply returned |
-| `append(v, w)` | `(@T, @n, @m, Vec(T, n), Vec(T, m)) -> Vec(T, Nat/add(n, m))` | Concatenation, length-summing by type |
-| `map(f, v)` | `(@A, @B, @n, A -> B, Vec(A, n)) -> Vec(B, n)` | Length-preserving map |
-| `first(v)` | `(@T, @n, Vec(T, Nat/succ(n))) -> T` | Head — only accepts non-empty vectors |
-| `rest(v)` | `(@T, @n, Vec(T, Nat/succ(n))) -> Vec(T, n)` | Tail — only accepts non-empty vectors |
+| Binding        | Type                                                          | Description                                                             |
+| -------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `len(v)`       | `(@T, @n : Nat, Vec(T, n)) -> Nat`                            | The length is the index: `n` rides in implicitly and is simply returned |
+| `append(v, w)` | `(@T, @n, @m, Vec(T, n), Vec(T, m)) -> Vec(T, Nat/add(n, m))` | Concatenation, length-summing by type                                   |
+| `map(f, v)`    | `(@A, @B, @n, A -> B, Vec(A, n)) -> Vec(B, n)`                | Length-preserving map                                                   |
+| `first(v)`     | `(@T, @n, Vec(T, Nat/succ(n))) -> T`                          | Head — only accepts non-empty vectors                                   |
+| `rest(v)`      | `(@T, @n, Vec(T, Nat/succ(n))) -> Vec(T, n)`                  | Tail — only accepts non-empty vectors                                   |
 
 In `first`/`rest` the `nil` arm is provably impossible at length `Nat/succ(n)` and simply omitted: the checker verifies the omission, and `cons`'s length binder is pinned to `n`.
 
@@ -166,12 +166,12 @@ pub union Eq(@A : Type) : (x : A, y : A)
 end
 ```
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `sym(p)` | `Eq(x, y) -> Eq(y, x)` | Symmetry |
-| `trans(p, q)` | `(Eq(x, y), Eq(y, z)) -> Eq(x, z)` | Transitivity |
-| `cong(f, p)` | `(f : A -> B, Eq(x, y)) -> Eq(f(x), f(y))` | Congruence |
-| `subst(P, p, v)` | `(P : A -> Type, Eq(x, y), P(x)) -> P(y)` | Transport: rewrite `x` to `y` under an arbitrary predicate |
+| Binding          | Type                                       | Description                                                |
+| ---------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| `sym(p)`         | `Eq(x, y) -> Eq(y, x)`                     | Symmetry                                                   |
+| `trans(p, q)`    | `(Eq(x, y), Eq(y, z)) -> Eq(x, z)`         | Transitivity                                               |
+| `cong(f, p)`     | `(f : A -> B, Eq(x, y)) -> Eq(f(x), f(y))` | Congruence                                                 |
+| `subst(P, p, v)` | `(P : A -> Type, Eq(x, y), P(x)) -> P(y)`  | Transport: rewrite `x` to `y` under an arbitrary predicate |
 
 (All `@A`/`@x`/`@y`/`@z` parameters elided above; they infer.)
 
@@ -179,10 +179,10 @@ end
 
 The uninhabited type: a union with zero cases. No value of `Void` can be constructed, so holding one is itself a contradiction — and eliminating it is a match with zero arms, which checks at any motive.
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `absurd(contradiction)` | `(@A : Type, Void) -> A` | From the absurd, anything follows |
-| `Not(P)` | `Type -> Type` (`= P -> Void`) | Negation: a proof of `P` would be absurd |
+| Binding                 | Type                           | Description                              |
+| ----------------------- | ------------------------------ | ---------------------------------------- |
+| `absurd(contradiction)` | `(@A : Type, Void) -> A`       | From the absurd, anything follows        |
+| `Not(P)`                | `Type -> Type` (`= P -> Void`) | Negation: a proof of `P` would be absurd |
 
 ## Parsing and formatting
 
@@ -196,20 +196,20 @@ Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Bin)
 
 — success carries the new position and the value; failure carries a message.
 
-| Binding | Description |
-| --- | --- |
-| `run(p, input)` | Run from position 0; `Result(A, Bin)` |
-| `pure(a)` / `fail(msg)` | Constant success / failure |
-| `map(f, p)` | Map the result |
-| `bind` | Sequencing, shaped for `with Parse/bind` blocks |
-| `or(p, q)` | Try `p`, fall back to `q` |
-| `and(p, q)` | Both in sequence; pairs the results as `{ A, B }` |
-| `and_drop(p, q)` / `and_keep(p, q)` | Both in sequence; keep the first / second result |
-| `any_byte` / `peek_byte` | Next byte, consuming / not consuming |
-| `take_byte(expected)` | Exactly the given byte |
-| `take_while(pred)` | Longest run of bytes satisfying `pred` |
-| `many0(p)` | Zero or more `p`, collected in an `Arr` |
-| `sep_by0(elem, sep)` | Zero or more `elem` separated by `sep` |
+| Binding                             | Description                                       |
+| ----------------------------------- | ------------------------------------------------- |
+| `run(p, input)`                     | Run from position 0; `Result(A, Bin)`             |
+| `pure(a)` / `fail(msg)`             | Constant success / failure                        |
+| `map(f, p)`                         | Map the result                                    |
+| `bind`                              | Sequencing, shaped for `with Parse/bind` blocks   |
+| `or(p, q)`                          | Try `p`, fall back to `q`                         |
+| `and(p, q)`                         | Both in sequence; pairs the results as `{ A, B }` |
+| `and_drop(p, q)` / `and_keep(p, q)` | Both in sequence; keep the first / second result  |
+| `any_byte` / `peek_byte`            | Next byte, consuming / not consuming              |
+| `take_byte(expected)`               | Exactly the given byte                            |
+| `take_while(pred)`                  | Longest run of bytes satisfying `pred`            |
+| `many0(p)`                          | Zero or more `p`, collected in an `Arr`           |
+| `sep_by0(elem, sep)`                | Zero or more `elem` separated by `sep`            |
 
 ### `/std/Json`
 
@@ -222,10 +222,10 @@ pub union Json
 end
 ```
 
-| Binding | Type | Description |
-| --- | --- | --- |
-| `encode(v)` | `Json -> Bin` | Serialize |
-| `decode` | `Parse(Json)` | Parser for a JSON value, built from `/std/Parse` |
+| Binding     | Type          | Description                                      |
+| ----------- | ------------- | ------------------------------------------------ |
+| `encode(v)` | `Json -> Bin` | Serialize                                        |
+| `decode`    | `Parse(Json)` | Parser for a JSON value, built from `/std/Parse` |
 
 `examples/crs_json_codec.rs` round-trips a tree through both.
 
@@ -233,12 +233,12 @@ end
 
 Typed format strings: the argument list of `printf` is computed from the format string at compile time by an ordinary dependent function — no macro.
 
-| Binding | Description |
-| --- | --- |
-| `Fmt` | The parsed format AST: `nil()`, `lit(Bin, Fmt)`, `str(Fmt)` (`%s`), `nat(Fmt)` (`%d`) |
-| `parse(input)` | `Bin -> Fmt` — parse a format string |
-| `format_type_with(T, f)` | The dependent-type computation: the curried function type a format demands |
-| `format(s)` | Build a `Bin` by applying the demanded arguments |
-| `printf(s)` | Like `format`, but also prints the result |
+| Binding                  | Description                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `Fmt`                    | The parsed format AST: `nil()`, `lit(Bin, Fmt)`, `str(Fmt)` (`%s`), `nat(Fmt)` (`%d`) |
+| `parse(input)`           | `Bin -> Fmt` — parse a format string                                                  |
+| `format_type_with(T, f)` | The dependent-type computation: the curried function type a format demands            |
+| `format(s)`              | Build a `Bin` by applying the demanded arguments                                      |
+| `printf(s)`              | Like `format`, but also prints the result                                             |
 
 `/std/Fmt/printf("%s is %d")` has type `Bin -> Nat -> Bin`; passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`. See `examples/crs_printf.rs`.

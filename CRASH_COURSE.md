@@ -60,11 +60,11 @@ The primitive types map to Rust as follows:
 | ------ | ---------------------------------------------------- |
 | `Bln`  | `bool`                                               |
 | `Nat`  | Natural number; erased to `u32`, emitted as `i31ref` |
-| `Int`  | `i32`                                                |
+| `Int`  | Signed integer; erased to `i32`, emitted as `i31ref` |
 | `Flt`  | `f32`                                                |
 | `Bin`  | `Vec<u8>`                                            |
 
-Integer and float literals require an explicit sign: `+42`, `-7`, `+1.5`. Natural number literals are unsigned and have no sign: `42`; they are arbitrary precision during parsing and type-level reduction, narrowed to `u32` during erasure, then emitted as WebAssembly `i31ref` values. String literals (`"hello"`) have type `Bin`.
+Integer and float literals require an explicit sign: `+42`, `-7`, `+1.5`. Natural number literals are unsigned and have no sign: `42`. `Nat` and `Int` are arbitrary precision during parsing and type-level reduction, narrowed to `u32`/`i32` during erasure, then emitted as WebAssembly `i31ref` values. String literals (`"hello"`) have type `Bin`.
 
 ## Tuples
 
