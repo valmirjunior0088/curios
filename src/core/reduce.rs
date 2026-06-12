@@ -1,8 +1,7 @@
 use {
     super::{
         Apply, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, ReduceError,
-        Subterm,
-        Term, Tuple, Var, reduce_prim,
+        Subterm, Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -20,7 +19,9 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
         params,
         plicities,
     } = apply;
+
     let param_refs = params.iter().collect::<Vec<_>>();
+
     match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Func(Func { telescope }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
         head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
@@ -38,9 +39,11 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
     let Field::Index(index) = field else {
         unreachable!("unresolved label projection reached reduction");
     };
+
     if let Some(v) = context.proj_reduct(&head, index) {
         return Ok(Reduce::Continue(v.clone()));
     }
+
     match Term::unwrap_or_clone(reduce(context, head)?) {
         Subterm::Tuple(Tuple { fields, .. }) => Ok(Reduce::Continue(
             fields
@@ -73,12 +76,16 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
 
 fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceError> {
     let n = func.telescope.len();
+
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
+
     let ys = freshs
         .iter()
         .map(|f| Term::var(Var::free(f)))
         .collect::<Vec<_>>();
+
     let y_refs = ys.iter().collect::<Vec<_>>();
+
     match Term::unwrap_or_clone(func.telescope.open(&y_refs)) {
             Subterm::Apply(Apply { head, params, .. })
                 if params.len() == n
@@ -124,11 +131,13 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
             Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
                 let one = BigUint::from(1usize);
+
                 let pred = if spine == one {
                     inner
                 } else {
                     Term::prim(Prim::Nat(Nat::Succ(spine - one, inner)))
                 };
+
                 let ih: Term = Subterm::Match(Match {
                     head: pred.clone(),
                     motive: motive.clone(),
@@ -138,6 +147,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                     },
                 })
                 .into();
+
                 Ok(Reduce::Continue(succ_case.open(&[&pred, &ih])))
             }
             head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
@@ -188,6 +198,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                 let projections = (0..scope.arity())
                     .map(|i| Term::proj(head.clone(), i + 1))
                     .collect::<Vec<_>>();
+
                 let projection_refs = projections.iter().collect::<Vec<_>>();
 
                 return Ok(Reduce::Continue(scope.open(&projection_refs)));
@@ -224,9 +235,7 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
 }
 
 pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
-    context.get_or_init_reduced(term, |context, term| {
-        let mut term = term;
-
+    context.get_or_init_reduced(term, |context, mut term| {
         loop {
             if Instant::now() > context.deadline() {
                 break Err(ReduceError::Preempted);

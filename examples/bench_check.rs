@@ -18,7 +18,10 @@ fn deep_eq_chain(n: usize) -> String {
     let mut s = String::from("use /std/{Nat, Eq, Io};\n");
     s.push_str("let e0 : Eq(0, 0) = Eq/refl();\n");
     for i in 1..=n {
-        s.push_str(&format!("let e{i} : Eq(0, 0) = Eq/trans(e{}, e0);\n", i - 1));
+        s.push_str(&format!(
+            "let e{i} : Eq(0, 0) = Eq/trans(e{}, e0);\n",
+            i - 1
+        ));
     }
     s.push_str("Io/print(\"ok\")\n");
     s
@@ -43,7 +46,7 @@ fn time_check(label: &str, source: &str) {
         .expect("benchmark source parses");
 
     let start = Instant::now();
-    let module = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
+    let (module, metavars) = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
         .expect("benchmark source lowers");
     let lowered = start.elapsed();
 
@@ -51,6 +54,7 @@ fn time_check(label: &str, source: &str) {
     core::elaborate_module(
         &mut core::Context::new(Duration::from_secs(60)),
         &module,
+        metavars,
         core::Mode::Infer,
     )
     .expect("benchmark source elaborates");

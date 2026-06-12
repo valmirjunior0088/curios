@@ -30,7 +30,7 @@ fn zonk_leaves_a_meta_free_term_unchanged() {
 fn zonk_replaces_a_solved_metavariable_with_its_solution() {
     let mut context = context();
 
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
     context.solve_metavar(0, nat());
 
     let zonked = zonk(&context, &Term::metavar(0)).unwrap();
@@ -42,7 +42,7 @@ fn zonk_replaces_a_solved_metavariable_with_its_solution() {
 fn zonk_resolves_a_metavariable_nested_in_a_structure() {
     let mut context = context();
 
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
     context.solve_metavar(0, nat());
 
     // A tuple `{ ?0 }` zonks to `{ Nat }`.
@@ -69,8 +69,8 @@ fn zonk_chases_a_solution_that_mentions_another_metavariable() {
     let mut context = context();
 
     // ?0 := ?1, ?1 := Nat. Zonking ?0 must resolve through to `Nat`.
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
-    context.birth_metavar(1, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
+    context.birth_metavar(1, Vec::new(), Term::type_());
     context.solve_metavar(1, nat());
     context.solve_metavar(0, Term::metavar(1));
 
@@ -83,7 +83,7 @@ fn zonk_chases_a_solution_that_mentions_another_metavariable() {
 fn zonk_rejects_an_unsolved_metavariable() {
     let mut context = context();
 
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     let result = zonk(&context, &Term::metavar(0));
 

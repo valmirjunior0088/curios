@@ -34,7 +34,7 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let module =
+    let (module, metavars) =
         text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
 
     observe(Stage::Core(&module));
@@ -46,8 +46,8 @@ where
         None => core::Mode::Infer,
     };
 
-    let (module, core_type) =
-        core::elaborate_module(&mut context, &module, core_mode).map_err(|error| error.format())?;
+    let (module, core_type) = core::elaborate_module(&mut context, &module, metavars, core_mode)
+        .map_err(|error| error.format())?;
 
     let module = core::zonk_module(&context, &module).map_err(|error| error.format())?;
     let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;

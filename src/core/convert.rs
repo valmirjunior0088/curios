@@ -835,7 +835,7 @@ impl Convert {
                 Err(_) => continue,
             };
             let ambiguous = matches!(&*reduced, Subterm::Var(_))
-                || entries.iter().any(|e| *e == reduced)
+                || entries.contains(&reduced)
                 || subjects.iter().any(|(s, _)| *s == reduced);
             if !ambiguous {
                 subjects.push((reduced, birth.clone()));
@@ -862,7 +862,9 @@ impl Convert {
                 continue;
             }
             let mentioned = entries.is_empty()
-                || entries.iter().any(|entry| entry.free_vars().contains(&name));
+                || entries
+                    .iter()
+                    .any(|entry| entry.free_vars().contains(&name));
             return Ok(match mentioned {
                 true => Solved::Postponed,
                 false => Solved::Failed,

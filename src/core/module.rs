@@ -42,12 +42,6 @@ pub struct Module {
     /// and erasure each run with their *own* `Context` (see `run::compile`);
     /// both seed their context's flat inductive store from here on entry.
     pub inductives: BTreeMap<String, Inductive>,
-    /// How many metavariable ids `to_core` minted for this module. Implicit-
-    /// argument insertion mints fresh metavariables *during* core elaboration;
-    /// `elaborate_module` seeds the context's counter with this floor so those
-    /// ids never collide with the surface holes' (same registry-on-module
-    /// pattern as `inductives`).
-    pub metavars: usize,
     pub type_: Option<Term>,
     pub body: Term,
 }

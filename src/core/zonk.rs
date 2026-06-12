@@ -77,7 +77,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
     Ok(Module {
         items,
         inductives,
-        metavars: module.metavars,
         type_,
         body,
     })
@@ -113,12 +112,10 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
             // user never wrote this metavariable, so a generic "cannot infer"
             // would point at nothing they can see.
             let error = match origin {
-                Some(origin) => Error::uninferred_implicit(
-                    term.clone(),
-                    origin.func.clone(),
-                    origin.binder.clone(),
-                ),
-                None => Error::cannot_infer(term.clone()),
+                Some(origin) => {
+                    Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
+                }
+                None => Error::CannotInfer,
             };
             match term.span() {
                 Some(span) => error.at(span),
@@ -174,10 +171,7 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
 }
 
 fn zonk_terms(context: &Context, terms: &[Term]) -> Result<Vec<Term>, Error> {
-    terms
-        .iter()
-        .map(|t| zonk_term(context, t))
-        .collect()
+    terms.iter().map(|t| zonk_term(context, t)).collect()
 }
 
 fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
@@ -265,9 +259,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     succ_case,
                 } => Cases::Nat {
                     zero_case: zonk_term(context, zero_case)?,
-                    succ_case: enter_scope(succ_case, |b| {
-                        zonk_term(context, b)
-                    })?,
+                    succ_case: enter_scope(succ_case, |b| zonk_term(context, b))?,
                 },
                 Cases::Switch { cases, default } => Cases::Switch {
                     cases: cases
@@ -280,12 +272,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     cases: cases
                         .iter()
                         .map(|(atom, scope)| {
-                            Ok((
-                                atom.clone(),
-                                enter_scope(scope, |b| {
-                                    zonk_term(context, b)
-                                })?,
-                            ))
+                            Ok((atom.clone(), enter_scope(scope, |b| zonk_term(context, b))?))
                         })
                         .collect::<Result<_, Error>>()?,
                     pattern: pattern
@@ -353,149 +340,46 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::IoType
         | Prim::Io(_) => prim.clone(),
 
-        Prim::Nat(Nat::Succ(spine, inner)) => Prim::Nat(Nat::Succ(
-            spine.clone(),
-            zonk_term(context, inner)?,
-        )),
+        Prim::Nat(Nat::Succ(spine, inner)) => {
+            Prim::Nat(Nat::Succ(spine.clone(), zonk_term(context, inner)?))
+        }
 
-        Prim::NatEql(a, b) => Prim::NatEql(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatNeq(a, b) => Prim::NatNeq(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatAdd(a, b) => Prim::NatAdd(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatSub(a, b) => Prim::NatSub(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatMul(a, b) => Prim::NatMul(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatLt(a, b) => Prim::NatLt(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatDiv(a, b) => Prim::NatDiv(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatRem(a, b) => Prim::NatRem(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatGt(a, b) => Prim::NatGt(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatLte(a, b) => Prim::NatLte(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::NatGte(a, b) => Prim::NatGte(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
+        Prim::NatEql(a, b) => Prim::NatEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatNeq(a, b) => Prim::NatNeq(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatAdd(a, b) => Prim::NatAdd(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatSub(a, b) => Prim::NatSub(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatMul(a, b) => Prim::NatMul(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatLt(a, b) => Prim::NatLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatDiv(a, b) => Prim::NatDiv(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatRem(a, b) => Prim::NatRem(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatGt(a, b) => Prim::NatGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatLte(a, b) => Prim::NatLte(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatGte(a, b) => Prim::NatGte(zonk_term(context, a)?, zonk_term(context, b)?),
 
-        Prim::IntEql(a, b) => Prim::IntEql(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntNeq(a, b) => Prim::IntNeq(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntAdd(a, b) => Prim::IntAdd(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntSub(a, b) => Prim::IntSub(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntMul(a, b) => Prim::IntMul(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntDiv(a, b) => Prim::IntDiv(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntRem(a, b) => Prim::IntRem(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntLt(a, b) => Prim::IntLt(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntGt(a, b) => Prim::IntGt(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntLte(a, b) => Prim::IntLte(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IntGte(a, b) => Prim::IntGte(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
+        Prim::IntEql(a, b) => Prim::IntEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntNeq(a, b) => Prim::IntNeq(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntAdd(a, b) => Prim::IntAdd(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntSub(a, b) => Prim::IntSub(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntMul(a, b) => Prim::IntMul(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntDiv(a, b) => Prim::IntDiv(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntRem(a, b) => Prim::IntRem(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntLt(a, b) => Prim::IntLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntGt(a, b) => Prim::IntGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntLte(a, b) => Prim::IntLte(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntGte(a, b) => Prim::IntGte(zonk_term(context, a)?, zonk_term(context, b)?),
 
-        Prim::FltAdd(a, b) => Prim::FltAdd(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltSub(a, b) => Prim::FltSub(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltMul(a, b) => Prim::FltMul(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltDiv(a, b) => Prim::FltDiv(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltEql(a, b) => Prim::FltEql(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltNeq(a, b) => Prim::FltNeq(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltLt(a, b) => Prim::FltLt(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltGt(a, b) => Prim::FltGt(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltLte(a, b) => Prim::FltLte(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltGte(a, b) => Prim::FltGte(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltMin(a, b) => Prim::FltMin(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::FltMax(a, b) => Prim::FltMax(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
+        Prim::FltAdd(a, b) => Prim::FltAdd(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltSub(a, b) => Prim::FltSub(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltMul(a, b) => Prim::FltMul(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltDiv(a, b) => Prim::FltDiv(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltEql(a, b) => Prim::FltEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltNeq(a, b) => Prim::FltNeq(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltLt(a, b) => Prim::FltLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltGt(a, b) => Prim::FltGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltLte(a, b) => Prim::FltLte(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltGte(a, b) => Prim::FltGte(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltMin(a, b) => Prim::FltMin(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltMax(a, b) => Prim::FltMax(zonk_term(context, a)?, zonk_term(context, b)?),
 
         Prim::FltNeg(t) => Prim::FltNeg(zonk_term(context, t)?),
         Prim::FltAbs(t) => Prim::FltAbs(zonk_term(context, t)?),
@@ -517,18 +401,9 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltToInt(t) => Prim::FltToInt(zonk_term(context, t)?),
 
         Prim::BinLen(t) => Prim::BinLen(zonk_term(context, t)?),
-        Prim::BinEql(a, b) => Prim::BinEql(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinGet(a, b) => Prim::BinGet(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinAppend(a, b) => Prim::BinAppend(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
+        Prim::BinEql(a, b) => Prim::BinEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BinGet(a, b) => Prim::BinGet(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BinAppend(a, b) => Prim::BinAppend(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::BinSlice(a, b, c) => Prim::BinSlice(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
@@ -538,10 +413,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
 
         Prim::ArrType(t) => Prim::ArrType(zonk_term(context, t)?),
         Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems)?),
-        Prim::ArrLen(a, b) => Prim::ArrLen(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
+        Prim::ArrLen(a, b) => Prim::ArrLen(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::ArrGet(a, b, c) => Prim::ArrGet(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
@@ -558,23 +430,13 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, c)?,
             zonk_term(context, d)?,
         ),
-        Prim::ArrConcat(ty, operands) => Prim::ArrConcat(
-            zonk_term(context, ty)?,
-            zonk_terms(context, operands)?,
-        ),
+        Prim::ArrConcat(ty, operands) => {
+            Prim::ArrConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
+        }
 
-        Prim::IoRead(a, b) => Prim::IoRead(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IoWrite(a, b) => Prim::IoWrite(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::IoOpen(a, b) => Prim::IoOpen(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
+        Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a)?),
     })
 }

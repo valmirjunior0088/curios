@@ -515,7 +515,7 @@ fn convert_unit_typed_neutrals_in_type_argument() {
 #[test]
 fn solve_flex_rigid_commits_solution() {
     let mut context = context();
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     // ?0 ≟ Nat  (at type Type)
     let nat = Term::prim(Prim::NatType);
@@ -526,7 +526,7 @@ fn solve_flex_rigid_commits_solution() {
 #[test]
 fn solve_is_symmetric() {
     let mut context = context();
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     let nat = Term::prim(Prim::NatType);
     // rigid on the left, flex on the right
@@ -537,7 +537,7 @@ fn solve_is_symmetric() {
 #[test]
 fn occurs_check_rejects_cyclic_solution() {
     let mut context = context();
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     // ?0 ≟ (x : ?0) -> Nat  — the candidate mentions ?0 itself.
     let cyclic = Term::func_type([("x", Term::metavar(0))], Term::prim(Prim::NatType));
@@ -549,7 +549,7 @@ fn occurs_check_rejects_cyclic_solution() {
 fn scope_check_rejects_out_of_context_variable() {
     let mut context = context();
     // Birth with empty Γ: no variable is in scope for ?0.
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     // ?0 ≟ x  — `x` is not available to ?0.
     let x = Term::var(Var::free("x"));
@@ -562,12 +562,7 @@ fn scope_check_allows_in_context_variable() {
     let mut context = context();
     // Γ = (x : Type); result is Type, and the candidate `x` is in scope.
     context.assume("x", &Term::type_());
-    context.birth_metavar(
-        0,
-        vec![("x".to_string(), Term::type_())],
-        Term::type_(),
-        None,
-    );
+    context.birth_metavar(0, vec![("x".to_string(), Term::type_())], Term::type_());
 
     let x = Term::var(Var::free("x"));
     let occurrence = Term::metavar_birthed(0, None, vec![x.clone()]);
@@ -578,7 +573,7 @@ fn scope_check_allows_in_context_variable() {
 #[test]
 fn flex_flex_equal_id_short_circuits() {
     let mut context = context();
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     // ?0 ≟ ?0 is trivially true and leaves the metavariable unsolved.
     assert_eq!(
@@ -591,8 +586,8 @@ fn flex_flex_equal_id_short_circuits() {
 #[test]
 fn flex_flex_distinct_is_residual() {
     let mut context = context();
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
-    context.birth_metavar(1, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
+    context.birth_metavar(1, Vec::new(), Term::type_());
 
     // ?0 ≟ ?1 postpones with no way to progress — a residual constraint.
     assert_eq!(
@@ -604,8 +599,8 @@ fn flex_flex_distinct_is_residual() {
 #[test]
 fn embedded_metavar_postpones_to_residual() {
     let mut context = context();
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
-    context.birth_metavar(1, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
+    context.birth_metavar(1, Vec::new(), Term::type_());
 
     // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the
     // solve is postponed; nothing solves ?1, so it stays residual.
@@ -619,7 +614,7 @@ fn revalidation_rejects_ill_typed_solution() {
     let mut context = context();
     // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bln`) does not
     // type-check against Nat, so re-validation rejects it.
-    context.birth_metavar(0, Vec::new(), Term::prim(Prim::NatType), None);
+    context.birth_metavar(0, Vec::new(), Term::prim(Prim::NatType));
 
     let bln = Term::prim(Prim::BlnType);
     assert_eq!(conv(&mut context, &Term::metavar(0), &bln), Ok(false));
@@ -640,7 +635,6 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
         0,
         vec![("t".to_string(), Term::type_())],
         Term::var(Var::free("t")),
-        None,
     );
 
     // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds,
@@ -665,7 +659,6 @@ fn revalidation_accepts_a_refinement_independent_solution() {
         0,
         vec![("t".to_string(), Term::type_())],
         Term::prim(Prim::NatType),
-        None,
     );
 
     let nat = Term::prim(Prim::NatType);
@@ -686,19 +679,25 @@ fn solve_inverts_a_renaming() {
     let mut context = context();
     // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the
     // live name `y` (the enclosing binders were re-closed and reopened).
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
 
     // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named
     // form: `a`, not `y`.
-    assert_eq!(conv(&mut context, &occurrence, &Term::var(Var::free("y"))), Ok(true));
-    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("a"))));
+    assert_eq!(
+        conv(&mut context, &occurrence, &Term::var(Var::free("y"))),
+        Ok(true)
+    );
+    assert_eq!(
+        context.metavar_solution(0),
+        Some(&Term::var(Var::free("a")))
+    );
 }
 
 #[test]
 fn solve_through_an_identity_spine_matches_legacy() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
 
     // The identity spine behaves exactly like the empty (legacy bare-hole)
@@ -714,7 +713,6 @@ fn solve_postpones_a_duplicated_renaming() {
         0,
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
-        None,
     );
     // Both entries are the same live name: which birth binder `y` stands for
     // is ambiguous, so a candidate mentioning it is undecided, not unequal.
@@ -741,7 +739,6 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
         0,
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
-        None,
     );
     // First slot a pattern variable, second a compound term: the candidate
     // may depend on the first but not (yet) on the second.
@@ -750,8 +747,14 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
         Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
 
     // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
-    assert_eq!(conv(&mut context, &occurrence, &Term::var(Var::free("y"))), Ok(true));
-    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("a"))));
+    assert_eq!(
+        conv(&mut context, &occurrence, &Term::var(Var::free("y"))),
+        Ok(true)
+    );
+    assert_eq!(
+        context.metavar_solution(0),
+        Some(&Term::var(Var::free("a")))
+    );
 }
 
 #[test]
@@ -761,7 +764,6 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
         0,
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
-        None,
     );
     let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
     let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound]);
@@ -781,7 +783,7 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
 #[test]
 fn solve_rejects_an_out_of_image_variable() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
 
     // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard
@@ -801,16 +803,22 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
     let mut context = context();
     // ?0 is already solved to its own binder, so an occurrence ?0[y] stands
     // for `y` — a perfectly good pattern variable hiding behind a node.
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     context.solve_metavar(0, Term::var(Var::free("a")));
     let entry = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
 
-    context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(1, None, vec![entry]);
 
     // ?1[?0[y]] ≟ y — the entry resolves to `y` and inverts to `b`.
-    assert_eq!(conv(&mut context, &occurrence, &Term::var(Var::free("y"))), Ok(true));
-    assert_eq!(context.metavar_solution(1), Some(&Term::var(Var::free("b"))));
+    assert_eq!(
+        conv(&mut context, &occurrence, &Term::var(Var::free("y"))),
+        Ok(true)
+    );
+    assert_eq!(
+        context.metavar_solution(1),
+        Some(&Term::var(Var::free("b")))
+    );
 }
 
 #[test]
@@ -820,7 +828,6 @@ fn solve_abstracts_a_non_pattern_occurrence() {
         0,
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
-        None,
     );
     // A reduce-stable compound (a tuple is a normal form), matched by the
     // raw spelling; the reduced-spelling case is the next test.
@@ -831,7 +838,10 @@ fn solve_abstracts_a_non_pattern_occurrence() {
     // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the
     // non-pattern entry, which abstracts to its birth binder `b`.
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
-    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("b"))));
+    assert_eq!(
+        context.metavar_solution(0),
+        Some(&Term::var(Var::free("b")))
+    );
 }
 
 // === Parked-constraint retries ==============================================
@@ -889,7 +899,6 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
         0,
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
-        None,
     );
     // `z + 1` successor-peels under reduction, and the candidate side arrives
     // reduced — each subject contributes both spellings, so the occurrence
@@ -900,13 +909,16 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
         Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
 
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
-    assert_eq!(context.metavar_solution(0), Some(&Term::var(Var::free("b"))));
+    assert_eq!(
+        context.metavar_solution(0),
+        Some(&Term::var(Var::free("b")))
+    );
 }
 
 #[test]
 fn flex_flex_same_id_converts_through_equal_spines() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
 
     // Two occurrences of the same unsolved metavariable whose spines differ
     // syntactically but agree definitionally (`1 + 1` reduces to `2`): the
@@ -922,7 +934,7 @@ fn flex_flex_same_id_converts_through_equal_spines() {
 #[test]
 fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
 
     // Disagreeing spines are not *unequal* — the solution may ignore the
     // slot — so the pair parks rather than mismatching.
@@ -943,8 +955,8 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     // is built, this test should flip to `Converts` with `?0` solved to an
     // occurrence of `?1` (and this comment retired).
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
-    context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
+    context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type());
 
     let this = Term::metavar_birthed(0, None, vec![Term::var(Var::free("x"))]);
     let that = Term::metavar_birthed(1, None, vec![Term::var(Var::free("x"))]);
@@ -958,8 +970,8 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
 #[test]
 fn rollback_solutions_unwinds_to_the_mark() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
-    context.birth_metavar(1, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
+    context.birth_metavar(1, vec![("a".into(), nat_type())], nat_type());
 
     context.solve_metavar(0, nat(1));
     let mark = context.solution_mark();
@@ -977,7 +989,7 @@ fn rollback_solutions_unwinds_to_the_mark() {
 #[test]
 fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
     let stuck: Term = Subterm::Prim(Prim::NatSub(m.clone(), nat(1))).into();
 
@@ -999,7 +1011,7 @@ fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
 #[test]
 fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     let mut context = context();
-    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
 
     // A union type against `Nat` is provably unequal whatever `?0` becomes —
@@ -1014,7 +1026,7 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
 fn arm_refinement_does_not_taint_a_committed_solution() {
     let mut context = context();
     context.assume("n", &nat_type());
-    context.birth_metavar(0, vec![("n".into(), nat_type())], nat_type(), None);
+    context.birth_metavar(0, vec![("n".into(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("n"))]);
 
     // Inside a frame that counterfactually refines `n := 0` (a match arm),

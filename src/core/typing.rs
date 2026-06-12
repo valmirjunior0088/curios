@@ -31,15 +31,14 @@ pub fn expect(
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
-    let outcome = super::convert_outcome(context, &Term::type_(), inferred, expected)
-        .map_err(|error| {
+    let outcome =
+        super::convert_outcome(context, &Term::type_(), inferred, expected).map_err(|error| {
             error.into_error(|| Error::convert_preempted(inferred.clone(), expected.clone()))
         })?;
 
     match outcome {
         super::Outcome::Converts => retry_parked(context),
         super::Outcome::Mismatch => Err(Error::type_mismatch(
-            term.clone(),
             resolved_for_display(context, inferred),
             resolved_for_display(context, expected),
         )),
@@ -50,7 +49,6 @@ pub fn expect(
         super::Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
                 return Err(Error::type_mismatch(
-                    term.clone(),
                     resolved_for_display(context, inferred),
                     resolved_for_display(context, expected),
                 ));
@@ -115,17 +113,19 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     let outcome = context.with_frame(|context| {
         context.restore_frame(&frame);
 
-        Ok(match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
-            super::Outcome::Converts => Retry::Converts,
-            // Report through whatever solutions have landed: the reduced
-            // sides name the actual disagreement, not the metavariables it
-            // arrived wrapped in.
-            super::Outcome::Mismatch => Retry::Mismatch(
-                super::reduce(context, goal.this.clone())?,
-                super::reduce(context, goal.that.clone())?,
-            ),
-            super::Outcome::Blocked(goals) => Retry::Blocked(goals),
-        })
+        Ok(
+            match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
+                super::Outcome::Converts => Retry::Converts,
+                // Report through whatever solutions have landed: the reduced
+                // sides name the actual disagreement, not the metavariables it
+                // arrived wrapped in.
+                super::Outcome::Mismatch => Retry::Mismatch(
+                    super::reduce(context, goal.this.clone())?,
+                    super::reduce(context, goal.that.clone())?,
+                ),
+                super::Outcome::Blocked(goals) => Retry::Blocked(goals),
+            },
+        )
     });
 
     let outcome = outcome.map_err(|error: super::ReduceError| {
@@ -134,7 +134,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
 
     match outcome {
         Retry::Converts => Ok(()),
-        Retry::Mismatch(this, that) => Err(Error::type_mismatch(origin, this, that)),
+        Retry::Mismatch(this, that) => Err(Error::type_mismatch(this, that)),
         Retry::Blocked(goals) => {
             for goal in goals {
                 context.repark(
@@ -218,9 +218,9 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
                     super::ParkedWork::Conversion(goal) => {
                         let this = resolved_for_display(context, &goal.this);
                         let that = resolved_for_display(context, &goal.that);
-                        Error::type_mismatch(parked.origin, this, that)
+                        Error::type_mismatch(this, that)
                     }
-                    super::ParkedWork::Checking { .. } => Error::cannot_infer(parked.origin),
+                    super::ParkedWork::Checking { .. } => Error::CannotInfer,
                 });
             }
             return Ok(());
@@ -279,20 +279,15 @@ pub fn check_motive(
 /// Infer the scrutinee's type, reduce it, and require it to be the given prim type
 /// (`Prim::NatType` or `Prim::BlnType`). Returns the reduced head type — used by `erase`
 /// to erase the head; ignored by `infer`.
-pub fn expect_prim_head(
-    context: &mut Context,
-    head: &Term,
-    term: &Term,
-    expected: Prim,
-) -> Result<Term, Error> {
+pub fn expect_prim_head(context: &mut Context, head: &Term, expected: Prim) -> Result<Term, Error> {
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
     match expected {
         Prim::NatType if matches!(&*head_type, Subterm::Prim(Prim::NatType)) => Ok(head_type),
         Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => Ok(head_type),
-        Prim::NatType => Err(Error::not_nat_type(term.clone(), head_type)),
-        Prim::BlnType => Err(Error::not_bln_type(term.clone(), head_type)),
+        Prim::NatType => Err(Error::not_nat_type(head_type)),
+        Prim::BlnType => Err(Error::not_bln_type(head_type)),
         _ => unreachable!("expect_prim_head supports only NatType and BlnType"),
     }
 }

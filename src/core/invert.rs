@@ -29,8 +29,7 @@ enum Step {
 
 /// Open a constructor's instantiated telescope with `vars` and read the
 /// terminal's index expressions.
-pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
-    let mut telescope = telescope;
+pub fn case_target_indices(mut telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
     for var in vars {
         telescope = match telescope {
             Telescope::Cons(_, rest) => rest.open(&[var]),
@@ -62,8 +61,9 @@ pub fn invert_indices(
     targets: &[Term],
     flex: &[String],
 ) -> Result<Invert, Error> {
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let mut tainted: BTreeSet<String> = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    let mut tainted = BTreeSet::new();
+
     for target in targets {
         for name in target.free_vars() {
             if flex.contains(&name) && !seen.insert(name.clone()) {
@@ -73,8 +73,10 @@ pub fn invert_indices(
     }
 
     let mut solutions = Vec::new();
+
     for (actual, target) in actuals.iter().zip(targets) {
         let mut position = Vec::new();
+
         match unify_index(context, actual, target, flex, &tainted, true, &mut position)? {
             Step::Clash => return Ok(Invert::Impossible),
             // A refused position contributes nothing — solutions found on
@@ -132,6 +134,7 @@ fn unify_index(
         }
 
         solutions.push((label, actual.clone()));
+
         return Ok(Step::Ok);
     }
 
@@ -217,14 +220,24 @@ fn unify_nat(
         },
         (Nat::Succ(ka, ra), Nat::Succ(kt, rt)) => match ka.cmp(kt) {
             Ordering::Equal => unify_index(context, ra, rt, flex, tainted, false, solutions),
-            Ordering::Greater => {
-                let rest = Term::prim(Prim::Nat(Nat::Succ(ka - kt, ra.clone())));
-                unify_index(context, &rest, rt, flex, tainted, false, solutions)
-            }
-            Ordering::Less => {
-                let rest = Term::prim(Prim::Nat(Nat::Succ(kt - ka, rt.clone())));
-                unify_index(context, ra, &rest, flex, tainted, false, solutions)
-            }
+            Ordering::Greater => unify_index(
+                context,
+                &Term::prim(Prim::Nat(Nat::Succ(ka - kt, ra.clone()))),
+                rt,
+                flex,
+                tainted,
+                false,
+                solutions,
+            ),
+            Ordering::Less => unify_index(
+                context,
+                ra,
+                &Term::prim(Prim::Nat(Nat::Succ(kt - ka, rt.clone()))),
+                flex,
+                tainted,
+                false,
+                solutions,
+            ),
         },
     }
 }

@@ -8,9 +8,10 @@ use {
 };
 
 fn run(src: &str) -> core::Term {
-    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader)
-        .unwrap()
-        .into_nested_term()
+    let (module, _) =
+        super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader).unwrap();
+
+    module.into_nested_term()
 }
 
 fn run_err(src: &str) -> String {

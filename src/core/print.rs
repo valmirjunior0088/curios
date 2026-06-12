@@ -574,10 +574,12 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             flat([
                 pure("("),
                 sep_flat(
-                    fields.into_iter().map(move |f| match names.next().flatten() {
-                        Some(name) => flat([pure(name), pure(" = "), print_term(f, depth)]),
-                        None => print_term(f, depth),
-                    }),
+                    fields
+                        .into_iter()
+                        .map(move |f| match names.next().flatten() {
+                            Some(name) => flat([pure(name), pure(" = "), print_term(f, depth)]),
+                            None => print_term(f, depth),
+                        }),
                     || pure(", "),
                 ),
                 pure(")"),

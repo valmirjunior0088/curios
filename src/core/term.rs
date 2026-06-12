@@ -750,9 +750,9 @@ pub struct ImplicitOrigin {
 /// `origin` rides with the node: `Some` iff the elaborator minted this
 /// metavariable for an omitted implicit argument, in which case zonk's
 /// unsolved-hole report names the binder instead of a bare id. Each id is
-/// minted exactly once (`to_core` holes with `None`, core insertions above the
-/// `Module::metavars` floor with `Some`), so every occurrence of an id carries
-/// the same origin and the derived equality never splits an id.
+/// minted exactly once (`to_core` holes with `None`, core insertions above
+/// the floor `to_core` returns with `Some`), so every occurrence of an id
+/// carries the same origin and the derived equality never splits an id.
 ///
 /// `spine` is the delayed substitution — one term per binder of the birth
 /// telescope (`MetaEntry::telescope` order), recording what that binder

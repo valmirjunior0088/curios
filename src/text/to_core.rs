@@ -641,7 +641,14 @@ fn declaration(label: &str) -> TopItem {
     })
 }
 
-pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Module, Error> {
+/// Lower an [`Entrypoint`] to a [`core::Module`]. Also returns how many
+/// metavariable ids were minted for the module's holes: the floor
+/// `elaborate_module` needs so the ids it mints for implicit-argument
+/// insertion never collide with these.
+pub fn to_core(
+    entrypoint: &Entrypoint,
+    loader: &dyn Loader,
+) -> Result<(core::Module, usize), Error> {
     let roots = loader.roots();
 
     let entrypoint = &Entrypoint {
@@ -700,13 +707,15 @@ pub fn to_core(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<core::Mod
         .map(flat_item_to_core)
         .collect();
 
-    Ok(core::Module {
-        items,
-        inductives,
-        metavars: metavars.count(),
-        type_,
-        body: tail,
-    })
+    Ok((
+        core::Module {
+            items,
+            inductives,
+            type_,
+            body: tail,
+        },
+        metavars.count(),
+    ))
 }
 
 #[cfg(test)]

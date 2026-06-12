@@ -25,6 +25,7 @@ impl Lower for u32 {
             &mut *caller,
             I31::wrapping_u32(self),
         )));
+
         Ok(())
     }
 }
@@ -39,6 +40,7 @@ impl<A: Lower, B: Lower> Lower for (A, B) {
     ) -> Result<(), wasmtime::Error> {
         let (a, b) = self;
         a.lower(caller, &mut results[0..1])?;
+
         b.lower(caller, &mut results[1..2])
     }
 }

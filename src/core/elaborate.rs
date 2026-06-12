@@ -120,7 +120,7 @@ fn elaborate_apply(
     let ft = loop {
         let ft = match &*head_type {
             Subterm::FuncType(ft) => ft.clone(),
-            other => return Err(Error::not_a_function(term.clone(), other.clone())),
+            other => return Err(Error::not_a_function(other.clone())),
         };
 
         let all_implicit =
@@ -171,17 +171,12 @@ fn elaborate_apply(
 
     if plain.len() != explicit_slots {
         return Err(Error::wrong_number_of_arguments(
-            term.clone(),
             explicit_slots,
             plain.len(),
         ));
     }
     if marked.len() > implicit_slots {
-        return Err(Error::too_many_implicits(
-            term.clone(),
-            implicit_slots,
-            marked.len(),
-        ));
+        return Err(Error::too_many_implicits(implicit_slots, marked.len()));
     }
 
     // Materialize the saturated argument vector, threading the dependent
@@ -386,10 +381,7 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
     let source_labels = tt.telescope.labels();
     for (position, label) in source_labels.iter().enumerate() {
         if !label.is_empty() && source_labels[..position].contains(label) {
-            return Err(Error::duplicate_tuple_label(
-                Term::from(Subterm::TupleType(tt.clone())),
-                label.to_string(),
-            ));
+            return Err(Error::duplicate_tuple_label(label.to_string()));
         }
     }
 
@@ -410,7 +402,6 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
 fn elaborate_prim_head(
     context: &mut Context,
     head: &Term,
-    term: &Term,
     expected: Prim,
 ) -> Result<(Term, Term), Error> {
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
@@ -423,8 +414,8 @@ fn elaborate_prim_head(
         Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => {
             Ok((head, head_type))
         }
-        Prim::NatType => Err(Error::not_nat_type(term.clone(), head_type)),
-        Prim::BlnType => Err(Error::not_bln_type(term.clone(), head_type)),
+        Prim::NatType => Err(Error::not_nat_type(head_type)),
+        Prim::BlnType => Err(Error::not_bln_type(head_type)),
         _ => unreachable!("elaborate_prim_head supports only NatType and BlnType"),
     }
 }
@@ -461,7 +452,7 @@ fn elaborate_nat_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::NatType)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, Prim::NatType)?;
 
     // Everything below opens the *rebuilt* motive: insertion saturates
     // applications during elaboration, and a lowered (under-applied) motive
@@ -525,7 +516,7 @@ fn elaborate_switch(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::NatType)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, Prim::NatType)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
@@ -605,7 +596,7 @@ fn elaborate_bln_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, term, Prim::BlnType)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, Prim::BlnType)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
@@ -644,7 +635,7 @@ fn elaborate_bln_match(
     Ok((rebuilt, result_type))
 }
 
-fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Term, Term), Error> {
+fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {
     let Proj { head, field } = proj;
 
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
@@ -652,7 +643,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
 
     let TupleType { telescope } = match &*head_type {
         Subterm::TupleType(tt) => tt.clone(),
-        other => return Err(Error::not_a_tuple(term.clone(), other.clone())),
+        other => return Err(Error::not_a_tuple(other.clone())),
     };
 
     // A label projection resolves to its position here and is rebuilt
@@ -667,7 +658,6 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
                 Some(index) => index,
                 None => {
                     return Err(Error::unknown_tuple_label(
-                        term.clone(),
                         label.clone(),
                         labels
                             .iter()
@@ -681,11 +671,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
     };
 
     if index >= telescope.len() {
-        return Err(Error::tuple_index_out_of_bounds(
-            term.clone(),
-            index,
-            telescope.len(),
-        ));
+        return Err(Error::tuple_index_out_of_bounds(index, telescope.len()));
     }
 
     let field_type = telescope
@@ -699,11 +685,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj, term: &Term) -> Result<(Te
 /// and indices are checked pointwise (dependently) as one flat argument list
 /// through the declaration's full index telescope (whose leading binders are
 /// the parameters), and the whole node is a `Type`.
-fn elaborate_union_type(
-    context: &mut Context,
-    ut: &UnionType,
-    term: &Term,
-) -> Result<(Term, Term), Error> {
+fn elaborate_union_type(context: &mut Context, ut: &UnionType) -> Result<(Term, Term), Error> {
     let UnionType {
         name,
         params,
@@ -718,7 +700,6 @@ fn elaborate_union_type(
 
     if args.len() != inductive.indices.len() {
         return Err(Error::wrong_number_of_arguments(
-            term.clone(),
             inductive.indices.len(),
             args.len(),
         ));
@@ -768,7 +749,6 @@ fn elaborate_variant(
 
     if args.len() != signature.len() {
         return Err(Error::wrong_number_of_arguments(
-            term.clone(),
             signature.len(),
             args.len(),
         ));
@@ -820,7 +800,7 @@ fn elaborate_union_match(
             params,
             indices,
         }) => (name.clone(), params.clone(), indices.clone()),
-        other => return Err(Error::not_a_union_type(term.clone(), other.clone())),
+        other => return Err(Error::not_a_union_type(other.clone())),
     };
 
     let Some(inductive) = context.inductive(&name).cloned() else {
@@ -831,7 +811,7 @@ fn elaborate_union_match(
         None => (check_motive(context, &head_type, motive)?, None, vec![]),
         Some(pattern) => {
             let (motive_elaborated, pattern_elaborated, plan) =
-                check_union_motive(context, &inductive, &name, &params, motive, pattern, term)?;
+                check_union_motive(context, &inductive, &name, &params, motive, pattern)?;
             (motive_elaborated, Some(pattern_elaborated), plan)
         }
     };
@@ -867,7 +847,6 @@ fn elaborate_union_match(
         .any(|tag| !inductive.constructors.contains_key(tag))
     {
         return Err(Error::match_arity_mismatch(
-            term.clone(),
             inductive.constructors.len(),
             cases.len(),
         ));
@@ -903,7 +882,7 @@ fn elaborate_union_match(
             match invert_indices(context, &actual_indices, &ix_c, &labels)? {
                 Invert::Impossible => continue,
                 Invert::Solved(_) => {
-                    return Err(Error::missing_arm_not_impossible(term.clone(), tag.clone()));
+                    return Err(Error::missing_arm_not_impossible(tag.clone()));
                 }
             }
         };
@@ -917,7 +896,6 @@ fn elaborate_union_match(
         let arity = telescope.len();
         if scope.arity() != arity {
             return Err(Error::ctor_arity_mismatch(
-                term.clone(),
                 tag.clone(),
                 arity,
                 scope.arity(),
@@ -1054,14 +1032,12 @@ fn check_union_motive(
     params: &[Term],
     motive: &Scope<Many>,
     pattern: &MotivePattern,
-    term: &Term,
 ) -> Result<(Scope<Many>, MotivePattern, Vec<SlotPlan>), Error> {
     let n_params = inductive.params.len();
     let n_indices = inductive.indices.len() - n_params;
 
     if pattern.name != name {
         return Err(Error::motive_wrong_union(
-            term.clone(),
             pattern.name.clone(),
             name.to_string(),
         ));
@@ -1069,7 +1045,6 @@ fn check_union_motive(
 
     if pattern.slots.len() != n_params + n_indices {
         return Err(Error::motive_pattern_arity(
-            term.clone(),
             n_params + n_indices,
             pattern.slots.len(),
         ));
@@ -1104,7 +1079,6 @@ fn check_union_motive(
                 let elaborated = check(context, t, param_types[position].clone())?;
                 if !convert_with(context, &elaborated, &params[position])? {
                     return Err(Error::motive_param_mismatch(
-                        term.clone(),
                         elaborated,
                         params[position].clone(),
                     ));
@@ -1114,7 +1088,7 @@ fn check_union_motive(
             // An index slot states nothing — it binds. Constraining an index
             // is the declaration's job (case targets), not the motive's.
             (MotiveSlot::Term(t), false) => {
-                return Err(Error::motive_index_slot_not_binder(term.clone(), t.clone()));
+                return Err(Error::motive_index_slot_not_binder(t.clone()));
             }
         }
     }
@@ -1335,7 +1309,7 @@ fn elaborate_func(
 
     match mode {
         Mode::Check(expected) => elaborate_func_check(context, telescope, term, expected),
-        Mode::Infer => elaborate_func_infer(context, telescope, term),
+        Mode::Infer => elaborate_func_infer(context, telescope),
     }
 }
 
@@ -1384,12 +1358,11 @@ fn elaborate_func_check(
         Subterm::Metavar(_) if !context.parking_suppressed() => {
             return park_checking(context, term, &expected);
         }
-        _ => return Err(Error::not_a_function_type(term.clone(), expected.clone())),
+        _ => return Err(Error::not_a_function_type(expected.clone())),
     };
 
     if telescope.len() != ft.telescope.len() {
         return Err(Error::wrong_number_of_arguments(
-            term.clone(),
             ft.telescope.len(),
             telescope.len(),
         ));
@@ -1446,11 +1419,9 @@ fn elaborate_func_check(
 fn elaborate_func_infer(
     context: &mut Context,
     telescope: &Telescope<Term>,
-    term: &Term,
 ) -> Result<(Term, Term), Error> {
     fn walk(
         context: &mut Context,
-        term: &Term,
         body: Telescope<Term>,
         domains: &mut Vec<(String, Term)>,
     ) -> Result<(Term, Term), Error> {
@@ -1460,21 +1431,21 @@ fn elaborate_func_infer(
                 let domain = check(context, &domain, Term::type_())?;
 
                 if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(_)) {
-                    return Err(Error::cannot_infer(term.clone()));
+                    return Err(Error::CannotInfer);
                 }
 
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::var(Var::free(&name));
                 context.assume(&name, &domain);
                 domains.push((name, domain));
-                walk(context, term, body_rest.open(&[&x]), domains)
+                walk(context, body_rest.open(&[&x]), domains)
             }
         }
     }
 
     let mut domains = Vec::new();
     let (body, output) =
-        context.with_frame(|context| walk(context, term, telescope.clone(), &mut domains))?;
+        context.with_frame(|context| walk(context, telescope.clone(), &mut domains))?;
 
     Ok((
         Term::func(domains.clone(), body),
@@ -1491,7 +1462,7 @@ fn elaborate_tuple(
     let Tuple { fields, names } = tuple;
 
     let Mode::Check(expected) = mode else {
-        return Err(Error::cannot_infer(term.clone()));
+        return Err(Error::CannotInfer);
     };
 
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
@@ -1500,16 +1471,12 @@ fn elaborate_tuple(
             return park_checking(context, term, &expected);
         }
         _ => {
-            return Err(Error::not_a_tuple_type(
-                Term::from(Subterm::Tuple(tuple.clone())),
-                expected.clone(),
-            ));
+            return Err(Error::not_a_tuple_type(expected.clone()));
         }
     };
 
     if fields.len() != type_telescope.len() {
         return Err(Error::tuple_arity_mismatch(
-            Term::from(Subterm::Tuple(tuple.clone())),
             type_telescope.len(),
             fields.len(),
         ));
@@ -1525,7 +1492,6 @@ fn elaborate_tuple(
         let expected_label = labels.get(position).copied().unwrap_or_default();
         if expected_label != name {
             return Err(Error::tuple_field_name_mismatch(
-                Term::from(Subterm::Tuple(tuple.clone())),
                 name.clone(),
                 expected_label.to_string(),
                 position,
@@ -1579,7 +1545,7 @@ fn elaborate_metavar(
                 // every surviving occurrence carries the delayed substitution.
                 // Telescope and spine are the shared per-Γ snapshot.
                 let (telescope, spine) = context.identity_snapshot();
-                context.birth_metavar(id, telescope, expected.clone(), term.span());
+                context.birth_metavar(id, telescope, expected.clone());
 
                 let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
                 let rebuilt = match term.span() {
@@ -1593,7 +1559,7 @@ fn elaborate_metavar(
         // already born in a checking position, in which case report that type.
         Mode::Infer => match context.metavar_entry(id) {
             Some(entry) => Ok((term.clone(), entry.result.clone())),
-            None => Err(Error::cannot_infer(term.clone())),
+            None => Err(Error::CannotInfer),
         },
     }
 }
@@ -1829,6 +1795,7 @@ fn elaborate_module_rec(
 pub fn elaborate_module(
     context: &mut Context,
     module: &Module,
+    metavar_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     // Seed the context's inductive registry before any item is checked: a
@@ -1839,8 +1806,9 @@ pub fn elaborate_module(
     }
 
     // Implicit-argument insertion mints metavariables during elaboration;
-    // floor the counter above `to_core`'s so the id spaces never collide.
-    context.seed_metavars(module.metavars);
+    // floor the counter above `to_core`'s (which returns the count alongside
+    // the lowered module) so the id spaces never collide.
+    context.seed_metavars(metavar_floor);
 
     let mut items = Vec::with_capacity(module.items.len());
     for item in &module.items {
@@ -1877,7 +1845,6 @@ pub fn elaborate_module(
     let module = Module {
         items,
         inductives,
-        metavars: module.metavars,
         type_: module.type_.clone(),
         body,
     };
@@ -1914,7 +1881,7 @@ fn elaborate_subterm(
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,
         Subterm::Apply(apply) => return elaborate_apply(context, apply, term, mode),
         Subterm::TupleType(tt) => elaborate_tuple_type(context, tt)?,
-        Subterm::Proj(proj) => elaborate_proj(context, proj, term)?,
+        Subterm::Proj(proj) => elaborate_proj(context, proj)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::Var(var) => match context.assumption(var.unwrap()) {
@@ -1924,7 +1891,7 @@ fn elaborate_subterm(
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
-        Subterm::UnionType(ut) => elaborate_union_type(context, ut, term)?,
+        Subterm::UnionType(ut) => elaborate_union_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
     };
 

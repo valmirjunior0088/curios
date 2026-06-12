@@ -199,7 +199,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Subterm::Prim(Prim::BinType) => (Prim::BinLen(bin), nat_type),
                 other => {
                     return Err(Error::type_mismatch(
-                        Subterm::Prim(prim.clone()),
                         other.clone(),
                         Subterm::Prim(Prim::BinType),
                     ));
@@ -221,7 +220,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 }
                 other => {
                     return Err(Error::type_mismatch(
-                        Subterm::Prim(prim.clone()),
                         other.clone(),
                         Subterm::Prim(Prim::BinType),
                     ));
@@ -239,7 +237,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 }
                 other => {
                     return Err(Error::type_mismatch(
-                        Subterm::Prim(prim.clone()),
                         other.clone(),
                         Subterm::Prim(Prim::BinType),
                     ));
@@ -256,7 +253,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 }
                 other => {
                     return Err(Error::type_mismatch(
-                        Subterm::Prim(prim.clone()),
                         other.clone(),
                         Subterm::Prim(Prim::BinType),
                     ));
@@ -274,7 +270,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
             (Prim::ArrType(elem), Term::type_())
         }
-        Prim::Arr(_) => return Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone()))),
+        Prim::Arr(_) => return Err(Error::CannotInferLiteral),
         Prim::ArrLen(type_, list) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
@@ -363,15 +359,16 @@ pub fn elaborate_prim(
     // from `expected` and cannot synthesize.
     if let Prim::Arr(elems) = prim {
         let Mode::Check(expected) = &mode else {
-            return Err(Error::cannot_infer_literal(Subterm::Prim(prim.clone())));
+            return Err(Error::CannotInferLiteral);
         };
 
         let elem_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
             Subterm::Prim(Prim::ArrType(elem_type)) => elem_type,
-            other => return Err(Error::type_mismatch(term.clone(), other, expected.clone())),
+            other => return Err(Error::type_mismatch(other, expected.clone())),
         };
 
         let mut elaborated = Vec::with_capacity(elems.len());
+
         for elem in elems {
             elaborated.push(elaborate(context, elem, Mode::Check(elem_type.clone()))?.0);
         }

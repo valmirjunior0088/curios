@@ -8,21 +8,27 @@ use {
     },
 };
 
+/// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta
+/// born under the same Γ shares one allocation (see
+/// [`Context::identity_snapshot`]).
+pub type SharedTelescope = Rc<Vec<(String, Term)>>;
+
+/// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder
+/// — shared the same way.
+pub type SharedSpine = Rc<Vec<Term>>;
+
 /// One metavariable's record in the [`MetaStore`]. Everything here is frozen at
 /// birth except `solution`, which transitions `None -> Some(_)` exactly once.
 #[derive(Debug)]
 pub struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with
     /// birth-time types. Drives the scope check and re-validation (§7.3–§7.4).
-    /// `Rc`-shared: every meta born under the same Γ shares one allocation.
-    pub telescope: Rc<Vec<(String, Term)>>,
+    pub telescope: SharedTelescope,
     /// The metavariable's type — the `expected` it was checked against at birth.
     pub result: Term,
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a
     /// subset of `telescope`'s names.
     pub solution: Option<Term>,
-    /// Birth-site span, for `cannot_infer` / unsolved-hole errors.
-    pub span: Option<Span>,
 }
 
 /// Flat, frame-independent store of metavariable records, indexed by
@@ -117,11 +123,11 @@ pub struct Context {
     // Invalidates `identity_cache`, which shares the frozen telescope and
     // identity spine between every meta born under an unchanged Γ.
     locals_stamp: Entropy,
-    identity_cache: Option<(usize, Rc<Vec<(String, Term)>>, Rc<Vec<Term>>)>,
+    identity_cache: Option<(usize, SharedTelescope, SharedSpine)>,
     metas: MetaStore,
     // The next metavariable id this context may mint (implicit-argument
-    // insertion). Seeded by `elaborate_module` from `Module::metavars` so
-    // core-minted ids sit strictly above `to_core`'s.
+    // insertion). Seeded by `elaborate_module` with its `metavar_floor`
+    // argument so core-minted ids sit strictly above `to_core`'s.
     next_metavar: Entropy,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
@@ -408,9 +414,8 @@ impl Context {
     pub fn birth_metavar(
         &mut self,
         id: usize,
-        telescope: impl Into<Rc<Vec<(String, Term)>>>,
+        telescope: impl Into<SharedTelescope>,
         result: Term,
-        span: Option<Span>,
     ) {
         if id >= self.metas.entries.len() {
             self.metas.entries.resize_with(id + 1, || None);
@@ -420,7 +425,6 @@ impl Context {
             telescope: telescope.into(),
             result,
             solution: None,
-            span,
         });
     }
 
@@ -428,11 +432,11 @@ impl Context {
     /// rebuilt only when `local` has changed since the last birth, so minting
     /// a metavariable is O(1) amortized instead of O(|Γ|) per mint — the
     /// difference between linear and quadratic elaboration over a module.
-    pub fn identity_snapshot(&mut self) -> (Rc<Vec<(String, Term)>>, Rc<Vec<Term>>) {
-        if let Some((stamp, telescope, spine)) = &self.identity_cache {
-            if *stamp == self.locals_stamp.count() {
-                return (telescope.clone(), spine.clone());
-            }
+    pub fn identity_snapshot(&mut self) -> (SharedTelescope, SharedSpine) {
+        if let Some((stamp, telescope, spine)) = &self.identity_cache
+            && *stamp == self.locals_stamp.count()
+        {
+            return (telescope.clone(), spine.clone());
         }
 
         let telescope = Rc::new(self.local.clone());
@@ -448,17 +452,17 @@ impl Context {
     }
 
     /// Raise the minting floor: every id `fresh_metavar` hands out will be
-    /// `>= floor`. Called by `elaborate_module` with `Module::metavars` (the
-    /// count `to_core` minted) before any item is elaborated.
+    /// `>= floor`. Called by `elaborate_module` with its `metavar_floor`
+    /// argument (the count `to_core` minted) before any item is elaborated.
     pub fn seed_metavars(&mut self, floor: usize) {
         self.next_metavar.seed(floor);
     }
 
     /// Mint a metavariable for an omitted implicit argument and birth it
     /// immediately — frozen local Γ, the binder's instantiated type as
-    /// `result`, and the *call site's* span — so the id always has a useful
-    /// birth record. Returns the metavariable term carrying that span and the
-    /// insertion provenance (which rides on the node; see [`Metavar::origin`]).
+    /// `result` — so the id always has a birth record. Returns the
+    /// metavariable term carrying the *call site's* span and the insertion
+    /// provenance (which rides on the node; see [`Metavar::origin`]).
     pub fn fresh_metavar(
         &mut self,
         result: Term,
@@ -468,7 +472,7 @@ impl Context {
         let id = self.next_metavar.fresh();
 
         let (telescope, spine) = self.identity_snapshot();
-        self.birth_metavar(id, telescope, result, span.clone());
+        self.birth_metavar(id, telescope, result);
 
         let metavar = Term::metavar_inserted(id, origin, spine);
         match span {
@@ -641,7 +645,7 @@ impl Context {
         let id = self.next_metavar.fresh();
 
         let (telescope, spine) = self.identity_snapshot();
-        self.birth_metavar(id, telescope, result, span.clone());
+        self.birth_metavar(id, telescope, result);
 
         let term = Term::metavar_birthed(id, None, spine);
         let term = match span {

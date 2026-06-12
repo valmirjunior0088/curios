@@ -587,6 +587,10 @@ impl<B: Bound> Telescope<B> {
 
 // === Visit ===================================================================
 
+/// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the
+/// whole node at the current depth.
+pub type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
+
 pub struct Visit<F> {
     depth: usize,
     prune: bool,
@@ -595,7 +599,7 @@ pub struct Visit<F> {
     // before descending: `Some(replacement)` substitutes the whole node (and
     // is not descended into). Incompatible with pruning, which may skip the
     // very nodes the hook would match.
-    rewrite: Option<Box<dyn FnMut(usize, &Term) -> Option<Term>>>,
+    rewrite: Option<Rewrite>,
 }
 
 impl<F> Visit<F>
@@ -628,7 +632,7 @@ where
     /// Like `new`, additionally carrying a term-level rewrite hook fired at
     /// every recursion point. Note the root term reaches `traverse` directly,
     /// not through `visit_subterm` — callers must check it themselves.
-    pub fn rewriting(visit: F, rewrite: Box<dyn FnMut(usize, &Term) -> Option<Term>>) -> Self {
+    pub fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
             depth: 0,
             prune: false,
@@ -651,10 +655,10 @@ where
     }
 
     pub fn visit_subterm(&mut self, term: &Term) -> Term {
-        if let Some(rewrite) = &mut self.rewrite {
-            if let Some(replacement) = rewrite(self.depth, term) {
-                return replacement;
-            }
+        if let Some(rewrite) = &mut self.rewrite
+            && let Some(replacement) = rewrite(self.depth, term)
+        {
+            return replacement;
         }
 
         term.traverse(self)

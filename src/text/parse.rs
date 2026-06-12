@@ -2,9 +2,8 @@ use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity,
-        Prim, Proj,
-        Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse,
-        Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
+        Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod,
+        TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
     crate::{
         Source,
@@ -355,11 +354,11 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     )
     .and(sep_by0(parse_tuple_field, || parse_literal(",")))
     .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
-    .or(catch(
-        parse_literal("(").and_keep(parse_identifier().and_drop(parse_literal("="))),
+    .or(
+        catch(parse_literal("(").and_keep(parse_identifier().and_drop(parse_literal("="))))
+            .and(lazy(parse_term))
+            .map(|(name, term): (&str, Term)| vec![(Some(name.to_string()), term)]),
     )
-    .and(lazy(parse_term))
-    .map(|(name, term): (&str, Term)| vec![(Some(name.to_string()), term)]))
     .and_drop(parse_literal(")"))
     .map(|fields| Subterm::Tuple(Tuple { fields }))
     .map(Into::into)
@@ -734,12 +733,14 @@ fn parse_let<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
-    catch(take_exact(".").and_keep(
-        parse_usize()
-            .map(Field::Index)
-            .or(parse_identifier().map(|label| Field::Label(label.to_string())))
-            .map_err("Expected field index or label after '.'"),
-    ))
+    catch(
+        take_exact(".").and_keep(
+            parse_usize()
+                .map(Field::Index)
+                .or(parse_identifier().map(|label| Field::Label(label.to_string())))
+                .map_err("Expected field index or label after '.'"),
+        ),
+    )
 }
 
 enum Suffix {

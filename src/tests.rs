@@ -131,12 +131,7 @@ fn io_read_short_reads_and_eof() {
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
-        vec![
-            b"ab".to_vec(),
-            b"c\n".to_vec(),
-            b"".to_vec(),
-            b"1".to_vec()
-        ]
+        vec![b"ab".to_vec(), b"c\n".to_vec(), b"".to_vec(), b"1".to_vec()]
     );
 }
 

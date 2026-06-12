@@ -271,12 +271,22 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |l, r| l.lt(&r).map(Prim::Bln),
             Prim::NatLt,
         ),
-        Prim::NatDiv(left, right) => {
-            reduce_nat_division(context, left, right, "Nat/div", Nat::checked_div, Prim::NatDiv)
-        }
-        Prim::NatRem(left, right) => {
-            reduce_nat_division(context, left, right, "Nat/rem", Nat::checked_rem, Prim::NatRem)
-        }
+        Prim::NatDiv(left, right) => reduce_nat_division(
+            context,
+            left,
+            right,
+            "Nat/div",
+            Nat::checked_div,
+            Prim::NatDiv,
+        ),
+        Prim::NatRem(left, right) => reduce_nat_division(
+            context,
+            left,
+            right,
+            "Nat/rem",
+            Nat::checked_rem,
+            Prim::NatRem,
+        ),
         Prim::NatGt(left, right) => reduce_nat_binary(
             context,
             left,
@@ -335,12 +345,22 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |left, right| Prim::Int(left * right),
             Prim::IntMul,
         ),
-        Prim::IntDiv(left, right) => {
-            reduce_int_division(context, left, right, "Int/div", Int::checked_div, Prim::IntDiv)
-        }
-        Prim::IntRem(left, right) => {
-            reduce_int_division(context, left, right, "Int/rem", Int::checked_rem, Prim::IntRem)
-        }
+        Prim::IntDiv(left, right) => reduce_int_division(
+            context,
+            left,
+            right,
+            "Int/div",
+            Int::checked_div,
+            Prim::IntDiv,
+        ),
+        Prim::IntRem(left, right) => reduce_int_division(
+            context,
+            left,
+            right,
+            "Int/rem",
+            Int::checked_rem,
+            Prim::IntRem,
+        ),
         Prim::IntLt(left, right) => reduce_int_binary(
             context,
             left,

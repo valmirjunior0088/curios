@@ -2,9 +2,8 @@ use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec,
-        Subterm, Term,
-        TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType, UnionCase,
-        UnionMatch, UseGroup, With,
+        Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
+        UnionCase, UnionMatch, UseGroup, With,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -292,11 +291,7 @@ fn print_term(term: Term) -> Printer<'static> {
             if fields.len() == 1 {
                 let (name, field) = fields.into_iter().next().unwrap();
                 let trailer = if name.is_some() { ")" } else { ",)" };
-                flat([
-                    pure("("),
-                    print_field((name, field)),
-                    pure(trailer),
-                ])
+                flat([pure("("), print_field((name, field)), pure(trailer)])
             } else {
                 flat([
                     pure("("),

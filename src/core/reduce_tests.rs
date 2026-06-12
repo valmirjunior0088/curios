@@ -359,7 +359,7 @@ fn reduce_unsolved_metavar_is_neutral() {
     // No store entry, or an unsolved one, both reduce to the metavariable itself.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
     assert_eq!(reduce(&mut context, m.clone()), Ok(m));
 }
 
@@ -368,7 +368,7 @@ fn reduce_solved_metavar_yields_solution_and_clears_cache() {
     let mut context = context();
     let m = Term::metavar(0);
 
-    context.birth_metavar(0, Vec::new(), Term::type_(), None);
+    context.birth_metavar(0, Vec::new(), Term::type_());
 
     // First reduce caches the metavariable as itself (it is `reach == 0`).
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
