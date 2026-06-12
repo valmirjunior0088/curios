@@ -16,14 +16,11 @@
 //! To update: clone the new tag, copy the same file set over `binaryen/`,
 //! and bump the tag in this comment. No vendored file is patched.
 
-use {cmake::Config, std::env};
-
+#[cfg(feature = "binaryen")]
 fn main() {
-    println!("cargo:rerun-if-changed=binaryen");
+    use {cmake::Config, std::env};
 
-    if env::var_os("CARGO_FEATURE_BINARYEN").is_none() {
-        return;
-    }
+    println!("cargo:rerun-if-changed=binaryen");
 
     // Always build Binaryen as Release: a Debug-profile optimizer is an
     // order of magnitude slower at runtime for no benefit to us.
@@ -57,3 +54,6 @@ fn main() {
         println!("cargo:rustc-link-lib=stdc++");
     }
 }
+
+#[cfg(not(feature = "binaryen"))]
+fn main() {}

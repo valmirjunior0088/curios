@@ -7,11 +7,11 @@ description = "Work-in-progress functional dependently typed programming languag
 [features]
 run = ["dep:wasmtime"]
 cli = ["dep:clap", "run"]
-binaryen = []
+binaryen = ["dep:cmake"]
 default = ["cli", "binaryen"]
 
 [build-dependencies]
-cmake = { version = "0.1.54" }
+cmake = { version = "0.1.54", optional = true }
 
 [dependencies]
 wasmtime = { version = "44.0.1", optional = true }
