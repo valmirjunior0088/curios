@@ -2,8 +2,9 @@ use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity,
-        Prim, Proj, Qualifier, Rec, RecItem, Subterm, Term, TopCase, TopItem, TopLet, TopMod,
-        TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
+        Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem, TopLet,
+        TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
+        With,
     },
     crate::{
         Source,
@@ -20,7 +21,8 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union", "with",
+    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union", "struct",
+    "with",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -362,6 +364,37 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .and_drop(parse_literal(")"))
     .map(|fields| Subterm::Tuple(Tuple { fields }))
     .map(Into::into)
+}
+
+// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` inside
+// the `catch` is the commit point — it distinguishes the literal from a bare
+// name / name-application (no brace) and from a Σ-type `{ x : A }` (no head
+// name), so there is no grammar conflict. Fields reuse the tuple-value parser
+// (`= value` or positional); the head's arguments are plain terms (`@`-pinning
+// is not the struct idiom — the head type pins instead).
+fn parse_struct_lit<'a>() -> Parser<'a, Term> {
+    catch(
+        parse_name()
+            .and(
+                catch(
+                    parse_literal("(")
+                        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                        .and_drop(parse_literal(")")),
+                )
+                .or(pure(vec![])),
+            )
+            .and_drop(parse_literal("{")),
+    )
+    .and(sep_by0(parse_tuple_field, || parse_literal(",")))
+    .and_drop(parse_literal("}"))
+    .map(|((head, params), fields)| {
+        Subterm::StructLit(StructLit {
+            head,
+            params,
+            fields,
+        })
+        .into()
+    })
 }
 
 // A leading `@` marks a binder (or call-site argument) implicit.
@@ -792,6 +825,7 @@ fn parse_atomic_term<'a>() -> Parser<'a, Term> {
 fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
         parse_hole()
+            .or(parse_struct_lit())
             .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
             .or(parse_type())
             .or(parse_prim())
@@ -1153,11 +1187,40 @@ fn parse_top_union<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("struct"))).flat_map(|(is_pub, ())| {
+        parse_identifier()
+            .and(
+                catch(
+                    parse_literal("(")
+                        .and_keep(sep_by0(parse_union_param, || parse_literal(",")))
+                        .and_drop(parse_literal(")")),
+                )
+                .or(pure(vec![])),
+            )
+            // The inner `pub` (representation visibility) sits right before `{`.
+            .and(parse_pub())
+            .and_drop(parse_literal("{"))
+            .and(sep_by0(parse_tuple_type_field, || parse_literal(",")))
+            .and_drop(parse_literal("}"))
+            .map(move |(((label, params), rep_pub), fields)| {
+                TopItem::Struct(TopStruct {
+                    is_pub,
+                    rep_pub,
+                    label: label.to_string(),
+                    params,
+                    fields,
+                })
+            })
+    })
+}
+
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {
     parse_top_mod()
         .or(parse_top_use())
         .or(parse_top_let())
         .or(parse_top_union())
+        .or(parse_top_struct())
         .or(parse_top_rec())
 }
 

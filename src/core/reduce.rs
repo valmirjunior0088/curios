@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, ReduceError,
-        Subterm, Term, Tuple, Var, reduce_prim,
+        Struct, Subterm, Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -64,6 +64,15 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
                     .expect("index bounded above"),
             ))
         }
+        // A struct value is projected positionally with *no* tag offset
+        // (unlike `Variant`, whose field 0 is the tag): `Proj(Struct, i)` is
+        // field `i`.
+        Subterm::Struct(Struct { fields, .. }) if index < fields.len() => Ok(Reduce::Continue(
+            fields
+                .into_iter()
+                .nth(index)
+                .expect("index bounded above"),
+        )),
         head => {
             let head: Term = head.into();
             match context.proj_reduct(&head, index) {
@@ -250,8 +259,9 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
-                // `UnionType` and `Variant` are primitive normal forms, like
-                // `Tuple`: their sub-terms are not reduced in WHNF.
+                // `UnionType`/`Variant` and `StructType`/`Struct` are primitive
+                // normal forms, like `Tuple`: their sub-terms are not reduced
+                // in WHNF.
                 term => Reduce::Break(term.into()),
             };
 

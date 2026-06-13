@@ -86,6 +86,20 @@ pub struct TopUnion {
     pub cases: Vec<TopCase>,
 }
 
+/// A `struct` declaration: a nominal record. `is_pub` is the outer `pub` (the
+/// type-former's visibility); `rep_pub` is the inner `pub` before the brace
+/// (whether the representation — construction and projection — is exported).
+/// `params` are written exactly like a union's; `fields` reuse the Σ-type field
+/// grammar (label optional, like tuple-type fields).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopStruct {
+    pub is_pub: bool,
+    pub rep_pub: bool,
+    pub label: String,
+    pub params: Vec<(Plicity, String, Term)>,
+    pub fields: Vec<(Option<String>, Term)>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
     Mod(TopMod),
@@ -93,6 +107,7 @@ pub enum TopItem {
     Let(TopLet),
     Rec(Vec<TopLet>),
     Union(Vec<TopUnion>),
+    Struct(TopStruct),
 }
 
 #[derive(Debug, Clone, PartialEq)]

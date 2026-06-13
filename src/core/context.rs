@@ -1,5 +1,5 @@
 use {
-    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Term, Var},
+    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Structure, Term, Var},
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -133,6 +133,14 @@ pub struct Context {
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
     inductives: BTreeMap<String, Inductive>,
+    // Struct declarations, keyed the same way — a flat monotonic store like
+    // `inductives`. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
+    structures: BTreeMap<String, Structure>,
+    // The module whose item is currently being elaborated — the qualifier
+    // prefix of that item's name (the root module is the empty string). Set by
+    // `elaborate_module` per item; read by `elaborate_proj` for the struct
+    // representation-privacy check (§7).
+    current_module: String,
 }
 
 // Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
@@ -158,6 +166,8 @@ impl Context {
             metas: MetaStore::default(),
             next_metavar: Entropy::<usize>::new(),
             inductives: BTreeMap::new(),
+            structures: BTreeMap::new(),
+            current_module: String::new(),
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
@@ -404,6 +414,36 @@ impl Context {
     /// Look up an inductive declaration by the type's qualified name.
     pub fn inductive(&self, name: &str) -> Option<&Inductive> {
         self.inductives.get(name)
+    }
+
+    // === Struct registry ====================================================
+
+    /// Record a struct declaration's metadata. Called once per `struct`
+    /// declaration as the module's items are processed (and again when the
+    /// module is seeded into a fresh `Context` for erasure).
+    pub fn register_structure<N>(&mut self, name: N, structure: Structure)
+    where
+        N: Into<String>,
+    {
+        self.structures.insert(name.into(), structure);
+    }
+
+    /// Look up a struct declaration by the type's qualified name.
+    pub fn structure(&self, name: &str) -> Option<&Structure> {
+        self.structures.get(name)
+    }
+
+    /// The module whose item is currently being elaborated (the qualifier
+    /// prefix of its name; empty for the root). Used by the struct projection
+    /// privacy check.
+    pub fn current_module(&self) -> &str {
+        &self.current_module
+    }
+
+    /// Set the current module before elaborating an item (see
+    /// `elaborate_module`).
+    pub fn set_current_module<N: Into<String>>(&mut self, module: N) {
+        self.current_module = module.into();
     }
 
     // === Metavariable store =================================================

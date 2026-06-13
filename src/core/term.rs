@@ -281,6 +281,64 @@ impl Term {
         }))
     }
 
+    pub fn struct_type<N, I, P>(name: N, params: I) -> Self
+    where
+        N: Into<String>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+    {
+        Self::from(Subterm::StructType(StructType {
+            name: name.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+        }))
+    }
+
+    /// A struct value with no written field names — the positional normal form
+    /// (post-elaboration and every internal build), mirroring `tuple`.
+    pub fn struct_<N, I, P, J, Q>(name: N, params: I, fields: J) -> Self
+    where
+        N: Into<String>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        J: IntoIterator<Item = Q>,
+        Q: Into<Term>,
+    {
+        Self::from(Subterm::Struct(Struct {
+            name: name.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+            fields: fields.into_iter().map(|f| f.into()).collect(),
+            names: vec![],
+        }))
+    }
+
+    /// A struct literal carrying the written field names from `to_core`;
+    /// elaboration validates them positionally and rebuilds name-free, exactly
+    /// like `tuple_named`.
+    pub fn struct_named<N, I, P, J, T>(name: N, params: I, fields: J) -> Self
+    where
+        N: Into<String>,
+        I: IntoIterator<Item = P>,
+        P: Into<Term>,
+        J: IntoIterator<Item = (Option<String>, T)>,
+        T: Into<Term>,
+    {
+        let (mut names, fields): (Vec<_>, Vec<_>) = fields
+            .into_iter()
+            .map(|(name, term)| (name, term.into()))
+            .unzip();
+
+        if names.iter().all(Option::is_none) {
+            names = vec![];
+        }
+
+        Self::from(Subterm::Struct(Struct {
+            name: name.into(),
+            params: params.into_iter().map(|p| p.into()).collect(),
+            fields,
+            names,
+        }))
+    }
+
     pub fn union_match<H, M, I, A, L, B>(
         head: H,
         motive_label: Option<&str>,
@@ -654,6 +712,32 @@ pub struct Variant {
     pub payload: Vec<Term>,
 }
 
+/// A struct type as a primitive normal form (cf. [`UnionType`], no indices).
+/// Built inside the generated type-former's body; users write `Pair(A, B)` and
+/// the former reduces to this. Convertible iff same `name` and pointwise-
+/// convertible `params`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StructType {
+    pub name: String,
+    pub params: Vec<Term>,
+}
+
+/// A struct value as a primitive normal form (cf. [`Variant`], no tag).
+/// `name`/`params` are recoverable from the inferred type but stored
+/// redundantly so `convert` stays purely structural.
+///
+/// `names` carries the literal's written field names from `to_core`, exactly
+/// as [`Tuple`] does: elaboration checks them positionally against the declared
+/// labels and rebuilds the value name-free. Empty means "no names written" —
+/// the invariant for every internally-built and post-elaboration struct.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Struct {
+    pub name: String,
+    pub params: Vec<Term>,
+    pub fields: Vec<Term>,
+    pub names: Vec<Option<String>>,
+}
+
 /// The unified eliminator: every match form shares a scrutinee and a motive
 /// and differs only in its [`Cases`] payload.
 ///
@@ -782,9 +866,11 @@ pub enum Subterm {
     Apply(Apply),
     TupleType(TupleType),
     Tuple(Tuple),
-    Proj(Proj),
     UnionType(UnionType),
     Variant(Variant),
+    StructType(StructType),
+    Struct(Struct),
+    Proj(Proj),
     Match(Match),
     Let(Let),
     Rec(Rec),
@@ -857,6 +943,13 @@ impl Subterm {
             }) => {
                 params.iter().for_each(|p| p.collect_metavars(ids));
                 payload.iter().for_each(|p| p.collect_metavars(ids));
+            }
+            Subterm::StructType(StructType { params, .. }) => {
+                params.iter().for_each(|p| p.collect_metavars(ids));
+            }
+            Subterm::Struct(Struct { params, fields, .. }) => {
+                params.iter().for_each(|p| p.collect_metavars(ids));
+                fields.iter().for_each(|f| f.collect_metavars(ids));
             }
             Subterm::Match(Match {
                 head,
@@ -1021,6 +1114,21 @@ impl Bound for Subterm {
                 tag: tag.clone(),
                 payload: payload.iter().map(|p| visit.visit_subterm(p)).collect(),
             }),
+            Subterm::StructType(StructType { name, params }) => Subterm::StructType(StructType {
+                name: name.clone(),
+                params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
+            }),
+            Subterm::Struct(Struct {
+                name,
+                params,
+                fields,
+                names,
+            }) => Subterm::Struct(Struct {
+                name: name.clone(),
+                params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
+                fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),
+                names: names.clone(),
+            }),
             Subterm::Match(Match {
                 head,
                 motive,
@@ -1144,6 +1252,10 @@ impl Bound for Subterm {
             Subterm::Variant(Variant {
                 params, payload, ..
             }) => max_reach(params).max(max_reach(payload)),
+            Subterm::StructType(StructType { params, .. }) => max_reach(params),
+            Subterm::Struct(Struct { params, fields, .. }) => {
+                max_reach(params).max(max_reach(fields))
+            }
             Subterm::Match(Match {
                 head,
                 motive,

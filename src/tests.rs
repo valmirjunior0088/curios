@@ -874,3 +874,195 @@ fn checking_problem_without_a_pin_still_rejects() {
     let (system, _receiver) = ChannelHost::out();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
+
+// === Structs (SYNTAX.md) ================================================
+
+// A transparent record: build with a pinned head, project by label and by
+// index — both resolve to the same positional projection.
+#[test]
+fn struct_transparent_pair_projects() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair(Nat, Nat) { fst = 2, snd = 5 };
+        Io/print(Nat/to_str(Nat/add(p.fst, p.1)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+}
+
+// The bare-name head infers the parameters from the fields (and the expected
+// type at the binding).
+#[test]
+fn struct_parameter_inference_at_construction() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
+        Io/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"12".to_vec()]);
+}
+
+// A zero-cost newtype: a single positional field, projected with `.0`. It
+// erases to its bare field, so the projection elides at runtime.
+#[test]
+fn struct_newtype_projects() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Meters pub { Nat }
+        let m : Meters = Meters { 5 };
+        Io/print(Nat/to_str(m.0))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"5".to_vec()]);
+}
+
+// A dependent field: a later field's type mentions an earlier field (the
+// vector's length indexes its type).
+#[test]
+fn struct_dependent_fields_run_end_to_end() {
+    let source = r#"
+        use /std/{Vec, Nat, Io};
+        pub struct Sized pub { n : Nat, v : Vec(Nat, n) }
+        let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
+        rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
+            match v : Nat
+            | nil() => acc
+            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            end;
+        Io/print(Nat/to_str(total(s.v, 0)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+}
+
+// The motivating case: an abstract type — public type, hidden representation —
+// usable only through exported smart constructors/accessors in its module.
+#[test]
+fn struct_abstract_smart_constructor_round_trips() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod Celsius
+            use /std/{Nat};
+            pub struct Celsius { Nat }
+            pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+            pub let to_nat(c : Celsius) -> Nat = c.0;
+        end
+        Io/print(Nat/to_str(Celsius/to_nat(Celsius/of_nat(42))))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+}
+
+// Constructing a private-representation struct from outside its declaring
+// module is rejected (`PrivateRepresentation`).
+#[test]
+fn struct_private_construction_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod Celsius
+            use /std/{Nat};
+            pub struct Celsius { Nat }
+        end
+        let c : Celsius/Celsius = Celsius/Celsius { 42 };
+        Io/print("no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(error.contains("representation"), "unexpected error: {error}");
+}
+
+// Projecting a private-representation struct's field from outside its module is
+// rejected (`PrivateField`), even when the value was obtained legitimately.
+#[test]
+fn struct_private_projection_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod Celsius
+            use /std/{Nat};
+            pub struct Celsius { Nat }
+            pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+        end
+        let c : Celsius/Celsius = Celsius/of_nat(42);
+        Io/print(Nat/to_str(c.0))
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("field") && error.contains("private"),
+        "unexpected error: {error}"
+    );
+}
+
+// A struct type is nominal: it never converts with a structural tuple type of
+// the same fields.
+#[test]
+fn struct_is_not_a_tuple() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : { fst : Nat, snd : Nat } = Pair { fst = 1, snd = 2 };
+        Io/print("no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+// A struct literal must supply exactly the declared fields, in order.
+#[test]
+fn struct_wrong_field_count_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 1 };
+        Io/print("no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+// Written field labels are validated positionally — no reordering.
+#[test]
+fn struct_field_label_out_of_order_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
+        Io/print("no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+// A struct literal whose head names a non-struct binding is rejected as
+// `NotAStructType` (its type is reported), not misreported as unbound.
+#[test]
+fn struct_literal_non_struct_head_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        let Foo : Nat = 3;
+        let bad : Nat = Foo { x = 1 };
+        Io/print("no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(error.contains("struct type"), "unexpected error: {error}");
+}

@@ -95,6 +95,10 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
                     info.insert_binding(u.label.clone(), u.is_pub)?;
                 }
             }
+            // A struct declares one binding (the type-former), like a `let` —
+            // there are no value constructors and no nested namespace, so no
+            // child module.
+            TopItem::Struct(s) => info.insert_binding(s.label.clone(), s.is_pub)?,
             _ => {}
         }
     }
@@ -107,6 +111,7 @@ fn process_items(
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
     inductives: &mut BTreeMap<String, core::Inductive>,
+    structures: &mut BTreeMap<String, core::Structure>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in top_items {
@@ -126,6 +131,11 @@ fn process_items(
                     context.insert_binding(u.label.clone(), context.prefixed(&u.label))?;
                 }
             }
+            // The type-former binding only — like a `let` (no constructor
+            // namespace).
+            TopItem::Struct(s) => {
+                context.insert_binding(s.label.clone(), context.prefixed(&s.label))?
+            }
             _ => {}
         }
     }
@@ -139,6 +149,7 @@ fn process_items(
                         &mut context.nested(&mod_item.label),
                         flat_items,
                         inductives,
+                        structures,
                         modules,
                     )?;
                 }
@@ -153,6 +164,7 @@ fn process_items(
                         &mut context.nested(&mod_item.label),
                         flat_items,
                         inductives,
+                        structures,
                         modules,
                     )?;
                 }
@@ -444,6 +456,87 @@ fn process_items(
                     }
                 }
             }
+            // A struct lowers to a single type-former `let` plus a registry
+            // entry — no value-constructor binding (the literal elaborates
+            // directly) and no indices.
+            TopItem::Struct(s) => {
+                let elaborate = Elaborate::new(context);
+
+                let name = context.prefixed(&s.label).join();
+                // Declaring module: the type-former's qualifier prefix —
+                // identical to core's per-item `current_module` — for the
+                // representation-privacy checks.
+                let module = match name.rfind('/') {
+                    Some(slash) => name[..slash].to_string(),
+                    None => String::new(),
+                };
+
+                let param_tys = s
+                    .params
+                    .iter()
+                    .map(|(p, n, t)| Ok((*p, n.clone(), elaborate.term(t)?)))
+                    .collect::<Result<Vec<_>, Error>>()?;
+                let param_tys_unmarked = param_tys
+                    .iter()
+                    .map(|(_, n, t)| (n.clone(), t.clone()))
+                    .collect::<Vec<_>>();
+                let param_vars = s
+                    .params
+                    .iter()
+                    .map(|(_, n, _)| core::Term::var(core::Var::free(n)))
+                    .collect::<Vec<_>>();
+
+                // Field types, with declared or positional (`_i`) names so a
+                // later field type can depend on an earlier field.
+                let field_tys = s
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (n, t))| {
+                        let n = n.clone().unwrap_or_else(|| format!("_{i}"));
+                        Ok((n, elaborate.term(t)?))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                // Registry entry: the parameter telescope, and the full field
+                // telescope (parameter binders first — field types may mention
+                // them — then field binders), as in `Inductive::indices`.
+                structures.insert(
+                    name.clone(),
+                    core::Structure {
+                        params: core::Telescope::build(param_tys_unmarked.clone(), ()),
+                        fields: core::Telescope::build(
+                            param_tys_unmarked.iter().cloned().chain(field_tys),
+                            (),
+                        ),
+                        module,
+                        rep_public: s.rep_pub,
+                    },
+                );
+
+                // The type-former: `Pair : (A : Type, B : Type) -> Type` whose
+                // body is the `StructType` normal form (the bare node when
+                // parameterless), so `Pair(Nat, Bin)` reduces to
+                // `StructType { Pair, [Nat, Bin] }`. No value constructor.
+                let struct_type = core::Term::struct_type(&name, param_vars);
+                let (type_, body) = if param_tys.is_empty() {
+                    (core::Term::type_(), struct_type)
+                } else {
+                    (
+                        core::Term::func_type_marked(param_tys.clone(), core::Term::type_()),
+                        core::Term::func(
+                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
+                            struct_type,
+                        ),
+                    )
+                };
+
+                flat_items.push(FlatItem::Let(FlatLet {
+                    name: context.prefixed(&s.label),
+                    type_,
+                    body,
+                }));
+            }
         }
     }
 
@@ -461,6 +554,7 @@ fn order_flat_items(
     referenced: &HashSet<String>,
     library_roots: &HashSet<String>,
     inductives: &BTreeMap<String, core::Inductive>,
+    structures: &BTreeMap<String, core::Structure>,
 ) -> Vec<FlatItem> {
     // Index every declared qualifier to the node that owns it (a rec group owns
     // all its members).
@@ -490,6 +584,13 @@ fn order_flat_items(
             for declared in flat_item_names(item) {
                 if let Some(inductive) = inductives.get(&declared) {
                     names.extend(inductive_free_vars(inductive));
+                }
+                // A struct's field types live in the registry, not the
+                // type-former's body, so seed them here too (see
+                // `structure_free_vars`) — otherwise the former could be
+                // ordered before a type its fields mention is defined.
+                if let Some(structure) = structures.get(&declared) {
+                    names.extend(structure_free_vars(structure));
                 }
             }
 
@@ -604,6 +705,20 @@ fn inductive_free_vars(inductive: &core::Inductive) -> HashSet<String> {
         .collect()
 }
 
+/// The external references of a struct registry entry: every free var of its
+/// parameter and field telescopes. Like `inductive_free_vars`, this is what
+/// makes a struct's type-former node depend on the (e.g. primitive) types its
+/// fields mention — they live nowhere in the type-former's own body, which is
+/// just the `StructType` normal form.
+fn structure_free_vars(structure: &core::Structure) -> HashSet<String> {
+    structure
+        .params
+        .free_vars()
+        .into_iter()
+        .chain(structure.fields.free_vars())
+        .collect()
+}
+
 fn flat_item_prunable(item: &FlatItem, library_roots: &HashSet<String>) -> bool {
     !library_roots.is_empty()
         && flat_item_names(item).iter().all(|name| {
@@ -670,12 +785,14 @@ pub fn to_core(
     let mut context = Context::new(&table, &public, &metavars, &binders);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
+    let mut structures = BTreeMap::new();
 
     process_items(
         &entrypoint.module.items,
         &mut context,
         &mut flat_items,
         &mut inductives,
+        &mut structures,
         &modules,
     )?;
 
@@ -702,15 +819,22 @@ pub fn to_core(
         .collect();
     let library_roots: HashSet<String> = roots.iter().cloned().collect();
 
-    let items = order_flat_items(flat_items, &referenced, &library_roots, &inductives)
-        .into_iter()
-        .map(flat_item_to_core)
-        .collect();
+    let items = order_flat_items(
+        flat_items,
+        &referenced,
+        &library_roots,
+        &inductives,
+        &structures,
+    )
+    .into_iter()
+    .map(flat_item_to_core)
+    .collect();
 
     Ok((
         core::Module {
             items,
             inductives,
+            structures,
             type_,
             body: tail,
         },

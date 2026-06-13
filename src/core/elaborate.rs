@@ -2,9 +2,10 @@ use {
     super::{
         Apply, Atom, Cases, Context, Definition, Error, Field, Func, FuncType, ImplicitOrigin,
         Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat,
-        ParkedWork, Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType,
-        Two, UnionType, Var, Variant, case_target_indices, check_motive, convert_with,
-        drain_parked, elaborate_prim, expect, invert_indices, reduce_with, refine_head,
+        ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm,
+        Telescope, Term, Tuple, TupleType, Two, UnionType, Var, Variant, case_target_indices,
+        check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
+        reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -641,8 +642,30 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let TupleType { telescope } = match &*head_type {
-        Subterm::TupleType(tt) => tt.clone(),
+    // Both tuples and structs project; the field telescope is the tuple type's
+    // own, or the struct's (instantiated at the head type's parameters). A
+    // struct additionally enforces representation privacy here (§7).
+    let telescope = match &*head_type {
+        Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
+        Subterm::StructType(StructType { name, params }) => {
+            let Some(structure) = context.structure(name).cloned() else {
+                return Err(Error::unbound_variable(Term::var(Var::free(name))));
+            };
+
+            // The use-site module is the enclosing item's qualifier prefix
+            // (`Context::current_module`, set per item by `elaborate_module`);
+            // the island model grants no descendant access, so the check is
+            // exact qualifier equality.
+            if !structure.rep_public && context.current_module() != structure.module {
+                let field = match field {
+                    Field::Index(index) => index.to_string(),
+                    Field::Label(label) => label.clone(),
+                };
+                return Err(Error::private_field(name.clone(), field));
+            }
+
+            structure.fields_at(params)
+        }
         other => return Err(Error::not_a_tuple(other.clone())),
     };
 
@@ -768,6 +791,156 @@ fn elaborate_variant(
     );
 
     Ok((rebuilt, output))
+}
+
+/// Type a struct type against its registry entry: the parameters are checked
+/// pointwise (dependently) through the parameter telescope, and the whole node
+/// is a `Type`. The struct analogue of `elaborate_union_type`, with no indices.
+fn elaborate_struct_type(context: &mut Context, st: &StructType) -> Result<(Term, Term), Error> {
+    let StructType { name, params } = st;
+
+    let Some(structure) = context.structure(name).cloned() else {
+        return Err(match context.assumption(name) {
+            Some(found) => Error::not_a_struct_type(found.clone()),
+            None => Error::unbound_variable(Term::var(Var::free(name))),
+        });
+    };
+
+    if params.len() != structure.params.len() {
+        return Err(Error::struct_arity_mismatch(
+            name.clone(),
+            structure.params.len(),
+            params.len(),
+        ));
+    }
+
+    let mut elaborated = Vec::with_capacity(params.len());
+    structure.params.walk(params, |arg, ty| {
+        elaborated.push(check(context, arg, ty.clone())?);
+        Ok(())
+    })?;
+
+    Ok((Term::struct_type(name, elaborated), Term::type_()))
+}
+
+/// Type a struct literal against its registry entry (§3.3). The struct's `name`
+/// makes it self-describing, so this synthesizes (like `elaborate_variant`,
+/// not the purely-checked `elaborate_tuple`): the parameters come from the
+/// written head — a bare-name head mints one fresh metavariable per parameter,
+/// solved by the field checks (and, in `Check` mode, the `expect` turnaround
+/// unifying the result `StructType` against the expected type) — and the fields
+/// are checked in declaration order through the (dependent) field telescope.
+fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(Term, Term), Error> {
+    let Struct {
+        name,
+        params,
+        fields,
+        names,
+    } = s;
+
+    let Some(structure) = context.structure(name).cloned() else {
+        return Err(match context.assumption(name) {
+            Some(found) => Error::not_a_struct_type(found.clone()),
+            None => Error::unbound_variable(Term::var(Var::free(name))),
+        });
+    };
+
+    // Construction privacy (§7): a private-representation struct may be built
+    // only within its declaring module. Checked here (alongside projection
+    // privacy in `elaborate_proj`) via `current_module`, set per item by
+    // `elaborate_module`.
+    if !structure.rep_public && context.current_module() != structure.module {
+        return Err(Error::private_representation(name.clone()));
+    }
+
+    // A written-but-wrong parameter count is an error; an *empty* list is the
+    // bare-name head, which mints one fresh metavariable per parameter.
+    if !params.is_empty() && params.len() != structure.params.len() {
+        return Err(Error::struct_arity_mismatch(
+            name.clone(),
+            structure.params.len(),
+            params.len(),
+        ));
+    }
+
+    // Resolve the parameters, threading the (dependent) parameter telescope so
+    // each minted metavariable is born at its binder's instantiated type.
+    let mut written = params.iter();
+    let mut resolved = Vec::with_capacity(structure.params.len());
+    let mut tele = structure.params.clone();
+    while let Telescope::Cons(ty, rest) = tele {
+        let arg = match written.next() {
+            Some(arg) => check(context, arg, ty.clone())?,
+            None => {
+                let binder = binder_name(rest.first_label().unwrap_or("_"));
+                context.fresh_metavar(
+                    ty.clone(),
+                    term.span(),
+                    ImplicitOrigin {
+                        func: name.clone(),
+                        binder,
+                    },
+                )
+            }
+        };
+        tele = rest.open(&[&arg]);
+        resolved.push(arg);
+    }
+
+    // Instantiate the field telescope at the resolved parameters.
+    let field_telescope = structure.fields_at(&resolved);
+
+    if fields.len() != field_telescope.len() {
+        return Err(Error::wrong_number_of_fields(
+            name.clone(),
+            field_telescope.len(),
+            fields.len(),
+        ));
+    }
+
+    // Written field names are checked positionally against the declared labels
+    // and then dropped — the rebuilt literal is name-free. Reordering is not
+    // supported: in a dependent telescope the written order is the check order.
+    let labels = field_telescope.labels();
+    for (position, written) in names.iter().enumerate() {
+        let Some(written) = written else { continue };
+        let declared = labels.get(position).copied().unwrap_or_default();
+        if declared != written {
+            return Err(Error::unknown_struct_field(
+                name.clone(),
+                written.clone(),
+                labels
+                    .iter()
+                    .filter(|l| !l.is_empty())
+                    .map(|l| l.to_string())
+                    .collect(),
+            ));
+        }
+    }
+
+    fn walk(
+        context: &mut Context,
+        tele: Telescope<()>,
+        fields: &[Term],
+        elaborated: &mut Vec<Term>,
+    ) -> Result<(), Error> {
+        match tele {
+            Telescope::Done(_) => Ok(()),
+            Telescope::Cons(ty, rest) => {
+                let head = &fields[0];
+                elaborated.push(check(context, head, ty)?);
+                walk(context, rest.open(&[head]), &fields[1..], elaborated)
+            }
+        }
+    }
+
+    let mut elaborated = Vec::with_capacity(fields.len());
+    walk(context, field_telescope, fields, &mut elaborated)?;
+
+    Ok((
+        Term::struct_(name, resolved.clone(), elaborated),
+        Term::struct_type(name, resolved),
+    ))
 }
 
 /// The primitive eliminator's typing rule. Arm binders are
@@ -1688,6 +1861,61 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
     Ok(())
 }
 
+/// Rebuild a struct's registry telescopes with *elaborated* types, so the field
+/// types `erase` and later construction sites consult are saturated (implicit
+/// insertion) and reduce correctly — the struct analogue of
+/// [`elaborate_inductive_indices`], over the single (params-first) field
+/// telescope. Called from `elaborate_module_let` once the type-former is
+/// defined (field types may mention the struct itself and earlier items). A
+/// name with no registry entry is an ordinary binding; no-op.
+fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
+    let Some(structure) = context.structure(name).cloned() else {
+        return Ok(());
+    };
+
+    let n_params = structure.params.len();
+    let labels = structure
+        .fields
+        .labels()
+        .iter()
+        .map(|label| label.to_string())
+        .collect::<Vec<_>>();
+
+    let mut entries = Vec::new();
+    context.with_frame(|context| {
+        let mut telescope = structure.fields.clone();
+        loop {
+            match telescope {
+                Telescope::Done(_) => break Ok::<_, Error>(()),
+                Telescope::Cons(ty, rest) => {
+                    let rebuilt = check(context, &ty, Term::type_())?;
+                    let label = context.fresh(rest.first_label());
+                    context.assume(&label, &rebuilt);
+                    telescope = rest.open(&[&Term::var(Var::free(&label))]);
+                    entries.push((label, rebuilt));
+                }
+            }
+        }
+    })?;
+
+    let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let params =
+        Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
+    let fields = Telescope::build(entries, ()).relabel(&label_refs);
+
+    context.register_structure(
+        name,
+        Structure {
+            params,
+            fields,
+            module: structure.module,
+            rep_public: structure.rep_public,
+        },
+    );
+
+    Ok(())
+}
+
 /// Type-check a single non-recursive top-level definition, `define` it into the
 /// *current* (persistent base) frame, and return its rebuilt form. The flat
 /// analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail
@@ -1705,6 +1933,10 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // would meet a lowered form's under-applied calls and open a telescope at
     // the wrong arity. Pre-insertion the two were interchangeable; no longer.
     context.define_assuming(&def.name, &type_, &body);
+
+    // A struct's type-former lowers to a standalone `let`; rebuild its registry
+    // telescopes now that the former is defined (no-op for an ordinary let).
+    elaborate_structure(context, &def.name)?;
 
     Ok(Definition {
         name: def.name.clone(),
@@ -1805,6 +2037,12 @@ pub fn elaborate_module(
         context.register_inductive(name, inductive.clone());
     }
 
+    // Likewise seed the struct registry — `elaborate_struct`/`elaborate_proj`
+    // consult it (and `elaborate_structure` rebuilds each entry's telescopes).
+    for (name, structure) in &module.structures {
+        context.register_structure(name, structure.clone());
+    }
+
     // Implicit-argument insertion mints metavariables during elaboration;
     // floor the counter above `to_core`'s (which returns the count alongside
     // the lowered module) so the id spaces never collide.
@@ -1812,6 +2050,15 @@ pub fn elaborate_module(
 
     let mut items = Vec::with_capacity(module.items.len());
     for item in &module.items {
+        // The use-site module for the struct projection privacy check (§7) is
+        // the qualifier prefix of the item's name (a `rec` group shares one);
+        // the entrypoint body below runs under the root module.
+        let item_module = match item {
+            Item::Let(def) => module_of(&def.name),
+            Item::Rec(defs) => defs.first().map(|d| module_of(&d.name)).unwrap_or(""),
+        };
+        context.set_current_module(item_module.to_string());
+
         items.push(match item {
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
             Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
@@ -1822,6 +2069,7 @@ pub fn elaborate_module(
         drain_parked(context)?;
     }
 
+    context.set_current_module(String::new());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     drain_parked(context)?;
     let body_type = reduce_with(context, &body_type)?;
@@ -1842,14 +2090,39 @@ pub fn elaborate_module(
         })
         .collect();
 
+    // Same for the struct registry: pull back the entries rebuilt by
+    // `elaborate_structure` so `zonk_module`/`erase` see elaborated telescopes.
+    let structures = module
+        .structures
+        .keys()
+        .map(|name| {
+            let structure = context
+                .structure(name)
+                .expect("every module entry was registered above")
+                .clone();
+            (name.clone(), structure)
+        })
+        .collect();
+
     let module = Module {
         items,
         inductives,
+        structures,
         type_: module.type_.clone(),
         body,
     };
 
     Ok((module, body_type))
+}
+
+/// The module of a flat item: its name's qualifier prefix (`Foo/Bar` for
+/// `Foo/Bar/f`; the empty string for a root-level `f`). The struct projection
+/// privacy check compares this against the struct's declaring module.
+fn module_of(name: &str) -> &str {
+    match name.rfind('/') {
+        Some(slash) => &name[..slash],
+        None => "",
+    }
 }
 
 pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
@@ -1893,6 +2166,8 @@ fn elaborate_subterm(
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::UnionType(ut) => elaborate_union_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
+        Subterm::StructType(st) => elaborate_struct_type(context, st)?,
+        Subterm::Struct(s) => elaborate_struct(context, s, term)?,
     };
 
     if let Mode::Check(expected) = &mode {

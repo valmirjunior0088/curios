@@ -1,5 +1,5 @@
 use {
-    super::{Inductive, Term},
+    super::{Inductive, Structure, Term},
     std::collections::BTreeMap,
 };
 
@@ -42,6 +42,10 @@ pub struct Module {
     /// and erasure each run with their *own* `Context` (see `run::compile`);
     /// both seed their context's flat inductive store from here on entry.
     pub inductives: BTreeMap<String, Inductive>,
+    /// Struct declarations' registry entries, keyed by the type's qualified
+    /// name. Carried on the module like `inductives` (and for the same reason):
+    /// elaboration and erasure each seed their own `Context` from here on entry.
+    pub structures: BTreeMap<String, Structure>,
     pub type_: Option<Term>,
     pub body: Term,
 }

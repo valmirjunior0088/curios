@@ -150,6 +150,41 @@ pub enum Error {
     NotAUnionType {
         head_type: Box<Term>,
     },
+    /// A struct literal's (or struct type's) head names a binding that is not a
+    /// struct; `found` is that binding's type.
+    NotAStructType {
+        found: Box<Term>,
+    },
+    /// Wrong number of type arguments applied to a struct's type-former.
+    StructArityMismatch {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
+    /// A struct literal supplies the wrong number of fields.
+    WrongNumberOfFields {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
+    /// A written field label does not match the declared label at its position
+    /// (fields are given in declaration order — no reordering).
+    UnknownStructField {
+        name: String,
+        label: String,
+        available: Vec<String>,
+    },
+    /// Projecting a field of a struct whose representation is private, from
+    /// outside the declaring module (§7).
+    PrivateField {
+        name: String,
+        field: String,
+    },
+    /// Building a struct whose representation is private, from outside the
+    /// declaring module (§7) — the construction counterpart of `PrivateField`.
+    PrivateRepresentation {
+        name: String,
+    },
     CannotInferLiteral,
     UnboundVariable {
         term: Box<Term>,
@@ -325,6 +360,51 @@ impl Error {
         Self::NotAUnionType {
             head_type: Box::new(head_type.into()),
         }
+    }
+
+    pub fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
+        Self::NotAStructType {
+            found: Box::new(found.into()),
+        }
+    }
+
+    pub fn struct_arity_mismatch<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+        Self::StructArityMismatch {
+            name: name.into(),
+            expected,
+            got,
+        }
+    }
+
+    pub fn wrong_number_of_fields<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+        Self::WrongNumberOfFields {
+            name: name.into(),
+            expected,
+            got,
+        }
+    }
+
+    pub fn unknown_struct_field<N: Into<String>>(
+        name: N,
+        label: String,
+        available: Vec<String>,
+    ) -> Self {
+        Self::UnknownStructField {
+            name: name.into(),
+            label,
+            available,
+        }
+    }
+
+    pub fn private_field<N: Into<String>, F: Into<String>>(name: N, field: F) -> Self {
+        Self::PrivateField {
+            name: name.into(),
+            field: field.into(),
+        }
+    }
+
+    pub fn private_representation<N: Into<String>>(name: N) -> Self {
+        Self::PrivateRepresentation { name: name.into() }
     }
 
     pub fn ctor_arity_mismatch<A: Into<Atom>>(atom: A, expected: usize, got: usize) -> Self {
@@ -521,6 +601,55 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "matched union constructors on a non-union type\n  head has type: {head_type}"
+                )
+            }
+            Error::NotAStructType { found } => {
+                write!(
+                    f,
+                    "expected a struct type here\n  found: {found}"
+                )
+            }
+            Error::StructArityMismatch {
+                name,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "struct '{name}' takes {expected} type argument(s) but got {got}"
+                )
+            }
+            Error::WrongNumberOfFields {
+                name,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "struct '{name}' has {expected} field(s) but the literal supplies {got}"
+                )
+            }
+            Error::UnknownStructField {
+                name,
+                label,
+                available,
+            } => {
+                write!(
+                    f,
+                    "struct '{name}' has no field '{label}' at that position (fields in order: {})",
+                    available.join(", ")
+                )
+            }
+            Error::PrivateField { name, field } => {
+                write!(
+                    f,
+                    "field '{field}' of struct '{name}' is private to its declaring module"
+                )
+            }
+            Error::PrivateRepresentation { name } => {
+                write!(
+                    f,
+                    "the representation of struct '{name}' is private to its declaring module"
                 )
             }
             Error::CtorArityMismatch {

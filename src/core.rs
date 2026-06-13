@@ -28,6 +28,9 @@ pub use module::*;
 mod inductive;
 pub use inductive::*;
 
+mod structure;
+pub use structure::*;
+
 mod print;
 
 mod reduce_prim;

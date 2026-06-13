@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Atom, Cases, Context, Error, Field, Func, Item, Let, Many, Match, Module,
-        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple,
-        TupleType, Two, UnionType, Var, Variant, erase_prim, expect_prim_head, infer, reduce_with,
-        refine_head,
+        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Two, UnionType, Var, Variant, erase_prim,
+        expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -360,7 +360,21 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
         Subterm::TupleType(TupleType { telescope }) => {
             assert!(*index < telescope.len(), "erase: projected a non-tuple");
         }
-        _ => unreachable!("erase: projected a non-tuple"),
+        // A struct projects positionally with no tag offset (like a tuple, not
+        // a variant). A *single-field* struct erased to its bare field, so the
+        // projection vanishes — the value already *is* the field.
+        Subterm::StructType(StructType { name, params }) => {
+            let structure = context
+                .structure(name)
+                .cloned()
+                .expect("erase: projection head names a registered struct");
+            let field_count = structure.fields_at(params).len();
+            assert!(*index < field_count, "erase: struct projection out of range");
+            if field_count == 1 {
+                return erase(context, head, &head_type);
+            }
+        }
+        _ => unreachable!("erase: projected a non-tuple/struct"),
     }
 
     Ok(ersd::Subterm::Proj(ersd::Proj {
@@ -411,6 +425,42 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
     }
 
     Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
+}
+
+/// Lower a struct value to its zero-cost runtime representation: a multi-field
+/// struct is a *tagless* tuple (one fewer field than the equivalent
+/// single-constructor union); a single-field struct (a newtype) is its bare
+/// field — no tuple, no tag, so it is byte-identical to the field's own type.
+fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> {
+    let Struct {
+        name,
+        params,
+        fields,
+        ..
+    } = s;
+
+    let structure = context
+        .structure(name)
+        .cloned()
+        .expect("erase: struct names a registered struct");
+
+    // Erase the fields against the instantiated (dependent) field telescope.
+    let mut telescope = structure.fields_at(params);
+    let mut erased = Vec::with_capacity(fields.len());
+    for value in fields {
+        match telescope {
+            Telescope::Cons(ty, rest) => {
+                erased.push(erase(context, value, &ty)?);
+                telescope = rest.open(&[value]);
+            }
+            Telescope::Done(_) => unreachable!("erase: struct arity checked by elaborate"),
+        }
+    }
+
+    Ok(match erased.len() {
+        1 => erased.into_iter().next().expect("one field"),
+        _ => ersd::Subterm::Tuple(ersd::Tuple { fields: erased }).into(),
+    })
 }
 
 /// Lower the primitive eliminator: an index dispatch on the scrutinee's tag
@@ -681,6 +731,12 @@ pub fn erase_module(
         context.register_inductive(name, inductive.clone());
     }
 
+    // Seed the struct registry too — `erase_struct`/`erase_proj` consult it to
+    // lower fields and to elide a newtype projection.
+    for (name, structure) in &module.structures {
+        context.register_structure(name, structure.clone());
+    }
+
     let mut items = Vec::with_capacity(module.items.len());
 
     for item in &module.items {
@@ -742,10 +798,13 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::Match(m) => erase_match(context, m),
         // Type formers all erase to a runtime unit; they carry nothing to lower
         // and were already checked by `elaborate`.
-        Subterm::Type | Subterm::FuncType(_) | Subterm::TupleType(_) | Subterm::UnionType(_) => {
-            Ok(ersd::Subterm::Erased.into())
-        }
+        Subterm::Type
+        | Subterm::FuncType(_)
+        | Subterm::TupleType(_)
+        | Subterm::UnionType(_)
+        | Subterm::StructType(_) => Ok(ersd::Subterm::Erased.into()),
         Subterm::Variant(uc) => erase_variant(context, uc),
+        Subterm::Struct(s) => erase_struct(context, s),
         Subterm::Func(func) => erase_func(context, func, expected),
         Subterm::Apply(apply) => erase_apply(context, apply),
         Subterm::Tuple(tuple) => erase_tuple(context, tuple, expected),

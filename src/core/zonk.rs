@@ -1,7 +1,7 @@
 use super::{
     Apply, Arity, Bound, Cases, Context, Definition, Error, Func, FuncType, Inductive, Item, Let,
-    Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Subterm,
-    Telescope, Term, Tuple, TupleType, UnionType, Variant,
+    Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
+    StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Variant,
 };
 
 /// Zonk `scope`'s body in place. (The binder stack that used to thread
@@ -74,9 +74,27 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         })
         .collect::<Result<_, Error>>()?;
 
+    // Struct field telescopes flow into `erase` the same way — zonk them too.
+    let structures = module
+        .structures
+        .iter()
+        .map(|(name, structure)| {
+            Ok((
+                name.clone(),
+                Structure {
+                    params: structure.params.zonk(context)?,
+                    fields: structure.fields.zonk(context)?,
+                    module: structure.module.clone(),
+                    rep_public: structure.rep_public,
+                },
+            ))
+        })
+        .collect::<Result<_, Error>>()?;
+
     Ok(Module {
         items,
         inductives,
+        structures,
         type_,
         body,
     })
@@ -237,6 +255,23 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             params: zonk_terms(context, params)?,
             tag: tag.clone(),
             payload: zonk_terms(context, payload)?,
+        }),
+
+        Subterm::StructType(StructType { name, params }) => Subterm::StructType(StructType {
+            name: name.clone(),
+            params: zonk_terms(context, params)?,
+        }),
+
+        Subterm::Struct(Struct {
+            name,
+            params,
+            fields,
+            names,
+        }) => Subterm::Struct(Struct {
+            name: name.clone(),
+            params: zonk_terms(context, params)?,
+            fields: zonk_terms(context, fields)?,
+            names: names.clone(),
         }),
 
         Subterm::Match(Match {

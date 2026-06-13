@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Bound, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
-        ReduceError, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant, Visit,
-        convert_prim, infer, reduce,
+        ReduceError, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UnionType,
+        Var, Variant, Visit, convert_prim, infer, reduce,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -409,6 +409,41 @@ impl Convert {
         }
 
         for (a, b) in this.payload.into_iter().zip(that.payload) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        Ok(true)
+    }
+
+    fn compare_struct_type(
+        &mut self,
+        this: StructType,
+        that: StructType,
+    ) -> Result<bool, ReduceError> {
+        if this.name != that.name || this.params.len() != that.params.len() {
+            return Ok(false);
+        }
+
+        for (a, b) in this.params.into_iter().zip(that.params) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        Ok(true)
+    }
+
+    fn compare_struct(&mut self, this: Struct, that: Struct) -> Result<bool, ReduceError> {
+        if this.name != that.name
+            || this.params.len() != that.params.len()
+            || this.fields.len() != that.fields.len()
+        {
+            return Ok(false);
+        }
+
+        for (a, b) in this.params.into_iter().zip(that.params) {
+            self.enqueue(Term::type_(), a, b);
+        }
+
+        for (a, b) in this.fields.into_iter().zip(that.fields) {
             self.enqueue(Term::type_(), a, b);
         }
 
@@ -1158,6 +1193,12 @@ impl Convert {
                 }
                 (Subterm::Variant(this), Subterm::Variant(that)) => {
                     self.compare_variant(this, that)?
+                }
+                (Subterm::StructType(this), Subterm::StructType(that)) => {
+                    self.compare_struct_type(this, that)?
+                }
+                (Subterm::Struct(this), Subterm::Struct(that)) => {
+                    self.compare_struct(this, that)?
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?

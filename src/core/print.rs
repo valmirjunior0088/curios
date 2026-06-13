@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match, Module, Nat,
-        One, Plicity, Prim, Proj, Rec, Scope, Subterm, Telescope, Term, Tuple, TupleType, Two,
-        UnionType, Var, Variant,
+        One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Two, UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -639,6 +639,38 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 ])
             }
         }
+        // Like `UnionType` but with no indices: `Pair(Nat, Bin)`.
+        Subterm::StructType(StructType { name, params }) => {
+            if params.is_empty() {
+                pure(name)
+            } else {
+                flat([
+                    pure(name),
+                    pure("("),
+                    sep_flat(
+                        params
+                            .into_iter()
+                            .map(|p| print_term(p, depth))
+                            .collect::<Vec<_>>(),
+                        || pure(", "),
+                    ),
+                    pure(")"),
+                ])
+            }
+        }
+        // Prints as the brace literal, instantiated type params hidden —
+        // `Pair { 0, "" }`.
+        Subterm::Struct(Struct { name, fields, .. }) => flat([
+            pure(format!("{name} {{ ")),
+            sep_flat(
+                fields
+                    .into_iter()
+                    .map(|f| print_term(f, depth))
+                    .collect::<Vec<_>>(),
+                || pure(", "),
+            ),
+            pure(" }"),
+        ]),
         Subterm::Match(Match {
             head,
             motive,

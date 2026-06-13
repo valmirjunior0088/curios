@@ -987,3 +987,80 @@ fn with_and_bang_round_trip() {
         );
     }
 }
+
+#[test]
+fn parse_struct_visibility_spellings() {
+    // The three legal states on the single private→abstract→transparent scale,
+    // distinguished by the outer (`is_pub`) and inner (`rep_pub`) `pub`.
+    for (source, is_pub, rep_pub) in [
+        ("struct Foo { x : Type } u", false, false),
+        ("pub struct Foo { x : Type } u", true, false),
+        ("pub struct Foo pub { x : Type } u", true, true),
+    ] {
+        let entrypoint = source.parse::<Entrypoint>().unwrap();
+        let TopItem::Struct(s) = &entrypoint.module.items[0] else {
+            panic!("expected a struct declaration for {source:?}");
+        };
+        assert_eq!((s.is_pub, s.rep_pub), (is_pub, rep_pub), "for {source:?}");
+    }
+}
+
+#[test]
+fn parse_struct_literal_disambiguates_from_tuple_type() {
+    // `Name { x = a }` is a struct literal; a bare `{ x : A }` stays a Σ-type.
+    assert_eq!(
+        "Pair { fst = a, snd = b }".parse::<Term>().unwrap(),
+        Subterm::StructLit(StructLit {
+            head: Name::from(["Pair".to_string()]),
+            params: vec![],
+            fields: vec![
+                (Some("fst".to_string()), name("a")),
+                (Some("snd".to_string()), name("b")),
+            ],
+        })
+        .into()
+    );
+    // A positional single field is the newtype spelling `Str { raw }`.
+    assert_eq!(
+        "Str { raw }".parse::<Term>().unwrap(),
+        Subterm::StructLit(StructLit {
+            head: Name::from(["Str".to_string()]),
+            params: vec![],
+            fields: vec![(None, name("raw"))],
+        })
+        .into()
+    );
+}
+
+#[test]
+fn struct_round_trips() {
+    // Declarations (all three spellings, parameterized and parameterless) and
+    // literals (inferred / pinned / hole-pinned head, named and positional
+    // fields) survive a print → re-parse cycle unchanged.
+    for source in [
+        "struct Foo { x : Type } u",
+        "pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B } u",
+        "pub struct Meters pub { Nat } u",
+    ] {
+        let entrypoint = source.parse::<Entrypoint>().unwrap();
+        assert_eq!(
+            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint,
+            "declaration round-trip failed for {source:?}"
+        );
+    }
+
+    for source in [
+        "Pair { fst = a, snd = b }",
+        "Pair(Nat, Bin) { fst = a, snd = b }",
+        "Pair(Nat, ?) { fst = a, snd = b }",
+        "Str { raw }",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "literal round-trip failed for {source:?}"
+        );
+    }
+}

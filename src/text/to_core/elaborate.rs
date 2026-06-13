@@ -3,8 +3,8 @@ use {
     crate::{
         core,
         text::{
-            BinLiteral, Error, Field, Let, Match, Motive, Nat, NatLiteral, NatMatch, Prim, Subterm,
-            Term,
+            BinLiteral, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Prim,
+            Subterm, Term,
         },
     },
     num_bigint::BigUint,
@@ -37,6 +37,19 @@ impl<'a, 'b> Elaborate<'a, 'b> {
         Ok(match span {
             Some(s) => core::Term::spanned(s, elaborated),
             None => elaborated,
+        })
+    }
+
+    /// Resolve a surface name to its qualified (joined) core name — the same
+    /// rule the `Subterm::Name` term-reference arm uses.
+    fn resolve_name(&self, name: &Name) -> Result<String, Error> {
+        Ok(if name.is_abs() || !name.is_single() {
+            self.context.resolve_term_name(name)?.join()
+        } else {
+            match self.context.bindings().get(name.head()) {
+                Some(full) => full.join(),
+                None => name.head().to_string(),
+            }
         })
     }
 
@@ -118,6 +131,23 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     Field::Label(label) => core::Term::proj_label(head, label.clone()),
                 }
             }
+            // A struct literal lowers to a `core::Struct` carrying the resolved
+            // (qualified) struct name, the head parameters (empty → core
+            // elaboration mints metavariables), and the field values with their
+            // written names (validated positionally and dropped by elaborate).
+            // Construction privacy is enforced in core (`elaborate_struct`),
+            // alongside projection privacy.
+            Subterm::StructLit(lit) => core::Term::struct_named(
+                self.resolve_name(&lit.head)?,
+                lit.params
+                    .iter()
+                    .map(|p| self.term(p))
+                    .collect::<Result<Vec<_>, Error>>()?,
+                lit.fields
+                    .iter()
+                    .map(|(name, field)| Ok((name.clone(), self.term(field)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
             Subterm::Match(match_) => match match_ {
                 Match::Bln(bm) => {
                     let (label, body) = self.motive_parts(&bm.motive)?;
@@ -312,6 +342,19 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     Field::Label(label) => core::Term::proj_label(head, label.clone()),
                 }
             }
+            // A struct literal's field values hoist their bangs into this
+            // region, exactly like a tuple's.
+            Subterm::StructLit(lit) => core::Term::struct_named(
+                self.resolve_name(&lit.head)?,
+                lit.params
+                    .iter()
+                    .map(|p| self.collect(p, bind, binds))
+                    .collect::<Result<Vec<_>, Error>>()?,
+                lit.fields
+                    .iter()
+                    .map(|(name, field)| Ok((name.clone(), self.collect(field, bind, binds)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).
             Subterm::Let(let_) => self.build_let(let_, bind, binds)?,

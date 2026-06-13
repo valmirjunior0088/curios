@@ -164,6 +164,19 @@ pub struct Proj {
     pub field: Field,
 }
 
+/// A struct literal: a head naming the struct type (`Pair`, possibly applied —
+/// `Pair(Nat, Bin)` / `Pair(Nat, ?)` — to pin the parameters) followed by a
+/// brace of fields. `params` is the optionally-applied head arguments (empty
+/// for the bare-name head; holes appear as `?` terms). `fields` reuse the
+/// tuple-literal field grammar (`fst = a` or positional), validated positionally
+/// against the declared labels at core elaboration.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructLit {
+    pub head: Name,
+    pub params: Vec<Term>,
+    pub fields: Vec<(Option<String>, Term)>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionCase {
     pub binders: Vec<String>,
@@ -280,6 +293,7 @@ pub enum Subterm {
     TupleType(TupleType),
     Tuple(Tuple),
     Proj(Proj),
+    StructLit(StructLit),
     Match(Match),
     Let(Let),
     Rec(Rec),

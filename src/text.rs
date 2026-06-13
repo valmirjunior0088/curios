@@ -1,6 +1,4 @@
-// Plicity is shared vocabulary with the kernel: the surface AST carries the
-// same `@` marks `to_core` lowers into core's `FuncType`/`Apply`.
-pub use crate::core::Plicity;
+pub use super::core::Plicity;
 
 mod error;
 pub use error::*;

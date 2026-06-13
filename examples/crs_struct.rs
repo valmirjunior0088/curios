@@ -1,0 +1,104 @@
+use {
+    curios::{Stage, compile_entrypoint, core, text},
+    std::time::{Duration, Instant},
+};
+
+fn main() {
+    let timeout = Duration::from_secs(15);
+
+    // Structs (SYNTAX.md): a transparent record, a zero-cost newtype, and the
+    // motivating abstract type — a public type whose representation (a `Bin`) is
+    // hidden, reachable only through the exported smart constructor/accessor in
+    // its own module. All three build, project, and run; the newtype erases to
+    // its bare field, so `Meters` is byte-identical to `Nat` at runtime.
+    let source = r#"
+        use /std/{Bin, Nat, Io};
+
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub struct Meters pub { Nat }
+
+        mod Str
+            use /std/{Bin};
+            pub struct Str { Bin }
+            pub let of_bin(b : Bin) -> Str = Str { b };
+            pub let to_bin(s : Str) -> Bin = s.0;
+        end
+
+        let p : Pair(Nat, Bin) = Pair { fst = 7, snd = "!" };
+        let m : Meters = Meters { 5 };
+        let s : Str/Str = Str/of_bin("hi");
+
+        let _ = Io/print(Str/to_bin(s));
+        Io/print(Nat/to_str(Nat/add(p.fst, m.0)))
+        "#;
+
+    let mut last = Instant::now();
+
+    let entrypoint = source
+        .parse::<text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_type("()".parse().unwrap());
+
+    let wasm_module = compile_entrypoint(timeout, &entrypoint, &text::NullLoader, |stage| {
+        let now = Instant::now();
+        let elapsed = now - last;
+        last = now;
+
+        println!(
+            "{}: {elapsed:?}",
+            match stage {
+                Stage::Text(_) => "text",
+                Stage::Core(_) => "core",
+                Stage::Ersd(_) => "ersd",
+                Stage::Cont(_) => "cont",
+                Stage::Optm(_) => "optm",
+                Stage::Wasm(_) => "wasm",
+            }
+        );
+    })
+    .expect("expected wasm module");
+
+    let (system, receiver) = curios::ChannelHost::out();
+    let t = Instant::now();
+    curios::run_wasm(&wasm_module, system).expect("expected result");
+    println!("run:  {:?}", t.elapsed());
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"hi".to_vec(), b"12".to_vec()]
+    );
+
+    // The representation boundary: building a private-representation struct from
+    // outside its declaring module is a compile-time `PrivateRepresentation`.
+    let ill_typed = r#"
+        use /std/{Bin};
+
+        mod Str
+            use /std/{Bin};
+            pub struct Str { Bin }
+        end
+
+        let bad : Str/Str = Str/Str { "x" };
+        bad
+        "#;
+
+    let entrypoint = ill_typed
+        .parse::<text::Entrypoint>()
+        .expect("failed to parse ill-typed source");
+
+    let (module, metavars) = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
+        .expect("expected lowered module");
+    let result = core::elaborate_module(
+        &mut core::Context::new(timeout),
+        &module,
+        metavars,
+        core::Mode::Infer,
+    );
+
+    assert!(matches!(
+        &result,
+        Err(core::Error::Located { error, .. })
+            if matches!(error.as_ref(), core::Error::PrivateRepresentation { .. })
+    ));
+
+    println!("ok");
+}

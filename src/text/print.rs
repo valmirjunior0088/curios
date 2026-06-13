@@ -2,8 +2,8 @@ use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec,
-        Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopUnion, TopUse, Tuple, TupleType,
-        UnionCase, UnionMatch, UseGroup, With,
+        StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion, TopUse,
+        Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -306,6 +306,31 @@ fn print_term(term: Term) -> Printer<'static> {
                 Field::Label(label) => format!(").{label}"),
             };
             flat([pure("("), print_term(head), pure(field)])
+        }
+        Subterm::StructLit(StructLit {
+            head,
+            params,
+            fields,
+        }) => {
+            let print_field = |(name, field): (Option<String>, Term)| match name {
+                Some(name) => flat([pure(name), pure(" = "), print_term(field)]),
+                None => print_term(field),
+            };
+            flat([
+                pure(head.join()),
+                if params.is_empty() {
+                    pure("")
+                } else {
+                    flat([
+                        pure("("),
+                        sep_flat(params.into_iter().map(print_term), || pure(", ")),
+                        pure(")"),
+                    ])
+                },
+                pure(" { "),
+                sep_flat(fields.into_iter().map(print_field), || pure(", ")),
+                pure(" }"),
+            ])
         }
         Subterm::Match(match_) => match match_ {
             Match::Bln(BlnMatch {
@@ -673,6 +698,26 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
     ])
 }
 
+fn print_top_struct(item: TopStruct) -> Printer<'static> {
+    flat([
+        print_pub(item.is_pub),
+        pure("struct "),
+        pure(item.label),
+        print_top_union_params(item.params),
+        pure(" "),
+        print_pub(item.rep_pub),
+        pure("{ "),
+        sep_flat(
+            item.fields.into_iter().map(|(label, ty)| match label {
+                Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
+                None => print_term(ty),
+            }),
+            || pure(", "),
+        ),
+        pure(" }"),
+    ])
+}
+
 fn print_top_item(item: TopItem) -> Printer<'static> {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
@@ -680,6 +725,7 @@ fn print_top_item(item: TopItem) -> Printer<'static> {
         TopItem::Let(l) => print_top_let(l),
         TopItem::Rec(items) => print_top_rec(items),
         TopItem::Union(unions) => print_top_union(unions),
+        TopItem::Struct(s) => print_top_struct(s),
     }
 }
 

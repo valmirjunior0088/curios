@@ -137,6 +137,47 @@ end
 
 The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) -> Type`, applied `Vec(Bin, 3)` — so use sites never distinguish parameters from indices.
 
+### Struct
+
+```
+pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+```
+
+Declares a **nominal record** type. Unlike a union it has no value-constructor module and no tag — the brace literal builds it directly — and no indices. The type name is bound as `Pair`, a type-constructor function applied explicitly (`Pair(Nat, Bin)`), exactly like a union's; parameters are written as a union's are. Field types follow the [tuple-type](#tuple-type) field grammar (label optional), and a later field's type may mention an earlier field, making the record dependent:
+
+```
+struct Sized pub { n : Nat, v : Vec(Nat, n) }
+```
+
+A struct is _nominal_: as with a union, two structs are the same type only if they are the same declaration, and a struct never converts with a structural [tuple type](#tuple-type) of the same fields. Construction and projection are positional and tagless, so a struct adds no runtime cost over the equivalent tuple, and a single-field struct is a zero-cost newtype — it erases to its bare field, byte-identical at runtime:
+
+```
+struct Meters pub { Nat }
+```
+
+**Visibility.** Two independent `pub` markers place a struct on a private → abstract → transparent scale:
+
+- The outer `pub` (before `struct`) exports the **type name**, exactly as on a union.
+- The inner `pub` (before the `{`) exports the **representation** — the ability to build a value with the brace literal and to project its fields.
+
+```
+struct Foo { ... }          -- private:     type and representation module-local
+pub struct Foo { ... }      -- abstract:    type exported, representation hidden
+pub struct Foo pub { ... }  -- transparent: both exported
+```
+
+The abstract form is the motivating case: outside the declaring module the type is namable but opaque, reachable only through the smart constructors and accessors that module exports. The representation boundary is exact — a representation-private struct may be constructed or projected only in the very module that declares it, not in its submodules — and a violation is a compile-time error.
+
+**Construction.** A struct literal is the type name followed by a brace of fields:
+
+```
+Pair { fst = 2, snd = 5 }               -- parameters inferred
+Pair(Nat, Bin) { fst = 2, snd = "!" }   -- parameters pinned by the head
+Meters { 5 }                            -- positional (newtype)
+```
+
+A bare-name head infers the parameters (from the fields, and from the expected type when the literal is checked); applying the head pins them, with `?` allowed for individual holes (`Pair(Nat, ?) { ... }`). Fields follow the [tuple-literal](#tuples) grammar — named (`fst = ...`) or positional, mixed freely — and, as with tuples, written names are checked positionally against the declared labels (no reordering) and dropped: struct values are positional. Project fields with [field access](#field-access), `p.fst` or `p.0`.
+
 ### Submodule
 
 External reference (the module is loaded from a file):
@@ -388,7 +429,7 @@ e.1
 e.status
 ```
 
-Indices are zero-based. A label is sugar for the position it names — `e.status` and `e.0` on a `{ status : Nat, ... }` value elaborate to the same projection, and both spellings remain valid on labeled tuples. Unlabeled fields are accessible by index only. Chains are supported and may mix forms: `e.inner.1` reads field 1 of the `inner` field of `e`.
+Indices are zero-based. A label is sugar for the position it names — `e.status` and `e.0` on a `{ status : Nat, ... }` value elaborate to the same projection, and both spellings remain valid on labeled tuples. Unlabeled fields are accessible by index only. Chains are supported and may mix forms: `e.inner.1` reads field 1 of the `inner` field of `e`. [Struct](#struct) values project the same way, by index or declared label, subject to the struct's representation visibility.
 
 ## Types
 
