@@ -3,6 +3,7 @@ use {
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
+        mem,
         rc::Rc,
         time::{Duration, Instant},
     },
@@ -90,7 +91,7 @@ pub struct ParkedGoal {
 
 #[derive(Debug)]
 pub struct Context {
-    entropy: Entropy,
+    fresh_names: Entropy,
     deadline: Instant,
     reductions: HashMap<Term, Term>,
     assumptions: Vec<HashMap<String, Term>>,
@@ -140,7 +141,7 @@ pub struct Context {
     // prefix of that item's name (the root module is the empty string). Set by
     // `elaborate_module` per item; read by `elaborate_proj` for the struct
     // representation-privacy check (§7).
-    current_module: String,
+    island: String,
 }
 
 // Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
@@ -153,7 +154,7 @@ impl Context {
     // timeout bounds total work, not per-call work.
     pub fn new(timeout: Duration) -> Self {
         Self {
-            entropy: Entropy::<usize>::new(),
+            fresh_names: Entropy::<usize>::new(),
             deadline: Instant::now() + timeout,
             reductions: HashMap::new(),
             assumptions: vec![HashMap::new()],
@@ -167,7 +168,7 @@ impl Context {
             next_metavar: Entropy::<usize>::new(),
             inductives: BTreeMap::new(),
             structures: BTreeMap::new(),
-            current_module: String::new(),
+            island: String::new(),
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
@@ -178,7 +179,7 @@ impl Context {
     }
 
     pub fn fresh(&mut self, hint: Option<&str>) -> String {
-        let counter = self.entropy.fresh();
+        let counter = self.fresh_names.fresh();
 
         match hint {
             Some(h) => format!("{h}#{counter}"),
@@ -245,6 +246,7 @@ impl Context {
         let label = label.into();
         self.locals_stamp.fresh();
         self.local.push((label.clone(), type_.clone()));
+
         self.assumptions
             .last_mut()
             .unwrap()
@@ -259,6 +261,7 @@ impl Context {
     /// lowered type must never leak into later reduction.
     pub fn reassume(&mut self, label: &str, type_: &Term) {
         self.locals_stamp.fresh();
+
         if let Some(entry) = self.local.iter_mut().rev().find(|(name, _)| name == label) {
             entry.1 = type_.clone();
         }
@@ -390,9 +393,7 @@ impl Context {
         let previous = self.suppress_refinements;
         self.reductions.clear();
         self.suppress_refinements = true;
-
         let result = f(self);
-
         self.suppress_refinements = previous;
         self.reductions.clear();
 
@@ -436,14 +437,14 @@ impl Context {
     /// The module whose item is currently being elaborated (the qualifier
     /// prefix of its name; empty for the root). Used by the struct projection
     /// privacy check.
-    pub fn current_module(&self) -> &str {
-        &self.current_module
+    pub fn island(&self) -> &str {
+        &self.island
     }
 
     /// Set the current module before elaborating an item (see
     /// `elaborate_module`).
-    pub fn set_current_module<N: Into<String>>(&mut self, module: N) {
-        self.current_module = module.into();
+    pub fn set_island<N: Into<String>>(&mut self, module: N) {
+        self.island = module.into();
     }
 
     // === Metavariable store =================================================
@@ -480,12 +481,14 @@ impl Context {
         }
 
         let telescope = Rc::new(self.local.clone());
+
         let spine = Rc::new(
             telescope
                 .iter()
                 .map(|(name, _)| Term::var(Var::free(name)))
                 .collect::<Vec<_>>(),
         );
+
         self.identity_cache = Some((self.locals_stamp.count(), telescope.clone(), spine.clone()));
 
         (telescope, spine)
@@ -510,11 +513,10 @@ impl Context {
         origin: ImplicitOrigin,
     ) -> Term {
         let id = self.next_metavar.fresh();
-
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
-
         let metavar = Term::metavar_inserted(id, origin, spine);
+
         match span {
             Some(span) => metavar.with_span(span),
             None => metavar,
@@ -552,6 +554,7 @@ impl Context {
             .iter()
             .map(|(name, _)| name.as_str())
             .collect::<Vec<_>>();
+
         let spine = metavar.spine.iter().collect::<Vec<_>>();
 
         Some(solution.capture(&labels).release(&spine))
@@ -590,11 +593,13 @@ impl Context {
         }
 
         let unwound = self.solved_log.split_off(mark);
+
         for id in &unwound {
             if let Some(Some(entry)) = self.metas.entries.get_mut(*id) {
                 entry.solution = None;
             }
         }
+
         self.newly_solved.retain(|id| !unwound.contains(id));
         self.reductions.clear();
     }
@@ -632,12 +637,15 @@ impl Context {
         for (name, type_) in &frame.assumptions {
             self.assume(name, type_);
         }
+
         for (name, value) in &frame.definitions {
             self.define(name, value);
         }
+
         for (name, value) in &frame.refinements {
             self.refine(name, value);
         }
+
         for ((base, index), value) in &frame.refinement_projections {
             self.refine_projection(base.clone(), *index, value.clone());
         }
@@ -683,11 +691,10 @@ impl Context {
     /// problem at its origin before zonk could ever meet the placeholder.
     pub fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (usize, Term) {
         let id = self.next_metavar.fresh();
-
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
-
         let term = Term::metavar_birthed(id, None, spine);
+
         let term = match span {
             Some(span) => term.with_span(span),
             None => term,
@@ -701,13 +708,16 @@ impl Context {
     pub fn wake_parked(&mut self) -> Vec<ParkedGoal> {
         if self.newly_solved.is_empty() || self.parked.is_empty() {
             self.newly_solved.clear();
+
             return Vec::new();
         }
 
         let solved = self.newly_solved.drain(..).collect::<BTreeSet<_>>();
-        let (woken, kept) = std::mem::take(&mut self.parked)
+
+        let (woken, kept) = mem::take(&mut self.parked)
             .into_iter()
             .partition(|p| p.watching.iter().any(|id| solved.contains(id)));
+
         self.parked = kept;
 
         woken
@@ -715,7 +725,7 @@ impl Context {
 
     /// Take every parked goal — the drain's final sweep.
     pub fn take_parked(&mut self) -> Vec<ParkedGoal> {
-        std::mem::take(&mut self.parked)
+        mem::take(&mut self.parked)
     }
 
     pub fn parked_len(&self) -> usize {
@@ -744,10 +754,9 @@ impl Context {
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.suppress_parking;
         self.suppress_parking = true;
-
         let result = f(self);
-
         self.suppress_parking = previous;
+
         result
     }
 }

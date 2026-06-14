@@ -1,7 +1,7 @@
 use {
     super::*,
-    crate::core::{Int, Nat, Prim, Var},
-    std::time::Duration,
+    crate::core::{Atom, Inductive, Int, Nat, Prim, Structure, Var},
+    std::{collections::BTreeMap, time::Duration},
 };
 
 fn context() -> Context {
@@ -506,6 +506,81 @@ fn convert_unit_typed_neutrals_in_type_argument() {
 
     let this = Term::apply(f.clone(), [r]); // F r
     let that = Term::apply(f, [s]); // F s
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+// A struct's fields compare at their declared types, recovered from the
+// registry — so a proof-irrelevant (unit-typed) field equates distinct
+// neutrals, and two structs differing only there are convertible.
+#[test]
+fn convert_struct_unit_field_is_irrelevant() {
+    let mut context = context();
+
+    // struct Wrap { x : Nat, u : () }
+    context.register_structure(
+        "Wrap",
+        Structure {
+            params: Telescope::done(()),
+            fields: Telescope::build(
+                [
+                    ("x", Term::prim(Prim::NatType)),
+                    ("u", Term::tuple_type_unit()),
+                ],
+                (),
+            ),
+            module: String::new(),
+            rep_public: true,
+        },
+    );
+
+    context.assume("r", &Term::tuple_type_unit());
+    context.assume("s", &Term::tuple_type_unit());
+
+    let r = Term::var(Var::free("r"));
+    let s = Term::var(Var::free("s"));
+
+    // Wrap { 1, r } and Wrap { 1, s } differ only in the unit field's neutral.
+    let this = Term::struct_("Wrap", Vec::<Term>::new(), [nat(1), r]);
+    let that = Term::struct_("Wrap", Vec::<Term>::new(), [nat(1), s]);
+
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+// Likewise a variant's payload compares at its constructor's declared types,
+// so a unit-typed payload field is proof-irrelevant.
+#[test]
+fn convert_variant_unit_payload_is_irrelevant() {
+    let mut context = context();
+
+    // union Wrap | wrap(x : Nat, u : ()) end
+    context.register_inductive(
+        "Wrap",
+        Inductive {
+            params: Telescope::done(()),
+            indices: Telescope::done(()),
+            constructors: BTreeMap::from([(
+                Atom::from("wrap"),
+                Telescope::build(
+                    [
+                        ("x", Term::prim(Prim::NatType)),
+                        ("u", Term::tuple_type_unit()),
+                    ],
+                    Term::union_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
+                ),
+            )]),
+        },
+    );
+
+    context.assume("r", &Term::tuple_type_unit());
+    context.assume("s", &Term::tuple_type_unit());
+
+    let r = Term::var(Var::free("r"));
+    let s = Term::var(Var::free("s"));
+
+    // wrap(1, r) and wrap(1, s) differ only in the unit payload's neutral.
+    let this = Term::variant("Wrap", Vec::<Term>::new(), "wrap", [nat(1), r]);
+    let that = Term::variant("Wrap", Vec::<Term>::new(), "wrap", [nat(1), s]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }

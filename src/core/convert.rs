@@ -395,7 +395,12 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_variant(&mut self, this: Variant, that: Variant) -> Result<bool, ReduceError> {
+    fn compare_variant(
+        &mut self,
+        context: &mut Context,
+        this: Variant,
+        that: Variant,
+    ) -> Result<bool, ReduceError> {
         if this.name != that.name
             || this.tag != that.tag
             || this.params.len() != that.params.len()
@@ -404,12 +409,28 @@ impl Convert {
             return Ok(false);
         }
 
+        // Recover the payload types from the constructor's registry telescope
+        // (instantiated at this side's parameters) so each payload field
+        // compares at its own type — η and proof irrelevance fire per field,
+        // instead of a structural compare at `Type`. Same recovery `erase`
+        // uses; falls back to `Type` if the inductive is somehow absent.
+        let mut telescope = context
+            .inductive(&this.name)
+            .and_then(|inductive| inductive.instantiate(&this.tag, &this.params));
+
         for (a, b) in this.params.into_iter().zip(that.params) {
             self.enqueue(Term::type_(), a, b);
         }
 
         for (a, b) in this.payload.into_iter().zip(that.payload) {
-            self.enqueue(Term::type_(), a, b);
+            let payload_type = match telescope.take() {
+                Some(Telescope::Cons(ty, rest)) => {
+                    telescope = Some(rest.open(&[&a]));
+                    ty
+                }
+                _ => Term::type_(),
+            };
+            self.enqueue(payload_type, a, b);
         }
 
         Ok(true)
@@ -431,7 +452,12 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_struct(&mut self, this: Struct, that: Struct) -> Result<bool, ReduceError> {
+    fn compare_struct(
+        &mut self,
+        context: &mut Context,
+        this: Struct,
+        that: Struct,
+    ) -> Result<bool, ReduceError> {
         if this.name != that.name
             || this.params.len() != that.params.len()
             || this.fields.len() != that.fields.len()
@@ -439,12 +465,27 @@ impl Convert {
             return Ok(false);
         }
 
+        // Recover the field types from the registry (instantiated at this side's
+        // parameters) so each field compares at its own type — η and proof
+        // irrelevance fire per field, as `compare_tuple` does with the tuple
+        // type's telescope. Falls back to `Type` if the struct is somehow absent.
+        let mut telescope = context
+            .structure(&this.name)
+            .map(|structure| structure.fields_at(&this.params));
+
         for (a, b) in this.params.into_iter().zip(that.params) {
             self.enqueue(Term::type_(), a, b);
         }
 
         for (a, b) in this.fields.into_iter().zip(that.fields) {
-            self.enqueue(Term::type_(), a, b);
+            let field_type = match telescope.take() {
+                Some(Telescope::Cons(ty, rest)) => {
+                    telescope = Some(rest.open(&[&a]));
+                    ty
+                }
+                _ => Term::type_(),
+            };
+            self.enqueue(field_type, a, b);
         }
 
         Ok(true)
@@ -1192,13 +1233,13 @@ impl Convert {
                     self.compare_union_type(this, that)?
                 }
                 (Subterm::Variant(this), Subterm::Variant(that)) => {
-                    self.compare_variant(this, that)?
+                    self.compare_variant(context, this, that)?
                 }
                 (Subterm::StructType(this), Subterm::StructType(that)) => {
                     self.compare_struct_type(this, that)?
                 }
                 (Subterm::Struct(this), Subterm::Struct(that)) => {
-                    self.compare_struct(this, that)?
+                    self.compare_struct(context, this, that)?
                 }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?

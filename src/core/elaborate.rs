@@ -653,10 +653,10 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
             };
 
             // The use-site module is the enclosing item's qualifier prefix
-            // (`Context::current_module`, set per item by `elaborate_module`);
+            // (`Context::island`, set per item by `elaborate_module`);
             // the island model grants no descendant access, so the check is
             // exact qualifier equality.
-            if !structure.rep_public && context.current_module() != structure.module {
+            if !structure.rep_public && context.island() != structure.module {
                 let field = match field {
                     Field::Index(index) => index.to_string(),
                     Field::Label(label) => label.clone(),
@@ -847,9 +847,9 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
 
     // Construction privacy (§7): a private-representation struct may be built
     // only within its declaring module. Checked here (alongside projection
-    // privacy in `elaborate_proj`) via `current_module`, set per item by
+    // privacy in `elaborate_proj`) via `island`, set per item by
     // `elaborate_module`.
-    if !structure.rep_public && context.current_module() != structure.module {
+    if !structure.rep_public && context.island() != structure.module {
         return Err(Error::private_representation(name.clone()));
     }
 
@@ -2057,7 +2057,7 @@ pub fn elaborate_module(
             Item::Let(def) => module_of(&def.name),
             Item::Rec(defs) => defs.first().map(|d| module_of(&d.name)).unwrap_or(""),
         };
-        context.set_current_module(item_module.to_string());
+        context.set_island(item_module.to_string());
 
         items.push(match item {
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
@@ -2069,7 +2069,7 @@ pub fn elaborate_module(
         drain_parked(context)?;
     }
 
-    context.set_current_module(String::new());
+    context.set_island(String::new());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     drain_parked(context)?;
     let body_type = reduce_with(context, &body_type)?;

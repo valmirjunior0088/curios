@@ -233,8 +233,8 @@ fn process_items(
                     .iter()
                     .map(|u| {
                         let elaborate = Elaborate::new(context);
-
                         let name = context.prefixed(&u.label).join();
+
                         let param_tys = u
                             .params
                             .iter()
@@ -247,6 +247,7 @@ fn process_items(
                             .iter()
                             .map(|(_, n, t)| (n.clone(), t.clone()))
                             .collect::<Vec<_>>();
+
                         let param_vars = u
                             .params
                             .iter()
@@ -265,6 +266,7 @@ fn process_items(
                                 Ok((n, elaborate.term(t)?))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
+
                         let index_vars = index_tys
                             .iter()
                             .map(|(n, _)| core::Term::var(core::Var::free(n)))
@@ -291,16 +293,19 @@ fn process_items(
                                         Ok((n, elaborate.term(t)?))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
+
                                 let target = c
                                     .target
                                     .iter()
                                     .flatten()
                                     .map(|t| elaborate.term(t))
                                     .collect::<Result<Vec<_>, Error>>()?;
+
                                 let signature = core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
                                     core::Term::union_type(&name, param_vars.clone(), target),
                                 );
+
                                 Ok((core::Atom::from(c.label.as_str()), signature))
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
@@ -464,7 +469,7 @@ fn process_items(
 
                 let name = context.prefixed(&s.label).join();
                 // Declaring module: the type-former's qualifier prefix —
-                // identical to core's per-item `current_module` — for the
+                // identical to core's per-item `island` — for the
                 // representation-privacy checks.
                 let module = match name.rfind('/') {
                     Some(slash) => name[..slash].to_string(),
