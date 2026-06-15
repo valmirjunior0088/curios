@@ -100,7 +100,7 @@ pub struct Context<'a> {
     // into one `core::Term`, so holes in different module bodies (each its own
     // `Context` via `nested`) must draw from the same monotonic source. Shared
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
-    // `Elaborate`'s immutable `&Context` borrow.
+    // `Lower`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     // Sibling counter for fresh continuation-binder names minted while desugaring
     // `let !`/`!` blocks. Threaded (not a process-global atomic) for determinism:

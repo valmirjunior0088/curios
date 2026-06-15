@@ -1,8 +1,8 @@
 mod context;
 use context::*;
 
-mod elaborate;
-use elaborate::*;
+mod lower;
+use lower::*;
 
 mod interface;
 
@@ -197,24 +197,24 @@ fn process_items(
                 }
             }
             TopItem::Let(let_item) => {
-                let elaborate = Elaborate::new(context);
+                let lower = Lower::new(context);
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
-                    type_: elaborate.term(&let_item.signature.type_())?,
-                    body: elaborate.term(&let_item.signature.body())?,
+                    type_: lower.term(&let_item.signature.type_())?,
+                    body: lower.term(&let_item.signature.body())?,
                 }));
             }
             TopItem::Rec(ls) => {
                 let items = ls
                     .iter()
                     .map(|let_item| {
-                        let elaborate = Elaborate::new(context);
+                        let lower = Lower::new(context);
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
-                            type_: elaborate.term(&let_item.signature.type_())?,
-                            body: elaborate.term(&let_item.signature.body())?,
+                            type_: lower.term(&let_item.signature.type_())?,
+                            body: lower.term(&let_item.signature.body())?,
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -232,13 +232,13 @@ fn process_items(
                 let type_flat_items = unions
                     .iter()
                     .map(|u| {
-                        let elaborate = Elaborate::new(context);
+                        let lower = Lower::new(context);
                         let name = context.prefixed(&u.label).join();
 
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(p, n, t)| Ok((*p, n.clone(), elaborate.term(t)?)))
+                            .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
                             .collect::<Result<Vec<_>, Error>>()?;
                         // The registry and the `UnionType` normal form are
                         // positional; plicity matters only on the generated
@@ -263,7 +263,7 @@ fn process_items(
                             .enumerate()
                             .map(|(i, (n, t))| {
                                 let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                                Ok((n, elaborate.term(t)?))
+                                Ok((n, lower.term(t)?))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
 
@@ -290,7 +290,7 @@ fn process_items(
                                     .enumerate()
                                     .map(|(i, (_, n, t))| {
                                         let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                                        Ok((n, elaborate.term(t)?))
+                                        Ok((n, lower.term(t)?))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -298,7 +298,7 @@ fn process_items(
                                     .target
                                     .iter()
                                     .flatten()
-                                    .map(|t| elaborate.term(t))
+                                    .map(|t| lower.term(t))
                                     .collect::<Result<Vec<_>, Error>>()?;
 
                                 let signature = core::Telescope::build(
@@ -371,7 +371,7 @@ fn process_items(
                 // injects the variant as a tagged tuple.
                 for u in unions {
                     for c in &u.cases {
-                        let elaborate = Elaborate::new(context);
+                        let lower = Lower::new(context);
 
                         // Per-case payload binder names: the declared name, or
                         // a positional placeholder.
@@ -420,15 +420,15 @@ fn process_items(
                             .params
                             .iter()
                             .map(|(_, n, t)| {
-                                Ok((core::Plicity::Implicit, n.clone(), elaborate.term(t)?))
+                                Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
                             })
                             .chain(c.payload.iter().enumerate().map(|(i, (p, n, t))| {
-                                Ok((*p, payload_name(i, n), elaborate.term(t)?))
+                                Ok((*p, payload_name(i, n), lower.term(t)?))
                             }))
                             .collect::<Result<Vec<_>, Error>>()?;
                         let ctor_type = core::Term::func_type_marked(
                             param_tys.clone(),
-                            elaborate.term(&output_type)?,
+                            lower.term(&output_type)?,
                         );
 
                         // Constructor body: (params..., _0, ...) => the variant's
@@ -465,7 +465,7 @@ fn process_items(
             // entry — no value-constructor binding (the literal elaborates
             // directly) and no indices.
             TopItem::Struct(s) => {
-                let elaborate = Elaborate::new(context);
+                let lower = Lower::new(context);
 
                 let name = context.prefixed(&s.label).join();
                 // Declaring module: the type-former's qualifier prefix —
@@ -479,7 +479,7 @@ fn process_items(
                 let param_tys = s
                     .params
                     .iter()
-                    .map(|(p, n, t)| Ok((*p, n.clone(), elaborate.term(t)?)))
+                    .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
                     .collect::<Result<Vec<_>, Error>>()?;
                 let param_tys_unmarked = param_tys
                     .iter()
@@ -499,7 +499,7 @@ fn process_items(
                     .enumerate()
                     .map(|(i, (n, t))| {
                         let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                        Ok((n, elaborate.term(t)?))
+                        Ok((n, lower.term(t)?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -801,13 +801,13 @@ pub fn to_core(
         &modules,
     )?;
 
-    let elaborate = Elaborate::new(&context);
+    let lower = Lower::new(&context);
     let type_ = entrypoint
         .type_
         .as_ref()
-        .map(|type_| elaborate.term(type_))
+        .map(|type_| lower.term(type_))
         .transpose()?;
-    let tail = elaborate.term(&entrypoint.tail)?;
+    let tail = lower.term(&entrypoint.tail)?;
 
     // Emit the program as a flat list of named top-level definitions rather than
     // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references

@@ -10,18 +10,18 @@ use {
     num_bigint::BigUint,
 };
 
-pub struct Elaborate<'a, 'b> {
+pub struct Lower<'a, 'b> {
     context: &'a Context<'b>,
 }
 
 /// The active bind of a `let !` region: an atomic term denoting a binary bind
-/// `(M A, A -> M B) -> M B`. [`Elaborate::instantiate`] re-elaborates `term` (so its
+/// `(M A, A -> M B) -> M B`. [`Lower::instantiate`] re-elaborates `term` (so its
 /// `?` holes are fresh per `!` site) and applies it to `(action, continuation)`.
 struct Bind<'t> {
     term: &'t Term,
 }
 
-impl<'a, 'b> Elaborate<'a, 'b> {
+impl<'a, 'b> Lower<'a, 'b> {
     pub fn new(context: &'a Context<'b>) -> Self {
         Self { context }
     }
