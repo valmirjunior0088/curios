@@ -1,12 +1,308 @@
 use {
     super::{
-        Apply, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match, Module, Nat,
-        One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Two, UnionType, Var, Variant,
+        Apply, Arity, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match, Module,
+        Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, Two, UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
-    std::fmt::{Display, Formatter, Result},
+    std::{
+        cell::RefCell,
+        collections::{BTreeSet, HashMap},
+        fmt::{Display, Formatter, Result},
+        rc::Rc,
+    },
 };
+
+// === Source-style names (diagnostics) ========================================
+//
+// Core spells names for the kernel's convenience, not the reader's: every binder
+// is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and
+// every global is its fully-qualified canonical path (`std/Vec/Vec`, `sys/Nat`).
+// Two thread-local maps, installed only while a diagnostic (or `Module`) renders,
+// rewrite both back toward what the user wrote; the faithful `Display` for a bare
+// term leaves names untouched.
+//
+//   axis (a) — local binders: a *rename map* (`with_pretty_names`, built by
+//     `build_rename` over `display_names`) alpha-renames the whole fragment —
+//     free vars *and* binder labels. A source hint is used bare when unique;
+//     distinct names sharing a hint, or shadowing a literally-rendered name, take
+//     minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike.
+//
+//   axis (b) — globals: a *shorten map* (`with_short_names`, built by
+//     `build_shorten` over `module_symbols`) replaces each qualified path with
+//     its shortest unambiguous `/`-suffix — the name in scope, since Curios has
+//     no `use … as` aliasing. Installed by error rendering *and* `Module` display.
+//
+// `display_label` consults the shorten map first (globals), then the rename map
+// (locals); a name in neither renders verbatim.
+
+thread_local! {
+    /// Local binders → source-name renaming (axis (a)); installed by error
+    /// rendering only.
+    static PRETTY: RefCell<Option<Rc<HashMap<String, String>>>> = const { RefCell::new(None) };
+    /// Global qualified names → their shortest in-scope spelling (axis (b));
+    /// installed by both error rendering and `Module` display.
+    static SHORTEN: RefCell<Option<Rc<HashMap<String, String>>>> = const { RefCell::new(None) };
+}
+
+/// Install a pretty-name rename map for the duration of `f`, restoring the
+/// previous state afterwards so the faithful `Display` paths are unaffected.
+pub fn with_pretty_names<R>(rename: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
+    let prev = PRETTY.with(|p| p.borrow_mut().replace(rename));
+    let result = f();
+    PRETTY.with(|p| *p.borrow_mut() = prev);
+    result
+}
+
+/// Install a global-shortening map for the duration of `f`.
+pub fn with_short_names<R>(shorten: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
+    let prev = SHORTEN.with(|s| s.borrow_mut().replace(shorten));
+    let result = f();
+    SHORTEN.with(|s| *s.borrow_mut() = prev);
+    result
+}
+
+/// Strip a `fresh`-generated `hint#counter` name down to its source `hint`.
+/// User-written names carry no `#`; a counter-only `#7` (an unnamed binder) has
+/// an empty hint and is left as-is.
+fn strip_fresh(raw: &str) -> String {
+    match raw.split_once('#') {
+        Some((hint, _)) if !hint.is_empty() => hint.to_string(),
+        _ => raw.to_string(),
+    }
+}
+
+/// The display spelling of a name. A global with a shorter in-scope spelling
+/// takes it (axis (b)); otherwise a local binder gets its pretty rename (axis
+/// (a), with a `strip_fresh` fallback). A name in neither map renders verbatim.
+fn display_label(raw: &str) -> String {
+    if let Some(short) = SHORTEN.with(|s| s.borrow().as_ref().and_then(|m| m.get(raw).cloned())) {
+        return short;
+    }
+    PRETTY.with(|p| match &*p.borrow() {
+        None => raw.to_string(),
+        Some(map) => map.get(raw).cloned().unwrap_or_else(|| strip_fresh(raw)),
+    })
+}
+
+/// Every name the printer will emit for `term`: free vars (Γ references) and the
+/// stored labels of every binder it reopens. Free vars come from the robust
+/// `Bound` traversal; binder labels — which that traversal never surfaces — from
+/// [`collect_labels`], which descends scope bodies (where nested binders live).
+pub fn display_names(term: &Term) -> BTreeSet<String> {
+    let mut names = term.free_vars();
+    collect_labels(term, &mut names);
+    names
+}
+
+/// Collect every binder label in `term`, recursing through scope and telescope
+/// bodies. (`Prim` interiors are skipped: they hold no binders the diagnostics
+/// need to name, and any free vars there are already in `free_vars`.)
+fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
+    fn push(out: &mut BTreeSet<String>, label: Option<&str>) {
+        if let Some(label) = label.filter(|l| !l.is_empty()) {
+            out.insert(label.to_string());
+        }
+    }
+
+    fn scope<A: Arity>(out: &mut BTreeSet<String>, scope: &Scope<A>) {
+        if let Some(names) = scope.names() {
+            names.iter().for_each(|n| push(out, Some(n)));
+        }
+        collect_labels(scope.body(), out);
+    }
+
+    fn telescope(out: &mut BTreeSet<String>, mut cur: &Telescope<Term>) {
+        loop {
+            match cur {
+                Telescope::Cons(ty, rest) => {
+                    push(out, rest.first_label());
+                    collect_labels(ty, out);
+                    cur = rest.body();
+                }
+                Telescope::Done(body) => break collect_labels(body, out),
+            }
+        }
+    }
+
+    // A tuple type's telescope has no result term (`Telescope<()>`); only its
+    // field types and labels carry names.
+    fn tuple_telescope(out: &mut BTreeSet<String>, mut cur: &Telescope<()>) {
+        while let Telescope::Cons(ty, rest) = cur {
+            push(out, rest.first_label());
+            collect_labels(ty, out);
+            cur = rest.body();
+        }
+    }
+
+    let each = |out: &mut BTreeSet<String>, terms: &[Term]| {
+        terms.iter().for_each(|t| collect_labels(t, out))
+    };
+
+    match &**term {
+        Subterm::FuncType(FuncType { telescope: t, .. }) => telescope(out, t),
+        Subterm::Func(Func { telescope: t }) => telescope(out, t),
+        Subterm::TupleType(TupleType { telescope: t }) => tuple_telescope(out, t),
+        Subterm::Apply(Apply { head, params, .. }) => {
+            collect_labels(head, out);
+            each(out, params);
+        }
+        Subterm::Tuple(Tuple { fields, .. }) => each(out, fields),
+        Subterm::Proj(Proj { head, .. }) => collect_labels(head, out),
+        Subterm::UnionType(UnionType {
+            params, indices, ..
+        }) => {
+            each(out, params);
+            each(out, indices);
+        }
+        Subterm::Variant(Variant {
+            params, payload, ..
+        }) => {
+            each(out, params);
+            each(out, payload);
+        }
+        Subterm::StructType(StructType { params, .. }) => each(out, params),
+        Subterm::Struct(Struct { params, fields, .. }) => {
+            each(out, params);
+            each(out, fields);
+        }
+        Subterm::Let(Let { type_, body, tail }) => {
+            collect_labels(type_, out);
+            collect_labels(body, out);
+            scope(out, tail);
+        }
+        Subterm::Rec(Rec { items, tail }) => {
+            for (type_, value) in items {
+                scope(out, type_);
+                scope(out, value);
+            }
+            scope(out, tail);
+        }
+        Subterm::Match(Match {
+            head,
+            motive,
+            cases,
+        }) => {
+            collect_labels(head, out);
+            scope(out, motive);
+            match cases {
+                Cases::Bln {
+                    false_case,
+                    true_case,
+                } => {
+                    collect_labels(false_case, out);
+                    collect_labels(true_case, out);
+                }
+                Cases::Nat {
+                    zero_case,
+                    succ_case,
+                } => {
+                    collect_labels(zero_case, out);
+                    scope(out, succ_case);
+                }
+                Cases::Switch { cases, default } => {
+                    cases.iter().for_each(|(_, body)| collect_labels(body, out));
+                    collect_labels(default, out);
+                }
+                Cases::Union { cases, .. } => {
+                    cases.iter().for_each(|(_, s)| scope(out, s))
+                }
+            }
+        }
+        Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
+        Subterm::Var(_) | Subterm::Type | Subterm::Prim(_) => {}
+    }
+}
+
+/// Assign every `hint#counter` name a clean display spelling: its source `hint`,
+/// or `hint2`, `hint3`, … when several distinct names — binders *or* free vars —
+/// would otherwise collide, or would shadow a name that renders literally
+/// (globals, already-clean labels). The result is unambiguous by construction,
+/// so no rendered name is ever silently shared between two binders.
+pub fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> {
+    // `names` is sorted, so the assignment below is deterministic.
+    let prettifiable = names
+        .iter()
+        .filter(|n| matches!(n.split_once('#'), Some((hint, _)) if !hint.is_empty()))
+        .collect::<Vec<_>>();
+
+    // Names that render as themselves reserve their spelling up front.
+    let mut used = names
+        .iter()
+        .filter(|n| !prettifiable.contains(n))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    let mut map = HashMap::new();
+    for raw in prettifiable {
+        let hint = strip_fresh(raw);
+        let mut candidate = hint.clone();
+        let mut next = 2;
+        while used.contains(&candidate) {
+            candidate = format!("{hint}{next}");
+            next += 1;
+        }
+        used.insert(candidate.clone());
+        map.insert(raw.clone(), candidate);
+    }
+    map
+}
+
+/// Every global qualified name in `module`: each definition (`let`/`rec`), each
+/// union type, each struct type. The universe a global is shortened *against*.
+pub fn module_symbols(module: &Module) -> Vec<String> {
+    let mut symbols = Vec::new();
+    for item in &module.items {
+        match item {
+            Item::Let(def) => symbols.push(def.name.clone()),
+            Item::Rec(defs) => symbols.extend(defs.iter().map(|def| def.name.clone())),
+        }
+    }
+    symbols.extend(module.inductives.keys().cloned());
+    symbols.extend(module.structures.keys().cloned());
+    symbols
+}
+
+/// Map each global to the shortest `/`-suffix of its path that no other global
+/// shares — the name it has in scope, since Curios has no `use … as` aliasing,
+/// so an in-scope name is always a suffix. Only entries that actually shorten
+/// are recorded; an ambiguous (or single-segment) name keeps its full path.
+pub fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
+    // One global can be listed twice (a union is both an `inductives` registry
+    // key and an `items` type-constructor definition); count distinct names, or
+    // such a name would look ambiguous with itself and never shorten.
+    let symbols = symbols
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+
+    let suffixes = |sym: &str| -> Vec<String> {
+        let segments = sym.split('/').collect::<Vec<_>>();
+        (1..=segments.len())
+            .map(|k| segments[segments.len() - k..].join("/"))
+            .collect()
+    };
+
+    // How many distinct globals carry each segment-suffix.
+    let mut count: HashMap<String, usize> = HashMap::new();
+    for sym in &symbols {
+        for suffix in suffixes(sym) {
+            *count.entry(suffix).or_insert(0) += 1;
+        }
+    }
+
+    let mut map = HashMap::new();
+    for sym in &symbols {
+        if let Some(shortest) = suffixes(sym)
+            .into_iter()
+            .find(|suffix| count.get(suffix) == Some(&1))
+            && shortest.len() < sym.len()
+        {
+            map.insert(sym.to_string(), shortest);
+        }
+    }
+    map
+}
 
 fn label_at(depth: usize) -> String {
     format!("#{depth}")
@@ -62,7 +358,7 @@ fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
 }
 
 fn print_var(var: Var) -> Printer<'static> {
-    pure(var.unwrap().to_string())
+    pure(display_label(var.unwrap()))
 }
 
 fn print_atom(atom: Atom) -> Printer<'static> {
@@ -487,7 +783,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         let printer = match raw {
                             Some(_) => flat([
                                 pure(mark),
-                                pure(label.clone()),
+                                pure(display_label(&label)),
                                 pure(" : "),
                                 print_term(ty, depth + total),
                             ]),
@@ -514,9 +810,16 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let n = telescope.len();
             let (labels, body) = open_telescope(telescope, depth);
             let param_str = if labels.len() == 1 {
-                labels.into_iter().next().unwrap()
+                display_label(&labels[0])
             } else {
-                format!("({})", labels.join(", "))
+                format!(
+                    "({})",
+                    labels
+                        .iter()
+                        .map(|l| display_label(l))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             };
             flat([
                 pure(param_str),
@@ -560,7 +863,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             .map(str::to_string)
                             .unwrap_or_else(|| label_at(depth + idx));
                         items.push(indent(flat([
-                            pure(label.clone()),
+                            pure(display_label(&label)),
                             pure(" : "),
                             print_term(ty, depth + total),
                         ])));
@@ -607,10 +910,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             indices,
         }) => {
             if params.is_empty() && indices.is_empty() {
-                pure(name)
+                pure(display_label(&name))
             } else {
                 flat([
-                    pure(name),
+                    pure(display_label(&name)),
                     pure("("),
                     sep_flat(
                         params
@@ -630,10 +933,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             name, tag, payload, ..
         }) => {
             if payload.is_empty() {
-                pure(format!("{name}/{tag}"))
+                pure(format!("{}/{tag}", display_label(&name)))
             } else {
                 flat([
-                    pure(format!("{name}/{tag}")),
+                    pure(format!("{}/{tag}", display_label(&name))),
                     pure("("),
                     sep_flat(
                         payload
@@ -649,10 +952,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         // Like `UnionType` but with no indices: `Pair(Nat, Bin)`.
         Subterm::StructType(StructType { name, params }) => {
             if params.is_empty() {
-                pure(name)
+                pure(display_label(&name))
             } else {
                 flat([
-                    pure(name),
+                    pure(display_label(&name)),
                     pure("("),
                     sep_flat(
                         params
@@ -668,7 +971,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         // Prints as the brace literal, instantiated type params hidden —
         // `Pair { 0, "" }`.
         Subterm::Struct(Struct { name, fields, .. }) => flat([
-            pure(format!("{name} {{ ")),
+            pure(format!("{} {{ ", display_label(&name))),
             sep_flat(
                 fields
                     .into_iter()
@@ -693,7 +996,11 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let motive_terms = label_terms(&motive_labels);
             let motive_refs = motive_terms.iter().collect::<Vec<_>>();
             let motive_arity = motive_labels.len();
-            let motive_label = motive_labels.join(", ");
+            let motive_label = motive_labels
+                .iter()
+                .map(|l| display_label(l))
+                .collect::<Vec<_>>()
+                .join(", ");
             let motive = motive.open(&motive_refs);
 
             // Shared `<keyword> head : label => motive;` prefix; the keyword
@@ -734,9 +1041,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         pure("\n| 0n =>\n"),
                         indent(flat([print_term(zero_case, depth), pure(";")])),
                         pure("\n| "),
-                        pure(pred_label),
+                        pure(display_label(&pred_label)),
                         pure(" "),
-                        pure(ih_label),
+                        pure(display_label(&ih_label)),
                         pure(" =>\n"),
                         indent(flat([print_term(succ_case, depth), pure(";")])),
                     ])
@@ -777,7 +1084,14 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             let binders = if labels.is_empty() {
                                 pure("")
                             } else {
-                                pure(format!("({})", labels.join(", ")))
+                                pure(format!(
+                                    "({})",
+                                    labels
+                                        .iter()
+                                        .map(|l| display_label(l))
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                ))
                             };
 
                             flat([
@@ -799,7 +1113,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([
                 pure("let "),
-                pure(label),
+                pure(display_label(&label)),
                 pure(" : "),
                 print_term(type_, depth),
                 pure(" =\n"),
@@ -826,7 +1140,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     let body = body.open(&label_terms);
 
                     flat([
-                        pure(labels[index].clone()),
+                        pure(display_label(&labels[index])),
                         pure(" : "),
                         print_term(type_, inner_depth),
                         pure(" =\n"),
@@ -894,33 +1208,35 @@ impl Display for Module {
     // so `--print core` stays O(N) and cannot re-trigger the prelude-depth
     // overflow this representation removed.
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        for item in &self.items {
-            match item {
-                Item::Let(def) => {
-                    write!(formatter, "let ")?;
-                    print_definition(formatter, def)?;
-                    writeln!(formatter, ";")?;
-                }
-                Item::Rec(defs) => {
-                    write!(formatter, "rec ")?;
-                    for (index, def) in defs.iter().enumerate() {
-                        if index > 0 {
-                            write!(formatter, "and ")?;
-                        }
+        with_short_names(Rc::new(build_shorten(&module_symbols(self))), || {
+            for item in &self.items {
+                match item {
+                    Item::Let(def) => {
+                        write!(formatter, "let ")?;
                         print_definition(formatter, def)?;
-                        write!(formatter, " ")?;
+                        writeln!(formatter, ";")?;
                     }
-                    writeln!(formatter, ";")?;
+                    Item::Rec(defs) => {
+                        write!(formatter, "rec ")?;
+                        for (index, def) in defs.iter().enumerate() {
+                            if index > 0 {
+                                write!(formatter, "and ")?;
+                            }
+                            print_definition(formatter, def)?;
+                            write!(formatter, " ")?;
+                        }
+                        writeln!(formatter, ";")?;
+                    }
                 }
             }
-        }
 
-        write!(formatter, "{}", self.body)?;
+            write!(formatter, "{}", self.body)?;
 
-        if let Some(type_) = &self.type_ {
-            write!(formatter, "\n: {type_}")?;
-        }
+            if let Some(type_) = &self.type_ {
+                write!(formatter, "\n: {type_}")?;
+            }
 
-        Ok(())
+            Ok(())
+        })
     }
 }

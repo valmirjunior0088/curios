@@ -32,6 +32,7 @@ mod structure;
 pub use structure::*;
 
 mod print;
+use print::*;
 
 mod reduce_prim;
 use reduce_prim::*;

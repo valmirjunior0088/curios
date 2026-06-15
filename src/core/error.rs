@@ -1,8 +1,8 @@
 use {
-    super::{Atom, Int, Term},
+    super::{Atom, Int, Module, Term},
     crate::Span,
     num_bigint::BigUint,
-    std::fmt,
+    std::{collections::BTreeSet, fmt, rc::Rc},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -482,11 +482,75 @@ impl Error {
     }
 
     pub fn format(&self) -> String {
+        // Render with source-style names (axis (a)): collect the names appearing
+        // across every term this error displays, build one collision-aware
+        // rename map for them, and install it for the duration of the render so
+        // `inferred`/`expected` agree on what each name means.
+        let mut terms = Vec::new();
+        self.collect_terms(&mut terms);
+
+        let mut names = BTreeSet::new();
+        for term in terms {
+            names.extend(super::display_names(term));
+        }
+
+        let rename = Rc::new(super::build_rename(&names));
+        super::with_pretty_names(rename, || self.render())
+    }
+
+    /// Like [`format`], additionally shortening global names against `module`'s
+    /// symbol table (axis (b)) — the qualified-name universe an error's globals
+    /// are spelled relative to. Used on the core error paths, where the lowered
+    /// module is in scope.
+    pub fn format_with(&self, module: &Module) -> String {
+        super::with_short_names(
+            Rc::new(super::build_shorten(&super::module_symbols(module))),
+            || self.format(),
+        )
+    }
+
+    fn render(&self) -> String {
         match self {
             Self::Located { span, error } => {
                 format!("{error}\n\n{}", span.render_snippet())
             }
             error => error.to_string(),
+        }
+    }
+
+    /// The terms this error embeds in its message, gathered so [`format`] can
+    /// pretty-print their names consistently. Recurses through the `Located`
+    /// wrapper; variants carrying no term contribute nothing.
+    fn collect_terms<'a>(&'a self, out: &mut Vec<&'a Term>) {
+        match self {
+            Self::Located { error, .. } => error.collect_terms(out),
+            Self::ReducePreempted { term } => out.push(term),
+            Self::ConvertPreempted { this, that } => {
+                out.push(this);
+                out.push(that);
+            }
+            Self::TypeMismatch { inferred, expected } => {
+                out.push(inferred);
+                out.push(expected);
+            }
+            Self::NotAFunction { head_type }
+            | Self::NotATuple { head_type }
+            | Self::NotArrType { head_type }
+            | Self::NotNatType { head_type }
+            | Self::NotBlnType { head_type }
+            | Self::NotAUnionType { head_type } => out.push(head_type),
+            Self::NotAFunctionType { expected }
+            | Self::NotATupleType { expected }
+            | Self::NotAnArrayType { expected } => out.push(expected),
+            Self::NotAStructType { found } => out.push(found),
+            Self::MatchCaseMissing { term, .. } => out.push(term),
+            Self::UnboundVariable { term } => out.push(term),
+            Self::MotiveParamMismatch { written, actual } => {
+                out.push(written);
+                out.push(actual);
+            }
+            Self::MotiveIndexSlotNotBinder { slot } => out.push(slot),
+            _ => {}
         }
     }
 }

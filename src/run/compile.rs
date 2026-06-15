@@ -47,10 +47,10 @@ where
     };
 
     let (module, core_type) = core::elaborate_module(&mut context, &module, metavars, core_mode)
-        .map_err(|error| error.format())?;
+        .map_err(|error| error.format_with(&module))?;
 
-    let module = core::zonk_module(&context, &module).map_err(|error| error.format())?;
-    let core_type = core::zonk(&context, &core_type).map_err(|error| error.format())?;
+    let module = core::zonk_module(&context, &module).map_err(|error| error.format_with(&module))?;
+    let core_type = core::zonk(&context, &core_type).map_err(|error| error.format_with(&module))?;
 
     Ok((module, core_type))
 }
@@ -84,7 +84,7 @@ where
     let (module, core_type) = elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
     let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
-        .map_err(|error| error.format())?;
+        .map_err(|error| error.format_with(&module))?;
 
     observe(Stage::Ersd(&ersd_module));
 

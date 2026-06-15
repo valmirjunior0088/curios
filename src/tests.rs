@@ -1029,6 +1029,69 @@ fn struct_private_projection_rejected() {
     );
 }
 
+// Diagnostics name binders with the source names the user wrote, not the
+// `hint#counter` gensyms elaboration opens them under (axis (a)): the inferred
+// function type must read `(n : Nat)`, never `(n#3 : Nat)`.
+#[test]
+fn diagnostic_uses_source_binder_names() {
+    let source = r#"
+        use /std/{Nat};
+        let f(n : Nat) -> Nat = n;
+        let bad : Nat = f;
+        bad
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("inferred: (n : Nat) -> Nat"),
+        "binder lost its source name: {error}"
+    );
+    assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
+}
+
+// Two binders sharing a source name (shadowing) stay distinct in the message
+// via a minimal numeric suffix — `n` and `n2` — instead of both reading `n`
+// (axis (a) collision handling).
+#[test]
+fn diagnostic_disambiguates_shadowed_binders() {
+    let source = r#"
+        use /std/{Nat};
+        let f(n : Nat) -> ((n : Nat) -> Nat) = (k : Nat) => n;
+        let bad : Nat = f;
+        bad
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("inferred: (n : Nat) -> (n2 : Nat) -> Nat"),
+        "shadowed binders not disambiguated: {error}"
+    );
+    assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
+}
+
+// Globals print under their shortest in-scope spelling, not their fully
+// qualified canonical path (axis (b)): `Vec` and `Nat`, never `std/Vec/Vec`
+// or `sys/Nat`.
+#[test]
+fn diagnostic_shortens_global_names() {
+    let source = r#"
+        use /std/{Nat, Vec};
+        let bad(n : Nat, v : Vec(Nat, n)) -> Nat = v;
+        bad
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("inferred: Vec(Nat, n)"),
+        "globals not shortened: {error}"
+    );
+    assert!(!error.contains("std/Vec"), "qualified union path leaked: {error}");
+    assert!(!error.contains("sys/"), "qualified prim path leaked: {error}");
+}
+
 // A struct type is nominal: it never converts with a structural tuple type of
 // the same fields.
 #[test]
