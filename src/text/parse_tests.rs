@@ -777,6 +777,31 @@ fn parse_local_let_with_type_still_works() {
 }
 
 #[test]
+fn parse_struct_pattern_in_let() {
+    // `let Foo { pun, rename = p } = value; tail` — a pun field binds its own
+    // label; a rename binds the nested pattern. The head's trailing `{` commits
+    // to the struct form, distinguishing it from a plain `let x = …` binder.
+    assert_eq!(
+        "let Pair { fst, snd = s } = p; fst".parse::<Term>().unwrap(),
+        Subterm::Let(Let {
+            binder: Pattern::Struct {
+                head: Name::from(["Pair".to_string()]),
+                fields: vec![
+                    ("fst".to_string(), Pattern::Bind("fst".to_string())),
+                    ("snd".to_string(), Pattern::Bind("s".to_string())),
+                ],
+            },
+            signature: LetSignature::Name {
+                type_: None,
+                body: name("p"),
+            },
+            tail: name("fst"),
+        })
+        .into()
+    );
+}
+
+#[test]
 fn parse_func_with_annotation() {
     assert_eq!(
         "(x : Type) => x".parse::<Term>().unwrap(),
@@ -1061,6 +1086,24 @@ fn struct_round_trips() {
             term.to_string().parse::<Term>().unwrap(),
             term,
             "literal round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn struct_pattern_round_trips() {
+    // A struct pattern survives print → re-parse: a pun prints as the bare label,
+    // a rename as `label = pattern`, and both nest.
+    for source in [
+        "let Pair { fst, snd } = p; fst",
+        "let Pair { fst = a, snd = b } = p; a",
+        "let Outer { it = Inner { a, b }, c } = o; c",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "struct pattern round-trip failed for {source:?}"
         );
     }
 }

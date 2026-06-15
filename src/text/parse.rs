@@ -462,8 +462,31 @@ fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
         .map(Pattern::Tuple)
 }
 
+// One field of a struct pattern: a rename `bar = p` (binding the nested pattern
+// `p`), or a pun `bar` (binding the field's own label). The `=` commits to the
+// rename, so a bare label falls through to the pun.
+fn parse_struct_field_pattern<'a>() -> Parser<'a, (String, Pattern)> {
+    catch(parse_identifier().and_drop(parse_literal("=")))
+        .and(lazy(parse_pattern))
+        .map(|(label, pattern): (&str, Pattern)| (label.to_string(), pattern))
+        .or(parse_identifier()
+            .map(|label: &str| (label.to_string(), Pattern::Bind(label.to_string()))))
+}
+
+// A nominal struct pattern `Name { field, … }`. The trailing `{` after the head
+// is the commit point — it distinguishes the pattern from a bare `Bind` (no
+// brace), exactly as `parse_struct_lit` distinguishes a literal from a name
+// reference. Parameters are never written here; they are inferred from the head.
+fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
+    catch(parse_name().and_drop(parse_literal("{")))
+        .and(sep_by0(parse_struct_field_pattern, || parse_literal(",")))
+        .and_drop(parse_literal("}"))
+        .map(|(head, fields)| Pattern::Struct { head, fields })
+}
+
 fn parse_pattern<'a>() -> Parser<'a, Pattern> {
     parse_tuple_pattern()
+        .or(parse_struct_pattern())
         .or(parse_identifier().map(|name: &str| Pattern::Bind(name.to_string())))
 }
 
@@ -778,6 +801,26 @@ fn parse_let_tuple<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+// `let Foo { bar, baz } = e; tail`. A struct pattern right after `let` commits
+// to the destructuring form (the head's trailing `{`), so `.or(parse_let_name)`
+// only backtracks when there is no struct pattern. Like the tuple form, the
+// signature is always the plain `(: T)? = value` shape — the head already pins
+// the struct type, so an annotation is optional.
+fn parse_let_struct<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("let").and_keep(parse_struct_pattern()))
+        .and(parse_optional_name_signature())
+        .and_drop(parse_literal(";"))
+        .and(lazy(parse_term))
+        .map(|((binder, signature), tail)| {
+            Subterm::Let(Let {
+                binder,
+                signature,
+                tail,
+            })
+        })
+        .map(Into::into)
+}
+
 fn parse_let_name<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("let"))
         .and_keep(parse_identifier())
@@ -795,7 +838,7 @@ fn parse_let_name<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
-    parse_let_tuple().or(parse_let_name())
+    parse_let_tuple().or(parse_let_struct()).or(parse_let_name())
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, Field> {

@@ -788,7 +788,17 @@ fn elaborate_variant(
 /// Type a struct type against its registry entry: the parameters are checked
 /// pointwise (dependently) through the parameter telescope, and the whole node
 /// is a `Type`. The struct analogue of `elaborate_union_type`, with no indices.
-fn elaborate_struct_type(context: &mut Context, st: &StructType) -> Result<(Term, Term), Error> {
+///
+/// An *empty* parameter list on a parameterized struct is the inferred-head form
+/// (the type struct destructuring gives its temp): mint one fresh metavariable
+/// per declared parameter, exactly as the bare-name struct literal does
+/// (`elaborate_struct`), so the head can be solved by unification against the
+/// scrutinee's type.
+fn elaborate_struct_type(
+    context: &mut Context,
+    st: &StructType,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
     let StructType { name, params } = st;
 
     let Some(structure) = context.structure(name).cloned() else {
@@ -797,6 +807,25 @@ fn elaborate_struct_type(context: &mut Context, st: &StructType) -> Result<(Term
             None => Error::unbound_variable(Term::var(Var::free(name))),
         });
     };
+
+    if params.is_empty() && !structure.params.is_empty() {
+        let mut resolved = Vec::with_capacity(structure.params.len());
+        let mut tele = structure.params.clone();
+        while let Telescope::Cons(ty, rest) = tele {
+            let binder = binder_name(rest.first_label().unwrap_or("_"));
+            let arg = context.fresh_metavar(
+                ty.clone(),
+                term.span(),
+                ImplicitOrigin {
+                    func: name.clone(),
+                    binder,
+                },
+            );
+            tele = rest.open(&[&arg]);
+            resolved.push(arg);
+        }
+        return Ok((Term::struct_type(name, resolved), Term::type_()));
+    }
 
     if params.len() != structure.params.len() {
         return Err(Error::struct_arity_mismatch(
@@ -2174,7 +2203,7 @@ fn elaborate_subterm(
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::UnionType(ut) => elaborate_union_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
-        Subterm::StructType(st) => elaborate_struct_type(context, st)?,
+        Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
         Subterm::Struct(s) => elaborate_struct(context, s, term)?,
     };
 

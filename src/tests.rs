@@ -1151,6 +1151,152 @@ fn struct_literal_non_struct_head_rejected() {
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
 
+// === struct destructuring ===============================================
+
+// A struct pattern in a `let` binds each named field by label (a pun binds the
+// field's own name); the head's parameters are inferred.
+#[test]
+fn struct_destructure_pun_binds_fields_by_label() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 2, snd = 5 };
+        let Pair { fst, snd } = p;
+        Io/print(Nat/to_str(Nat/add(fst, snd)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+}
+
+// A rename field `fst = a` binds the field to a fresh name.
+#[test]
+fn struct_destructure_rename_binds_new_names() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 2, snd = 5 };
+        let Pair { fst = a, snd = b } = p;
+        Io/print(Nat/to_str(Nat/mul(a, b)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"10".to_vec()]);
+}
+
+// Naming a subset of fields is allowed — the rest are simply ignored.
+#[test]
+fn struct_destructure_partial_ignores_unlisted_fields() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 9, snd = 5 };
+        let Pair { fst } = p;
+        Io/print(Nat/to_str(fst))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"9".to_vec()]);
+}
+
+// Patterns nest: a renamed field can itself be a struct pattern.
+#[test]
+fn struct_destructure_nested_struct_pattern() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Inner pub { a : Nat, b : Nat }
+        pub struct Outer pub { it : Inner, c : Nat }
+        let o : Outer = Outer { it = Inner { a = 1, b = 2 }, c = 3 };
+        let Outer { it = Inner { a, b }, c } = o;
+        Io/print(Nat/to_str(Nat/add(Nat/add(a, b), c)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"6".to_vec()]);
+}
+
+// The head is checked nominally: destructuring a `Pair` as a structurally
+// identical but distinctly-named `Other` is rejected (not silently projected).
+#[test]
+fn struct_destructure_wrong_head_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub struct Other pub { fst : Nat, snd : Nat }
+        let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
+        let Other { fst, snd } = p;
+        Io/print("no")
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+// A struct pattern works as an un-annotated lambda parameter — the domain comes
+// from the head, parameters inferred against the expected function type.
+#[test]
+fn struct_destructure_in_lambda_parameter() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        let sum : (_ : Pair(Nat, Nat)) -> Nat = (Pair { fst, snd }) => Nat/add(fst, snd);
+        let p : Pair(Nat, Nat) = Pair { fst = 6, snd = 1 };
+        Io/print(Nat/to_str(sum(p)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+}
+
+// A struct pattern destructures a constructor's payload in a match arm.
+#[test]
+fn struct_destructure_in_match_arm() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        union Wrap | wrap(Pair(Nat, Nat)) end
+        let w : Wrap = Wrap/wrap(Pair { fst = 3, snd = 8 });
+        let out : Nat =
+            match w : Nat
+            | wrap(Pair { fst, snd }) => Nat/add(fst, snd)
+            end;
+        Io/print(Nat/to_str(out))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"11".to_vec()]);
+}
+
+// Destructuring projects through the representation-privacy boundary: a
+// private-representation struct's field cannot be pulled out from another module.
+#[test]
+fn struct_destructure_private_field_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod Celsius
+            use /std/{Nat};
+            pub struct Celsius { value : Nat }
+            pub let of_nat(n : Nat) -> Celsius = Celsius { value = n };
+        end
+        let c : Celsius/Celsius = Celsius/of_nat(42);
+        let Celsius/Celsius { value } = c;
+        Io/print(Nat/to_str(value))
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("field") && error.contains("private"),
+        "unexpected error: {error}"
+    );
+}
+
 // === Str (std/Str) ======================================================
 
 // `"..."` is a `Str` primitive value (UTF-8 by construction); `Io/print` writes

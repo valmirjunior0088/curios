@@ -25,6 +25,20 @@ fn print_pattern(pattern: Pattern) -> Printer<'static> {
             sep_flat(fields.into_iter().map(print_pattern), || pure(", ")),
             pure(")"),
         ]),
+        // A pun field `(bar, Bind("bar"))` prints as the bare label; any other
+        // binding prints as a rename `bar = <pattern>`.
+        Pattern::Struct { head, fields } => flat([
+            pure(head.join()),
+            pure(" { "),
+            sep_flat(
+                fields.into_iter().map(|(label, pattern)| match pattern {
+                    Pattern::Bind(ref name) if *name == label => pure(label),
+                    pattern => flat([pure(label), pure(" = "), print_pattern(pattern)]),
+                }),
+                || pure(", "),
+            ),
+            pure(" }"),
+        ]),
     }
 }
 

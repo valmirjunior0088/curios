@@ -77,16 +77,26 @@ pub enum Pattern {
     /// A positional tuple pattern `(p0, p1, …)`. Irrefutable — a tuple has a
     /// single shape, so destructuring is pure projection.
     Tuple(Vec<Pattern>),
+    /// A nominal struct pattern `Foo { bar, baz }` (pun, binding each field by
+    /// its label) or `Foo { bar = p, … }` (rename, binding the nested pattern
+    /// `p`). The `head` names the struct type — checked nominally, like the
+    /// `Foo { … }` struct literal it mirrors. Irrefutable, and *partial*: only
+    /// the listed fields are projected, the rest are ignored.
+    Struct {
+        head: Name,
+        fields: Vec<(String, Pattern)>,
+    },
 }
 
 impl Pattern {
     /// The name a Π-binder should carry when this pattern is a function
     /// parameter: a plain `Bind`'s name (so dependent domains/outputs can refer
-    /// to it), or `None` for a tuple pattern (no whole-value name to refer to).
+    /// to it), or `None` for a tuple/struct pattern (no whole-value name to
+    /// refer to).
     pub fn binder_name(&self) -> Option<String> {
         match self {
             Pattern::Bind(name) => Some(name.clone()),
-            Pattern::Tuple(_) => None,
+            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
         }
     }
 }
