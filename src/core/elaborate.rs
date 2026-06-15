@@ -1626,8 +1626,24 @@ fn elaborate_tuple(
 ) -> Result<(Term, Term), Error> {
     let Tuple { fields, names } = tuple;
 
-    let Mode::Check(expected) = mode else {
-        return Err(Error::CannotInfer);
+    let expected = match mode {
+        Mode::Check(expected) => expected,
+        // Synthesis position: infer each field independently and form the
+        // *non-dependent* product. No field type can mention an earlier field
+        // (each is inferred in isolation), so the telescope is non-dependent —
+        // a dependent Σ-type only ever arises from a checking expectation. This
+        // is what lets an un-annotated `let (a, b) = (x, y)` infer `{ typeof x,
+        // typeof y }` instead of demanding an annotation.
+        Mode::Infer => {
+            let mut elaborated = Vec::with_capacity(fields.len());
+            let mut field_types = Vec::with_capacity(fields.len());
+            for field in fields {
+                let (field, field_type) = elaborate(context, field, Mode::Infer)?;
+                elaborated.push(field);
+                field_types.push((String::new(), field_type));
+            }
+            return Ok((Term::tuple(elaborated), Term::tuple_type(field_types)));
+        }
     };
 
     let type_telescope = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {

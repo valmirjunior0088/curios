@@ -1420,6 +1420,20 @@ fn nested_let_tuple_destructures() {
 }
 
 #[test]
+fn let_tuple_destructures_without_annotation() {
+    // PROTOTYPE CHECK: with Infer-mode tuple synthesis, a bare tuple literal no
+    // longer needs an annotation — `(+3, +4)` infers `{ std/Int, std/Int }`.
+    let source = r#"
+        let (a, b) = (+3, +4);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(b)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+4".to_vec()]);
+}
+
+#[test]
 fn let_three_tuple_destructures() {
     // A genuine 3-tuple (not a nested pair): exercises projection at index 2 and
     // a three-pattern binder. `c` is `t.2`.
@@ -1479,4 +1493,3 @@ fn match_arm_tuple_destructures() {
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+9".to_vec()]);
 }
-
