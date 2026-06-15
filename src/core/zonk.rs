@@ -377,7 +377,8 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
-        | Prim::IoClockMono => prim.clone(),
+        | Prim::IoClockMono
+        | Prim::IoArgs => prim.clone(),
 
         Prim::Nat(Nat::Succ(spine, inner)) => {
             Prim::Nat(Nat::Succ(spine.clone(), zonk_term(context, inner)?))
@@ -481,6 +482,8 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a)?),
         Prim::IoRandom(a) => Prim::IoRandom(zonk_term(context, a)?),
+        Prim::IoEnv(a) => Prim::IoEnv(zonk_term(context, a)?),
+        Prim::IoExit(a, b) => Prim::IoExit(zonk_term(context, a)?, zonk_term(context, b)?),
     })
 }
 

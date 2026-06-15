@@ -57,3 +57,5 @@ pub mod Clock;
 pub use Clock/{let Instant, let Duration};
 
 pub mod Random;
+
+pub mod Proc;

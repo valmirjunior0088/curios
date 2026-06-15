@@ -360,6 +360,27 @@ fn io_ops() -> Vec<TopItem> {
             bin(),
             prim(Prim::IoRandom(name("n"))),
         ),
+        // argv is an immutable snapshot, so a shared value binding is correct
+        // (and `IoArgs` is inert, so this is not force-reduced into the IO
+        // guard). `env` stays a function — lambda-protected, never force-reduced.
+        pub_let("args", arr_of(bin()), prim(Prim::IoArgs)),
+        pub_fn(
+            "env",
+            vec![("name", bin())],
+            record(vec![("status", nat()), ("value", bin())]),
+            prim(Prim::IoEnv(name("name"))),
+        ),
+        // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
+        // whatever the caller wants. `/std/Proc/exit` pins `A := Void`.
+        pub_fn_marked(
+            "exit",
+            vec![
+                (Plicity::Implicit, "A", type_()),
+                (Plicity::Explicit, "n", nat()),
+            ],
+            name("A"),
+            prim(Prim::IoExit(name("A"), name("n"))),
+        ),
     ]
 }
 
@@ -457,6 +478,7 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Fmt"], include_str!("../../std/Fmt.crs")),
     (&["std", "Clock"], include_str!("../../std/Clock.crs")),
     (&["std", "Random"], include_str!("../../std/Random.crs")),
+    (&["std", "Proc"], include_str!("../../std/Proc.crs")),
 ];
 
 // Serves the embedded `std` modules, delegating everything else to `inner`.

@@ -1,5 +1,6 @@
 use wasmtime::{
-    AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, I31, Mutability, StorageType, Val,
+    AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability, RefType,
+    StorageType, Val, ValType,
 };
 
 pub trait Lower {
@@ -82,6 +83,52 @@ impl Lower for Vec<u8> {
                     .collect::<Vec<_>>(),
             )?
             .to_anyref(),
+        ));
+
+        Ok(())
+    }
+}
+
+/// `Arr(Bin)`: an array of `anyref` whose elements are `Bin`s (`i8` arrays). The
+/// outer element type `(mut (ref null any))` matches the codegen's uniform
+/// `arr_type`, so the array's runtime type is the one downstream `ref.cast`s
+/// expect.
+impl Lower for Vec<Vec<u8>> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        let byte_type = ArrayType::new(
+            caller.engine(),
+            FieldType::new(Mutability::Var, StorageType::I8),
+        );
+        let byte_pre = ArrayRefPre::new(&mut *caller, byte_type);
+
+        let mut elements = Vec::with_capacity(self.len());
+        for bytes in self {
+            let bin = ArrayRef::new_fixed(
+                &mut *caller,
+                &byte_pre,
+                &bytes
+                    .into_iter()
+                    .map(|byte| Val::I32(byte as i32))
+                    .collect::<Vec<_>>(),
+            )?;
+            elements.push(Val::AnyRef(Some(bin.to_anyref())));
+        }
+
+        let outer_type = ArrayType::new(
+            caller.engine(),
+            FieldType::new(
+                Mutability::Var,
+                StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
+            ),
+        );
+        let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
+
+        results[0] = Val::AnyRef(Some(
+            ArrayRef::new_fixed(&mut *caller, &outer_pre, &elements)?.to_anyref(),
         ));
 
         Ok(())

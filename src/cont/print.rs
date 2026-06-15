@@ -655,6 +655,21 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
+            HostTarget::IoArgs { resume } => {
+                flat([pure("Io.args "), print_block_name(resume)])
+            }
+            HostTarget::IoEnv { name, resume } => flat([
+                pure("Io.env "),
+                print_value_name(name),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoExit { code, resume } => flat([
+                pure("Io.exit "),
+                print_value_name(code),
+                pure(" "),
+                print_block_name(resume),
+            ]),
         },
         Tail::Unreachable => pure("unreachable"),
     }

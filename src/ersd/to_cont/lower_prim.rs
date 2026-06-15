@@ -539,6 +539,49 @@ pub fn lower_value_prim<'b>(
                 cont::Tail::Host(cont::HostTarget::IoRandom { count, resume })
             }),
         ),
+        ersd::Prim::Host(ersd::HostPrim::IoArgs) => {
+            // Ambient: no operands. The host returns the `Arr(Bin)` directly;
+            // the resume's lone param threads straight in, like `IoRandom`.
+            let resume = work.fresh_block();
+            let args = work.fresh_value();
+            let args_clone = args.clone();
+            work.add_resume_block(resume.clone(), vec![args], move |inner| {
+                cont.call(inner, args_clone)
+            });
+            cont::Tail::Host(cont::HostTarget::IoArgs { resume })
+        }
+        ersd::Prim::Host(ersd::HostPrim::IoEnv(name)) => work.lower_value_name(
+            name,
+            frame,
+            Cont::new(move |work, name| {
+                // (status, value) packs into `{ status, value }`, like `IoOpen`.
+                let resume = work.fresh_block();
+                let status = work.fresh_value();
+                let value = work.fresh_value();
+                let params = vec![status.clone(), value.clone()];
+                work.add_resume_block(resume.clone(), params, move |inner| {
+                    let record =
+                        inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, value])));
+                    cont.call(inner, record)
+                });
+                cont::Tail::Host(cont::HostTarget::IoEnv { name, resume })
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoExit(code)) => work.lower_value_name(
+            code,
+            frame,
+            Cont::new(move |work, code| {
+                // exit never returns — the host traps — so the resume is dead
+                // code, kept only for the uniform shape (like `IoClose`'s unit
+                // resume).
+                let resume = work.fresh_block();
+                work.add_resume_block(resume.clone(), vec![], move |inner| {
+                    let unit = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
+                    cont.call(inner, unit)
+                });
+                cont::Tail::Host(cont::HostTarget::IoExit { code, resume })
+            }),
+        ),
     }
 }
 

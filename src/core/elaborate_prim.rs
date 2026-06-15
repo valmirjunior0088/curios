@@ -377,6 +377,27 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let count = elaborate(context, count, Mode::Check(nat_type.clone()))?.0;
             (Prim::IoRandom(count), bin_type)
         }
+        // argv: an immutable snapshot of the process arguments.
+        Prim::IoArgs => (
+            prim.clone(),
+            Subterm::Prim(Prim::ArrType(bin_type)).into(),
+        ),
+        Prim::IoEnv(name) => {
+            let name = elaborate(context, name, Mode::Check(bin_type.clone()))?.0;
+            // Found/not-found crosses as a status record: 0 ok, 2 not found.
+            (
+                Prim::IoEnv(name),
+                Term::tuple_type([("status", nat_type), ("value", bin_type)]),
+            )
+        }
+        // `(@A : Type) -> Nat -> A`: exit never returns, so the result type is
+        // whatever the caller demands (`/std/Proc/exit` instantiates it at
+        // `Void`). The type argument keeps the kernel from naming `/std/Void`.
+        Prim::IoExit(type_, code) => {
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let code = elaborate(context, code, Mode::Check(nat_type))?.0;
+            (Prim::IoExit(type_.clone(), code), type_)
+        }
     })
 }
 

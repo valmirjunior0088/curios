@@ -830,5 +830,18 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoRandom",
             span: count.span(),
         }),
+        // argv is an immutable snapshot: inert, like the handle tokens above. A
+        // top-level `args : Arr(Bin)` value force-reduces to this stuck node
+        // rather than tripping the IO guard; it becomes a host call only at
+        // erasure.
+        Prim::IoArgs => Ok(Subterm::Prim(Prim::IoArgs)),
+        Prim::IoEnv(name) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoEnv",
+            span: name.span(),
+        }),
+        Prim::IoExit(_, code) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoExit",
+            span: code.span(),
+        }),
     }
 }

@@ -200,6 +200,24 @@ pub enum HostTarget {
         count: ValueName,
         resume: BlockName,
     },
+    /// Read the process arguments. Ambient — no operands. Returns the
+    /// `Arr(Bin)` directly; `resume` takes one block parameter.
+    IoArgs {
+        resume: BlockName,
+    },
+    /// Look up the environment variable `name` (a `Bin`). Returns
+    /// (status, value); `resume` takes two block parameters.
+    IoEnv {
+        name: ValueName,
+        resume: BlockName,
+    },
+    /// Terminate the process with exit `code`. The host traps, so the resume is
+    /// never reached; it is kept (taking zero block parameters) only so the
+    /// uniform `Tail::Host { resume }` shape holds.
+    IoExit {
+        code: ValueName,
+        resume: BlockName,
+    },
 }
 
 impl HostTarget {
@@ -211,7 +229,10 @@ impl HostTarget {
             | HostTarget::IoClose { resume, .. }
             | HostTarget::IoClockWall { resume }
             | HostTarget::IoClockMono { resume }
-            | HostTarget::IoRandom { resume, .. } => resume,
+            | HostTarget::IoRandom { resume, .. }
+            | HostTarget::IoArgs { resume }
+            | HostTarget::IoEnv { resume, .. }
+            | HostTarget::IoExit { resume, .. } => resume,
         }
     }
 }

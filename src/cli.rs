@@ -2,8 +2,9 @@ use {
     super::{Stage, StdioHost, compile_entrypoint, run_wasm, text, typecheck_entrypoint, wasm},
     clap::{Parser, Subcommand},
     std::{
-        fs,
+        fs, iter,
         path::{Path, PathBuf},
+        process,
         time::Duration,
     },
 };
@@ -21,6 +22,14 @@ enum Mode {
     Run {
         #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
         input_path: PathBuf,
+
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            value_name = "ARGS",
+            help = "Arguments passed to the program (read via /std/Proc/args)"
+        )]
+        args: Vec<String>,
     },
 
     #[command(about = "Type-check the entrypoint without executing")]
@@ -118,11 +127,21 @@ pub fn cli() -> Result<(), String> {
     let print = print.unwrap_or_default();
 
     match mode {
-        Mode::Run { input_path } => {
-            run_wasm(
-                &compile_file(timeout, &print, &input_path)?,
-                StdioHost::new(),
+        Mode::Run { input_path, args } => {
+            let module = compile_file(timeout, &print, &input_path)?;
+
+            let code = run_wasm(
+                &module,
+                StdioHost::with_args(
+                    iter::once(input_path.to_string_lossy().into_owned().into_bytes())
+                        .chain(args.into_iter().map(String::into_bytes))
+                        .collect(),
+                ),
             )?;
+
+            if code != 0 {
+                process::exit(code);
+            }
         }
         Mode::Check { input_path } => {
             // Run the fast type-check-only path; fall through to the full pipeline

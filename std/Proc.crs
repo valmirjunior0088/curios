@@ -1,0 +1,13 @@
+use /sys/{Io};
+use /std/{Arr, Bin, Nat, Option, Void};
+
+pub let args : Arr(Bin) = Io/args;
+
+pub let env(name : Bin) -> Option(Bin) =
+    let r = Io/env(name);
+    match Nat/eql(r.status, 0)
+    | true => Option/some(r.value)
+    | false => Option/none()
+    end;
+
+pub let exit(code : Nat) -> Void = Io/exit(code);

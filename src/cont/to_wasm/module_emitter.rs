@@ -310,6 +310,81 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 },
             );
         }
+
+        if self.table.io_args_used() {
+            // argv crosses as the module's uniform `Arr(Bin)` (emitted before
+            // imports), each element a `bin_ref`.
+            let arr_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
+            });
+            let io_args = wasm::TypeName::from("io_args");
+            self.module.add_type(
+                io_args.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([]),
+                        outputs: wasm::ResultType::from([arr_ref]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_args",
+                wasm::Import::Func {
+                    func_name: self.table.io_args_func().clone(),
+                    type_name: io_args,
+                },
+            );
+        }
+
+        if self.table.io_env_used() {
+            let io_env = wasm::TypeName::from("io_env");
+            self.module.add_type(
+                io_env.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([bin_out.clone()]),
+                        outputs: wasm::ResultType::from([i31_ref.clone(), bin_out.clone()]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_env",
+                wasm::Import::Func {
+                    func_name: self.table.io_env_func().clone(),
+                    type_name: io_env,
+                },
+            );
+        }
+
+        if self.table.io_exit_used() {
+            let io_exit = wasm::TypeName::from("io_exit");
+            self.module.add_type(
+                io_exit.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
+                        outputs: wasm::ResultType::from([]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_exit",
+                wasm::Import::Func {
+                    func_name: self.table.io_exit_func().clone(),
+                    type_name: io_exit,
+                },
+            );
+        }
     }
 
     fn emit_arr_type(&mut self) {

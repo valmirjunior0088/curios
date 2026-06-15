@@ -3,7 +3,7 @@ use {
     crate::wasm,
     std::sync::{Arc, LazyLock},
     wasmtime::{
-        AnyRef, ArrayType, Config, Engine, FieldType, FuncType, HeapType, Instance, Linker, Module,
+        AnyRef, ArrayType, Config, Engine, FieldType, FuncType, HeapType, Linker, Module,
         Mutability, RefType, Rooted, StorageType, Store, ValType,
     },
 };
@@ -46,19 +46,35 @@ where
         .map_err(|error| format!("failed to define {name}: {error}"))
 }
 
+/// A process exit requested via `Proc/exit`. Carried out of the wasm call as a
+/// trap so it unwinds cleanly; `instantiate_and_run` catches it and recovers the
+/// code, distinguishing a clean exit from a real trap.
+#[derive(Debug)]
+struct ExitTrap(i32);
+
+impl std::fmt::Display for ExitTrap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "process exited with code {}", self.0)
+    }
+}
+
+impl std::error::Error for ExitTrap {}
+
+/// Run `module`'s entrypoint, returning the process exit code — `0` when `main`
+/// returns normally, otherwise the code passed to `Proc/exit`.
 pub fn run_wasm<H: Host + Send + Sync + 'static>(
     module: &wasm::Module,
     host: H,
-) -> Result<(), String> {
-    instantiate_and_run(module, host).map(|_| ())
+) -> Result<i32, String> {
+    instantiate_and_run(module, host)
 }
 
-/// Instantiate `module`, wire up the host imports, and run its entrypoint, returning the
-/// store and instance so callers can inspect post-run state.
+/// Instantiate `module`, wire up the host imports, and run its entrypoint,
+/// returning the process exit code.
 fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     module: &wasm::Module,
     host: H,
-) -> Result<(Store<()>, Instance), String> {
+) -> Result<i32, String> {
     let engine = shared_engine();
 
     let bytes = wasm::to_bytes(module);
@@ -85,6 +101,20 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [i31_ref.clone(), i31_ref.clone()],
     );
     let io_random_type = FuncType::new(engine, [ValType::I32], [bin_ref.clone()]);
+    // argv crosses as an `Arr(Bin)` — an array of `anyref` whose element type
+    // `(mut (ref null any))` matches the codegen's uniform `arr_type`.
+    let arr_array_type = ArrayType::new(
+        engine,
+        FieldType::new(
+            Mutability::Var,
+            StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
+        ),
+    );
+    let arr_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(arr_array_type)));
+    let io_args_type = FuncType::new(engine, std::iter::empty::<ValType>(), [arr_ref]);
+    let io_env_type =
+        FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), bin_ref.clone()]);
+    let io_exit_type = FuncType::new(engine, [ValType::I32], []);
     let io_read_type = FuncType::new(
         engine,
         [ValType::I32, ValType::I32],
@@ -155,6 +185,31 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         move |count: u32| host.random(count)
     })?;
 
+    define_import(&mut linker, "io_args", io_args_type, {
+        let host = host.clone();
+
+        move |()| host.args()
+    })?;
+
+    define_import(&mut linker, "io_env", io_env_type, {
+        let host = host.clone();
+
+        move |name: Vec<u8>| host.env(&name)
+    })?;
+
+    // `exit` never returns: it traps with the code, which `instantiate_and_run`
+    // catches. A plain `define_import` cannot trap, so it is wired directly.
+    linker
+        .func_new("env", "io_exit", io_exit_type, move |_caller, params, _| {
+            let code = match params.first() {
+                Some(wasmtime::Val::I32(code)) => *code,
+                _ => 0,
+            };
+
+            Err(wasmtime::Error::from(ExitTrap(code)))
+        })
+        .map_err(|error| format!("failed to define io_exit: {error}"))?;
+
     let mut store = Store::new(engine, ());
 
     let instance = linker
@@ -165,9 +220,11 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
         .map_err(|error| format!("failed to access func/main: {error}"))?;
 
-    function
-        .call(&mut store, ())
-        .map_err(|error| format!("execution failed: {error}"))?;
-
-    Ok((store, instance))
+    match function.call(&mut store, ()) {
+        Ok(_) => Ok(0),
+        Err(error) => match error.downcast_ref::<ExitTrap>() {
+            Some(ExitTrap(code)) => Ok(*code),
+            None => Err(format!("execution failed: {error}")),
+        },
+    }
 }

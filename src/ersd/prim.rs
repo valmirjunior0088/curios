@@ -82,6 +82,10 @@ pub enum HostPrim {
     IoClockWall,
     IoClockMono,
     IoRandom(Term),
+    IoArgs,
+    IoEnv(Term),
+    // Only the exit code survives erasure; the polymorphic result type is gone.
+    IoExit(Term),
 }
 
 #[derive(Debug)]

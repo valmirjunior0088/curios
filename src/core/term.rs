@@ -1320,7 +1320,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
-        | Prim::IoClockMono => 0,
+        | Prim::IoClockMono
+        | Prim::IoArgs => 0,
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.reach(),
 
@@ -1346,7 +1347,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
-        | Prim::IoRandom(t) => t.reach(),
+        | Prim::IoRandom(t)
+        | Prim::IoEnv(t) => t.reach(),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1388,7 +1390,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::ArrLen(a, b)
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
-        | Prim::IoOpen(a, b) => a.reach().max(b.reach()),
+        | Prim::IoOpen(a, b)
+        | Prim::IoExit(a, b) => a.reach().max(b.reach()),
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
             a.reach().max(b.reach()).max(c.reach())
@@ -1418,7 +1421,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
-        | Prim::IoClockMono => {}
+        | Prim::IoClockMono
+        | Prim::IoArgs => {}
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.collect_metavars(ids),
 
@@ -1444,7 +1448,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
-        | Prim::IoRandom(t) => t.collect_metavars(ids),
+        | Prim::IoRandom(t)
+        | Prim::IoEnv(t) => t.collect_metavars(ids),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1486,7 +1491,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::ArrLen(a, b)
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
-        | Prim::IoOpen(a, b) => {
+        | Prim::IoOpen(a, b)
+        | Prim::IoExit(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
         }
@@ -1711,6 +1717,11 @@ where
         Prim::IoClockWall => Prim::IoClockWall,
         Prim::IoClockMono => Prim::IoClockMono,
         Prim::IoRandom(count) => Prim::IoRandom(visit.visit_subterm(count)),
+        Prim::IoArgs => Prim::IoArgs,
+        Prim::IoEnv(name) => Prim::IoEnv(visit.visit_subterm(name)),
+        Prim::IoExit(type_, code) => {
+            Prim::IoExit(visit.visit_subterm(type_), visit.visit_subterm(code))
+        }
     }
 }
 

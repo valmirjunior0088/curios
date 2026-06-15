@@ -750,6 +750,14 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),
         Prim::IoRandom(count) => flat([pure("Io.random "), print_term(count, depth)]),
+        Prim::IoArgs => pure("Io.args"),
+        Prim::IoEnv(name) => flat([pure("Io.env "), print_term(name, depth)]),
+        Prim::IoExit(type_, code) => flat([
+            pure("Io.exit "),
+            print_term(type_, depth),
+            pure(" "),
+            print_term(code, depth),
+        ]),
     }
 }
 

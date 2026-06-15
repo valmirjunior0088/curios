@@ -28,6 +28,7 @@ pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
         &compile_entrypoint(timeout, entrypoint, loader, |_| {})?,
         host,
     )
+    .map(|_| ())
 }
 
 pub fn run<H: Host + Send + Sync + 'static>(

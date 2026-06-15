@@ -89,6 +89,13 @@ pub enum Prim {
     IoClockWall,
     IoClockMono,
     IoRandom(Term),
+    // argv as an immutable snapshot: inert at the type level (reduce-to-self,
+    // like `Io(token)`), a host call only at erasure.
+    IoArgs,
+    IoEnv(Term),
+    // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
+    // kernel from naming `/std/Void`; it is dropped at erasure.
+    IoExit(Term, Term),
 }
 
 impl Prim {

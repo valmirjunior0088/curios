@@ -88,6 +88,9 @@ pub enum Prim {
     IoClockWall,
     IoClockMono,
     IoRandom(Term),
+    IoArgs,
+    IoEnv(Term),
+    IoExit(Term, Term),
 }
 
 impl Prim {

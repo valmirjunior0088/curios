@@ -669,6 +669,11 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::IoClockWall => core::Prim::IoClockWall,
             Prim::IoClockMono => core::Prim::IoClockMono,
             Prim::IoRandom(count) => core::Prim::IoRandom(self.term(count)?),
+            Prim::IoArgs => core::Prim::IoArgs,
+            Prim::IoEnv(name) => core::Prim::IoEnv(self.term(name)?),
+            Prim::IoExit(type_, code) => {
+                core::Prim::IoExit(self.term(type_)?, self.term(code)?)
+            }
             Prim::NatToFlt(inner) => core::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => core::Prim::int_to_nat(self.term(inner)?),
             Prim::IntToFlt(inner) => core::Prim::int_to_flt(self.term(inner)?),

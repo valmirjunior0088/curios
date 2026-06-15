@@ -171,6 +171,9 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
         HostPrim::IoClockWall => pure("Io.clock_wall"),
         HostPrim::IoClockMono => pure("Io.clock_mono"),
         HostPrim::IoRandom(n) => flat([pure("Io.random "), print_term(n)]),
+        HostPrim::IoArgs => pure("Io.args"),
+        HostPrim::IoEnv(name) => flat([pure("Io.env "), print_term(name)]),
+        HostPrim::IoExit(code) => flat([pure("Io.exit "), print_term(code)]),
     }
 }
 

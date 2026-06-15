@@ -1303,3 +1303,89 @@ fn clock_mono_reads_scripted_elapsed() {
     assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
 }
 
+#[test]
+fn proc_args_indexes_the_argv_snapshot() {
+    // argv crosses as a host-built `Arr(Bin)`; indexing it round-trips one entry.
+    let (system, receiver) = ChannelHost::out();
+    system.script_args(["prog", "hello", "world"]);
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"std/Io/write(std/Io/stdout, /std/Arr/get(/std/Proc/args, 1))"#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"hello".to_vec()]
+    );
+}
+
+#[test]
+fn proc_env_found_unwraps_to_some() {
+    let (system, receiver) = ChannelHost::out();
+    system.script_env([("HOME", "/root")]);
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        match /std/Proc/env(/std/Str/to_bin("HOME")) : std/Nat
+        | some(v) => std/Io/write(std/Io/stdout, v)
+        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing"))
+        end
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"/root".to_vec()]
+    );
+}
+
+#[test]
+fn proc_env_absent_is_none() {
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        match /std/Proc/env(/std/Str/to_bin("NOPE")) : std/Nat
+        | some(v) => std/Io/write(std/Io/stdout, v)
+        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing"))
+        end
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"missing".to_vec()]
+    );
+}
+
+#[test]
+fn proc_exit_halts_with_code() {
+    // exit traps: it surfaces its code *and* the trailing write never runs.
+    let entrypoint = r#"
+        let _ : std/Void = /std/Proc/exit(7);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
+        "#
+    .parse::<crate::text::Entrypoint>()
+    .expect("failed to parse source");
+
+    let module = crate::compile_entrypoint(
+        Duration::from_secs(5),
+        &entrypoint,
+        &crate::text::NullLoader,
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let (system, receiver) = ChannelHost::out();
+    let code = crate::run_wasm(&module, system).expect("execution succeeded");
+
+    assert_eq!(code, 7);
+    assert!(receiver.try_iter().next().is_none());
+}
+

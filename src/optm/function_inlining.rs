@@ -391,7 +391,10 @@ fn freshen_tail_blocks(tail: &mut Tail, sentinel: &BlockName, resume: &BlockName
         | Tail::Host(HostTarget::IoClose { resume: r, .. })
         | Tail::Host(HostTarget::IoClockWall { resume: r })
         | Tail::Host(HostTarget::IoClockMono { resume: r })
-        | Tail::Host(HostTarget::IoRandom { resume: r, .. }) => {
+        | Tail::Host(HostTarget::IoRandom { resume: r, .. })
+        | Tail::Host(HostTarget::IoArgs { resume: r })
+        | Tail::Host(HostTarget::IoEnv { resume: r, .. })
+        | Tail::Host(HostTarget::IoExit { resume: r, .. }) => {
             freshen_block(r, sentinel, resume, suffix);
         }
         Tail::Unreachable => {}

@@ -416,5 +416,17 @@ pub fn erase_prim(
             count,
             &nat_type(),
         )?))),
+        Prim::IoArgs => Ok(host(ersd::HostPrim::IoArgs)),
+        Prim::IoEnv(name) => Ok(host(ersd::HostPrim::IoEnv(erase(
+            context,
+            name,
+            &bin_type(),
+        )?))),
+        // The polymorphic result type is type-only; only the code survives.
+        Prim::IoExit(_, code) => Ok(host(ersd::HostPrim::IoExit(erase(
+            context,
+            code,
+            &nat_type(),
+        )?))),
     }
 }

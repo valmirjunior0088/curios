@@ -100,6 +100,13 @@ pub trait Host {
 
     /// Return `count` random bytes.
     fn random(&self, count: u32) -> Vec<u8>;
+
+    /// The process arguments, each an opaque byte string.
+    fn args(&self) -> Vec<Vec<u8>>;
+
+    /// Look up the environment variable `name`. Returns `(status, value)`:
+    /// `STATUS_OK` with the value, or `STATUS_NOT_FOUND` with empty bytes.
+    fn env(&self, name: &[u8]) -> (u32, Vec<u8>);
 }
 
 pub struct StdioHost {
@@ -107,6 +114,8 @@ pub struct StdioHost {
     handles: Mutex<Entropy>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
     start: Instant,
+    /// The process arguments served by `args` (argv[0] is the program name).
+    args: Vec<Vec<u8>>,
 }
 
 impl Default for StdioHost {
@@ -117,10 +126,21 @@ impl Default for StdioHost {
 
 impl StdioHost {
     pub fn new() -> Self {
+        Self::with_args(
+            std::env::args_os()
+                .map(|arg| arg.into_encoded_bytes())
+                .collect(),
+        )
+    }
+
+    /// Build a host whose `args` are the given byte strings — used by the CLI to
+    /// forward a program's own arguments instead of the `curios` process's.
+    pub fn with_args(args: Vec<Vec<u8>>) -> Self {
         Self {
             files: Mutex::new(HashMap::new()),
             handles: handle_entropy(),
             start: Instant::now(),
+            args,
         }
     }
 }
@@ -216,6 +236,17 @@ impl Host for StdioHost {
 
         buffer
     }
+
+    fn args(&self) -> Vec<Vec<u8>> {
+        self.args.clone()
+    }
+
+    fn env(&self, name: &[u8]) -> (u32, Vec<u8>) {
+        match std::env::var_os(String::from_utf8_lossy(name).as_ref()) {
+            Some(value) => (STATUS_OK, value.into_encoded_bytes()),
+            None => (STATUS_NOT_FOUND, vec![]),
+        }
+    }
 }
 
 /// The in-memory file map shared between a [`ChannelHost`] and the test that
@@ -246,6 +277,10 @@ pub struct ChannelHost {
     clock_mono_seq: Mutex<VecDeque<(u32, u32)>>,
     /// Deterministic xorshift64 state backing `random`.
     rng: Mutex<u64>,
+    /// Scripted process arguments served by `args`.
+    args: Mutex<Vec<Vec<u8>>>,
+    /// Scripted environment served by `env`: name → value.
+    env: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
 }
 
 impl ChannelHost {
@@ -284,6 +319,8 @@ impl ChannelHost {
                 clock_wall_seq: Mutex::new(VecDeque::new()),
                 clock_mono_seq: Mutex::new(VecDeque::new()),
                 rng: Mutex::new(0x2545_F491_4F6C_DD1D),
+                args: Mutex::new(Vec::new()),
+                env: Mutex::new(HashMap::new()),
             },
             output_receiver,
             files,
@@ -318,6 +355,22 @@ impl ChannelHost {
     /// Reseed the deterministic RNG backing `random` (must be non-zero).
     pub fn seed_random(&self, seed: u64) {
         *self.rng.lock().unwrap() = seed;
+    }
+
+    /// Set the process arguments served by `args`.
+    pub fn script_args<L: AsRef<[u8]>, I: IntoIterator<Item = L>>(&self, args: I) {
+        *self.args.lock().unwrap() = args.into_iter().map(|a| a.as_ref().to_vec()).collect();
+    }
+
+    /// Set the environment served by `env`: `(name, value)` pairs.
+    pub fn script_env<N: AsRef<[u8]>, V: AsRef<[u8]>, I: IntoIterator<Item = (N, V)>>(
+        &self,
+        vars: I,
+    ) {
+        *self.env.lock().unwrap() = vars
+            .into_iter()
+            .map(|(name, value)| (name.as_ref().to_vec(), value.as_ref().to_vec()))
+            .collect();
     }
 }
 
@@ -466,5 +519,16 @@ impl Host for ChannelHost {
         }
 
         output
+    }
+
+    fn args(&self) -> Vec<Vec<u8>> {
+        self.args.lock().unwrap().clone()
+    }
+
+    fn env(&self, name: &[u8]) -> (u32, Vec<u8>) {
+        match self.env.lock().unwrap().get(name) {
+            Some(value) => (STATUS_OK, value.clone()),
+            None => (STATUS_NOT_FOUND, vec![]),
+        }
     }
 }

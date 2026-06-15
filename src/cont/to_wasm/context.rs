@@ -675,6 +675,53 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.extend(block_data.enter(1));
                 }
             }
+            cont::HostTarget::IoArgs { resume } => {
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_args_func().clone(),
+                });
+
+                if self.is_resume(resume) {
+                    // The import returns the `Arr(Bin)` directly (an array ref,
+                    // an anyref subtype), already matching the single-anyref
+                    // return shape.
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+                    output.extend(block_data.enter(1));
+                }
+            }
+            cont::HostTarget::IoEnv { name, resume } => {
+                output.extend(self.load_value_instrs(name, LoadAs::Bin));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_env_func().clone(),
+                });
+
+                // Same two-result invariant as `IoOpen`.
+                assert!(
+                    !self.is_resume(resume),
+                    "two-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(2));
+            }
+            cont::HostTarget::IoExit { code, resume } => {
+                output.extend(self.load_value_instrs(code, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_exit_func().clone(),
+                });
+
+                // The host traps, so control never returns; the resume path is
+                // dead code but must stay well-typed, exactly like `IoClose`.
+                if self.is_resume(resume) {
+                    output.push(wasm::Instr::StructNew {
+                        type_name: self.table().find_tpl_type(0),
+                    });
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+                    output.extend(block_data.enter(0));
+                }
+            }
         }
 
         output

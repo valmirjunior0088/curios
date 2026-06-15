@@ -231,6 +231,9 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),
         Prim::IoRandom(count) => print_prim_call("Io.random", vec![count]),
+        Prim::IoArgs => pure("Io.args"),
+        Prim::IoEnv(name) => print_prim_call("Io.env", vec![name]),
+        Prim::IoExit(type_, code) => print_prim_call("Io.exit", vec![type_, code]),
     }
 }
 

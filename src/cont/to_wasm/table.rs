@@ -215,6 +215,9 @@ pub struct Table<'a> {
     io_clock_wall: OnceCell<wasm::FuncName>,
     io_clock_mono: OnceCell<wasm::FuncName>,
     io_random: OnceCell<wasm::FuncName>,
+    io_args: OnceCell<wasm::FuncName>,
+    io_env: OnceCell<wasm::FuncName>,
+    io_exit: OnceCell<wasm::FuncName>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -244,6 +247,9 @@ impl<'a> Table<'a> {
             io_clock_wall: OnceCell::new(),
             io_clock_mono: OnceCell::new(),
             io_random: OnceCell::new(),
+            io_args: OnceCell::new(),
+            io_env: OnceCell::new(),
+            io_exit: OnceCell::new(),
             tpl_types: {
                 let max = module
                     .consts()
@@ -442,6 +448,30 @@ impl<'a> Table<'a> {
 
     pub fn io_random_used(&self) -> bool {
         self.io_random.get().is_some()
+    }
+
+    pub fn io_args_func(&self) -> &wasm::FuncName {
+        self.io_args.get_or_init(|| wasm::FuncName::from("io_args"))
+    }
+
+    pub fn io_args_used(&self) -> bool {
+        self.io_args.get().is_some()
+    }
+
+    pub fn io_env_func(&self) -> &wasm::FuncName {
+        self.io_env.get_or_init(|| wasm::FuncName::from("io_env"))
+    }
+
+    pub fn io_env_used(&self) -> bool {
+        self.io_env.get().is_some()
+    }
+
+    pub fn io_exit_func(&self) -> &wasm::FuncName {
+        self.io_exit.get_or_init(|| wasm::FuncName::from("io_exit"))
+    }
+
+    pub fn io_exit_used(&self) -> bool {
+        self.io_exit.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {
