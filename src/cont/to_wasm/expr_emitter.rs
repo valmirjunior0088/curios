@@ -402,66 +402,152 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         // distinguish a fresh value from a fill — the current region's shells are now in scope.
         let preallocs = region.preallocs.iter().map(|(name, _)| name).collect();
 
-        if region.blocks.is_empty() {
-            self.context
-                .enter_frame(Frame::new(params, preallocs, vec![]));
-            self.emit_preallocs(&region.preallocs);
-            self.emit_let_values(&region.values);
-            self.emit_instrs(self.context.tail_instrs(&region.tail));
-        } else {
-            let bloink_local = self
-                .context
-                .push_local("", wasm::ValType::Num(wasm::NumType::I32));
+        match region.blocks.as_slice() {
+            [] => {
+                self.context
+                    .enter_frame(Frame::new(params, preallocs, vec![]));
+                self.emit_preallocs(&region.preallocs);
+                self.emit_let_values(&region.values);
+                self.emit_instrs(self.context.tail_instrs(&region.tail));
+            }
+            // A region with a single block whose body never targets it has no
+            // back-edge: control only ever flows *forward* into the block, so the
+            // trampolining `loop` + `br_table` + `-1` seed collapse to a plain
+            // `block` the entry branches out of. See `emit_direct_block`.
+            [(block_name, block)] if !region_targets_block(&block.region, block_name) => {
+                let block_params = block
+                    .params
+                    .iter()
+                    .map(|value_name| {
+                        let local_name = self
+                            .context
+                            .push_local(value_name.as_str(), self.context.table().top_type(true));
 
-            let bloink_label = wasm::LabelName::from(format!("region${}", bloink_local.as_str()));
+                        (value_name, LocalData::new(local_name, true))
+                    })
+                    .collect::<Vec<_>>();
 
-            let blocks = region
-                .blocks
-                .iter()
-                .enumerate()
-                .map(|(index, (block_name, block))| {
-                    let block_params = block
-                        .params
-                        .iter()
-                        .map(|value_name| {
-                            let local_name = self.context.push_local(
-                                value_name.as_str(),
-                                self.context.table().top_type(true),
-                            );
+                let block_data = BlockData::new_direct(block_name, block_params, &block.region);
 
-                            (value_name, LocalData::new(local_name, true))
-                        })
-                        .collect::<Vec<_>>();
+                self.context.enter_frame(Frame::new(
+                    params,
+                    preallocs,
+                    vec![(block_name, block_data.clone())],
+                ));
 
-                    let block_data = BlockData::new(
-                        bloink_label.clone(),
-                        bloink_local.clone(),
-                        index,
-                        block_name,
-                        block_params,
-                        &block.region,
-                    );
+                self.emit_preallocs(&region.preallocs);
+                self.emit_let_values(&region.values);
+                self.emit_direct_block(block_data, &region.tail);
+            }
+            _ => {
+                let bloink_local = self
+                    .context
+                    .push_local("", wasm::ValType::Num(wasm::NumType::I32));
 
-                    (block_name, block_data)
-                })
-                .collect::<Vec<_>>();
+                let bloink_label =
+                    wasm::LabelName::from(format!("region${}", bloink_local.as_str()));
 
-            let frame_blocks = blocks
-                .iter()
-                .map(|(block_name, block_data)| (*block_name, block_data.clone()))
-                .collect::<Vec<_>>();
+                let blocks = region
+                    .blocks
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (block_name, block))| {
+                        let block_params = block
+                            .params
+                            .iter()
+                            .map(|value_name| {
+                                let local_name = self.context.push_local(
+                                    value_name.as_str(),
+                                    self.context.table().top_type(true),
+                                );
 
-            self.context
-                .enter_frame(Frame::new(params, preallocs, frame_blocks));
+                                (value_name, LocalData::new(local_name, true))
+                            })
+                            .collect::<Vec<_>>();
 
-            self.emit_preallocs(&region.preallocs);
-            self.emit_let_values(&region.values);
-            self.emit_let_blocks(bloink_local, bloink_label, blocks, &region.tail);
+                        let block_data = BlockData::new(
+                            bloink_label.clone(),
+                            bloink_local.clone(),
+                            index,
+                            block_name,
+                            block_params,
+                            &block.region,
+                        );
+
+                        (block_name, block_data)
+                    })
+                    .collect::<Vec<_>>();
+
+                let frame_blocks = blocks
+                    .iter()
+                    .map(|(block_name, block_data)| (*block_name, block_data.clone()))
+                    .collect::<Vec<_>>();
+
+                self.context
+                    .enter_frame(Frame::new(params, preallocs, frame_blocks));
+
+                self.emit_preallocs(&region.preallocs);
+                self.emit_let_values(&region.values);
+                self.emit_let_blocks(bloink_local, bloink_label, blocks, &region.tail);
+            }
         }
+    }
+
+    /// Emit a single-target region (one block, no back-edge). The block body is
+    /// laid out *after* a `block` wrapping the region's tail, so the tail — the
+    /// entry — runs first and reaches the body by branching forward out of the
+    /// block label, with no dispatcher loop:
+    ///
+    /// ```wat
+    /// (block $b  ;; the region's tail (entry); `br $b` exits here
+    ///   <tail>)
+    /// <body>     ;; the block body
+    /// ```
+    fn emit_direct_block(&mut self, block_data: BlockData<'a>, tail: &'a cont::Tail) {
+        self.emit_region(block_data.params_map(), block_data.region);
+        let body = self.context.leave_frame();
+
+        let entry = self.context.tail_instrs(tail);
+
+        self.emit_instr(wasm::Instr::Block {
+            label_name: block_data.label_name.clone(),
+            block_type: wasm::BlockType::Empty,
+            instructions: entry,
+        });
+        self.emit_instrs(body);
     }
 
     pub fn emit_root_region(&mut self, region: &'a cont::Region) {
         self.emit_region(self.context.params(), region);
         self.leave_last_frame();
     }
+}
+
+/// Whether `region`, or any region nested inside its blocks, branches into
+/// `block_name` — via a jump, a match arm, or a call/host resume. A single-block
+/// region whose block is *not* targeted from within its own body has no back-edge,
+/// so it can be emitted with `emit_direct_block` instead of the dispatcher loop.
+fn region_targets_block(region: &cont::Region, block_name: &cont::BlockName) -> bool {
+    fn tail_targets(tail: &cont::Tail, block_name: &cont::BlockName) -> bool {
+        match tail {
+            cont::Tail::Jump(target) => &target.target == block_name,
+            cont::Tail::Match(target) => {
+                target.cases.values().any(|jump| &jump.target == block_name)
+                    || target
+                        .default
+                        .as_ref()
+                        .is_some_and(|jump| &jump.target == block_name)
+            }
+            cont::Tail::Call(cont::CallTarget::Direct { resume, .. })
+            | cont::Tail::Call(cont::CallTarget::Indirect { resume, .. }) => resume == block_name,
+            cont::Tail::Host(host) => host.resume() == block_name,
+            cont::Tail::Unreachable => false,
+        }
+    }
+
+    tail_targets(&region.tail, block_name)
+        || region
+            .blocks
+            .iter()
+            .any(|(_, block)| region_targets_block(&block.region, block_name))
 }

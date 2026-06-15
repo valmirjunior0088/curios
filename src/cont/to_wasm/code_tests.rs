@@ -1752,3 +1752,65 @@ fn flt_to_int_overflow_traps() {
     );
     assert!(traps(&module));
 }
+
+// A region with a single block whose body never branches back into it has no
+// back-edge, so the dispatcher `loop` + `br_table` + `-1` seed collapse to a
+// plain `block` the entry branches out of. The block here is reached by a
+// forward `Tail::Jump`, and its own body only writes-and-returns, so direct
+// lowering must fire: the emitted code carries the block but no loop or seed.
+#[test]
+fn single_block_region_lowers_without_dispatch_loop() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("b"),
+                    cont::Block {
+                        params: vec![cont::ValueName::from("x")],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![(
+                                cont::ValueName::from("str"),
+                                cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("x"))),
+                            )],
+                            blocks: vec![],
+                            tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                                handle: cont::ValueName::from("STDOUT"),
+                                bytes: cont::ValueName::from("str"),
+                                resume: cont::BlockName::from("r"),
+                            }),
+                        },
+                    },
+                )],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("b"),
+                    params: vec![cont::ValueName::from("SEVEN")],
+                }),
+            },
+        },
+    );
+
+    assert_eq!(i32_result(&module), 7);
+
+    let wat = to_wasm(&module).to_string();
+    assert!(wat.contains("block $$b"), "expected a direct block:\n{wat}");
+    assert!(
+        !wat.contains("loop "),
+        "dispatch loop not collapsed:\n{wat}"
+    );
+    assert!(
+        !wat.contains("i32.const -1"),
+        "dispatcher seed not removed:\n{wat}",
+    );
+}
