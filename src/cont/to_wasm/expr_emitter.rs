@@ -147,20 +147,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_preallocate_tpl(&mut self, value_name: &'a cont::ValueName, arity: usize) {
-        self.emit_instr(wasm::Instr::StructNewDefault {
-            type_name: self.context.table().find_tpl_type(arity),
-        });
-
-        self.emit_instr(wasm::Instr::LocalSet {
-            local_name: self
-                .context
-                .find_local(value_name)
-                .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
-        });
-    }
-
     fn emit_preallocate_clsr(
         &mut self,
         value_name: &'a cont::ValueName,
@@ -228,65 +214,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_preallocate_arr(&mut self, value_name: &'a cont::ValueName, len: usize) {
-        self.emit_instr(wasm::Instr::I32Const { value: len as i32 });
-
-        self.emit_instr(wasm::Instr::ArrayNewDefault {
-            type_name: self.context.table().arr_type(),
-        });
-
-        self.emit_instr(wasm::Instr::LocalSet {
-            local_name: self
-                .context
-                .find_local(value_name)
-                .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
-        });
-    }
-
-    fn emit_backpatch_arr(
-        &mut self,
-        value_name: &'a cont::ValueName,
-        elems: &'a [cont::ValueName],
-    ) {
-        let arr_type = self.context.table().arr_type();
-
-        for (index, elem) in elems.iter().enumerate() {
-            self.emit_instrs(self.context.load_value_instrs(value_name, LoadAs::Arr));
-
-            self.emit_instr(wasm::Instr::I32Const {
-                value: index as i32,
-            });
-            self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
-
-            self.emit_instr(wasm::Instr::ArraySet {
-                type_name: arr_type.clone(),
-            });
-        }
-    }
-
-    fn emit_backpatch_tpl(
-        &mut self,
-        value_name: &'a cont::ValueName,
-        elems: &'a [cont::ValueName],
-    ) {
-        let tpl_n_type = self.context.table().find_tpl_type(elems.len());
-
-        for (index, element) in elems.iter().enumerate() {
-            self.emit_instrs(
-                self.context
-                    .load_value_instrs(value_name, LoadAs::Concrete(tpl_n_type.clone())),
-            );
-
-            self.emit_instrs(self.context.load_value_instrs(element, LoadAs::Null));
-
-            self.emit_instr(wasm::Instr::StructSet {
-                type_name: tpl_n_type.clone(),
-                field_name: self.context.table().tpl_field(index),
-            });
-        }
-    }
-
     fn emit_let_alias(&mut self, value_name: &'a cont::ValueName, source: &'a cont::ValueName) {
         self.emit_instrs(self.context.load_value_instrs(source, LoadAs::Null));
 
@@ -314,44 +241,32 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .insert(value_name, local_name);
     }
 
-    fn emit_preallocs(&mut self, preallocs: &'a [(cont::ValueName, cont::Prealloc)]) {
-        for (value_name, prealloc) in preallocs {
+    fn emit_preallocs(&mut self, preallocs: &'a [(cont::ValueName, cont::ClsrName)]) {
+        for (value_name, target) in preallocs {
             self.declare_local(value_name);
-
-            match prealloc {
-                cont::Prealloc::Tpl(arity) => self.emit_preallocate_tpl(value_name, *arity),
-                cont::Prealloc::Arr(len) => self.emit_preallocate_arr(value_name, *len),
-                cont::Prealloc::Clsr(target) => self.emit_preallocate_clsr(value_name, target),
-            }
+            self.emit_preallocate_clsr(value_name, target);
         }
     }
 
     fn emit_let_values(&mut self, values: &'a [(cont::ValueName, cont::Value)]) {
         for (value_name, value) in values {
-            // A name already backed by a shell (this region's or an ancestor's) is a fill: it
-            // reuses that local and only backpatches. Any other name is introduced here, so it
-            // gets its local allocated now — the same `is_prealloc` test decides both.
+            // An acyclic aggregate has no back-edge, so every field is already bound: build it
+            // directly with a single `struct.new` / `array.new_fixed` (via `emit_data`). Only a
+            // prealloc'd closure shell — a recursive capture reusing its own local — takes the
+            // `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never
+            // prealloc'd (cyclic ones are rejected in `to_cont`), so they always build directly.
             match value {
-                cont::Value::Pure(cont::Data::Arr(elems)) => {
-                    if !self.context.is_prealloc(value_name) {
-                        self.declare_local(value_name);
-                        self.emit_preallocate_arr(value_name, elems.len());
-                    }
-                    self.emit_backpatch_arr(value_name, elems);
+                cont::Value::Pure(value @ (cont::Data::Arr(_) | cont::Data::Tpl(_))) => {
+                    self.declare_local(value_name);
+                    self.emit_let_pure(value_name, value);
                 }
-                cont::Value::Pure(cont::Data::Tpl(elems)) => {
-                    if !self.context.is_prealloc(value_name) {
+                cont::Value::Pure(value @ cont::Data::Clsr(target, fields)) => {
+                    if self.context.is_prealloc(value_name) {
+                        self.emit_backpatch_clsr(value_name, target, fields);
+                    } else {
                         self.declare_local(value_name);
-                        self.emit_preallocate_tpl(value_name, elems.len());
+                        self.emit_let_pure(value_name, value);
                     }
-                    self.emit_backpatch_tpl(value_name, elems);
-                }
-                cont::Value::Pure(cont::Data::Clsr(target, fields)) => {
-                    if !self.context.is_prealloc(value_name) {
-                        self.declare_local(value_name);
-                        self.emit_preallocate_clsr(value_name, target);
-                    }
-                    self.emit_backpatch_clsr(value_name, target, fields);
                 }
                 cont::Value::Pure(value) => {
                     self.declare_local(value_name);

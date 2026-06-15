@@ -32,10 +32,8 @@ pub trait Sink {
 
 /// Walk a region and every nested block, firing events into `sink`.
 pub fn walk_region(region: &Region, sink: &mut impl Sink) {
-    for (_, prealloc) in &region.preallocs {
-        if let Prealloc::Clsr(clsr) = prealloc {
-            sink.clsr_ref(clsr);
-        }
+    for (_, clsr) in &region.preallocs {
+        sink.clsr_ref(clsr);
     }
 
     for (_, value) in &region.values {

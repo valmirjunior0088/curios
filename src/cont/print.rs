@@ -1,7 +1,7 @@
 use {
     super::{
         Argument, Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
-        HostTarget, JumpTarget, Module, Prealloc, Region, Tail, Value, ValueName,
+        HostTarget, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -525,15 +525,12 @@ fn print_let_value<'a>(name: &'a ValueName, value: &'a Value) -> Printer<'a> {
     ])
 }
 
-fn print_prealloc<'a>(name: &'a ValueName, prealloc: &'a Prealloc) -> Printer<'a> {
+fn print_prealloc<'a>(name: &'a ValueName, clsr: &'a ClsrName) -> Printer<'a> {
     flat([
         pure("prealloc "),
         print_value_name(name),
-        match prealloc {
-            Prealloc::Tpl(arity) => pure(format!(": tpl[{arity}]")),
-            Prealloc::Arr(len) => pure(format!(": arr[{len}]")),
-            Prealloc::Clsr(clsr) => flat([pure(": "), print_clsr_name(clsr)]),
-        },
+        pure(": "),
+        print_clsr_name(clsr),
         pure(";"),
     ])
 }

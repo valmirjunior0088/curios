@@ -480,10 +480,8 @@ fn splice(args: &[ValueName], resolved: &[(usize, Shape, Vec<ValueName>)]) -> Ve
 /// Re-point every recursive-closure `prealloc` whose fill was respecialized to the
 /// fill's clone, so the reserved shell and its backpatch agree on closure shape.
 fn sync_preallocs(region: &mut Region, respecialized: &HashMap<ValueName, ClsrName>) {
-    for (name, prealloc) in &mut region.preallocs {
-        if let Prealloc::Clsr(clsr) = prealloc
-            && let Some(specialized) = respecialized.get(name)
-        {
+    for (name, clsr) in &mut region.preallocs {
+        if let Some(specialized) = respecialized.get(name) {
             *clsr = specialized.clone();
         }
     }
@@ -1146,7 +1144,7 @@ mod tests {
             params: vec![],
             resume: BlockName::from("r"),
             region: Region {
-                preallocs: vec![(v("rec"), Prealloc::Clsr(ClsrName::from("c")))],
+                preallocs: vec![(v("rec"), ClsrName::from("c"))],
                 values: vec![(v("init"), Value::Pure(Data::Nat(0)))],
                 blocks: vec![
                     (BlockName::from("fill"), fill),
@@ -1196,7 +1194,7 @@ mod tests {
             params: vec![],
             resume: BlockName::from("r"),
             region: Region {
-                preallocs: vec![(v("rec"), Prealloc::Clsr(ClsrName::from("c")))],
+                preallocs: vec![(v("rec"), ClsrName::from("c"))],
                 values: vec![(
                     v("rec"),
                     Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("rec")])),
@@ -1223,7 +1221,7 @@ mod tests {
         ));
         assert!(matches!(
             &region.preallocs[0],
-            (_, Prealloc::Clsr(name)) if name.as_str() == "c@spec#0=c",
+            (_, name) if name.as_str() == "c@spec#0=c",
         ));
     }
 }

@@ -2,7 +2,7 @@ use {
     crate::{cont, wasm},
     std::{
         cell::OnceCell,
-        collections::{BTreeMap, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
     },
 };
 
@@ -31,6 +31,7 @@ impl FieldData {
 
 #[derive(Debug, Clone)]
 pub struct ClsrData<'a> {
+    name: &'a cont::ClsrName,
     func_name: wasm::FuncName,
     clsr_type: wasm::TypeName,
     envr_type: wasm::TypeName,
@@ -42,6 +43,7 @@ pub struct ClsrData<'a> {
 impl<'a> ClsrData<'a> {
     pub fn new(clsr_name: &'a cont::ClsrName, clsr: &'a cont::Clsr) -> Self {
         Self {
+            name: clsr_name,
             func_name: wasm::FuncName::from(format!("clsr/{}", clsr_name)),
             clsr_type: wasm::TypeName::from(format!("clsr/{}", clsr_name)),
             envr_type: wasm::TypeName::from(format!("envr/{}", clsr_name)),
@@ -67,6 +69,10 @@ impl<'a> ClsrData<'a> {
                 .collect(),
             resume: &clsr.resume,
         }
+    }
+
+    pub fn name(&self) -> &'a cont::ClsrName {
+        self.name
     }
 
     pub fn func_name(&self) -> wasm::FuncName {
@@ -177,12 +183,22 @@ fn max_value_tpl_arity(value: &cont::Value) -> usize {
     }
 }
 
-fn max_region_tpl_arity(region: &cont::Region) -> usize {
-    let preallocs = region.preallocs.iter().map(|(_, prealloc)| match prealloc {
-        cont::Prealloc::Tpl(arity) => *arity,
-        _ => 0,
-    });
+/// Collect every closure that is reserved as a recursive shell anywhere in `region` (and its
+/// nested blocks). These are the only closures whose `envr` fields are back-patched, so they
+/// are the only ones whose wasm struct fields must stay mutable.
+fn collect_cyclic_clsrs(region: &cont::Region, out: &mut BTreeSet<cont::ClsrName>) {
+    for (_, clsr) in &region.preallocs {
+        out.insert(clsr.clone());
+    }
 
+    for (_, block) in &region.blocks {
+        collect_cyclic_clsrs(&block.region, out);
+    }
+}
+
+fn max_region_tpl_arity(region: &cont::Region) -> usize {
+    // Preallocs are closure shells only, so they contribute no tuple arity; the arities all
+    // come from tuple constructions and projections in `values` (and nested blocks).
     let values = region
         .values
         .iter()
@@ -193,7 +209,7 @@ fn max_region_tpl_arity(region: &cont::Region) -> usize {
         .iter()
         .map(|(_, block)| max_region_tpl_arity(&block.region));
 
-    preallocs.chain(values).chain(blocks).max().unwrap_or(0)
+    values.chain(blocks).max().unwrap_or(0)
 }
 
 #[derive(Debug)]
@@ -225,11 +241,38 @@ pub struct Table<'a> {
     consts: HashMap<&'a cont::ValueName, wasm::GlobalName>,
     clsrs: HashMap<&'a cont::ClsrName, ClsrData<'a>>,
     funcs: HashMap<&'a cont::FuncName, FuncData<'a>>,
+    // Closures that are ever prealloc'd as a recursive shell — their `envr` fields are
+    // back-patched (`struct.set`), so those fields must stay mutable. Every other aggregate
+    // field is immutable. `cyclic_clsr_arities` carries the same fact at arity granularity,
+    // for the shared `envr/N` special field (which must agree across all its subtypes).
+    cyclic_clsrs: BTreeSet<cont::ClsrName>,
+    cyclic_clsr_arities: BTreeSet<usize>,
 }
 
 impl<'a> Table<'a> {
     pub fn new(module: &'a cont::Module) -> Self {
+        let mut cyclic_clsrs = BTreeSet::new();
+        for (_, clsr) in module.clsrs() {
+            collect_cyclic_clsrs(&clsr.region, &mut cyclic_clsrs);
+        }
+        for (_, func) in module.funcs() {
+            collect_cyclic_clsrs(&func.region, &mut cyclic_clsrs);
+        }
+
+        let arities = module
+            .clsrs()
+            .iter()
+            .map(|(name, clsr)| (name.clone(), clsr.params.len()))
+            .collect::<HashMap<cont::ClsrName, usize>>();
+
+        let cyclic_clsr_arities = cyclic_clsrs
+            .iter()
+            .filter_map(|name| arities.get(name).copied())
+            .collect::<BTreeSet<usize>>();
+
         Self {
+            cyclic_clsrs,
+            cyclic_clsr_arities,
             special_field: wasm::FieldName::from("!"),
             special_local: wasm::LocalName::from("!"),
             special_label: wasm::LabelName::from("!"),
@@ -489,6 +532,46 @@ impl<'a> Table<'a> {
 
     pub fn tpl_field(&self, index: usize) -> wasm::FieldName {
         wasm::FieldName::from(index.to_string())
+    }
+
+    /// Whether this closure is ever reserved as a recursive shell, i.e. its `envr` payload
+    /// fields are back-patched and so must be declared mutable.
+    pub fn is_cyclic_clsr(&self, name: &cont::ClsrName) -> bool {
+        self.cyclic_clsrs.contains(name)
+    }
+
+    /// Whether *any* closure of this arity is cyclic. The shared `envr/N` special field (and
+    /// thus every `envr/<clsr>` of that arity, by subtyping invariance) must be mutable iff so.
+    pub fn arity_has_cyclic_clsr(&self, arity: usize) -> bool {
+        self.cyclic_clsr_arities.contains(&arity)
+    }
+
+    fn field_mutability(&self, is_mutable: bool) -> wasm::Mutability {
+        if is_mutable {
+            wasm::Mutability::Var
+        } else {
+            wasm::Mutability::Const
+        }
+    }
+
+    pub fn tpl_field_mutability(&self) -> wasm::Mutability {
+        // Tuples are never cyclic (rejected in `to_cont`), so they are never back-patched.
+        self.field_mutability(false)
+    }
+
+    pub fn arr_field_mutability(&self) -> wasm::Mutability {
+        // Arrays stay mutable regardless of cyclicity: their primitives (append/concat/slice)
+        // build results with `array.new_default` + per-element `array.set`, so the element
+        // field must be writable. Only tuples and closures gain immutable fields here.
+        self.field_mutability(true)
+    }
+
+    pub fn envr_special_mutability(&self, arity: usize) -> wasm::Mutability {
+        self.field_mutability(self.arity_has_cyclic_clsr(arity))
+    }
+
+    pub fn envr_payload_mutability(&self, name: &cont::ClsrName) -> wasm::Mutability {
+        self.field_mutability(self.is_cyclic_clsr(name))
     }
 
     pub fn envr_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

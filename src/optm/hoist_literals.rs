@@ -592,7 +592,7 @@ mod tests {
     fn leaves_a_self_capturing_recursive_closure_inline() {
         // `rec` is prealloc'd and its fill captures itself — never a constant.
         let mut module = main_func(Region {
-            preallocs: vec![(v("rec"), Prealloc::Clsr(ClsrName::from("c")))],
+            preallocs: vec![(v("rec"), ClsrName::from("c"))],
             values: vec![(
                 v("rec"),
                 Value::Pure(Data::Clsr(ClsrName::from("c"), vec![v("rec")])),

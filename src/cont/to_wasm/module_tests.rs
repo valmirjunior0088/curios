@@ -24,66 +24,9 @@ fn lowers_unreachable_tail_to_trap() {
     assert!(traps(&module));
 }
 
-#[test]
-fn lowers_and_runs_mutually_recursive_tuple() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
-
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
-
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
-
-    module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
-            params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
-                preallocs: vec![
-                    (cont::ValueName::from("x"), cont::Prealloc::Tpl(2)),
-                    (cont::ValueName::from("y"), cont::Prealloc::Tpl(2)),
-                ],
-                values: vec![
-                    (
-                        cont::ValueName::from("x"),
-                        cont::Value::Pure(cont::Data::Tpl(vec![
-                            cont::ValueName::from("y"),
-                            cont::ValueName::from("ONE"),
-                        ])),
-                    ),
-                    (
-                        cont::ValueName::from("y"),
-                        cont::Value::Pure(cont::Data::Tpl(vec![
-                            cont::ValueName::from("TWO"),
-                            cont::ValueName::from("x"),
-                        ])),
-                    ),
-                    (
-                        cont::ValueName::from("left"),
-                        cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("x"), 0)),
-                    ),
-                    (
-                        cont::ValueName::from("out"),
-                        cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("left"), 0)),
-                    ),
-                    (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("out"))),
-                    ),
-                ],
-                blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
-                    handle: cont::ValueName::from("STDOUT"),
-                    bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
-                }),
-            },
-        },
-    );
-
-    assert_eq!(i32_result(&module), 2);
-}
+// Cyclic tuples/arrays are intentionally unrepresentable: `Region::preallocs` only holds
+// closure shells now (cyclic data is rejected in `to_cont`), which keeps every `tpl`/`arr`
+// wasm field immutable. Mutual recursion is exercised through closures below.
 
 #[test]
 fn lowers_and_runs_mutually_recursive_closures() {
@@ -250,12 +193,9 @@ fn lowers_and_runs_mutually_recursive_closures() {
                 preallocs: vec![
                     (
                         cont::ValueName::from("even"),
-                        cont::Prealloc::Clsr(cont::ClsrName::from("even")),
+                        cont::ClsrName::from("even"),
                     ),
-                    (
-                        cont::ValueName::from("odd"),
-                        cont::Prealloc::Clsr(cont::ClsrName::from("odd")),
-                    ),
+                    (cont::ValueName::from("odd"), cont::ClsrName::from("odd")),
                 ],
                 values: vec![
                     (

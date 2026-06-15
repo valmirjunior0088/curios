@@ -204,8 +204,8 @@ impl Work<'_, '_, '_> {
         for (item, target) in items.into_iter().zip(reserved) {
             match self.plan_backpatch(item, &frame) {
                 Some(backpatch) => {
-                    self.emit.add_prealloc(target.clone(), backpatch.prealloc());
-                    self.emit_backpatch(target, &backpatch, &frame);
+                    self.emit.add_prealloc(target.clone(), backpatch.clsr.clone());
+                    self.emit_backpatch(target, &backpatch);
                 }
                 None => match &**item {
                     ersd::Subterm::Apply(_)
@@ -415,58 +415,32 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    /// Classify a `rec` item: backpatches (`Func`/`Tuple`/`Arr`) get a prealloc'd shell so
-    /// their identity is available before their fields; a `Func` is lowered here so its
-    /// `ClsrName` is fixed. Everything else is "computed" (lowered via `lower_value_name`).
-    pub fn plan_backpatch<'b>(
-        &mut self,
-        item: &'b ersd::Term,
-        frame: &Frame,
-    ) -> Option<Backpatch<'b>> {
+    /// Classify a `rec` item: only a `Func` gets a prealloc'd shell, so its closure identity
+    /// is available before its captures (and the `Func` is lowered here to fix its `ClsrName`).
+    /// Everything else — including tuples and arrays — is "computed": lowered via
+    /// `lower_value_name` in dependency order. A non-cyclic aggregate then builds directly; a
+    /// genuinely self-referential one surfaces as a cycle in `rec_computed_order` and is
+    /// rejected. Confining cyclic recursion to closures is what lets `tpl`/`arr` fields stay
+    /// immutable.
+    pub fn plan_backpatch(&mut self, item: &ersd::Term, frame: &Frame) -> Option<Backpatch> {
         match &**item {
             ersd::Subterm::Func(func) => {
-                let (clsr_name, captures) = self.lower_closure(func, frame);
+                let (clsr, captures) = self.lower_closure(func, frame);
 
-                Some(Backpatch::Clsr(clsr_name, captures))
-            }
-            ersd::Subterm::Tuple(tuple) => Some(Backpatch::Tpl(&tuple.fields)),
-            ersd::Subterm::Prim(ersd::Prim::Pure(ersd::PurePrim::Arr(elems))) => {
-                Some(Backpatch::Arr(elems))
+                Some(Backpatch { clsr, captures })
             }
             _ => None,
         }
     }
 
-    pub fn emit_backpatch(
-        &mut self,
-        target: cont::ValueName,
-        backpatch: &Backpatch,
-        frame: &Frame,
-    ) {
-        match backpatch {
-            Backpatch::Clsr(clsr_name, captures) => self.emit.add_value(
-                target,
-                cont::Value::Pure(cont::Data::Clsr(clsr_name.clone(), captures.clone())),
-            ),
-            Backpatch::Tpl(fields) => {
-                let names = fields
-                    .iter()
-                    .map(|field| self.lower_pure_name(field, frame))
-                    .collect();
-
-                self.emit
-                    .add_value(target, cont::Value::Pure(cont::Data::Tpl(names)));
-            }
-            Backpatch::Arr(elems) => {
-                let names = elems
-                    .iter()
-                    .map(|elem| self.lower_pure_name(elem, frame))
-                    .collect();
-
-                self.emit
-                    .add_value(target, cont::Value::Pure(cont::Data::Arr(names)));
-            }
-        }
+    pub fn emit_backpatch(&mut self, target: cont::ValueName, backpatch: &Backpatch) {
+        self.emit.add_value(
+            target,
+            cont::Value::Pure(cont::Data::Clsr(
+                backpatch.clsr.clone(),
+                backpatch.captures.clone(),
+            )),
+        );
     }
 
     /// Lower a `rec` group, then `body`. Backpatches are prealloc'd at region entry; call/match
@@ -490,7 +464,7 @@ impl Work<'_, '_, '_> {
             })
             .collect::<Vec<_>>();
 
-        let mut backpatches: Vec<(cont::ValueName, Backpatch<'b>)> = vec![];
+        let mut backpatches: Vec<(cont::ValueName, Backpatch)> = vec![];
         let mut computed: Vec<(usize, cont::ValueName, &'b ersd::Term)> = vec![];
 
         for (index, (item, target)) in items.into_iter().zip(&targets).enumerate() {
@@ -524,7 +498,7 @@ impl Work<'_, '_, '_> {
         let order = rec_computed_order(&computed_names, &deps);
 
         for (target, backpatch) in &backpatches {
-            self.emit.add_prealloc(target.clone(), backpatch.prealloc());
+            self.emit.add_prealloc(target.clone(), backpatch.clsr.clone());
         }
 
         let sorted = order
@@ -537,7 +511,7 @@ impl Work<'_, '_, '_> {
 
         let backpatch_body: RecBody<'b> = RecBody::new(move |work, frame| {
             for (target, backpatch) in &backpatches {
-                work.emit_backpatch(target.clone(), backpatch, frame);
+                work.emit_backpatch(target.clone(), backpatch);
             }
 
             body.call(work, frame)

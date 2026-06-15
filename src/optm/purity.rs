@@ -41,10 +41,8 @@ fn scan_body(region: &Region) -> BodyScan {
 }
 
 fn scan_region(region: &Region, scan: &mut BodyScan) {
-    for (_, prealloc) in &region.preallocs {
-        if let Prealloc::Clsr(c) = prealloc {
-            scan.clsr_refs.insert(c.clone());
-        }
+    for (_, clsr) in &region.preallocs {
+        scan.clsr_refs.insert(clsr.clone());
     }
 
     for (_, value) in &region.values {

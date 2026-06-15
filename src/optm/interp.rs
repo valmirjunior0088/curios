@@ -235,19 +235,15 @@ impl<'a> Interp<'a> {
         region: &Region,
         frame: &mut Frame,
     ) -> Result<(), Outcome> {
-        // Preallocs back recursive data: a `Prealloc::Clsr` is the placeholder
-        // whose same-named `Pure(Data::Clsr)` fill mutates the `RefCell` in
-        // place so a self-referential capture observes the resolved content
-        // after the fill. `Tpl`/`Arr` preallocs back cyclic *data* values; the
-        // placeholder stays empty, so a cyclic field access OOBs and the
-        // interpreter gives up — correct for non-evaluable cyclic data.
-        for (name, prealloc) in &region.preallocs {
-            let placeholder = match prealloc {
-                Prealloc::Clsr(c) => Snapshot::Clsr(c.clone(), Rc::new(RefCell::new(Vec::new()))),
-                Prealloc::Tpl(_) => Snapshot::Tpl(Rc::new(Vec::new())),
-                Prealloc::Arr(_) => Snapshot::Arr(Rc::new(Vec::new())),
-            };
-            frame.insert(name.clone(), placeholder);
+        // A prealloc backs a recursive closure: the shell is the placeholder whose
+        // same-named `Pure(Data::Clsr)` fill mutates the `RefCell` in place, so a self-
+        // referential capture observes the resolved content after the fill. Only closures
+        // are prealloc'd (cyclic tuples/arrays are rejected upstream in `to_cont`).
+        for (name, clsr) in &region.preallocs {
+            frame.insert(
+                name.clone(),
+                Snapshot::Clsr(clsr.clone(), Rc::new(RefCell::new(Vec::new()))),
+            );
         }
 
         for (name, value) in &region.values {

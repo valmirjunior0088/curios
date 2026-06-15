@@ -27,73 +27,6 @@ fn identity_func() -> Func {
 }
 
 #[test]
-fn lowers_recursive_pairs_into_main_region_values() {
-    let term = Subterm::Rec(Rec {
-        names: vec!["x".into(), "y".into()],
-        items: vec![
-            Subterm::Tuple(Tuple {
-                fields: vec![
-                    Subterm::Name(Name::from("y")).into(),
-                    Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
-                ],
-            })
-            .into(),
-            Subterm::Tuple(Tuple {
-                fields: vec![
-                    Subterm::Prim(Prim::Pure(PurePrim::Int(2))).into(),
-                    Subterm::Name(Name::from("x")).into(),
-                ],
-            })
-            .into(),
-        ],
-        tail: Subterm::Name(Name::from("x")).into(),
-    });
-
-    let module = lower(term.into());
-
-    assert!(module.consts().is_empty());
-    assert!(module.clsrs().is_empty());
-    assert_eq!(module.funcs().len(), 1);
-    assert_eq!(module.funcs()[0].0.as_str(), "main");
-
-    let func = &module.funcs()[0].1;
-    assert!(func.region.blocks.is_empty());
-    assert_eq!(func.region.values.len(), 4);
-
-    let recursive_pairs = func
-        .region
-        .values
-        .iter()
-        .filter_map(|(name, value)| match value {
-            cont::Value::Pure(cont::Data::Tpl(elems)) if elems.len() == 2 => {
-                Some((name.clone(), elems[0].clone(), elems[1].clone()))
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    assert_eq!(recursive_pairs.len(), 2);
-    assert!(
-        recursive_pairs
-            .iter()
-            .any(|(name, left, _)| name.as_str() == "v0" && left.as_str() == "v1")
-    );
-    assert!(
-        recursive_pairs
-            .iter()
-            .any(|(name, _, right)| name.as_str() == "v1" && right.as_str() == "v0")
-    );
-
-    let cont::Tail::Jump(target) = &func.region.tail else {
-        panic!("expected main tail jump");
-    };
-
-    assert_eq!(target.target.as_str(), func.resume.as_str());
-    assert_eq!(target.params.len(), 1);
-    assert_eq!(target.params[0].as_str(), "v0");
-}
-
-#[test]
 fn lowers_tail_apply_as_indirect_call_to_resume() {
     let term = Subterm::Apply(Apply {
         head: Subterm::Func(Func {
@@ -250,7 +183,12 @@ fn lowers_bin_literal() {
 }
 
 #[test]
-fn recursive_pairs_declare_preallocs() {
+#[should_panic(expected = "value-level mutual recursion")]
+fn rejects_mutually_referential_tuples() {
+    // `rec x = (y, 1) and y = (2, x)`: genuinely self-referential data. Tuples are lowered as
+    // computed items now (not prealloc'd shells), so the x→y→x cycle is caught by
+    // `rec_computed_order` and rejected — cyclic recursion is confined to closures, which is
+    // what keeps `tpl`/`arr` fields immutable.
     let term = Subterm::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![
@@ -272,17 +210,7 @@ fn recursive_pairs_declare_preallocs() {
         tail: Subterm::Name(Name::from("x")).into(),
     });
 
-    let module = lower(term.into());
-    let func = &module.funcs()[0].1;
-
-    // Both mutually-referential tuples are prealloc'd so their shells exist before fill.
-    assert_eq!(func.region.preallocs.len(), 2);
-    assert!(
-        func.region
-            .preallocs
-            .iter()
-            .all(|(_, prealloc)| matches!(prealloc, cont::Prealloc::Tpl(2)))
-    );
+    lower(term.into());
 }
 
 #[test]
@@ -311,13 +239,8 @@ fn lowers_cross_region_rec_through_resume_block() {
     let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
-    // `f`'s closure shell is declared at region entry.
-    assert!(
-        func.region
-            .preallocs
-            .iter()
-            .any(|(_, prealloc)| matches!(prealloc, cont::Prealloc::Clsr(_)))
-    );
+    // `f`'s closure shell is declared at region entry (preallocs are closure shells only).
+    assert!(!func.region.preallocs.is_empty());
 
     // `g`'s call leaves the region, so its fill lands in a resume block, not the entry region.
     assert!(matches!(func.region.tail, cont::Tail::Call(_)));
@@ -325,7 +248,7 @@ fn lowers_cross_region_rec_through_resume_block() {
 }
 
 #[test]
-#[should_panic(expected = "value-level mutual recursion through calls")]
+#[should_panic(expected = "value-level mutual recursion")]
 fn rejects_apply_apply_cycle() {
     let term = Subterm::Rec(Rec {
         names: vec!["a".into(), "b".into()],

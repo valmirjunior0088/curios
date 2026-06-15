@@ -39,8 +39,8 @@ impl<'s> Emit<'s> {
         name
     }
 
-    pub fn add_prealloc(&mut self, name: cont::ValueName, prealloc: cont::Prealloc) {
-        self.builder.add_prealloc(name, prealloc);
+    pub fn add_prealloc(&mut self, name: cont::ValueName, clsr: cont::ClsrName) {
+        self.builder.add_prealloc(name, clsr);
     }
 
     pub fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
@@ -57,7 +57,7 @@ impl<'s> Emit<'s> {
 }
 
 pub struct RegionBuilder {
-    preallocs: Vec<(cont::ValueName, cont::Prealloc)>,
+    preallocs: Vec<(cont::ValueName, cont::ClsrName)>,
     values: Vec<(cont::ValueName, cont::Value)>,
     blocks: Vec<(cont::BlockName, cont::Block)>,
 }
@@ -71,8 +71,8 @@ impl RegionBuilder {
         }
     }
 
-    pub fn add_prealloc(&mut self, name: cont::ValueName, prealloc: cont::Prealloc) {
-        self.preallocs.push((name, prealloc));
+    pub fn add_prealloc(&mut self, name: cont::ValueName, clsr: cont::ClsrName) {
+        self.preallocs.push((name, clsr));
     }
 
     pub fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {

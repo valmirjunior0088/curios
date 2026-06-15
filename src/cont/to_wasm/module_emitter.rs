@@ -396,7 +396,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 comp_type: wasm::CompType::Array(wasm::ArrayType {
                     field_type: wasm::FieldType {
                         storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                        mutability: wasm::Mutability::Var,
+                        mutability: self.table.arr_field_mutability(),
                     },
                 }),
             },
@@ -440,7 +440,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                 self.table.tpl_field(index),
                                 wasm::FieldType {
                                     storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                                    mutability: wasm::Mutability::Var,
+                                    mutability: self.table.tpl_field_mutability(),
                                 },
                             )
                         },
@@ -468,7 +468,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                     ),
                                 },
                             )),
-                            mutability: wasm::Mutability::Var,
+                            mutability: self.table.envr_special_mutability(arity),
                         },
                     )])),
                 },
@@ -495,7 +495,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                         ),
                                     },
                                 )),
-                                mutability: wasm::Mutability::Var,
+                                // Must agree with the shared `envr/N` special field above.
+                                mutability: self.table.envr_special_mutability(data.arity()),
                             },
                         ))
                         .chain(data.fields().map(|field_name| {
@@ -503,7 +504,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                 field_name,
                                 wasm::FieldType {
                                     storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                                    mutability: wasm::Mutability::Var,
+                                    // Payload captures are back-patched only when this closure
+                                    // is itself a recursive shell; otherwise they're immutable.
+                                    mutability: self.table.envr_payload_mutability(data.name()),
                                 },
                             )
                         })),

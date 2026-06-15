@@ -210,8 +210,9 @@ pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
                         .join(" -> ");
 
                     panic!(
-                        "`to_cont` does not support value-level mutual recursion through calls: \
-                         {cycle} would require runtime fixpoint cells",
+                        "`to_cont` does not support value-level mutual recursion: \
+                         {cycle} would require runtime fixpoint cells; only closures may be \
+                         mutually recursive (a cyclic tuple/array reaches this path too)",
                     );
                 }
                 0 => visit(next, names, deps, marks, stack, order),
@@ -237,21 +238,13 @@ pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
     order
 }
 
-/// How a `rec`-bound prealloc'd shell is backpatched. A `Func` is lowered eagerly so
-/// its `ClsrName` is shared by both the prealloc declaration and the patch; tuples and arrays
-/// only need their length up front and lower their elements at patch time.
-pub enum Backpatch<'b> {
-    Clsr(cont::ClsrName, Vec<cont::ValueName>),
-    Tpl(&'b [ersd::Term]),
-    Arr(&'b [ersd::Term]),
-}
-
-impl Backpatch<'_> {
-    pub fn prealloc(&self) -> cont::Prealloc {
-        match self {
-            Backpatch::Clsr(clsr, _) => cont::Prealloc::Clsr(clsr.clone()),
-            Backpatch::Tpl(fields) => cont::Prealloc::Tpl(fields.len()),
-            Backpatch::Arr(elems) => cont::Prealloc::Arr(elems.len()),
-        }
-    }
+/// A `rec`-bound closure shell and its captures. The `Func` is lowered eagerly so its
+/// `clsr` name is shared by both the prealloc declaration (the shell) and the later fill.
+/// Only closures need a shell: tuples and arrays are *not* prealloc'd — they lower as
+/// computed items, so a cyclic one is rejected by [`rec_computed_order`] rather than
+/// back-patched (see `plan_backpatch`). Confining cyclic recursion to closures is what lets
+/// every `tpl`/`arr` wasm field stay immutable.
+pub struct Backpatch {
+    pub clsr: cont::ClsrName,
+    pub captures: Vec<cont::ValueName>,
 }

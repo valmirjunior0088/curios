@@ -112,13 +112,6 @@ pub enum Value {
 }
 
 #[derive(Debug, Clone)]
-pub enum Prealloc {
-    Tpl(usize),
-    Arr(usize),
-    Clsr(ClsrName),
-}
-
-#[derive(Debug, Clone)]
 pub struct Block {
     pub params: Vec<ValueName>,
     pub region: Region,
@@ -248,7 +241,10 @@ pub enum Tail {
 
 #[derive(Debug, Clone)]
 pub struct Region {
-    pub preallocs: Vec<(ValueName, Prealloc)>,
+    /// Closure shells reserved before their captures are filled, so a self- or
+    /// mutually-recursive capture can name the shell. Only closures need this; cyclic
+    /// tuples/arrays are rejected upstream (`to_cont`), which keeps `tpl`/`arr` immutable.
+    pub preallocs: Vec<(ValueName, ClsrName)>,
     pub values: Vec<(ValueName, Value)>,
     pub blocks: Vec<(BlockName, Block)>,
     pub tail: Tail,
