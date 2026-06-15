@@ -4,7 +4,7 @@ use {
         Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat,
         ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm,
         Telescope, Term, Tuple, TupleType, Two, UnionType, Var, Variant, case_target_indices,
-        check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
+        check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
         reduce_with, refine_head,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
@@ -18,14 +18,6 @@ use {
 pub enum Mode {
     Infer,
     Check(Term),
-}
-
-/// Drive `term` against `ty` and return the *elaborated* term — the rebuilt,
-/// de-Bruijn-correct subterm whose lambda domains are solved and whose binders
-/// are re-closed (§9). Elaboration is authoritative: this output, not the
-/// original lowered term, is what flows on to `zonk`/`erase`.
-fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
-    elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
 }
 
 fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Term), Error> {

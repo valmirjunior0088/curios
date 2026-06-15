@@ -646,6 +646,41 @@ fn scope_check_allows_in_context_variable() {
 }
 
 #[test]
+fn revalidation_admits_checkable_but_not_inferable_candidate() {
+    let mut context = context();
+    // ?0 : (x : Nat, y : Nat) — a tuple type, born in empty Γ.
+    let pair_type = Term::tuple_type([
+        ("x", Term::prim(Prim::NatType)),
+        ("y", Term::prim(Prim::NatType)),
+    ]);
+    context.birth_metavar(0, Vec::new(), pair_type);
+
+    // ?0 ≟ (1, 2). A bare tuple has no synthesizable type (`elaborate_tuple`
+    // is Check-only), so synthesize-then-convert re-validation rejected it;
+    // checking it against the frozen tuple result type admits it.
+    let pair = Term::tuple([nat(1), nat(2)]);
+    assert_eq!(conv(&mut context, &Term::metavar(0), &pair), Ok(true));
+    assert_eq!(context.metavar_solution(0), Some(&pair));
+}
+
+#[test]
+fn revalidation_rejects_ill_typed_candidate_through_checking() {
+    let mut context = context();
+    // ?0 : (x : Nat, y : Nat).
+    let pair_type = Term::tuple_type([
+        ("x", Term::prim(Prim::NatType)),
+        ("y", Term::prim(Prim::NatType)),
+    ]);
+    context.birth_metavar(0, Vec::new(), pair_type);
+
+    // ?0 ≟ (1, 2, 3): a three-field tuple does not check against a two-field
+    // tuple type, so checking still rejects the candidate and commits nothing.
+    let wrong = Term::tuple([nat(1), nat(2), nat(3)]);
+    assert_eq!(conv(&mut context, &Term::metavar(0), &wrong), Ok(false));
+    assert_eq!(context.metavar_solution(0), None);
+}
+
+#[test]
 fn flex_flex_equal_id_short_circuits() {
     let mut context = context();
     context.birth_metavar(0, Vec::new(), Term::type_());

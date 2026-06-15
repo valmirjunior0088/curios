@@ -7,6 +7,15 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
 }
 
+/// Checking counterpart to `infer`: `elaborate` in `Check` mode, returning the
+/// *elaborated* term. Drives `term` against a known `ty` — the rebuilt,
+/// de-Bruijn-correct subterm whose lambda domains are solved and whose binders
+/// are re-closed (§9). Elaboration is authoritative: this output, not the
+/// original lowered term, is what flows on to `zonk`/`erase`.
+pub fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
+    elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
+}
+
 pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     super::reduce(context, term.clone())
         .map_err(|error| error.into_error(|| Error::reduce_preempted(term.clone())))

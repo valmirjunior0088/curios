@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Bound, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
         ReduceError, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UnionType,
-        Var, Variant, Visit, convert_prim, infer, reduce, unfold_rec,
+        Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -953,24 +953,29 @@ impl Convert {
             }
         }
 
-        // Re-validation (§7.4): the (inverted) candidate must type-check
-        // against the metavariable's frozen type, under its birth context Γ,
-        // as an *oracle* — counterfactual refinements and constraint parking
-        // both suppressed (see `Context::with_oracle`). Stable definitions
-        // are kept. The validation run itself can solve *other* metavariables
-        // (inference may mint and pin fresh implicits); the mark/rollback
-        // bracket unwinds those if the candidate is rejected, so a failed
-        // oracle leaves no fingerprints.
+        // Re-validation (§7.4): the (inverted) candidate must *check* against the
+        // metavariable's frozen result type, under its birth context Γ, as an
+        // *oracle* — counterfactual refinements and constraint parking both
+        // suppressed (see `Context::with_oracle`). Stable definitions are kept.
+        // Checking (rather than synthesizing then converting) admits candidates
+        // that are checkable but not inferable — a bare lambda whose domain only
+        // `result` knows, an unannotated tuple — which are still the correct
+        // solution at the frozen type. The validation run itself can solve
+        // *other* metavariables (inference may mint and pin fresh implicits); the
+        // mark/rollback bracket unwinds those if the candidate is rejected, so a
+        // failed oracle leaves no fingerprints.
         let mark = context.solution_mark();
         let revalidated = context.with_frame(|context| {
             for (name, ty) in telescope.iter() {
                 context.assume(name, ty);
             }
 
-            context.with_oracle(|context| match infer(context, &inverted) {
-                Ok(inferred) => convert(context, &Term::type_(), &inferred, &result),
-                // A meta-free, well-scoped candidate that fails to synthesize is
-                // not validly typed here — reject the solution.
+            context.with_oracle(|context| match check(context, &inverted, result.clone()) {
+                Ok(_) => Ok(true),
+                // A meta-free, well-scoped candidate that fails to check against
+                // the frozen type is not validly typed here — reject the
+                // solution. (Under the oracle's suppressed parking an undecided
+                // check surfaces as an error too, and likewise rejects.)
                 Err(_) => Ok(false),
             })
         })?;
