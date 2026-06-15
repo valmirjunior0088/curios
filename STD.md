@@ -106,19 +106,19 @@ Layers safe conveniences over the `/sys/Io` handle primitives (which it re-expor
 
 ### `/std/File`
 
-`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close`: `using`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice (`/sys/Io/open` remains the explicit escape hatch).
+`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close`: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice (`/sys/Io/open` remains the explicit escape hatch).
 
 ```
 union Mode  | read() | write() | append() end   -- File/Mode/read() etc.
 union Error | not_found() | permission_denied() | exists() | other(Nat) end
 
-File/using(path, mode, body)   -- (@A : Type, Bin, Mode, File -> A) -> Result(A, Error)
+File/with(path, mode, body)    -- (@A : Type, Bin, Mode, File -> A) -> Result(A, Error)
 File/read_all(path)            -- Bin -> Result(Bin, Error)
 File/read(f, n)                -- (File, Nat) -> { status : Nat, bytes : Bin }
 File/write(f, b)               -- (File, Bin) -> Nat
 ```
 
-`using` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/sys/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
+`with` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/sys/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
 
 ## Data types
 

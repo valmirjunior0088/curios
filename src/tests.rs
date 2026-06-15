@@ -196,7 +196,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io};
-        match File/using(/sys/Str/to_bin("out.txt"), File/Mode/write(), (f) => File/write(f, /sys/Str/to_bin("written")))
+        match File/with(/sys/Str/to_bin("out.txt"), File/Mode/write(), (f) => File/write(f, /sys/Str/to_bin("written")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -221,7 +221,7 @@ fn file_with_write_mode_persists_through_close() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io};
-        match File/using(/sys/Str/to_bin("log.txt"), File/Mode/append(), (f) => File/write(f, /sys/Str/to_bin("x")))
+        match File/with(/sys/Str/to_bin("log.txt"), File/Mode/append(), (f) => File/write(f, /sys/Str/to_bin("x")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -246,7 +246,7 @@ fn effectful_match_scrutinee_runs_once() {
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
         use /std/{File, Io, Str};
-        match File/using(/sys/Str/to_bin("lines.txt"), File/Mode/read(), (f) => File/read(f, 1024).bytes)
+        match File/with(/sys/Str/to_bin("lines.txt"), File/Mode/read(), (f) => File/read(f, 1024).bytes)
         | success(bytes) => Io/print(/sys/Str/of_bin(bytes))
         | failure(_) => Io/print("error")
         end

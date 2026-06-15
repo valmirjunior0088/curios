@@ -27,7 +27,7 @@ pub let read(f : File, n : Nat) -> { status : Nat, bytes : Bin } =
 pub let write(f : File, b : Bin) -> Nat =
     Io/write(f.0, b);
 
--- Closing is not part of the public surface: `using`/`read_all` open and close
+-- Closing is not part of the public surface: `with`/`read_all` open and close
 -- around `body`, so a handle never outlives the bracket and cannot be closed
 -- twice or used after close.
 let close(f : File) -> {} =
@@ -48,7 +48,7 @@ let decode(status : Nat) -> Error =
     | _ => Error/other(status)
     end;
 
-pub let using(@A : Type, path : Bin, mode : Mode, body : File -> A) -> Result(A, Error) =
+pub let with(@A : Type, path : Bin, mode : Mode, body : File -> A) -> Result(A, Error) =
     let r = Io/open(path, token(mode));
     match Nat/eql(r.status, 0)
     | true =>
@@ -67,4 +67,4 @@ rec drain(f : File, acc : Bin) -> Bin =
     end;
 
 pub let read_all(path : Bin) -> Result(Bin, Error) =
-    using(path, Mode/read(), (f) => drain(f, Bin/empty));
+    with(path, Mode/read(), (f) => drain(f, Bin/empty));
