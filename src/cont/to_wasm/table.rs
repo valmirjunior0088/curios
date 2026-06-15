@@ -212,6 +212,9 @@ pub struct Table<'a> {
     io_write: OnceCell<wasm::FuncName>,
     io_open: OnceCell<wasm::FuncName>,
     io_close: OnceCell<wasm::FuncName>,
+    io_clock_wall: OnceCell<wasm::FuncName>,
+    io_clock_mono: OnceCell<wasm::FuncName>,
+    io_random: OnceCell<wasm::FuncName>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -238,6 +241,9 @@ impl<'a> Table<'a> {
             io_write: OnceCell::new(),
             io_open: OnceCell::new(),
             io_close: OnceCell::new(),
+            io_clock_wall: OnceCell::new(),
+            io_clock_mono: OnceCell::new(),
+            io_random: OnceCell::new(),
             tpl_types: {
                 let max = module
                     .consts()
@@ -409,6 +415,33 @@ impl<'a> Table<'a> {
 
     pub fn io_close_used(&self) -> bool {
         self.io_close.get().is_some()
+    }
+
+    pub fn io_clock_wall_func(&self) -> &wasm::FuncName {
+        self.io_clock_wall
+            .get_or_init(|| wasm::FuncName::from("io_clock_wall"))
+    }
+
+    pub fn io_clock_wall_used(&self) -> bool {
+        self.io_clock_wall.get().is_some()
+    }
+
+    pub fn io_clock_mono_func(&self) -> &wasm::FuncName {
+        self.io_clock_mono
+            .get_or_init(|| wasm::FuncName::from("io_clock_mono"))
+    }
+
+    pub fn io_clock_mono_used(&self) -> bool {
+        self.io_clock_mono.get().is_some()
+    }
+
+    pub fn io_random_func(&self) -> &wasm::FuncName {
+        self.io_random
+            .get_or_init(|| wasm::FuncName::from("io_random"))
+    }
+
+    pub fn io_random_used(&self) -> bool {
+        self.io_random.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, wasm::TypeName)> {

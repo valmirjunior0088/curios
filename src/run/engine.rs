@@ -74,6 +74,17 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let i31_ref = ValType::Ref(RefType::new(false, HeapType::I31));
     let i32_to_bin_type = FuncType::new(engine, [ValType::I32], [bin_ref.clone()]);
     let f32_to_bin_type = FuncType::new(engine, [ValType::F32], [bin_ref.clone()]);
+    let io_clock_wall_type = FuncType::new(
+        engine,
+        std::iter::empty::<ValType>(),
+        [i31_ref.clone(), i31_ref.clone(), i31_ref.clone()],
+    );
+    let io_clock_mono_type = FuncType::new(
+        engine,
+        std::iter::empty::<ValType>(),
+        [i31_ref.clone(), i31_ref.clone()],
+    );
+    let io_random_type = FuncType::new(engine, [ValType::I32], [bin_ref.clone()]);
     let io_read_type = FuncType::new(
         engine,
         [ValType::I32, ValType::I32],
@@ -124,6 +135,24 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         let host = host.clone();
 
         move |handle: u32| host.close(handle)
+    })?;
+
+    define_import(&mut linker, "io_clock_wall", io_clock_wall_type, {
+        let host = host.clone();
+
+        move |()| host.clock_wall()
+    })?;
+
+    define_import(&mut linker, "io_clock_mono", io_clock_mono_type, {
+        let host = host.clone();
+
+        move |()| host.clock_mono()
+    })?;
+
+    define_import(&mut linker, "io_random", io_random_type, {
+        let host = host.clone();
+
+        move |count: u32| host.random(count)
     })?;
 
     let mut store = Store::new(engine, ());

@@ -338,6 +338,28 @@ fn io_ops() -> Vec<TopItem> {
             unit(),
             prim(Prim::IoClose(name("h"))),
         ),
+        // Clock/random are ambient (no handle). The clocks are 0-arity
+        // *functions* (not value bindings), so each call re-performs the read
+        // and the bare effectful-prim body stays under the function abstraction,
+        // never force-reduced at definition — like read/write/open/close.
+        pub_fn(
+            "clock_wall",
+            vec![],
+            record(vec![("secs_hi", nat()), ("secs_lo", nat()), ("nanos", nat())]),
+            prim(Prim::IoClockWall),
+        ),
+        pub_fn(
+            "clock_mono",
+            vec![],
+            record(vec![("secs", nat()), ("nanos", nat())]),
+            prim(Prim::IoClockMono),
+        ),
+        pub_fn(
+            "random",
+            vec![("n", nat())],
+            bin(),
+            prim(Prim::IoRandom(name("n"))),
+        ),
     ]
 }
 
@@ -433,6 +455,8 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Parse"], include_str!("../../std/Parse.crs")),
     (&["std", "Json"], include_str!("../../std/Json.crs")),
     (&["std", "Fmt"], include_str!("../../std/Fmt.crs")),
+    (&["std", "Clock"], include_str!("../../std/Clock.crs")),
+    (&["std", "Random"], include_str!("../../std/Random.crs")),
 ];
 
 // Serves the embedded `std` modules, delegating everything else to `inner`.

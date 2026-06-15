@@ -31,7 +31,7 @@ pub let write(f : File, b : Bin) -> Nat =
 -- around `body`, so a handle never outlives the bracket and cannot be closed
 -- twice or used after close.
 let close(f : File) -> {} =
-    Io/close(f.0);
+    /sys/Io/close(f.0);
 
 let token(mode : Mode) -> Nat =
     match mode : Nat
@@ -49,7 +49,7 @@ let decode(status : Nat) -> Error =
     end;
 
 pub let with(@A : Type, path : Bin, mode : Mode, body : File -> A) -> Result(A, Error) =
-    let r = Io/open(path, token(mode));
+    let r = /sys/Io/open(path, token(mode));
     match Nat/eql(r.status, 0)
     | true =>
         let f = File { r.handle };

@@ -1,4 +1,4 @@
-pub use /sys/Io/*;
+pub use /sys/Io/{let stdin, let stdout, let stderr, let read, let write};
 pub use /sys/{Io};
 use /std/{Bin, Str, Nat, Option};
 

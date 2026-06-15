@@ -229,6 +229,87 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 },
             );
         }
+
+        // `bin_ref`/`status_ref` above are moved by the `io_open` block, so the
+        // clock/random imports recompute their own i31 and bin reference types.
+        let i31_ref = wasm::ValType::Ref(self.table.int_type(false));
+        let bin_out = wasm::ValType::Ref(wasm::RefType {
+            is_nullable: false,
+            heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+        });
+
+        if self.table.io_clock_wall_used() {
+            let io_clock_wall = wasm::TypeName::from("io_clock_wall");
+            self.module.add_type(
+                io_clock_wall.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([]),
+                        outputs: wasm::ResultType::from([
+                            i31_ref.clone(),
+                            i31_ref.clone(),
+                            i31_ref.clone(),
+                        ]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_clock_wall",
+                wasm::Import::Func {
+                    func_name: self.table.io_clock_wall_func().clone(),
+                    type_name: io_clock_wall,
+                },
+            );
+        }
+
+        if self.table.io_clock_mono_used() {
+            let io_clock_mono = wasm::TypeName::from("io_clock_mono");
+            self.module.add_type(
+                io_clock_mono.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([]),
+                        outputs: wasm::ResultType::from([i31_ref.clone(), i31_ref.clone()]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_clock_mono",
+                wasm::Import::Func {
+                    func_name: self.table.io_clock_mono_func().clone(),
+                    type_name: io_clock_mono,
+                },
+            );
+        }
+
+        if self.table.io_random_used() {
+            let io_random = wasm::TypeName::from("io_random");
+            self.module.add_type(
+                io_random.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
+                        outputs: wasm::ResultType::from([bin_out.clone()]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_random",
+                wasm::Import::Func {
+                    func_name: self.table.io_random_func().clone(),
+                    type_name: io_random,
+                },
+            );
+        }
     }
 
     fn emit_arr_type(&mut self) {

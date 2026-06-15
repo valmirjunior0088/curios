@@ -52,3 +52,8 @@ pub use Json/{let Json};
 
 pub mod Fmt;
 pub use Fmt/{let Fmt};
+
+pub mod Clock;
+pub use Clock/{let Instant, let Duration};
+
+pub mod Random;

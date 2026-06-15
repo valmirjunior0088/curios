@@ -184,6 +184,22 @@ pub enum HostTarget {
         handle: ValueName,
         resume: BlockName,
     },
+    /// Read the wall clock. Ambient — no operands. Returns
+    /// (secs_hi, secs_lo, nanos); `resume` takes three block parameters.
+    IoClockWall {
+        resume: BlockName,
+    },
+    /// Read the monotonic clock. Ambient. Returns (secs, nanos);
+    /// `resume` takes two block parameters.
+    IoClockMono {
+        resume: BlockName,
+    },
+    /// Fill `count` random bytes. Returns a `Bin`; `resume` takes one
+    /// block parameter.
+    IoRandom {
+        count: ValueName,
+        resume: BlockName,
+    },
 }
 
 impl HostTarget {
@@ -192,7 +208,10 @@ impl HostTarget {
             HostTarget::IoRead { resume, .. }
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
-            | HostTarget::IoClose { resume, .. } => resume,
+            | HostTarget::IoClose { resume, .. }
+            | HostTarget::IoClockWall { resume }
+            | HostTarget::IoClockMono { resume }
+            | HostTarget::IoRandom { resume, .. } => resume,
         }
     }
 }

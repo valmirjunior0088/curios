@@ -495,6 +495,50 @@ pub fn lower_value_prim<'b>(
                 cont::Tail::Host(cont::HostTarget::IoClose { handle, resume })
             }),
         ),
+        ersd::Prim::Host(ersd::HostPrim::IoClockWall) => {
+            // Ambient: no operands. The host returns (secs_hi, secs_lo, nanos)
+            // as three resume params, packed into the `{ secs_hi, secs_lo,
+            // nanos }` record the prim's type promises.
+            let resume = work.fresh_block();
+            let secs_hi = work.fresh_value();
+            let secs_lo = work.fresh_value();
+            let nanos = work.fresh_value();
+            let params = vec![secs_hi.clone(), secs_lo.clone(), nanos.clone()];
+            work.add_resume_block(resume.clone(), params, move |inner| {
+                let record = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![
+                    secs_hi, secs_lo, nanos,
+                ])));
+                cont.call(inner, record)
+            });
+            cont::Tail::Host(cont::HostTarget::IoClockWall { resume })
+        }
+        ersd::Prim::Host(ersd::HostPrim::IoClockMono) => {
+            // (secs, nanos) packs into `{ secs, nanos }`, like IoClockWall.
+            let resume = work.fresh_block();
+            let secs = work.fresh_value();
+            let nanos = work.fresh_value();
+            let params = vec![secs.clone(), nanos.clone()];
+            work.add_resume_block(resume.clone(), params, move |inner| {
+                let record = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![secs, nanos])));
+                cont.call(inner, record)
+            });
+            cont::Tail::Host(cont::HostTarget::IoClockMono { resume })
+        }
+        ersd::Prim::Host(ersd::HostPrim::IoRandom(count)) => work.lower_value_name(
+            count,
+            frame,
+            Cont::new(move |work, count| {
+                // `Io.random` returns the Bin directly; the resume's lone param
+                // threads straight into the continuation, like `IoWrite`.
+                let resume = work.fresh_block();
+                let bytes = work.fresh_value();
+                let bytes_clone = bytes.clone();
+                work.add_resume_block(resume.clone(), vec![bytes], move |inner| {
+                    cont.call(inner, bytes_clone)
+                });
+                cont::Tail::Host(cont::HostTarget::IoRandom { count, resume })
+            }),
+        ),
     }
 }
 

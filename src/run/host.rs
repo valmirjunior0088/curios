@@ -1,13 +1,14 @@
 use {
     crate::Entropy,
     std::{
-        collections::HashMap,
+        collections::{HashMap, VecDeque},
         fs::{File, OpenOptions},
         io::{ErrorKind, Read, Write, stderr, stdin, stdout},
         sync::{
             Arc, Mutex,
             mpsc::{self, Receiver, RecvError, Sender},
         },
+        time::{Instant, SystemTime, UNIX_EPOCH},
     },
 };
 
@@ -87,11 +88,25 @@ pub trait Host {
 
     /// Write `bytes` to `handle`, returning a status.
     fn write(&self, handle: u32, bytes: &[u8]) -> u32;
+
+    /// Read the wall clock. Returns `(secs_hi, secs_lo, nanos)`: seconds since
+    /// the Unix epoch split base-10⁹ so each limb fits an i31, plus sub-second
+    /// nanoseconds.
+    fn clock_wall(&self) -> (u32, u32, u32);
+
+    /// Read the monotonic clock. Returns `(secs, nanos)` elapsed since a fixed
+    /// origin (host construction); only differences are meaningful.
+    fn clock_mono(&self) -> (u32, u32);
+
+    /// Return `count` random bytes.
+    fn random(&self, count: u32) -> Vec<u8>;
 }
 
 pub struct StdioHost {
     files: Mutex<HashMap<u32, File>>,
     handles: Mutex<Entropy>,
+    /// Monotonic origin: `clock_mono` reports elapsed time since this.
+    start: Instant,
 }
 
 impl Default for StdioHost {
@@ -105,6 +120,7 @@ impl StdioHost {
         Self {
             files: Mutex::new(HashMap::new()),
             handles: handle_entropy(),
+            start: Instant::now(),
         }
     }
 }
@@ -174,6 +190,32 @@ impl Host for StdioHost {
             Err(error) => status_of(error.kind()),
         }
     }
+
+    fn clock_wall(&self) -> (u32, u32, u32) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = now.as_secs();
+
+        (
+            (secs / 1_000_000_000) as u32,
+            (secs % 1_000_000_000) as u32,
+            now.subsec_nanos(),
+        )
+    }
+
+    fn clock_mono(&self) -> (u32, u32) {
+        let elapsed = self.start.elapsed();
+
+        (elapsed.as_secs() as u32, elapsed.subsec_nanos())
+    }
+
+    fn random(&self, count: u32) -> Vec<u8> {
+        let mut buffer = vec![0u8; count as usize];
+        getrandom::fill(&mut buffer).expect("OS randomness unavailable");
+
+        buffer
+    }
 }
 
 /// The in-memory file map shared between a [`ChannelHost`] and the test that
@@ -198,6 +240,12 @@ pub struct ChannelHost {
     files: ChannelFs,
     open_files: Mutex<HashMap<u32, OpenFile>>,
     handles: Mutex<Entropy>,
+    /// Scripted wall-clock readings, served in order by `clock_wall`.
+    clock_wall_seq: Mutex<VecDeque<(u32, u32, u32)>>,
+    /// Scripted monotonic readings, served in order by `clock_mono`.
+    clock_mono_seq: Mutex<VecDeque<(u32, u32)>>,
+    /// Deterministic xorshift64 state backing `random`.
+    rng: Mutex<u64>,
 }
 
 impl ChannelHost {
@@ -233,6 +281,9 @@ impl ChannelHost {
                 files: files.clone(),
                 open_files: Mutex::new(HashMap::new()),
                 handles: handle_entropy(),
+                clock_wall_seq: Mutex::new(VecDeque::new()),
+                clock_mono_seq: Mutex::new(VecDeque::new()),
+                rng: Mutex::new(0x2545_F491_4F6C_DD1D),
             },
             output_receiver,
             files,
@@ -251,6 +302,22 @@ impl ChannelHost {
 
     pub fn out() -> (Self, Receiver<Vec<u8>>) {
         Self::in_out::<&[u8], [&[u8]; 0]>([])
+    }
+
+    /// Script the wall-clock readings served by `clock_wall`, in order. When
+    /// the script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
+    pub fn script_wall<I: IntoIterator<Item = (u32, u32, u32)>>(&self, readings: I) {
+        self.clock_wall_seq.lock().unwrap().extend(readings);
+    }
+
+    /// Script the monotonic readings served by `clock_mono`, in order.
+    pub fn script_mono<I: IntoIterator<Item = (u32, u32)>>(&self, readings: I) {
+        self.clock_mono_seq.lock().unwrap().extend(readings);
+    }
+
+    /// Reseed the deterministic RNG backing `random` (must be non-zero).
+    pub fn seed_random(&self, seed: u64) {
+        *self.rng.lock().unwrap() = seed;
     }
 }
 
@@ -366,5 +433,38 @@ impl Host for ChannelHost {
             .extend_from_slice(bytes);
 
         STATUS_OK
+    }
+
+    fn clock_wall(&self) -> (u32, u32, u32) {
+        self.clock_wall_seq
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or((0, 0, 0))
+    }
+
+    fn clock_mono(&self) -> (u32, u32) {
+        self.clock_mono_seq
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or((0, 0))
+    }
+
+    fn random(&self, count: u32) -> Vec<u8> {
+        let mut state = self.rng.lock().unwrap();
+        let mut output = Vec::with_capacity(count as usize);
+
+        for _ in 0..count {
+            // xorshift64: deterministic and reproducible across runs.
+            let mut x = *state;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            *state = x;
+            output.push((x >> 24) as u8);
+        }
+
+        output
     }
 }

@@ -636,6 +636,45 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.extend(block_data.enter(0));
                 }
             }
+            cont::HostTarget::IoClockWall { resume } => {
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_clock_wall_func().clone(),
+                });
+                // Three-result host op: its resume defines a record value, so it
+                // is never a bare forwarder and never the sentinel.
+                assert!(
+                    !self.is_resume(resume),
+                    "multi-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(3));
+            }
+            cont::HostTarget::IoClockMono { resume } => {
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_clock_mono_func().clone(),
+                });
+                assert!(
+                    !self.is_resume(resume),
+                    "multi-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(2));
+            }
+            cont::HostTarget::IoRandom { count, resume } => {
+                output.extend(self.load_value_instrs(count, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_random_func().clone(),
+                });
+
+                if self.is_resume(resume) {
+                    // The import returns the Bin directly (a bin_ref, an anyref
+                    // subtype), already matching the single-anyref return shape.
+                    output.push(wasm::Instr::Return);
+                } else {
+                    let block_data = self.find_block(resume);
+                    output.extend(block_data.enter(1));
+                }
+            }
         }
 
         output

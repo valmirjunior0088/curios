@@ -1185,3 +1185,58 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
     assert!(crate::run_text(Duration::from_secs(1), source, system).is_err());
 }
 
+#[test]
+fn random_bin_returns_requested_length() {
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"std/Io/write(std/Io/stdout, /std/Random/bin(8))"#,
+        system,
+    )
+    .expect("expected result");
+
+    let output = receiver.try_iter().collect::<Vec<_>>();
+    assert_eq!(output.len(), 1);
+    assert_eq!(output[0].len(), 8);
+}
+
+#[test]
+fn clock_diff_of_two_distinct_now_readings() {
+    // Two scripted wall readings 30 s + 400 ns apart. `Clock/now` referenced
+    // twice must perform two *distinct* host calls (the nullary-effect
+    // distinctness the struct-head reduction relies on), so the diff is the
+    // gap between them, not zero.
+    let (system, receiver) = ChannelHost::out();
+    system.script_wall([(1, 100, 500), (1, 130, 900)]);
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        let a = /std/Clock/now();
+        let b = /std/Clock/now();
+        let d = /std/Clock/diff(b, a);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Clock/secs(d))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"30".to_vec()]);
+}
+
+#[test]
+fn clock_mono_reads_scripted_elapsed() {
+    let (system, receiver) = ChannelHost::out();
+    system.script_mono([(2, 7)]);
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        let e = /std/Clock/elapsed();
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Clock/secs(e))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+}
+

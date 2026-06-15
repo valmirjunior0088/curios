@@ -818,5 +818,17 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoClose",
             span: handle.span(),
         }),
+        Prim::IoClockWall => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoClockWall",
+            span: None,
+        }),
+        Prim::IoClockMono => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoClockMono",
+            span: None,
+        }),
+        Prim::IoRandom(count) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoRandom",
+            span: count.span(),
+        }),
     }
 }

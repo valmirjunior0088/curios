@@ -228,6 +228,9 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoWrite(handle, bytes) => print_prim_call("Io.write", vec![handle, bytes]),
         Prim::IoOpen(path, mode) => print_prim_call("Io.open", vec![path, mode]),
         Prim::IoClose(handle) => print_prim_call("Io.close", vec![handle]),
+        Prim::IoClockWall => pure("Io.clock_wall"),
+        Prim::IoClockMono => pure("Io.clock_mono"),
+        Prim::IoRandom(count) => print_prim_call("Io.random", vec![count]),
     }
 }
 

@@ -139,6 +139,9 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(mode);
         }
         Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
+        Tail::Host(HostTarget::IoClockWall { .. })
+        | Tail::Host(HostTarget::IoClockMono { .. }) => {}
+        Tail::Host(HostTarget::IoRandom { count, .. }) => sink.value_use(count),
         Tail::Unreachable => {}
     }
 }
@@ -362,6 +365,9 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
             sink.value_use(mode);
         }
         Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
+        Tail::Host(HostTarget::IoClockWall { .. })
+        | Tail::Host(HostTarget::IoClockMono { .. }) => {}
+        Tail::Host(HostTarget::IoRandom { count, .. }) => sink.value_use(count),
         Tail::Unreachable => {}
     }
 }

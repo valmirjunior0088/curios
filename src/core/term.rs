@@ -1318,7 +1318,9 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::StrType
         | Prim::Str(_)
         | Prim::IoType
-        | Prim::Io(_) => 0,
+        | Prim::Io(_)
+        | Prim::IoClockWall
+        | Prim::IoClockMono => 0,
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.reach(),
 
@@ -1343,7 +1345,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::StrToBin(t)
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
-        | Prim::IoClose(t) => t.reach(),
+        | Prim::IoClose(t)
+        | Prim::IoRandom(t) => t.reach(),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1413,7 +1416,9 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::StrType
         | Prim::Str(_)
         | Prim::IoType
-        | Prim::Io(_) => {}
+        | Prim::Io(_)
+        | Prim::IoClockWall
+        | Prim::IoClockMono => {}
 
         Prim::Nat(Nat::Succ(_, inner)) => inner.collect_metavars(ids),
 
@@ -1438,7 +1443,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::StrToBin(t)
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
-        | Prim::IoClose(t) => t.collect_metavars(ids),
+        | Prim::IoClose(t)
+        | Prim::IoRandom(t) => t.collect_metavars(ids),
 
         Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
@@ -1702,6 +1708,9 @@ where
             Prim::IoOpen(visit.visit_subterm(path), visit.visit_subterm(mode))
         }
         Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
+        Prim::IoClockWall => Prim::IoClockWall,
+        Prim::IoClockMono => Prim::IoClockMono,
+        Prim::IoRandom(count) => Prim::IoRandom(visit.visit_subterm(count)),
     }
 }
 

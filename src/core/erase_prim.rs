@@ -409,5 +409,12 @@ pub fn erase_prim(
             handle,
             &prim_type(Prim::IoType),
         )?))),
+        Prim::IoClockWall => Ok(host(ersd::HostPrim::IoClockWall)),
+        Prim::IoClockMono => Ok(host(ersd::HostPrim::IoClockMono)),
+        Prim::IoRandom(count) => Ok(host(ersd::HostPrim::IoRandom(erase(
+            context,
+            count,
+            &nat_type(),
+        )?))),
     }
 }

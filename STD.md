@@ -109,7 +109,7 @@ Layers safe conveniences over the primitive `Io` handle operations (which it re-
 
 ### `/std/File`
 
-`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close`: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice (`/std/Io/open` remains the explicit escape hatch).
+`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close` anywhere: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice.
 
 ```
 union Mode  | read() | write() | append() end   -- File/Mode/read() etc.
@@ -122,6 +122,34 @@ File/write(f, b)               -- (File, Bin) -> Nat
 ```
 
 `with` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/std/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
+
+### `/std/Clock`
+
+Wall-clock and monotonic time. `now` and `elapsed` are **0-arity functions** — each call performs a fresh read. (A value binding would be a CAF: read once, then shared.) `Instant` and `Duration` are **opaque**, observed only through the operations below.
+
+An `Instant` is seconds since the Unix epoch — split into two base-10⁹ limbs so it clears the 2³¹-second (≈ year 2038) ceiling of the i31 runtime `Nat` — plus sub-second nanoseconds. A `Duration` is whole seconds plus nanoseconds, a span of up to ≈ 68 years.
+
+```
+Instant    -- opaque: a wall-clock timestamp
+Duration   -- opaque: a span of time
+
+Clock/now()         -- 0-arity, -> Instant  : current wall-clock time (may jump when the system clock is set)
+Clock/elapsed()     -- 0-arity, -> Duration : monotonic time since program start; never goes backward
+Clock/diff(a, b)    -- (Instant, Instant) -> Duration : a − b, saturating to zero when a precedes b
+Clock/before(a, b)  -- (Instant, Instant) -> Bln : a strictly earlier than b
+Clock/secs(d)       -- Duration -> Nat : whole seconds
+Clock/nanos(d)      -- Duration -> Nat : sub-second nanoseconds (0–999999999)
+```
+
+Time a section by reading `now()` (or `elapsed()`) on each side and taking the `diff`. Calendar decomposition of an `Instant` and general `Duration` arithmetic are future work.
+
+### `/std/Random`
+
+```
+Random/bin(n)   -- Nat -> Bin : n random bytes from the host's OS randomness source
+```
+
+A uniform `Nat`, a bounded range, and a seedable generator are future work, built on `bin` in pure Curios.
 
 ## Data types
 

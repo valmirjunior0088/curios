@@ -117,6 +117,8 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
             names
         }
         ersd::HostPrim::IoClose(handle) => free_names(handle),
+        ersd::HostPrim::IoClockWall | ersd::HostPrim::IoClockMono => BTreeSet::new(),
+        ersd::HostPrim::IoRandom(count) => free_names(count),
     }
 }
 

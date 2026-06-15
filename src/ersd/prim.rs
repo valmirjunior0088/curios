@@ -79,6 +79,9 @@ pub enum HostPrim {
     IoWrite(Term, Term),
     IoOpen(Term, Term),
     IoClose(Term),
+    IoClockWall,
+    IoClockMono,
+    IoRandom(Term),
 }
 
 #[derive(Debug)]

@@ -451,6 +451,9 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(mode, depth),
         ]),
         Prim::IoClose(handle) => flat([pure("Io.close "), print_term(handle, depth)]),
+        Prim::IoClockWall => pure("Io.clock_wall"),
+        Prim::IoClockMono => pure("Io.clock_mono"),
+        Prim::IoRandom(count) => flat([pure("Io.random "), print_term(count, depth)]),
     }
 }
 

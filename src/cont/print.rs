@@ -643,6 +643,18 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
+            HostTarget::IoClockWall { resume } => {
+                flat([pure("Io.clock_wall "), print_block_name(resume)])
+            }
+            HostTarget::IoClockMono { resume } => {
+                flat([pure("Io.clock_mono "), print_block_name(resume)])
+            }
+            HostTarget::IoRandom { count, resume } => flat([
+                pure("Io.random "),
+                print_value_name(count),
+                pure(" "),
+                print_block_name(resume),
+            ]),
         },
         Tail::Unreachable => pure("unreachable"),
     }

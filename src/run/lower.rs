@@ -45,6 +45,20 @@ impl<A: Lower, B: Lower> Lower for (A, B) {
     }
 }
 
+impl<A: Lower, B: Lower, C: Lower> Lower for (A, B, C) {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        let (a, b, c) = self;
+        a.lower(caller, &mut results[0..1])?;
+        b.lower(caller, &mut results[1..2])?;
+
+        c.lower(caller, &mut results[2..3])
+    }
+}
+
 impl Lower for Vec<u8> {
     fn lower(
         self,

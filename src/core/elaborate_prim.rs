@@ -361,6 +361,22 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             (Prim::IoClose(handle), Term::tuple_type_unit())
         }
+        Prim::IoClockWall => (
+            prim.clone(),
+            Term::tuple_type([
+                ("secs_hi", nat_type.clone()),
+                ("secs_lo", nat_type.clone()),
+                ("nanos", nat_type.clone()),
+            ]),
+        ),
+        Prim::IoClockMono => (
+            prim.clone(),
+            Term::tuple_type([("secs", nat_type.clone()), ("nanos", nat_type.clone())]),
+        ),
+        Prim::IoRandom(count) => {
+            let count = elaborate(context, count, Mode::Check(nat_type.clone()))?.0;
+            (Prim::IoRandom(count), bin_type)
+        }
     })
 }
 

@@ -419,6 +419,7 @@ dependencies = [
  "clap",
  "cmake",
  "curios",
+ "getrandom 0.3.4",
  "num-bigint",
  "num-traits",
  "wasmtime",

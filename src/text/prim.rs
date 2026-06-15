@@ -85,6 +85,9 @@ pub enum Prim {
     IoWrite(Term, Term),
     IoOpen(Term, Term),
     IoClose(Term),
+    IoClockWall,
+    IoClockMono,
+    IoRandom(Term),
 }
 
 impl Prim {

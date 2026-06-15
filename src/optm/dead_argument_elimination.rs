@@ -372,6 +372,9 @@ fn constrain_region(
             seed(mode, liveness);
         }
         Tail::Host(HostTarget::IoClose { handle, .. }) => seed(handle, liveness),
+        Tail::Host(HostTarget::IoClockWall { .. })
+        | Tail::Host(HostTarget::IoClockMono { .. }) => {}
+        Tail::Host(HostTarget::IoRandom { count, .. }) => seed(count, liveness),
         Tail::Unreachable => {}
     }
 
