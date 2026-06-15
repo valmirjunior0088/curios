@@ -381,18 +381,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::Str(bytes) => pure(format!("{:?}", String::from_utf8_lossy(bytes.as_slice()))),
         Prim::StrToBin(str) => flat([pure("Str.to_bin "), print_term(str, depth)]),
         Prim::StrOfBin(bin) => flat([pure("Str.of_bin "), print_term(bin, depth)]),
-        Prim::StrConcat(left, right) => flat([
-            pure("Str.concat "),
-            print_term(left, depth),
-            pure(" "),
-            print_term(right, depth),
-        ]),
-        Prim::StrEql(left, right) => flat([
-            pure("Str.eql "),
-            print_term(left, depth),
-            pure(" "),
-            print_term(right, depth),
-        ]),
         Prim::ArrType(elem) => flat([pure("Arr "), print_term(elem, depth)]),
         Prim::Arr(elems) => flat([
             pure("["),

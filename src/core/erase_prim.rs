@@ -340,16 +340,6 @@ pub fn erase_prim(
         Prim::Str(bytes) => Ok(pure(ersd::PurePrim::Bin(bytes.clone()))),
         Prim::StrToBin(str) => erase(context, str, &str_type()),
         Prim::StrOfBin(bin) => erase(context, bin, &bin_type()),
-        // `Str` shares `Bin`'s representation, so `concat`/`eql` lower to the
-        // byte-buffer runtime ops (no separate Str runtime op set).
-        Prim::StrConcat(left, right) => Ok(pure(ersd::PurePrim::BinConcat(vec![
-            erase(context, left, &str_type())?,
-            erase(context, right, &str_type())?,
-        ]))),
-        Prim::StrEql(left, right) => Ok(pure(ersd::PurePrim::BinEql(
-            erase(context, left, &str_type())?,
-            erase(context, right, &str_type())?,
-        ))),
         Prim::ArrType(_) => Ok(ersd::Subterm::Erased.into()),
         Prim::Arr(elems) => {
             // Elaborate already checked this literal against an array type (§9);

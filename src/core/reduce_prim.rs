@@ -697,31 +697,6 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 bin => Subterm::Prim(Prim::str_of_bin(bin)),
             })
         }
-        Prim::StrConcat(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Str(mut a)), Subterm::Prim(Prim::Str(b))) => {
-                        a.extend(b);
-                        Subterm::Prim(Prim::Str(a))
-                    }
-                    (left, right) => Subterm::Prim(Prim::str_concat(left, right)),
-                },
-            )
-        }
-        Prim::StrEql(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Str(a)), Subterm::Prim(Prim::Str(b))) => {
-                        Subterm::Prim(Prim::Bln(a == b))
-                    }
-                    (left, right) => Subterm::Prim(Prim::str_eql(left, right)),
-                },
-            )
-        }
         Prim::ArrType(elem) => {
             let elem = reduce(context, elem.clone())?;
             Ok(Subterm::Prim(Prim::arr_type(elem)))

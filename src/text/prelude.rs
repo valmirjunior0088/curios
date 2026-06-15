@@ -217,11 +217,10 @@ fn flt_ops() -> Vec<TopItem> {
 
 fn str_ops() -> Vec<TopItem> {
     vec![
-        // First-class Str operations (own ops; they share Bin's *representation*
-        // at runtime, not its surface). `to_bin` is the carrier projection.
+        // `Str` shares `Bin`'s runtime representation but not its surface.
+        // `to_bin` is the carrier projection; `concat`/`eql` are defined in
+        // `/std/Str` on top of it rather than as primitives.
         unary("to_bin", str(), bin(), Prim::StrToBin),
-        binary("concat", str(), str(), Prim::StrConcat),
-        binary("eql", str(), bln(), Prim::StrEql),
         // The trusted `Bin -> Str` coercion — the raw substrate beneath the
         // checked `/std/Str/of_bin`. Not re-exported into the `/std/Str` API.
         unary("of_bin", bin(), str(), Prim::StrOfBin),

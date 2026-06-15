@@ -1,5 +1,5 @@
 pub use /sys/{Str};
-pub use /sys/Str/{let to_bin, let concat, let eql};
+pub use /sys/Str/{let to_bin};
 use /std/{Char, Nat, Bin, Bln, Arr, Option};
 
 let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
@@ -69,6 +69,15 @@ pub let is_utf8(b : Bin) -> Bln =
     | cont(rem, lo, hi) => false
     | bad() => false
     end;
+
+-- Byte equality on the shared `Bin` representation. UTF-8 is canonical, so
+-- equal bytes ⟺ equal text.
+pub let eql(a : Str, b : Str) -> Bln = Bin/eql(to_bin(a), to_bin(b));
+
+-- Concatenation on the shared `Bin` representation. Valid UTF-8 followed by
+-- valid UTF-8 is itself valid UTF-8, so the trusted `/sys/Str/of_bin` re-wrap
+-- needs no `is_utf8` re-check.
+pub let concat(a : Str, b : Str) -> Str = /sys/Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
 
 -- The empty string.
 pub let empty : Str = "";

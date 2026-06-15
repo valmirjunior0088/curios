@@ -281,18 +281,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let bin = elaborate(context, bin, Mode::Check(bin_type))?.0;
             (Prim::StrOfBin(bin), str_type)
         }
-        // Concatenation stays in `Str` (valid UTF-8 ++ valid UTF-8 is valid).
-        Prim::StrConcat(left, right) => {
-            let left = elaborate(context, left, Mode::Check(str_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(str_type.clone()))?.0;
-            (Prim::StrConcat(left, right), str_type)
-        }
-        // Equality is byte equality — UTF-8 is canonical, so equal bytes ⟺ equal text.
-        Prim::StrEql(left, right) => {
-            let left = elaborate(context, left, Mode::Check(str_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(str_type))?.0;
-            (Prim::StrEql(left, right), bln_type)
-        }
         Prim::ArrType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
             (Prim::ArrType(elem), Term::type_())

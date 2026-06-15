@@ -72,8 +72,6 @@ pub enum Prim {
     StrType,
     StrToBin(Term),
     StrOfBin(Term),
-    StrConcat(Term, Term),
-    StrEql(Term, Term),
     ArrType(Term),
     Arr(Vec<Term>),
     ArrLen(Term, Term),

@@ -20,6 +20,17 @@ fn run_err(src: &str) -> String {
         .to_string()
 }
 
+// Lower against the real prelude (so `sys` and `std` are served and rooted),
+// returning only success/error — the lens for the internal-root gate.
+fn lower_with_prelude(src: &str) -> Result<(), String> {
+    super::to_core(
+        &src.parse::<text::Entrypoint>().unwrap(),
+        &text::prelude(&text::NullLoader),
+    )
+    .map(|_| ())
+    .map_err(|error| error.to_string())
+}
+
 fn temp_dir(name: &str) -> PathBuf {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -583,6 +594,34 @@ fn genuine_value_cycle_leaves_unbound_name() {
         .free_vars()
         .is_empty()
     );
+}
+
+// `sys` is the trusted primitive substrate, reachable only from the standard
+// library. A user entrypoint that names it — through a `use` or a bare term
+// reference — is rejected at resolution; the `/std` wrappers are the door.
+#[test]
+fn rejects_sys_use_from_user_code() {
+    let error = lower_with_prelude("use /sys/{Nat}; Nat/add(1, 2)").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_sys_reference_in_term_from_user_code() {
+    let error = lower_with_prelude("/sys/Nat/add(1, 2)").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+// The same primitive reached through its `/std` wrapper resolves: `std` is
+// privileged to reference `sys`, and re-exports it.
+#[test]
+fn allows_sys_reference_through_std_wrapper() {
+    assert!(lower_with_prelude("use /std/{Nat}; Nat/add(1, 2)").is_ok());
 }
 
 #[test]

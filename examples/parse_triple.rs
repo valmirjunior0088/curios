@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let source = r#"
-        use /sys/{Int};
+        use /std/{Int};
         let triple : {Int, Int, Int} = (+1, +2, +3);
         Int/add(triple.0, Int/add(triple.1, triple.2))
         "#;

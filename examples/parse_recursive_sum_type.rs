@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let source = r#"
-        use /sys/{Int};
+        use /std/{Int};
         union IntList
         | nil()
         | cons(Int, IntList)
@@ -24,7 +24,7 @@ fn main() {
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("/sys/Int".parse().unwrap());
+        .with_type("/std/Int".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

@@ -228,6 +228,7 @@ impl<'a> Context<'a> {
         let last = segments.len() - 1;
 
         let parent = if name.is_abs() {
+            super::guard_internal_root(&self.prefix, segments)?;
             self.walk_children(Qualifier::empty(), &segments[..last])?
         } else {
             let head = name.head();
@@ -387,6 +388,7 @@ impl<'a> Context<'a> {
             let segments = name.qualifier().segments();
 
             let module = if name.is_abs() {
+                super::guard_internal_root(&self.prefix, segments)?;
                 self.walk_children(Qualifier::empty(), segments)?
             } else {
                 let head = name.head();

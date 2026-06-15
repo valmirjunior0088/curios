@@ -7,7 +7,7 @@
 - [Types](#types) — universe, function, tuple, array, primitives
 - [Literals](#literals)
 - [Idioms](#idioms) — sum types, recursive types
-- [Appendix: primitive operations](#appendix-primitive-operations) — the `/sys` tables
+- [Appendix: primitive operations](#appendix-primitive-operations) — the `/std` tables
 
 ## Lexical basics
 
@@ -15,9 +15,9 @@
 
 **Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union` `struct`
 
-**Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
+**Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/std/Nat/add`.
 
-The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended `/sys` module, so `/sys/Nat`, `/sys/Bin`, and `/sys/Io/write` parse as ordinary paths. A source file can import those names with `use /sys/{Nat, Bin, Io};`. The standard library is prepended the same way under `/std` (its sources live in `std/` alongside the compiler) and re-exports the same API plus higher-level helpers — see `STD.md` for its reference.
+The universe `Type` is built in. Primitive types and operations are exposed through the automatically prepended standard library at `/std`, so `/std/Nat`, `/std/Bin`, and `/std/Io/write` parse as ordinary paths. A source file imports those names with `use /std/{Nat, Bin, Io};`. The standard library's sources live in `std/` alongside the compiler and add higher-level helpers on top of the primitives — see `STD.md` for its reference. (The primitives themselves live in an internal `/sys` module that `/std` re-exports; `/sys` is not reachable from user code, so always go through `/std`.)
 
 **Whitespace** (spaces, tabs, newlines) is insignificant except as a separator between tokens.
 
@@ -42,10 +42,10 @@ Binds `name` to `body` of type `Type`. The semicolon is required.
 A function may be defined with shorthand that names its parameters and result type:
 
 ```
-pub let add(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat = /sys/Nat/add(a, b);
+pub let add(a : /std/Nat, b : /std/Nat) -> /std/Nat = /std/Nat/add(a, b);
 ```
 
-This is sugar for binding `add`, of type `(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat`, to the lambda `(a, b) => /sys/Nat/add(a, b)`.
+This is sugar for binding `add`, of type `(a : /std/Nat, b : /std/Nat) -> /std/Nat`, to the lambda `(a, b) => /std/Nat/add(a, b)`.
 
 ### Recursive bindings
 
@@ -57,10 +57,10 @@ pub and g : B = body_g;
 Declares a group of mutually recursive bindings. Each binding in the group independently accepts `pub`. The entire group is terminated by a single semicolon after the last binding. Each binding accepts the same forms as `let` — either `name : type = value` or the function-definition shorthand `name(params) -> R = body`:
 
 ```
-pub rec fact(n : /sys/Nat) -> /sys/Nat =
-    match n : /sys/Nat
+pub rec fact(n : /std/Nat) -> /std/Nat =
+    match n : /std/Nat
     | 0 => 1
-    | pred + 1, ih => /sys/Nat/mul(/sys/Nat/succ(pred), ih)
+    | pred + 1, ih => /std/Nat/mul(/std/Nat/succ(pred), ih)
     end;
 ```
 
@@ -246,7 +246,7 @@ f(a)(b)
 Arguments are arbitrary terms — there is no need to parenthesise compound arguments beyond the call's own parentheses:
 
 ```
-/sys/Nat/add(/sys/Nat/mul(2, 3), 1)
+/std/Nat/add(/std/Nat/mul(2, 3), 1)
 ```
 
 ### Lambda
@@ -269,7 +269,7 @@ A hole is a placeholder elaborated to a fresh metavariable. The type checker sol
 
 ```
 let id(T : Type, x : T) -> T = x;
-id(?, 5)        -- the hole is solved as /sys/Nat
+id(?, 5)        -- the hole is solved as /std/Nat
 ```
 
 An unsolved hole is rejected during type checking.
@@ -312,7 +312,7 @@ tail
 The body must be inferable: a bare `let f = (x) => x;` (nothing constrains the domain), or a tuple with no annotation, is rejected. Top-level `let` and every `rec` binding (local or top-level) still require an explicit type — a `rec` group's mutually recursive types cannot be inferred from their bodies. The function-definition shorthand is also available locally:
 
 ```
-let add(a : /sys/Nat, b : /sys/Nat) -> /sys/Nat = /sys/Nat/add(a, b);
+let add(a : /std/Nat, b : /std/Nat) -> /std/Nat = /std/Nat/add(a, b);
 tail
 ```
 
@@ -369,7 +369,7 @@ In the annotated form the binder's type is the scrutinee's type with its index s
 **Booleans** — both branches required, either order:
 
 ```
-match cond : /sys/Bln
+match cond : /std/Bln
 | true  => true_body
 | false => false_body
 end
@@ -378,7 +378,7 @@ end
 **Structural induction over `Nat`** — `| 0` is the base case; `| pred + 1, ih` binds the predecessor and the result already computed for it (`ih`, the induction hypothesis):
 
 ```
-match n : /sys/Nat
+match n : /std/Nat
 | 0 => zero_case
 | pred + 1, ih => succ_case
 end
@@ -387,7 +387,7 @@ end
 **Sparse dispatch on `Nat`** — specific values plus a mandatory `| _` default that must appear last:
 
 ```
-match n : /sys/Nat
+match n : /std/Nat
 | 0 => body
 | 3 => body
 | _ => default
@@ -475,20 +475,20 @@ Labels must be unique within a type. The empty tuple type `{}` (whose only value
 ### Array type
 
 ```
-/sys/Arr(T)
+/std/Arr(T)
 ```
 
-A homogeneous array of elements of type `T`. Write `/sys/Arr(/sys/Arr(/sys/Nat))` for nested arrays.
+A homogeneous array of elements of type `T`. Write `/std/Arr(/std/Arr(/std/Nat))` for nested arrays.
 
 ### Primitive types
 
 | Type       | Description                  |
 | ---------- | ---------------------------- |
-| `/sys/Bln` | Boolean                      |
-| `/sys/Nat` | Natural number               |
-| `/sys/Int` | Signed integer               |
-| `/sys/Flt` | Single-precision float (f32) |
-| `/sys/Bin` | Byte sequence                |
+| `/std/Bln` | Boolean                      |
+| `/std/Nat` | Natural number               |
+| `/std/Int` | Signed integer               |
+| `/std/Flt` | Single-precision float (f32) |
+| `/std/Bin` | Byte sequence                |
 
 `Nat` and `Int` literals are arbitrary precision while parsing and type-level reduction are in progress — the type level computes in ℕ and ℤ. Erasure narrows runtime `Nat` values to `u32` and runtime `Int` values to `i32`; WebAssembly code generation then represents both as packed `i31ref`, so emitted literals must fit in the signed 31-bit range.
 
@@ -530,9 +530,9 @@ A sign, a decimal point, and at least one digit after the point are all required
 "hello, world"
 ```
 
-Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/sys/Str` — a
+Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/std/Str` — a
 UTF-8 string (validity holds by construction, since source text is UTF-8). Use
-`/sys/Str/to_bin` to view the underlying bytes, and `/std/Str/of_bin` (checked,
+`/std/Str/to_bin` to view the underlying bytes, and `/std/Str/of_bin` (checked,
 `Bin -> Option(Str)`) to go the other way.
 
 ### Byte sequences
@@ -543,7 +543,7 @@ Raw bytes written as consecutive hex pairs, each prefixed with `\`:
 \ef\bb\bf
 ```
 
-Has type `/sys/Bin`. This is the escape hatch for raw or non-UTF-8 bytes — unlike
+Has type `/std/Bin`. This is the escape hatch for raw or non-UTF-8 bytes — unlike
 a `"..."` string literal, a `\hex` sequence is a `Bin`, not a `Str`.
 
 ### Arrays
@@ -559,7 +559,7 @@ false
 true
 ```
 
-Boolean literals. Their type is `/sys/Bln`.
+Boolean literals. Their type is `/std/Bln`.
 
 ### Tuples
 
@@ -585,7 +585,7 @@ Use `union` to declare a sum type (see [Union](#union) for the declaration, para
 Construction goes through the constructor module — `Result/ok(42)` — with the type parameters implicit (supply one positionally with a call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`). Eliminate with `match`; constructor branches bind the payload fields directly:
 
 ```
-let unwrap_or(A : Type, r : Result(A, /sys/Bin), default : A) -> A =
+let unwrap_or(A : Type, r : Result(A, /std/Bin), default : A) -> A =
     match r : A
     | ok(value) => value
     | err(_) => default
@@ -625,10 +625,10 @@ let three : List(Nat) =
 A recursive function over the list is itself written with `rec`:
 
 ```
-rec length(A : Type, list : List(A)) -> /sys/Nat =
-    match list : /sys/Nat
+rec length(A : Type, list : List(A)) -> /std/Nat =
+    match list : /std/Nat
     | nil() => 0
-    | cons(_, tail) => /sys/Nat/add(1, length(A, tail))
+    | cons(_, tail) => /std/Nat/add(1, length(A, tail))
     end;
 ```
 
@@ -639,31 +639,31 @@ rec length(A : Type, list : List(A)) -> /sys/Nat =
 All primitive operations use call syntax: the operation name followed by parenthesised, comma-separated arguments. Arguments are arbitrary terms.
 
 ```
-/sys/Nat/add(a, b)
-/sys/Bin/slice(s, start, end)
+/std/Nat/add(a, b)
+/std/Bin/slice(s, start, end)
 ```
 
-These are normal path references. After `use /sys/{Nat, Bin};`, the same calls can be written `Nat/add(a, b)` and `Bin/slice(s, start, end)`.
+These are normal path references. After `use /std/{Nat, Bin};`, the same calls can be written `Nat/add(a, b)` and `Bin/slice(s, start, end)`. They surface through the standard library at `/std`; the primitives themselves live in the internal `/sys` module, which `/std` re-exports and which user code never names directly.
 
 ### Nat
 
 | Operation            | Arity | Description           | Returns    |
 | -------------------- | ----- | --------------------- | ---------- |
-| `/sys/Nat/succ(a)`   | 1     | Successor             | `/sys/Nat` |
-| `/sys/Nat/add(a, b)` | 2     | Addition              | `/sys/Nat` |
-| `/sys/Nat/sub(a, b)` | 2     | Subtraction           | `/sys/Nat` |
-| `/sys/Nat/mul(a, b)` | 2     | Multiplication        | `/sys/Nat` |
-| `/sys/Nat/div(a, b)` | 2     | Division              | `/sys/Nat` |
-| `/sys/Nat/rem(a, b)` | 2     | Remainder             | `/sys/Nat` |
-| `/sys/Nat/eql(a, b)` | 2     | Equality              | `/sys/Bln` |
-| `/sys/Nat/neq(a, b)` | 2     | Inequality            | `/sys/Bln` |
-| `/sys/Nat/lt(a, b)`  | 2     | Less than             | `/sys/Bln` |
-| `/sys/Nat/gt(a, b)`  | 2     | Greater than          | `/sys/Bln` |
-| `/sys/Nat/lte(a, b)` | 2     | Less than or equal    | `/sys/Bln` |
-| `/sys/Nat/gte(a, b)` | 2     | Greater than or equal | `/sys/Bln` |
-| `/sys/Nat/to_int(a)` | 1     | Convert to Int        | `/sys/Int` |
-| `/sys/Nat/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
-| `/sys/Nat/to_str(a)` | 1     | Convert to Str        | `/sys/Str` |
+| `/std/Nat/succ(a)`   | 1     | Successor             | `/std/Nat` |
+| `/std/Nat/add(a, b)` | 2     | Addition              | `/std/Nat` |
+| `/std/Nat/sub(a, b)` | 2     | Subtraction           | `/std/Nat` |
+| `/std/Nat/mul(a, b)` | 2     | Multiplication        | `/std/Nat` |
+| `/std/Nat/div(a, b)` | 2     | Division              | `/std/Nat` |
+| `/std/Nat/rem(a, b)` | 2     | Remainder             | `/std/Nat` |
+| `/std/Nat/eql(a, b)` | 2     | Equality              | `/std/Bln` |
+| `/std/Nat/neq(a, b)` | 2     | Inequality            | `/std/Bln` |
+| `/std/Nat/lt(a, b)`  | 2     | Less than             | `/std/Bln` |
+| `/std/Nat/gt(a, b)`  | 2     | Greater than          | `/std/Bln` |
+| `/std/Nat/lte(a, b)` | 2     | Less than or equal    | `/std/Bln` |
+| `/std/Nat/gte(a, b)` | 2     | Greater than or equal | `/std/Bln` |
+| `/std/Nat/to_int(a)` | 1     | Convert to Int        | `/std/Int` |
+| `/std/Nat/to_flt(a)` | 1     | Convert to Flt        | `/std/Flt` |
+| `/std/Nat/to_str(a)` | 1     | Convert to Str        | `/std/Str` |
 
 Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively).
 
@@ -671,84 +671,82 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 
 | Operation            | Arity | Description           | Returns    |
 | -------------------- | ----- | --------------------- | ---------- |
-| `/sys/Int/add(a, b)` | 2     | Addition              | `/sys/Int` |
-| `/sys/Int/sub(a, b)` | 2     | Subtraction           | `/sys/Int` |
-| `/sys/Int/mul(a, b)` | 2     | Multiplication        | `/sys/Int` |
-| `/sys/Int/div(a, b)` | 2     | Division              | `/sys/Int` |
-| `/sys/Int/rem(a, b)` | 2     | Remainder             | `/sys/Int` |
-| `/sys/Int/eql(a, b)` | 2     | Equality              | `/sys/Bln` |
-| `/sys/Int/neq(a, b)` | 2     | Inequality            | `/sys/Bln` |
-| `/sys/Int/lt(a, b)`  | 2     | Less than             | `/sys/Bln` |
-| `/sys/Int/gt(a, b)`  | 2     | Greater than          | `/sys/Bln` |
-| `/sys/Int/lte(a, b)` | 2     | Less than or equal    | `/sys/Bln` |
-| `/sys/Int/gte(a, b)` | 2     | Greater than or equal | `/sys/Bln` |
-| `/sys/Int/to_nat(a)` | 1     | Convert to Nat        | `/sys/Nat` |
-| `/sys/Int/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
-| `/sys/Int/to_str(a)` | 1     | Convert to Str        | `/sys/Str` |
+| `/std/Int/add(a, b)` | 2     | Addition              | `/std/Int` |
+| `/std/Int/sub(a, b)` | 2     | Subtraction           | `/std/Int` |
+| `/std/Int/mul(a, b)` | 2     | Multiplication        | `/std/Int` |
+| `/std/Int/div(a, b)` | 2     | Division              | `/std/Int` |
+| `/std/Int/rem(a, b)` | 2     | Remainder             | `/std/Int` |
+| `/std/Int/eql(a, b)` | 2     | Equality              | `/std/Bln` |
+| `/std/Int/neq(a, b)` | 2     | Inequality            | `/std/Bln` |
+| `/std/Int/lt(a, b)`  | 2     | Less than             | `/std/Bln` |
+| `/std/Int/gt(a, b)`  | 2     | Greater than          | `/std/Bln` |
+| `/std/Int/lte(a, b)` | 2     | Less than or equal    | `/std/Bln` |
+| `/std/Int/gte(a, b)` | 2     | Greater than or equal | `/std/Bln` |
+| `/std/Int/to_nat(a)` | 1     | Convert to Nat        | `/std/Nat` |
+| `/std/Int/to_flt(a)` | 1     | Convert to Flt        | `/std/Flt` |
+| `/std/Int/to_str(a)` | 1     | Convert to Str        | `/std/Str` |
 
 ### Flt
 
 | Operation               | Arity | Description           | Returns    |
 | ----------------------- | ----- | --------------------- | ---------- |
-| `/sys/Flt/add(a, b)`    | 2     | Addition              | `/sys/Flt` |
-| `/sys/Flt/sub(a, b)`    | 2     | Subtraction           | `/sys/Flt` |
-| `/sys/Flt/mul(a, b)`    | 2     | Multiplication        | `/sys/Flt` |
-| `/sys/Flt/div(a, b)`    | 2     | Division              | `/sys/Flt` |
-| `/sys/Flt/eql(a, b)`    | 2     | Equality              | `/sys/Bln` |
-| `/sys/Flt/neq(a, b)`    | 2     | Inequality            | `/sys/Bln` |
-| `/sys/Flt/lt(a, b)`     | 2     | Less than             | `/sys/Bln` |
-| `/sys/Flt/gt(a, b)`     | 2     | Greater than          | `/sys/Bln` |
-| `/sys/Flt/lte(a, b)`    | 2     | Less than or equal    | `/sys/Bln` |
-| `/sys/Flt/gte(a, b)`    | 2     | Greater than or equal | `/sys/Bln` |
-| `/sys/Flt/min(a, b)`    | 2     | Minimum               | `/sys/Flt` |
-| `/sys/Flt/max(a, b)`    | 2     | Maximum               | `/sys/Flt` |
-| `/sys/Flt/neg(a)`       | 1     | Negation              | `/sys/Flt` |
-| `/sys/Flt/abs(a)`       | 1     | Absolute value        | `/sys/Flt` |
-| `/sys/Flt/sqrt(a)`      | 1     | Square root           | `/sys/Flt` |
-| `/sys/Flt/floor(a)`     | 1     | Floor                 | `/sys/Flt` |
-| `/sys/Flt/ceil(a)`      | 1     | Ceiling               | `/sys/Flt` |
-| `/sys/Flt/trunc(a)`     | 1     | Truncate toward zero  | `/sys/Flt` |
-| `/sys/Flt/nearest(a)`   | 1     | Round to nearest      | `/sys/Flt` |
-| `/sys/Flt/to_nat(a)`    | 1     | Convert to Nat        | `/sys/Nat` |
-| `/sys/Flt/to_int(a)`    | 1     | Convert to Int        | `/sys/Int` |
-| `/sys/Flt/to_le_bin(a)` | 1     | Convert to Bin bytes  | `/sys/Bin` |
-| `/sys/Flt/to_str(a)`    | 1     | Convert to Str        | `/sys/Str` |
+| `/std/Flt/add(a, b)`    | 2     | Addition              | `/std/Flt` |
+| `/std/Flt/sub(a, b)`    | 2     | Subtraction           | `/std/Flt` |
+| `/std/Flt/mul(a, b)`    | 2     | Multiplication        | `/std/Flt` |
+| `/std/Flt/div(a, b)`    | 2     | Division              | `/std/Flt` |
+| `/std/Flt/eql(a, b)`    | 2     | Equality              | `/std/Bln` |
+| `/std/Flt/neq(a, b)`    | 2     | Inequality            | `/std/Bln` |
+| `/std/Flt/lt(a, b)`     | 2     | Less than             | `/std/Bln` |
+| `/std/Flt/gt(a, b)`     | 2     | Greater than          | `/std/Bln` |
+| `/std/Flt/lte(a, b)`    | 2     | Less than or equal    | `/std/Bln` |
+| `/std/Flt/gte(a, b)`    | 2     | Greater than or equal | `/std/Bln` |
+| `/std/Flt/min(a, b)`    | 2     | Minimum               | `/std/Flt` |
+| `/std/Flt/max(a, b)`    | 2     | Maximum               | `/std/Flt` |
+| `/std/Flt/neg(a)`       | 1     | Negation              | `/std/Flt` |
+| `/std/Flt/abs(a)`       | 1     | Absolute value        | `/std/Flt` |
+| `/std/Flt/sqrt(a)`      | 1     | Square root           | `/std/Flt` |
+| `/std/Flt/floor(a)`     | 1     | Floor                 | `/std/Flt` |
+| `/std/Flt/ceil(a)`      | 1     | Ceiling               | `/std/Flt` |
+| `/std/Flt/trunc(a)`     | 1     | Truncate toward zero  | `/std/Flt` |
+| `/std/Flt/nearest(a)`   | 1     | Round to nearest      | `/std/Flt` |
+| `/std/Flt/to_nat(a)`    | 1     | Convert to Nat        | `/std/Nat` |
+| `/std/Flt/to_int(a)`    | 1     | Convert to Int        | `/std/Int` |
+| `/std/Flt/to_le_bin(a)` | 1     | Convert to Bin bytes  | `/std/Bin` |
+| `/std/Flt/to_str(a)`    | 1     | Convert to Str        | `/std/Str` |
 
 ### Bin
 
 | Operation                       | Arity | Description                       | Returns    |
 | ------------------------------- | ----- | --------------------------------- | ---------- |
-| `/sys/Bin/len(a)`               | 1     | Byte length                       | `/sys/Nat` |
-| `/sys/Bin/eql(a, b)`            | 2     | Equality                          | `/sys/Bln` |
-| `/sys/Bin/get(a, i)`            | 2     | Byte at index `i`                 | `/sys/Nat` |
-| `/sys/Bin/slice(a, start, end)` | 3     | Subsequence from `start` to `end` | `/sys/Bin` |
-| `/sys/Bin/append(a, byte)`      | 2     | Append a single byte              | `/sys/Bin` |
-| `/sys/Bin/concat(a, b)`         | 2     | Concatenate two sequences         | `/sys/Bin` |
+| `/std/Bin/len(a)`               | 1     | Byte length                       | `/std/Nat` |
+| `/std/Bin/eql(a, b)`            | 2     | Equality                          | `/std/Bln` |
+| `/std/Bin/get(a, i)`            | 2     | Byte at index `i`                 | `/std/Nat` |
+| `/std/Bin/slice(a, start, end)` | 3     | Subsequence from `start` to `end` | `/std/Bin` |
+| `/std/Bin/append(a, byte)`      | 2     | Append a single byte              | `/std/Bin` |
+| `/std/Bin/concat(a, b)`         | 2     | Concatenate two sequences         | `/std/Bin` |
 
 ### Str
 
-`/sys/Str` is the UTF-8 string type; its runtime representation is the same byte
-buffer as `Bin`, so these ops share `Bin`'s implementation but are distinct,
-first-class operations on `Str`. String literals (`"..."`) have type `Str`.
-`/std/Str` adds `empty`, `len` (codepoint count), `is_utf8`, and the checked
-`of_bin : Bin -> Option(Str)` — the safe way in from arbitrary bytes.
+`/std/Str` is the UTF-8 string type; its runtime representation is the same byte
+buffer as `Bin`. String literals (`"..."`) have type `Str`. The only primitive
+surfacing through `/std/Str` is `to_bin`, the carrier projection onto those
+bytes; `concat`, `eql`, `len` (codepoint count), `is_utf8`, the checked
+`of_bin : Bin -> Option(Str)`, and the rest are ordinary library definitions
+built on top of it — see `STD.md`.
 
 | Operation             | Arity | Description                                | Returns    |
 | --------------------- | ----- | ------------------------------------------ | ---------- |
-| `/sys/Str/to_bin(s)`  | 1     | The underlying UTF-8 bytes                 | `/sys/Bin` |
-| `/sys/Str/concat(a, b)` | 2   | Concatenate two strings                    | `/sys/Str` |
-| `/sys/Str/eql(a, b)`  | 2     | String equality                            | `/sys/Bln` |
-| `/sys/Str/of_bin(b)`  | 1     | Trusted `Bin -> Str` substrate (raw; prefer the checked `/std/Str/of_bin`) | `/sys/Str` |
+| `/std/Str/to_bin(s)`  | 1     | The underlying UTF-8 bytes                 | `/std/Bin` |
 
 ### Arr
 
 | Operation                       | Arity | Description                    | Returns       |
 | ------------------------------- | ----- | ------------------------------ | ------------- |
-| `/sys/Arr/len(a)`               | 1     | Element count                  | `/sys/Nat`    |
-| `/sys/Arr/get(a, i)`            | 2     | Element at index `i`           | `T`           |
-| `/sys/Arr/slice(a, start, end)` | 3     | Subarray from `start` to `end` | `/sys/Arr(T)` |
-| `/sys/Arr/append(a, elem)`      | 2     | Append a single element        | `/sys/Arr(T)` |
-| `/sys/Arr/concat(a, b)`         | 2     | Concatenate two arrays         | `/sys/Arr(T)` |
+| `/std/Arr/len(a)`               | 1     | Element count                  | `/std/Nat`    |
+| `/std/Arr/get(a, i)`            | 2     | Element at index `i`           | `T`           |
+| `/std/Arr/slice(a, start, end)` | 3     | Subarray from `start` to `end` | `/std/Arr(T)` |
+| `/std/Arr/append(a, elem)`      | 2     | Append a single element        | `/std/Arr(T)` |
+| `/std/Arr/concat(a, b)`         | 2     | Concatenate two arrays         | `/std/Arr(T)` |
 
 `Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more.
 For text, the `/std/Str` API (`Str/concat`, `Str/join`, …) works the same way and
@@ -756,22 +754,22 @@ keeps the values typed as `Str`:
 
 ```
 /std/Str/concat(/std/Str/concat("hello", ", "), "world")
-/sys/Arr/concat(/sys/Arr/concat([1, 2], [3, 4]), [5])
+/std/Arr/concat(/std/Arr/concat([1, 2], [3, 4]), [5])
 ```
 
 ### Io
 
-`/sys/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `open` mints file handles; `read`, `write`, and `close` work on any handle.
+`/std/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `open` mints file handles; `read`, `write`, and `close` work on any handle.
 
 | Operation             | Arity | Description                                                                    | Returns                              |
 | --------------------- | ----- | ------------------------------------------------------------------------------ | ------------------------------------ |
-| `/sys/Io/stdin`       | —     | The standard input handle                                                      | `/sys/Io`                            |
-| `/sys/Io/stdout`      | —     | The standard output handle                                                     | `/sys/Io`                            |
-| `/sys/Io/stderr`      | —     | The standard error handle                                                      | `/sys/Io`                            |
-| `/sys/Io/open(p, m)`  | 2     | Open the file at path `p : /sys/Bin` with mode `m` (0 read, 1 write, 2 append) | `{ status : Nat, handle : /sys/Io }` |
-| `/sys/Io/close(h)`    | 1     | Close `h`; closing an unknown handle is a no-op                                | `{}`                                 |
-| `/sys/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available        | `{ status : Nat, bytes : /sys/Bin }` |
-| `/sys/Io/write(h, b)` | 2     | Write `b : /sys/Bin` to `h`                                                    | `/sys/Nat` (a status)                |
+| `/std/Io/stdin`       | —     | The standard input handle                                                      | `/std/Io`                            |
+| `/std/Io/stdout`      | —     | The standard output handle                                                     | `/std/Io`                            |
+| `/std/Io/stderr`      | —     | The standard error handle                                                      | `/std/Io`                            |
+| `/std/Io/open(p, m)`  | 2     | Open the file at path `p : /std/Bin` with mode `m` (0 read, 1 write, 2 append) | `{ status : Nat, handle : /std/Io }` |
+| `/std/Io/close(h)`    | 1     | Close `h`; closing an unknown handle is a no-op                                | `{}`                                 |
+| `/std/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available        | `{ status : Nat, bytes : /std/Bin }` |
+| `/std/Io/write(h, b)` | 2     | Write `b : /std/Bin` to `h`                                                    | `/std/Nat` (a status)                |
 
 Failable operations report through a status code — errors are data; traps stay reserved for programmer errors:
 

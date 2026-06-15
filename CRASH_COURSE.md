@@ -1,6 +1,6 @@
 # Crash Course
 
-This document assumes a Rust background. It skips ceremony and goes straight to where Curios and Rust differ. Snippets assume the primitive names have been imported. The standard library is prepended automatically (like `/sys`), so that means `use /std/{Nat, Int, Flt, Bin, Bln, Arr, Io};`; you can also use absolute `/sys/...` paths directly.
+This document assumes a Rust background. It skips ceremony and goes straight to where Curios and Rust differ. Snippets assume the primitive names have been imported. The standard library is prepended automatically, so that means `use /std/{Nat, Int, Flt, Bin, Bln, Arr, Io};`; you can also write the absolute `/std/...` paths directly.
 
 ## Bindings and functions
 

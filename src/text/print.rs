@@ -207,8 +207,6 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::StrType => pure("Str"),
         Prim::StrToBin(operand) => print_prim_call("Str.to_bin", vec![operand]),
         Prim::StrOfBin(operand) => print_prim_call("Str.of_bin", vec![operand]),
-        Prim::StrConcat(left, right) => print_prim_call("Str.concat", vec![left, right]),
-        Prim::StrEql(left, right) => print_prim_call("Str.eql", vec![left, right]),
         Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
         Prim::Arr(elems) => flat([
             pure("["),

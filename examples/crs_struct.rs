@@ -77,7 +77,7 @@ fn main() {
             pub struct Token { Bin }
         end
 
-        let bad : Token/Token = Token/Token { /sys/Str/to_bin("x") };
+        let bad : Token/Token = Token/Token { /std/Str/to_bin("x") };
         bad
         "#;
 

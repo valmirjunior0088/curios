@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let source = r#"
-        use /sys/{Nat, Int, Flt, Bin, Arr};
+        use /std/{Nat, Int, Flt, Bin, Arr};
         union Pair
         | left(Int)
         | right(Flt)
@@ -18,8 +18,8 @@ fn main() {
             end;
         let my_list : Arr(Nat) = [1, 2, 3];
         let my_bin : Bin = \01\02\03;
-        let my_str : Bin = "hello";
-        let list_len : Nat = Arr/len(Nat, my_list);
+        let my_str : Bin = /std/Str/to_bin("hello");
+        let list_len : Nat = Arr/len(my_list);
         let bin_len : Nat = Bin/len(my_bin);
         let str_len : Nat = Bin/len(my_str);
         Int/add(score(pair), Nat/to_int(Nat/add(list_len, Nat/add(bin_len, str_len))))
@@ -28,7 +28,7 @@ fn main() {
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("/sys/Int".parse().unwrap());
+        .with_type("/std/Int".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(1),

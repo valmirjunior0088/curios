@@ -73,8 +73,6 @@ pub enum Prim {
     Str(Vec<u8>),
     StrToBin(Term),
     StrOfBin(Term),
-    StrConcat(Term, Term),
-    StrEql(Term, Term),
     ArrType(Term),
     Arr(Vec<Term>),
     ArrLen(Term, Term),
@@ -542,22 +540,6 @@ impl Prim {
         B: Into<Term>,
     {
         Self::StrOfBin(bin.into())
-    }
-
-    pub fn str_concat<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::StrConcat(left.into(), right.into())
-    }
-
-    pub fn str_eql<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::StrEql(left.into(), right.into())
     }
 
     pub fn arr<I, A>(items: I) -> Self

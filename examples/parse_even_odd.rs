@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let source = r#"
-        use /sys/{Nat, Bln};
+        use /std/{Nat, Bln};
         rec is_even : Nat -> Bln = (n) =>
             match n : Bln
             | 0 => true
@@ -22,7 +22,7 @@ fn main() {
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("/sys/Bln".parse().unwrap());
+        .with_type("/std/Bln".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

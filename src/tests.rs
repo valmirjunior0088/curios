@@ -7,16 +7,16 @@ use {
 fn end_to_end() {
     let source = r#"
         union Pair
-        | left(sys/Int)
-        | right(sys/Flt)
+        | left(std/Int)
+        | right(std/Flt)
         end
         let pair : Pair = Pair/left(+42);
-        let score : (_ : Pair) -> sys/Int = (p) =>
-            match p : sys/Int
+        let score : (_ : Pair) -> std/Int = (p) =>
+            match p : std/Int
             | left(_) => +42
             | right(_) => +7
             end;
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Int/to_str(score(pair))))
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(score(pair))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -30,7 +30,7 @@ fn end_to_end() {
 #[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
-        sys/Io/write(sys/Io/stdout, sys/Flt/to_le_bin(+1.5))
+        std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -46,7 +46,7 @@ fn io_write() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stdout, /sys/Str/to_bin("hello"))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Str/to_bin("hello"))"#,
         system,
     )
     .expect("expected result");
@@ -61,7 +61,7 @@ fn io_write_stderr() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stderr, /sys/Str/to_bin("oops"))"#,
+        r#"std/Io/write(std/Io/stderr, /std/Str/to_bin("oops"))"#,
         system,
     )
     .expect("expected result");
@@ -76,7 +76,7 @@ fn io_read() {
     let (system, receiver) = ChannelHost::in_out(["hello"]);
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stdout, sys/Io/read(sys/Io/stdin, 1024).bytes)"#,
+        r#"std/Io/write(std/Io/stdout, std/Io/read(std/Io/stdin, 1024).bytes)"#,
         system,
     )
     .expect("expected result");
@@ -93,7 +93,7 @@ fn bin_empty_is_the_empty_sequence() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stdout, sys/Bin/concat(sys/Bin/empty, /sys/Str/to_bin("ok")))"#,
+        r#"std/Io/write(std/Io/stdout, std/Bin/concat(std/Bin/empty, /std/Str/to_bin("ok")))"#,
         system,
     )
     .expect("expected result");
@@ -138,7 +138,7 @@ fn io_read_short_reads_and_eof() {
         let rb = Io/write(Io/stdout, b.bytes);
         let c = Io/read(Io/stdin, 2);
         let rc = Io/write(Io/stdout, c.bytes);
-        Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(c.status)))
+        Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(c.status)))
         "#;
 
     let (system, receiver) = ChannelHost::in_out(["abc"]);
@@ -153,9 +153,9 @@ fn io_read_short_reads_and_eof() {
 fn file_read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Io};
-        match File/read_all(/sys/Str/to_bin("data.txt"))
-        | success(contents) => Io/print(/sys/Str/of_bin(contents))
-        | failure(_) => Io/print("error")
+        match File/read_all(/std/Str/to_bin("data.txt"))
+        | success(contents) => Io/write(Io/stdout, contents)
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bin("error"))
         end
         "#;
 
@@ -172,7 +172,7 @@ fn file_read_all_reads_a_seeded_file() {
 fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
         use /std/{File, Io};
-        match File/read_all(/sys/Str/to_bin("nope.txt"))
+        match File/read_all(/std/Str/to_bin("nope.txt"))
         | success(_) => Io/print("contents")
         | failure(e) =>
             match e : {}
@@ -196,7 +196,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io};
-        match File/with(/sys/Str/to_bin("out.txt"), File/Mode/write(), (f) => File/write(f, /sys/Str/to_bin("written")))
+        match File/with(/std/Str/to_bin("out.txt"), File/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -221,7 +221,7 @@ fn file_with_write_mode_persists_through_close() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io};
-        match File/with(/sys/Str/to_bin("log.txt"), File/Mode/append(), (f) => File/write(f, /sys/Str/to_bin("x")))
+        match File/with(/std/Str/to_bin("log.txt"), File/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -246,9 +246,9 @@ fn effectful_match_scrutinee_runs_once() {
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
         use /std/{File, Io, Str};
-        match File/with(/sys/Str/to_bin("lines.txt"), File/Mode/read(), (f) => File/read(f, 1024).bytes)
-        | success(bytes) => Io/print(/sys/Str/of_bin(bytes))
-        | failure(_) => Io/print("error")
+        match File/with(/std/Str/to_bin("lines.txt"), File/Mode/read(), (f) => File/read(f, 1024).bytes)
+        | success(bytes) => Io/write(Io/stdout, bytes)
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
         "#;
 
@@ -264,7 +264,7 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 #[test]
 fn std_io_read_line_sequences_lines() {
     let source = r#"
-        use /std/{Io, Option, Bin};
+        use /std/{Io, Option, Bin, Str};
         let program : Io/Buf({}) =
             let ! = Io/bind;
             let first = Io/read_line!;
@@ -272,7 +272,11 @@ fn std_io_read_line_sequences_lines() {
             match first : Io/Buf({})
             | some(a) =>
                 match second : Io/Buf({})
-                | some(b) => Io/pure(Io/print(/sys/Str/of_bin(Bin/concat(a, b))))
+                | some(b) =>
+                    match Str/of_bin(Bin/concat(a, b)) : Io/Buf({})
+                    | some(s) => Io/pure(Io/print(s))
+                    | none() => Io/pure(Io/print("invalid utf-8"))
+                    end
                 | none() => Io/pure(Io/print("missing"))
                 end
             | none() => Io/pure(Io/print("missing"))
@@ -339,12 +343,12 @@ fn std_io_read_line_spans_refills() {
 #[test]
 fn triangular_sum() {
     let source = r#"
-        let result : sys/Nat =
-            match 5 : sys/Nat
+        let result : std/Nat =
+            match 5 : std/Nat
             | 0 => 0
-            | pred + 1, ih => sys/Nat/add(ih, pred)
+            | pred + 1, ih => std/Nat/add(ih, pred)
             end;
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -358,15 +362,15 @@ fn triangular_sum() {
 #[test]
 fn match_omitted_motive_infers() {
     // The same induction as `triangular_sum`, but with the motive omitted. It is
-    // non-dependent (every arm has type `sys/Nat`), so the synthesized metavar
-    // motive is solved by the arms — no explicit `: sys/Nat` needed.
+    // non-dependent (every arm has type `std/Nat`), so the synthesized metavar
+    // motive is solved by the arms — no explicit `: std/Nat` needed.
     let source = r#"
-        let result : sys/Nat =
+        let result : std/Nat =
             match 5
             | 0 => 0
-            | pred + 1, ih => sys/Nat/add(ih, pred)
+            | pred + 1, ih => std/Nat/add(ih, pred)
             end;
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -380,8 +384,8 @@ fn match_omitted_motive_infers() {
 #[test]
 fn multi_arg_function() {
     let source = r#"
-        let add : (sys/Int, sys/Int) -> sys/Int = (x, y) => sys/Int/add(x, y);
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Int/to_str(add(+3, +4))))
+        let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3, +4))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -395,8 +399,8 @@ fn multi_arg_function() {
 #[test]
 fn curried_function() {
     let source = r#"
-        let add : sys/Int -> sys/Int -> sys/Int = (x) => (y) => sys/Int/add(x, y);
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Int/to_str(add(+3)(+4))))
+        let add : std/Int -> std/Int -> std/Int = (x) => (y) => std/Int/add(x, y);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3)(+4))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -409,16 +413,16 @@ fn curried_function() {
 
 #[test]
 fn let_bang_identity_monad_sequences_bangs() {
-    // A minimal Identity monad over `sys/Nat`: `bind(m, f) = f(m)`. The compiler is
+    // A minimal Identity monad over `std/Nat`: `bind(m, f) = f(m)`. The compiler is
     // monad-agnostic — `let ! = bind;` applies the binary `bind` to `(action, cont)`
     // per `!` site — so the sugar `add(a!, b!)` threads each banged value through a
     // fresh continuation and evaluates to `add(a, b)`.
     let source = r#"
-        let bind : (sys/Nat, (sys/Nat) -> sys/Nat) -> sys/Nat = (m, f) => f(m);
-        let a : sys/Nat = 3;
-        let b : sys/Nat = 4;
-        let result : sys/Nat = let ! = bind; sys/Nat/add(a!, b!);
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
+        let bind : (std/Nat, (std/Nat) -> std/Nat) -> std/Nat = (m, f) => f(m);
+        let a : std/Nat = 3;
+        let b : std/Nat = 4;
+        let result : std/Nat = let ! = bind; std/Nat/add(a!, b!);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -442,7 +446,7 @@ fn let_bang_std_parse_threads_bangs_left_to_right() {
             let ! = Parse/bind;
             Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
-        match Parse/run(parser, /sys/Str/to_bin("BA")) : {}
+        match Parse/run(parser, /std/Str/to_bin("BA")) : {}
         | success(n) => Io/print(Nat/to_str(n))
         | failure(msg) => Io/print(msg)
         end
@@ -470,7 +474,7 @@ fn let_bang_region_mixes_action_types() {
     // reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bin/append("A", 66)`
     // is "AB".
     let source = r#"
-        use /std/{Parse, Nat, Bin, Bln, Result, Io};
+        use /std/{Parse, Nat, Bin, Bln, Result, Io, Str};
 
         let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
 
@@ -478,8 +482,12 @@ fn let_bang_region_mixes_action_types() {
             let ! = Parse/bind;
             Parse/pure(Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
-        match Parse/run(parser, /sys/Str/to_bin("AB")) : {}
-        | success(s) => Io/print(/sys/Str/of_bin(s))
+        match Parse/run(parser, /std/Str/to_bin("AB")) : {}
+        | success(s) =>
+            match Str/of_bin(s) : {}
+            | some(t) => Io/print(t)
+            | none() => Io/print("invalid utf-8")
+            end
         | failure(msg) => Io/print(msg)
         end
         "#;
@@ -502,20 +510,20 @@ fn let_bang_region_mixes_action_types() {
 #[test]
 fn vec_cons_with_nat_succ() {
     let source = r#"
-        rec Vec(T : Type, n : sys/Nat) -> Type =
+        rec Vec(T : Type, n : std/Nat) -> Type =
             match n : Type
             | 0 => {}
             | pred + 1, ih => { T, ih }
             end;
 
-        let cons(T : Type, n : sys/Nat, x : T, xs : Vec(T, n)) -> Vec(T, sys/Nat/succ(n)) =
+        let cons(T : Type, n : std/Nat, x : T, xs : Vec(T, n)) -> Vec(T, std/Nat/succ(n)) =
             (x, xs);
 
-        let head(T : Type, n : sys/Nat, xs : Vec(T, sys/Nat/succ(n))) -> T =
+        let head(T : Type, n : std/Nat, xs : Vec(T, std/Nat/succ(n))) -> T =
             xs.0;
 
-        let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, ());
-        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(head(sys/Nat, 0, v))))
+        let v : Vec(std/Nat, 1) = cons(std/Nat, 0, 42, ());
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(head(std/Nat, 0, v))))
     "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -536,7 +544,7 @@ fn folds_constant_arg_through_let_function() {
     use crate::{cont, text};
 
     let source = r#"
-        use /sys/{Nat};
+        use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
         f(3)
         "#;
@@ -611,17 +619,20 @@ fn folds_constant_arg_through_let_function() {
 #[test]
 fn printf_partial_evaluation_reduces_residual() {
     // End-to-end smoke for §2 (`evaluate_pure_calls`) and §3 (size-bounded
-    // multi-site inlining) on `Fmt/printf("%s is %d")(/sys/Str/of_bin(name))(30)`. §2 interprets
+    // multi-site inlining) on `Fmt/printf("%s is %d")(name)(30)`. §2 interprets
     // pure sub-bodies of the parser combinator at compile time; §3 then
-    // dissolves the residual primitive wrappers at every call site. Together
-    // they collapse the post-§1 residue (≈14 funcs) down to a handful — the
-    // assert pins a comfortable upper bound while leaving headroom for
-    // legitimate std/Fmt drift.
+    // dissolves the residual primitive wrappers at every call site (including the
+    // `Str/of_bin` validation guarding the runtime `%s` argument). Together they
+    // collapse the post-§1 residue (≈14 funcs) down to a handful — the assert pins
+    // a comfortable upper bound while leaving headroom for legitimate std/Fmt drift.
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        let name = Str/trim(Io/read(Io/stdin, 1024).bytes);
-        Fmt/printf("%s is %d")(/sys/Str/of_bin(name))(30)
+        let name_bytes = Str/trim(Io/read(Io/stdin, 1024).bytes);
+        match Str/of_bin(name_bytes) : {}
+        | some(name) => Fmt/printf("%s is %d")(name)(30)
+        | none() => Io/print("invalid input")
+        end
         "#;
 
     let entrypoint = source
@@ -669,7 +680,7 @@ fn indexed_vec_append_executes() {
     // order flipped, the solved indices silently referenced the wrong binder
     // and the program trapped at runtime.
     let source = r#"
-        use /sys/{Nat, Bin, Io};
+        use /std/{Nat, Bin, Io};
         union Vec(T : Type) : (n : Nat)
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -687,7 +698,7 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat, 3) = append(a, b);
-        Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(total(c, 0))))
+        Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(total(c, 0))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -705,7 +716,7 @@ fn implicit_union_type_param_executes() {
     // names a sibling binder, and without the delayed substitution the two
     // spellings of the same domain compare as distinct.
     let source = r#"
-        use /sys/{Nat, Bin, Io};
+        use /std/{Nat, Bin, Io};
         union Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
@@ -717,7 +728,7 @@ fn implicit_union_type_param_executes() {
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
         match inferred : Nat
-        | refl(z) => Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(z)))
+        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z)))
         end
         "#;
 
@@ -732,12 +743,12 @@ fn implicit_union_type_param_rejects_explicit_spelling() {
     // explicit slots — one argument too many, an error rather than a silent
     // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
     let source = r#"
-        use /sys/{Nat, Io};
+        use /std/{Nat, Io};
         union Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
-        Io/write(Io/stdout, /sys/Str/to_bin("no"))
+        Io/write(Io/stdout, /std/Str/to_bin("no"))
         "#;
 
     let (system, _receiver) = ChannelHost::out();
@@ -753,7 +764,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
     // everything. Now the pairs park, the output `expect` solves the domain
     // metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
-        use /sys/{Nat, Io};
+        use /std/{Nat, Io};
         union Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
@@ -764,7 +775,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : Nat
-        | refl(z) => Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(z)))
+        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z)))
         end
         "#;
 
@@ -779,12 +790,12 @@ fn parked_constraints_still_reject_the_unsolvable() {
     // at the item drain, attributed to its origin. `refl` forces both indices
     // equal; `2` and `3` are not.
     let source = r#"
-        use /sys/{Nat, Io};
+        use /std/{Nat, Io};
         union Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();
-        Io/write(Io/stdout, /sys/Str/to_bin("no"))
+        Io/write(Io/stdout, /std/Str/to_bin("no"))
         "#;
 
     let (system, _receiver) = ChannelHost::out();
@@ -833,7 +844,7 @@ fn bare_tuple_continuation_tail_infers() {
             let ! = Parse/bind;
             let a = Parse/any_byte!;
             Parse/pure((a, 0));
-        match Parse/run(pairer, /sys/Str/to_bin("hi"))
+        match Parse/run(pairer, /std/Str/to_bin("hi"))
         | success(pair) => Io/print(Nat/to_str(pair.0))
         | failure(_) => Io/print("error")
         end
@@ -861,7 +872,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
         match v : Nat
         | nil() => 0
-        | cons(p, rest) => Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(p.1)))
+        | cons(p, rest) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1)))
         end
         "#;
 
@@ -878,7 +889,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         use /std/{Nat, Io};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
-        Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(n)))
+        Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(n)))
         "#;
 
     let (system, _receiver) = ChannelHost::out();
@@ -1157,7 +1168,7 @@ fn str_of_bin_rejects_truncated_multibyte() {
 #[test]
 fn nonproductive_inner_rec_in_type_position_is_preempted() {
     let source = r#"
-        use /sys/{Bln};
+        use /std/{Bln};
         let spin : Bln =
             rec go : Bln = go;
             go;

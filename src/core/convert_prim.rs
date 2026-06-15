@@ -78,9 +78,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
         | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
         | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
-        | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right))
-        | (Prim::StrConcat(this_left, this_right), Prim::StrConcat(that_left, that_right))
-        | (Prim::StrEql(this_left, this_right), Prim::StrEql(that_left, that_right)) => {
+        | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
             cmp.enqueue(Term::type_(), this_left, that_left);
             cmp.enqueue(Term::type_(), this_right, that_right);
 

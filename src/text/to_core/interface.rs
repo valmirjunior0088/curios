@@ -291,6 +291,7 @@ fn provider(
     let segments = name.qualifier().segments();
 
     let (mut current, walk) = if name.is_abs() {
+        super::guard_internal_root(module, segments).ok()?;
         (Qualifier::empty(), segments)
     } else {
         let first = &segments[0];
@@ -468,6 +469,12 @@ fn unreachable_path(
     name: &Name,
 ) -> Error {
     let segments = name.qualifier().segments();
+
+    if let Err(error) = super::guard_internal_root(module, segments) {
+        if name.is_abs() {
+            return error;
+        }
+    }
 
     let (mut current, walk) = if name.is_abs() {
         (Qualifier::empty(), segments)

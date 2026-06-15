@@ -17,6 +17,12 @@ pub enum Error {
     PrivateChildModule {
         segment: String,
     },
+    /// A root module reachable only from the standard library (e.g. `sys`) was
+    /// referenced from user code. Such modules are the trusted primitive
+    /// substrate; user code reaches them through their `/std` wrappers.
+    InternalRootModule {
+        segment: String,
+    },
     BindingNotFound {
         binding: String,
     },
@@ -98,6 +104,10 @@ impl fmt::Display for Error {
                 write!(f, "child module not found: {segment}")
             }
             Error::PrivateChildModule { segment } => write!(f, "private child module: {segment}"),
+            Error::InternalRootModule { segment } => write!(
+                f,
+                "`{segment}` is internal to the standard library; use the corresponding `/std` module"
+            ),
             Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
             Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),
             Error::QualifierConflict { qualifier } => {

@@ -679,10 +679,6 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::StrType => core::Prim::StrType,
             Prim::StrToBin(inner) => core::Prim::str_to_bin(self.term(inner)?),
             Prim::StrOfBin(inner) => core::Prim::str_of_bin(self.term(inner)?),
-            Prim::StrConcat(left, right) => {
-                core::Prim::str_concat(self.term(left)?, self.term(right)?)
-            }
-            Prim::StrEql(left, right) => core::Prim::str_eql(self.term(left)?, self.term(right)?),
             Prim::BinLen(inner) => core::Prim::bin_len(self.term(inner)?),
             Prim::BinEql(left, right) => core::Prim::bin_eql(self.term(left)?, self.term(right)?),
             Prim::BinGet(bin, index) => core::Prim::bin_get(self.term(bin)?, self.term(index)?),

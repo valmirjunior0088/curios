@@ -15,6 +15,41 @@ use {
     },
 };
 
+// Root modules reachable only from the standard library — the trusted primitive
+// substrate (`sys`). User code reaches them through their `/std` wrappers; an
+// absolute reference into one from outside is rejected during resolution.
+const INTERNAL_ROOTS: &[&str] = &["sys"];
+// Consuming roots permitted to reference an internal root: the standard library,
+// and the internal roots themselves (so they may reference one another).
+const PRIVILEGED_ROOTS: &[&str] = &["std", "sys"];
+
+// Reject an absolute reference whose first segment is an internal root (`sys`)
+// when the consuming module lies outside the privileged roots. `referenced` is
+// the absolute path's segments; `consumer` is the module containing the
+// reference. A non-internal target or a privileged consumer passes through.
+fn guard_internal_root(consumer: &Qualifier, referenced: &[String]) -> Result<(), Error> {
+    let Some(root) = referenced.first() else {
+        return Ok(());
+    };
+
+    if !INTERNAL_ROOTS.contains(&root.as_str()) {
+        return Ok(());
+    }
+
+    let privileged = consumer
+        .segments()
+        .first()
+        .is_some_and(|r| PRIVILEGED_ROOTS.contains(&r.as_str()));
+
+    if privileged {
+        Ok(())
+    } else {
+        Err(Error::InternalRootModule {
+            segment: root.clone(),
+        })
+    }
+}
+
 struct Resolved {
     modules: HashMap<Qualifier, Rc<Module>>,
     table: HashMap<Qualifier, ModuleInfo>,

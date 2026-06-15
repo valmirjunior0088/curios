@@ -1382,8 +1382,6 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinEql(a, b)
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
-        | Prim::StrConcat(a, b)
-        | Prim::StrEql(a, b)
         | Prim::ArrLen(a, b)
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
@@ -1479,8 +1477,6 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BinEql(a, b)
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
-        | Prim::StrConcat(a, b)
-        | Prim::StrEql(a, b)
         | Prim::ArrLen(a, b)
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
@@ -1671,12 +1667,6 @@ where
         Prim::Str(bytes) => Prim::Str(bytes.clone()),
         Prim::StrToBin(str) => Prim::StrToBin(visit.visit_subterm(str)),
         Prim::StrOfBin(bin) => Prim::StrOfBin(visit.visit_subterm(bin)),
-        Prim::StrConcat(left, right) => {
-            Prim::StrConcat(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::StrEql(left, right) => {
-            Prim::StrEql(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
         Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
         Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
         Prim::ArrLen(ty, list) => Prim::ArrLen(visit.visit_subterm(ty), visit.visit_subterm(list)),

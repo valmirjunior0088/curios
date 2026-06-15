@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let source = r#"
-        use /sys/{Int, Flt};
+        use /std/{Int, Flt};
         rec id : Type -> Type = (x) => x;
         let witness : Type = id(Int);
         union Pair

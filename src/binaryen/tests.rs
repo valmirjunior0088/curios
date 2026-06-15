@@ -7,10 +7,10 @@ use {
 #[test]
 fn optimizes_to_a_smaller_module_that_behaves_identically() {
     let source = r#"
-        rec sum(n : /sys/Nat) -> /sys/Nat =
-            match n : /sys/Nat
+        rec sum(n : /std/Nat) -> /std/Nat =
+            match n : /std/Nat
             | 0 => 0
-            | pred + 1, ih => /sys/Nat/add(/sys/Nat/succ(pred), ih)
+            | pred + 1, ih => /std/Nat/add(/std/Nat/succ(pred), ih)
             end;
 
         /std/Fmt/printf("%d")(sum(10))

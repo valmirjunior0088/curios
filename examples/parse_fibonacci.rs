@@ -5,7 +5,7 @@ use {
 
 fn main() {
     let source = r#"
-        use /sys/{Nat, Int};
+        use /std/{Nat, Int};
         rec fib_pair : Nat -> {Int, Int} = (n) =>
             match n : {Int, Int}
             | 0 => (+0, +1)
@@ -18,7 +18,7 @@ fn main() {
     let entrypoint = source
         .parse::<curios::text::Entrypoint>()
         .unwrap()
-        .with_type("/sys/Int".parse().unwrap());
+        .with_type("/std/Int".parse().unwrap());
 
     let wasm_module = compile_entrypoint(
         Duration::from_secs(5),

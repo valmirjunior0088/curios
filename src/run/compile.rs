@@ -112,7 +112,7 @@ mod tests {
         let entrypoint = "0"
             .parse::<text::Entrypoint>()
             .unwrap()
-            .with_type("/sys/Bln".parse().unwrap());
+            .with_type("/std/Bln".parse().unwrap());
 
         let error = compile_entrypoint(
             Duration::from_secs(1),
@@ -163,13 +163,13 @@ mod tests {
     #[test]
     fn meta_free_prelude_program_compiles_without_overflow() {
         // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
-        // still pulls in the whole sys/std prelude. Assembling and traversing the
+        // still pulls in the whole std/std prelude. Assembling and traversing the
         // old N-deep nested term overflowed the stack during construction and in
         // every pass; the flat `core::Module`/`ersd::Module` representation lowers
         // it end-to-end to wasm without overflow.
         let source = r#"
             let id(A : Type, a : A) -> A = a;
-            id(/sys/Nat, 5)
+            id(/std/Nat, 5)
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -189,15 +189,15 @@ mod tests {
 
     #[test]
     fn hole_pinned_through_the_expected_type_is_solved() {
-        // `id ? true` checked against `/sys/Bln`: the turnaround pins the type
+        // `id ? true` checked against `/std/Bln`: the turnaround pins the type
         // argument `?` to `Bln` through the expected type (§14, a type-level pin).
         let source = r#"
-            use /sys/{Bln};
+            use /std/{Bln};
             let id(A : Type, a : A) -> A = a;
             id(?, true)
         "#;
 
-        assert!(compile(source, Some("/sys/Bln")).is_ok());
+        assert!(compile(source, Some("/std/Bln")).is_ok());
     }
 
     #[test]
@@ -205,12 +205,12 @@ mod tests {
         // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the
         // metavariable is unsolved at zonk and compilation fails (§14).
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let m : Nat = ?;
             m
         "#;
 
-        let error = compile(source, Some("/sys/Nat")).unwrap_err();
+        let error = compile(source, Some("/std/Nat")).unwrap_err();
 
         assert!(error.contains("cannot"), "unexpected error: {error}");
     }
@@ -224,13 +224,13 @@ mod tests {
         // re-closed and `erase` rejects it with `unbound variable`. Guards the
         // zonk binder-realignment fix.
         let source = r#"
-            use /sys/{Bln};
+            use /std/{Bln};
             let pick(A : Type, a : A, b : A, c : Bln) -> A =
                 match c
                 | false => a
                 | true => b
                 end;
-            pick(/sys/Nat, 1, 2, true)
+            pick(/std/Nat, 1, 2, true)
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -267,7 +267,7 @@ mod tests {
         // tuple type".
         let source = r#"
             use /std/{Result};
-            use /sys/{Nat};
+            use /std/{Nat};
             let f(a : Nat) -> Result({ Nat, Nat }, Nat) =
                 Result/success((a, a));
             f(7)
@@ -294,7 +294,7 @@ mod tests {
         // binder became an out-of-range payload projection).
         let source = r#"
             use /std/{Result};
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             let f(r : Result(Nat, Bin)) -> Nat =
                 match r : Nat
                 | success(value, extra) => value
@@ -317,7 +317,7 @@ mod tests {
         // `@` — including a union constructor's parameters, which are implicit
         // by default — and the fully-supplied call compiles end-to-end.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Opt(A : Type)
             | some(A)
             | none()
@@ -338,7 +338,7 @@ mod tests {
         // makes the constructor's type argument implicit, so the call site
         // writes no holes at all.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Opt(A : Type)
             | some(A)
             | none()
@@ -357,9 +357,9 @@ mod tests {
         // `T` is overridden positionally with `@`, `U` (interleaved after an
         // explicit binder) is inferred from `y`.
         let source = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-            sys/Bin/len(second(@Nat, 1, /sys/Str/to_bin("abc")))
+            std/Bin/len(second(@Nat, 1, /std/Str/to_bin("abc")))
         "#;
 
         compile(source, None).unwrap();
@@ -371,14 +371,14 @@ mod tests {
         // first unfilled implicit binder no matter where it sits among the
         // plain arguments.
         let at_first = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-            sys/Bin/len(second(@Nat, 1, /sys/Str/to_bin("abc")))
+            std/Bin/len(second(@Nat, 1, /std/Str/to_bin("abc")))
         "#;
         let at_last = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-            sys/Bin/len(second(1, /sys/Str/to_bin("abc"), @Nat))
+            std/Bin/len(second(1, /std/Str/to_bin("abc"), @Nat))
         "#;
 
         compile(at_first, None).unwrap();
@@ -391,7 +391,7 @@ mod tests {
         // and is mentioned only in the result type, so nothing but the
         // result-directed turnaround can pin it.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Opt(A : Type)
             | some(A)
             | none()
@@ -415,7 +415,7 @@ mod tests {
         // the next telescope — both through a direct call and the `let !`
         // sugar (which desugars to exactly that call).
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Id(A : Type)
             | wrap(A)
             end
@@ -445,7 +445,7 @@ mod tests {
         // Nothing mentions `T` outside the binder itself, so unification can
         // never pin it; the report must name the hole, not a bare metavar id.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let cast(x : Nat, @T : Type) -> Nat = x;
             cast(5)
         "#;
@@ -461,7 +461,7 @@ mod tests {
     #[test]
     fn surplus_implicit_arguments_are_rejected() {
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let id(@T : Type, x : T) -> T = x;
             id(@Nat, @Nat, 1)
         "#;
@@ -479,7 +479,7 @@ mod tests {
         // Constructors are exactly as visible as their union: a non-`pub`
         // union is module-local but fully usable where it is declared.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Opt
             | none()
             | some(Nat)
@@ -500,7 +500,7 @@ mod tests {
         let source = r#"
             pub mod m
                 union Secret
-                | hide(/sys/Nat)
+                | hide(/std/Nat)
                 end
             end
             m/Secret/hide(7)
@@ -515,7 +515,7 @@ mod tests {
         // constructors on a non-union value reports the real problem instead
         // of a downstream projection error.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             match 7 : Nat
             | success(value) => value
             end
@@ -537,7 +537,7 @@ mod tests {
         // runtime shape.
         let source = r#"
             use /std/{Result};
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             let f(r : Result(Nat, Bin)) -> Nat =
                 match r : Nat
                 | success(value) => value
@@ -558,7 +558,7 @@ mod tests {
         // arms are typed from the constructor telescopes; indices ride
         // along), lowering through to wasm.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -583,15 +583,15 @@ mod tests {
         // pointwise: `Tag(7)` accepts `Tag/b` and the match dispatches on the
         // tag as ever.
         let source = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Tag : (Nat)
             | a() : (0)
             | b() : (7)
             end
             let t : Tag(7) = Tag/b();
             match t : Bin
-            | a() => /sys/Str/to_bin("a")
-            | b() => /sys/Str/to_bin("b")
+            | a() => /std/Str/to_bin("a")
+            | b() => /std/Str/to_bin("b")
             end
         "#;
 
@@ -606,7 +606,7 @@ mod tests {
         // cons), and the whole match at the scrutinee's actual index. The cons
         // arm converges via `Nat/add`'s definitional successor peeling.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -632,7 +632,7 @@ mod tests {
         // slot must bind (a fresh name or `_`); a verbatim parameter must be
         // the scrutinee's actual parameter.
         let union_decl = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -699,7 +699,7 @@ mod tests {
         // - `f`'s nil arm uses a hypothesis demanding `Vec(T, 0)` — legal
         //   because the arm refines `n := 0`.
         let source = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -757,7 +757,7 @@ mod tests {
         // unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is
         // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
         let source = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -770,7 +770,7 @@ mod tests {
                 match v : Vec(T, n)
                 | cons(j, x, xs) => xs
                 end;
-            let v : Vec(Bin, 2) = Vec/cons(/sys/Str/to_bin("a"), Vec/cons(/sys/Str/to_bin("b"), Vec/nil()));
+            let v : Vec(Bin, 2) = Vec/cons(/std/Str/to_bin("a"), Vec/cons(/std/Str/to_bin("b"), Vec/nil()));
             let w : Vec(Bin, 1) = rest(v);
             first(w)
         "#;
@@ -781,7 +781,7 @@ mod tests {
     #[test]
     fn impossible_union_arm_lowers_to_unreachable() {
         let source = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -790,7 +790,7 @@ mod tests {
                 match v : T
                 | cons(j, x, xs) => x
                 end;
-            let v : Vec(Bin, 1) = Vec/cons(/sys/Str/to_bin("a"), Vec/nil());
+            let v : Vec(Bin, 1) = Vec/cons(/std/Str/to_bin("a"), Vec/nil());
             first(v)
         "#;
 
@@ -811,7 +811,7 @@ mod tests {
         // An opaque index proves nothing: omitting nil at `Vec(T, n)` is
         // rejected with the explanation as the error.
         let opaque = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -834,14 +834,14 @@ mod tests {
         // plainly-uninhabited `Foo(3, 4)`. The flip side: `diff`'s target
         // `(0, 1)` clashes against literals `(5, 5)` and prunes.
         let nonlinear = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Foo : (x : Nat, y : Nat)
             | same(z : Nat) : (z, z)
             | diff() : (0, 1)
             end
             let f(q : Foo(3, 4)) -> Bin =
                 match q : Bin
-                | diff() => /sys/Str/to_bin("d")
+                | diff() => /std/Str/to_bin("d")
                 end;
             0
         "#;
@@ -852,14 +852,14 @@ mod tests {
         );
 
         let prunes = r#"
-            use /sys/{Nat, Bin};
+            use /std/{Nat, Bin};
             union Foo : (x : Nat, y : Nat)
             | same(z : Nat) : (z, z)
             | diff() : (0, 1)
             end
             let g(q : Foo(5, 5)) -> Bin =
                 match q : Bin
-                | same(z) => /sys/Str/to_bin("s")
+                | same(z) => /std/Str/to_bin("s")
                 end;
             g(Foo/same(5))
         "#;
@@ -872,7 +872,7 @@ mod tests {
         // `Nat/succ(m)` propagates through conversion until the index clash
         // surfaces as an ordinary type mismatch.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -892,7 +892,7 @@ mod tests {
         // error, as is a target whose arity differs from the head's index
         // telescope, or a target on an unindexed union.
         let missing = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil()
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -906,7 +906,7 @@ mod tests {
         );
 
         let surplus = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Pair(A : Type)
             | pair(A, A) : (0)
             end
@@ -919,7 +919,7 @@ mod tests {
         );
 
         let arity = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Vec(T : Type) : (n : Nat)
             | nil() : (0, 1)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -944,7 +944,7 @@ mod tests {
         // type-check level — the inference is the point, not lowering.
         let source = r#"
             use /std/{Arr};
-            use /sys/{Nat};
+            use /std/{Nat};
             let first(xs : Arr({ Nat, Nat })) -> Arr(Nat) =
                 Arr/map((pair) => pair.0, xs);
             first
@@ -965,7 +965,7 @@ mod tests {
         // "introduced a tuple where the expected type is not a tuple type".
         let source = r#"
             use /std/{Parse};
-            use /sys/{Nat};
+            use /std/{Nat};
             let pair : Parse({ Nat, Nat }) =
                 let ! = Parse/bind;
                 let x = Parse/any_byte!;
@@ -999,7 +999,7 @@ mod tests {
         // Guards folding projection (`index + 1`) and prealloc arities into that scan.
         let source = r#"
             use /std/{Arr};
-            use /sys/{Nat};
+            use /std/{Nat};
             Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
         "#;
 
@@ -1025,7 +1025,7 @@ mod tests {
         // (Infer-mode `elaborate_func`), the let's type is inferred from it, and
         // `f(5)` checks and lowers all the way to wasm.
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let f = (x : Nat) => x;
             f(5)
         "#;
@@ -1038,7 +1038,7 @@ mod tests {
         // In checking position the param annotation is verified against the
         // expected function type's domain — a wrong annotation is a type mismatch.
         let source = r#"
-            use /sys/{Nat, Bln};
+            use /std/{Nat, Bln};
             let f : (Nat) -> Nat = (x : Bln) => x;
             f(5)
         "#;
@@ -1078,7 +1078,7 @@ mod tests {
     fn typecheck_accepts_a_well_typed_program() {
         // The fast path stops after `elaborate → zonk`; a well-typed program passes
         // without running erase/cont/optm/wasm.
-        assert!(typecheck("/sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin(/sys/Nat/to_str(0)))").is_ok());
+        assert!(typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(0)))").is_ok());
     }
 
     #[test]
@@ -1087,7 +1087,7 @@ mod tests {
         // caught — type-checking is fully validated even though lowering is skipped.
         let error = typecheck(
             r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let m : Nat = ?;
             m
             "#,
@@ -1104,8 +1104,8 @@ mod tests {
         // `.label` is elaboration-time sugar for the positional projection,
         // so both spellings typecheck identically.
         let source = r#"
-            use /sys/{Nat, Bin, Io};
-            let r : { status : Nat, payload : Bin } = (0, /sys/Str/to_bin("ok"));
+            use /std/{Nat, Bin, Io};
+            let r : { status : Nat, payload : Bin } = (0, /std/Str/to_bin("ok"));
             let by_label : Bin = r.payload;
             let by_index : Bin = r.1;
             Io/write(Io/stdout, by_label)
@@ -1117,8 +1117,8 @@ mod tests {
     #[test]
     fn proj_unknown_label_names_the_available_fields() {
         let source = r#"
-            use /sys/{Nat, Bin};
-            let r : { status : Nat, payload : Bin } = (0, /sys/Str/to_bin("ok"));
+            use /std/{Nat, Bin};
+            let r : { status : Nat, payload : Bin } = (0, /std/Str/to_bin("ok"));
             r.body
         "#;
 
@@ -1132,7 +1132,7 @@ mod tests {
     #[test]
     fn duplicate_tuple_label_is_rejected() {
         let source = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let r : { x : Nat, x : Nat } = (0, 1);
             r.x
         "#;
@@ -1149,7 +1149,7 @@ mod tests {
         // Same positional types, different label order: not convertible —
         // this is what makes `.label` re-indexing impossible.
         let reordered = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let p : { width : Nat, height : Nat } = (640, 480);
             let q : { height : Nat, width : Nat } = p;
             q.width
@@ -1158,7 +1158,7 @@ mod tests {
 
         // Labeled and unlabeled spellings are distinct types too.
         let unlabeled = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             let p : { width : Nat, height : Nat } = (640, 480);
             let q : { Nat, Nat } = p;
             q.0
@@ -1171,16 +1171,16 @@ mod tests {
         // Written names must match the expected type's labels positionally;
         // bare fields are always accepted.
         let source = r#"
-            use /sys/{Nat, Bin};
-            let r : { status : Nat, payload : Bin } = (status = 0, payload = /sys/Str/to_bin("ok"));
-            let mixed : { status : Nat, payload : Bin } = (status = 0, /sys/Str/to_bin("ok"));
+            use /std/{Nat, Bin};
+            let r : { status : Nat, payload : Bin } = (status = 0, payload = /std/Str/to_bin("ok"));
+            let mixed : { status : Nat, payload : Bin } = (status = 0, /std/Str/to_bin("ok"));
             r.status
         "#;
         assert!(typecheck(source).is_ok());
 
         let wrong_name = r#"
-            use /sys/{Nat, Bin};
-            let r : { status : Nat, payload : Bin } = (code = 0, payload = /sys/Str/to_bin("ok"));
+            use /std/{Nat, Bin};
+            let r : { status : Nat, payload : Bin } = (code = 0, payload = /std/Str/to_bin("ok"));
             r.status
         "#;
         let error = typecheck(wrong_name).unwrap_err();
@@ -1190,8 +1190,8 @@ mod tests {
         );
 
         let unlabeled_type = r#"
-            use /sys/{Nat, Bin};
-            let r : { Nat, Bin } = (status = 0, /sys/Str/to_bin("ok"));
+            use /std/{Nat, Bin};
+            let r : { Nat, Bin } = (status = 0, /std/Str/to_bin("ok"));
             r.0
         "#;
         assert!(typecheck(unlabeled_type).is_err());
@@ -1202,15 +1202,15 @@ mod tests {
         // Labels bind dependently: a later field's type mentions an earlier
         // label, and label projection re-types through the dependency.
         let source = r#"
-            let p : { T : Type, x : T } = (T = /sys/Nat, x = 3);
+            let p : { T : Type, x : T } = (T = /std/Nat, x = 3);
             let v : p.T = p.x;
-            /sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin(/sys/Nat/to_str(v)))
+            /std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(v)))
         "#;
 
         assert!(typecheck(source).is_ok());
     }
 
-    // --- C: reachability prune of unused sys/std -----------------------------
+    // --- C: reachability prune of unused std/std -----------------------------
 
     /// The `name`s of every top-level item in the lowered `core::Module`, captured
     /// from the `Core` stage of a full compile (which runs the real `prelude`).
@@ -1258,7 +1258,7 @@ mod tests {
     fn prune_keeps_reachable_library_and_transitive_deps() {
         // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
         let names = core_item_names(
-            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, /sys/Str/to_bin(\"1\"))",
+            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, /std/Str/to_bin(\"1\"))",
         );
 
         assert!(
@@ -1310,7 +1310,7 @@ mod tests {
         // the match arm's binder is typed from the rebuilt payload type, and
         // the whole program lowers to wasm.
         let through = r#"
-            use /sys/{Nat};
+            use /std/{Nat};
             union Eq(@A : Type) : (x : A, y : A)
             | refl(z : A) : (z, z)
             end
@@ -1332,8 +1332,8 @@ mod tests {
         // (`write` returns its `Nat` status, so `Bin` is the mismatch.)
         let error = typecheck(
             r#"
-            let dead : /sys/Bin = /sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin("x"));
-            /sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin("ok"))
+            let dead : /std/Bin = /std/Io/write(/std/Io/stdout, /std/Str/to_bin("x"));
+            /std/Io/write(/std/Io/stdout, /std/Str/to_bin("ok"))
             "#,
         )
         .unwrap_err();

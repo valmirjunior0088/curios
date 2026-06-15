@@ -1,8 +1,8 @@
 # Curios Standard Library
 
-The standard library lives under `/std`, prepended to every program automatically (like `/sys`). Its sources are ordinary Curios in `std/*.crs`, declared by the `std.crs` manifest and embedded into the compiler binary at build time.
+The standard library lives under `/std`, prepended to every program automatically. Its sources are ordinary Curios in `std/*.crs`, declared by the `std.crs` manifest and embedded into the compiler binary at build time. The primitives it builds on live in an internal `/sys` module that `/std` re-exports; user code reaches them only through `/std`.
 
-Each scalar and collection module re-exports its `/sys` counterpart (`pub use /sys/Nat/*;` and the type itself), so `use /std/{Nat};` brings in both the primitives and the helpers below — programs rarely need `/sys` paths directly. The manifest also re-exports each module's principal type at the `/std` root.
+Each scalar and collection module re-exports its `/sys` counterpart (`pub use /sys/Nat/*;` and the type itself), so `use /std/{Nat};` brings in both the primitives and the helpers below. The `/sys` paths are internal — user code always goes through `/std`. The manifest also re-exports each module's principal type at the `/std` root.
 
 - [Scalars](#scalars) — `Nat`, `Int`, `Flt`, `Bln`
 - [Bytes and arrays](#bytes-and-arrays) — `Bin`, `Arr`, `Char`, `Str`
@@ -62,13 +62,16 @@ Byte classifiers over ASCII code points (`Nat -> Bln`): `is_whitespace`, `is_dig
 
 ### `/std/Str`
 
-`Str` is the UTF-8 string type (re-exported from `/sys`; `"..."` literals have
-this type). It has its own first-class operations — they share `Bin`'s *runtime
-representation* (the conversions are no-ops) but never appear as `Bin` ops at the
-surface. `of_bin` is the single, checked bridge from arbitrary bytes into text;
-within `Str`-to-`Str` code it is never needed. (There is no unchecked
-constructor in this API — the only trust is the inherent primitive trust behind
-`to_str`/`concat`, exactly as for `Bin/len`.)
+`Str` is the UTF-8 string type (`"..."` literals have this type). It shares
+`Bin`'s *runtime representation* — `to_bin` is a no-op carrier projection onto
+those bytes — but is a distinct type at the surface. Only `to_bin` is a
+primitive (re-exported from the internal `/sys`); `concat`, `eql`, `len`, and
+the rest are ordinary library definitions built on `to_bin` and the `Bin` ops.
+`of_bin` is the single, checked bridge from arbitrary bytes into text; within
+`Str`-to-`Str` code it is never needed. (There is no unchecked constructor in
+this API — the lone trust is the internal `/sys/Str/of_bin` substrate, used by
+the checked `of_bin` behind an `is_utf8` gate and by `concat`, which is sound
+because UTF-8 is closed under concatenation.)
 
 | Binding               | Type                    | Description                                                     |
 | --------------------- | ----------------------- | -------------------------------------------------------------- |
@@ -89,7 +92,7 @@ constructor in this API — the only trust is the inherent primitive trust behin
 
 ### `/std/Io`
 
-Layers safe conveniences over the `/sys/Io` handle primitives (which it re-exports).
+Layers safe conveniences over the primitive `Io` handle operations (which it re-exports from the internal `/sys`).
 
 | Binding     | Type                                          | Description                                                                                                                               |
 | ----------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -106,7 +109,7 @@ Layers safe conveniences over the `/sys/Io` handle primitives (which it re-expor
 
 ### `/std/File`
 
-`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close`: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice (`/sys/Io/open` remains the explicit escape hatch).
+`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close`: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice (`/std/Io/open` remains the explicit escape hatch).
 
 ```
 union Mode  | read() | write() | append() end   -- File/Mode/read() etc.
@@ -118,7 +121,7 @@ File/read(f, n)                -- (File, Nat) -> { status : Nat, bytes : Bin }
 File/write(f, b)               -- (File, Bin) -> Nat
 ```
 
-`with` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/sys/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
+`with` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/std/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
 
 ## Data types
 
