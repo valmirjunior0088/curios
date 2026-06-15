@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, ReduceError,
+        Apply, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, Rec, ReduceError,
         Struct, Subterm, Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
@@ -13,6 +13,56 @@ enum Reduce {
     Break(Term),
 }
 
+/// Open a `rec` group: register each binding as a definition (so `reduce_var`
+/// unfolds the recursive calls) and return the opened tail. Shared with
+/// `convert`, which enqueues the tail rather than reducing it eagerly. The
+/// definitions land in the enclosing context and outlive this call; their
+/// labels are entropy-fresh, so nothing collides.
+pub fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
+    let labels = rec
+        .tail
+        .label_iter()
+        .map(|label| context.fresh(label))
+        .collect::<Vec<_>>();
+
+    let label_terms = labels
+        .iter()
+        .map(Var::free)
+        .map(Term::var)
+        .collect::<Vec<_>>();
+    let label_refs = label_terms.iter().collect::<Vec<_>>();
+
+    for (label, (_, body)) in labels.iter().zip(rec.items.iter()) {
+        context.define(label, &body.open(&label_refs));
+    }
+
+    rec.tail.open(&label_refs)
+}
+
+/// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a
+/// normal form, so an eliminator that demands its value unfolds it here and
+/// re-reduces, repeating if the opened tail is itself a `rec`. A non-productive
+/// group spins until the reduce deadline — exactly as a top-level `rec` does.
+fn force_rec(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
+    loop {
+        match Term::unwrap_or_clone(term) {
+            Subterm::Rec(rec) => {
+                let tail = unfold_rec(context, rec);
+                term = reduce(context, tail)?;
+            }
+            other => return Ok(other.into()),
+        }
+    }
+}
+
+/// Reduce to WHNF and then force a `rec` head: used wherever an eliminator
+/// (`match`/application/projection) demands a value, so an inner `rec` reduces
+/// just like a top-level one instead of staying stuck.
+fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    let reduced = reduce(context, term)?;
+    force_rec(context, reduced)
+}
+
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
     let Apply {
         head,
@@ -22,7 +72,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 
     let param_refs = params.iter().collect::<Vec<_>>();
 
-    match Term::unwrap_or_clone(reduce(context, head)?) {
+    match Term::unwrap_or_clone(reduce_forced(context, head)?) {
         Subterm::Func(Func { telescope }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
         head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
             head: head.into(),
@@ -44,7 +94,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         return Ok(Reduce::Continue(v.clone()));
     }
 
-    match Term::unwrap_or_clone(reduce(context, head)?) {
+    match Term::unwrap_or_clone(reduce_forced(context, head)?) {
         Subterm::Tuple(Tuple { fields, .. }) => Ok(Reduce::Continue(
             fields
                 .into_iter()
@@ -120,7 +170,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         Cases::Bln {
             false_case,
             true_case,
-        } => match Term::unwrap_or_clone(reduce(context, head)?) {
+        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
             Subterm::Prim(Prim::Bln(false)) => Ok(Reduce::Continue(false_case)),
             Subterm::Prim(Prim::Bln(true)) => Ok(Reduce::Continue(true_case)),
             head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
@@ -136,7 +186,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         Cases::Nat {
             zero_case,
             succ_case,
-        } => match Term::unwrap_or_clone(reduce(context, head)?) {
+        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
             Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
             Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
                 let one = BigUint::from(1usize);
@@ -169,7 +219,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             })))),
         },
 
-        Cases::Switch { cases, default } => match Term::unwrap_or_clone(reduce(context, head)?) {
+        Cases::Switch { cases, default } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
             Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
                 Some(body) => Ok(Reduce::Continue(body.clone())),
                 None => Ok(Reduce::Continue(default.clone())),
@@ -199,7 +249,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // annotation holes that elaboration never births) into types that
         // flow on to `zonk`.
         Cases::Union { cases, pattern } => {
-            let head_reduced = reduce(context, head.clone())?;
+            let head_reduced = reduce_forced(context, head.clone())?;
 
             if let Subterm::Variant(ctor) = &*head_reduced
                 && let Some(scope) = cases.get(&ctor.tag)
