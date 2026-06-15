@@ -4,3 +4,10 @@ pub union Option(A : Type)
 end
 
 pub use Option/*;
+
+pub let bind(@A : Type, @B : Type) -> (Option(A), A -> Option(B)) -> Option(B) =
+    (m, f) =>
+        match m
+        | some(a) => f(a)
+        | none() => Option/none()
+        end;
