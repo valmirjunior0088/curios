@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
-        LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec,
-        StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion, TopUse,
-        LetBang, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
+        LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, Plicity,
+        Prim, Proj, Rec, StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct,
+        TopUnion, TopUse, LetBang, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -14,6 +14,17 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
     match plicity {
         Plicity::Implicit => pure("@"),
         Plicity::Explicit => pure(""),
+    }
+}
+
+fn print_pattern(pattern: Pattern) -> Printer<'static> {
+    match pattern {
+        Pattern::Bind(name) => pure(name),
+        Pattern::Tuple(fields) => flat([
+            pure("("),
+            sep_flat(fields.into_iter().map(print_pattern), || pure(", ")),
+            pure(")"),
+        ]),
     }
 }
 
@@ -265,9 +276,9 @@ fn print_term(term: Term) -> Printer<'static> {
             sep_flat(
                 params
                     .into_iter()
-                    .map(|(name, annotation)| match annotation {
-                        Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
-                        None => pure(name),
+                    .map(|(pattern, annotation)| match annotation {
+                        Some(ty) => flat([print_pattern(pattern), pure(" : "), print_term(ty)]),
+                        None => print_pattern(pattern),
                     }),
                 || pure(", "),
             ),
@@ -413,7 +424,7 @@ fn print_term(term: Term) -> Printer<'static> {
                         .map(|(label, UnionCase { binders, body })| {
                             flat([
                                 pure(format!("\n| {label}(")),
-                                pure(binders.join(", ")),
+                                sep_flat(binders.into_iter().map(print_pattern), || pure(", ")),
                                 pure(") =>\n"),
                                 indent(print_term(body)),
                             ])
@@ -424,12 +435,12 @@ fn print_term(term: Term) -> Printer<'static> {
             ]),
         },
         Subterm::Let(Let {
-            label,
+            binder,
             signature,
             tail,
         }) => flat([
             pure("let "),
-            pure(label),
+            print_pattern(binder),
             print_let_signature(signature),
             pure(";"),
             pure("\n"),
@@ -473,10 +484,10 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
         } => flat([
             pure("("),
             sep_flat(
-                params.into_iter().map(|(plicity, name, ty)| {
+                params.into_iter().map(|(plicity, pattern, ty)| {
                     flat([
                         print_plicity(plicity),
-                        pure(name),
+                        print_pattern(pattern),
                         pure(" : "),
                         print_term(ty),
                     ])

@@ -3,8 +3,8 @@ use {
     crate::{
         core,
         text::{
-            BinLiteral, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Prim,
-            Subterm, Term,
+            BinLiteral, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
+            Prim, Subterm, Term,
         },
     },
     num_bigint::BigUint,
@@ -82,24 +82,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                 self.term(&ft.output)?,
             ),
             Subterm::Func(func) => {
-                // Each parameter's domain is its annotation lowered, or — for the
-                // `(x) => …` sugar — a fresh hole (exactly like `Subterm::Hole`).
-                // The hole is solved against the expected function type when the
-                // lambda is checked, or synthesized from the annotation when the
-                // lambda is inferred. Core's `func` constructor closes the param
-                // names over both the body and the later (dependent) domains.
-                let params = func
-                    .params
-                    .iter()
-                    .map(|(name, annotation)| {
-                        let domain = match annotation {
-                            Some(ty) => self.term(ty)?,
-                            None => core::Term::metavar(self.context.fresh_metavar()),
-                        };
-                        Ok((name.clone(), domain))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-                core::Term::func(params, self.term(&func.body)?)
+                let body = self.term(&func.body)?;
+                let (params, body) = self.lower_func_params(&func.params, body)?;
+                core::Term::func(params, body)
             }
             Subterm::Apply(apply) => core::Term::apply_marked(
                 self.term(&apply.head)?,
@@ -207,22 +192,20 @@ impl<'a, 'b> Lower<'a, 'b> {
                         um.cases
                             .iter()
                             .map(|(label, case)| {
-                                Ok((
-                                    core::Atom::from(label.as_str()),
-                                    case.binders.clone(),
-                                    self.term(&case.body)?,
-                                ))
+                                let body = self.term(&case.body)?;
+                                let (binders, body) = self.bind_arm_patterns(&case.binders, body);
+                                Ok((core::Atom::from(label.as_str()), binders, body))
                             })
                             .collect::<Result<Vec<_>, Error>>()?,
                     )?
                 }
             },
-            Subterm::Let(let_) => core::Term::let_(
-                let_.label.clone(),
-                self.term(&let_.signature.type_())?,
-                self.term(&let_.signature.body())?,
-                self.term(&let_.tail)?,
-            ),
+            Subterm::Let(let_) => {
+                let type_ = self.term(&let_.signature.type_())?;
+                let value = self.term(&let_.signature.body())?;
+                let tail = self.term(&let_.tail)?;
+                self.lower_let(&let_.binder, type_, value, tail)
+            }
             Subterm::Rec(rec) => core::Term::rec(
                 rec.items
                     .iter()
@@ -273,18 +256,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
             // A lambda re-roots the region (same bind, lexically in scope).
             Subterm::Func(func) => {
-                let params = func
-                    .params
-                    .iter()
-                    .map(|(name, annotation)| {
-                        let domain = match annotation {
-                            Some(ty) => self.term(ty)?,
-                            None => core::Term::metavar(self.context.fresh_metavar()),
-                        };
-                        Ok((name.clone(), domain))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-                Ok(core::Term::func(params, self.region(&func.body, bind)?))
+                let body = self.region(&func.body, bind)?;
+                let (params, body) = self.lower_func_params(&func.params, body)?;
+                Ok(core::Term::func(params, body))
             }
             // A nested `let !` switches the bind and desugars independently.
             Subterm::LetBang(let_bang) => {
@@ -371,9 +345,10 @@ impl<'a, 'b> Lower<'a, 'b> {
         })
     }
 
-    /// Builds `let x = value; tail` for a `let` inside a `let !` region, collecting
-    /// the bound expression's bangs into `binds` and desugaring the tail as the
-    /// continuation of the same region.
+    /// Builds `let <pattern> = value; tail` for a `let` inside a `let !` region,
+    /// collecting the bound expression's bangs into `binds` and desugaring the
+    /// tail as the continuation of the same region. A tuple binder's projections
+    /// are pure, so they need no region treatment.
     fn build_let(
         &self,
         let_: &Let,
@@ -382,12 +357,142 @@ impl<'a, 'b> Lower<'a, 'b> {
     ) -> Result<core::Term, Error> {
         let value = self.collect(&let_.signature.body(), bind, binds)?;
         let tail = self.region(&let_.tail, bind)?;
-        Ok(core::Term::let_(
-            let_.label.clone(),
-            self.term(&let_.signature.type_())?,
-            value,
-            tail,
-        ))
+        let type_ = self.term(&let_.signature.type_())?;
+        Ok(self.lower_let(&let_.binder, type_, value, tail))
+    }
+
+    /// Binds a `let`'s pattern against an already-lowered `value` (typed by
+    /// `type_`) with `tail` as its continuation. A plain `Bind` is a single core
+    /// `let` (the common case, and the function-definition sugar); a `Tuple`
+    /// binds the value to a fresh temp typed by `type_`, then projects each leaf.
+    fn lower_let(
+        &self,
+        binder: &Pattern,
+        type_: core::Term,
+        value: core::Term,
+        tail: core::Term,
+    ) -> core::Term {
+        match binder {
+            Pattern::Bind(name) => {
+                core::Term::let_(self.pattern_binder_name(name), type_, value, tail)
+            }
+            Pattern::Tuple(fields) => {
+                let temp = self.context.fresh_binder();
+                let scrutinee = core::Term::var(core::Var::free(temp.clone()));
+                let body = self.project_fields(&scrutinee, fields, tail);
+                core::Term::let_(temp, type_, value, body)
+            }
+        }
+    }
+
+    /// Lowers a function's parameter patterns into core binder `(name, domain)`
+    /// pairs plus a body wrapped with the projections each tuple pattern needs.
+    /// A plain `Bind` parameter is named directly and adds no wrapping — the
+    /// common `(x) => …` case is unchanged. Folds right-to-left so each wrap
+    /// nests inside the previous parameter's scope.
+    fn lower_func_params(
+        &self,
+        params: &[(Pattern, Option<Term>)],
+        body: core::Term,
+    ) -> Result<(Vec<(String, core::Term)>, core::Term), Error> {
+        let mut lowered = Vec::with_capacity(params.len());
+        let mut body = body;
+        for (pattern, annotation) in params.iter().rev() {
+            let domain = match annotation {
+                Some(annotation) => self.term(annotation)?,
+                None => core::Term::metavar(self.context.fresh_metavar()),
+            };
+            let (name, wrapped) = self.bind_top_pattern(pattern, body);
+            body = wrapped;
+            lowered.push((name, domain));
+        }
+        lowered.reverse();
+        Ok((lowered, body))
+    }
+
+    /// Lowers a union arm's payload patterns into the core arm's binder names
+    /// plus a body wrapped with the projections each tuple pattern needs. Like
+    /// [`Self::lower_func_params`] without domains.
+    fn bind_arm_patterns(
+        &self,
+        patterns: &[Pattern],
+        body: core::Term,
+    ) -> (Vec<String>, core::Term) {
+        let mut names = vec![String::new(); patterns.len()];
+        let body = patterns
+            .iter()
+            .enumerate()
+            .rev()
+            .fold(body, |acc, (index, pattern)| {
+                let (name, wrapped) = self.bind_top_pattern(pattern, acc);
+                names[index] = name;
+                wrapped
+            });
+        (names, body)
+    }
+
+    /// Resolves a single binder pattern to the core binder name that holds the
+    /// whole value, wrapping `body` with projections when the pattern is a tuple.
+    /// Projecting directly off this name avoids the redundant `let` a fresh
+    /// [`Self::bind_pattern`] temp would introduce.
+    fn bind_top_pattern(&self, pattern: &Pattern, body: core::Term) -> (String, core::Term) {
+        match pattern {
+            Pattern::Bind(name) => (self.pattern_binder_name(name), body),
+            Pattern::Tuple(fields) => {
+                let name = self.context.fresh_binder();
+                let scrutinee = core::Term::var(core::Var::free(name.clone()));
+                (name, self.project_fields(&scrutinee, fields, body))
+            }
+        }
+    }
+
+    /// Binds each field of a tuple pattern by projecting off `scrutinee` (already
+    /// a variable). Folds right-to-left so field 0's bindings end up outermost.
+    fn project_fields(
+        &self,
+        scrutinee: &core::Term,
+        fields: &[Pattern],
+        body: core::Term,
+    ) -> core::Term {
+        fields
+            .iter()
+            .enumerate()
+            .rev()
+            .fold(body, |acc, (index, pattern)| {
+                self.bind_pattern(pattern, core::Term::proj(scrutinee.clone(), index), acc)
+            })
+    }
+
+    /// Binds `pattern` against an arbitrary `scrutinee` term. A `Bind` is a plain
+    /// `let`; a `Tuple` binds the scrutinee to a fresh temp and projects. Used for
+    /// nested patterns, where the scrutinee is itself a projection.
+    fn bind_pattern(
+        &self,
+        pattern: &Pattern,
+        scrutinee: core::Term,
+        body: core::Term,
+    ) -> core::Term {
+        let hole = core::Term::metavar(self.context.fresh_metavar());
+        match pattern {
+            Pattern::Bind(name) => {
+                core::Term::let_(self.pattern_binder_name(name), hole, scrutinee, body)
+            }
+            Pattern::Tuple(fields) => {
+                let temp = self.context.fresh_binder();
+                let inner = core::Term::var(core::Var::free(temp.clone()));
+                let body = self.project_fields(&inner, fields, body);
+                core::Term::let_(temp, hole, scrutinee, body)
+            }
+        }
+    }
+
+    /// A pattern binder's core name: `_` mints a fresh internal name (so repeated
+    /// wildcards never collide), any other identifier is used verbatim.
+    fn pattern_binder_name(&self, name: &str) -> String {
+        match name {
+            "_" => self.context.fresh_binder(),
+            name => name.to_string(),
+        }
     }
 
     /// Desugars a `match` inside a `let !` region: the scrutinee's bangs are
@@ -461,11 +566,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     um.cases
                         .iter()
                         .map(|(label, case)| {
-                            Ok((
-                                core::Atom::from(label.as_str()),
-                                case.binders.clone(),
-                                self.region(&case.body, bind)?,
-                            ))
+                            let body = self.region(&case.body, bind)?;
+                            let (binders, body) = self.bind_arm_patterns(&case.binders, body);
+                            Ok((core::Atom::from(label.as_str()), binders, body))
                         })
                         .collect::<Result<Vec<_>, Error>>()?,
                 )?

@@ -64,13 +64,43 @@ pub struct FuncType {
     pub output: Term,
 }
 
+/// A binding pattern in a binder position (`let`, lambda parameter, match-arm
+/// payload). Stage 1 covers the irrefutable *product* fragment — plain binders
+/// and positional tuple patterns; both lower to projections off a fresh temp in
+/// `to_core`, never to a branch. The grammar is shared with the (future)
+/// refutable constructor patterns the pattern-matrix compiler will consume.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    /// A plain binder `x` (or `_`). `_` lowers to a fresh internal name, so
+    /// repeated wildcards within one pattern never collide.
+    Bind(String),
+    /// A positional tuple pattern `(p0, p1, …)`. Irrefutable — a tuple has a
+    /// single shape, so destructuring is pure projection.
+    Tuple(Vec<Pattern>),
+}
+
+impl Pattern {
+    /// The name a Π-binder should carry when this pattern is a function
+    /// parameter: a plain `Bind`'s name (so dependent domains/outputs can refer
+    /// to it), or `None` for a tuple pattern (no whole-value name to refer to).
+    pub fn binder_name(&self) -> Option<String> {
+        match self {
+            Pattern::Bind(name) => Some(name.clone()),
+            Pattern::Tuple(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
-    /// Each parameter carries an optional domain annotation. `None` is the
-    /// surface `(x) => …` form, sugar for `(x : _) => …`; it lowers to a hole
-    /// (`to_core::elaborate`), solved against the expected function type when the
-    /// lambda is checked, or synthesized from the annotation when inferred.
-    pub params: Vec<(String, Option<Term>)>,
+    /// Each parameter binds a [`Pattern`] and carries an optional domain
+    /// annotation. `None` is the surface `(x) => …` form, sugar for `(x : _) =>
+    /// …`; it lowers to a hole (`to_core::elaborate`), solved against the
+    /// expected function type when the lambda is checked, or synthesized from
+    /// the annotation when inferred. A tuple-pattern parameter needs its own
+    /// parentheses — `((a, b)) => …` is one pair-destructuring parameter, while
+    /// `(a, b) => …` stays two parameters.
+    pub params: Vec<(Pattern, Option<Term>)>,
     pub body: Term,
 }
 
@@ -179,7 +209,10 @@ pub struct StructLit {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionCase {
-    pub binders: Vec<String>,
+    /// One pattern per constructor payload field. A plain `Bind` names the field
+    /// directly (the common `Cons(x, xs) => …` case, unchanged); a tuple pattern
+    /// destructures it — `Cons((a, b), xs) => …`.
+    pub binders: Vec<Pattern>,
     pub body: Term,
 }
 
@@ -207,7 +240,7 @@ pub enum LetSignature {
         body: Term,
     },
     Func {
-        params: Vec<(Plicity, String, Term)>,
+        params: Vec<(Plicity, Pattern, Term)>,
         output: Term,
         body: Term,
     },
@@ -222,10 +255,14 @@ impl LetSignature {
             // An omitted (local-only) annotation lowers to a hole, so the core
             // elaborator infers the body's type; identical to writing `: _`.
             LetSignature::Name { type_: None, .. } => Subterm::Hole.into(),
+            // A plain-binder parameter names the Π-binder (so a later domain or
+            // the output may depend on it); a tuple-pattern parameter has no
+            // whole-value name, so its Π-binder is anonymous — the result type
+            // cannot mention a destructured argument.
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
-                    .map(|(plicity, n, t)| (*plicity, Some(n.clone()), t.clone()))
+                    .map(|(plicity, pattern, t)| (*plicity, pattern.binder_name(), t.clone()))
                     .collect(),
                 output: output.clone(),
             })
@@ -237,11 +274,13 @@ impl LetSignature {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
             // The lambda binds every parameter, implicit or not — plicity is a
-            // fact about the *type*, consulted only at application sites.
+            // fact about the *type*, consulted only at application sites. Each
+            // parameter keeps its pattern, so tuple parameters destructure in
+            // the lambda body exactly as a bare lambda's would.
             LetSignature::Func { params, body, .. } => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|(_, n, t)| (n.clone(), Some(t.clone())))
+                    .map(|(_, pattern, t)| (pattern.clone(), Some(t.clone())))
                     .collect(),
                 body: body.clone(),
             })
@@ -252,7 +291,13 @@ impl LetSignature {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Let {
-    pub label: String,
+    /// The bound pattern. A plain `Bind` is the ordinary `let x = …` (and the
+    /// `let f(…) -> R = …` function-definition sugar, where `f` is the binder);
+    /// a `Tuple` destructures — `let (a, b) = …`. The function-definition
+    /// [`LetSignature::Func`] only ever pairs with a `Bind` binder (the parser
+    /// never mints a tuple-pattern function definition); a tuple binder always
+    /// carries the [`LetSignature::Name`] `(: T)? = value` form.
+    pub binder: Pattern,
     pub signature: LetSignature,
     pub tail: Term,
 }

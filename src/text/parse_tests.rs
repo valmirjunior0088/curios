@@ -22,7 +22,7 @@ fn parse_rec_func_and_apply() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![("x".to_string(), None)],
+                        params: vec![(Pattern::Bind("x".to_string()), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -184,7 +184,7 @@ fn parse_top_rec_mixed_pub() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![("x".to_string(), None)],
+                        params: vec![(Pattern::Bind("x".to_string()), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -647,7 +647,7 @@ fn parse_union_match_nullary_and_unary() {
                 (
                     "bln".to_string(),
                     UnionCase {
-                        binders: vec!["b".to_string()],
+                        binders: vec![Pattern::Bind("b".to_string())],
                         body: Subterm::Name(Name::from(["b".to_string()])).into(),
                     },
                 ),
@@ -673,7 +673,7 @@ fn parse_union_match_multi_binder() {
             cases: [(
                 "lit".to_string(),
                 UnionCase {
-                    binders: vec!["a".to_string(), "b".to_string()],
+                    binders: vec![Pattern::Bind("a".to_string()), Pattern::Bind("b".to_string())],
                     body: Subterm::Name(Name::from(["a".to_string()])).into(),
                 },
             )]
@@ -696,7 +696,7 @@ fn parse_match_omitted_motive() {
             cases: [(
                 "foo".to_string(),
                 UnionCase {
-                    binders: vec!["y".to_string()],
+                    binders: vec![Pattern::Bind("y".to_string())],
                     body: Subterm::Name(Name::from(["y".to_string()])).into(),
                 },
             )]
@@ -749,7 +749,7 @@ fn parse_local_let_without_type() {
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            label: "x".to_string(),
+            binder: Pattern::Bind("x".to_string()),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Type.into(),
@@ -765,7 +765,7 @@ fn parse_local_let_with_type_still_works() {
     assert_eq!(
         "let x : Type = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            label: "x".to_string(),
+            binder: Pattern::Bind("x".to_string()),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
@@ -781,7 +781,7 @@ fn parse_func_with_annotation() {
     assert_eq!(
         "(x : Type) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![("x".to_string(), Some(Subterm::Type.into()))],
+            params: vec![(Pattern::Bind("x".to_string()), Some(Subterm::Type.into()))],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -795,8 +795,8 @@ fn parse_func_with_mixed_annotations() {
         "(x : Type, y) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
             params: vec![
-                ("x".to_string(), Some(Subterm::Type.into())),
-                ("y".to_string(), None),
+                (Pattern::Bind("x".to_string()), Some(Subterm::Type.into())),
+                (Pattern::Bind("y".to_string()), None),
             ],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -809,7 +809,7 @@ fn parse_func_without_annotation_still_works() {
     assert_eq!(
         "(x) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![("x".to_string(), None)],
+            params: vec![(Pattern::Bind("x".to_string()), None)],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -900,7 +900,7 @@ fn parse_bang_in_let_binding() {
     assert_eq!(
         "let x = e!; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            label: "x".to_string(),
+            binder: Pattern::Bind("x".to_string()),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Bang(name("e")).into(),

@@ -1,10 +1,10 @@
 use {
     super::{
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
-        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity,
-        Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem, TopLet,
-        LetBang, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch,
-        UseGroup,
+        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
+        Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem,
+        TopLet, LetBang, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionCase,
+        UnionMatch, UseGroup,
     },
     crate::{
         Source,
@@ -452,8 +452,23 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
 // A lambda parameter with an optional domain annotation. `(x)` is sugar for
 // `(x : _)`; the annotation, when present, parses as an arbitrary term and stops
 // at the closing `)` (mirrors `parse_func_type_param`).
-fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
-    parse_identifier().map(|name: &str| name.to_string()).and(
+// A binder pattern: a plain identifier, or a parenthesized positional tuple
+// pattern. A leading `(` always commits to a tuple pattern — patterns never need
+// grouping, so there is no `(p)`-as-grouping ambiguity.
+fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
+    catch(parse_literal("("))
+        .and_keep(sep_by0(|| lazy(parse_pattern), || parse_literal(",")))
+        .and_drop(parse_literal(")"))
+        .map(Pattern::Tuple)
+}
+
+fn parse_pattern<'a>() -> Parser<'a, Pattern> {
+    parse_tuple_pattern()
+        .or(parse_identifier().map(|name: &str| Pattern::Bind(name.to_string())))
+}
+
+fn parse_func_param<'a>() -> Parser<'a, (Pattern, Option<Term>)> {
+    parse_pattern().and(
         catch(parse_literal(":").and_keep(lazy(parse_term)))
             .map(Some)
             .or(pure(None)),
@@ -631,15 +646,12 @@ fn parse_union_match_branch<'a>() -> Parser<'a, (String, UnionCase)> {
     catch(parse_literal("|").and_keep(parse_identifier()))
         .and(
             parse_literal("(")
-                .and_keep(sep_by0(
-                    || parse_identifier().map(|s: &str| s.to_string()),
-                    || parse_literal(","),
-                ))
+                .and_keep(sep_by0(|| lazy(parse_pattern), || parse_literal(",")))
                 .and_drop(parse_literal(")")),
         )
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
-        .map(|((label, binders), body): ((&str, Vec<String>), Term)| {
+        .map(|((label, binders), body): ((&str, Vec<Pattern>), Term)| {
             (label.to_string(), UnionCase { binders, body })
         })
 }
@@ -686,12 +698,12 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_func_sugar_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
+fn parse_func_sugar_param<'a>() -> Parser<'a, (Plicity, Pattern, Term)> {
     parse_plicity()
-        .and(parse_identifier())
+        .and(parse_pattern())
         .and_drop(parse_literal(":"))
         .and(lazy(parse_term))
-        .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, name.to_string(), ty))
+        .map(|((plicity, pattern), ty): ((Plicity, Pattern), Term)| (plicity, pattern, ty))
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the
@@ -748,7 +760,25 @@ fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature().or(parse_optional_name_signature())
 }
 
-fn parse_let<'a>() -> Parser<'a, Term> {
+// `let (a, b) = e; tail` / `let (a, b) : T = e; tail`. A `(` right after `let`
+// (an identifier can never start there) commits to the destructuring form, so
+// `.or(parse_let_name)` only backtracks when there is no tuple pattern. The
+// binder is a pattern but the signature is always the plain `(: T)? = value`
+// form — a tuple pattern never carries the function-definition sugar.
+fn parse_let_tuple<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("let").and_keep(parse_tuple_pattern()))
+        .and(parse_optional_name_signature())
+        .and_drop(parse_literal(";"))
+        .and(lazy(parse_term))
+        .map(|((binder, signature), tail)| Subterm::Let(Let {
+            binder,
+            signature,
+            tail,
+        }))
+        .map(Into::into)
+}
+
+fn parse_let_name<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("let"))
         .and_keep(parse_identifier())
         .and(parse_local_let_signature())
@@ -756,12 +786,16 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         .and(lazy(parse_term))
         .map(|((label, signature), tail)| {
             Subterm::Let(Let {
-                label: label.to_string(),
+                binder: Pattern::Bind(label.to_string()),
                 signature,
                 tail,
             })
         })
         .map(Into::into)
+}
+
+fn parse_let<'a>() -> Parser<'a, Term> {
+    parse_let_tuple().or(parse_let_name())
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, Field> {

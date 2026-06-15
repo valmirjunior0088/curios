@@ -1,5 +1,5 @@
 use super::{
-    BinLiteral, Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim,
+    BinLiteral, Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
     Qualifier, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
 };
 
@@ -111,7 +111,7 @@ fn pub_fn_marked(
         signature: LetSignature::Func {
             params: params
                 .into_iter()
-                .map(|(p, n, t)| (p, n.to_string(), t))
+                .map(|(p, n, t)| (p, Pattern::Bind(n.to_string()), t))
                 .collect(),
             output,
             body,

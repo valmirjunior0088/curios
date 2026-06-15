@@ -1389,3 +1389,94 @@ fn proc_exit_halts_with_code() {
     assert!(receiver.try_iter().next().is_none());
 }
 
+#[test]
+fn let_tuple_destructures() {
+    // `let (a, b) = …` binds each leaf by projection off a fresh temp. The
+    // annotation types that temp — a bare tuple literal is uninferable on its
+    // own (the same constraint a non-destructuring `let t = (+3, +4)` hits).
+    let source = r#"
+        let (a, b) : { std/Int, std/Int } = (+3, +4);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(b)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+4".to_vec()]);
+}
+
+#[test]
+fn nested_let_tuple_destructures() {
+    // Nested tuple patterns project recursively: `c` is `t.1.1`. Only the outer
+    // binding needs an annotation — the inner `(b, c)` projects off `t.1`, whose
+    // type the elaborator infers from the projection (unlike a bare literal).
+    let source = r#"
+        let (a, (b, c)) : { std/Int, { std/Int, std/Int } } = (+1, (+2, +3));
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(c)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+3".to_vec()]);
+}
+
+#[test]
+fn let_three_tuple_destructures() {
+    // A genuine 3-tuple (not a nested pair): exercises projection at index 2 and
+    // a three-pattern binder. `c` is `t.2`.
+    let source = r#"
+        let (a, b, c) : { std/Int, std/Int, std/Int } = (+10, +20, +30);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(c)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+30".to_vec()]);
+}
+
+#[test]
+fn func_tuple_param_destructures() {
+    // A function-definition-sugar parameter destructures its argument; the
+    // Π-binder is anonymous, so the result type cannot mention the whole pair.
+    let source = r#"
+        let snd((a, b) : { std/Int, std/Int }) -> std/Int = b;
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(snd((+7, +8)))))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+8".to_vec()]);
+}
+
+#[test]
+fn lambda_tuple_param_destructures() {
+    // A bare lambda taking one pair parameter needs its own parens: `((a, b))`.
+    let source = r#"
+        let fst : (_ : { std/Int, std/Int }) -> std/Int = ((a, b)) => a;
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(fst((+5, +6)))))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+5".to_vec()]);
+}
+
+#[test]
+fn match_arm_tuple_destructures() {
+    // A constructor whose payload is a tuple destructures inside the arm binder.
+    let source = r#"
+        union Boxed
+        | box({ std/Int, std/Int })
+        end
+        let value : Boxed = Boxed/box((+9, +1));
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(
+            match value : std/Int
+            | box((x, y)) => x
+            end
+        )))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+9".to_vec()]);
+}
+
