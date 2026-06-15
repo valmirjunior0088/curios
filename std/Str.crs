@@ -1,5 +1,128 @@
-use /std/{Char, Nat, Bin};
+pub use /sys/{Str};
+pub use /sys/Str/{let to_bin, let concat, let eql};
+use /std/{Char, Nat, Bin, Bln, Arr, Option};
 
+let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+    match Nat/gte(c, lo)
+    | true => Nat/lte(c, hi)
+    | false => false
+    end;
+
+-- UTF-8 validity as a byte-at-a-time automaton (Unicode Table 3-7). The state
+-- is the obligation owed at the current position: `lead` expects a leading
+-- byte; `cont(rem, lo, hi)` owes `rem` continuation bytes with the immediate
+-- next one constrained to [lo, hi] (the tightened first-byte ranges reject
+-- overlong encodings and surrogates); `bad` is the absorbing failure. Folding
+-- `step` over the bytes needs only the primitive one-step recursor.
+union Scan
+| lead()
+| cont(Nat, Nat, Nat)
+| bad()
+end
+
+-- Classify a leading byte into the obligation it opens: ASCII closes the
+-- sequence at once (`lead`), while a 2/3/4-byte lead owes 1/2/3 continuation
+-- bytes. The first owed byte's range is tightened (E0/ED, F0/F4) to reject
+-- overlong encodings and surrogates; subsequent ones relax to [128, 191].
+let classify(c : Nat) -> Scan =
+    match in_range(c, 0, 127)
+    | true => Scan/lead()
+    | false =>
+        match in_range(c, 194, 223)
+        | true => Scan/cont(1, 128, 191)
+        | false =>
+            match in_range(c, 224, 239)
+            | true =>
+                let lo = match Nat/eql(c, 224) | true => 160 | false => 128 end;
+                let hi = match Nat/eql(c, 237) | true => 159 | false => 191 end;
+                Scan/cont(2, lo, hi)
+            | false =>
+                match in_range(c, 240, 244)
+                | true =>
+                    let lo = match Nat/eql(c, 240) | true => 144 | false => 128 end;
+                    let hi = match Nat/eql(c, 244) | true => 143 | false => 191 end;
+                    Scan/cont(3, lo, hi)
+                | false => Scan/bad()
+                end
+            end
+        end
+    end;
+
+let step(c : Nat, s : Scan) -> Scan =
+    match s
+    | bad() => Scan/bad()
+    | cont(rem, lo, hi) =>
+        match in_range(c, lo, hi)
+        | false => Scan/bad()
+        | true =>
+            match Nat/eql(rem, 1)
+            | true => Scan/lead()
+            | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+            end
+        end
+    | lead() => classify(c)
+    end;
+
+pub let is_utf8(b : Bin) -> Bln =
+    match Bin/fold(b, Scan/lead(), step)
+    | lead() => true
+    | cont(rem, lo, hi) => false
+    | bad() => false
+    end;
+
+-- The empty string.
+pub let empty : Str = "";
+
+-- The number of Unicode scalar values (codepoints) — *not* bytes, and not
+-- grapheme clusters. Counts every byte that is not a UTF-8 continuation byte
+-- (those in [128, 191]). For the encoded byte size, use `Bin/len(Str/to_bin s)`.
+pub let len(s : Str) -> Nat =
+    Bin/fold(to_bin(s), 0, (byte, acc) =>
+        match in_range(byte, 128, 191)
+        | true => acc
+        | false => Nat/add(acc, 1)
+        end);
+
+-- The checked constructor: a `Str` is produced only when `b` is well-formed
+-- UTF-8. This is the single bridge from arbitrary bytes (IO input, parsers)
+-- into text; within `Str`-to-`Str` code it is never needed. The trusted
+-- `/sys/Str/of_bin` coercion it guards is the raw primitive substrate, not part
+-- of this API.
+pub let of_bin(b : Bin) -> Option(Str) =
+    match is_utf8(b)
+    | true => Option/some(/sys/Str/of_bin(b))
+    | false => Option/none()
+    end;
+
+pub let concat_all(parts : Arr(Str)) -> Str =
+    rec go(lo : Nat, hi : Nat) -> Str =
+        match Nat/lt(Nat/add(lo, 1), hi)
+        | false =>
+            match Nat/lt(lo, hi)
+            | false => empty
+            | true => Arr/get(parts, lo)
+            end
+        | true =>
+            let mid = Nat/div(Nat/add(lo, hi), 2);
+            concat(go(lo, mid), go(mid, hi))
+        end;
+    go(0, Arr/len(parts));
+
+pub let join(sep : Str, parts : Arr(Str)) -> Str =
+    rec go(lo : Nat, hi : Nat) -> Str =
+        match Nat/lt(Nat/add(lo, 1), hi)
+        | false =>
+            match Nat/lt(lo, hi)
+            | false => empty
+            | true => Arr/get(parts, lo)
+            end
+        | true =>
+            let mid = Nat/div(Nat/add(lo, hi), 2);
+            concat(concat(go(lo, mid), sep), go(mid, hi))
+        end;
+    go(0, Arr/len(parts));
+
+-- Whitespace trimming over the raw byte view (ASCII whitespace only).
 pub let trim_start(str : Bin) -> Nat =
     match Bin/len(str)
     | 0 => Bin/len(str)

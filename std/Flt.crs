@@ -22,7 +22,7 @@ let pow10(n : Nat) -> Flt =
     | pred + 1, ih => Flt/mul(ih, +10.0)
     end;
 
-pub let from_str(str : Bin) -> Flt =
+pub let of_str(str : Bin) -> Flt =
     let is_neg = Nat/eql(Bin/get(str, 0), '-');
 
     let start =
@@ -36,20 +36,20 @@ pub let from_str(str : Bin) -> Flt =
     let dot_pos = find_byte('.', str);
     let e_pos = Nat/min(find_byte('e', str), find_byte('E', str));
     let int_end = Nat/min(dot_pos, e_pos);
-    let int_flt = Nat/to_flt(Nat/from_str(Bin/slice(str, start, int_end)));
+    let int_flt = Nat/to_flt(Nat/of_str(Bin/slice(str, start, int_end)));
 
     let frac_flt =
         match Nat/lt(dot_pos, e_pos)
         | true =>
             let frac_slice = Bin/slice(str, Nat/add(dot_pos, 1), e_pos);
-            Flt/div(Nat/to_flt(Nat/from_str(frac_slice)), pow10(Bin/len(frac_slice)))
+            Flt/div(Nat/to_flt(Nat/of_str(frac_slice)), pow10(Bin/len(frac_slice)))
         | false => +0.0
         end;
 
     let exp_flt =
         match Nat/lt(e_pos, len)
         | true =>
-            let exp_int = Int/from_str(Bin/slice(str, Nat/add(e_pos, 1), len));
+            let exp_int = Int/of_str(Bin/slice(str, Nat/add(e_pos, 1), len));
             match Int/gte(exp_int, +0)
             | true => pow10(Int/to_nat(exp_int))
             | false => Flt/div(+1.0, pow10(Int/abs(exp_int)))

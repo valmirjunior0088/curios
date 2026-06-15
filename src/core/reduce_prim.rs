@@ -504,20 +504,20 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             inner,
             |v| {
                 v.to_big_uint()
-                    .map(|b| Prim::Bin(format!("{b}").into_bytes()))
+                    .map(|b| Prim::Str(format!("{b}").into_bytes()))
             },
             Prim::NatToStr,
         ),
         Prim::IntToStr(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Some(Prim::Bin(format!("{v}").into_bytes())),
+            |v| Some(Prim::Str(format!("{v}").into_bytes())),
             Prim::IntToStr,
         ),
         Prim::FltToStr(inner) => reduce_flt_unary(
             context,
             inner,
-            |v| Prim::Bin(format!("{v}").into_bytes()),
+            |v| Prim::Str(format!("{v}").into_bytes()),
             Prim::FltToStr,
         ),
         Prim::FltToLeBin(inner) => reduce_flt_unary(
@@ -676,6 +676,51 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 Some(bytes) => Subterm::Prim(Prim::Bin(bytes)),
                 None => Subterm::Prim(Prim::BinConcat(reduced)),
             })
+        }
+        Prim::StrType => Ok(Subterm::Prim(Prim::StrType)),
+        Prim::Str(bytes) => Ok(Subterm::Prim(Prim::Str(bytes.clone()))),
+        Prim::StrToBin(str) => {
+            let str = reduce(context, str.clone())?;
+            Ok(match Term::unwrap_or_clone(str) {
+                // A literal's carrier bytes compute; `Str/to_bin ∘ of_bin` cancels.
+                Subterm::Prim(Prim::Str(bytes)) => Subterm::Prim(Prim::Bin(bytes)),
+                Subterm::Prim(Prim::StrOfBin(bin)) => Term::unwrap_or_clone(bin),
+                str => Subterm::Prim(Prim::str_to_bin(str)),
+            })
+        }
+        Prim::StrOfBin(bin) => {
+            let bin = reduce(context, bin.clone())?;
+            Ok(match Term::unwrap_or_clone(bin) {
+                // A reduced byte literal becomes a `Str` literal; `of_bin ∘ to_bin` cancels.
+                Subterm::Prim(Prim::Bin(bytes)) => Subterm::Prim(Prim::Str(bytes)),
+                Subterm::Prim(Prim::StrToBin(str)) => Term::unwrap_or_clone(str),
+                bin => Subterm::Prim(Prim::str_of_bin(bin)),
+            })
+        }
+        Prim::StrConcat(left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+            Ok(
+                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
+                    (Subterm::Prim(Prim::Str(mut a)), Subterm::Prim(Prim::Str(b))) => {
+                        a.extend(b);
+                        Subterm::Prim(Prim::Str(a))
+                    }
+                    (left, right) => Subterm::Prim(Prim::str_concat(left, right)),
+                },
+            )
+        }
+        Prim::StrEql(left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+            Ok(
+                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
+                    (Subterm::Prim(Prim::Str(a)), Subterm::Prim(Prim::Str(b))) => {
+                        Subterm::Prim(Prim::Bln(a == b))
+                    }
+                    (left, right) => Subterm::Prim(Prim::str_eql(left, right)),
+                },
+            )
         }
         Prim::ArrType(elem) => {
             let elem = reduce(context, elem.clone())?;

@@ -13,7 +13,7 @@ fn main() {
     // `search`. The proofs all erase — at runtime the program runs `search`
     // and prints "ok".
     let source = r#"
-        use /std/{Nat, Bin, Bln, Eq, Lst, Vec, Io};
+        use /std/{Nat, Str, Bln, Eq, Lst, Vec, Io};
 
         union Void
         end
@@ -47,13 +47,13 @@ fn main() {
         let zero_is_not_one : Not(Eq(0, 1)) =
             (p) => Eq/subst(IsZero, p, ());
 
-        let BinVec(k : Nat) -> Type = Vec(Bin, k);
+        let StrVec(k : Nat) -> Type = Vec(Str, k);
 
-        let cast(@n : Nat, @m : Nat, p : Eq(n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
-            Eq/subst(BinVec, p, v);
+        let cast(@n : Nat, @m : Nat, p : Eq(n, m), v : Vec(Str, n)) -> Vec(Str, m) =
+            Eq/subst(StrVec, p, v);
 
-        let single : Vec(Bin, 1) = Vec/cons("hi", Vec/nil());
-        let recast : Vec(Bin, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
+        let single : Vec(Str, 1) = Vec/cons("hi", Vec/nil());
+        let recast : Vec(Str, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
 
         let Lte(a : Nat, b : Nat) -> Type =
             match Nat/lte(a, b) : Type

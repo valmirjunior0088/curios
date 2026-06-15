@@ -10,6 +10,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let flt_type: Term = Subterm::Prim(Prim::FltType).into();
     let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
     let bin_type: Term = Subterm::Prim(Prim::BinType).into();
+    let str_type: Term = Subterm::Prim(Prim::StrType).into();
 
     Ok(match prim {
         Prim::BlnType => (prim.clone(), Term::type_()),
@@ -152,15 +153,15 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::NatToStr(inner) => {
             let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
-            (Prim::NatToStr(inner), bin_type)
+            (Prim::NatToStr(inner), str_type)
         }
         Prim::IntToStr(inner) => {
             let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
-            (Prim::IntToStr(inner), bin_type)
+            (Prim::IntToStr(inner), str_type.clone())
         }
         Prim::FltToStr(inner) => {
             let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
-            (Prim::FltToStr(inner), bin_type)
+            (Prim::FltToStr(inner), str_type.clone())
         }
         Prim::FltToLeBin(inner) => {
             let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
@@ -265,6 +266,32 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 elaborated.push(elaborate(context, operand, Mode::Check(bin_type.clone()))?.0);
             }
             (Prim::BinConcat(elaborated), bin_type)
+        }
+        Prim::StrType => (prim.clone(), Term::type_()),
+        Prim::Str(_) => (prim.clone(), str_type),
+        // `Str/to_bin` reveals the underlying UTF-8 carrier; total and safe.
+        Prim::StrToBin(str) => {
+            let str = elaborate(context, str, Mode::Check(str_type))?.0;
+            (Prim::StrToBin(str), bin_type)
+        }
+        // The trusted `Bin -> Str` coercion — the /sys substrate beneath the
+        // checked `/std/Str/of_bin`. Not part of the /std API; its only caller is
+        // `of_bin`, which gates it behind an `is_utf8` check.
+        Prim::StrOfBin(bin) => {
+            let bin = elaborate(context, bin, Mode::Check(bin_type))?.0;
+            (Prim::StrOfBin(bin), str_type)
+        }
+        // Concatenation stays in `Str` (valid UTF-8 ++ valid UTF-8 is valid).
+        Prim::StrConcat(left, right) => {
+            let left = elaborate(context, left, Mode::Check(str_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(str_type.clone()))?.0;
+            (Prim::StrConcat(left, right), str_type)
+        }
+        // Equality is byte equality — UTF-8 is canonical, so equal bytes ⟺ equal text.
+        Prim::StrEql(left, right) => {
+            let left = elaborate(context, left, Mode::Check(str_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(str_type))?.0;
+            (Prim::StrEql(left, right), bln_type)
         }
         Prim::ArrType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;

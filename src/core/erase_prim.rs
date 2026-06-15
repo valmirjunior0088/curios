@@ -41,6 +41,10 @@ fn bin_type() -> Term {
     prim_type(Prim::BinType)
 }
 
+fn str_type() -> Term {
+    prim_type(Prim::StrType)
+}
+
 fn pure(prim: ersd::PurePrim) -> ersd::Term {
     ersd::Subterm::Prim(ersd::Prim::Pure(prim)).into()
 }
@@ -330,6 +334,22 @@ pub fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(ersd::PurePrim::BinConcat(erased)))
         }
+        // `Str` shares `Bin`'s runtime representation (a UTF-8 byte buffer), so the
+        // type erases like `Bin` and the two conversions are runtime no-ops.
+        Prim::StrType => Ok(ersd::Subterm::Erased.into()),
+        Prim::Str(bytes) => Ok(pure(ersd::PurePrim::Bin(bytes.clone()))),
+        Prim::StrToBin(str) => erase(context, str, &str_type()),
+        Prim::StrOfBin(bin) => erase(context, bin, &bin_type()),
+        // `Str` shares `Bin`'s representation, so `concat`/`eql` lower to the
+        // byte-buffer runtime ops (no separate Str runtime op set).
+        Prim::StrConcat(left, right) => Ok(pure(ersd::PurePrim::BinConcat(vec![
+            erase(context, left, &str_type())?,
+            erase(context, right, &str_type())?,
+        ]))),
+        Prim::StrEql(left, right) => Ok(pure(ersd::PurePrim::BinEql(
+            erase(context, left, &str_type())?,
+            erase(context, right, &str_type())?,
+        ))),
         Prim::ArrType(_) => Ok(ersd::Subterm::Erased.into()),
         Prim::Arr(elems) => {
             // Elaborate already checked this literal against an array type (§9);

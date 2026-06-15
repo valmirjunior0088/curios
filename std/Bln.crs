@@ -1,7 +1,7 @@
 pub use /sys/{Bln};
-use /std/{Bin};
+use /std/{Str};
 
-pub let to_str(b : Bln) -> Bin =
+pub let to_str(b : Bln) -> Str =
     match b
     | true => "true"
     | false => "false"

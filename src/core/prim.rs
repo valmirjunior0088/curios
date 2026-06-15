@@ -69,6 +69,12 @@ pub enum Prim {
     BinSlice(Term, Term, Term),
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
+    StrType,
+    Str(Vec<u8>),
+    StrToBin(Term),
+    StrOfBin(Term),
+    StrConcat(Term, Term),
+    StrEql(Term, Term),
     ArrType(Term),
     Arr(Vec<Term>),
     ArrLen(Term, Term),
@@ -522,6 +528,36 @@ impl Prim {
         I::Item: Into<Term>,
     {
         Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
+    }
+
+    pub fn str_to_bin<S>(str: S) -> Self
+    where
+        S: Into<Term>,
+    {
+        Self::StrToBin(str.into())
+    }
+
+    pub fn str_of_bin<B>(bin: B) -> Self
+    where
+        B: Into<Term>,
+    {
+        Self::StrOfBin(bin.into())
+    }
+
+    pub fn str_concat<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::StrConcat(left.into(), right.into())
+    }
+
+    pub fn str_eql<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::StrEql(left.into(), right.into())
     }
 
     pub fn arr<I, A>(items: I) -> Self

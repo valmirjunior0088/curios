@@ -1,53 +1,65 @@
-use /std/{Arr, Bin, Bln, Char, Flt, Nat, Parse, Result, Lst};
+use /std/{Arr, Bin, Str, Bln, Char, Flt, Nat, Parse, Result, Lst};
 
 pub union Json
 | null()
 | bln(Bln)
 | num(Flt)
-| str(Bin)
+| str(Str)
 | arr(Arr(Json))
-| obj(Arr({ Bin, Json }))
+| obj(Arr({ Str, Json }))
 end
 
 pub use Json/*;
 
-let encode_num(n : Flt) -> Bin =
-    let raw = Flt/to_str(n);
-    match Nat/eql(Bin/get(raw, 0), '+')
-    | true => Bin/slice(raw, 1, Bin/len(raw))
-    | false => raw
+-- Reassemble validated bytes as text. The byte-level escaping below always
+-- yields valid UTF-8 (the escapes are ASCII and the source is already a `Str`),
+-- so the `none` arm is unreachable here — it is the total fallback the checked
+-- `Str/of_bin` forces, not a trust assertion.
+let as_str(b : Bin) -> Str =
+    match Str/of_bin(b)
+    | some(s) => s
+    | none() => Str/empty
     end;
 
+let encode_num(n : Flt) -> Str =
+    let raw = Str/to_bin(Flt/to_str(n));
+    match Nat/eql(Bin/get(raw, 0), '+')
+    | true => as_str(Bin/slice(raw, 1, Bin/len(raw)))
+    | false => Flt/to_str(n)
+    end;
+
+-- Escape one source byte into its JSON-escaped byte sequence. Byte-level work,
+-- so it produces `Bin`; the whole escaped body is reassembled into `Str` once.
 let escape_byte(byte : Nat) -> Bin =
     match byte
-    | '"' => "\\\""
-    | '\\' => "\\\\"
-    | '\n' => "\\n"
-    | '\r' => "\\r"
-    | '\t' => "\\t"
-    | _ => Bin/append("", byte)
+    | '"' => Str/to_bin("\\\"")
+    | '\\' => Str/to_bin("\\\\")
+    | '\n' => Str/to_bin("\\n")
+    | '\r' => Str/to_bin("\\r")
+    | '\t' => Str/to_bin("\\t")
+    | _ => Bin/append(Bin/empty, byte)
     end;
 
-let encode_str(s : Bin) -> Bin =
+let encode_str(s : Str) -> Str =
     let body =
         Bin/concat_all(Lst/to_arr(Lst/rev(
-            Bin/fold(s, Lst/nil(@Bin), (byte, acc) =>
+            Bin/fold(Str/to_bin(s), Lst/nil(@Bin), (byte, acc) =>
                 Lst/cons(escape_byte(byte), acc)))));
-    Bin/concat(Bin/concat("\"", body), "\"");
+    Str/concat(Str/concat("\"", as_str(body)), "\"");
 
-pub rec encode(v : Json) -> Bin =
+pub rec encode(v : Json) -> Str =
     match v
     | null() => "null"
     | bln(b) => Bln/to_str(b)
     | num(n) => encode_num(n)
     | str(s) => encode_str(s)
     | arr(xs) =>
-        Bin/concat(Bin/concat("[",
-            Bin/join(",", Arr/map(encode, xs))), "]")
+        Str/concat(Str/concat("[",
+            Str/join(",", Arr/map(encode, xs))), "]")
     | obj(ps) =>
-        Bin/concat(Bin/concat("{",
-            Bin/join(",", Arr/map(
-                (pair) => Bin/concat(Bin/concat(encode_str(pair.0), ":"), encode(pair.1)),
+        Str/concat(Str/concat("{",
+            Str/join(",", Arr/map(
+                (pair) => Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1)),
                 ps))),
             "}")
     end;
@@ -66,10 +78,11 @@ let is_num_byte(byte : Nat) -> Bln =
         end
     end;
 
-let take_literal(literal : Bin) -> Parse({}) =
+let take_literal(literal : Str) -> Parse({}) =
     (input, pos) =>
+        let lit = Str/to_bin(literal);
         let r =
-            match Bin/len(literal) : { Nat, Bln }
+            match Bin/len(lit) : { Nat, Bln }
             | 0 => (pos, true)
             | step + 1, ih =>
                 match ih.1
@@ -78,7 +91,7 @@ let take_literal(literal : Bin) -> Parse({}) =
                     match Nat/lt(ih.0, Bin/len(input))
                     | false => (ih.0, false)
                     | true =>
-                        match Nat/eql(Bin/get(literal, step), Bin/get(input, ih.0))
+                        match Nat/eql(Bin/get(lit, step), Bin/get(input, ih.0))
                         | true => (Nat/add(ih.0, 1), true)
                         | false => (ih.0, false)
                         end
@@ -105,7 +118,7 @@ let parse_num : Parse(Json) =
         | success(pair) =>
             match Nat/eql(Bin/len(pair.1), 0)
             | true => Result/failure("expected number")
-            | false => Result/success((pair.0, Json/num(Flt/from_str(pair.1))))
+            | false => Result/success((pair.0, Json/num(Flt/of_str(pair.1))))
             end
         | failure(msg) => Result/failure(msg)
         end;
@@ -122,11 +135,11 @@ let parse_str_escape : Parse(Bin) =
         let _ = Parse/take_byte('\\')!;
         let byte = Parse/any_byte!;
         match byte : Parse(Bin)
-        | '"' => Parse/pure("\"")
-        | '\\' => Parse/pure("\\")
-        | 'n' => Parse/pure("\n")
-        | 'r' => Parse/pure("\r")
-        | 't' => Parse/pure("\t")
+        | '"' => Parse/pure(Str/to_bin("\""))
+        | '\\' => Parse/pure(Str/to_bin("\\"))
+        | 'n' => Parse/pure(Str/to_bin("\n"))
+        | 'r' => Parse/pure(Str/to_bin("\r"))
+        | 't' => Parse/pure(Str/to_bin("\t"))
         | _ => Parse/fail("unknown escape")
         end;
 
@@ -136,12 +149,18 @@ let parse_str_segment : Parse(Bin) =
 let parse_str_body : Parse(Arr(Bin)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
-let parse_raw_str : Parse(Bin) =
+-- The string's bytes come from arbitrary input, so this is a real text
+-- boundary: validate with the checked `Str/of_bin`, and a malformed-UTF-8
+-- string is a parse failure.
+let parse_raw_str : Parse(Str) =
     with Parse/bind
         let _ = Parse/take_byte('"')!;
         let chunks = parse_str_body!;
         let _ = Parse/take_byte('"')!;
-        Parse/pure(Bin/concat_all(chunks));
+        match Str/of_bin(Bin/concat_all(chunks)) : Parse(Str)
+        | some(s) => Parse/pure(s)
+        | none() => Parse/fail("invalid UTF-8 in string")
+        end;
 
 let parse_str_value : Parse(Json) =
     Parse/map((s) => Json/str(s), parse_raw_str);
@@ -176,7 +195,7 @@ and parse_obj : Parse(Json) =
         let pairs = Parse/sep_by0(parse_pair, Parse/take_byte(','))!;
         let _ = Parse/take_byte('}')!;
         Parse/pure(Json/obj(pairs))
-and parse_pair : Parse({ Bin, Json }) =
+and parse_pair : Parse({ Str, Json }) =
     with Parse/bind
         let key = parse_raw_str!;
         let _ = Parse/take_byte(':')!;

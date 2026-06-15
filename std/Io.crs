@@ -1,14 +1,14 @@
 pub use /sys/Io/*;
 pub use /sys/{Io};
-use /std/{Bin, Nat, Option};
+use /std/{Bin, Str, Nat, Option};
 
-pub let print(b : Bin) -> {} =
-    let status = write(stdout, b);
+pub let print(s : Str) -> {} =
+    let status = write(stdout, Str/to_bin(s));
     ();
 
 pub let Reader : Type = { Io, Bin };
 
-pub let reader(h : Io) -> Reader = (h, "");
+pub let reader(h : Io) -> Reader = (h, Bin/empty);
 
 pub let Buf(A : Type) -> Type = Reader -> { Reader, A };
 
@@ -51,7 +51,7 @@ pub rec read_line : Buf(Option(Bin)) =
             | false =>
                 match Nat/eql(Bin/len(r.1), 0)
                 | true => (r, Option/none())
-                | false => ((r.0, ""), Option/some(r.1))
+                | false => ((r.0, Bin/empty), Option/some(r.1))
                 end
             | true => read_line((r.0, Bin/concat(r.1, chunk.bytes)))
             end

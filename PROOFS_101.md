@@ -1,6 +1,6 @@
 # Proofs 101
 
-This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (unions, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Bin, Bln, Eq, Lst, Vec, Io};`.
+This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (unions, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Str, Bln, Eq, Lst, Vec, Io};`.
 
 ## A proof is a test that checks every input
 
@@ -153,20 +153,20 @@ let zero_is_not_one : Not(Eq(0, 1)) =
 So far the proofs proved things _about_ programs. They also work _inside_ programs: `subst` can re-type real data along an equality, replacing what Rust would handle with a runtime check or an `unsafe` transmute.
 
 ```
-let BinVec(k : Nat) -> Type = Vec(Bin, k);
+let StrVec(k : Nat) -> Type = Vec(Str, k);
 
-let cast(@n : Nat, @m : Nat, p : Eq(n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
-    Eq/subst(BinVec, p, v);
+let cast(@n : Nat, @m : Nat, p : Eq(n, m), v : Vec(Str, n)) -> Vec(Str, m) =
+    Eq/subst(StrVec, p, v);
 ```
 
 `cast` changes a vector's _type_ — its length index — without touching the value, and only when handed evidence the lengths agree. Combined with `add_zero`, it dissolves the kind of index bookkeeping that piles up around length-indexed structures:
 
 ```
-let single : Vec(Bin, 1) = Vec/cons("hi", Vec/nil());
-let recast : Vec(Bin, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
+let single : Vec(Str, 1) = Vec/cons("hi", Vec/nil());
+let recast : Vec(Str, Nat/add(1, 0)) = cast(Eq/sym(add_zero(1)), single);
 ```
 
-`Vec(Bin, Nat/add(1, 0))` and `Vec(Bin, 1)` are the same length, but the checker wants the _types_ to convert — `sym(add_zero(1))` is the evidence, and it erases: at runtime `recast` **is** `single`.
+`Vec(Str, Nat/add(1, 0))` and `Vec(Str, 1)` are the same length, but the checker wants the _types_ to convert — `sym(add_zero(1))` is the evidence, and it erases: at runtime `recast` **is** `single`.
 
 ## Payoff: sortedness as a precondition
 

@@ -16,7 +16,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        sys/Io/write(sys/Io/stdout, sys/Int/to_str(score(pair)))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Int/to_str(score(pair))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -46,7 +46,7 @@ fn io_write() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stdout, "hello")"#,
+        r#"sys/Io/write(sys/Io/stdout, /sys/Str/to_bin("hello"))"#,
         system,
     )
     .expect("expected result");
@@ -61,7 +61,7 @@ fn io_write_stderr() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"sys/Io/write(sys/Io/stderr, "oops")"#,
+        r#"sys/Io/write(sys/Io/stderr, /sys/Str/to_bin("oops"))"#,
         system,
     )
     .expect("expected result");
@@ -84,6 +84,20 @@ fn io_read() {
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"hello\n".to_vec()]
     );
+}
+
+#[test]
+fn bin_empty_is_the_empty_sequence() {
+    // `Bin/empty` is the literal-free empty byte sequence (so foundational
+    // modules can stop spelling it `""`); concatenating it is the identity.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"sys/Io/write(sys/Io/stdout, sys/Bin/concat(sys/Bin/empty, /sys/Str/to_bin("ok")))"#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"ok".to_vec()]);
 }
 
 // Named fields end to end: a dependent record (the vector's length indexes its
@@ -124,7 +138,7 @@ fn io_read_short_reads_and_eof() {
         let rb = Io/write(Io/stdout, b.bytes);
         let c = Io/read(Io/stdin, 2);
         let rc = Io/write(Io/stdout, c.bytes);
-        Io/write(Io/stdout, Nat/to_str(c.status))
+        Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(c.status)))
         "#;
 
     let (system, receiver) = ChannelHost::in_out(["abc"]);
@@ -139,8 +153,8 @@ fn io_read_short_reads_and_eof() {
 fn file_read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Io};
-        match File/read_all("data.txt")
-        | success(contents) => Io/print(contents)
+        match File/read_all(/sys/Str/to_bin("data.txt"))
+        | success(contents) => Io/print(/sys/Str/of_bin(contents))
         | failure(_) => Io/print("error")
         end
         "#;
@@ -158,7 +172,7 @@ fn file_read_all_reads_a_seeded_file() {
 fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
         use /std/{File, Io};
-        match File/read_all("nope.txt")
+        match File/read_all(/sys/Str/to_bin("nope.txt"))
         | success(_) => Io/print("contents")
         | failure(e) =>
             match e : {}
@@ -182,7 +196,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io};
-        match File/using("out.txt", File/write(), (h) => Io/write(h, "written"))
+        match File/using(/sys/Str/to_bin("out.txt"), File/write(), (h) => Io/write(h, /sys/Str/to_bin("written")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -207,7 +221,7 @@ fn file_with_write_mode_persists_through_close() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io};
-        match File/using("log.txt", File/append(), (h) => Io/write(h, "x"))
+        match File/using(/sys/Str/to_bin("log.txt"), File/append(), (h) => Io/write(h, /sys/Str/to_bin("x")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -230,13 +244,13 @@ fn effectful_match_scrutinee_runs_once() {
 #[test]
 fn read_line_works_over_a_file_handle() {
     let source = r#"
-        use /std/{File, Io, Option, Bin};
-        let first_line(h : Io/Io) -> Bin =
+        use /std/{File, Io, Option, Bin, Str};
+        let first_line(h : Io/Io) -> Str =
             match Io/read_line(Io/reader(h)).1
-            | some(line) => line
+            | some(line) => /sys/Str/of_bin(line)
             | none() => "empty"
             end;
-        match File/using("lines.txt", File/read(), first_line)
+        match File/using(/sys/Str/to_bin("lines.txt"), File/read(), first_line)
         | success(line) => Io/print(line)
         | failure(_) => Io/print("error")
         end
@@ -262,7 +276,7 @@ fn std_io_read_line_sequences_lines() {
                 match first : Io/Buf({})
                 | some(a) =>
                     match second : Io/Buf({})
-                    | some(b) => Io/pure(Io/print(Bin/concat(a, b)))
+                    | some(b) => Io/pure(Io/print(/sys/Str/of_bin(Bin/concat(a, b))))
                     | none() => Io/pure(Io/print("missing"))
                     end
                 | none() => Io/pure(Io/print("missing"))
@@ -334,7 +348,7 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1, ih => sys/Nat/add(ih, pred)
             end;
-        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(result))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -356,7 +370,7 @@ fn match_omitted_motive_infers() {
             | 0 => 0
             | pred + 1, ih => sys/Nat/add(ih, pred)
             end;
-        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(result))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -371,7 +385,7 @@ fn match_omitted_motive_infers() {
 fn multi_arg_function() {
     let source = r#"
         let add : (sys/Int, sys/Int) -> sys/Int = (x, y) => sys/Int/add(x, y);
-        sys/Io/write(sys/Io/stdout, sys/Int/to_str(add(+3, +4)))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Int/to_str(add(+3, +4))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -386,7 +400,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : sys/Int -> sys/Int -> sys/Int = (x) => (y) => sys/Int/add(x, y);
-        sys/Io/write(sys/Io/stdout, sys/Int/to_str(add(+3)(+4)))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Int/to_str(add(+3)(+4))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -408,7 +422,7 @@ fn with_identity_monad_sequences_bangs() {
         let a : sys/Nat = 3;
         let b : sys/Nat = 4;
         let result : sys/Nat = with bind sys/Nat/add(a!, b!);
-        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(result))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -432,7 +446,7 @@ fn with_std_parse_threads_bangs_left_to_right() {
             with Parse/bind
             Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
-        match Parse/run(parser, "BA") : {}
+        match Parse/run(parser, /sys/Str/to_bin("BA")) : {}
         | success(n) => Io/print(Nat/to_str(n))
         | failure(msg) => Io/print(msg)
         end
@@ -468,8 +482,8 @@ fn with_region_mixes_action_types() {
             with Parse/bind
             Parse/pure(Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
-        match Parse/run(parser, "AB") : {}
-        | success(s) => Io/print(s)
+        match Parse/run(parser, /sys/Str/to_bin("AB")) : {}
+        | success(s) => Io/print(/sys/Str/of_bin(s))
         | failure(msg) => Io/print(msg)
         end
         "#;
@@ -505,7 +519,7 @@ fn vec_cons_with_nat_succ() {
             xs.0;
 
         let v : Vec(sys/Nat, 1) = cons(sys/Nat, 0, 42, ());
-        sys/Io/write(sys/Io/stdout, sys/Nat/to_str(head(sys/Nat, 0, v)))
+        sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(head(sys/Nat, 0, v))))
     "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -601,7 +615,7 @@ fn folds_constant_arg_through_let_function() {
 #[test]
 fn printf_partial_evaluation_reduces_residual() {
     // End-to-end smoke for §2 (`evaluate_pure_calls`) and §3 (size-bounded
-    // multi-site inlining) on `Fmt/printf("%s is %d")(name)(30)`. §2 interprets
+    // multi-site inlining) on `Fmt/printf("%s is %d")(/sys/Str/of_bin(name))(30)`. §2 interprets
     // pure sub-bodies of the parser combinator at compile time; §3 then
     // dissolves the residual primitive wrappers at every call site. Together
     // they collapse the post-§1 residue (≈14 funcs) down to a handful — the
@@ -611,7 +625,7 @@ fn printf_partial_evaluation_reduces_residual() {
         use /std/{Str, Io, Bin, Fmt};
 
         let name = Str/trim(Io/read(Io/stdin, 1024).bytes);
-        Fmt/printf("%s is %d")(name)(30)
+        Fmt/printf("%s is %d")(/sys/Str/of_bin(name))(30)
         "#;
 
     let entrypoint = source
@@ -677,7 +691,7 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat, 3) = append(a, b);
-        Io/write(Io/stdout, Nat/to_str(total(c, 0)))
+        Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(total(c, 0))))
         "#;
 
     let (system, receiver) = ChannelHost::out();
@@ -707,7 +721,7 @@ fn implicit_union_type_param_executes() {
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
         match inferred : Nat
-        | refl(z) => Io/write(Io/stdout, Nat/to_str(z))
+        | refl(z) => Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(z)))
         end
         "#;
 
@@ -727,7 +741,7 @@ fn implicit_union_type_param_rejects_explicit_spelling() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
-        Io/write(Io/stdout, "no")
+        Io/write(Io/stdout, /sys/Str/to_bin("no"))
         "#;
 
     let (system, _receiver) = ChannelHost::out();
@@ -754,7 +768,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : Nat
-        | refl(z) => Io/write(Io/stdout, Nat/to_str(z))
+        | refl(z) => Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(z)))
         end
         "#;
 
@@ -774,7 +788,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();
-        Io/write(Io/stdout, "no")
+        Io/write(Io/stdout, /sys/Str/to_bin("no"))
         "#;
 
     let (system, _receiver) = ChannelHost::out();
@@ -823,7 +837,7 @@ fn bare_tuple_continuation_tail_infers() {
             with Parse/bind
                 let a = Parse/any_byte!;
                 Parse/pure((a, 0));
-        match Parse/run(pairer, "hi")
+        match Parse/run(pairer, /sys/Str/to_bin("hi"))
         | success(pair) => Io/print(Nat/to_str(pair.0))
         | failure(_) => Io/print("error")
         end
@@ -851,7 +865,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
         match v : Nat
         | nil() => 0
-        | cons(p, rest) => Io/write(Io/stdout, Nat/to_str(p.1))
+        | cons(p, rest) => Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(p.1)))
         end
         "#;
 
@@ -868,7 +882,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         use /std/{Nat, Io};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
-        Io/write(Io/stdout, Nat/to_str(n))
+        Io/write(Io/stdout, /sys/Str/to_bin(Nat/to_str(n)))
         "#;
 
     let (system, _receiver) = ChannelHost::out();
@@ -1066,3 +1080,101 @@ fn struct_literal_non_struct_head_rejected() {
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
+
+// === Str (std/Str) ======================================================
+
+// `"..."` is a `Str` primitive value (UTF-8 by construction); `Io/print` writes
+// a `Str` straight to stdout.
+#[test]
+fn str_literal_prints_its_bytes() {
+    let source = r#"
+        use /std/{Str, Io};
+        let s : Str = "hello";
+        Io/print(s)
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"hello".to_vec()]);
+}
+
+// `Str/of_bin` is the checked constructor: it runs `is_utf8` and yields `some`
+// for well-formed UTF-8. `é` is the bytes C3 A9, a valid 2-byte sequence.
+#[test]
+fn str_of_bin_accepts_multibyte_utf8() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\c3\a9) : {}
+        | some(s) => Io/print(s)
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![vec![0xc3, 0xa9]]);
+}
+
+// An invalid lead byte fails `is_utf8`, so `Str/of_bin` returns `none`.
+#[test]
+fn str_of_bin_rejects_invalid_utf8() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\ff) : {}
+        | some(s) => Io/print(s)
+        | none() => Io/print("rejected")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"rejected".to_vec()]
+    );
+}
+
+// A truncated multi-byte sequence (a 2-byte lead with no continuation) fails the
+// continuation-byte check, so `of_bin` returns `none`.
+#[test]
+fn str_of_bin_rejects_truncated_multibyte() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\c3) : {}
+        | some(s) => Io/print(s)
+        | none() => Io/print("rejected")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"rejected".to_vec()]
+    );
+}
+
+// A *non-productive* inner `rec` forced in a type position must degrade to the
+// reduce deadline (an error), never hang or panic — the regression guard for
+// inner-`rec` reduction at the type level (a `Subterm::Rec` demanded by an
+// eliminator is now forced, not left stuck).
+#[test]
+fn nonproductive_inner_rec_in_type_position_is_preempted() {
+    let source = r#"
+        use /sys/{Bln};
+        let spin : Bln =
+            rec go : Bln = go;
+            go;
+        let bad : Type =
+            match spin : Type
+            | true => {}
+            | false => {}
+            end;
+        let x : bad = ();
+        0
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    assert!(crate::run_text(Duration::from_secs(1), source, system).is_err());
+}
+

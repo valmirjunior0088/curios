@@ -530,7 +530,10 @@ A sign, a decimal point, and at least one digit after the point are all required
 "hello, world"
 ```
 
-Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/sys/Bin`.
+Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/sys/Str` — a
+UTF-8 string (validity holds by construction, since source text is UTF-8). Use
+`/sys/Str/to_bin` to view the underlying bytes, and `/std/Str/of_bin` (checked,
+`Bin -> Option(Str)`) to go the other way.
 
 ### Byte sequences
 
@@ -540,7 +543,8 @@ Raw bytes written as consecutive hex pairs, each prefixed with `\`:
 \ef\bb\bf
 ```
 
-Has type `/sys/Bin`.
+Has type `/sys/Bin`. This is the escape hatch for raw or non-UTF-8 bytes — unlike
+a `"..."` string literal, a `\hex` sequence is a `Bin`, not a `Str`.
 
 ### Arrays
 
@@ -659,7 +663,7 @@ These are normal path references. After `use /sys/{Nat, Bin};`, the same calls c
 | `/sys/Nat/gte(a, b)` | 2     | Greater than or equal | `/sys/Bln` |
 | `/sys/Nat/to_int(a)` | 1     | Convert to Int        | `/sys/Int` |
 | `/sys/Nat/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
-| `/sys/Nat/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
+| `/sys/Nat/to_str(a)` | 1     | Convert to Str        | `/sys/Str` |
 
 Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively).
 
@@ -680,7 +684,7 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 | `/sys/Int/gte(a, b)` | 2     | Greater than or equal | `/sys/Bln` |
 | `/sys/Int/to_nat(a)` | 1     | Convert to Nat        | `/sys/Nat` |
 | `/sys/Int/to_flt(a)` | 1     | Convert to Flt        | `/sys/Flt` |
-| `/sys/Int/to_str(a)` | 1     | Convert to Bin        | `/sys/Bin` |
+| `/sys/Int/to_str(a)` | 1     | Convert to Str        | `/sys/Str` |
 
 ### Flt
 
@@ -708,7 +712,7 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 | `/sys/Flt/to_nat(a)`    | 1     | Convert to Nat        | `/sys/Nat` |
 | `/sys/Flt/to_int(a)`    | 1     | Convert to Int        | `/sys/Int` |
 | `/sys/Flt/to_le_bin(a)` | 1     | Convert to Bin bytes  | `/sys/Bin` |
-| `/sys/Flt/to_str(a)`    | 1     | Convert to Bin        | `/sys/Bin` |
+| `/sys/Flt/to_str(a)`    | 1     | Convert to Str        | `/sys/Str` |
 
 ### Bin
 
@@ -721,6 +725,21 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 | `/sys/Bin/append(a, byte)`      | 2     | Append a single byte              | `/sys/Bin` |
 | `/sys/Bin/concat(a, b)`         | 2     | Concatenate two sequences         | `/sys/Bin` |
 
+### Str
+
+`/sys/Str` is the UTF-8 string type; its runtime representation is the same byte
+buffer as `Bin`, so these ops share `Bin`'s implementation but are distinct,
+first-class operations on `Str`. String literals (`"..."`) have type `Str`.
+`/std/Str` adds `empty`, `len` (codepoint count), `is_utf8`, and the checked
+`of_bin : Bin -> Option(Str)` — the safe way in from arbitrary bytes.
+
+| Operation             | Arity | Description                                | Returns    |
+| --------------------- | ----- | ------------------------------------------ | ---------- |
+| `/sys/Str/to_bin(s)`  | 1     | The underlying UTF-8 bytes                 | `/sys/Bin` |
+| `/sys/Str/concat(a, b)` | 2   | Concatenate two strings                    | `/sys/Str` |
+| `/sys/Str/eql(a, b)`  | 2     | String equality                            | `/sys/Bln` |
+| `/sys/Str/of_bin(b)`  | 1     | Trusted `Bin -> Str` substrate (raw; prefer the checked `/std/Str/of_bin`) | `/sys/Str` |
+
 ### Arr
 
 | Operation                       | Arity | Description                    | Returns       |
@@ -731,10 +750,12 @@ Structural induction and sparse dispatch over a `Nat` are written with [`match`]
 | `/sys/Arr/append(a, elem)`      | 2     | Append a single element        | `/sys/Arr(T)` |
 | `/sys/Arr/concat(a, b)`         | 2     | Concatenate two arrays         | `/sys/Arr(T)` |
 
-`Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more:
+`Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more.
+For text, the `/std/Str` API (`Str/concat`, `Str/join`, …) works the same way and
+keeps the values typed as `Str`:
 
 ```
-/sys/Bin/concat(/sys/Bin/concat("hello", ", "), "world")
+/std/Str/concat(/std/Str/concat("hello", ", "), "world")
 /sys/Arr/concat(/sys/Arr/concat([1, 2], [3, 4]), [5])
 ```
 

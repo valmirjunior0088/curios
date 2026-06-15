@@ -669,8 +669,17 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             Prim::FltToNat(inner) => core::Prim::flt_to_nat(self.term(inner)?),
             Prim::FltToInt(inner) => core::Prim::flt_to_int(self.term(inner)?),
             Prim::BinType => core::Prim::BinType,
+            // `\hex` is a raw byte sequence; `"..."` is a `Str` (UTF-8 by
+            // construction, since source text is UTF-8).
             Prim::Bin(BinLiteral::Bytes(bytes)) => core::Prim::Bin(bytes.clone()),
-            Prim::Bin(BinLiteral::String(string)) => core::Prim::Bin(string.as_bytes().to_vec()),
+            Prim::Bin(BinLiteral::String(string)) => core::Prim::Str(string.as_bytes().to_vec()),
+            Prim::StrType => core::Prim::StrType,
+            Prim::StrToBin(inner) => core::Prim::str_to_bin(self.term(inner)?),
+            Prim::StrOfBin(inner) => core::Prim::str_of_bin(self.term(inner)?),
+            Prim::StrConcat(left, right) => {
+                core::Prim::str_concat(self.term(left)?, self.term(right)?)
+            }
+            Prim::StrEql(left, right) => core::Prim::str_eql(self.term(left)?, self.term(right)?),
             Prim::BinLen(inner) => core::Prim::bin_len(self.term(inner)?),
             Prim::BinEql(left, right) => core::Prim::bin_eql(self.term(left)?, self.term(right)?),
             Prim::BinGet(bin, index) => core::Prim::bin_get(self.term(bin)?, self.term(index)?),

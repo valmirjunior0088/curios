@@ -12,23 +12,23 @@ fn main() {
     // its own module. All three build, project, and run; the newtype erases to
     // its bare field, so `Meters` is byte-identical to `Nat` at runtime.
     let source = r#"
-        use /std/{Bin, Nat, Io};
+        use /std/{Bin, Nat, Str, Io};
 
         pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
         pub struct Meters pub { Nat }
 
-        mod Str
+        mod Token
             use /std/{Bin};
-            pub struct Str { Bin }
-            pub let of_bin(b : Bin) -> Str = Str { b };
-            pub let to_bin(s : Str) -> Bin = s.0;
+            pub struct Token { Bin }
+            pub let of_bin(b : Bin) -> Token = Token { b };
+            pub let to_bin(t : Token) -> Bin = t.0;
         end
 
-        let p : Pair(Nat, Bin) = Pair { fst = 7, snd = "!" };
+        let p : Pair(Nat, Str) = Pair { fst = 7, snd = "!" };
         let m : Meters = Meters { 5 };
-        let s : Str/Str = Str/of_bin("hi");
+        let t : Token/Token = Token/of_bin(Str/to_bin("hi"));
 
-        let _ = Io/print(Str/to_bin(s));
+        let _ = Io/write(Io/stdout, Token/to_bin(t));
         Io/print(Nat/to_str(Nat/add(p.fst, m.0)))
         "#;
 
@@ -72,12 +72,12 @@ fn main() {
     let ill_typed = r#"
         use /std/{Bin};
 
-        mod Str
+        mod Token
             use /std/{Bin};
-            pub struct Str { Bin }
+            pub struct Token { Bin }
         end
 
-        let bad : Str/Str = Str/Str { "x" };
+        let bad : Token/Token = Token/Token { /sys/Str/to_bin("x") };
         bad
         "#;
 

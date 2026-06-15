@@ -13,7 +13,7 @@ pub let concat_all(parts : Arr(Bin)) -> Bin =
         match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
             match Nat/lt(lo, hi)
-            | false => ""
+            | false => empty
             | true => Arr/get(parts, lo)
             end
         | true =>
@@ -27,7 +27,7 @@ pub let join(sep : Bin, parts : Arr(Bin)) -> Bin =
         match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
             match Nat/lt(lo, hi)
-            | false => ""
+            | false => empty
             | true => Arr/get(parts, lo)
             end
         | true =>

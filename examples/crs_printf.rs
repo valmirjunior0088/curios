@@ -9,8 +9,11 @@ fn main() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        let name = Str/trim(Io/read(Io/stdin, 1024).bytes);
-        Fmt/printf("%s is %d")(name)(30)
+        let name_bytes = Str/trim(Io/read(Io/stdin, 1024).bytes);
+        match Str/of_bin(name_bytes) : {}
+        | some(name) => Fmt/printf("%s is %d")(name)(30)
+        | none() => Io/print("invalid input")
+        end
         "#;
 
     let mut last = Instant::now();

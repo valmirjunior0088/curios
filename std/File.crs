@@ -50,4 +50,4 @@ rec drain(h : Io, acc : Bin) -> Bin =
     end;
 
 pub let read_all(path : Bin) -> Result(Bin, Error) =
-    using(path, Mode/read(), (h) => drain(h, ""));
+    using(path, Mode/read(), (h) => drain(h, Bin/empty));

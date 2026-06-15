@@ -42,6 +42,7 @@ pub mod Flt;
 pub use Flt/{let Flt};
 
 pub mod Str;
+pub use Str/{let Str};
 
 pub mod Parse;
 pub use Parse/{let Parse};

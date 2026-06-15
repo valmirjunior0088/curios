@@ -17,27 +17,27 @@ Each scalar and collection module re-exports its `/sys` counterpart (`pub use /s
 
 | Binding         | Type                | Description             |
 | --------------- | ------------------- | ----------------------- |
-| `from_str(str)` | `Bin -> Nat`        | Parse a decimal numeral |
+| `of_str(str)` | `Bin -> Nat`        | Parse a decimal numeral |
 | `min(a, b)`     | `(Nat, Nat) -> Nat` | Minimum                 |
 
 ### `/std/Int`
 
 | Binding         | Type         | Description                                       |
 | --------------- | ------------ | ------------------------------------------------- |
-| `from_str(str)` | `Bin -> Int` | Parse a decimal numeral with optional leading `-` |
+| `of_str(str)` | `Bin -> Int` | Parse a decimal numeral with optional leading `-` |
 | `abs(n)`        | `Int -> Nat` | Absolute value                                    |
 
 ### `/std/Flt`
 
 | Binding         | Type         | Description                                                       |
 | --------------- | ------------ | ----------------------------------------------------------------- |
-| `from_str(str)` | `Bin -> Flt` | Parse a decimal `digits.digits` numeral with optional leading `-` |
+| `of_str(str)` | `Bin -> Flt` | Parse a decimal `digits.digits` numeral with optional leading `-` |
 
 ### `/std/Bln`
 
 | Binding     | Type         | Description           |
 | ----------- | ------------ | --------------------- |
-| `to_str(b)` | `Bln -> Bin` | `"true"` or `"false"` |
+| `to_str(b)` | `Bln -> Str` | `"true"` or `"false"` |
 
 ## Bytes and arrays
 
@@ -62,11 +62,28 @@ Byte classifiers over ASCII code points (`Nat -> Bln`): `is_whitespace`, `is_dig
 
 ### `/std/Str`
 
-| Binding           | Type         | Description                                 |
-| ----------------- | ------------ | ------------------------------------------- |
-| `trim_start(str)` | `Bin -> Nat` | Index of the first non-whitespace byte      |
-| `trim_stop(str)`  | `Bin -> Nat` | Index one past the last non-whitespace byte |
-| `trim(str)`       | `Bin -> Bin` | The slice between the two                   |
+`Str` is the UTF-8 string type (re-exported from `/sys`; `"..."` literals have
+this type). It has its own first-class operations — they share `Bin`'s *runtime
+representation* (the conversions are no-ops) but never appear as `Bin` ops at the
+surface. `of_bin` is the single, checked bridge from arbitrary bytes into text;
+within `Str`-to-`Str` code it is never needed. (There is no unchecked
+constructor in this API — the only trust is the inherent primitive trust behind
+`to_str`/`concat`, exactly as for `Bin/len`.)
+
+| Binding               | Type                    | Description                                                     |
+| --------------------- | ----------------------- | -------------------------------------------------------------- |
+| `to_bin(s)`           | `Str -> Bin`            | The underlying UTF-8 bytes (total)                             |
+| `of_bin(b)`           | `Bin -> Option(Str)`    | Checked construction: `some` iff `b` is well-formed UTF-8       |
+| `is_utf8(b)`          | `Bin -> Bln`            | Whether `b` is well-formed UTF-8                               |
+| `empty`               | `Str`                   | The empty string                                               |
+| `concat(a, b)`        | `(Str, Str) -> Str`     | Concatenate two strings                                        |
+| `concat_all(parts)`   | `Arr(Str) -> Str`       | Concatenate every part                                         |
+| `join(sep, parts)`    | `(Str, Arr(Str)) -> Str`| Concatenate with a separator between parts                     |
+| `eql(a, b)`           | `(Str, Str) -> Bln`     | String equality (byte equality; UTF-8 is canonical)            |
+| `len(s)`              | `Str -> Nat`            | Codepoint count (Unicode scalar values, *not* bytes/graphemes) |
+| `trim_start(str)`     | `Bin -> Nat`            | Index of the first non-whitespace byte                         |
+| `trim_stop(str)`      | `Bin -> Nat`            | Index one past the last non-whitespace byte                    |
+| `trim(str)`           | `Bin -> Bin`            | The slice between the two                                      |
 
 ## IO
 
@@ -76,7 +93,7 @@ Layers safe conveniences over the `/sys/Io` handle primitives (which it re-expor
 
 | Binding     | Type                                          | Description                                                                                                                               |
 | ----------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `print(b)`  | `Bin -> {}`                                   | Write to stdout, best-effort: the write status is dropped, like printing to a closed pipe                                                 |
+| `print(s)`  | `Str -> {}`                                   | Write a string to stdout, best-effort: the write status is dropped, like printing to a closed pipe                                        |
 | `Reader`    | `Type` (`= { Io, Bin }`)                      | A buffered reader: the handle plus bytes already read but not yet consumed                                                                |
 | `reader(h)` | `Io -> Reader`                                | A fresh reader with an empty buffer                                                                                                       |
 | `Buf(A)`    | `Type -> Type` (`= Reader -> { Reader, A }`)  | The buffered-reader state monad — the reader threads explicitly through actions, exactly like `Parse` threads its (input, position) state |
@@ -191,14 +208,15 @@ The uninhabited type: a union with zero cases. No value of `Void` can be constru
 Byte-level parser combinators over a `(input : Bin, position : Nat)` state:
 
 ```
-Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Bin)
+Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Str)
 ```
 
-— success carries the new position and the value; failure carries a message.
+— success carries the new position and the value; failure carries a message
+(`Str`). The input being parsed stays a `Bin` (raw bytes).
 
 | Binding                             | Description                                       |
 | ----------------------------------- | ------------------------------------------------- |
-| `run(p, input)`                     | Run from position 0; `Result(A, Bin)`             |
+| `run(p, input)`                     | Run from position 0; `Result(A, Str)`             |
 | `pure(a)` / `fail(msg)`             | Constant success / failure                        |
 | `map(f, p)`                         | Map the result                                    |
 | `bind`                              | Sequencing, shaped for `with Parse/bind` blocks   |
@@ -217,15 +235,18 @@ A JSON tree and a byte-level codec:
 
 ```
 pub union Json
-| null() | bln(Bln) | num(Flt) | str(Bin)
-| arr(Arr(Json)) | obj(Arr({ Bin, Json }))
+| null() | bln(Bln) | num(Flt) | str(Str)
+| arr(Arr(Json)) | obj(Arr({ Str, Json }))
 end
 ```
 
 | Binding     | Type          | Description                                      |
 | ----------- | ------------- | ------------------------------------------------ |
-| `encode(v)` | `Json -> Bin` | Serialize                                        |
+| `encode(v)` | `Json -> Str` | Serialize                                        |
 | `decode`    | `Parse(Json)` | Parser for a JSON value, built from `/std/Parse` |
+
+(`decode` parses a `Bin`; `encode` returns a `Str` — feed it back in via
+`Str/to_bin` to round-trip.)
 
 `examples/crs_json_codec.rs` round-trips a tree through both.
 
@@ -235,10 +256,10 @@ Typed format strings: the argument list of `printf` is computed from the format 
 
 | Binding                  | Description                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------- |
-| `Fmt`                    | The parsed format AST: `nil()`, `lit(Bin, Fmt)`, `str(Fmt)` (`%s`), `nat(Fmt)` (`%d`) |
+| `Fmt`                    | The parsed format AST: `nil()`, `lit(Str, Fmt)`, `str(Fmt)` (`%s`), `nat(Fmt)` (`%d`) |
 | `parse(input)`           | `Bin -> Fmt` — parse a format string                                                  |
 | `format_type_with(T, f)` | The dependent-type computation: the curried function type a format demands            |
-| `format(s)`              | Build a `Bin` by applying the demanded arguments                                      |
+| `format(s)`              | Build a `Str` by applying the demanded arguments (`s : Str`)                          |
 | `printf(s)`              | Like `format`, but also prints the result                                             |
 
-`/std/Fmt/printf("%s is %d")` has type `Bin -> Nat -> Bin`; passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`. See `examples/crs_printf.rs`.
+`/std/Fmt/printf("%s is %d")` has type `Str -> Nat -> Str`; `%s` takes a `Str`, and passing a `Bin` where `%d` expects a `Nat` is a compile-time `TypeMismatch`. See `examples/crs_printf.rs`.

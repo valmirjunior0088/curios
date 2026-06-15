@@ -158,14 +158,14 @@ The simplest example is the identity function, which works for any type:
 let id(T : Type, x : T) -> T = x;
 ```
 
-In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id(Nat, 42)` or `id(Bin, "hello")`. There are no angle brackets.
+In Rust this would be `fn id<T>(x: T) -> T { x }`. In Curios, `T` is an ordinary argument; you call `id(Nat, 42)` or `id(Str, "hello")`. There are no angle brackets.
 
 Passing types by hand gets old, so a binder marked `@` is _implicit_ — an automatic `?` the elaborator fills by inference at each call site:
 
 ```
 let id(@T : Type, x : T) -> T = x;
 id(42)          -- T inferred as Nat
-id(@Bin, "hi")  -- T supplied positionally with @
+id(@Str, "hi")  -- T supplied positionally with @
 ```
 
 Union parameters work this way out of the box: `Result/ok(42)` infers the type arguments; only the _type_ `Result(Nat, Bin)` is written out.
@@ -260,11 +260,11 @@ Length-indexed vectors rule out bounds errors. The same mechanism rules out vari
 -- output: Alice is 30
 ```
 
-`"%s is %d"` calls for a `Bin` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `/std/Fmt/printf("%s is %d")` is `Bin -> Nat -> Bin` — computed by reducing the format string during type checking, so the format string and each argument are applied in turn. Swapping the types is a compile-time error:
+`"%s is %d"` calls for a `Str` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `/std/Fmt/printf("%s is %d")` is `Str -> Nat -> Str` — computed by reducing the format string during type checking, so the format string and each argument are applied in turn. Swapping the types is a compile-time error:
 
 ```
 /std/Fmt/printf("%d")("Alice")
--- TypeMismatch: %d expects Nat, but "Alice" has type Bin
+-- TypeMismatch: %d expects Nat, but "Alice" has type Str
 ```
 
 The `examples/crs_printf.rs` program exercises the successful case with host input (`Io/read` + `Str/trim`) and asserts the same output, then checks that the ill-typed `%d` example is rejected. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, union values, and arrays to encode and decode a `Json` tree.

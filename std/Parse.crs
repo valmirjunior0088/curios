@@ -1,9 +1,10 @@
-use /std/{Result, Nat, Bin, Bln, Arr, Lst};
+use /std/{Result, Nat, Bin, Str, Bln, Arr, Lst};
 
+-- Parsers consume a byte buffer (`Bin`) but report failures as text (`Str`).
 pub let Parse(A : Type) -> Type =
-    (Bin, Nat) -> Result({ Nat, A }, Bin);
+    (Bin, Nat) -> Result({ Nat, A }, Str);
 
-pub let run(@A : Type, p : Parse(A), input : Bin) -> Result(A, Bin) =
+pub let run(@A : Type, p : Parse(A), input : Bin) -> Result(A, Str) =
     match p(input, 0)
     | success(pair) => Result/success(pair.1)
     | failure(msg) => Result/failure(msg)
@@ -13,7 +14,7 @@ pub let pure(@A : Type, a : A) -> Parse(A) =
     (input, pos) =>
         Result/success((pos, a));
 
-pub let fail(@A : Type, msg : Bin) -> Parse(A) =
+pub let fail(@A : Type, msg : Str) -> Parse(A) =
     (input, pos) =>
         Result/failure(msg);
 
@@ -97,7 +98,7 @@ pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
     (input, pos) =>
         let r =
             match Nat/sub(Bin/len(input), pos) : { Nat, Bin, Bln }
-            | 0 => (pos, "", false)
+            | 0 => (pos, Bin/empty, false)
             | step + 1, ih =>
                 match ih.2
                 | true => ih
@@ -113,7 +114,7 @@ pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
 
 pub let many0(@A : Type, p : Parse(A)) -> Parse(Arr(A)) =
     (input, pos) =>
-        rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Arr(A) }, Bin) =
+        rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Arr(A) }, Str) =
             match p(input, cur)
             | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
             | success(pair) =>
@@ -129,7 +130,7 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
         match elem(input, pos)
         | failure(_) => Result/success((pos, []))
         | success(rp) =>
-            rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Arr(A) }, Bin) =
+            rec go(acc : Lst(A), cur : Nat) -> Result({ Nat, Arr(A) }, Str) =
                 match sep(input, cur)
                 | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
                 | success(sp) =>

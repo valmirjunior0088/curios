@@ -1,8 +1,8 @@
-use /std/{Bin, Nat, Parse, Io, Bln, Result};
+use /std/{Bin, Str, Nat, Parse, Io, Bln, Result};
 
 pub union Fmt
 | nil()
-| lit(Bin, Fmt)
+| lit(Str, Fmt)
 | str(Fmt)
 | nat(Fmt)
 end
@@ -11,7 +11,7 @@ pub rec format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
-    | str(rest) => Bin -> format_type_with(T, rest)
+    | str(rest) => Str -> format_type_with(T, rest)
     | nat(rest) => Nat -> format_type_with(T, rest)
     end;
 
@@ -46,7 +46,10 @@ and parse_lit : Parse(Fmt) =
     with Parse/bind
         let bytes = Parse/take_while(is_not_pct)!;
         let rest = parse_fmt!;
-        Parse/pure(Fmt/lit(bytes, rest));
+        match Str/of_bin(bytes) : Parse(Fmt)
+        | some(piece) => Parse/pure(Fmt/lit(piece, rest))
+        | none() => Parse/fail("invalid UTF-8 in format string")
+        end;
 
 pub let parse(input : Bin) -> Fmt =
     match Parse/run(parse_fmt, input)
@@ -54,16 +57,16 @@ pub let parse(input : Bin) -> Fmt =
     | failure(_) => Fmt/nil()
     end;
 
-rec go_with(T : Type, finish : Bin -> T, f : Fmt, acc : Bin) -> format_type_with(T, f) =
+rec go_with(T : Type, finish : Str -> T, f : Fmt, acc : Str) -> format_type_with(T, f) =
     match f : (f) => format_type_with(T, f)
     | nil() => finish(acc)
-    | lit(bytes, rest) => go_with(T, finish, rest, Bin/concat(acc, bytes))
-    | str(rest) => (s) => go_with(T, finish, rest, Bin/concat(acc, s))
-    | nat(rest) => (n) => go_with(T, finish, rest, Bin/concat(acc, Nat/to_str(n)))
+    | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
+    | str(rest) => (s) => go_with(T, finish, rest, Str/concat(acc, s))
+    | nat(rest) => (n) => go_with(T, finish, rest, Str/concat(acc, Nat/to_str(n)))
     end;
 
-pub let format(s : Bin) -> format_type_with(Bin, parse(s)) =
-    go_with(Bin, (x) => x, parse(s), "");
+pub let format(s : Str) -> format_type_with(Str, parse(Str/to_bin(s))) =
+    go_with(Str, (x) => x, parse(Str/to_bin(s)), Str/empty);
 
-pub let printf(s : Bin) -> format_type_with({}, parse(s)) =
-    go_with({}, (x) => Io/print(x), parse(s), "");
+pub let printf(s : Str) -> format_type_with({}, parse(Str/to_bin(s))) =
+    go_with({}, (x) => Io/print(x), parse(Str/to_bin(s)), Str/empty);

@@ -9,6 +9,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::IntType, Prim::IntType)
         | (Prim::FltType, Prim::FltType)
         | (Prim::BinType, Prim::BinType)
+        | (Prim::StrType, Prim::StrType)
         | (Prim::IoType, Prim::IoType) => Ok(true),
         (Prim::Io(this), Prim::Io(that)) => Ok(this == that),
         (Prim::Nat(Nat::Zero), Prim::Nat(Nat::Zero)) => Ok(true),
@@ -35,6 +36,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
         (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
+        (Prim::Str(this), Prim::Str(that)) => Ok(this == that),
         (Prim::ArrType(this), Prim::ArrType(that)) => {
             cmp.enqueue(Term::type_(), this, that);
 
@@ -76,7 +78,9 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
         | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
         | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
-        | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
+        | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right))
+        | (Prim::StrConcat(this_left, this_right), Prim::StrConcat(that_left, that_right))
+        | (Prim::StrEql(this_left, this_right), Prim::StrEql(that_left, that_right)) => {
             cmp.enqueue(Term::type_(), this_left, that_left);
             cmp.enqueue(Term::type_(), this_right, that_right);
 
@@ -99,7 +103,9 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::IntToFlt(this), Prim::IntToFlt(that))
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
-        | (Prim::BinLen(this), Prim::BinLen(that)) => {
+        | (Prim::BinLen(this), Prim::BinLen(that))
+        | (Prim::StrToBin(this), Prim::StrToBin(that))
+        | (Prim::StrOfBin(this), Prim::StrOfBin(that)) => {
             cmp.enqueue(Term::type_(), this, that);
 
             Ok(true)

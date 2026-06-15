@@ -58,8 +58,11 @@ The `examples/` directory contains end-to-end Rust programs that drive the full 
 **Typed format strings** (`examples/crs_printf.rs`) — reads a name from stdin via `Io/read`, trims it, then calls `/std/Fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
 
 ```
-let name = Str/trim(Io/read(Io/stdin, 1024));
-Fmt/printf("%s is %d")(name)(30)
+let name_bytes = Str/trim(Io/read(Io/stdin, 1024).bytes);
+match Str/of_bin(name_bytes) : {}
+| some(name) => Fmt/printf("%s is %d")(name)(30)
+| none() => Io/print("invalid input")
+end
 -- with input "Alice": "Alice is 30"
 ```
 
@@ -67,7 +70,7 @@ Passing the wrong type is a compile-time error, not a runtime failure:
 
 ```
 /std/Fmt/printf("%d")("Alice")
--- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Bin
+-- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Str
 ```
 
 **JSON codec** (`examples/crs_json_codec.rs`) — constructs a `Json` tree using `union` constructors such as `Json/obj` and `Json/str`, encodes it to a `Bin` string with `Json/encode`, parses it back with `Json/decode`, and asserts the output is byte-identical to the original. It exercises the prepended standard library (`std/Json`, `std/Parse`), arrays, and nested union values together.

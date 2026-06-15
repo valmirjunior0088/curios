@@ -372,6 +372,8 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
+        | Prim::StrType
+        | Prim::Str(_)
         | Prim::IoType
         | Prim::Io(_) => prim.clone(),
 
@@ -445,6 +447,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, c)?,
         ),
         Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
+
+        Prim::StrToBin(t) => Prim::StrToBin(zonk_term(context, t)?),
+        Prim::StrOfBin(t) => Prim::StrOfBin(zonk_term(context, t)?),
+        Prim::StrConcat(a, b) => Prim::StrConcat(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::StrEql(a, b) => Prim::StrEql(zonk_term(context, a)?, zonk_term(context, b)?),
 
         Prim::ArrType(t) => Prim::ArrType(zonk_term(context, t)?),
         Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems)?),

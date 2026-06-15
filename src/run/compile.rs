@@ -359,7 +359,7 @@ mod tests {
         let source = r#"
             use /sys/{Nat, Bin};
             let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-            sys/Bin/len(second(@Nat, 1, "abc"))
+            sys/Bin/len(second(@Nat, 1, /sys/Str/to_bin("abc")))
         "#;
 
         compile(source, None).unwrap();
@@ -373,12 +373,12 @@ mod tests {
         let at_first = r#"
             use /sys/{Nat, Bin};
             let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-            sys/Bin/len(second(@Nat, 1, "abc"))
+            sys/Bin/len(second(@Nat, 1, /sys/Str/to_bin("abc")))
         "#;
         let at_last = r#"
             use /sys/{Nat, Bin};
             let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-            sys/Bin/len(second(1, "abc", @Nat))
+            sys/Bin/len(second(1, /sys/Str/to_bin("abc"), @Nat))
         "#;
 
         compile(at_first, None).unwrap();
@@ -590,8 +590,8 @@ mod tests {
             end
             let t : Tag(7) = Tag/b();
             match t : Bin
-            | a() => "a"
-            | b() => "b"
+            | a() => /sys/Str/to_bin("a")
+            | b() => /sys/Str/to_bin("b")
             end
         "#;
 
@@ -770,7 +770,7 @@ mod tests {
                 match v : Vec(T, n)
                 | cons(j, x, xs) => xs
                 end;
-            let v : Vec(Bin, 2) = Vec/cons("a", Vec/cons("b", Vec/nil()));
+            let v : Vec(Bin, 2) = Vec/cons(/sys/Str/to_bin("a"), Vec/cons(/sys/Str/to_bin("b"), Vec/nil()));
             let w : Vec(Bin, 1) = rest(v);
             first(w)
         "#;
@@ -790,7 +790,7 @@ mod tests {
                 match v : T
                 | cons(j, x, xs) => x
                 end;
-            let v : Vec(Bin, 1) = Vec/cons("a", Vec/nil());
+            let v : Vec(Bin, 1) = Vec/cons(/sys/Str/to_bin("a"), Vec/nil());
             first(v)
         "#;
 
@@ -841,7 +841,7 @@ mod tests {
             end
             let f(q : Foo(3, 4)) -> Bin =
                 match q : Bin
-                | diff() => "d"
+                | diff() => /sys/Str/to_bin("d")
                 end;
             0
         "#;
@@ -859,7 +859,7 @@ mod tests {
             end
             let g(q : Foo(5, 5)) -> Bin =
                 match q : Bin
-                | same(z) => "s"
+                | same(z) => /sys/Str/to_bin("s")
                 end;
             g(Foo/same(5))
         "#;
@@ -1078,7 +1078,7 @@ mod tests {
     fn typecheck_accepts_a_well_typed_program() {
         // The fast path stops after `elaborate → zonk`; a well-typed program passes
         // without running erase/cont/optm/wasm.
-        assert!(typecheck("/sys/Io/write(/sys/Io/stdout, /sys/Nat/to_str(0))").is_ok());
+        assert!(typecheck("/sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin(/sys/Nat/to_str(0)))").is_ok());
     }
 
     #[test]
@@ -1105,7 +1105,7 @@ mod tests {
         // so both spellings typecheck identically.
         let source = r#"
             use /sys/{Nat, Bin, Io};
-            let r : { status : Nat, payload : Bin } = (0, "ok");
+            let r : { status : Nat, payload : Bin } = (0, /sys/Str/to_bin("ok"));
             let by_label : Bin = r.payload;
             let by_index : Bin = r.1;
             Io/write(Io/stdout, by_label)
@@ -1118,7 +1118,7 @@ mod tests {
     fn proj_unknown_label_names_the_available_fields() {
         let source = r#"
             use /sys/{Nat, Bin};
-            let r : { status : Nat, payload : Bin } = (0, "ok");
+            let r : { status : Nat, payload : Bin } = (0, /sys/Str/to_bin("ok"));
             r.body
         "#;
 
@@ -1172,15 +1172,15 @@ mod tests {
         // bare fields are always accepted.
         let source = r#"
             use /sys/{Nat, Bin};
-            let r : { status : Nat, payload : Bin } = (status = 0, payload = "ok");
-            let mixed : { status : Nat, payload : Bin } = (status = 0, "ok");
+            let r : { status : Nat, payload : Bin } = (status = 0, payload = /sys/Str/to_bin("ok"));
+            let mixed : { status : Nat, payload : Bin } = (status = 0, /sys/Str/to_bin("ok"));
             r.status
         "#;
         assert!(typecheck(source).is_ok());
 
         let wrong_name = r#"
             use /sys/{Nat, Bin};
-            let r : { status : Nat, payload : Bin } = (code = 0, payload = "ok");
+            let r : { status : Nat, payload : Bin } = (code = 0, payload = /sys/Str/to_bin("ok"));
             r.status
         "#;
         let error = typecheck(wrong_name).unwrap_err();
@@ -1191,7 +1191,7 @@ mod tests {
 
         let unlabeled_type = r#"
             use /sys/{Nat, Bin};
-            let r : { Nat, Bin } = (status = 0, "ok");
+            let r : { Nat, Bin } = (status = 0, /sys/Str/to_bin("ok"));
             r.0
         "#;
         assert!(typecheck(unlabeled_type).is_err());
@@ -1204,7 +1204,7 @@ mod tests {
         let source = r#"
             let p : { T : Type, x : T } = (T = /sys/Nat, x = 3);
             let v : p.T = p.x;
-            /sys/Io/write(/sys/Io/stdout, /sys/Nat/to_str(v))
+            /sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin(/sys/Nat/to_str(v)))
         "#;
 
         assert!(typecheck(source).is_ok());
@@ -1257,8 +1257,9 @@ mod tests {
     #[test]
     fn prune_keeps_reachable_library_and_transitive_deps() {
         // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
-        let names =
-            core_item_names("use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, \"1\")");
+        let names = core_item_names(
+            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, /sys/Str/to_bin(\"1\"))",
+        );
 
         assert!(
             names.iter().any(|name| name.starts_with("std/Json")),
@@ -1331,8 +1332,8 @@ mod tests {
         // (`write` returns its `Nat` status, so `Bin` is the mismatch.)
         let error = typecheck(
             r#"
-            let dead : /sys/Bin = /sys/Io/write(/sys/Io/stdout, "x");
-            /sys/Io/write(/sys/Io/stdout, "ok")
+            let dead : /sys/Bin = /sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin("x"));
+            /sys/Io/write(/sys/Io/stdout, /sys/Str/to_bin("ok"))
             "#,
         )
         .unwrap_err();

@@ -20,7 +20,7 @@ fn main() {
 
         let encoded = Json/encode(value);
 
-        let decoded = Json/decode(encoded, 0);
+        let decoded = Json/decode(/sys/Str/to_bin(encoded), 0);
 
         match decoded : {}
         | success(pair) => Io/print(Json/encode(pair.1))
