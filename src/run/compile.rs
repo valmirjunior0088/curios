@@ -412,7 +412,7 @@ mod tests {
         // The curried `bind` shape: `(@A, @B) -> (M A, A -> M B) -> M B`.
         // Applying it directly to plain arguments saturates the all-implicit
         // telescope with fresh metavariables and re-targets the arguments at
-        // the next telescope — both through a direct call and the `with`
+        // the next telescope — both through a direct call and the `let !`
         // sugar (which desugars to exactly that call).
         let source = r#"
             use /sys/{Nat};
@@ -426,7 +426,7 @@ mod tests {
                     end;
             let direct = bind(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
             let sugared =
-                with bind
+                let ! = bind;
                 let v = Id/wrap(3)!;
                 Id/wrap(v);
             match sugared : Nat
@@ -955,7 +955,7 @@ mod tests {
 
     #[test]
     fn continuation_postpones_until_the_result_type_pins_its_codomain() {
-        // A `with Parse/bind` block whose tail is `Parse/pure((x, x))` — a *bare
+        // A `let ! = Parse/bind;` block whose tail is `Parse/pure((x, x))` — a *bare
         // tuple*, checkable only against a known tuple type. The expected type reaches
         // the tail solely through each bind's result metavar `?B`, which the turnaround
         // solves *after* the continuation is checked. Elaboration must postpone the
@@ -967,9 +967,9 @@ mod tests {
             use /std/{Parse};
             use /sys/{Nat};
             let pair : Parse({ Nat, Nat }) =
-                with Parse/bind
-                    let x = Parse/any_byte!;
-                    Parse/pure((x, x));
+                let ! = Parse/bind;
+                let x = Parse/any_byte!;
+                Parse/pure((x, x));
             pair
         "#;
 
@@ -980,9 +980,9 @@ mod tests {
         // tuple is rejected — graceful degradation, no new acceptance.
         let unpinned = r#"
             use /std/{Parse};
-            with Parse/bind
-                let x = Parse/any_byte!;
-                Parse/pure((x, x))
+            let ! = Parse/bind;
+            let x = Parse/any_byte!;
+            Parse/pure((x, x))
         "#;
 
         assert!(typecheck(unpinned).is_err());

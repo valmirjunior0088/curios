@@ -103,7 +103,7 @@ pub struct Context<'a> {
     // `Elaborate`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     // Sibling counter for fresh continuation-binder names minted while desugaring
-    // `with`/`!` blocks. Threaded (not a process-global atomic) for determinism:
+    // `let !`/`!` blocks. Threaded (not a process-global atomic) for determinism:
     // `core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
     // tests must be order-stable.
     binders: &'a Entropy,
@@ -151,7 +151,7 @@ impl<'a> Context<'a> {
         self.metavars.fresh()
     }
 
-    /// Mint a fresh continuation-binder name for `with`/`!` desugaring. The `#`
+    /// Mint a fresh continuation-binder name for `let !`/`!` desugaring. The `#`
     /// sigil is illegal in source identifiers, so it cannot collide with user
     /// names or qualified references.
     pub fn fresh_binder(&self) -> String {

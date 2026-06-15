@@ -50,9 +50,9 @@ pub enum Error {
     CyclicReExport {
         label: String,
     },
-    /// A postfix `!` appeared outside any `with` body, so there is no bind
+    /// A postfix `!` appeared outside any `let !` body, so there is no bind
     /// function to sequence it with.
-    BangOutsideWith,
+    BangWithoutBind,
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
     /// union scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
     AnnotatedMotiveNotUnion,
@@ -127,8 +127,8 @@ impl fmt::Display for Error {
             Error::CyclicReExport { label } => {
                 write!(f, "cyclic re-export with no concrete target: {label}")
             }
-            Error::BangOutsideWith => {
-                write!(f, "postfix `!` used outside a `with` block")
+            Error::BangWithoutBind => {
+                write!(f, "postfix `!` used outside a `let !` block")
             }
             Error::AnnotatedMotiveNotUnion => {
                 write!(

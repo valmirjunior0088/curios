@@ -1062,8 +1062,8 @@ fn distinct_holes_get_distinct_ids() {
 }
 
 #[test]
-fn bang_outside_with_is_rejected() {
-    // A postfix `!` with no enclosing `with` has no bind to sequence it, so the
+fn bang_outside_let_bang_is_rejected() {
+    // A postfix `!` with no enclosing `let !` has no bind to sequence it, so the
     // desugarer rejects it rather than emitting a dangling continuation.
-    assert!(run_err("x!").contains("outside a `with` block"));
+    assert!(run_err("x!").contains("outside a `let !` block"));
 }

@@ -3,8 +3,8 @@ use {
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Plicity,
         Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem, TopLet,
-        TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
-        With,
+        LetBang, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionCase, UnionMatch,
+        UseGroup,
     },
     crate::{
         Source,
@@ -22,7 +22,6 @@ const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
     "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union", "struct",
-    "with",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -847,17 +846,21 @@ fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     )
 }
 
-// A `with <bind>  <body>` block. `<bind>` is an *atomic* term denoting a binary
-// bind `(M A, A -> M B) -> M B` (e.g. the partially-applied `Parse/bind(?, ?)`).
-// It is re-elaborated per `!` site, so its `?` holes get fresh metavariables each
-// time and the desugarer applies it to `(action, continuation)` there — keeping the
-// bind's own head (e.g. `Parse/bind`) in head position, so it needs no annotation.
-// No `end`: the block ends where the enclosing term ends (like a `let`/`rec` tail).
-fn parse_with<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("with"))
+// A `let ! = <bind>; <body>` do-notation block. `<bind>` is an *atomic* term
+// denoting a binary bind `(M A, A -> M B) -> M B` (e.g. the partially-applied
+// `Parse/bind(?, ?)`); it is re-elaborated per `!` site, so its `?` holes get fresh
+// metavariables each time, and the desugarer applies it to `(action, continuation)`
+// there — keeping the bind's own head (e.g. `Parse/bind`) in head position, so it
+// needs no annotation. No `end`: the block ends where the enclosing term ends (like
+// a `let`/`rec` tail). The leading `let !` is committed once matched, so a plain
+// `let x` backtracks cleanly.
+fn parse_let_bang<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("let").and_keep(parse_literal("!")))
+        .and_keep(parse_literal("="))
         .and_keep(parse_atomic_term())
+        .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
-        .map(|(bind, body)| Subterm::With(With { bind, body }))
+        .map(|(bind, body)| Subterm::LetBang(LetBang { bind, body }))
         .map(Into::into)
 }
 
@@ -867,7 +870,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
 
 fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_with()
+        parse_let_bang()
             .or(parse_rec())
             .or(parse_let())
             .or(parse_match())

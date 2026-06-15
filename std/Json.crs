@@ -131,17 +131,17 @@ let is_not_string_special(byte : Nat) -> Bln =
     end;
 
 let parse_str_escape : Parse(Bin) =
-    with Parse/bind
-        let _ = Parse/take_byte('\\')!;
-        let byte = Parse/any_byte!;
-        match byte : Parse(Bin)
-        | '"' => Parse/pure(Str/to_bin("\""))
-        | '\\' => Parse/pure(Str/to_bin("\\"))
-        | 'n' => Parse/pure(Str/to_bin("\n"))
-        | 'r' => Parse/pure(Str/to_bin("\r"))
-        | 't' => Parse/pure(Str/to_bin("\t"))
-        | _ => Parse/fail("unknown escape")
-        end;
+    let ! = Parse/bind;
+    let _ = Parse/take_byte('\\')!;
+    let byte = Parse/any_byte!;
+    match byte : Parse(Bin)
+    | '"' => Parse/pure(Str/to_bin("\""))
+    | '\\' => Parse/pure(Str/to_bin("\\"))
+    | 'n' => Parse/pure(Str/to_bin("\n"))
+    | 'r' => Parse/pure(Str/to_bin("\r"))
+    | 't' => Parse/pure(Str/to_bin("\t"))
+    | _ => Parse/fail("unknown escape")
+    end;
 
 let parse_str_segment : Parse(Bin) =
     Parse/take_while(is_not_string_special);
@@ -153,14 +153,14 @@ let parse_str_body : Parse(Arr(Bin)) =
 -- boundary: validate with the checked `Str/of_bin`, and a malformed-UTF-8
 -- string is a parse failure.
 let parse_raw_str : Parse(Str) =
-    with Parse/bind
-        let _ = Parse/take_byte('"')!;
-        let chunks = parse_str_body!;
-        let _ = Parse/take_byte('"')!;
-        match Str/of_bin(Bin/concat_all(chunks)) : Parse(Str)
-        | some(s) => Parse/pure(s)
-        | none() => Parse/fail("invalid UTF-8 in string")
-        end;
+    let ! = Parse/bind;
+    let _ = Parse/take_byte('"')!;
+    let chunks = parse_str_body!;
+    let _ = Parse/take_byte('"')!;
+    match Str/of_bin(Bin/concat_all(chunks)) : Parse(Str)
+    | some(s) => Parse/pure(s)
+    | none() => Parse/fail("invalid UTF-8 in string")
+    end;
 
 let parse_str_value : Parse(Json) =
     Parse/map((s) => Json/str(s), parse_raw_str);
@@ -184,20 +184,20 @@ pub rec decode : Parse(Json) = (input, pos) =>
         end
     end
 and parse_arr : Parse(Json) =
-    with Parse/bind
-        let _ = Parse/take_byte('[')!;
-        let elems = Parse/sep_by0(decode, Parse/take_byte(','))!;
-        let _ = Parse/take_byte(']')!;
-        Parse/pure(Json/arr(elems))
+    let ! = Parse/bind;
+    let _ = Parse/take_byte('[')!;
+    let elems = Parse/sep_by0(decode, Parse/take_byte(','))!;
+    let _ = Parse/take_byte(']')!;
+    Parse/pure(Json/arr(elems))
 and parse_obj : Parse(Json) =
-    with Parse/bind
-        let _ = Parse/take_byte('{')!;
-        let pairs = Parse/sep_by0(parse_pair, Parse/take_byte(','))!;
-        let _ = Parse/take_byte('}')!;
-        Parse/pure(Json/obj(pairs))
+    let ! = Parse/bind;
+    let _ = Parse/take_byte('{')!;
+    let pairs = Parse/sep_by0(parse_pair, Parse/take_byte(','))!;
+    let _ = Parse/take_byte('}')!;
+    Parse/pure(Json/obj(pairs))
 and parse_pair : Parse({ Str, Json }) =
-    with Parse/bind
-        let key = parse_raw_str!;
-        let _ = Parse/take_byte(':')!;
-        let val = decode!;
-        Parse/pure((key, val));
+    let ! = Parse/bind;
+    let key = parse_raw_str!;
+    let _ = Parse/take_byte(':')!;
+    let val = decode!;
+    Parse/pure((key, val));

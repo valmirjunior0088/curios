@@ -3,7 +3,7 @@
 - [Lexical basics](#lexical-basics)
 - [Source files](#source-files)
 - [Top-level declarations](#top-level-declarations) — `let`, `rec`, `union`, `mod`, `use`
-- [Terms](#terms) — application, lambdas, holes, implicits, `let`/`rec`, `with`/`!`, `match`, field access
+- [Terms](#terms) — application, lambdas, holes, implicits, `let`/`rec`, `let !`/`!`, `match`, field access
 - [Types](#types) — universe, function, tuple, array, primitives
 - [Literals](#literals)
 - [Idioms](#idioms) — sum types, recursive types
@@ -13,7 +13,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union` `with`
+**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union` `struct`
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/sys/Nat/add`.
 
@@ -326,25 +326,25 @@ tail
 
 Mutually recursive local bindings. Unlike top-level `rec`, the `and` clauses do not accept `pub`. Terminated by a semicolon; the remaining expression `tail` follows.
 
-### With and bang
+### Let-bang and bang
 
 ```
-with bind body
+let ! = bind;  body
 action!
 ```
 
-`with` introduces monadic sequencing sugar. The `bind` term is an atomic term denoting a binary bind operation of shape `(M A, A -> M B) -> M B` — typically a reference like `Parse/bind`, whose type parameters are implicit and inferred per use. Inside the `body`, postfix `!` marks an action whose result should be bound inline:
+`let !` introduces monadic sequencing sugar — the binder is the literal `!`, and it shadows no ordinary `let`. The `bind` is an atomic term denoting a binary operation of shape `(M A, A -> M B) -> M B` — typically a reference like `Parse/bind`, whose type parameters are implicit and inferred per use. The block runs to the end of the enclosing term — there is no `end`. Inside the body, postfix `!` marks an action whose result should be bound inline:
 
 ```
-with Parse/bind
-    let a = parse_a!;
-    let b = parse_b!;
-    combine(a, b)
+let ! = Parse/bind;
+let a = parse_a!;
+let b = parse_b!;
+combine(a, b)
 ```
 
-The desugarer rewrites each `!` into an application of the active bind to the action and a generated continuation. The bind term is re-elaborated at each `!` site, so its implicit parameters (and any holes it contains) are fresh for each action and can solve to different types.
+The desugarer rewrites each `!` into an application of the active bind to the action and a generated continuation. The bind is re-elaborated at each `!` site, so its implicit parameters (and any holes it contains) are fresh for each action and can solve to different types.
 
-Bang is only valid inside a `with` body. A `!` in a call or tuple is collected left-to-right; a `!` in a `match` scrutinee runs before branching, while bangs inside branches stay branch-local. Lambda bodies and nested `with` blocks start their own sequencing regions.
+Bang is only valid inside a `let !` body. A `!` in a call or tuple is collected left-to-right; a `!` in a `match` scrutinee runs before branching, while bangs inside branches stay branch-local. Lambda bodies and nested `let !` blocks start their own sequencing regions.
 
 ### Match
 

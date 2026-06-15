@@ -14,7 +14,7 @@ pub struct Elaborate<'a, 'b> {
     context: &'a Context<'b>,
 }
 
-/// The active bind of a `with` region: an atomic term denoting a binary bind
+/// The active bind of a `let !` region: an atomic term denoting a binary bind
 /// `(M A, A -> M B) -> M B`. [`Elaborate::instantiate`] re-elaborates `term` (so its
 /// `?` holes are fresh per `!` site) and applies it to `(action, continuation)`.
 struct Bind<'t> {
@@ -236,23 +236,24 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 self.term(&rec.tail)?,
             ),
-            // `with <bind> <body>` opens a monadic block. The body is desugared
-            // (eliminating every `Bang`) into ordinary core terms by re-elaborating
-            // the bind and applying it to `(action, continuation)` per `!` site. See
-            // `region`/`instantiate`.
-            Subterm::With(with) => {
-                let bind = Bind { term: &with.bind };
-                self.region(&with.body, &bind)?
+            // `let !` opens a monadic block. The body is desugared (eliminating every
+            // `Bang`) into ordinary core terms by re-elaborating the bind and applying
+            // it to `(action, continuation)` per `!` site. See `region`/`instantiate`.
+            Subterm::LetBang(let_bang) => {
+                let bind = Bind {
+                    term: &let_bang.bind,
+                };
+                self.region(&let_bang.body, &bind)?
             }
-            // A bang outside any `with` body has no continuation to hoist to.
-            Subterm::Bang(_) => return Err(Error::BangOutsideWith),
+            // A bang outside any `let !` body has no continuation to hoist to.
+            Subterm::Bang(_) => return Err(Error::BangWithoutBind),
         })
     }
 
     /// Desugars `term` as a single **region** under the active `bind`. A region
-    /// is a stretch of a `with` body that shares one continuation; each `!` in it
+    /// is a stretch of a `let !` body that shares one continuation; each `!` in it
     /// hoists to the top of the region, never past a boundary (lambda body, match
-    /// arm, nested `with`). Boundaries re-root a region. See `WITH.md`.
+    /// arm, nested `let !`). Boundaries re-root a region.
     fn region(&self, term: &Term, bind: &Bind) -> Result<core::Term, Error> {
         match term.as_subterm() {
             // A `let`'s bound expression evaluates in place (its bangs hoist to
@@ -285,10 +286,12 @@ impl<'a, 'b> Elaborate<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?;
                 Ok(core::Term::func(params, self.region(&func.body, bind)?))
             }
-            // A nested `with` switches the bind and desugars independently.
-            Subterm::With(with) => {
-                let inner = Bind { term: &with.bind };
-                self.region(&with.body, &inner)
+            // A nested `let !` switches the bind and desugars independently.
+            Subterm::LetBang(let_bang) => {
+                let inner = Bind {
+                    term: &let_bang.bind,
+                };
+                self.region(&let_bang.body, &inner)
             }
             // Spine forms (atomic / apply / tuple / proj): collect bangs in
             // left-to-right evaluation order, then wrap.
@@ -359,16 +362,16 @@ impl<'a, 'b> Elaborate<'a, 'b> {
             // scrutinee bangs into the enclosing region (this `binds`).
             Subterm::Let(let_) => self.build_let(let_, bind, binds)?,
             Subterm::Match(match_) => self.match_region(match_, bind, binds)?,
-            // A lambda is a value and a nested `with` is independent: neither
+            // A lambda is a value and a nested `let !` is independent: neither
             // hoists anything outward, so desugar each as its own region.
-            Subterm::Func(_) | Subterm::With(_) => self.region(term, bind)?,
+            Subterm::Func(_) | Subterm::LetBang(_) => self.region(term, bind)?,
             // Leaves elaborate normally. A `Bang` reachable here (e.g. nested in a
             // type position) hits `self.term`'s `Bang` arm and is rejected.
             _ => self.term(term)?,
         })
     }
 
-    /// Builds `let x = value; tail` for a `let` inside a `with` region, collecting
+    /// Builds `let x = value; tail` for a `let` inside a `let !` region, collecting
     /// the bound expression's bangs into `binds` and desugaring the tail as the
     /// continuation of the same region.
     fn build_let(
@@ -387,7 +390,7 @@ impl<'a, 'b> Elaborate<'a, 'b> {
         ))
     }
 
-    /// Desugars a `match` inside a `with` region: the scrutinee's bangs are
+    /// Desugars a `match` inside a `let !` region: the scrutinee's bangs are
     /// collected into `binds` (hoisted out — the scrutinee runs unconditionally),
     /// while each arm is desugared as its own region (branch-local effects). This
     /// mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect`

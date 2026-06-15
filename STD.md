@@ -98,7 +98,7 @@ Layers safe conveniences over the `/sys/Io` handle primitives (which it re-expor
 | `reader(h)` | `Io -> Reader`                                | A fresh reader with an empty buffer                                                                                                       |
 | `Buf(A)`    | `Type -> Type` (`= Reader -> { Reader, A }`)  | The buffered-reader state monad — the reader threads explicitly through actions, exactly like `Parse` threads its (input, position) state |
 | `pure(a)`   | `(@A : Type, A) -> Buf(A)`                    | Lift a value                                                                                                                              |
-| `bind`      | `(@A, @B) -> (Buf(A), A -> Buf(B)) -> Buf(B)` | Sequence two actions (use with `with Io/bind` blocks)                                                                                     |
+| `bind`      | `(@A, @B) -> (Buf(A), A -> Buf(B)) -> Buf(B)` | Sequence two actions (use with `let ! = Io/bind;` blocks)                                                                                     |
 | `run(m, h)` | `(@A : Type, Buf(A), Io) -> A`                | Run an action against a fresh reader on `h`                                                                                               |
 | `read_line` | `Buf(Option(Bin))`                            | The next line, including its trailing `\n`; `none` means end of input                                                                     |
 
@@ -106,17 +106,19 @@ Layers safe conveniences over the `/sys/Io` handle primitives (which it re-expor
 
 ### `/std/File`
 
-File IO as exactly two bracket-managed verbs — there is no `open` in std, so a handle can never leak from the safe layer (`/sys/Io/open` remains the explicit escape hatch):
+`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close`: `using`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice (`/sys/Io/open` remains the explicit escape hatch).
 
 ```
-union Mode  | read() | write() | append() end
+union Mode  | read() | write() | append() end   -- File/Mode/read() etc.
 union Error | not_found() | permission_denied() | exists() | other(Nat) end
 
-File/using(path, mode, body)   -- (@A : Type, Bin, Mode, Io -> A) -> Result(A, Error)
+File/using(path, mode, body)   -- (@A : Type, Bin, Mode, File -> A) -> Result(A, Error)
 File/read_all(path)            -- Bin -> Result(Bin, Error)
+File/read(f, n)                -- (File, Nat) -> { status : Nat, bytes : Bin }
+File/write(f, b)               -- (File, Bin) -> Nat
 ```
 
-`using` is the one doorway to a file handle: open, run `body`, close. (It is named `using` because `with` is the sequencing keyword.) The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/sys/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
+`using` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/sys/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
 
 ## Data types
 
@@ -219,7 +221,7 @@ Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Str)
 | `run(p, input)`                     | Run from position 0; `Result(A, Str)`             |
 | `pure(a)` / `fail(msg)`             | Constant success / failure                        |
 | `map(f, p)`                         | Map the result                                    |
-| `bind`                              | Sequencing, shaped for `with Parse/bind` blocks   |
+| `bind`                              | Sequencing, shaped for `let ! = Parse/bind;` blocks |
 | `or(p, q)`                          | Try `p`, fall back to `q`                         |
 | `and(p, q)`                         | Both in sequence; pairs the results as `{ A, B }` |
 | `and_drop(p, q)` / `and_keep(p, q)` | Both in sequence; keep the first / second result  |

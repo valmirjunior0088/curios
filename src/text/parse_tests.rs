@@ -836,12 +836,12 @@ fn name(label: &str) -> Term {
 }
 
 #[test]
-fn parse_with_block() {
-    // `with <bind>  <body>`: an atomic bind term, then a full-term body that runs to
-    // the end of the region (no `end` terminator). Here the bind is a bare name.
+fn parse_let_bang() {
+    // `let ! = <bind>; <body>`: an atomic bind term, then a full-term body that runs
+    // to the end of the region (no `end` terminator). Here the bind is a bare name.
     assert_eq!(
-        "with bind body".parse::<Term>().unwrap(),
-        Subterm::With(With {
+        "let ! = bind; body".parse::<Term>().unwrap(),
+        Subterm::LetBang(LetBang {
             bind: name("bind"),
             body: name("body"),
         })
@@ -850,13 +850,13 @@ fn parse_with_block() {
 }
 
 #[test]
-fn parse_with_partial_application_holes() {
+fn parse_let_bang_partial_application_holes() {
     // The bind is typically a partial application carrying `?` holes (e.g.
     // `Parse/bind`'s leading `Type` args); they elaborate to fresh metavariables per
-    // `!` site. Atomic maximal-munch ends the bind at `)`, before the body.
+    // `!` site. Atomic maximal-munch ends the bind at `)`, before the `;`.
     assert_eq!(
-        "with Parse/bind(?, ?) body".parse::<Term>().unwrap(),
-        Subterm::With(With {
+        "let ! = Parse/bind(?, ?); body".parse::<Term>().unwrap(),
+        Subterm::LetBang(LetBang {
             bind: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["Parse".to_string(), "bind".to_string()])).into(),
                 params: vec![
@@ -970,10 +970,10 @@ fn bang_binds_tighter_than_projection() {
 }
 
 #[test]
-fn with_and_bang_round_trip() {
+fn let_bang_and_bang_round_trip() {
     for source in [
-        "with bind body",
-        "with Parse/bind(?, ?) body",
+        "let ! = bind; body",
+        "let ! = Parse/bind(?, ?); body",
         "f(x!, y!)",
         "p.0!",
         "x!.0",

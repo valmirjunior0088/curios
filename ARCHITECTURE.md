@@ -131,7 +131,7 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 - The unified `match x : motive | … end` eliminator covering unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`); the motive ladder is `: T`, `: (x) => T`, or — union scrutinees — the index-binding `: (x : Vec(T, k)) => T`
 - `e.0`, `e.1` (field access / Σ-elimination)
 - Holes `?`, which elaborate to fresh metavariables solved by bidirectional type checking
-- Monadic sequencing sugar: `with bind body` plus postfix `!`, desugared before core elaboration by re-elaborating the bind at each bang site
+- Monadic sequencing sugar: `let ! = bind; body` plus postfix `!`, desugared before core elaboration by re-elaborating the bind at each bang site
 - Primitive literals plus the prelude-backed `/sys` module, which exposes `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)`, `Bln`, and their operations as ordinary paths
 - Module system: `mod Label ... end`, `mod Label;` (file-backed), `union Label ... end`, `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`

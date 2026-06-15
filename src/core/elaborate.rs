@@ -314,7 +314,7 @@ fn blocked_on_metavar(
                 // ...or a lambda whose *codomain* still carries an unsolved metavar that
                 // the result type will pin: postpone until `expect(output, expected)`
                 // solves it, so the body is checked against the refined codomain. This is
-                // the `with`-continuation case — `(x) => …` checked against
+                // the `let !`-continuation case — `(x) => …` checked against
                 // `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action
                 // but `?B` (the bind's own result type) is solved only by the turnaround.
                 // Gating on `result_metavars` keeps it to metavars `expect` will address;

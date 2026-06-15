@@ -6,8 +6,6 @@ pub union Mode
 | append()
 end
 
-pub use Mode/*;
-
 pub union Error
 | not_found()
 | permission_denied()
@@ -16,6 +14,24 @@ pub union Error
 end
 
 pub use Error/*;
+
+-- An open file handle. Abstract: outside this module a `File` is opaque and
+-- distinct from a bare `Io` handle (stdin/stdout, a socket), reachable only
+-- through the operations below. A single-field struct is a zero-cost newtype,
+-- so at runtime a `File` *is* its underlying `Io` handle.
+pub struct File { Io }
+
+pub let read(f : File, n : Nat) -> { status : Nat, bytes : Bin } =
+    Io/read(f.0, n);
+
+pub let write(f : File, b : Bin) -> Nat =
+    Io/write(f.0, b);
+
+-- Closing is not part of the public surface: `using`/`read_all` open and close
+-- around `body`, so a handle never outlives the bracket and cannot be closed
+-- twice or used after close.
+let close(f : File) -> {} =
+    Io/close(f.0);
 
 let token(mode : Mode) -> Nat =
     match mode : Nat
@@ -32,22 +48,23 @@ let decode(status : Nat) -> Error =
     | _ => Error/other(status)
     end;
 
-pub let using(@A : Type, path : Bin, mode : Mode, body : Io -> A) -> Result(A, Error) =
+pub let using(@A : Type, path : Bin, mode : Mode, body : File -> A) -> Result(A, Error) =
     let r = Io/open(path, token(mode));
     match Nat/eql(r.status, 0)
     | true =>
-        let value = body(r.handle);
-        let closed = Io/close(r.handle);
+        let f = File { r.handle };
+        let value = body(f);
+        let closed = close(f);
         Result/success(value)
     | false => Result/failure(decode(r.status))
     end;
 
-rec drain(h : Io, acc : Bin) -> Bin =
-    let r = Io/read(h, 4096);
+rec drain(f : File, acc : Bin) -> Bin =
+    let r = read(f, 4096);
     match Nat/eql(r.status, 0)
-    | true => drain(h, Bin/concat(acc, r.bytes))
+    | true => drain(f, Bin/concat(acc, r.bytes))
     | false => acc
     end;
 
 pub let read_all(path : Bin) -> Result(Bin, Error) =
-    using(path, Mode/read(), (h) => drain(h, Bin/empty));
+    using(path, Mode/read(), (f) => drain(f, Bin/empty));

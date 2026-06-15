@@ -3,7 +3,7 @@ use {
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Plicity, Prim, Proj, Rec,
         StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion, TopUse,
-        Tuple, TupleType, UnionCase, UnionMatch, UseGroup, With,
+        LetBang, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -442,11 +442,11 @@ fn print_term(term: Term) -> Printer<'static> {
                 print_term(tail),
             ])
         }
-        Subterm::With(With { bind, body }) => flat([
-            pure("with "),
+        Subterm::LetBang(LetBang { bind, body }) => flat([
+            pure("let ! = "),
             print_term(bind),
-            pure("\n"),
-            indent(print_term(body)),
+            pure(";\n"),
+            print_term(body),
         ]),
         Subterm::Bang(term) => flat([pure("("), print_term(term), pure(")!")]),
     }

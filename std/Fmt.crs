@@ -32,24 +32,24 @@ rec parse_fmt : Parse(Fmt) = (input, pos) =>
     end
 and parse_spec : Parse(Fmt) =
     Parse/or(
-        with Parse/bind
-            let _ = Parse/take_byte('%')!;
-            let byte = Parse/any_byte!;
-            let rest = parse_fmt!;
-            match byte : Parse(Fmt)
-            | 's' => Parse/pure(Fmt/str(rest))
-            | 'd' => Parse/pure(Fmt/nat(rest))
-            | _ => Parse/pure(rest)
-            end,
+        let ! = Parse/bind;
+        let _ = Parse/take_byte('%')!;
+        let byte = Parse/any_byte!;
+        let rest = parse_fmt!;
+        match byte : Parse(Fmt)
+        | 's' => Parse/pure(Fmt/str(rest))
+        | 'd' => Parse/pure(Fmt/nat(rest))
+        | _ => Parse/pure(rest)
+        end,
         Parse/map((_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
 and parse_lit : Parse(Fmt) =
-    with Parse/bind
-        let bytes = Parse/take_while(is_not_pct)!;
-        let rest = parse_fmt!;
-        match Str/of_bin(bytes) : Parse(Fmt)
-        | some(piece) => Parse/pure(Fmt/lit(piece, rest))
-        | none() => Parse/fail("invalid UTF-8 in format string")
-        end;
+    let ! = Parse/bind;
+    let bytes = Parse/take_while(is_not_pct)!;
+    let rest = parse_fmt!;
+    match Str/of_bin(bytes) : Parse(Fmt)
+    | some(piece) => Parse/pure(Fmt/lit(piece, rest))
+    | none() => Parse/fail("invalid UTF-8 in format string")
+    end;
 
 pub let parse(input : Bin) -> Fmt =
     match Parse/run(parse_fmt, input)

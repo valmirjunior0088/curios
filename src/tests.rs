@@ -196,7 +196,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io};
-        match File/using(/sys/Str/to_bin("out.txt"), File/write(), (h) => Io/write(h, /sys/Str/to_bin("written")))
+        match File/using(/sys/Str/to_bin("out.txt"), File/Mode/write(), (f) => File/write(f, /sys/Str/to_bin("written")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -221,7 +221,7 @@ fn file_with_write_mode_persists_through_close() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io};
-        match File/using(/sys/Str/to_bin("log.txt"), File/append(), (h) => Io/write(h, /sys/Str/to_bin("x")))
+        match File/using(/sys/Str/to_bin("log.txt"), File/Mode/append(), (f) => File/write(f, /sys/Str/to_bin("x")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -239,19 +239,15 @@ fn effectful_match_scrutinee_runs_once() {
     );
 }
 
-// The payoff of handle-generic std/Io: the buffered reader runs unchanged
-// over a file handle inside the bracket.
+// The public file ops run on the opaque handle inside the bracket: `File/read`
+// pulls bytes from the `File` that `using` hands the body, and `using` closes
+// it afterwards.
 #[test]
-fn read_line_works_over_a_file_handle() {
+fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Io, Option, Bin, Str};
-        let first_line(h : Io/Io) -> Str =
-            match Io/read_line(Io/reader(h)).1
-            | some(line) => /sys/Str/of_bin(line)
-            | none() => "empty"
-            end;
-        match File/using(/sys/Str/to_bin("lines.txt"), File/read(), first_line)
-        | success(line) => Io/print(line)
+        use /std/{File, Io, Str};
+        match File/using(/sys/Str/to_bin("lines.txt"), File/Mode/read(), (f) => File/read(f, 1024).bytes)
+        | success(bytes) => Io/print(/sys/Str/of_bin(bytes))
         | failure(_) => Io/print("error")
         end
         "#;
@@ -261,7 +257,7 @@ fn read_line_works_over_a_file_handle() {
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"first\n".to_vec()]
+        vec![b"first\nsecond\n".to_vec()]
     );
 }
 
@@ -270,17 +266,17 @@ fn std_io_read_line_sequences_lines() {
     let source = r#"
         use /std/{Io, Option, Bin};
         let program : Io/Buf({}) =
-            with Io/bind
-                let first = Io/read_line!;
-                let second = Io/read_line!;
-                match first : Io/Buf({})
-                | some(a) =>
-                    match second : Io/Buf({})
-                    | some(b) => Io/pure(Io/print(/sys/Str/of_bin(Bin/concat(a, b))))
-                    | none() => Io/pure(Io/print("missing"))
-                    end
+            let ! = Io/bind;
+            let first = Io/read_line!;
+            let second = Io/read_line!;
+            match first : Io/Buf({})
+            | some(a) =>
+                match second : Io/Buf({})
+                | some(b) => Io/pure(Io/print(/sys/Str/of_bin(Bin/concat(a, b))))
                 | none() => Io/pure(Io/print("missing"))
-                end;
+                end
+            | none() => Io/pure(Io/print("missing"))
+            end;
         Io/run(program, Io/stdin)
         "#;
 
@@ -297,13 +293,13 @@ fn std_io_read_line_signals_eof_with_none() {
     let source = r#"
         use /std/{Io, Option};
         let program : Io/Buf({}) =
-            with Io/bind
-                let first = Io/read_line!;
-                let second = Io/read_line!;
-                match second : Io/Buf({})
-                | some(_) => Io/pure(Io/print("line"))
-                | none() => Io/pure(Io/print("eof"))
-                end;
+            let ! = Io/bind;
+            let first = Io/read_line!;
+            let second = Io/read_line!;
+            match second : Io/Buf({})
+            | some(_) => Io/pure(Io/print("line"))
+            | none() => Io/pure(Io/print("eof"))
+            end;
         Io/run(program, Io/stdin)
         "#;
 
@@ -322,12 +318,12 @@ fn std_io_read_line_spans_refills() {
     let source = r#"
         use /std/{Io, Option, Bin, Nat};
         let program : Io/Buf({}) =
-            with Io/bind
-                let line = Io/read_line!;
-                match line : Io/Buf({})
-                | some(bytes) => Io/pure(Io/print(Nat/to_str(Bin/len(bytes))))
-                | none() => Io/pure(Io/print("eof"))
-                end;
+            let ! = Io/bind;
+            let line = Io/read_line!;
+            match line : Io/Buf({})
+            | some(bytes) => Io/pure(Io/print(Nat/to_str(Bin/len(bytes))))
+            | none() => Io/pure(Io/print("eof"))
+            end;
         Io/run(program, Io/stdin)
         "#;
 
@@ -412,16 +408,16 @@ fn curried_function() {
 }
 
 #[test]
-fn with_identity_monad_sequences_bangs() {
+fn let_bang_identity_monad_sequences_bangs() {
     // A minimal Identity monad over `sys/Nat`: `bind(m, f) = f(m)`. The compiler is
-    // monad-agnostic — `with bind` applies the binary `bind` to `(action, cont)` per
-    // `!` site — so the sugar `add(a!, b!)` threads each banged value through a fresh
-    // continuation and evaluates to `add(a, b)`.
+    // monad-agnostic — `let ! = bind;` applies the binary `bind` to `(action, cont)`
+    // per `!` site — so the sugar `add(a!, b!)` threads each banged value through a
+    // fresh continuation and evaluates to `add(a, b)`.
     let source = r#"
         let bind : (sys/Nat, (sys/Nat) -> sys/Nat) -> sys/Nat = (m, f) => f(m);
         let a : sys/Nat = 3;
         let b : sys/Nat = 4;
-        let result : sys/Nat = with bind sys/Nat/add(a!, b!);
+        let result : sys/Nat = let ! = bind; sys/Nat/add(a!, b!);
         sys/Io/write(sys/Io/stdout, /sys/Str/to_bin(sys/Nat/to_str(result)))
         "#;
 
@@ -431,8 +427,8 @@ fn with_identity_monad_sequences_bangs() {
 }
 
 #[test]
-fn with_std_parse_threads_bangs_left_to_right() {
-    // The real `std/Parse` monad. `with Parse/bind` partially applies the curried
+fn let_bang_std_parse_threads_bangs_left_to_right() {
+    // The real `std/Parse` monad. `let ! = Parse/bind;` partially applies the curried
     // bind, fixing its leading `Type` arguments with `?` holes — and because the bind is
     // re-elaborated per `!` site, each site mints its own holes (solved by inference).
     // `Parse/bind` stays in head position, so no annotations are needed.
@@ -443,7 +439,7 @@ fn with_std_parse_threads_bangs_left_to_right() {
         use /std/{Parse, Nat, Result, Io};
 
         let parser : Parse/Parse(Nat) =
-            with Parse/bind
+            let ! = Parse/bind;
             Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
         match Parse/run(parser, /sys/Str/to_bin("BA")) : {}
@@ -465,10 +461,10 @@ fn with_std_parse_threads_bangs_left_to_right() {
 }
 
 #[test]
-fn with_region_mixes_action_types() {
+fn let_bang_region_mixes_action_types() {
     // A single region sequences two actions of *different* payload types: a
     // `Parse(Bin)` (`take_while`) and a `Parse(Nat)` (`any_byte`). This works only
-    // because `with Parse/bind` is re-elaborated per `!` site, so each site gets
+    // because `let ! = Parse/bind;` is re-elaborated per `!` site, so each site gets
     // its own holes (`?A := Bin` for the first, `?A := Nat` for the second). A single
     // shared bind value would force one `A` and reject this. On "AB": `take_while(is_a)`
     // reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bin/append("A", 66)`
@@ -479,7 +475,7 @@ fn with_region_mixes_action_types() {
         let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
 
         let parser : Parse/Parse(Bin) =
-            with Parse/bind
+            let ! = Parse/bind;
             Parse/pure(Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
         match Parse/run(parser, /sys/Str/to_bin("AB")) : {}
@@ -834,9 +830,9 @@ fn bare_tuple_continuation_tail_infers() {
         let pairer : Parse({ Nat, Nat }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
         rec with_sugar : Parse({ Nat, Nat }) =
-            with Parse/bind
-                let a = Parse/any_byte!;
-                Parse/pure((a, 0));
+            let ! = Parse/bind;
+            let a = Parse/any_byte!;
+            Parse/pure((a, 0));
         match Parse/run(pairer, /sys/Str/to_bin("hi"))
         | success(pair) => Io/print(Nat/to_str(pair.0))
         | failure(_) => Io/print("error")
