@@ -1,5 +1,5 @@
 use {
-    super::ChannelHost,
+    super::{ChannelHost, StdioHost},
     std::{path::Path, time::Duration},
 };
 
@@ -1943,13 +1943,38 @@ fn http_perform_parses_a_scripted_response() {
         "#;
 
     let (system, receiver) = ChannelHost::out();
+    // The trailing bytes past `Content-Length: 5` must be dropped by the body
+    // framing, leaving the body exactly "hello".
     system.script_net([(
         "example.com:80",
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE",
     )]);
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
         vec![b"200 text/plain hello".to_vec()]
     );
+}
+
+// Real-network smoke test, ignored by default — it needs outbound TCP to
+// example.com:80. It runs against the real `StdioHost`, so `Http/perform` drives
+// a live connect/GET/parse round trip through codegen; the status line prints to
+// stdout. `expect` asserts the run completes without trapping (the exact-200
+// parse is pinned by `http_perform_parses_a_scripted_response`). Run with:
+//   cargo test -- --ignored --nocapture http_perform_smoke_tests_example_com
+#[test]
+#[ignore]
+fn http_perform_smoke_tests_example_com() {
+    let source = r#"
+        use /std/{Http, Io, Str, Nat};
+        match Http/perform(Http/get("example.com", 80, "/")) : Nat
+        | success(response) =>
+            Io/write(Io/stdout, Str/to_bin(Str/concat_all([
+                "smoke: HTTP ", Nat/to_str(response.status.code), "\n"
+            ])))
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("smoke: connect/parse failed\n"))
+        end
+        "#;
+
+    crate::run_text(Duration::from_secs(30), source, StdioHost::new()).expect("expected result");
 }

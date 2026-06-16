@@ -75,6 +75,37 @@ let until(target : Nat) -> Nat -> Bln =
         | false => true
         end;
 
+-- ASCII lowercasing, for case-insensitive header-name matching (HTTP field
+-- names are case-insensitive).
+let lower_byte(byte : Nat) -> Nat =
+    match Nat/gte(byte, 65) : Nat
+    | true =>
+        match Nat/lte(byte, 90) : Nat
+        | true => Nat/add(byte, 32)
+        | false => byte
+        end
+    | false => byte
+    end;
+
+let lower(b : Bin) -> Bin =
+    Bin/fold(b, Bin/empty, (byte, acc) => Bin/append(acc, lower_byte(byte)));
+
+let eql_ci(a : Str, b : Str) -> Bln =
+    Bin/eql(lower(Str/to_bin(a)), lower(Str/to_bin(b)));
+
+-- The first header whose name matches `name` case-insensitively, over a raw
+-- header array. `header` (below) is the `Response`-facing wrapper.
+let header_lookup(headers : Arr({ Str, Str }), name : Str) -> Option(Str) =
+    Arr/fold(headers, Option/none(@Str), (pair, acc) =>
+        match acc : Option(Str)
+        | some(found) => Option/some(found)
+        | none() =>
+            match eql_ci(pair.0, name)
+            | true => Option/some(pair.1)
+            | false => Option/none()
+            end
+        end);
+
 let render_header(pair : { Str, Str }) -> Str =
     Str/concat_all([pair.0, ": ", pair.1, "\r\n"]);
 
@@ -168,33 +199,47 @@ let header_line : Parse({ Str, Str }) =
     let _ = Parse/take_byte('\n')!;
     Parse/pure((as_str(name), as_str(Str/trim(value))));
 
+-- Take exactly `n` bytes (clamped to what remains), advancing the cursor. This
+-- is the `Content-Length`-framed body.
+let take_n(n : Nat) -> Parse(Bin) =
+    (input, pos) =>
+        let stop = Nat/min(Nat/add(pos, n), Bin/len(input));
+        Result/success((stop, Bin/slice(input, pos, stop)));
+
+-- The declared `Content-Length`, if the header is present and numeric.
+let content_length_of(headers : Arr({ Str, Str })) -> Option(Nat) =
+    match header_lookup(headers, "Content-Length") : Option(Nat)
+    | some(value) => Option/some(Nat/of_str(Str/to_bin(value)))
+    | none() => Option/none()
+    end;
+
+-- Choose how to frame the body: by `Content-Length` when advertised, otherwise
+-- everything up to EOF (the `Connection: close` fallback).
+let body_parser(headers : Arr({ Str, Str })) -> Parse(Bin) =
+    match content_length_of(headers) : Parse(Bin)
+    | some(n) => take_n(n)
+    | none() => rest
+    end;
+
 -- Parse a complete response: status line, zero or more header lines, the blank
--- line terminating the header block, then the body as the remaining bytes.
+-- line terminating the header block, then the body — `Content-Length`-framed when
+-- the header is present, else the remaining bytes.
 pub let decode : Parse(Response) =
     let ! = Parse/bind;
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
     let _ = Parse/take_byte('\r')!;
     let _ = Parse/take_byte('\n')!;
-    let body = rest!;
+    let body = body_parser(headers)!;
     Parse/pure(Response {
         status = status,
         headers = headers,
         body = body
     });
 
--- Look up the first header whose name matches `name` exactly. Case-insensitive
--- matching is a TODO (HTTP field names are case-insensitive).
+-- Look up the first header whose name matches `name` (case-insensitively).
 pub let header(resp : Response, name : Str) -> Option(Str) =
-    Arr/fold(resp.headers, Option/none(@Str), (pair, acc) =>
-        match acc : Option(Str)
-        | some(v) => Option/some(v)
-        | none() =>
-            match Str/eql(pair.0, name)
-            | true => Option/some(pair.1)
-            | false => Option/none()
-            end
-        end);
+    header_lookup(resp.headers, name);
 
 -- Drive one request end to end: render it, send it through `/std/Net`, and parse
 -- the reply. A transport failure becomes `Error/net`; an unparseable reply
