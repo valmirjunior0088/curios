@@ -132,7 +132,7 @@ pub let find(s : Str, target : Nat) -> Option(Nat) =
     let r : { Nat, Option(Nat) } =
         fold(s, (0, Option/none()), (cp, acc) =>
             match acc.1
-            | some(_) => (Nat/add(acc.0, 1), acc.1)
+            | some(_) => acc
             | none() =>
                 match Nat/eql(cp, target)
                 | true => (Nat/add(acc.0, 1), Option/some(acc.0))

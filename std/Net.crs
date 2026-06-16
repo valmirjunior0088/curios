@@ -31,7 +31,7 @@ let close(c : Socket) -> {} =
 let timeout_ms(t : Option(Time/Duration)) -> Nat =
     match t : Nat
     | none() => 0
-    | some(d) => Nat/add(Nat/mul(Time/secs(d), 1000), Nat/div(Time/nanos(d), 1000000))
+    | some(d) => Time/to_millis(d)
     end;
 
 let decode(status : Nat) -> Error =
