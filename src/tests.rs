@@ -87,13 +87,12 @@ fn io_read() {
 }
 
 #[test]
-fn bin_empty_is_the_empty_sequence() {
-    // `Bin/empty` is the literal-free empty byte sequence (so foundational
-    // modules can stop spelling it `""`); concatenating it is the identity.
+fn empty_bin_literal_is_the_empty_sequence() {
+    // The empty `Bin` literal concatenated with a value is the identity.
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"std/Io/write(std/Io/stdout, std/Bin/concat(std/Bin/empty, /std/Str/to_bin("ok")))"#,
+        r#"std/Io/write(std/Io/stdout, std/Bin/concat(\\, /std/Str/to_bin("ok")))"#,
         system,
     )
     .expect("expected result");
@@ -399,7 +398,7 @@ fn multi_arg_function() {
 #[test]
 fn curried_function() {
     let source = r#"
-        let add : std/Int -> std/Int -> std/Int = (x) => (y) => std/Int/add(x, y);
+        let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3)(+4))))
         "#;
 
@@ -1606,7 +1605,7 @@ fn random_bin_returns_requested_length() {
     let (system, receiver) = ChannelHost::out();
     crate::run_text(
         Duration::from_secs(5),
-        r#"std/Io/write(std/Io/stdout, /std/Random/bin(8))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Rand/bin(8))"#,
         system,
     )
     .expect("expected result");
@@ -1617,8 +1616,50 @@ fn random_bin_returns_requested_length() {
 }
 
 #[test]
+fn bln_logic_and_of_str() {
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Bln, Str, Option, Io};
+        let computed = Bln/and(Bln/or(false, true), Bln/not(false));
+        let parsed = match Bln/of_str(Str/to_bin("false")) : Bln
+            | some(b) => b
+            | none() => true
+            end;
+        Io/write(Io/stdout, Str/to_bin(Str/concat(Bln/to_str(computed), Bln/to_str(parsed))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"truefalse".to_vec()]);
+}
+
+#[test]
+fn option_result_char_helpers() {
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Option, Result, Char, Nat, Str, Io};
+        let opt = Option/unwrap_or(Option/map((x : Nat) => Nat/add(x, 1), Option/some(4)), 0);
+        let res0 : Result(Nat, Nat) = Result/success(5);
+        let res = Result/unwrap_or(Result/map((x : Nat) => Nat/mul(x, 2), res0), 0);
+        let up = Char/to_upper('a');
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(opt, res), up))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    // opt = 5, res = 10, up = 'A' = 65  ->  80
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"80".to_vec()]);
+}
+
+#[test]
 fn clock_diff_of_two_distinct_now_readings() {
-    // Two scripted wall readings 30 s + 400 ns apart. `Clock/now` referenced
+    // Two scripted wall readings 30 s + 400 ns apart. `Time/now` referenced
     // twice must perform two *distinct* host calls (the nullary-effect
     // distinctness the struct-head reduction relies on), so the diff is the
     // gap between them, not zero.
@@ -1627,10 +1668,10 @@ fn clock_diff_of_two_distinct_now_readings() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        let a = /std/Clock/now();
-        let b = /std/Clock/now();
-        let d = /std/Clock/diff(b, a);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Clock/secs(d))))
+        let a = /std/Time/now();
+        let b = /std/Time/now();
+        let d = /std/Time/diff(b, a);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Time/secs(d))))
         "#,
         system,
     )
@@ -1646,8 +1687,8 @@ fn clock_mono_reads_scripted_elapsed() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        let e = /std/Clock/elapsed();
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Clock/secs(e))))
+        let e = /std/Time/elapsed();
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Time/secs(e))))
         "#,
         system,
     )
@@ -1897,9 +1938,9 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
-        use /std/{Net, Io, Str, Option, Clock};
+        use /std/{Net, Io, Str, Option, Time};
         let settings = Net/Settings {
-            connect_timeout = Option/some(Clock/of_millis(500)),
+            connect_timeout = Option/some(Time/of_millis(500)),
             read_timeout = Option/none(),
             write_timeout = Option/none()
         };

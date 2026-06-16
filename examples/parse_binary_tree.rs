@@ -10,7 +10,7 @@ fn main() {
         | leaf(Int)
         | node(Int, Tree, Tree)
         end
-        rec sum : Tree -> Int = (t) =>
+        rec sum : (Tree) -> Int = (t) =>
             match t : Int
             | leaf(n) => n
             | node(n, l, r) =>

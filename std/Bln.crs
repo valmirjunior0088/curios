@@ -1,8 +1,48 @@
 pub use /sys/{Bln};
-use /std/{Str};
+use /std/{Str, Bin, Option};
+
+pub let not(b : Bln) -> Bln =
+    match b
+    | true => false
+    | false => true
+    end;
+
+pub let and(a : Bln, b : Bln) -> Bln =
+    match a
+    | true => b
+    | false => false
+    end;
+
+pub let or(a : Bln, b : Bln) -> Bln =
+    match a
+    | true => true
+    | false => b
+    end;
+
+pub let xor(a : Bln, b : Bln) -> Bln =
+    match a
+    | true => not(b)
+    | false => b
+    end;
+
+pub let eql(a : Bln, b : Bln) -> Bln =
+    match a
+    | true => b
+    | false => not(b)
+    end;
 
 pub let to_str(b : Bln) -> Str =
     match b
     | true => "true"
     | false => "false"
+    end;
+
+pub let of_str(s : Bin) -> Option(Bln) =
+    match Bin/eql(s, Str/to_bin("true"))
+    | true => Option/some(true)
+    | false =>
+        match Bin/eql(s, Str/to_bin("false"))
+        | true => Option/some(false)
+        | false => Option/none(@Bln)
+        end
     end;

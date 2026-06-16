@@ -1,7 +1,8 @@
 use /sys/{Io};
 use /std/{Arr, Bin, Nat, Option, Void};
 
-pub let args : Arr(Bin) = Io/args;
+pub let args : Arr(Bin) =
+    Io/args;
 
 pub let env(name : Bin) -> Option(Bin) =
     let r = Io/env(name);
@@ -10,4 +11,5 @@ pub let env(name : Bin) -> Option(Bin) =
     | false => Option/none()
     end;
 
-pub let exit(code : Nat) -> Void = Io/exit(code);
+pub let exit(code : Nat) -> Void =
+    Io/exit(code);

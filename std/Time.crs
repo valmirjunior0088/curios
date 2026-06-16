@@ -1,4 +1,4 @@
-use /sys/Io/{let clock_wall, let clock_mono};
+use /sys/{Io};
 use /std/{Nat, Bln};
 
 pub struct Instant {
@@ -12,8 +12,8 @@ pub struct Duration {
     nanos : Nat
 }
 
-pub let duration(secs : Nat, nanos : Nat) -> Duration =
-    Duration { secs = secs, nanos = nanos };
+pub let zero : Duration =
+    Duration { secs = 0, nanos = 0 };
 
 pub let of_secs(secs : Nat) -> Duration =
     Duration { secs = secs, nanos = 0 };
@@ -25,7 +25,7 @@ pub let of_millis(ms : Nat) -> Duration =
     };
 
 pub let now() -> Instant =
-    let r = clock_wall();
+    let r = Io/clock_wall();
     Instant {
         secs_hi = r.secs_hi,
         secs_lo = r.secs_lo,
@@ -33,15 +33,17 @@ pub let now() -> Instant =
     };
 
 pub let elapsed() -> Duration =
-    let r = clock_mono();
+    let r = Io/clock_mono();
     Duration {
         secs = r.secs,
         nanos = r.nanos
     };
 
-pub let secs(d : Duration) -> Nat = d.secs;
+pub let secs(d : Duration) -> Nat =
+    d.secs;
 
-pub let nanos(d : Duration) -> Nat = d.nanos;
+pub let nanos(d : Duration) -> Nat =
+    d.nanos;
 
 let sub_digit(x : Nat, y : Nat) -> { digit : Nat, borrow : Nat } =
     match Nat/lt(x, y)

@@ -8,22 +8,12 @@ let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
     | false => false
     end;
 
--- UTF-8 validity as a byte-at-a-time automaton (Unicode Table 3-7). The state
--- is the obligation owed at the current position: `lead` expects a leading
--- byte; `cont(rem, lo, hi)` owes `rem` continuation bytes with the immediate
--- next one constrained to [lo, hi] (the tightened first-byte ranges reject
--- overlong encodings and surrogates); `bad` is the absorbing failure. Folding
--- `step` over the bytes needs only the primitive one-step recursor.
 union Scan
 | lead()
 | cont(Nat, Nat, Nat)
 | bad()
 end
 
--- Classify a leading byte into the obligation it opens: ASCII closes the
--- sequence at once (`lead`), while a 2/3/4-byte lead owes 1/2/3 continuation
--- bytes. The first owed byte's range is tightened (E0/ED, F0/F4) to reject
--- overlong encodings and surrogates; subsequent ones relax to [128, 191].
 let classify(c : Nat) -> Scan =
     match in_range(c, 0, 127)
     | true => Scan/lead()
@@ -70,21 +60,12 @@ pub let is_utf8(b : Bin) -> Bln =
     | bad() => false
     end;
 
--- Byte equality on the shared `Bin` representation. UTF-8 is canonical, so
--- equal bytes ⟺ equal text.
-pub let eql(a : Str, b : Str) -> Bln = Bin/eql(to_bin(a), to_bin(b));
+pub let eql(a : Str, b : Str) -> Bln =
+    Bin/eql(to_bin(a), to_bin(b));
 
--- Concatenation on the shared `Bin` representation. Valid UTF-8 followed by
--- valid UTF-8 is itself valid UTF-8, so the trusted `/sys/Str/of_bin` re-wrap
--- needs no `is_utf8` re-check.
-pub let concat(a : Str, b : Str) -> Str = /sys/Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
+pub let concat(a : Str, b : Str) -> Str =
+    Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
 
--- The empty string.
-pub let empty : Str = "";
-
--- The number of Unicode scalar values (codepoints) — *not* bytes, and not
--- grapheme clusters. Counts every byte that is not a UTF-8 continuation byte
--- (those in [128, 191]). For the encoded byte size, use `Bin/len(Str/to_bin s)`.
 pub let len(s : Str) -> Nat =
     Bin/fold(to_bin(s), 0, (byte, acc) =>
         match in_range(byte, 128, 191)
@@ -92,14 +73,9 @@ pub let len(s : Str) -> Nat =
         | false => Nat/add(acc, 1)
         end);
 
--- The checked constructor: a `Str` is produced only when `b` is well-formed
--- UTF-8. This is the single bridge from arbitrary bytes (IO input, parsers)
--- into text; within `Str`-to-`Str` code it is never needed. The trusted
--- `/sys/Str/of_bin` coercion it guards is the raw primitive substrate, not part
--- of this API.
 pub let of_bin(b : Bin) -> Option(Str) =
     match is_utf8(b)
-    | true => Option/some(/sys/Str/of_bin(b))
+    | true => Option/some(Str/of_bin(b))
     | false => Option/none()
     end;
 
@@ -108,7 +84,7 @@ pub let concat_all(parts : Arr(Str)) -> Str =
         match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
             match Nat/lt(lo, hi)
-            | false => empty
+            | false => ""
             | true => Arr/get(parts, lo)
             end
         | true =>
@@ -122,7 +98,7 @@ pub let join(sep : Str, parts : Arr(Str)) -> Str =
         match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
             match Nat/lt(lo, hi)
-            | false => empty
+            | false => ""
             | true => Arr/get(parts, lo)
             end
         | true =>
@@ -131,7 +107,6 @@ pub let join(sep : Str, parts : Arr(Str)) -> Str =
         end;
     go(0, Arr/len(parts));
 
--- Whitespace trimming over the raw byte view (ASCII whitespace only).
 pub let trim_start(str : Bin) -> Nat =
     match Bin/len(str)
     | 0 => Bin/len(str)

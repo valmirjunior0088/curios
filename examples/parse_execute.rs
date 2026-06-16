@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Int, Flt};
-        rec id : Type -> Type = (x) => x;
+        rec id : (Type) -> Type = (x) => x;
         let witness : Type = id(Int);
         union Pair
         | left(Int)
@@ -18,7 +18,7 @@ fn main() {
             | left(_) => Int/add(+40, +2)
             | right(_) => +7
             end;
-        let make : Int -> {witness, Flt} = (x) =>
+        let make : (Int) -> {witness, Flt} = (x) =>
             (x, Flt/add(+0.25, +0.5));
         make(decoded)
         "#;

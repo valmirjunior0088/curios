@@ -22,7 +22,7 @@ fn main() {
             match contradiction : A
             end;
 
-        let Not(P : Type) -> Type = P -> Void;
+        let Not(P : Type) -> Type = (P) -> Void;
 
         let trivially_true : {} = ();
 

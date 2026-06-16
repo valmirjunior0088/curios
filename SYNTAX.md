@@ -13,7 +13,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `and` `pub` `match` `mod` `use` `end` `false` `true` `union` `struct`
+**Keywords**: `let` `rec` `pub` `match` `mod` `use` `end` `false` `true` `union` `struct`. (`and`, the `rec`-clause separator, is contextual — elsewhere it is an ordinary identifier.)
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/std/Nat/add`.
 
@@ -287,7 +287,7 @@ A binder marked `@` is an implicit parameter: **an automatic `?`**. At every cal
 Implicit parameters may appear anywhere in the telescope, not just as a prefix; `@` marks work the same in standalone Π-types (`rec` signatures, annotations):
 
 ```
-rec bind : (@A : Type, @B : Type) -> (Parse(A), A -> Parse(B)) -> Parse(B) = …;
+rec bind : (@A : Type, @B : Type) -> (Parse(A), (A) -> Parse(B)) -> Parse(B) = …;
 ```
 
 Call sites follow a two-queue rule: plain arguments fill the explicit binders in telescope order, `@`-arguments fill the implicit binders in telescope order, matched independently — `f(@Nat, x)` and `f(x, @Nat)` are the same call. An implicit the elaborator cannot infer is rejected with the binder's name; supply it explicitly with `@`.
@@ -333,7 +333,7 @@ let ! = bind;  body
 action!
 ```
 
-`let !` introduces monadic sequencing sugar — the binder is the literal `!`, and it shadows no ordinary `let`. The `bind` is an atomic term denoting a binary operation of shape `(M A, A -> M B) -> M B` — typically a reference like `Parse/bind`, whose type parameters are implicit and inferred per use. The block runs to the end of the enclosing term — there is no `end`. Inside the body, postfix `!` marks an action whose result should be bound inline:
+`let !` introduces monadic sequencing sugar — the binder is the literal `!`, and it shadows no ordinary `let`. The `bind` is an atomic term denoting a binary operation of shape `(M A, (A) -> M B) -> M B` — typically a reference like `Parse/bind`, whose type parameters are implicit and inferred per use. The block runs to the end of the enclosing term — there is no `end`. Inside the body, postfix `!` marks an action whose result should be bound inline:
 
 ```
 let ! = Parse/bind;
@@ -443,18 +443,17 @@ The type of all types.
 
 ### Function type
 
-Non-dependent (output does not mention the input):
+The parameter set is always parenthesised, whether or not the function is dependent:
 
 ```
-A -> B
-```
-
-Dependent, one or more named parameters (each parameter may be mentioned by later parameters and by the output):
-
-```
-(a : A) -> B
+(A) -> B                 -- non-dependent
+(A, B) -> C
+() -> B                  -- nullary
+(a : A) -> B             -- dependent: later parameters and the output may mention `a`
 (a : A, b : B) -> C
 ```
+
+A non-dependent parameter omits its name; named and unnamed parameters may be mixed.
 
 ### Tuple type
 
@@ -530,10 +529,7 @@ A sign, a decimal point, and at least one digit after the point are all required
 "hello, world"
 ```
 
-Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/std/Str` — a
-UTF-8 string (validity holds by construction, since source text is UTF-8). Use
-`/std/Str/to_bin` to view the underlying bytes, and `/std/Str/of_bin` (checked,
-`Bin -> Option(Str)`) to go the other way.
+Supports escapes: `\n` `\t` `\r` `\\` `\"`. A string literal has type `/std/Str` — a UTF-8 string (validity holds by construction, since source text is UTF-8). Use `/std/Str/to_bin` to view the underlying bytes, and `/std/Str/of_bin` (checked, `(Bin) -> Option(Str)`) to go the other way.
 
 ### Byte sequences
 
@@ -543,8 +539,7 @@ Raw bytes written as consecutive hex pairs, each prefixed with `\`:
 \ef\bb\bf
 ```
 
-Has type `/std/Bin`. This is the escape hatch for raw or non-UTF-8 bytes — unlike
-a `"..."` string literal, a `\hex` sequence is a `Bin`, not a `Str`.
+Has type `/std/Bin`. This is the escape hatch for raw or non-UTF-8 bytes — unlike a `"..."` string literal, a `\hex` sequence is a `Bin`, not a `Str`. The empty byte sequence is the literal `\\`.
 
 ### Arrays
 
@@ -645,141 +640,4 @@ All primitive operations use call syntax: the operation name followed by parenth
 
 These are normal path references. After `use /std/{Nat, Bin};`, the same calls can be written `Nat/add(a, b)` and `Bin/slice(s, start, end)`. They surface through the standard library at `/std`; the primitives themselves live in the internal `/sys` module, which `/std` re-exports and which user code never names directly.
 
-### Nat
-
-| Operation            | Arity | Description           | Returns    |
-| -------------------- | ----- | --------------------- | ---------- |
-| `/std/Nat/succ(a)`   | 1     | Successor             | `/std/Nat` |
-| `/std/Nat/add(a, b)` | 2     | Addition              | `/std/Nat` |
-| `/std/Nat/sub(a, b)` | 2     | Subtraction           | `/std/Nat` |
-| `/std/Nat/mul(a, b)` | 2     | Multiplication        | `/std/Nat` |
-| `/std/Nat/div(a, b)` | 2     | Division              | `/std/Nat` |
-| `/std/Nat/rem(a, b)` | 2     | Remainder             | `/std/Nat` |
-| `/std/Nat/eql(a, b)` | 2     | Equality              | `/std/Bln` |
-| `/std/Nat/neq(a, b)` | 2     | Inequality            | `/std/Bln` |
-| `/std/Nat/lt(a, b)`  | 2     | Less than             | `/std/Bln` |
-| `/std/Nat/gt(a, b)`  | 2     | Greater than          | `/std/Bln` |
-| `/std/Nat/lte(a, b)` | 2     | Less than or equal    | `/std/Bln` |
-| `/std/Nat/gte(a, b)` | 2     | Greater than or equal | `/std/Bln` |
-| `/std/Nat/to_int(a)` | 1     | Convert to Int        | `/std/Int` |
-| `/std/Nat/to_flt(a)` | 1     | Convert to Flt        | `/std/Flt` |
-| `/std/Nat/to_str(a)` | 1     | Convert to Str        | `/std/Str` |
-
-Structural induction and sparse dispatch over a `Nat` are written with [`match`](#match) (the `| 0` / `| pred + 1, ih` and `| n` / `| _` branch shapes, respectively).
-
-### Int
-
-| Operation            | Arity | Description           | Returns    |
-| -------------------- | ----- | --------------------- | ---------- |
-| `/std/Int/add(a, b)` | 2     | Addition              | `/std/Int` |
-| `/std/Int/sub(a, b)` | 2     | Subtraction           | `/std/Int` |
-| `/std/Int/mul(a, b)` | 2     | Multiplication        | `/std/Int` |
-| `/std/Int/div(a, b)` | 2     | Division              | `/std/Int` |
-| `/std/Int/rem(a, b)` | 2     | Remainder             | `/std/Int` |
-| `/std/Int/eql(a, b)` | 2     | Equality              | `/std/Bln` |
-| `/std/Int/neq(a, b)` | 2     | Inequality            | `/std/Bln` |
-| `/std/Int/lt(a, b)`  | 2     | Less than             | `/std/Bln` |
-| `/std/Int/gt(a, b)`  | 2     | Greater than          | `/std/Bln` |
-| `/std/Int/lte(a, b)` | 2     | Less than or equal    | `/std/Bln` |
-| `/std/Int/gte(a, b)` | 2     | Greater than or equal | `/std/Bln` |
-| `/std/Int/to_nat(a)` | 1     | Convert to Nat        | `/std/Nat` |
-| `/std/Int/to_flt(a)` | 1     | Convert to Flt        | `/std/Flt` |
-| `/std/Int/to_str(a)` | 1     | Convert to Str        | `/std/Str` |
-
-### Flt
-
-| Operation               | Arity | Description           | Returns    |
-| ----------------------- | ----- | --------------------- | ---------- |
-| `/std/Flt/add(a, b)`    | 2     | Addition              | `/std/Flt` |
-| `/std/Flt/sub(a, b)`    | 2     | Subtraction           | `/std/Flt` |
-| `/std/Flt/mul(a, b)`    | 2     | Multiplication        | `/std/Flt` |
-| `/std/Flt/div(a, b)`    | 2     | Division              | `/std/Flt` |
-| `/std/Flt/eql(a, b)`    | 2     | Equality              | `/std/Bln` |
-| `/std/Flt/neq(a, b)`    | 2     | Inequality            | `/std/Bln` |
-| `/std/Flt/lt(a, b)`     | 2     | Less than             | `/std/Bln` |
-| `/std/Flt/gt(a, b)`     | 2     | Greater than          | `/std/Bln` |
-| `/std/Flt/lte(a, b)`    | 2     | Less than or equal    | `/std/Bln` |
-| `/std/Flt/gte(a, b)`    | 2     | Greater than or equal | `/std/Bln` |
-| `/std/Flt/min(a, b)`    | 2     | Minimum               | `/std/Flt` |
-| `/std/Flt/max(a, b)`    | 2     | Maximum               | `/std/Flt` |
-| `/std/Flt/neg(a)`       | 1     | Negation              | `/std/Flt` |
-| `/std/Flt/abs(a)`       | 1     | Absolute value        | `/std/Flt` |
-| `/std/Flt/sqrt(a)`      | 1     | Square root           | `/std/Flt` |
-| `/std/Flt/floor(a)`     | 1     | Floor                 | `/std/Flt` |
-| `/std/Flt/ceil(a)`      | 1     | Ceiling               | `/std/Flt` |
-| `/std/Flt/trunc(a)`     | 1     | Truncate toward zero  | `/std/Flt` |
-| `/std/Flt/nearest(a)`   | 1     | Round to nearest      | `/std/Flt` |
-| `/std/Flt/to_nat(a)`    | 1     | Convert to Nat        | `/std/Nat` |
-| `/std/Flt/to_int(a)`    | 1     | Convert to Int        | `/std/Int` |
-| `/std/Flt/to_le_bin(a)` | 1     | Convert to Bin bytes  | `/std/Bin` |
-| `/std/Flt/to_str(a)`    | 1     | Convert to Str        | `/std/Str` |
-
-### Bin
-
-| Operation                       | Arity | Description                       | Returns    |
-| ------------------------------- | ----- | --------------------------------- | ---------- |
-| `/std/Bin/len(a)`               | 1     | Byte length                       | `/std/Nat` |
-| `/std/Bin/eql(a, b)`            | 2     | Equality                          | `/std/Bln` |
-| `/std/Bin/get(a, i)`            | 2     | Byte at index `i`                 | `/std/Nat` |
-| `/std/Bin/slice(a, start, end)` | 3     | Subsequence from `start` to `end` | `/std/Bin` |
-| `/std/Bin/append(a, byte)`      | 2     | Append a single byte              | `/std/Bin` |
-| `/std/Bin/concat(a, b)`         | 2     | Concatenate two sequences         | `/std/Bin` |
-
-### Str
-
-`/std/Str` is the UTF-8 string type; its runtime representation is the same byte
-buffer as `Bin`. String literals (`"..."`) have type `Str`. The only primitive
-surfacing through `/std/Str` is `to_bin`, the carrier projection onto those
-bytes; `concat`, `eql`, `len` (codepoint count), `is_utf8`, the checked
-`of_bin : Bin -> Option(Str)`, and the rest are ordinary library definitions
-built on top of it — see `STD.md`.
-
-| Operation             | Arity | Description                                | Returns    |
-| --------------------- | ----- | ------------------------------------------ | ---------- |
-| `/std/Str/to_bin(s)`  | 1     | The underlying UTF-8 bytes                 | `/std/Bin` |
-
-### Arr
-
-| Operation                       | Arity | Description                    | Returns       |
-| ------------------------------- | ----- | ------------------------------ | ------------- |
-| `/std/Arr/len(a)`               | 1     | Element count                  | `/std/Nat`    |
-| `/std/Arr/get(a, i)`            | 2     | Element at index `i`           | `T`           |
-| `/std/Arr/slice(a, start, end)` | 3     | Subarray from `start` to `end` | `/std/Arr(T)` |
-| `/std/Arr/append(a, elem)`      | 2     | Append a single element        | `/std/Arr(T)` |
-| `/std/Arr/concat(a, b)`         | 2     | Concatenate two arrays         | `/std/Arr(T)` |
-
-`Bin/concat` and `Arr/concat` concatenate two operands; chain calls to join more.
-For text, the `/std/Str` API (`Str/concat`, `Str/join`, …) works the same way and
-keeps the values typed as `Str`:
-
-```
-/std/Str/concat(/std/Str/concat("hello", ", "), "world")
-/std/Arr/concat(/std/Arr/concat([1, 2], [3, 4]), [5])
-```
-
-### Io
-
-`/std/Io` is the byte-stream handle type — an opaque runtime token, like a file descriptor. The well-known handles `stdin`, `stdout`, and `stderr` are provided as constants; `open` mints file handles; `read`, `write`, and `close` work on any handle.
-
-| Operation             | Arity | Description                                                                    | Returns                              |
-| --------------------- | ----- | ------------------------------------------------------------------------------ | ------------------------------------ |
-| `/std/Io/stdin`       | —     | The standard input handle                                                      | `/std/Io`                            |
-| `/std/Io/stdout`      | —     | The standard output handle                                                     | `/std/Io`                            |
-| `/std/Io/stderr`      | —     | The standard error handle                                                      | `/std/Io`                            |
-| `/std/Io/open(p, m)`  | 2     | Open the file at path `p : /std/Bin` with mode `m` (0 read, 1 write, 2 append) | `{ status : Nat, handle : /std/Io }` |
-| `/std/Io/close(h)`    | 1     | Close `h`; closing an unknown handle is a no-op                                | `{}`                                 |
-| `/std/Io/read(h, n)`  | 2     | Read up to `n` bytes from `h`, blocking until at least one is available        | `{ status : Nat, bytes : /std/Bin }` |
-| `/std/Io/write(h, b)` | 2     | Write `b : /std/Bin` to `h`                                                    | `/std/Nat` (a status)                |
-
-Failable operations report through a status code — errors are data; traps stay reserved for programmer errors:
-
-| Status | Meaning                                      |
-| ------ | -------------------------------------------- |
-| 0      | ok                                           |
-| 1      | end of input (`read` only; `bytes` is empty) |
-| 2      | not found                                    |
-| 3      | permission denied                            |
-| 4      | already exists                               |
-| 5      | other                                        |
-
-The standard library layers safe conveniences on top — `/std/Io` (printing, buffered line reading) and `/std/File` (bracket-managed file access) — documented in `STD.md`. Programs run with the invoking user's filesystem access; there is no sandbox.
+The full catalogue of primitive operations — every module, with argument and result types — lives in [`STD.md`](STD.md), alongside the library helpers built on the same primitives.

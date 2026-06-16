@@ -1,3 +1,5 @@
+use /std/{Bln};
+
 pub union Option(A : Type)
 | some(A)
 | none()
@@ -5,9 +7,33 @@ end
 
 pub use Option/*;
 
-pub let bind(@A : Type, @B : Type) -> (Option(A), A -> Option(B)) -> Option(B) =
+pub let bind(@A : Type, @B : Type) -> (Option(A), (A) -> Option(B)) -> Option(B) =
     (m, f) =>
         match m
         | some(a) => f(a)
         | none() => Option/none()
         end;
+
+pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
+    match m
+    | some(a) => Option/some(f(a))
+    | none() => Option/none(@B)
+    end;
+
+pub let unwrap_or(@A : Type, m : Option(A), default : A) -> A =
+    match m
+    | some(a) => a
+    | none() => default
+    end;
+
+pub let is_some(@A : Type, m : Option(A)) -> Bln =
+    match m
+    | some(_) => true
+    | none() => false
+    end;
+
+pub let is_none(@A : Type, m : Option(A)) -> Bln =
+    match m
+    | some(_) => false
+    | none() => true
+    end;

@@ -21,7 +21,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "and", "mod", "use", "pub", "end", "false", "true", "union", "struct",
+    "let", "match", "rec", "mod", "use", "pub", "end", "false", "true", "union", "struct",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -278,7 +278,10 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
-    catch(many1(parse_hex_byte).and_drop(parse_whitespace()))
+    catch(take_exact("\\\\"))
+        .map(|()| Vec::<u8>::new())
+        .or(catch(many1(parse_hex_byte)))
+        .and_drop(parse_whitespace())
         .map(|bytes| Subterm::Prim(Prim::Bin(BinLiteral::Bytes(bytes))))
         .map(Into::into)
 }
@@ -414,7 +417,7 @@ fn parse_func_type_param<'a>() -> Parser<'a, (Plicity, Option<String>, Term)> {
         .map(|(plicity, (label, ty))| (plicity, label, ty))
 }
 
-fn parse_paren_func_type<'a>() -> Parser<'a, Term> {
+fn parse_func_type<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("(")
             .and_keep(sep_by0(parse_func_type_param, || parse_literal(",")))
@@ -431,22 +434,6 @@ fn parse_paren_func_type<'a>() -> Parser<'a, Term> {
         },
     )
     .map(Into::into)
-}
-
-fn parse_non_dependent_func_type<'a>() -> Parser<'a, Term> {
-    catch(parse_atomic_term().and_drop(parse_literal("->")))
-        .and(lazy(parse_term))
-        .map(|(input, output)| {
-            Subterm::FuncType(FuncType {
-                params: vec![(Plicity::Explicit, None, input)],
-                output,
-            })
-        })
-        .map(Into::into)
-}
-
-fn parse_func_type<'a>() -> Parser<'a, Term> {
-    parse_paren_func_type().or(parse_non_dependent_func_type())
 }
 
 // A lambda parameter with an optional domain annotation. `(x)` is sugar for

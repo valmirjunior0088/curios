@@ -17,6 +17,7 @@ pub mod Io;
 pub use Io/{let Io};
 
 pub mod File;
+pub use File/{let File};
 
 pub mod Net;
 
@@ -57,9 +58,8 @@ pub use Json/{let Json};
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
-pub mod Clock;
-pub use Clock/{let Instant, let Duration};
+pub mod Time;
 
-pub mod Random;
+pub mod Rand;
 
 pub mod Proc;

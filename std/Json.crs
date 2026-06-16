@@ -11,14 +11,10 @@ end
 
 pub use Json/*;
 
--- Reassemble validated bytes as text. The byte-level escaping below always
--- yields valid UTF-8 (the escapes are ASCII and the source is already a `Str`),
--- so the `none` arm is unreachable here — it is the total fallback the checked
--- `Str/of_bin` forces, not a trust assertion.
 let as_str(b : Bin) -> Str =
     match Str/of_bin(b)
     | some(s) => s
-    | none() => Str/empty
+    | none() => ""
     end;
 
 let encode_num(n : Flt) -> Str =
@@ -28,8 +24,6 @@ let encode_num(n : Flt) -> Str =
     | false => Flt/to_str(n)
     end;
 
--- Escape one source byte into its JSON-escaped byte sequence. Byte-level work,
--- so it produces `Bin`; the whole escaped body is reassembled into `Str` once.
 let escape_byte(byte : Nat) -> Bin =
     match byte
     | '"' => Str/to_bin("\\\"")
@@ -37,7 +31,7 @@ let escape_byte(byte : Nat) -> Bin =
     | '\n' => Str/to_bin("\\n")
     | '\r' => Str/to_bin("\\r")
     | '\t' => Str/to_bin("\\t")
-    | _ => Bin/append(Bin/empty, byte)
+    | _ => Bin/append(\\, byte)
     end;
 
 let encode_str(s : Str) -> Str =
@@ -149,9 +143,6 @@ let parse_str_segment : Parse(Bin) =
 let parse_str_body : Parse(Arr(Bin)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
--- The string's bytes come from arbitrary input, so this is a real text
--- boundary: validate with the checked `Str/of_bin`, and a malformed-UTF-8
--- string is a parse failure.
 let parse_raw_str : Parse(Str) =
     let ! = Parse/bind;
     let _ = Parse/take_byte('"')!;

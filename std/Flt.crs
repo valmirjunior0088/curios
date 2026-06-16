@@ -1,5 +1,5 @@
-pub use /sys/Flt/*;
 pub use /sys/{Flt};
+pub use /sys/Flt/*;
 use /std/{Nat, Int, Bin, Bln};
 
 let find_byte(target : Nat, str : Bin) -> Nat =

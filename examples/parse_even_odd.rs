@@ -6,12 +6,12 @@ use {
 fn main() {
     let source = r#"
         use /std/{Nat, Bln};
-        rec is_even : Nat -> Bln = (n) =>
+        rec is_even : (Nat) -> Bln = (n) =>
             match n : Bln
             | 0 => true
             | pred + 1, ih => is_odd(pred)
             end
-        and is_odd : Nat -> Bln = (n) =>
+        and is_odd : (Nat) -> Bln = (n) =>
             match n : Bln
             | 0 => false
             | pred + 1, ih => is_even(pred)

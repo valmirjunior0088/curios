@@ -11,8 +11,8 @@ pub rec format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
-    | str(rest) => Str -> format_type_with(T, rest)
-    | nat(rest) => Nat -> format_type_with(T, rest)
+    | str(rest) => (Str) -> format_type_with(T, rest)
+    | nat(rest) => (Nat) -> format_type_with(T, rest)
     end;
 
 let is_not_pct(byte : Nat) -> Bln =
@@ -57,7 +57,7 @@ pub let parse(input : Bin) -> Fmt =
     | failure(_) => Fmt/nil()
     end;
 
-rec go_with(T : Type, finish : Str -> T, f : Fmt, acc : Str) -> format_type_with(T, f) =
+rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_with(T, f) =
     match f : (f) => format_type_with(T, f)
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
@@ -66,7 +66,7 @@ rec go_with(T : Type, finish : Str -> T, f : Fmt, acc : Str) -> format_type_with
     end;
 
 pub let format(s : Str) -> format_type_with(Str, parse(Str/to_bin(s))) =
-    go_with(Str, (x) => x, parse(Str/to_bin(s)), Str/empty);
+    go_with(Str, (x) => x, parse(Str/to_bin(s)), "");
 
 pub let printf(s : Str) -> format_type_with({}, parse(Str/to_bin(s))) =
-    go_with({}, (x) => Io/print(x), parse(Str/to_bin(s)), Str/empty);
+    go_with({}, (x) => Io/print(x), parse(Str/to_bin(s)), "");

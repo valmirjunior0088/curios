@@ -1,23 +1,16 @@
-use /std/{Bin, Str, Nat, Io, Result, Option, Clock};
+use /std/{Bin, Str, Nat, Io, Result, Option, Time};
 
 pub union Error
 | refused()
 | other(Nat)
 end
 
--- A live connection handle. Like `/std/File`, a single-field struct is a
--- zero-cost newtype over the underlying `Io` byte stream, kept distinct so a
--- socket is not confused with stdin/stdout or a file.
 pub struct Socket { Io }
 
--- Per-connection settings. Each timeout is optional; `none` blocks forever.
--- `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout`
--- bound subsequent reads/writes on the handle. The representation is public:
--- build one as `Settings { ... }`, or start from `default`.
 pub struct Settings pub {
-    connect_timeout : Option(Clock/Duration),
-    read_timeout : Option(Clock/Duration),
-    write_timeout : Option(Clock/Duration)
+    connect_timeout : Option(Time/Duration),
+    read_timeout : Option(Time/Duration),
+    write_timeout : Option(Time/Duration)
 }
 
 pub let default : Settings = Settings {
@@ -32,15 +25,13 @@ pub let read(c : Socket, n : Nat) -> { status : Nat, bytes : Bin } =
 pub let write(c : Socket, b : Bin) -> Nat =
     Io/write(c.0, b);
 
--- Closing is private: `with`/`call` bracket the connection so a handle never
--- outlives the body and cannot be used after close.
 let close(c : Socket) -> {} =
     /sys/Io/close(c.0);
 
-let timeout_ms(t : Option(Clock/Duration)) -> Nat =
+let timeout_ms(t : Option(Time/Duration)) -> Nat =
     match t : Nat
     | none() => 0
-    | some(d) => Nat/add(Nat/mul(Clock/secs(d), 1000), Nat/div(Clock/nanos(d), 1000000))
+    | some(d) => Nat/add(Nat/mul(Time/secs(d), 1000), Nat/div(Time/nanos(d), 1000000))
     end;
 
 let decode(status : Nat) -> Error =
@@ -49,7 +40,7 @@ let decode(status : Nat) -> Error =
     | _ => Error/other(status)
     end;
 
-pub let with(@A : Type, settings : Settings, host : Str, port : Nat, body : Socket -> A) -> Result(A, Error) =
+pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> A) -> Result(A, Error) =
     let r = /sys/Io/connect(
         Str/to_bin(host),
         port,
@@ -59,7 +50,7 @@ pub let with(@A : Type, settings : Settings, host : Str, port : Nat, body : Sock
     match Nat/eql(r.status, 0)
     | true =>
         let c = Socket { r.handle };
-        let value = body(c);
+        let value = f(c);
         let closed = close(c);
         Result/success(value)
     | false => Result/failure(decode(r.status))
@@ -72,8 +63,7 @@ rec drain(c : Socket, acc : Bin) -> Bin =
     | false => acc
     end;
 
--- Open a connection, send `request`, read the whole response to EOF, close.
 pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Result(Bin, Error) =
     with(settings, host, port, (c) =>
         let sent = write(c, request);
-        drain(c, Bin/empty));
+        drain(c, \\));

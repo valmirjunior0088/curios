@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Nat, Int};
-        rec fib_pair : Nat -> {Int, Int} = (n) =>
+        rec fib_pair : (Nat) -> {Int, Int} = (n) =>
             match n : {Int, Int}
             | 0 => (+0, +1)
             | pred + 1, ih =>

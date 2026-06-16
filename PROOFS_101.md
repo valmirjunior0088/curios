@@ -51,7 +51,7 @@ let absurd(@A : Type, contradiction : Void) -> A =
 Negation is a function into `Void` — "a proof of `P` would be absurd":
 
 ```
-let Not(P : Type) -> Type = P -> Void;
+let Not(P : Type) -> Type = (P) -> Void;
 ```
 
 All three ship in the standard library as `/std/Void` (`Void`, `Void/absurd`, `Void/Not`); this document declares them inline so every snippet stands on its own.
@@ -90,7 +90,7 @@ let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
 | `sym`   | `Eq(x, y) -> Eq(y, x)`                             |
 | `trans` | `Eq(x, y) -> Eq(y, z) -> Eq(x, z)`                 |
 | `cong`  | `Eq(x, y) -> Eq(f(x), f(y))` for any `f`           |
-| `subst` | `Eq(x, y) -> P(x) -> P(y)` for any `P : A -> Type` |
+| `subst` | `(Eq(x, y)) -> (P(x)) -> P(y)` for any `P : (A) -> Type` |
 
 ```
 let flipped : Eq(2, 2) = Eq/sym(two_is_two);

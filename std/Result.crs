@@ -1,6 +1,39 @@
+use /std/{Bln};
+
 pub union Result(A : Type, E : Type)
 | success(A)
 | failure(E)
 end
 
 pub use Result/*;
+
+pub let map(@A : Type, @B : Type, @E : Type, f : (A) -> B, r : Result(A, E)) -> Result(B, E) =
+    match r
+    | success(a) => Result/success(f(a))
+    | failure(e) => Result/failure(e)
+    end;
+
+pub let map_err(@A : Type, @E : Type, @F : Type, f : (E) -> F, r : Result(A, E)) -> Result(A, F) =
+    match r
+    | success(a) => Result/success(a)
+    | failure(e) => Result/failure(f(e))
+    end;
+
+pub let bind(@A : Type, @B : Type, @E : Type) -> (Result(A, E), (A) -> Result(B, E)) -> Result(B, E) =
+    (m, f) =>
+        match m
+        | success(a) => f(a)
+        | failure(e) => Result/failure(e)
+        end;
+
+pub let unwrap_or(@A : Type, @E : Type, r : Result(A, E), default : A) -> A =
+    match r
+    | success(a) => a
+    | failure(_) => default
+    end;
+
+pub let is_ok(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
+    match r
+    | success(_) => true
+    | failure(_) => false
+    end;

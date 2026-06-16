@@ -1,5 +1,5 @@
-pub use /sys/Int/*;
 pub use /sys/{Int};
+pub use /sys/Int/*;
 use /std/{Nat, Bin};
 
 pub let of_str(str : Bin) -> Int =

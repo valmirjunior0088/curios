@@ -1,6 +1,5 @@
 use /std/{Result, Nat, Bin, Str, Bln, Arr, Lst};
 
--- Parsers consume a byte buffer (`Bin`) but report failures as text (`Str`).
 pub let Parse(A : Type) -> Type =
     (Bin, Nat) -> Result({ Nat, A }, Str);
 
@@ -18,14 +17,14 @@ pub let fail(@A : Type, msg : Str) -> Parse(A) =
     (input, pos) =>
         Result/failure(msg);
 
-pub let map(@A : Type, @B : Type, f : A -> B, p : Parse(A)) -> Parse(B) =
+pub let map(@A : Type, @B : Type, f : (A) -> B, p : Parse(A)) -> Parse(B) =
     (input, pos) =>
         match p(input, pos)
         | success(pair) => Result/success((pair.0, f(pair.1)))
         | failure(msg) => Result/failure(msg)
         end;
 
-pub let bind(@A : Type, @B : Type) -> (Parse(A), A -> Parse(B)) -> Parse(B) =
+pub let bind(@A : Type, @B : Type) -> (Parse(A), (A) -> Parse(B)) -> Parse(B) =
     (p, f) => (input, pos) =>
         match p(input, pos)
         | success(pair) => f(pair.1)(input, pair.0)
@@ -94,11 +93,11 @@ pub let take_byte(expected : Nat) -> Parse(Nat) =
             end
         end;
 
-pub let take_while(pred : Nat -> Bln) -> Parse(Bin) =
+pub let take_while(pred : (Nat) -> Bln) -> Parse(Bin) =
     (input, pos) =>
         let r =
             match Nat/sub(Bin/len(input), pos) : { Nat, Bin, Bln }
-            | 0 => (pos, Bin/empty, false)
+            | 0 => (pos, \\, false)
             | step + 1, ih =>
                 match ih.2
                 | true => ih

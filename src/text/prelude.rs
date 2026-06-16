@@ -1,5 +1,5 @@
 use super::{
-    BinLiteral, Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
+    Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
     Qualifier, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
 };
 
@@ -229,7 +229,6 @@ fn str_ops() -> Vec<TopItem> {
 
 fn bin_ops() -> Vec<TopItem> {
     vec![
-        pub_let("empty", bin(), prim(Prim::Bin(BinLiteral::Bytes(vec![])))),
         unary("len", bin(), nat(), Prim::BinLen),
         binary("eql", bin(), bln(), Prim::BinEql),
         pub_fn(
@@ -496,8 +495,8 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Parse"], include_str!("../../std/Parse.crs")),
     (&["std", "Json"], include_str!("../../std/Json.crs")),
     (&["std", "Fmt"], include_str!("../../std/Fmt.crs")),
-    (&["std", "Clock"], include_str!("../../std/Clock.crs")),
-    (&["std", "Random"], include_str!("../../std/Random.crs")),
+    (&["std", "Time"], include_str!("../../std/Time.crs")),
+    (&["std", "Rand"], include_str!("../../std/Rand.crs")),
     (&["std", "Proc"], include_str!("../../std/Proc.crs")),
 ];
 

@@ -39,3 +39,15 @@ pub let is_alphanumeric(byte : Nat) -> Bln =
     | true => true
     | false => is_digit(byte)
     end;
+
+pub let to_lower(byte : Nat) -> Nat =
+    match is_upper(byte)
+    | true => Nat/add(byte, 32)
+    | false => byte
+    end;
+
+pub let to_upper(byte : Nat) -> Nat =
+    match is_lower(byte)
+    | true => Nat/sub(byte, 32)
+    | false => byte
+    end;

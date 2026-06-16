@@ -7,7 +7,8 @@ end
 
 pub use Vec/*;
 
-pub let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat = n;
+pub let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+    n;
 
 pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
     match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
@@ -15,7 +16,7 @@ pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> V
     | cons(j, x, xs) => Vec/cons(x, append(xs, w))
     end;
 
-pub rec map(@A : Type, @B : Type, @n : Nat, f : A -> B, v : Vec(A, n)) -> Vec(B, n) =
+pub rec map(@A : Type, @B : Type, @n : Nat, f : (A) -> B, v : Vec(A, n)) -> Vec(B, n) =
     match v : (v : Vec(A, k)) => Vec(B, k)
     | nil() => Vec/nil()
     | cons(j, x, xs) => Vec/cons(f(x), map(f, xs))

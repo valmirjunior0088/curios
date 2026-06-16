@@ -19,7 +19,7 @@ let double(n : Nat) -> Nat =
     Nat/mul(n, 2);
 ```
 
-`double(n : Nat) -> Nat = …` is function-definition shorthand: it names the parameter and the result type. The underlying value is a lambda, written `(n) => body` (the same as `|n| body` in Rust), so the shorthand desugars to `let double : Nat -> Nat = (n) => Nat/mul(n, 2);`.
+`double(n : Nat) -> Nat = …` is function-definition shorthand: it names the parameter and the result type. The underlying value is a lambda, written `(n) => body` (the same as `|n| body` in Rust), so the shorthand desugars to `let double : (Nat) -> Nat = (n) => Nat/mul(n, 2);`.
 
 A function can take several parameters at once. A call passes them in parentheses, comma-separated — `add(2, 3)`:
 
@@ -260,7 +260,7 @@ Length-indexed vectors rule out bounds errors. The same mechanism rules out vari
 -- output: Alice is 30
 ```
 
-`"%s is %d"` calls for a `Str` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `/std/Fmt/printf("%s is %d")` is `Str -> Nat -> Str` — computed by reducing the format string during type checking, so the format string and each argument are applied in turn. Swapping the types is a compile-time error:
+`"%s is %d"` calls for a `Str` argument (for `%s`) followed by a `Nat` argument (for `%d`). The type of `/std/Fmt/printf("%s is %d")` is `(Str) -> (Nat) -> Str` — computed by reducing the format string during type checking, so the format string and each argument are applied in turn. Swapping the types is a compile-time error:
 
 ```
 /std/Fmt/printf("%d")("Alice")

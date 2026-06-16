@@ -11,7 +11,7 @@ fn main() {
         | right(Flt)
         end
         let pair : Pair = Pair/left(+42);
-        let score : Pair -> Int = (p) =>
+        let score : (Pair) -> Int = (p) =>
             match p : Int
             | left(_) => +42
             | right(_) => +7

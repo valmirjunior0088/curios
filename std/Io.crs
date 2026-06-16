@@ -1,5 +1,5 @@
-pub use /sys/Io/{let stdin, let stdout, let stderr, let read, let write};
 pub use /sys/{Io};
+pub use /sys/Io/{let stdin, let stdout, let stderr, let read, let write};
 use /std/{Bin, Str, Nat, Option};
 
 pub let print(s : Str) -> {} =
@@ -8,14 +8,14 @@ pub let print(s : Str) -> {} =
 
 pub let Reader : Type = { Io, Bin };
 
-pub let reader(h : Io) -> Reader = (h, Bin/empty);
+pub let reader(h : Io) -> Reader = (h, \\);
 
-pub let Buf(A : Type) -> Type = Reader -> { Reader, A };
+pub let Buf(A : Type) -> Type = (Reader) -> { Reader, A };
 
 pub let pure(@A : Type, a : A) -> Buf(A) =
     (r) => (r, a);
 
-pub let bind(@A : Type, @B : Type) -> (Buf(A), A -> Buf(B)) -> Buf(B) =
+pub let bind(@A : Type, @B : Type) -> (Buf(A), (A) -> Buf(B)) -> Buf(B) =
     (m, f) => (r) =>
         let p = m(r);
         f(p.1)(p.0);
@@ -51,7 +51,7 @@ pub rec read_line : Buf(Option(Bin)) =
             | false =>
                 match Nat/eql(Bin/len(r.1), 0)
                 | true => (r, Option/none())
-                | false => ((r.0, Bin/empty), Option/some(r.1))
+                | false => ((r.0, \\), Option/some(r.1))
                 end
             | true => read_line((r.0, Bin/concat(r.1, chunk.bytes)))
             end

@@ -10,7 +10,7 @@ fn main() {
         | nil()
         | cons(Int, IntList)
         end
-        rec sum : IntList -> Int = (list) =>
+        rec sum : (IntList) -> Int = (list) =>
             match list : Int
             | nil() => +0
             | cons(head, tail) =>

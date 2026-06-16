@@ -1,5 +1,5 @@
-pub use /sys/Arr/*;
 pub use /sys/{Arr};
+pub use /sys/Arr/*;
 use /std/{Nat};
 
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
@@ -8,7 +8,7 @@ pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A
     | pred + 1, ih => f(get(arr, pred), ih)
     end;
 
-pub let map(@A : Type, @B : Type, f : A -> B, arr : Arr(A)) -> Arr(B) =
+pub let map(@A : Type, @B : Type, f : (A) -> B, arr : Arr(A)) -> Arr(B) =
     rec go(lo : Nat, hi : Nat) -> Arr(B) =
         match Nat/lt(Nat/add(lo, 1), hi)
         | false =>

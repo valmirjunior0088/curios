@@ -13,10 +13,6 @@ pub union Error
 | other(Nat)
 end
 
--- An open file handle. Abstract: outside this module a `File` is opaque and
--- distinct from a bare `Io` handle (stdin/stdout, a socket), reachable only
--- through the operations below. A single-field struct is a zero-cost newtype,
--- so at runtime a `File` *is* its underlying `Io` handle.
 pub struct File { Io }
 
 pub let read(f : File, n : Nat) -> { status : Nat, bytes : Bin } =
@@ -25,9 +21,6 @@ pub let read(f : File, n : Nat) -> { status : Nat, bytes : Bin } =
 pub let write(f : File, b : Bin) -> Nat =
     Io/write(f.0, b);
 
--- Closing is not part of the public surface: `with`/`read_all` open and close
--- around `body`, so a handle never outlives the bracket and cannot be closed
--- twice or used after close.
 let close(f : File) -> {} =
     /sys/Io/close(f.0);
 
@@ -46,7 +39,7 @@ let decode(status : Nat) -> Error =
     | _ => Error/other(status)
     end;
 
-pub let with(@A : Type, path : Bin, mode : Mode, body : File -> A) -> Result(A, Error) =
+pub let with(@A : Type, path : Bin, mode : Mode, body : (File) -> A) -> Result(A, Error) =
     let r = /sys/Io/open(path, token(mode));
     match Nat/eql(r.status, 0)
     | true =>
@@ -65,4 +58,4 @@ rec drain(f : File, acc : Bin) -> Bin =
     end;
 
 pub let read_all(path : Bin) -> Result(Bin, Error) =
-    with(path, Mode/read(), (f) => drain(f, Bin/empty));
+    with(path, Mode/read(), (f) => drain(f, \\));
