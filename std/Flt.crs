@@ -2,7 +2,7 @@ pub use /sys/{Flt};
 pub use /sys/Flt/*;
 use /std/{Nat, Int, Str, Bln, Option};
 
-let find_cp(target : Nat, s : Str) -> Nat =
+let find_codepoint(target : Nat, s : Str) -> Nat =
     let n = Str/len(s);
     let init : { Nat, Nat } = (0, n);
     let r =
@@ -54,8 +54,8 @@ pub let of_str(s : Str) -> Option(Flt) =
             | _ => 0
             end;
         let len = Str/len(s);
-        let dot_pos = find_cp('.', s);
-        let e_pos = Nat/min(find_cp('e', s), find_cp('E', s));
+        let dot_pos = find_codepoint('.', s);
+        let e_pos = Nat/min(find_codepoint('e', s), find_codepoint('E', s));
         let int_end = Nat/min(dot_pos, e_pos);
         let int_slice = Str/slice(s, start, int_end);
         let frac_slice =

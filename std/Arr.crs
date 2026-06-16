@@ -23,5 +23,4 @@ pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (
     go(0, n);
 
 pub let map(@A : Type, @B : Type, f : (A) -> B, arr : Arr(A)) -> Arr(B) =
-    let empty : Arr(B) = [];
-    balanced(len(arr), empty, (i) => [f(get(arr, i))], concat);
+    balanced(len(arr), [], (i) => [f(get(arr, i))], concat);

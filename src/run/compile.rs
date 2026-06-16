@@ -955,6 +955,40 @@ mod tests {
     }
 
     #[test]
+    fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
+        // `pick([], Arr/concat)`: the inserted implicit `?A` is the empty array's
+        // type *and* `combine`'s domain. `[]` borrows its element type from the
+        // expected (`Arr/of_bin`-style checked-only intro), so against the bare
+        // metavar `?A` it cannot elaborate. Elaboration must postpone it until the
+        // sibling `Arr/concat` grounds `?A := Arr(?T)`, then re-check — at which
+        // point the `Arr(Nat)` result pins `?T`. Guards the array arm of
+        // `blocked_on_metavar`; without it this fails "type mismatch" eagerly.
+        let source = r#"
+            use /std/{Arr};
+            use /std/{Nat};
+            let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
+                combine(fallback, fallback);
+            let go : Arr(Nat) =
+                pick([], Arr/concat);
+            go
+        "#;
+
+        assert!(typecheck(source).is_ok());
+
+        // With no sibling to ground the element type and no result type to pin it,
+        // the postponed `[]` re-checks against a bare metavar and is rejected —
+        // graceful degradation, no new acceptance.
+        let unpinned = r#"
+            use /std/{Arr};
+            let id(@A : Type, x : A) -> A = x;
+            let bad = id([]);
+            bad
+        "#;
+
+        assert!(typecheck(unpinned).is_err());
+    }
+
+    #[test]
     fn continuation_postpones_until_the_result_type_pins_its_codomain() {
         // A `let ! = Parse/bind;` block whose tail is `Parse/pure((x, x))` — a *bare
         // tuple*, checkable only against a known tuple type. The expected type reaches
