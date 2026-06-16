@@ -20,6 +20,3 @@ pub let min(a : Nat, b : Nat) -> Nat =
     | true => a
     | false => b
     end;
-
-pub let not(x : Nat) -> Nat =
-    xor(x, 2147483647);

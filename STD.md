@@ -17,7 +17,7 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 ### `/std/Nat`
 
-The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str`, `not`, and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` drops the bits shifted off the top. `not` is the one that exposes the runtime word — there is no machine complement instruction, so it is the library `xor` against the all-ones value of the word a `Nat` is stored in.
+The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str` and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` drops the bits shifted off the top. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
 
 | Binding       | Type                | Description                          |
 | ------------- | ------------------- | ------------------------------------ |
@@ -36,7 +36,6 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `and(a, b)`   | `(Nat, Nat) -> Nat` | Bitwise AND                          |
 | `or(a, b)`    | `(Nat, Nat) -> Nat` | Bitwise OR                           |
 | `xor(a, b)`   | `(Nat, Nat) -> Nat` | Bitwise XOR                          |
-| `not(a)`      | `(Nat) -> Nat`      | Bitwise complement                   |
 | `shl(a, b)`   | `(Nat, Nat) -> Nat` | Left shift by `b`, truncating        |
 | `shr(a, b)`   | `(Nat, Nat) -> Nat` | Logical right shift by `b`           |
 | `to_int(a)`   | `(Nat) -> Int`      | Convert to `Int`                     |

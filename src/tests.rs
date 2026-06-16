@@ -1708,7 +1708,7 @@ fn nat_bitwise_ops_execute() {
     // operand opaque to the optimizer, so each op is lowered to its WebAssembly
     // instruction and executed for real rather than folded at compile time. This
     // is what exercises the truncating `shl` (65 << 25 sets bit 31, which the
-    // i31 carrier drops to leave 2^25) and the `xor`-based `not`.
+    // i31 carrier drops to leave 2^25).
     let (system, receiver) = ChannelHost::in_out(["A"]);
     crate::run_text(
         Duration::from_secs(5),
@@ -1720,8 +1720,7 @@ fn nat_bitwise_ops_execute() {
             Nat/to_str(Nat/or(x, 128)), ",",
             Nat/to_str(Nat/xor(x, 255)), ",",
             Nat/to_str(Nat/shl(x, 25)), ",",
-            Nat/to_str(Nat/shr(x, 1)), ",",
-            Nat/to_str(Nat/not(x))
+            Nat/to_str(Nat/shr(x, 1))
         ]);
         Io/write(Io/stdout, Str/to_bin(r))
         "#,
@@ -1731,7 +1730,7 @@ fn nat_bitwise_ops_execute() {
 
     assert_eq!(
         receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"1,193,190,33554432,32,2147483582".to_vec()]
+        vec![b"1,193,190,33554432,32".to_vec()]
     );
 }
 
