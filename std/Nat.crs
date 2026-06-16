@@ -1,12 +1,25 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/*;
-use /std/{Bin};
+use /std/{Bin, Option, Char};
 
-pub let of_str(str : Bin) -> Nat =
-    Bin/fold(str, 0, (byte, acc) => Nat/add(Nat/mul(acc, 10), Nat/sub(byte, 48)));
+pub let of_str(str : Bin) -> Option(Nat) =
+    match Nat/eql(Bin/len(str), 0)
+    | true => Option/none(@Nat)
+    | false =>
+        Bin/fold(str, Option/some(0), (byte, acc) =>
+            let ! = Option/bind;
+            let n = acc!;
+            match Char/is_digit(byte)
+            | true => Option/some(Nat/add(Nat/mul(n, 10), Nat/sub(byte, 48)))
+            | false => Option/none(@Nat)
+            end)
+    end;
 
 pub let min(a : Nat, b : Nat) -> Nat =
     match lt(a, b)
     | true => a
     | false => b
     end;
+
+pub let not(x : Nat) -> Nat =
+    xor(x, 2147483647);

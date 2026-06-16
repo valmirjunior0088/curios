@@ -229,6 +229,21 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::NatGte(left, right) => {
             lower_pure_binary_code(work, left, right, frame, cont::Code::NatGte)
         }
+        ersd::PurePrim::NatAnd(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::NatAnd)
+        }
+        ersd::PurePrim::NatOr(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::NatOr)
+        }
+        ersd::PurePrim::NatXor(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::NatXor)
+        }
+        ersd::PurePrim::NatShl(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::NatShl)
+        }
+        ersd::PurePrim::NatShr(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::NatShr)
+        }
         ersd::PurePrim::Int(value) => work.fresh(cont::Value::Pure(cont::Data::Int(*value))),
         ersd::PurePrim::Flt(value) => work.fresh(cont::Value::Pure(cont::Data::Flt(*value))),
         ersd::PurePrim::IntEql(left, right) => {
@@ -518,12 +533,11 @@ pub fn lower_value_prim<'b>(
                                                     resume.clone(),
                                                     params,
                                                     move |inner| {
-                                                        let record =
-                                                            inner.fresh(cont::Value::Pure(
-                                                                cont::Data::Tpl(vec![
-                                                                    status, handle,
-                                                                ]),
-                                                            ));
+                                                        let record = inner.fresh(
+                                                            cont::Value::Pure(cont::Data::Tpl(
+                                                                vec![status, handle],
+                                                            )),
+                                                        );
                                                         cont.call(inner, record)
                                                     },
                                                 );
@@ -698,6 +712,21 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::NatGte(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::NatGte)
+        }
+        ersd::PurePrim::NatAnd(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::NatAnd)
+        }
+        ersd::PurePrim::NatOr(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::NatOr)
+        }
+        ersd::PurePrim::NatXor(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::NatXor)
+        }
+        ersd::PurePrim::NatShl(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::NatShl)
+        }
+        ersd::PurePrim::NatShr(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::NatShr)
         }
         ersd::PurePrim::Int(value) => {
             let value = work.fresh(cont::Value::Pure(cont::Data::Int(*value)));

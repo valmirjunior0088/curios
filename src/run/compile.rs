@@ -49,7 +49,8 @@ where
     let (module, core_type) = core::elaborate_module(&mut context, &module, metavars, core_mode)
         .map_err(|error| error.format_with(&module))?;
 
-    let module = core::zonk_module(&context, &module).map_err(|error| error.format_with(&module))?;
+    let module =
+        core::zonk_module(&context, &module).map_err(|error| error.format_with(&module))?;
     let core_type = core::zonk(&context, &core_type).map_err(|error| error.format_with(&module))?;
 
     Ok((module, core_type))
@@ -1078,7 +1079,9 @@ mod tests {
     fn typecheck_accepts_a_well_typed_program() {
         // The fast path stops after `elaborate → zonk`; a well-typed program passes
         // without running erase/cont/optm/wasm.
-        assert!(typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(0)))").is_ok());
+        assert!(
+            typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(0)))").is_ok()
+        );
     }
 
     #[test]

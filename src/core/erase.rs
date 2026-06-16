@@ -369,7 +369,10 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
                 .cloned()
                 .expect("erase: projection head names a registered struct");
             let field_count = structure.fields_at(params).len();
-            assert!(*index < field_count, "erase: struct projection out of range");
+            assert!(
+                *index < field_count,
+                "erase: struct projection out of range"
+            );
             if field_count == 1 {
                 return erase(context, head, &head_type);
             }

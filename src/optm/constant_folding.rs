@@ -579,16 +579,13 @@ mod tests {
     }
 
     #[test]
-    fn does_not_fold_nat_shift_overflow() {
-        // 2^30 << 1 sets bit 31, which the backend traps on.
-        stays_eval(
-            vec![
-                (v("a"), Value::Pure(Data::Nat(1 << 30))),
-                (v("b"), Value::Pure(Data::Nat(1))),
-                (v("r"), Value::Eval(Code::NatShl(v("a"), v("b")))),
-            ],
-            "r",
-        );
+    fn folds_nat_shl_truncating() {
+        // 2^30 << 1 would set bit 31, which the i31 carrier drops — a truncating
+        // left shift, folded to match the backend rather than trapping.
+        assert!(matches!(
+            binary(Data::Nat(1 << 30), Data::Nat(1), Code::NatShl),
+            Data::Nat(0)
+        ));
     }
 
     #[test]

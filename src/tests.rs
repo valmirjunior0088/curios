@@ -96,7 +96,10 @@ fn empty_bin_literal_is_the_empty_sequence() {
         system,
     )
     .expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"ok".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"ok".to_vec()]
+    );
 }
 
 // Named fields end to end: a dependent record (the vector's length indexes its
@@ -926,7 +929,10 @@ fn struct_parameter_inference_at_construction() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"12".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"12".to_vec()]
+    );
 }
 
 // A zero-cost newtype: a single positional field, projected with `.0`. It
@@ -963,7 +969,10 @@ fn struct_dependent_fields_run_end_to_end() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"42".to_vec()]
+    );
 }
 
 // The motivating case: an abstract type — public type, hidden representation —
@@ -983,7 +992,10 @@ fn struct_abstract_smart_constructor_round_trips() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"42".to_vec()]
+    );
 }
 
 // Constructing a private-representation struct from outside its declaring
@@ -1002,7 +1014,10 @@ fn struct_private_construction_rejected() {
 
     let (system, _receiver) = ChannelHost::out();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
-    assert!(error.contains("representation"), "unexpected error: {error}");
+    assert!(
+        error.contains("representation"),
+        "unexpected error: {error}"
+    );
 }
 
 // Projecting a private-representation struct's field from outside its module is
@@ -1087,8 +1102,14 @@ fn diagnostic_shortens_global_names() {
         error.contains("inferred: Vec(Nat, n)"),
         "globals not shortened: {error}"
     );
-    assert!(!error.contains("std/Vec"), "qualified union path leaked: {error}");
-    assert!(!error.contains("sys/"), "qualified prim path leaked: {error}");
+    assert!(
+        !error.contains("std/Vec"),
+        "qualified union path leaked: {error}"
+    );
+    assert!(
+        !error.contains("sys/"),
+        "qualified prim path leaked: {error}"
+    );
 }
 
 // A struct type is nominal: it never converts with a structural tuple type of
@@ -1182,7 +1203,10 @@ fn struct_destructure_rename_binds_new_names() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"10".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"10".to_vec()]
+    );
 }
 
 // Naming a subset of fields is allowed — the rest are simply ignored.
@@ -1269,7 +1293,10 @@ fn struct_destructure_in_match_arm() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"11".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"11".to_vec()]
+    );
 }
 
 // Destructuring projects through the representation-privacy boundary: a
@@ -1341,7 +1368,10 @@ fn matrix_nat_literal_in_nested_column() {
     // special -> 100 (head is 0), other -> 7 (head binder). 100 + 7 = 107.
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"107".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"107".to_vec()]
+    );
 }
 
 // A top-level `Nat` match with a *named* default falls through to the matrix —
@@ -1363,7 +1393,10 @@ fn matrix_nat_literal_named_default() {
     // 100 + 200 + 1007 = 1307.
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"1307".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"1307".to_vec()]
+    );
 }
 
 // A `Nat` literal nested inside a struct field pattern: the struct column expands
@@ -1383,7 +1416,10 @@ fn matrix_nat_literal_in_struct_field() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"42".to_vec()]
+    );
 }
 
 // A `_` fallthrough at a union column expands into the *unlisted* constructors:
@@ -1517,7 +1553,10 @@ fn str_literal_prints_its_bytes() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"hello".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"hello".to_vec()]
+    );
 }
 
 // `Str/of_bin` is the checked constructor: it runs `is_utf8` and yields `some`
@@ -1534,7 +1573,10 @@ fn str_of_bin_accepts_multibyte_utf8() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![vec![0xc3, 0xa9]]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![vec![0xc3, 0xa9]]
+    );
 }
 
 // An invalid lead byte fails `is_utf8`, so `Str/of_bin` returns `none`.
@@ -1633,7 +1675,137 @@ fn bln_logic_and_of_str() {
     )
     .expect("expected result");
 
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"truefalse".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"truefalse".to_vec()]
+    );
+}
+
+#[test]
+fn bln_xor_executes() {
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Bln, Str, Io};
+        let a = Bln/xor(true, false);
+        let b = Bln/xor(true, true);
+        Io/write(Io/stdout, Str/to_bin(Str/concat(Bln/to_str(a), Bln/to_str(b))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"truefalse".to_vec()]
+    );
+}
+
+#[test]
+fn nat_bitwise_ops_execute() {
+    // The first input byte is `A` (65); reading it from the host keeps the
+    // operand opaque to the optimizer, so each op is lowered to its WebAssembly
+    // instruction and executed for real rather than folded at compile time. This
+    // is what exercises the truncating `shl` (65 << 25 sets bit 31, which the
+    // i31 carrier drops to leave 2^25) and the `xor`-based `not`.
+    let (system, receiver) = ChannelHost::in_out(["A"]);
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Io, Bin, Nat, Str};
+        let x = Bin/get(Io/read(Io/stdin, 16).bytes, 0);
+        let r = Str/concat_all([
+            Nat/to_str(Nat/and(x, 15)), ",",
+            Nat/to_str(Nat/or(x, 128)), ",",
+            Nat/to_str(Nat/xor(x, 255)), ",",
+            Nat/to_str(Nat/shl(x, 25)), ",",
+            Nat/to_str(Nat/shr(x, 1)), ",",
+            Nat/to_str(Nat/not(x))
+        ]);
+        Io/write(Io/stdout, Str/to_bin(r))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"1,193,190,33554432,32,2147483582".to_vec()]
+    );
+}
+
+#[test]
+fn nat_of_str_returns_option() {
+    // `123` parses; `12a` (non-digit) and the empty string are `none`, taking
+    // the `unwrap_or` defaults — `123 + 7 + 9`.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Nat, Str, Option, Io};
+        let ok = Option/unwrap_or(Nat/of_str(Str/to_bin("123")), 0);
+        let bad = Option/unwrap_or(Nat/of_str(Str/to_bin("12a")), 7);
+        let empty = Option/unwrap_or(Nat/of_str(Str/to_bin("")), 9);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"139".to_vec()]
+    );
+}
+
+#[test]
+fn int_of_str_returns_option() {
+    // `-5` and `+7` parse (compared by magnitude); `x` is `none` → default `+3`.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Nat, Int, Str, Option, Io};
+        let neg = Int/abs(Option/unwrap_or(Int/of_str(Str/to_bin("-5")), +0));
+        let pos = Int/abs(Option/unwrap_or(Int/of_str(Str/to_bin("+7")), +0));
+        let bad = Int/abs(Option/unwrap_or(Int/of_str(Str/to_bin("x")), +3));
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"15".to_vec()]
+    );
+}
+
+#[test]
+fn flt_of_str_returns_option() {
+    // `12.0`, `.5` (empty integer part), and `1e3` parse; `abc` is `none` →
+    // default `+4.0`. Values are truncated to `Nat` for an exact assertion:
+    // `12 + (0.5*2) + 1000 + 4`.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Nat, Flt, Str, Option, Io};
+        let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str(Str/to_bin("12.0")), +0.0));
+        let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(Str/to_bin(".5")), +0.0), +2.0));
+        let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str(Str/to_bin("1e3")), +0.0));
+        let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str(Str/to_bin("abc")), +4.0));
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"1017".to_vec()]
+    );
 }
 
 #[test]
@@ -1654,7 +1826,10 @@ fn option_result_char_helpers() {
     .expect("expected result");
 
     // opt = 5, res = 10, up = 'A' = 65  ->  80
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"80".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"80".to_vec()]
+    );
 }
 
 #[test]
@@ -1677,7 +1852,10 @@ fn clock_diff_of_two_distinct_now_readings() {
     )
     .expect("expected result");
 
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"30".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"30".to_vec()]
+    );
 }
 
 #[test]
@@ -1795,7 +1973,10 @@ fn let_tuple_destructures() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+4".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+4".to_vec()]
+    );
 }
 
 #[test]
@@ -1810,7 +1991,10 @@ fn nested_let_tuple_destructures() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+3".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+3".to_vec()]
+    );
 }
 
 #[test]
@@ -1824,7 +2008,10 @@ fn let_tuple_destructures_without_annotation() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+4".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+4".to_vec()]
+    );
 }
 
 #[test]
@@ -1838,7 +2025,10 @@ fn let_three_tuple_destructures() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+30".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+30".to_vec()]
+    );
 }
 
 #[test]
@@ -1852,7 +2042,10 @@ fn func_tuple_param_destructures() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+8".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+8".to_vec()]
+    );
 }
 
 #[test]
@@ -1865,7 +2058,10 @@ fn lambda_tuple_param_destructures() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+5".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+5".to_vec()]
+    );
 }
 
 #[test]
@@ -1885,7 +2081,10 @@ fn match_arm_tuple_destructures() {
 
     let (system, receiver) = ChannelHost::out();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+9".to_vec()]);
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+9".to_vec()]
+    );
 }
 
 // Client network IO (Phase A): `connect` rides the `Hdl` byte stream, so

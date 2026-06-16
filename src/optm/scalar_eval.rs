@@ -231,10 +231,13 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
         FltLte(a, b) => Some(Scalar::bln(env.flt(a)? <= env.flt(b)?)),
         FltGte(a, b) => Some(Scalar::bln(env.flt(a)? >= env.flt(b)?)),
 
-        // Nat — shifts, rotates, and bit scans. A left shift or rotate can push a
-        // set bit into position 31, which the backend trap-checks; the logical
-        // right shift and the scans always land back inside 31 bits.
-        NatShl(a, b) => fits31u(env.nat(a)?.wrapping_shl(env.nat(b)?) as u64).map(Scalar::Nat),
+        // Nat — shifts, rotates, and bit scans. A left shift truncates back into
+        // the 31-bit carrier (the backend's `ref.i31` drops bit 31), so the fold
+        // masks to 31 bits to match; the logical right shift and the scans always
+        // land back inside 31 bits, while a rotate can land on bit 31 and trap.
+        NatShl(a, b) => Some(Scalar::Nat(
+            env.nat(a)?.wrapping_shl(env.nat(b)?) & 0x7FFF_FFFF,
+        )),
         NatShr(a, b) => Some(Scalar::Nat(env.nat(a)?.wrapping_shr(env.nat(b)?))),
         NatRotl(a, b) => fits31u(env.nat(a)?.rotate_left(env.nat(b)?) as u64).map(Scalar::Nat),
         NatRotr(a, b) => fits31u(env.nat(a)?.rotate_right(env.nat(b)?) as u64).map(Scalar::Nat),

@@ -223,7 +223,10 @@ impl Host for StdioHost {
         let _ = stream.set_write_timeout(timeout(write_timeout));
 
         let handle = fresh_handle(&self.handles);
-        self.streams.lock().unwrap().insert(handle, Box::new(stream));
+        self.streams
+            .lock()
+            .unwrap()
+            .insert(handle, Box::new(stream));
 
         (STATUS_OK, handle)
     }
@@ -508,10 +511,13 @@ impl Host for ChannelHost {
         };
 
         let handle = fresh_handle(&self.handles);
-        self.connections
-            .lock()
-            .unwrap()
-            .insert(handle, NetConn { response, position: 0 });
+        self.connections.lock().unwrap().insert(
+            handle,
+            NetConn {
+                response,
+                position: 0,
+            },
+        );
 
         (STATUS_OK, handle)
     }

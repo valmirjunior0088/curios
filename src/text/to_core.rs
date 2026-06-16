@@ -494,16 +494,16 @@ fn process_items(
                         // call-site `@` supplies one positionally — while the
                         // payload binders keep their declared marks (`@m`
                         // makes one implicit; the default is explicit).
-                        let param_tys = u
-                            .params
-                            .iter()
-                            .map(|(_, n, t)| {
-                                Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
-                            })
-                            .chain(c.payload.iter().enumerate().map(|(i, (p, n, t))| {
-                                Ok((*p, payload_name(i, n), lower.term(t)?))
-                            }))
-                            .collect::<Result<Vec<_>, Error>>()?;
+                        let param_tys =
+                            u.params
+                                .iter()
+                                .map(|(_, n, t)| {
+                                    Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
+                                })
+                                .chain(c.payload.iter().enumerate().map(|(i, (p, n, t))| {
+                                    Ok((*p, payload_name(i, n), lower.term(t)?))
+                                }))
+                                .collect::<Result<Vec<_>, Error>>()?;
                         let ctor_type = core::Term::func_type_marked(
                             param_tys.clone(),
                             lower.term(&output_type)?,

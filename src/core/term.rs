@@ -900,6 +900,13 @@ impl Subterm {
         }
     }
 
+    pub fn as_bln(&self) -> Option<bool> {
+        match self {
+            Subterm::Prim(Prim::Bln(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
     pub fn free_vars(&self) -> BTreeSet<String> {
         <Subterm as Bound>::free_vars(self)
     }
@@ -1361,6 +1368,14 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::NatGt(a, b)
         | Prim::NatLte(a, b)
         | Prim::NatGte(a, b)
+        | Prim::NatAnd(a, b)
+        | Prim::NatOr(a, b)
+        | Prim::NatXor(a, b)
+        | Prim::NatShl(a, b)
+        | Prim::NatShr(a, b)
+        | Prim::BlnAnd(a, b)
+        | Prim::BlnOr(a, b)
+        | Prim::BlnXor(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -1469,6 +1484,14 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::NatGt(a, b)
         | Prim::NatLte(a, b)
         | Prim::NatGte(a, b)
+        | Prim::NatAnd(a, b)
+        | Prim::NatOr(a, b)
+        | Prim::NatXor(a, b)
+        | Prim::NatShl(a, b)
+        | Prim::NatShr(a, b)
+        | Prim::BlnAnd(a, b)
+        | Prim::BlnOr(a, b)
+        | Prim::BlnXor(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -1579,6 +1602,30 @@ where
         }
         Prim::NatGte(left, right) => {
             Prim::NatGte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatAnd(left, right) => {
+            Prim::NatAnd(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatOr(left, right) => {
+            Prim::NatOr(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatXor(left, right) => {
+            Prim::NatXor(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatShl(left, right) => {
+            Prim::NatShl(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::NatShr(left, right) => {
+            Prim::NatShr(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::BlnAnd(left, right) => {
+            Prim::BlnAnd(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::BlnOr(left, right) => {
+            Prim::BlnOr(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::BlnXor(left, right) => {
+            Prim::BlnXor(visit.visit_subterm(left), visit.visit_subterm(right))
         }
         Prim::IntType => Prim::IntType,
         Prim::Int(value) => Prim::Int(value.clone()),

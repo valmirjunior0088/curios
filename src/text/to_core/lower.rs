@@ -861,7 +861,10 @@ impl<'a, 'b> Lower<'a, 'b> {
             .find(|&i| rows.iter().any(|row| pattern_is_refutable(&row.columns[i])));
 
         let Some(column) = column else {
-            let row = rows.into_iter().next().expect("a matrix never has zero rows");
+            let row = rows
+                .into_iter()
+                .next()
+                .expect("a matrix never has zero rows");
             return self.bind_matrix_leaf(occurrences, row);
         };
 
@@ -1184,9 +1187,7 @@ impl<'a, 'b> Lower<'a, 'b> {
 
         let mut cases = Vec::new();
         for value in values {
-            let predicate = |pattern: &Pattern| {
-                matches!(pattern, Pattern::Lit(PatternLit::Nat(n)) if *n == value)
-            };
+            let predicate = |pattern: &Pattern| matches!(pattern, Pattern::Lit(PatternLit::Nat(n)) if *n == value);
             let sub_rows = self.specialize_scalar(&rows, column, predicate, &scrutinee);
             cases.push((value, self.compile_matrix(&sub_occ, sub_rows, None)?));
         }
@@ -1283,6 +1284,9 @@ impl<'a, 'b> Lower<'a, 'b> {
         Ok(match prim {
             Prim::BlnType => core::Prim::BlnType,
             Prim::Bln(b) => core::Prim::Bln(*b),
+            Prim::BlnAnd(left, right) => core::Prim::BlnAnd(self.term(left)?, self.term(right)?),
+            Prim::BlnOr(left, right) => core::Prim::BlnOr(self.term(left)?, self.term(right)?),
+            Prim::BlnXor(left, right) => core::Prim::BlnXor(self.term(left)?, self.term(right)?),
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
             Prim::Nat(Nat::Succ(NatLiteral::Number(spine), inner)) => {
@@ -1303,6 +1307,11 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::NatGt(left, right) => core::Prim::nat_gt(self.term(left)?, self.term(right)?),
             Prim::NatLte(left, right) => core::Prim::nat_lte(self.term(left)?, self.term(right)?),
             Prim::NatGte(left, right) => core::Prim::nat_gte(self.term(left)?, self.term(right)?),
+            Prim::NatAnd(left, right) => core::Prim::NatAnd(self.term(left)?, self.term(right)?),
+            Prim::NatOr(left, right) => core::Prim::NatOr(self.term(left)?, self.term(right)?),
+            Prim::NatXor(left, right) => core::Prim::NatXor(self.term(left)?, self.term(right)?),
+            Prim::NatShl(left, right) => core::Prim::NatShl(self.term(left)?, self.term(right)?),
+            Prim::NatShr(left, right) => core::Prim::NatShr(self.term(left)?, self.term(right)?),
             Prim::IntType => core::Prim::IntType,
             Prim::Int(value) => core::Prim::Int(core::Int::new(*value as i64)),
             Prim::IntEql(left, right) => core::Prim::int_eql(self.term(left)?, self.term(right)?),
@@ -1366,9 +1375,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::IoRandom(count) => core::Prim::IoRandom(self.term(count)?),
             Prim::IoArgs => core::Prim::IoArgs,
             Prim::IoEnv(name) => core::Prim::IoEnv(self.term(name)?),
-            Prim::IoExit(type_, code) => {
-                core::Prim::IoExit(self.term(type_)?, self.term(code)?)
-            }
+            Prim::IoExit(type_, code) => core::Prim::IoExit(self.term(type_)?, self.term(code)?),
             Prim::NatToFlt(inner) => core::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => core::Prim::int_to_nat(self.term(inner)?),
             Prim::IntToFlt(inner) => core::Prim::int_to_flt(self.term(inner)?),
@@ -1491,7 +1498,11 @@ fn pattern_is_refutable(pattern: &Pattern) -> bool {
 
 /// The occurrence list with `column` replaced by `replacement` (a constructor's
 /// payload occurrences spliced in at that position).
-fn splice(occurrences: &[core::Term], column: usize, replacement: &[core::Term]) -> Vec<core::Term> {
+fn splice(
+    occurrences: &[core::Term],
+    column: usize,
+    replacement: &[core::Term],
+) -> Vec<core::Term> {
     let mut out = occurrences[..column].to_vec();
     out.extend_from_slice(replacement);
     out.extend_from_slice(&occurrences[column + 1..]);

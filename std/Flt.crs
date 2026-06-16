@@ -1,6 +1,6 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/*;
-use /std/{Nat, Int, Bin, Bln};
+use /std/{Nat, Int, Bin, Bln, Option};
 
 let find_byte(target : Nat, str : Bin) -> Nat =
     match Bin/len(str)
@@ -22,44 +22,60 @@ let pow10(n : Nat) -> Flt =
     | pred + 1, ih => Flt/mul(ih, +10.0)
     end;
 
-pub let of_str(str : Bin) -> Flt =
-    let is_neg = Nat/eql(Bin/get(str, 0), '-');
+let digits_or_zero(slice : Bin) -> Option(Nat) =
+    match Nat/eql(Bin/len(slice), 0)
+    | true => Option/some(0)
+    | false => Nat/of_str(slice)
+    end;
 
-    let start =
-        match Bin/get(str, 0)
-        | '+' => 1
-        | '-' => 1
-        | _ => 0
-        end;
+let exp_factor(exp_int : Int) -> Flt =
+    match Int/gte(exp_int, +0)
+    | true => pow10(Int/to_nat(exp_int))
+    | false => Flt/div(+1.0, pow10(Int/abs(exp_int)))
+    end;
 
-    let len = Bin/len(str);
-    let dot_pos = find_byte('.', str);
-    let e_pos = Nat/min(find_byte('e', str), find_byte('E', str));
-    let int_end = Nat/min(dot_pos, e_pos);
-    let int_flt = Nat/to_flt(Nat/of_str(Bin/slice(str, start, int_end)));
+let exp_factor_of(str : Bin, e_pos : Nat, len : Nat) -> Option(Flt) =
+    match Nat/lt(e_pos, len)
+    | false => Option/some(+1.0)
+    | true => Option/map(exp_factor, Int/of_str(Bin/slice(str, Nat/add(e_pos, 1), len)))
+    end;
 
-    let frac_flt =
-        match Nat/lt(dot_pos, e_pos)
+pub let of_str(str : Bin) -> Option(Flt) =
+    let ! = Option/bind;
+    match Nat/eql(Bin/len(str), 0)
+    | true => Option/none(@Flt)
+    | false =>
+        let is_neg = Nat/eql(Bin/get(str, 0), '-');
+        let start =
+            match Bin/get(str, 0)
+            | '+' => 1
+            | '-' => 1
+            | _ => 0
+            end;
+        let len = Bin/len(str);
+        let dot_pos = find_byte('.', str);
+        let e_pos = Nat/min(find_byte('e', str), find_byte('E', str));
+        let int_end = Nat/min(dot_pos, e_pos);
+        let int_slice = Bin/slice(str, start, int_end);
+        let frac_slice =
+            match Nat/lt(dot_pos, e_pos)
+            | true => Bin/slice(str, Nat/add(dot_pos, 1), e_pos)
+            | false => \\
+            end;
+        match Bln/or(Nat/gt(Bin/len(int_slice), 0), Nat/gt(Bin/len(frac_slice), 0))
+        | false => Option/none(@Flt)
         | true =>
-            let frac_slice = Bin/slice(str, Nat/add(dot_pos, 1), e_pos);
-            Flt/div(Nat/to_flt(Nat/of_str(frac_slice)), pow10(Bin/len(frac_slice)))
-        | false => +0.0
-        end;
-
-    let exp_flt =
-        match Nat/lt(e_pos, len)
-        | true =>
-            let exp_int = Int/of_str(Bin/slice(str, Nat/add(e_pos, 1), len));
-            match Int/gte(exp_int, +0)
-            | true => pow10(Int/to_nat(exp_int))
-            | false => Flt/div(+1.0, pow10(Int/abs(exp_int)))
+            let int_val = digits_or_zero(int_slice)!;
+            let frac_val = digits_or_zero(frac_slice)!;
+            let factor = exp_factor_of(str, e_pos, len)!;
+            let mantissa =
+                Flt/add(
+                    Nat/to_flt(int_val),
+                    Flt/div(Nat/to_flt(frac_val), pow10(Bin/len(frac_slice))));
+            let result = Flt/mul(mantissa, factor);
+            match is_neg
+            | true => Option/some(Flt/neg(result))
+            | false => Option/some(result)
             end
-        | false => +1.0
-        end;
-
-    let result = Flt/mul(Flt/add(int_flt, frac_flt), exp_flt);
-
-    match is_neg
-    | true => Flt/neg(result)
-    | false => result
+        end
     end;

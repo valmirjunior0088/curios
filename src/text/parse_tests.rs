@@ -671,7 +671,10 @@ fn parse_union_match_multi_binder() {
             rows: vec![(
                 Pattern::Variant {
                     tag: "lit".to_string(),
-                    args: vec![Pattern::Bind("a".to_string()), Pattern::Bind("b".to_string())],
+                    args: vec![
+                        Pattern::Bind("a".to_string()),
+                        Pattern::Bind("b".to_string())
+                    ],
                 },
                 Subterm::Name(Name::from(["a".to_string()])).into(),
             )],
@@ -776,7 +779,9 @@ fn parse_struct_pattern_in_let() {
     // label; a rename binds the nested pattern. The head's trailing `{` commits
     // to the struct form, distinguishing it from a plain `let x = …` binder.
     assert_eq!(
-        "let Pair { fst, snd = s } = p; fst".parse::<Term>().unwrap(),
+        "let Pair { fst, snd = s } = p; fst"
+            .parse::<Term>()
+            .unwrap(),
         Subterm::Let(Let {
             binder: Pattern::Struct {
                 head: Name::from(["Pair".to_string()]),

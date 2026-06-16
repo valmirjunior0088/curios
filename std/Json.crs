@@ -110,9 +110,9 @@ let parse_num : Parse(Json) =
     (input, pos) =>
         match Parse/take_while(is_num_byte)(input, pos)
         | success(pair) =>
-            match Nat/eql(Bin/len(pair.1), 0)
-            | true => Result/failure("expected number")
-            | false => Result/success((pair.0, Json/num(Flt/of_str(pair.1))))
+            match Flt/of_str(pair.1)
+            | some(value) => Result/success((pair.0, Json/num(value)))
+            | none() => Result/failure("expected number")
             end
         | failure(msg) => Result/failure(msg)
         end;

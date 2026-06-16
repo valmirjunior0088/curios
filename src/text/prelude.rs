@@ -1,6 +1,6 @@
 use super::{
-    Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
-    Qualifier, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
+    Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier,
+    Subterm, Term, TopItem, TopLet, TopMod, TupleType,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -162,9 +162,26 @@ fn nat_ops() -> Vec<TopItem> {
         binary("gt", nat(), bln(), Prim::NatGt),
         binary("lte", nat(), bln(), Prim::NatLte),
         binary("gte", nat(), bln(), Prim::NatGte),
+        binary("and", nat(), nat(), Prim::NatAnd),
+        binary("or", nat(), nat(), Prim::NatOr),
+        binary("xor", nat(), nat(), Prim::NatXor),
+        binary("shl", nat(), nat(), Prim::NatShl),
+        binary("shr", nat(), nat(), Prim::NatShr),
         unary("to_int", nat(), int(), Prim::NatToInt),
         unary("to_flt", nat(), flt(), Prim::NatToFlt),
         to_str(nat(), Prim::NatToStr),
+    ]
+}
+
+// `Bln` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as
+// `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact
+// boolean logic — so they are primitives rather than `match` definitions. `not`
+// has no machine instruction; `/std/Bln` defines it as `xor(b, true)`.
+fn bln_ops() -> Vec<TopItem> {
+    vec![
+        binary("and", bln(), bln(), Prim::BlnAnd),
+        binary("or", bln(), bln(), Prim::BlnOr),
+        binary("xor", bln(), bln(), Prim::BlnXor),
     ]
 }
 
@@ -362,7 +379,11 @@ fn io_ops() -> Vec<TopItem> {
         pub_fn(
             "clock_wall",
             vec![],
-            record(vec![("secs_hi", nat()), ("secs_lo", nat()), ("nanos", nat())]),
+            record(vec![
+                ("secs_hi", nat()),
+                ("secs_lo", nat()),
+                ("nanos", nat()),
+            ]),
             prim(Prim::IoClockWall),
         ),
         pub_fn(
@@ -415,6 +436,7 @@ fn sys_module() -> Module {
             pub_let("Io", type_(), io()),
             pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
             pub_mod("Nat", nat_ops()),
+            pub_mod("Bln", bln_ops()),
             pub_mod("Int", int_ops()),
             pub_mod("Flt", flt_ops()),
             pub_mod("Bin", bin_ops()),

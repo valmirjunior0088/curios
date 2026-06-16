@@ -90,10 +90,7 @@ pub enum Pattern {
     /// nullary form. Mandatory parens distinguish it from a `Bind`. Appears only
     /// in match-arm rows (stage 2 — the pattern-matrix compiler consumes it);
     /// the irrefutable binder positions (`let`, lambda params) reject it.
-    Variant {
-        tag: String,
-        args: Vec<Pattern>,
-    },
+    Variant { tag: String, args: Vec<Pattern> },
     /// A *refutable* scalar literal pattern — `0`/`'c'` (Nat) or `true`/`false`
     /// (Bln) — nested in the matrix. Compiles to a `switch` / `bln_match`
     /// dispatch with the catch-all rows as the default.

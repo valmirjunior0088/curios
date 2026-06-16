@@ -191,10 +191,7 @@ fn lowers_and_runs_mutually_recursive_closures() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![
-                    (
-                        cont::ValueName::from("even"),
-                        cont::ClsrName::from("even"),
-                    ),
+                    (cont::ValueName::from("even"), cont::ClsrName::from("even")),
                     (cont::ValueName::from("odd"), cont::ClsrName::from("odd")),
                 ],
                 values: vec![

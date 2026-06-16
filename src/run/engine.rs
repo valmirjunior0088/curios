@@ -112,8 +112,11 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     );
     let arr_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(arr_array_type)));
     let io_args_type = FuncType::new(engine, std::iter::empty::<ValType>(), [arr_ref]);
-    let io_env_type =
-        FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), bin_ref.clone()]);
+    let io_env_type = FuncType::new(
+        engine,
+        [bin_ref.clone()],
+        [i31_ref.clone(), bin_ref.clone()],
+    );
     let io_exit_type = FuncType::new(engine, [ValType::I32], []);
     let io_read_type = FuncType::new(
         engine,
@@ -181,15 +184,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
             u32,
             u32,
             u32,
-        )| {
-            host.connect(
-                &address,
-                port,
-                connect_timeout,
-                read_timeout,
-                write_timeout,
-            )
-        }
+        )| { host.connect(&address, port, connect_timeout, read_timeout, write_timeout) }
     })?;
 
     define_import(&mut linker, "io_close", io_close_type, {

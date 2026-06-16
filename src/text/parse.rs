@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
+        Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
         LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
-        PatternLit, Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase,
-        TopItem, TopLet, LetBang, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType,
+        PatternLit, Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term,
+        TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType,
         UnionMatch, UseGroup,
     },
     crate::{
@@ -512,7 +512,9 @@ fn parse_match_struct_field_pattern<'a>() -> Parser<'a, (String, Pattern)> {
 // grammar for its fields.
 fn parse_match_struct_pattern<'a>() -> Parser<'a, Pattern> {
     catch(parse_name().and_drop(parse_literal("{")))
-        .and(sep_by0(parse_match_struct_field_pattern, || parse_literal(",")))
+        .and(sep_by0(parse_match_struct_field_pattern, || {
+            parse_literal(",")
+        }))
         .and_drop(parse_literal("}"))
         .map(|(head, fields)| Pattern::Struct { head, fields })
 }
@@ -835,11 +837,13 @@ fn parse_let_tuple<'a>() -> Parser<'a, Term> {
         .and(parse_optional_name_signature())
         .and_drop(parse_literal(";"))
         .and(lazy(parse_term))
-        .map(|((binder, signature), tail)| Subterm::Let(Let {
-            binder,
-            signature,
-            tail,
-        }))
+        .map(|((binder, signature), tail)| {
+            Subterm::Let(Let {
+                binder,
+                signature,
+                tail,
+            })
+        })
         .map(Into::into)
 }
 
@@ -880,7 +884,9 @@ fn parse_let_name<'a>() -> Parser<'a, Term> {
 }
 
 fn parse_let<'a>() -> Parser<'a, Term> {
-    parse_let_tuple().or(parse_let_struct()).or(parse_let_name())
+    parse_let_tuple()
+        .or(parse_let_struct())
+        .or(parse_let_name())
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, Field> {

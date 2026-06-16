@@ -17,27 +17,33 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 ### `/std/Nat`
 
-The natural numbers (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str` and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`.
+The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str`, `not`, and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` drops the bits shifted off the top. `not` is the one that exposes the runtime word — there is no machine complement instruction, so it is the library `xor` against the all-ones value of the word a `Nat` is stored in.
 
-| Binding       | Type                | Description             |
-| ------------- | ------------------- | ----------------------- |
-| `succ(a)`     | `(Nat) -> Nat`      | Successor (`a + 1`)     |
-| `add(a, b)`   | `(Nat, Nat) -> Nat` | Addition                |
-| `sub(a, b)`   | `(Nat, Nat) -> Nat` | Subtraction             |
-| `mul(a, b)`   | `(Nat, Nat) -> Nat` | Multiplication          |
-| `div(a, b)`   | `(Nat, Nat) -> Nat` | Division                |
-| `rem(a, b)`   | `(Nat, Nat) -> Nat` | Remainder               |
-| `eql(a, b)`   | `(Nat, Nat) -> Bln` | Equality                |
-| `neq(a, b)`   | `(Nat, Nat) -> Bln` | Inequality              |
-| `lt(a, b)`    | `(Nat, Nat) -> Bln` | Less than               |
-| `gt(a, b)`    | `(Nat, Nat) -> Bln` | Greater than            |
-| `lte(a, b)`   | `(Nat, Nat) -> Bln` | Less than or equal      |
-| `gte(a, b)`   | `(Nat, Nat) -> Bln` | Greater than or equal   |
-| `to_int(a)`   | `(Nat) -> Int`      | Convert to `Int`        |
-| `to_flt(a)`   | `(Nat) -> Flt`      | Convert to `Flt`        |
-| `to_str(a)`   | `(Nat) -> Str`      | Decimal text            |
-| `of_str(str)` | `(Bin) -> Nat`      | Parse a decimal numeral |
-| `min(a, b)`   | `(Nat, Nat) -> Nat` | Minimum                 |
+| Binding       | Type                | Description                          |
+| ------------- | ------------------- | ------------------------------------ |
+| `succ(a)`     | `(Nat) -> Nat`      | Successor (`a + 1`)                  |
+| `add(a, b)`   | `(Nat, Nat) -> Nat` | Addition                             |
+| `sub(a, b)`   | `(Nat, Nat) -> Nat` | Subtraction                          |
+| `mul(a, b)`   | `(Nat, Nat) -> Nat` | Multiplication                       |
+| `div(a, b)`   | `(Nat, Nat) -> Nat` | Division                             |
+| `rem(a, b)`   | `(Nat, Nat) -> Nat` | Remainder                            |
+| `eql(a, b)`   | `(Nat, Nat) -> Bln` | Equality                             |
+| `neq(a, b)`   | `(Nat, Nat) -> Bln` | Inequality                           |
+| `lt(a, b)`    | `(Nat, Nat) -> Bln` | Less than                            |
+| `gt(a, b)`    | `(Nat, Nat) -> Bln` | Greater than                         |
+| `lte(a, b)`   | `(Nat, Nat) -> Bln` | Less than or equal                   |
+| `gte(a, b)`   | `(Nat, Nat) -> Bln` | Greater than or equal                |
+| `and(a, b)`   | `(Nat, Nat) -> Nat` | Bitwise AND                          |
+| `or(a, b)`    | `(Nat, Nat) -> Nat` | Bitwise OR                           |
+| `xor(a, b)`   | `(Nat, Nat) -> Nat` | Bitwise XOR                          |
+| `not(a)`      | `(Nat) -> Nat`      | Bitwise complement                   |
+| `shl(a, b)`   | `(Nat, Nat) -> Nat` | Left shift by `b`, truncating        |
+| `shr(a, b)`   | `(Nat, Nat) -> Nat` | Logical right shift by `b`           |
+| `to_int(a)`   | `(Nat) -> Int`      | Convert to `Int`                     |
+| `to_flt(a)`   | `(Nat) -> Flt`      | Convert to `Flt`                     |
+| `to_str(a)`   | `(Nat) -> Str`      | Decimal text                         |
+| `of_str(str)` | `(Bin) -> Option(Nat)` | Parse a decimal numeral; `none` unless every byte is a digit |
+| `min(a, b)`   | `(Nat, Nat) -> Nat` | Minimum                              |
 
 ### `/std/Int`
 
@@ -59,7 +65,7 @@ Signed integers. `of_str` and `abs` are library helpers; the rest are `/sys` pri
 | `to_nat(a)`   | `(Int) -> Nat`      | Convert to `Nat`                                  |
 | `to_flt(a)`   | `(Int) -> Flt`      | Convert to `Flt`                                  |
 | `to_str(a)`   | `(Int) -> Str`      | Decimal text                                      |
-| `of_str(str)` | `(Bin) -> Int`      | Parse a decimal numeral with optional leading `-` |
+| `of_str(str)` | `(Bin) -> Option(Int)` | Parse a decimal numeral with optional leading `+`/`-`; `none` on invalid input |
 | `abs(n)`      | `(Int) -> Nat`      | Absolute value                                    |
 
 ### `/std/Flt`
@@ -91,11 +97,11 @@ Floating-point numbers. `of_str` is a library helper; the rest are `/sys` primit
 | `to_int(a)`    | `(Flt) -> Int`      | Convert to `Int`                                                  |
 | `to_le_bin(a)` | `(Flt) -> Bin`      | Little-endian byte encoding                                       |
 | `to_str(a)`    | `(Flt) -> Str`      | Decimal text                                                      |
-| `of_str(str)`  | `(Bin) -> Flt`      | Parse a decimal `digits.digits` numeral with optional leading `-` |
+| `of_str(str)`  | `(Bin) -> Option(Flt)` | Parse a `digits.digits` numeral with optional sign and `e`/`E` exponent; `none` on invalid input |
 
 ### `/std/Bln`
 
-Booleans. The values are the literals `true`/`false`, eliminated with [`match`](SYNTAX.md#match) (`| true => … | false => …`); there are no `/sys` primitives, so every binding below is a library helper.
+Booleans. The values are the literals `true`/`false`, eliminated with [`match`](SYNTAX.md#match) (`| true => … | false => …`). `Bln` rides the same i31 carrier as `Nat`, with `false`/`true` as `0`/`1`, so the three logic ops (`and`/`or`/`xor`) are `/sys` primitives — bitwise machine ops on that single bit — re-exported by `pub use /sys/Bln/*`; `not` (the library `xor(b, true)`), `eql`, `to_str`, and `of_str` are library helpers.
 
 | Binding     | Type                   | Description                                            |
 | ----------- | ---------------------- | ------------------------------------------------------ |

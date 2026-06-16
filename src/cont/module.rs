@@ -190,38 +190,23 @@ pub enum HostTarget {
     },
     /// Read the wall clock. Ambient — no operands. Returns
     /// (secs_hi, secs_lo, nanos); `resume` takes three block parameters.
-    IoClockWall {
-        resume: BlockName,
-    },
+    IoClockWall { resume: BlockName },
     /// Read the monotonic clock. Ambient. Returns (secs, nanos);
     /// `resume` takes two block parameters.
-    IoClockMono {
-        resume: BlockName,
-    },
+    IoClockMono { resume: BlockName },
     /// Fill `count` random bytes. Returns a `Bin`; `resume` takes one
     /// block parameter.
-    IoRandom {
-        count: ValueName,
-        resume: BlockName,
-    },
+    IoRandom { count: ValueName, resume: BlockName },
     /// Read the process arguments. Ambient — no operands. Returns the
     /// `Arr(Bin)` directly; `resume` takes one block parameter.
-    IoArgs {
-        resume: BlockName,
-    },
+    IoArgs { resume: BlockName },
     /// Look up the environment variable `name` (a `Bin`). Returns
     /// (status, value); `resume` takes two block parameters.
-    IoEnv {
-        name: ValueName,
-        resume: BlockName,
-    },
+    IoEnv { name: ValueName, resume: BlockName },
     /// Terminate the process with exit `code`. The host traps, so the resume is
     /// never reached; it is kept (taking zero block parameters) only so the
     /// uniform `Tail::Host { resume }` shape holds.
-    IoExit {
-        code: ValueName,
-        resume: BlockName,
-    },
+    IoExit { code: ValueName, resume: BlockName },
 }
 
 impl HostTarget {

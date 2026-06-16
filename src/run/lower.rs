@@ -1,6 +1,6 @@
 use wasmtime::{
-    AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability, RefType,
-    StorageType, Val, ValType,
+    AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability,
+    RefType, StorageType, Val, ValType,
 };
 
 pub trait Lower {

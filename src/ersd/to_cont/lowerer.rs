@@ -204,7 +204,8 @@ impl Work<'_, '_, '_> {
         for (item, target) in items.into_iter().zip(reserved) {
             match self.plan_backpatch(item, &frame) {
                 Some(backpatch) => {
-                    self.emit.add_prealloc(target.clone(), backpatch.clsr.clone());
+                    self.emit
+                        .add_prealloc(target.clone(), backpatch.clsr.clone());
                     self.emit_backpatch(target, &backpatch);
                 }
                 None => match &**item {
@@ -498,7 +499,8 @@ impl Work<'_, '_, '_> {
         let order = rec_computed_order(&computed_names, &deps);
 
         for (target, backpatch) in &backpatches {
-            self.emit.add_prealloc(target.clone(), backpatch.clsr.clone());
+            self.emit
+                .add_prealloc(target.clone(), backpatch.clsr.clone());
         }
 
         let sorted = order

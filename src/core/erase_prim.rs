@@ -45,6 +45,10 @@ fn str_type() -> Term {
     prim_type(Prim::StrType)
 }
 
+fn bln_type() -> Term {
+    prim_type(Prim::BlnType)
+}
+
 fn pure(prim: ersd::PurePrim) -> ersd::Term {
     ersd::Subterm::Prim(ersd::Prim::Pure(prim)).into()
 }
@@ -67,6 +71,20 @@ pub fn erase_prim(
     match prim {
         Prim::BlnType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Bln(value) => Ok(pure(ersd::PurePrim::Nat(if value { 1 } else { 0 }))),
+        // `Bln` rides the `0`/`1` i31 carrier, so its logic ops are exactly the
+        // `Nat` bit ops on a single bit. `not` flips bit 0 with `xor 1`.
+        Prim::BlnAnd(left, right) => Ok(pure(ersd::PurePrim::NatAnd(
+            erase(context, left, &bln_type())?,
+            erase(context, right, &bln_type())?,
+        ))),
+        Prim::BlnOr(left, right) => Ok(pure(ersd::PurePrim::NatOr(
+            erase(context, left, &bln_type())?,
+            erase(context, right, &bln_type())?,
+        ))),
+        Prim::BlnXor(left, right) => Ok(pure(ersd::PurePrim::NatXor(
+            erase(context, left, &bln_type())?,
+            erase(context, right, &bln_type())?,
+        ))),
         Prim::NatType => Ok(ersd::Subterm::Erased.into()),
         Prim::Nat(Nat::Zero) => Ok(pure(ersd::PurePrim::Nat(0))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
@@ -119,6 +137,26 @@ pub fn erase_prim(
             erase(context, right, &nat_type())?,
         ))),
         Prim::NatGte(left, right) => Ok(pure(ersd::PurePrim::NatGte(
+            erase(context, left, &nat_type())?,
+            erase(context, right, &nat_type())?,
+        ))),
+        Prim::NatAnd(left, right) => Ok(pure(ersd::PurePrim::NatAnd(
+            erase(context, left, &nat_type())?,
+            erase(context, right, &nat_type())?,
+        ))),
+        Prim::NatOr(left, right) => Ok(pure(ersd::PurePrim::NatOr(
+            erase(context, left, &nat_type())?,
+            erase(context, right, &nat_type())?,
+        ))),
+        Prim::NatXor(left, right) => Ok(pure(ersd::PurePrim::NatXor(
+            erase(context, left, &nat_type())?,
+            erase(context, right, &nat_type())?,
+        ))),
+        Prim::NatShl(left, right) => Ok(pure(ersd::PurePrim::NatShl(
+            erase(context, left, &nat_type())?,
+            erase(context, right, &nat_type())?,
+        ))),
+        Prim::NatShr(left, right) => Ok(pure(ersd::PurePrim::NatShr(
             erase(context, left, &nat_type())?,
             erase(context, right, &nat_type())?,
         ))),

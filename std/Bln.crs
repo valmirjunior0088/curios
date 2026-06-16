@@ -1,29 +1,9 @@
 pub use /sys/{Bln};
+pub use /sys/Bln/*;
 use /std/{Str, Bin, Option};
 
 pub let not(b : Bln) -> Bln =
-    match b
-    | true => false
-    | false => true
-    end;
-
-pub let and(a : Bln, b : Bln) -> Bln =
-    match a
-    | true => b
-    | false => false
-    end;
-
-pub let or(a : Bln, b : Bln) -> Bln =
-    match a
-    | true => true
-    | false => b
-    end;
-
-pub let xor(a : Bln, b : Bln) -> Bln =
-    match a
-    | true => not(b)
-    | false => b
-    end;
+    xor(b, true);
 
 pub let eql(a : Bln, b : Bln) -> Bln =
     match a

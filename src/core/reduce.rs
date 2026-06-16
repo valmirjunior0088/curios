@@ -118,10 +118,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         // (unlike `Variant`, whose field 0 is the tag): `Proj(Struct, i)` is
         // field `i`.
         Subterm::Struct(Struct { fields, .. }) if index < fields.len() => Ok(Reduce::Continue(
-            fields
-                .into_iter()
-                .nth(index)
-                .expect("index bounded above"),
+            fields.into_iter().nth(index).expect("index bounded above"),
         )),
         head => {
             let head: Term = head.into();
@@ -219,25 +216,27 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             })))),
         },
 
-        Cases::Switch { cases, default } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-            Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
-                Some(body) => Ok(Reduce::Continue(body.clone())),
-                None => Ok(Reduce::Continue(default.clone())),
-            },
-            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
-                if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
-            {
-                match spine.to_u32().and_then(|k| cases.get(&k)) {
+        Cases::Switch { cases, default } => {
+            match Term::unwrap_or_clone(reduce_forced(context, head)?) {
+                Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
                     Some(body) => Ok(Reduce::Continue(body.clone())),
                     None => Ok(Reduce::Continue(default.clone())),
+                },
+                Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
+                    if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
+                {
+                    match spine.to_u32().and_then(|k| cases.get(&k)) {
+                        Some(body) => Ok(Reduce::Continue(body.clone())),
+                        None => Ok(Reduce::Continue(default.clone())),
+                    }
                 }
+                head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                    head: head.into(),
+                    motive,
+                    cases: Cases::Switch { cases, default },
+                })))),
             }
-            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head.into(),
-                motive,
-                cases: Cases::Switch { cases, default },
-            })))),
-        },
+        }
 
         // Dispatch on the reduced scrutinee — a `Variant` directly, or one
         // reached through a match-arm refinement (`refine_head` registers

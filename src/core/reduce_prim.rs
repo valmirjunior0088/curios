@@ -4,6 +4,32 @@ use {
     num_traits::{ToPrimitive, Zero},
 };
 
+/// The low 31 bits of a `Nat` literal — the i31 carrier the runtime represents
+/// it with. Mirrors the masking in `NatToInt`'s fold; a symbolic operand has no
+/// `BigUint` and yields `None`, so the bitwise op stays a neutral term.
+fn nat_bits(n: &Nat) -> Option<u32> {
+    Some(n.to_big_uint()?.to_u32().unwrap_or(0) & 0x7FFF_FFFF)
+}
+
+/// Reduce both operands of a `Bln` binary primitive, then either `fold` the two
+/// literals or `rebuild` the neutral term. `Bln` has no numeric carrier at the
+/// type level, so the fold reads the `true`/`false` constructors directly.
+fn reduce_bln_binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    fold: impl FnOnce(bool, bool) -> bool,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, ReduceError> {
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    Ok(Subterm::Prim(match (left.as_bln(), right.as_bln()) {
+        (Some(l), Some(r)) => Prim::Bln(fold(l, r)),
+        _ => rebuild(left, right),
+    }))
+}
+
 /// Reduce both operands of a `Nat` binary primitive, then either `fold` the two literals or
 /// `rebuild` the neutral term from the reduced operands.
 fn reduce_nat_binary(
@@ -179,6 +205,15 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
     match prim {
         Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
         Prim::Bln(value) => Ok(Subterm::Prim(Prim::Bln(*value))),
+        Prim::BlnAnd(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l && r, Prim::BlnAnd)
+        }
+        Prim::BlnOr(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l || r, Prim::BlnOr)
+        }
+        Prim::BlnXor(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BlnXor)
+        }
         Prim::NatType => Ok(Subterm::Prim(Prim::NatType)),
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
@@ -307,6 +342,53 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             right,
             |l, r| l.gte(&r).map(Prim::Bln),
             Prim::NatGte,
+        ),
+        // Bitwise ops fold on the 31-bit carrier, matching the runtime: `and`,
+        // `or`, and `xor` all stay inside 31 bits; `shl` truncates the result
+        // back into the carrier like the backend's `ref.i31`, while `shr` is
+        // logical and never overflows.
+        Prim::NatAnd(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Some(Prim::Nat(Nat::new(nat_bits(&l)? & nat_bits(&r)?))),
+            Prim::NatAnd,
+        ),
+        Prim::NatOr(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Some(Prim::Nat(Nat::new(nat_bits(&l)? | nat_bits(&r)?))),
+            Prim::NatOr,
+        ),
+        Prim::NatXor(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| Some(Prim::Nat(Nat::new(nat_bits(&l)? ^ nat_bits(&r)?))),
+            Prim::NatXor,
+        ),
+        Prim::NatShl(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| {
+                Some(Prim::Nat(Nat::new(
+                    nat_bits(&l)?.wrapping_shl(nat_bits(&r)?) & 0x7FFF_FFFF,
+                )))
+            },
+            Prim::NatShl,
+        ),
+        Prim::NatShr(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| {
+                Some(Prim::Nat(Nat::new(
+                    nat_bits(&l)?.wrapping_shr(nat_bits(&r)?),
+                )))
+            },
+            Prim::NatShr,
         ),
         Prim::IntType => Ok(Subterm::Prim(Prim::IntType)),
         Prim::Int(value) => Ok(Subterm::Prim(Prim::Int(value.clone()))),

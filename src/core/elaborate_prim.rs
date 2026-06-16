@@ -40,7 +40,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         | Prim::NatSub(left, right)
         | Prim::NatMul(left, right)
         | Prim::NatDiv(left, right)
-        | Prim::NatRem(left, right) => {
+        | Prim::NatRem(left, right)
+        | Prim::NatAnd(left, right)
+        | Prim::NatOr(left, right)
+        | Prim::NatXor(left, right)
+        | Prim::NatShl(left, right)
+        | Prim::NatShr(left, right) => {
             let left = elaborate(context, left, Mode::Check(nat_type.clone()))?.0;
             let right = elaborate(context, right, Mode::Check(nat_type.clone()))?.0;
             let prim = match prim {
@@ -49,9 +54,25 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Prim::NatMul(..) => Prim::NatMul(left, right),
                 Prim::NatDiv(..) => Prim::NatDiv(left, right),
                 Prim::NatRem(..) => Prim::NatRem(left, right),
+                Prim::NatAnd(..) => Prim::NatAnd(left, right),
+                Prim::NatOr(..) => Prim::NatOr(left, right),
+                Prim::NatXor(..) => Prim::NatXor(left, right),
+                Prim::NatShl(..) => Prim::NatShl(left, right),
+                Prim::NatShr(..) => Prim::NatShr(left, right),
                 _ => unreachable!(),
             };
             (prim, nat_type)
+        }
+        Prim::BlnAnd(left, right) | Prim::BlnOr(left, right) | Prim::BlnXor(left, right) => {
+            let left = elaborate(context, left, Mode::Check(bln_type.clone()))?.0;
+            let right = elaborate(context, right, Mode::Check(bln_type.clone()))?.0;
+            let prim = match prim {
+                Prim::BlnAnd(..) => Prim::BlnAnd(left, right),
+                Prim::BlnOr(..) => Prim::BlnOr(left, right),
+                Prim::BlnXor(..) => Prim::BlnXor(left, right),
+                _ => unreachable!(),
+            };
+            (prim, bln_type)
         }
         Prim::IntType => (prim.clone(), Term::type_()),
         Prim::Int(_) => (prim.clone(), int_type),
@@ -391,10 +412,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::IoRandom(count), bin_type)
         }
         // argv: an immutable snapshot of the process arguments.
-        Prim::IoArgs => (
-            prim.clone(),
-            Subterm::Prim(Prim::ArrType(bin_type)).into(),
-        ),
+        Prim::IoArgs => (prim.clone(), Subterm::Prim(Prim::ArrType(bin_type)).into()),
         Prim::IoEnv(name) => {
             let name = elaborate(context, name, Mode::Check(bin_type.clone()))?.0;
             // Found/not-found crosses as a status record: 0 ok, 2 not found.

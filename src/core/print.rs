@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Arity, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match, Module,
-        Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, Two, UnionType, Var, Variant,
+        Apply, Arity, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match,
+        Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, Two, UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::{
@@ -204,9 +204,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     cases.iter().for_each(|(_, body)| collect_labels(body, out));
                     collect_labels(default, out);
                 }
-                Cases::Union { cases, .. } => {
-                    cases.iter().for_each(|(_, s)| scope(out, s))
-                }
+                Cases::Union { cases, .. } => cases.iter().for_each(|(_, s)| scope(out, s)),
             }
         }
         Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
@@ -271,10 +269,7 @@ pub fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
     // One global can be listed twice (a union is both an `inductives` registry
     // key and an `items` type-constructor definition); count distinct names, or
     // such a name would look ambiguous with itself and never shorten.
-    let symbols = symbols
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
+    let symbols = symbols.iter().map(String::as_str).collect::<BTreeSet<_>>();
 
     let suffixes = |sym: &str| -> Vec<String> {
         let segments = sym.split('/').collect::<Vec<_>>();
@@ -387,6 +382,24 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::BlnType => pure("Bln"),
         Prim::Bln(false) => pure("false"),
         Prim::Bln(true) => pure("true"),
+        Prim::BlnAnd(left, right) => flat([
+            pure("Bln.and "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::BlnOr(left, right) => flat([
+            pure("Bln.or "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::BlnXor(left, right) => flat([
+            pure("Bln.xor "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
@@ -469,6 +482,36 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::NatGte(left, right) => flat([
             pure("Nat.gte "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::NatAnd(left, right) => flat([
+            pure("Nat.and "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::NatOr(left, right) => flat([
+            pure("Nat.or "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::NatXor(left, right) => flat([
+            pure("Nat.xor "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::NatShl(left, right) => flat([
+            pure("Nat.shl "),
+            print_term(left, depth),
+            pure(" "),
+            print_term(right, depth),
+        ]),
+        Prim::NatShr(left, right) => flat([
+            pure("Nat.shr "),
             print_term(left, depth),
             pure(" "),
             print_term(right, depth),

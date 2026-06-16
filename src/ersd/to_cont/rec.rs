@@ -125,9 +125,9 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
             names
         }
         ersd::HostPrim::IoClose(handle) => free_names(handle),
-        ersd::HostPrim::IoClockWall
-        | ersd::HostPrim::IoClockMono
-        | ersd::HostPrim::IoArgs => BTreeSet::new(),
+        ersd::HostPrim::IoClockWall | ersd::HostPrim::IoClockMono | ersd::HostPrim::IoArgs => {
+            BTreeSet::new()
+        }
         ersd::HostPrim::IoRandom(count) => free_names(count),
         ersd::HostPrim::IoEnv(name) => free_names(name),
         ersd::HostPrim::IoExit(code) => free_names(code),
@@ -156,6 +156,11 @@ fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
         | NatGt(a, b)
         | NatLte(a, b)
         | NatGte(a, b)
+        | NatAnd(a, b)
+        | NatOr(a, b)
+        | NatXor(a, b)
+        | NatShl(a, b)
+        | NatShr(a, b)
         | IntEql(a, b)
         | IntNeq(a, b)
         | IntAdd(a, b)

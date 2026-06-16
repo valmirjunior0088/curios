@@ -668,10 +668,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::NotAStructType { found } => {
-                write!(
-                    f,
-                    "expected a struct type here\n  found: {found}"
-                )
+                write!(f, "expected a struct type here\n  found: {found}")
             }
             Error::StructArityMismatch {
                 name,
