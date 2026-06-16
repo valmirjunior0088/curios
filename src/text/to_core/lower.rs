@@ -62,20 +62,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Subterm::Type => core::Term::type_(),
             Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
-            Subterm::Name(name) => {
-                let resolved = if name.is_abs() || !name.is_single() {
-                    self.context.resolve_term_name(name)?.join()
-                } else {
-                    let label = name.head();
-
-                    match self.context.bindings().get(label) {
-                        Some(full) => full.join(),
-                        None => label.to_string(),
-                    }
-                };
-
-                core::Term::var(core::Var::free(resolved))
-            }
+            Subterm::Name(name) => core::Term::var(core::Var::free(self.resolve_name(name)?)),
             Subterm::FuncType(ft) => core::Term::func_type_marked(
                 ft.params
                     .iter()
@@ -721,14 +708,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         };
 
         // Resolve the annotation's union name exactly like a term reference.
-        let resolved = if name.is_abs() || !name.is_single() {
-            self.context.resolve_term_name(name)?.join()
-        } else {
-            match self.context.bindings().get(name.head()) {
-                Some(full) => full.join(),
-                None => name.head().to_string(),
-            }
-        };
+        let resolved = self.resolve_name(name)?;
 
         let mut binders = Vec::new();
         let mut pattern_slots = Vec::new();

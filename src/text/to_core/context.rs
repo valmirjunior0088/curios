@@ -235,16 +235,16 @@ impl<'a> Context<'a> {
         }
     }
 
-    // The module that should contain `name`'s final segment, plus that segment.
-    // Absolute names walk from the root; relative names from the lexically-bound
-    // head qualifier.
-    fn resolve_parent_path(&self, name: &Name) -> Result<(Qualifier, String), Error> {
-        let label = name.last().to_string();
+    // Resolve the module named by `name`'s first `upto` segments: from the module
+    // root (absolute) or the lexically-bound head qualifier (relative — the head
+    // is consumed as the start, so the walk runs over `segments[1..upto]`). Guards
+    // the *resolved* module, so a relative spelling is rejected exactly as the
+    // absolute one is.
+    fn resolve_module_prefix(&self, name: &Name, upto: usize) -> Result<Qualifier, Error> {
         let segments = name.qualifier().segments();
-        let last = segments.len() - 1;
 
-        let parent = if name.is_abs() {
-            self.walk_children(Qualifier::empty(), &segments[..last])?
+        let resolved = if name.is_abs() {
+            self.walk_children(Qualifier::empty(), &segments[..upto])?
         } else {
             let head = name.head();
             let start = self
@@ -255,13 +255,18 @@ impl<'a> Context<'a> {
                 })?
                 .clone();
 
-            self.walk_children(start, &segments[1..last])?
+            self.walk_children(start, &segments[1..upto])?
         };
 
-        // Guard the *resolved* containing module, so a relative spelling is
-        // rejected exactly as the absolute one is.
-        super::guard_internal_root(&self.prefix, parent.segments())?;
-        Ok((parent, label))
+        super::guard_internal_root(&self.prefix, resolved.segments())?;
+        Ok(resolved)
+    }
+
+    // The module that should contain `name`'s final segment, plus that segment.
+    fn resolve_parent_path(&self, name: &Name) -> Result<(Qualifier, String), Error> {
+        let last = name.qualifier().segments().len() - 1;
+        let parent = self.resolve_module_prefix(name, last)?;
+        Ok((parent, name.last().to_string()))
     }
 
     // Import the module child `label` out of `parent`, registering it as a
@@ -403,26 +408,8 @@ impl<'a> Context<'a> {
     // and binding it exposes (including its re-exports), each under its own label.
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
-            let segments = name.qualifier().segments();
-
-            let module = if name.is_abs() {
-                self.walk_children(Qualifier::empty(), segments)?
-            } else {
-                let head = name.head();
-                let start = self
-                    .qualifiers
-                    .get(head)
-                    .ok_or_else(|| Error::UnresolvedQualifier {
-                        qualifier: head.to_string(),
-                    })?
-                    .clone();
-
-                self.walk_children(start, &segments[1..])?
-            };
-
-            // Guard the *resolved* module, so a relative spelling is rejected
-            // exactly as the absolute one is.
-            super::guard_internal_root(&self.prefix, module.segments())?;
+            let module =
+                self.resolve_module_prefix(name, name.qualifier().segments().len())?;
 
             let interface = self
                 .public

@@ -441,33 +441,48 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
 // A binder pattern: a plain identifier, or a parenthesized positional tuple
 // pattern. A leading `(` always commits to a tuple pattern — patterns never need
 // grouping, so there is no `(p)`-as-grouping ambiguity.
-fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
+// A positional tuple pattern `(p, …)`, its fields drawn from `elem` — the
+// irrefutable (`parse_pattern`) or refutable (`parse_match_pattern`) sub-grammar.
+fn tuple_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, Pattern> {
     catch(parse_literal("("))
-        .and_keep(sep_by0(|| lazy(parse_pattern), || parse_literal(",")))
+        .and_keep(sep_by0(move || lazy(elem), || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .map(Pattern::Tuple)
 }
 
 // One field of a struct pattern: a rename `bar = p` (binding the nested pattern
-// `p`), or a pun `bar` (binding the field's own label). The `=` commits to the
-// rename, so a bare label falls through to the pun.
-fn parse_struct_field_pattern<'a>() -> Parser<'a, (String, Pattern)> {
+// `p`, drawn from `elem`), or a pun `bar` (binding the field's own label). The
+// `=` commits to the rename, so a bare label falls through to the pun.
+fn struct_field_pattern<'a>(
+    elem: fn() -> Parser<'a, Pattern>,
+) -> Parser<'a, (String, Pattern)> {
     catch(parse_identifier().and_drop(parse_literal("=")))
-        .and(lazy(parse_pattern))
+        .and(lazy(elem))
         .map(|(label, pattern): (&str, Pattern)| (label.to_string(), pattern))
         .or(parse_identifier()
             .map(|label: &str| (label.to_string(), Pattern::Bind(label.to_string()))))
 }
 
-// A nominal struct pattern `Name { field, … }`. The trailing `{` after the head
-// is the commit point — it distinguishes the pattern from a bare `Bind` (no
-// brace), exactly as `parse_struct_lit` distinguishes a literal from a name
-// reference. Parameters are never written here; they are inferred from the head.
-fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
+// A nominal struct pattern `Name { field, … }`, its fields drawn from `elem`. The
+// trailing `{` after the head is the commit point — it distinguishes the pattern
+// from a bare `Bind` (no brace), exactly as `parse_struct_lit` distinguishes a
+// literal from a name reference. Parameters are never written here; they are
+// inferred from the head.
+fn struct_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, Pattern> {
     catch(parse_name().and_drop(parse_literal("{")))
-        .and(sep_by0(parse_struct_field_pattern, || parse_literal(",")))
+        .and(sep_by0(move || struct_field_pattern(elem), || parse_literal(",")))
         .and_drop(parse_literal("}"))
         .map(|(head, fields)| Pattern::Struct { head, fields })
+}
+
+// The irrefutable tuple/struct entry points (also used at `let`-binder sites),
+// binding their fields with the irrefutable grammar.
+fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
+    tuple_pattern(parse_pattern)
+}
+
+fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
+    struct_pattern(parse_pattern)
 }
 
 fn parse_pattern<'a>() -> Parser<'a, Pattern> {
@@ -479,43 +494,14 @@ fn parse_pattern<'a>() -> Parser<'a, Pattern> {
 // The *refutable* pattern grammar, used only in match-arm rows. It extends the
 // irrefutable grammar with constructor patterns (`tag(p, …)`) and scalar literal
 // patterns (`0`, `true`), and recurses into itself through tuples and structs so
-// a literal/constructor may sit at any depth (`cons((0, x), _)`).
+// a literal/constructor may sit at any depth (`cons((0, x), _)`) — hence the
+// tuple/struct parsers recurse into `parse_match_pattern`, not `parse_pattern`.
 fn parse_match_pattern<'a>() -> Parser<'a, Pattern> {
-    parse_match_tuple_pattern()
-        .or(parse_match_struct_pattern())
+    tuple_pattern(parse_match_pattern)
+        .or(struct_pattern(parse_match_pattern))
         .or(parse_variant_pattern())
         .or(parse_lit_pattern())
         .or(parse_identifier().map(|name: &str| Pattern::Bind(name.to_string())))
-}
-
-// A refutable tuple pattern: like `parse_tuple_pattern`, but its fields recurse
-// into the refutable grammar.
-fn parse_match_tuple_pattern<'a>() -> Parser<'a, Pattern> {
-    catch(parse_literal("("))
-        .and_keep(sep_by0(|| lazy(parse_match_pattern), || parse_literal(",")))
-        .and_drop(parse_literal(")"))
-        .map(Pattern::Tuple)
-}
-
-// One field of a refutable struct pattern — `bar = p` (rename) or `bar` (pun),
-// like `parse_struct_field_pattern` but recursing into the refutable grammar.
-fn parse_match_struct_field_pattern<'a>() -> Parser<'a, (String, Pattern)> {
-    catch(parse_identifier().and_drop(parse_literal("=")))
-        .and(lazy(parse_match_pattern))
-        .map(|(label, pattern): (&str, Pattern)| (label.to_string(), pattern))
-        .or(parse_identifier()
-            .map(|label: &str| (label.to_string(), Pattern::Bind(label.to_string()))))
-}
-
-// A refutable struct pattern `Name { field, … }`, recursing into the refutable
-// grammar for its fields.
-fn parse_match_struct_pattern<'a>() -> Parser<'a, Pattern> {
-    catch(parse_name().and_drop(parse_literal("{")))
-        .and(sep_by0(parse_match_struct_field_pattern, || {
-            parse_literal(",")
-        }))
-        .and_drop(parse_literal("}"))
-        .map(|(head, fields)| Pattern::Struct { head, fields })
 }
 
 // A constructor pattern `tag(p, …)` — `nil()` for the nullary case. The `(`

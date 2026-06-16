@@ -103,6 +103,13 @@ fn print_flt(value: f32) -> Printer<'static> {
     pure(string)
 }
 
+fn print_named_field((name, field): (Option<String>, Term)) -> Printer<'static> {
+    match name {
+        Some(name) => flat([pure(name), pure(" = "), print_term(field)]),
+        None => print_term(field),
+    }
+}
+
 fn print_prim_call(name: &'static str, args: Vec<Term>) -> Printer<'static> {
     flat([
         pure(name),
@@ -345,18 +352,14 @@ fn print_term(term: Term) -> Printer<'static> {
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Subterm::Tuple(Tuple { fields }) => {
-            let print_field = |(name, field): (Option<String>, Term)| match name {
-                Some(name) => flat([pure(name), pure(" = "), print_term(field)]),
-                None => print_term(field),
-            };
             if fields.len() == 1 {
                 let (name, field) = fields.into_iter().next().unwrap();
                 let trailer = if name.is_some() { ")" } else { ",)" };
-                flat([pure("("), print_field((name, field)), pure(trailer)])
+                flat([pure("("), print_named_field((name, field)), pure(trailer)])
             } else {
                 flat([
                     pure("("),
-                    sep_flat(fields.into_iter().map(print_field), || pure(", ")),
+                    sep_flat(fields.into_iter().map(print_named_field), || pure(", ")),
                     pure(")"),
                 ])
             }
@@ -373,10 +376,6 @@ fn print_term(term: Term) -> Printer<'static> {
             params,
             fields,
         }) => {
-            let print_field = |(name, field): (Option<String>, Term)| match name {
-                Some(name) => flat([pure(name), pure(" = "), print_term(field)]),
-                None => print_term(field),
-            };
             flat([
                 pure(head.join()),
                 if params.is_empty() {
@@ -389,7 +388,7 @@ fn print_term(term: Term) -> Printer<'static> {
                     ])
                 },
                 pure(" { "),
-                sep_flat(fields.into_iter().map(print_field), || pure(", ")),
+                sep_flat(fields.into_iter().map(print_named_field), || pure(", ")),
                 pure(" }"),
             ])
         }
@@ -639,10 +638,7 @@ fn print_top_union_case(case: TopCase) -> Printer<'static> {
     let payload = sep_flat(
         case.payload.into_iter().map(|(plicity, name, ty)| {
             flat([
-                pure(match plicity {
-                    Plicity::Implicit => "@",
-                    Plicity::Explicit => "",
-                }),
+                print_plicity(plicity),
                 match name {
                     Some(name) => flat([pure(name), pure(" : "), print_term(ty)]),
                     None => print_term(ty),
@@ -679,10 +675,7 @@ fn print_top_union_params(params: Vec<(Plicity, String, Term)>) -> Printer<'stat
         sep_flat(
             params.into_iter().map(|(plicity, name, ty)| {
                 flat([
-                    pure(match plicity {
-                        Plicity::Implicit => "@",
-                        Plicity::Explicit => "",
-                    }),
+                    print_plicity(plicity),
                     pure(name),
                     pure(" : "),
                     print_term(ty),

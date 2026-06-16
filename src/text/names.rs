@@ -39,14 +39,6 @@ impl Qualifier {
         self.segments.last().unwrap()
     }
 
-    pub fn interior(&self) -> &[String] {
-        &self.segments[1..self.segments.len() - 1]
-    }
-
-    pub fn init(&self) -> &[String] {
-        &self.segments[..self.segments.len() - 1]
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = &str> {
         self.segments.iter().map(String::as_str)
     }
@@ -144,10 +136,6 @@ impl Name {
 
     pub fn last(&self) -> &str {
         self.qualifier.last()
-    }
-
-    pub fn interior(&self) -> &[String] {
-        self.qualifier.interior()
     }
 }
 
