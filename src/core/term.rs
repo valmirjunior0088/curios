@@ -1399,6 +1399,13 @@ fn prim_reach(prim: &Prim) -> usize {
 
         Prim::ArrSlice(a, b, c, d) => a.reach().max(b.reach()).max(c.reach()).max(d.reach()),
 
+        Prim::IoConnect(a, b, c, d, e) => a
+            .reach()
+            .max(b.reach())
+            .max(c.reach())
+            .max(d.reach())
+            .max(e.reach()),
+
         Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
         Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
     }
@@ -1495,6 +1502,14 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoExit(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
+        }
+
+        Prim::IoConnect(a, b, c, d, e) => {
+            a.collect_metavars(ids);
+            b.collect_metavars(ids);
+            c.collect_metavars(ids);
+            d.collect_metavars(ids);
+            e.collect_metavars(ids);
         }
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
@@ -1712,6 +1727,15 @@ where
         }
         Prim::IoOpen(path, mode) => {
             Prim::IoOpen(visit.visit_subterm(path), visit.visit_subterm(mode))
+        }
+        Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
+            Prim::IoConnect(
+                visit.visit_subterm(host),
+                visit.visit_subterm(port),
+                visit.visit_subterm(connect_timeout),
+                visit.visit_subterm(read_timeout),
+                visit.visit_subterm(write_timeout),
+            )
         }
         Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
         Prim::IoClockWall => Prim::IoClockWall,

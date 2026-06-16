@@ -371,6 +371,20 @@ fn constrain_region(
             seed(path, liveness);
             seed(mode, liveness);
         }
+        Tail::Host(HostTarget::IoConnect {
+            host,
+            port,
+            connect_timeout,
+            read_timeout,
+            write_timeout,
+            ..
+        }) => {
+            seed(host, liveness);
+            seed(port, liveness);
+            seed(connect_timeout, liveness);
+            seed(read_timeout, liveness);
+            seed(write_timeout, liveness);
+        }
         Tail::Host(HostTarget::IoClose { handle, .. }) => seed(handle, liveness),
         Tail::Host(HostTarget::IoClockWall { .. })
         | Tail::Host(HostTarget::IoClockMono { .. })

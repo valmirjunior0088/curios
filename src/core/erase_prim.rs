@@ -404,6 +404,15 @@ pub fn erase_prim(
             erase(context, path, &bin_type())?,
             erase(context, mode, &nat_type())?,
         ))),
+        Prim::IoConnect(address, port, connect_timeout, read_timeout, write_timeout) => {
+            Ok(host(ersd::HostPrim::IoConnect(
+                erase(context, address, &bin_type())?,
+                erase(context, port, &nat_type())?,
+                erase(context, connect_timeout, &nat_type())?,
+                erase(context, read_timeout, &nat_type())?,
+                erase(context, write_timeout, &nat_type())?,
+            )))
+        }
         Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
             context,
             handle,

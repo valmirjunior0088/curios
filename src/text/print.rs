@@ -260,6 +260,12 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoRead(handle, count) => print_prim_call("Io.read", vec![handle, count]),
         Prim::IoWrite(handle, bytes) => print_prim_call("Io.write", vec![handle, bytes]),
         Prim::IoOpen(path, mode) => print_prim_call("Io.open", vec![path, mode]),
+        Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
+            print_prim_call(
+                "Io.connect",
+                vec![host, port, connect_timeout, read_timeout, write_timeout],
+            )
+        }
         Prim::IoClose(handle) => print_prim_call("Io.close", vec![handle]),
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),

@@ -78,6 +78,7 @@ pub enum HostPrim {
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
+    IoConnect(Term, Term, Term, Term, Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

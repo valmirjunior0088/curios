@@ -1351,6 +1351,15 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
             }
             Prim::IoOpen(path, mode) => core::Prim::IoOpen(self.term(path)?, self.term(mode)?),
+            Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
+                core::Prim::IoConnect(
+                    self.term(host)?,
+                    self.term(port)?,
+                    self.term(connect_timeout)?,
+                    self.term(read_timeout)?,
+                    self.term(write_timeout)?,
+                )
+            }
             Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
             Prim::IoClockWall => core::Prim::IoClockWall,
             Prim::IoClockMono => core::Prim::IoClockMono,

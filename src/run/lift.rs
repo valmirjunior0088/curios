@@ -39,6 +39,20 @@ impl<A: Lift, B: Lift> Lift for (A, B) {
     }
 }
 
+// A 5-tuple lifts positionally, one param slot each — the shape `io_connect`
+// needs (host, port, connect_timeout, read_timeout, write_timeout).
+impl<A: Lift, B: Lift, C: Lift, D: Lift, E: Lift> Lift for (A, B, C, D, E) {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok((
+            A::lift(caller, &params[0..1])?,
+            B::lift(caller, &params[1..2])?,
+            C::lift(caller, &params[2..3])?,
+            D::lift(caller, &params[3..4])?,
+            E::lift(caller, &params[4..5])?,
+        ))
+    }
+}
+
 impl Lift for Vec<u8> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let Val::AnyRef(Some(anyref)) = &params[0] else {

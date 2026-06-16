@@ -171,6 +171,17 @@ pub enum HostTarget {
         mode: ValueName,
         resume: BlockName,
     },
+    /// Connect to `host`:`port` (a `Bin` and an i32) with the three i32
+    /// millisecond timeouts (`0` = none). Returns (status, handle); `resume`
+    /// takes two block parameters.
+    IoConnect {
+        host: ValueName,
+        port: ValueName,
+        connect_timeout: ValueName,
+        read_timeout: ValueName,
+        write_timeout: ValueName,
+        resume: BlockName,
+    },
     /// Close `handle`. Returns no payload; `resume` takes zero block
     /// parameters.
     IoClose {
@@ -219,6 +230,7 @@ impl HostTarget {
             HostTarget::IoRead { resume, .. }
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
+            | HostTarget::IoConnect { resume, .. }
             | HostTarget::IoClose { resume, .. }
             | HostTarget::IoClockWall { resume }
             | HostTarget::IoClockMono { resume }

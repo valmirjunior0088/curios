@@ -1846,3 +1846,74 @@ fn match_arm_tuple_destructures() {
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"+9".to_vec()]);
 }
+
+// Client network IO (Phase A): `connect` rides the `Hdl` byte stream, so
+// `Net/call` writes a request and drains the scripted response to EOF.
+#[test]
+fn net_call_round_trips_a_scripted_endpoint() {
+    let source = r#"
+        use /std/{Net, Io, Str};
+        match Net/call(Net/default, "example.com", 80, Str/to_bin("GET /\r\n\r\n"))
+        | success(response) => Io/write(Io/stdout, response)
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    system.script_net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"HTTP/1.0 200 OK\r\n\r\nhello".to_vec()]
+    );
+}
+
+// Connecting to an endpoint that was never scripted is refused, and the status
+// decodes to `Net/refused`.
+#[test]
+fn net_call_to_an_unscripted_endpoint_is_refused() {
+    let source = r#"
+        use /std/{Net, Io};
+        match Net/call(Net/default, "example.com", 80, /std/Str/to_bin("ping"))
+        | success(_) => Io/print("connected")
+        | failure(e) =>
+            match e : {}
+            | refused() => Io/print("refused")
+            | other(_) => Io/print("other")
+            end
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"refused".to_vec()]
+    );
+}
+
+// A custom `Config` with an optional `Duration` timeout flows through the
+// bracket; `Net/read` pulls bytes from the socket the body is handed.
+#[test]
+fn net_with_custom_timeout_config_reads_response() {
+    let source = r#"
+        use /std/{Net, Io, Str, Option, Clock};
+        let settings = Net/Settings {
+            connect_timeout = Option/some(Clock/of_millis(500)),
+            read_timeout = Option/none(),
+            write_timeout = Option/none()
+        };
+        match Net/with(settings, "db.internal", 5432, (s) => Net/read(s, 64).bytes)
+        | success(bytes) => Io/write(Io/stdout, bytes)
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    system.script_net([("db.internal:5432", "PONG")]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"PONG".to_vec()]
+    );
+}

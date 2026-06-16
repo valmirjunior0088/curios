@@ -116,6 +116,14 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
             names.extend(free_names(mode));
             names
         }
+        ersd::HostPrim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
+            let mut names = free_names(host);
+            names.extend(free_names(port));
+            names.extend(free_names(connect_timeout));
+            names.extend(free_names(read_timeout));
+            names.extend(free_names(write_timeout));
+            names
+        }
         ersd::HostPrim::IoClose(handle) => free_names(handle),
         ersd::HostPrim::IoClockWall
         | ersd::HostPrim::IoClockMono

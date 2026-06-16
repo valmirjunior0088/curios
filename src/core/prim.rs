@@ -85,6 +85,11 @@ pub enum Prim {
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
+    // (host, port, connect_timeout, read_timeout, write_timeout) -> { status,
+    // handle }. The three timeouts are `Nat` milliseconds; `0` means no
+    // timeout. The handle is a bare `Io`, so the existing read/write/close
+    // plumbing serves the socket.
+    IoConnect(Term, Term, Term, Term, Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

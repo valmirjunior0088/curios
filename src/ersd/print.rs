@@ -167,6 +167,18 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
             flat([pure("Io.write "), print_term(h), pure(" "), print_term(b)])
         }
         HostPrim::IoOpen(p, m) => flat([pure("Io.open "), print_term(p), pure(" "), print_term(m)]),
+        HostPrim::IoConnect(h, p, ct, rt, wt) => flat([
+            pure("Io.connect "),
+            print_term(h),
+            pure(" "),
+            print_term(p),
+            pure(" "),
+            print_term(ct),
+            pure(" "),
+            print_term(rt),
+            pure(" "),
+            print_term(wt),
+        ]),
         HostPrim::IoClose(h) => flat([pure("Io.close "), print_term(h)]),
         HostPrim::IoClockWall => pure("Io.clock_wall"),
         HostPrim::IoClockMono => pure("Io.clock_mono"),

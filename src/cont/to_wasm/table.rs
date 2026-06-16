@@ -227,6 +227,7 @@ pub struct Table<'a> {
     io_read: OnceCell<wasm::FuncName>,
     io_write: OnceCell<wasm::FuncName>,
     io_open: OnceCell<wasm::FuncName>,
+    io_connect: OnceCell<wasm::FuncName>,
     io_close: OnceCell<wasm::FuncName>,
     io_clock_wall: OnceCell<wasm::FuncName>,
     io_clock_mono: OnceCell<wasm::FuncName>,
@@ -286,6 +287,7 @@ impl<'a> Table<'a> {
             io_read: OnceCell::new(),
             io_write: OnceCell::new(),
             io_open: OnceCell::new(),
+            io_connect: OnceCell::new(),
             io_close: OnceCell::new(),
             io_clock_wall: OnceCell::new(),
             io_clock_mono: OnceCell::new(),
@@ -455,6 +457,15 @@ impl<'a> Table<'a> {
 
     pub fn io_open_used(&self) -> bool {
         self.io_open.get().is_some()
+    }
+
+    pub fn io_connect_func(&self) -> &wasm::FuncName {
+        self.io_connect
+            .get_or_init(|| wasm::FuncName::from("io_connect"))
+    }
+
+    pub fn io_connect_used(&self) -> bool {
+        self.io_connect.get().is_some()
     }
 
     pub fn io_close_func(&self) -> &wasm::FuncName {

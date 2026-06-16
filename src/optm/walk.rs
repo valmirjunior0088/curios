@@ -136,6 +136,20 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(path);
             sink.value_use(mode);
         }
+        Tail::Host(HostTarget::IoConnect {
+            host,
+            port,
+            connect_timeout,
+            read_timeout,
+            write_timeout,
+            ..
+        }) => {
+            sink.value_use(host);
+            sink.value_use(port);
+            sink.value_use(connect_timeout);
+            sink.value_use(read_timeout);
+            sink.value_use(write_timeout);
+        }
         Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
         Tail::Host(HostTarget::IoClockWall { .. })
         | Tail::Host(HostTarget::IoClockMono { .. })
@@ -364,6 +378,20 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
         Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
             sink.value_use(path);
             sink.value_use(mode);
+        }
+        Tail::Host(HostTarget::IoConnect {
+            host,
+            port,
+            connect_timeout,
+            read_timeout,
+            write_timeout,
+            ..
+        }) => {
+            sink.value_use(host);
+            sink.value_use(port);
+            sink.value_use(connect_timeout);
+            sink.value_use(read_timeout);
+            sink.value_use(write_timeout);
         }
         Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
         Tail::Host(HostTarget::IoClockWall { .. })

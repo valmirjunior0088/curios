@@ -356,6 +356,19 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
         }
+        Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let host = elaborate(context, host, Mode::Check(bin_type))?.0;
+            let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
+            let connect_timeout =
+                elaborate(context, connect_timeout, Mode::Check(nat_type.clone()))?.0;
+            let read_timeout = elaborate(context, read_timeout, Mode::Check(nat_type.clone()))?.0;
+            let write_timeout = elaborate(context, write_timeout, Mode::Check(nat_type.clone()))?.0;
+            (
+                Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout),
+                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
+            )
+        }
         Prim::IoClose(handle) => {
             let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;

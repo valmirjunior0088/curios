@@ -333,6 +333,24 @@ fn io_ops() -> Vec<TopItem> {
             prim(Prim::IoOpen(name("path"), name("mode"))),
         ),
         pub_fn(
+            "connect",
+            vec![
+                ("host", bin()),
+                ("port", nat()),
+                ("connect_timeout", nat()),
+                ("read_timeout", nat()),
+                ("write_timeout", nat()),
+            ],
+            record(vec![("status", nat()), ("handle", io())]),
+            prim(Prim::IoConnect(
+                name("host"),
+                name("port"),
+                name("connect_timeout"),
+                name("read_timeout"),
+                name("write_timeout"),
+            )),
+        ),
+        pub_fn(
             "close",
             vec![("h", io())],
             unit(),
@@ -464,6 +482,7 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Bln"], include_str!("../../std/Bln.crs")),
     (&["std", "Io"], include_str!("../../std/Io.crs")),
     (&["std", "File"], include_str!("../../std/File.crs")),
+    (&["std", "Net"], include_str!("../../std/Net.crs")),
     (&["std", "Char"], include_str!("../../std/Char.crs")),
     (&["std", "Result"], include_str!("../../std/Result.crs")),
     (&["std", "Option"], include_str!("../../std/Option.crs")),

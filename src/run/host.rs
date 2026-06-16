@@ -2,13 +2,14 @@ use {
     crate::Entropy,
     std::{
         collections::{HashMap, VecDeque},
-        fs::{File, OpenOptions},
+        fs::OpenOptions,
         io::{ErrorKind, Read, Write, stderr, stdin, stdout},
+        net::{TcpStream, ToSocketAddrs},
         sync::{
             Arc, Mutex,
             mpsc::{self, Receiver, RecvError, Sender},
         },
-        time::{Instant, SystemTime, UNIX_EPOCH},
+        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
 };
 
@@ -44,6 +45,8 @@ pub const STATUS_NOT_FOUND: u32 = 2;
 pub const STATUS_PERMISSION_DENIED: u32 = 3;
 pub const STATUS_EXISTS: u32 = 4;
 pub const STATUS_OTHER: u32 = 5;
+/// A `connect` was actively refused — no listener at the target host:port.
+pub const STATUS_REFUSED: u32 = 6;
 
 /// The mode tokens of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` union.
 pub const MODE_READ: u32 = 0;
@@ -55,6 +58,7 @@ fn status_of(kind: ErrorKind) -> u32 {
         ErrorKind::NotFound => STATUS_NOT_FOUND,
         ErrorKind::PermissionDenied => STATUS_PERMISSION_DENIED,
         ErrorKind::AlreadyExists => STATUS_EXISTS,
+        ErrorKind::ConnectionRefused => STATUS_REFUSED,
         _ => STATUS_OTHER,
     }
 }
@@ -72,11 +76,29 @@ fn fresh_handle(handles: &Mutex<Entropy>) -> u32 {
     handles.lock().unwrap().fresh() as u32
 }
 
+/// A bidirectional byte stream backing a non-stdio handle: a file or a socket.
+/// Both `File` and `TcpStream` are `Read + Write + Send`, so one handle map
+/// serves them uniformly — `close` (a drop) flushes or disconnects either.
+trait Conduit: Read + Write + Send {}
+impl<T: Read + Write + Send> Conduit for T {}
+
 pub trait Host {
     /// Open the file at `path` with `MODE_*` semantics. Returns
     /// `(status, handle)`; the handle is meaningful only when the status is
     /// `STATUS_OK`.
     fn open(&self, path: &[u8], mode: u32) -> (u32, u32);
+
+    /// Connect to `host`:`port`. The three timeouts are milliseconds (`0` = no
+    /// timeout). Returns `(status, handle)` like `open`; the handle is an
+    /// ordinary byte stream the same `read`/`write`/`close` serve.
+    fn connect(
+        &self,
+        host: &[u8],
+        port: u32,
+        connect_timeout: u32,
+        read_timeout: u32,
+        write_timeout: u32,
+    ) -> (u32, u32);
 
     /// Close `handle`. Closing an unknown handle is a no-op.
     fn close(&self, handle: u32);
@@ -110,7 +132,7 @@ pub trait Host {
 }
 
 pub struct StdioHost {
-    files: Mutex<HashMap<u32, File>>,
+    streams: Mutex<HashMap<u32, Box<dyn Conduit>>>,
     handles: Mutex<Entropy>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
     start: Instant,
@@ -137,7 +159,7 @@ impl StdioHost {
     /// forward a program's own arguments instead of the `curios` process's.
     pub fn with_args(args: Vec<Vec<u8>>) -> Self {
         Self {
-            files: Mutex::new(HashMap::new()),
+            streams: Mutex::new(HashMap::new()),
             handles: handle_entropy(),
             start: Instant::now(),
             args,
@@ -161,7 +183,7 @@ impl Host for StdioHost {
         match options.open(&path) {
             Ok(file) => {
                 let handle = fresh_handle(&self.handles);
-                self.files.lock().unwrap().insert(handle, file);
+                self.streams.lock().unwrap().insert(handle, Box::new(file));
 
                 (STATUS_OK, handle)
             }
@@ -169,8 +191,45 @@ impl Host for StdioHost {
         }
     }
 
+    fn connect(
+        &self,
+        host: &[u8],
+        port: u32,
+        connect_timeout: u32,
+        read_timeout: u32,
+        write_timeout: u32,
+    ) -> (u32, u32) {
+        let host = String::from_utf8_lossy(host).into_owned();
+        let address = format!("{host}:{port}");
+
+        let stream = if connect_timeout == 0 {
+            TcpStream::connect(&address)
+        } else {
+            match address.to_socket_addrs().ok().and_then(|mut a| a.next()) {
+                Some(addr) => {
+                    TcpStream::connect_timeout(&addr, Duration::from_millis(connect_timeout.into()))
+                }
+                None => return (STATUS_OTHER, 0),
+            }
+        };
+
+        let stream = match stream {
+            Ok(stream) => stream,
+            Err(error) => return (status_of(error.kind()), 0),
+        };
+
+        let timeout = |ms: u32| (ms != 0).then(|| Duration::from_millis(ms.into()));
+        let _ = stream.set_read_timeout(timeout(read_timeout));
+        let _ = stream.set_write_timeout(timeout(write_timeout));
+
+        let handle = fresh_handle(&self.handles);
+        self.streams.lock().unwrap().insert(handle, Box::new(stream));
+
+        (STATUS_OK, handle)
+    }
+
     fn close(&self, handle: u32) {
-        self.files.lock().unwrap().remove(&handle);
+        self.streams.lock().unwrap().remove(&handle);
     }
 
     fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
@@ -178,8 +237,8 @@ impl Host for StdioHost {
 
         let result = match handle {
             STDIN => stdin().lock().read(&mut buffer),
-            _ => match self.files.lock().unwrap().get_mut(&handle) {
-                Some(file) => file.read(&mut buffer),
+            _ => match self.streams.lock().unwrap().get_mut(&handle) {
+                Some(stream) => stream.read(&mut buffer),
                 None => return (STATUS_EOF, vec![]),
             },
         };
@@ -199,8 +258,8 @@ impl Host for StdioHost {
         let result = match handle {
             STDOUT => stdout().write_all(bytes),
             STDERR => stderr().write_all(bytes),
-            _ => match self.files.lock().unwrap().get_mut(&handle) {
-                Some(file) => file.write_all(bytes),
+            _ => match self.streams.lock().unwrap().get_mut(&handle) {
+                Some(stream) => stream.write_all(bytes),
                 None => return STATUS_OTHER,
             },
         };
@@ -259,6 +318,13 @@ struct OpenFile {
     position: usize,
 }
 
+/// A live in-memory connection: the scripted response and a read cursor into
+/// it. Writes to a connection are accepted and discarded.
+struct NetConn {
+    response: Vec<u8>,
+    position: usize,
+}
+
 pub struct ChannelHost {
     input_receiver: Mutex<Receiver<Vec<u8>>>,
     /// Bytes received from the channel but not yet consumed by `read` —
@@ -270,6 +336,11 @@ pub struct ChannelHost {
     /// The in-memory filesystem backing `open`/`close` and file handles.
     files: ChannelFs,
     open_files: Mutex<HashMap<u32, OpenFile>>,
+    /// Scripted network endpoints: `host:port` → the bytes a connection serves
+    /// on read. Connecting to an unscripted endpoint is refused.
+    endpoints: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
+    /// Live in-memory connections keyed by handle.
+    connections: Mutex<HashMap<u32, NetConn>>,
     handles: Mutex<Entropy>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
     clock_wall_seq: Mutex<VecDeque<(u32, u32, u32)>>,
@@ -315,6 +386,8 @@ impl ChannelHost {
                 output_sender: Arc::new(Mutex::new(output_sender)),
                 files: files.clone(),
                 open_files: Mutex::new(HashMap::new()),
+                endpoints: Mutex::new(HashMap::new()),
+                connections: Mutex::new(HashMap::new()),
                 handles: handle_entropy(),
                 clock_wall_seq: Mutex::new(VecDeque::new()),
                 clock_mono_seq: Mutex::new(VecDeque::new()),
@@ -372,6 +445,18 @@ impl ChannelHost {
             .map(|(name, value)| (name.as_ref().to_vec(), value.as_ref().to_vec()))
             .collect();
     }
+
+    /// Script the network endpoints served by `connect`: `(host:port, response)`
+    /// pairs. Connecting to an unscripted endpoint is refused.
+    pub fn script_net<E: AsRef<[u8]>, R: AsRef<[u8]>, I: IntoIterator<Item = (E, R)>>(
+        &self,
+        endpoints: I,
+    ) {
+        *self.endpoints.lock().unwrap() = endpoints
+            .into_iter()
+            .map(|(endpoint, response)| (endpoint.as_ref().to_vec(), response.as_ref().to_vec()))
+            .collect();
+    }
 }
 
 impl Host for ChannelHost {
@@ -407,34 +492,77 @@ impl Host for ChannelHost {
         (STATUS_OK, handle)
     }
 
+    fn connect(
+        &self,
+        host: &[u8],
+        port: u32,
+        _connect_timeout: u32,
+        _read_timeout: u32,
+        _write_timeout: u32,
+    ) -> (u32, u32) {
+        let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
+
+        let response = match self.endpoints.lock().unwrap().get(&endpoint) {
+            Some(response) => response.clone(),
+            None => return (STATUS_REFUSED, 0),
+        };
+
+        let handle = fresh_handle(&self.handles);
+        self.connections
+            .lock()
+            .unwrap()
+            .insert(handle, NetConn { response, position: 0 });
+
+        (STATUS_OK, handle)
+    }
+
     fn close(&self, handle: u32) {
         self.open_files.lock().unwrap().remove(&handle);
+        self.connections.lock().unwrap().remove(&handle);
     }
 
     fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
         if handle != STDIN {
-            let mut open_files = self.open_files.lock().unwrap();
+            // File-backed handle?
+            {
+                let mut open_files = self.open_files.lock().unwrap();
 
-            let Some(open) = open_files.get_mut(&handle) else {
-                return (STATUS_EOF, vec![]);
-            };
+                if let Some(open) = open_files.get_mut(&handle) {
+                    if open.mode != MODE_READ {
+                        return (STATUS_OTHER, vec![]);
+                    }
 
-            if open.mode != MODE_READ {
-                return (STATUS_OTHER, vec![]);
+                    let files = self.files.lock().unwrap();
+                    let contents = files.get(&open.path).map(Vec::as_slice).unwrap_or(&[]);
+
+                    if open.position >= contents.len() {
+                        return (STATUS_EOF, vec![]);
+                    }
+
+                    let stop = contents.len().min(open.position + count as usize);
+                    let bytes = contents[open.position..stop].to_vec();
+                    open.position = stop;
+
+                    return (STATUS_OK, bytes);
+                }
             }
 
-            let files = self.files.lock().unwrap();
-            let contents = files.get(&open.path).map(Vec::as_slice).unwrap_or(&[]);
+            // Socket-backed handle? Serve the scripted response bytes.
+            let mut connections = self.connections.lock().unwrap();
 
-            if open.position >= contents.len() {
-                return (STATUS_EOF, vec![]);
+            if let Some(conn) = connections.get_mut(&handle) {
+                if conn.position >= conn.response.len() {
+                    return (STATUS_EOF, vec![]);
+                }
+
+                let stop = conn.response.len().min(conn.position + count as usize);
+                let bytes = conn.response[conn.position..stop].to_vec();
+                conn.position = stop;
+
+                return (STATUS_OK, bytes);
             }
 
-            let stop = contents.len().min(open.position + count as usize);
-            let bytes = contents[open.position..stop].to_vec();
-            open.position = stop;
-
-            return (STATUS_OK, bytes);
+            return (STATUS_EOF, vec![]);
         }
 
         let mut leftover = self.input_leftover.lock().unwrap();
@@ -468,24 +596,32 @@ impl Host for ChannelHost {
             return STATUS_OK;
         }
 
-        let open_files = self.open_files.lock().unwrap();
+        {
+            let open_files = self.open_files.lock().unwrap();
 
-        let Some(open) = open_files.get(&handle) else {
-            return STATUS_OTHER;
-        };
+            if let Some(open) = open_files.get(&handle) {
+                if open.mode == MODE_READ {
+                    return STATUS_OTHER;
+                }
 
-        if open.mode == MODE_READ {
-            return STATUS_OTHER;
+                self.files
+                    .lock()
+                    .unwrap()
+                    .entry(open.path.clone())
+                    .or_default()
+                    .extend_from_slice(bytes);
+
+                return STATUS_OK;
+            }
         }
 
-        self.files
-            .lock()
-            .unwrap()
-            .entry(open.path.clone())
-            .or_default()
-            .extend_from_slice(bytes);
+        // Socket-backed handle: accept and discard (the in-memory test host
+        // does not capture request bytes in Phase A).
+        if self.connections.lock().unwrap().contains_key(&handle) {
+            return STATUS_OK;
+        }
 
-        STATUS_OK
+        STATUS_OTHER
     }
 
     fn clock_wall(&self) -> (u32, u32, u32) {

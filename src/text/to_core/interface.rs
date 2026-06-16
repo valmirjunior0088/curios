@@ -470,10 +470,10 @@ fn unreachable_path(
 ) -> Error {
     let segments = name.qualifier().segments();
 
-    if let Err(error) = super::guard_internal_root(module, segments) {
-        if name.is_abs() {
-            return error;
-        }
+    if let Err(error) = super::guard_internal_root(module, segments)
+        && name.is_abs()
+    {
+        return error;
     }
 
     let (mut current, walk) = if name.is_abs() {

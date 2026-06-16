@@ -12,6 +12,18 @@ pub struct Duration {
     nanos : Nat
 }
 
+pub let duration(secs : Nat, nanos : Nat) -> Duration =
+    Duration { secs = secs, nanos = nanos };
+
+pub let of_secs(secs : Nat) -> Duration =
+    Duration { secs = secs, nanos = 0 };
+
+pub let of_millis(ms : Nat) -> Duration =
+    Duration {
+        secs = Nat/div(ms, 1000),
+        nanos = Nat/mul(Nat/rem(ms, 1000), 1000000)
+    };
+
 pub let now() -> Instant =
     let r = clock_wall();
     Instant {

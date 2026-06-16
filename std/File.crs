@@ -13,8 +13,6 @@ pub union Error
 | other(Nat)
 end
 
-pub use Error/*;
-
 -- An open file handle. Abstract: outside this module a `File` is opaque and
 -- distinct from a bare `Io` handle (stdin/stdout, a socket), reachable only
 -- through the operations below. A single-field struct is a zero-cost newtype,

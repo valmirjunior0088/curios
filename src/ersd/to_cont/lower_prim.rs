@@ -482,6 +482,69 @@ pub fn lower_value_prim<'b>(
                 )
             }),
         ),
+        ersd::Prim::Host(ersd::HostPrim::IoConnect(
+            host,
+            port,
+            connect_timeout,
+            read_timeout,
+            write_timeout,
+        )) => work.lower_value_name(
+            host,
+            frame,
+            Cont::new(move |work, host| {
+                work.lower_value_name(
+                    port,
+                    frame,
+                    Cont::new(move |work, port| {
+                        work.lower_value_name(
+                            connect_timeout,
+                            frame,
+                            Cont::new(move |work, connect_timeout| {
+                                work.lower_value_name(
+                                    read_timeout,
+                                    frame,
+                                    Cont::new(move |work, read_timeout| {
+                                        work.lower_value_name(
+                                            write_timeout,
+                                            frame,
+                                            Cont::new(move |work, write_timeout| {
+                                                // (status, handle) packs into
+                                                // `{ status, handle }`, like `IoOpen`.
+                                                let resume = work.fresh_block();
+                                                let status = work.fresh_value();
+                                                let handle = work.fresh_value();
+                                                let params = vec![status.clone(), handle.clone()];
+                                                work.add_resume_block(
+                                                    resume.clone(),
+                                                    params,
+                                                    move |inner| {
+                                                        let record =
+                                                            inner.fresh(cont::Value::Pure(
+                                                                cont::Data::Tpl(vec![
+                                                                    status, handle,
+                                                                ]),
+                                                            ));
+                                                        cont.call(inner, record)
+                                                    },
+                                                );
+                                                cont::Tail::Host(cont::HostTarget::IoConnect {
+                                                    host,
+                                                    port,
+                                                    connect_timeout,
+                                                    read_timeout,
+                                                    write_timeout,
+                                                    resume,
+                                                })
+                                            }),
+                                        )
+                                    }),
+                                )
+                            }),
+                        )
+                    }),
+                )
+            }),
+        ),
         ersd::Prim::Host(ersd::HostPrim::IoClose(handle)) => work.lower_value_name(
             handle,
             frame,

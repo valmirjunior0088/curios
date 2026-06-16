@@ -207,6 +207,43 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        if self.table.io_connect_used() {
+            // `bin_ref`/`status_ref` were moved by the `io_open` block above, so
+            // recompute them (the `io_connect` signature is `(host, port,
+            // connect_timeout, read_timeout, write_timeout) -> (status, handle)`).
+            let bin_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+            });
+            let status_ref = wasm::ValType::Ref(self.table.int_type(false));
+            let io_connect = wasm::TypeName::from("io_connect");
+            self.module.add_type(
+                io_connect.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([
+                            bin_ref,
+                            i32_val.clone(),
+                            i32_val.clone(),
+                            i32_val.clone(),
+                            i32_val.clone(),
+                        ]),
+                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_connect",
+                wasm::Import::Func {
+                    func_name: self.table.io_connect_func().clone(),
+                    type_name: io_connect,
+                },
+            );
+        }
+
         if self.table.io_close_used() {
             let io_close = wasm::TypeName::from("io_close");
             self.module.add_type(

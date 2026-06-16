@@ -480,6 +480,13 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoConnect(a, b, c, d, e) => Prim::IoConnect(
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+            zonk_term(context, c)?,
+            zonk_term(context, d)?,
+            zonk_term(context, e)?,
+        ),
         Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a)?),
         Prim::IoRandom(a) => Prim::IoRandom(zonk_term(context, a)?),
         Prim::IoEnv(a) => Prim::IoEnv(zonk_term(context, a)?),
