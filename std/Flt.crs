@@ -4,10 +4,9 @@ use /std/{Nat, Int, Str, Bln, Option};
 
 let find_codepoint(target : Nat, s : Str) -> Nat =
     let n = Str/len(s);
-    let init : { Nat, Nat } = (0, n);
-    let r =
-        Str/fold(s, init, (cp, acc) =>
-            match Nat/lt(acc.1, n) : { Nat, Nat }
+    let r : { Nat, Nat } =
+        Str/fold(s, (0, n), (cp, acc) =>
+            match Nat/lt(acc.1, n)
             | true => (Nat/add(acc.0, 1), acc.1)
             | false =>
                 match Nat/eql(cp, target)

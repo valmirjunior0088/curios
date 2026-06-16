@@ -151,10 +151,9 @@ pub let join(sep : Str, parts : Arr(Str)) -> Str =
 
 let trim_bounds(s : Str) -> { Nat, Nat } =
     let n = len(s);
-    let init : { Nat, Nat, Nat } = (0, n, 0);
-    let r =
-        fold(s, init, (cp, acc) =>
-            match Char/is_whitespace(cp) : { Nat, Nat, Nat }
+    let r : { Nat, Nat, Nat } =
+        fold(s, (0, n, 0), (cp, acc) =>
+            match Char/is_whitespace(cp)
             | true => (Nat/add(acc.0, 1), acc.1, acc.2)
             | false =>
                 let start =

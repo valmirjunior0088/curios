@@ -33,10 +33,9 @@ pub let drain(h : Io) -> Bin =
     go(\\);
 
 let find_newline(buf : Bin) -> Option(Nat) =
-    let init : { Nat, Option(Nat) } = (0, Option/none());
-    let r =
-        Bin/fold(buf, init, (byte, acc) =>
-            match acc.1 : { Nat, Option(Nat) }
+    let r : { Nat, Option(Nat) } =
+        Bin/fold(buf, (0, Option/none()), (byte, acc) =>
+            match acc.1
             | some(_) => acc
             | none() =>
                 match Nat/eql(byte, '\n')
