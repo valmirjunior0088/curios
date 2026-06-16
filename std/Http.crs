@@ -1,0 +1,210 @@
+use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Net};
+
+-- A plain (cleartext, `http://`) HTTP/1.1 client layered on `/std/Net`. There is
+-- no new host primitive here: a request is bytes written to a socket, a response
+-- is bytes read back, so the whole module is request formatting plus a
+-- `/std/Parse` parser over the reply. TLS (`https://`) is a separate future phase
+-- — it needs a host-side primitive, unlike everything below.
+--
+-- The surface is value-centric: build a `Request`, hand it to `perform`, get back
+-- a `Result(Response, Error)`. v1 frames the response body by `Connection: close`
+-- (the body is everything after the headers); `Content-Length`/chunked-aware
+-- framing on the response side, and case-insensitive `header` lookup, are still to
+-- come.
+
+pub union Method
+| get()
+| post()
+end
+
+let method_str(m : Method) -> Str =
+    match m : Str
+    | get() => "GET"
+    | post() => "POST"
+    end;
+
+-- A failure either side of the round trip: `net` is a transport failure surfaced
+-- by `/std/Net` (refused, etc.); `malformed` is a response that did not parse.
+pub union Error
+| net(Net/Error)
+| malformed(Str)
+end
+
+-- Everything needed to drive one request. The representation is public — build it
+-- as `Request { ... }` (or start from `get`). `headers` are sent verbatim, in
+-- order, after the automatic `Host`/`Connection`/`Content-Length` lines; `body`
+-- is sent as-is (its `Content-Length` is added automatically when non-empty).
+pub struct Request pub {
+    method : Method,
+    host : Str,
+    port : Nat,
+    path : Str,
+    headers : Arr({ Str, Str }),
+    body : Bin,
+    settings : Net/Settings
+}
+
+-- A bare GET to `host:port` at `path`, with default settings and no extra headers
+-- or body. Build, then `perform`.
+pub let get(host : Str, port : Nat, path : Str) -> Request =
+    Request {
+        method = Method/get(),
+        host = host,
+        port = port,
+        path = path,
+        headers = [],
+        body = Bin/empty,
+        settings = Net/default
+    };
+
+-- Reassemble parsed bytes as text, falling back to empty on the (here
+-- unreachable) malformed-UTF-8 case — the total fallback the checked
+-- `Str/of_bin` forces, as in `/std/Json`.
+let as_str(b : Bin) -> Str =
+    match Str/of_bin(b)
+    | some(s) => s
+    | none() => Str/empty
+    end;
+
+-- The predicate `take_while` wants to scan up to (but not past) `target`: true
+-- for every byte that is not `target`.
+let until(target : Nat) -> Nat -> Bln =
+    (byte) =>
+        match Nat/eql(byte, target)
+        | true => false
+        | false => true
+        end;
+
+let render_header(pair : { Str, Str }) -> Str =
+    Str/concat_all([pair.0, ": ", pair.1, "\r\n"]);
+
+-- Emit a `Content-Length` line only when there is a body to measure.
+let content_length(body : Bin) -> Str =
+    match Nat/eql(Bin/len(body), 0) : Str
+    | true => ""
+    | false => Str/concat_all(["Content-Length: ", Nat/to_str(Bin/len(body)), "\r\n"])
+    end;
+
+-- Serialize a `Request` to the raw bytes written on the wire: request line, the
+-- automatic `Host`/`Connection: close`/`Content-Length` headers, the caller's
+-- headers, the blank line, then the body. Pure and testable on its own.
+pub let render(request : Request) -> Bin =
+    let head = Str/concat_all([
+        method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
+        "Host: ", request.host, "\r\n",
+        "Connection: close\r\n",
+        content_length(request.body),
+        Str/concat_all(Arr/map(render_header, request.headers)),
+        "\r\n"
+    ]);
+    Bin/concat(Str/to_bin(head), request.body);
+
+-- The parsed status line `HTTP/1.1 200 OK\r\n`: the protocol version, the numeric
+-- status code, and the (possibly empty) reason phrase.
+pub struct Status pub {
+    version : Str,
+    code : Nat,
+    reason : Str
+}
+
+-- Parse one status line and consume its terminating CRLF. The version and reason
+-- are delimited by a space and the CR respectively; the code is the run of digits
+-- between them (`Nat/of_str` reads it).
+pub let status_line : Parse(Status) =
+    let ! = Parse/bind;
+    let version = Parse/take_while(until(' '))!;
+    let _ = Parse/take_byte(' ')!;
+    let digits = Parse/take_while(Char/is_digit)!;
+    let _ = Parse/take_byte(' ')!;
+    let reason = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_byte('\r')!;
+    let _ = Parse/take_byte('\n')!;
+    Parse/pure(Status {
+        version = as_str(version),
+        code = Nat/of_str(digits),
+        reason = as_str(reason)
+    });
+
+-- A parsed response: the status line, the header pairs in wire order, and the
+-- body bytes. Header names are kept verbatim (case is not normalised yet — see
+-- `header`).
+pub struct Response pub {
+    status : Status,
+    headers : Arr({ Str, Str }),
+    body : Bin
+}
+
+-- The remaining input from the cursor to end-of-buffer, advancing the cursor to
+-- the end. With `Connection: close` the whole body is exactly this tail, so no
+-- length framing is needed for v1.
+let rest : Parse(Bin) =
+    (input, pos) =>
+        Result/success((Bin/len(input), Bin/slice(input, pos, Bin/len(input))));
+
+-- Fail (without consuming) when the cursor sits on the blank line that ends the
+-- header block. This is what makes `many0(header_line)` stop cleanly there
+-- instead of `take_while`-ing across the CRLF into the body (which may itself
+-- contain a colon, e.g. JSON).
+let guard_header : Parse({}) =
+    (input, pos) =>
+        match Nat/lt(pos, Bin/len(input))
+        | false => Result/failure("unexpected end of headers")
+        | true =>
+            match Nat/eql(Bin/get(input, pos), '\r')
+            | true => Result/failure("end of header block")
+            | false => Result/success((pos, ()))
+            end
+        end;
+
+-- One `Name: value\r\n` header line. The value's surrounding optional whitespace
+-- (the conventional space after the colon) is trimmed.
+let header_line : Parse({ Str, Str }) =
+    let ! = Parse/bind;
+    let _ = guard_header!;
+    let name = Parse/take_while(until(':'))!;
+    let _ = Parse/take_byte(':')!;
+    let value = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_byte('\r')!;
+    let _ = Parse/take_byte('\n')!;
+    Parse/pure((as_str(name), as_str(Str/trim(value))));
+
+-- Parse a complete response: status line, zero or more header lines, the blank
+-- line terminating the header block, then the body as the remaining bytes.
+pub let decode : Parse(Response) =
+    let ! = Parse/bind;
+    let status = status_line!;
+    let headers = Parse/many0(header_line)!;
+    let _ = Parse/take_byte('\r')!;
+    let _ = Parse/take_byte('\n')!;
+    let body = rest!;
+    Parse/pure(Response {
+        status = status,
+        headers = headers,
+        body = body
+    });
+
+-- Look up the first header whose name matches `name` exactly. Case-insensitive
+-- matching is a TODO (HTTP field names are case-insensitive).
+pub let header(resp : Response, name : Str) -> Option(Str) =
+    Arr/fold(resp.headers, Option/none(@Str), (pair, acc) =>
+        match acc : Option(Str)
+        | some(v) => Option/some(v)
+        | none() =>
+            match Str/eql(pair.0, name)
+            | true => Option/some(pair.1)
+            | false => Option/none()
+            end
+        end);
+
+-- Drive one request end to end: render it, send it through `/std/Net`, and parse
+-- the reply. A transport failure becomes `Error/net`; an unparseable reply
+-- becomes `Error/malformed`.
+pub let perform(request : Request) -> Result(Response, Error) =
+    match Net/call(request.settings, request.host, request.port, render(request)) : Result(Response, Error)
+    | success(bytes) =>
+        match Parse/run(decode, bytes) : Result(Response, Error)
+        | success(response) => Result/success(response)
+        | failure(message) => Result/failure(Error/malformed(message))
+        end
+    | failure(error) => Result/failure(Error/net(error))
+    end;

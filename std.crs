@@ -20,6 +20,8 @@ pub mod File;
 
 pub mod Net;
 
+pub mod Http;
+
 pub mod Char;
 
 pub mod Result;

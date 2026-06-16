@@ -483,6 +483,7 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Io"], include_str!("../../std/Io.crs")),
     (&["std", "File"], include_str!("../../std/File.crs")),
     (&["std", "Net"], include_str!("../../std/Net.crs")),
+    (&["std", "Http"], include_str!("../../std/Http.crs")),
     (&["std", "Char"], include_str!("../../std/Char.crs")),
     (&["std", "Result"], include_str!("../../std/Result.crs")),
     (&["std", "Option"], include_str!("../../std/Option.crs")),

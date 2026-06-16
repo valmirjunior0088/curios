@@ -1917,3 +1917,39 @@ fn net_with_custom_timeout_config_reads_response() {
         vec![b"PONG".to_vec()]
     );
 }
+
+// HTTP client (Phase B): `Http/perform` renders a `Request`, sends it through
+// `/std/Net`, and runs the `/std/Parse`-based response parser over the reply —
+// exercising the byte-scanning parser end to end through codegen.
+#[test]
+fn http_perform_parses_a_scripted_response() {
+    let source = r#"
+        use /std/{Http, Io, Str, Nat};
+        match Http/perform(Http/get("example.com", 80, "/")) : Nat
+        | success(response) =>
+            let ct = match Http/header(response, "Content-Type") : Str
+                | some(value) => value
+                | none() => "none"
+                end;
+            match Str/of_bin(response.body) : Nat
+            | some(body) =>
+                Io/write(Io/stdout, Str/to_bin(Str/concat_all([
+                    Nat/to_str(response.status.code), " ", ct, " ", body
+                ])))
+            | none() => Io/write(Io/stdout, Str/to_bin("bad body"))
+            end
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    system.script_net([(
+        "example.com:80",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello",
+    )]);
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"200 text/plain hello".to_vec()]
+    );
+}
