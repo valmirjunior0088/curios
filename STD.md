@@ -17,7 +17,7 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 ### `/std/Nat`
 
-The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str` and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` drops the bits shifted off the top. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
+The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str` and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
 
 | Binding       | Type                | Description                          |
 | ------------- | ------------------- | ------------------------------------ |
@@ -36,7 +36,7 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `and(a, b)`   | `(Nat, Nat) -> Nat` | Bitwise AND                          |
 | `or(a, b)`    | `(Nat, Nat) -> Nat` | Bitwise OR                           |
 | `xor(a, b)`   | `(Nat, Nat) -> Nat` | Bitwise XOR                          |
-| `shl(a, b)`   | `(Nat, Nat) -> Nat` | Left shift by `b`, truncating        |
+| `shl(a, b)`   | `(Nat, Nat) -> Nat` | Left shift by `b` (the unbounded `a * 2^b`) |
 | `shr(a, b)`   | `(Nat, Nat) -> Nat` | Logical right shift by `b`           |
 | `to_int(a)`   | `(Nat) -> Int`      | Convert to `Int`                     |
 | `to_flt(a)`   | `(Nat) -> Flt`      | Convert to `Flt`                     |
@@ -46,7 +46,7 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 
 ### `/std/Int`
 
-Signed integers — unbounded at the type level (a signed i31 at runtime). `of_str`, `not`, and `abs` are library helpers; the rest are `/sys` primitives. The bitwise ops are total and never trap: `and`/`or`/`xor` are the usual operations on the two's-complement bits, `shl` drops the bits shifted off the top, and `shr` is arithmetic — it preserves the sign. `not` exposes the runtime word — there is no machine complement instruction, so it is the library `xor` against `-1` (the all-ones word), which is also the complement `-a - 1`.
+Signed integers — unbounded at the type level (a signed i31 at runtime). `of_str`, `not`, and `abs` are library helpers; the rest are `/sys` primitives. The bitwise ops are total and never trap: `and`/`or`/`xor` are the usual operations on the two's-complement bits, `shl` is the unbounded `a * 2^b`, and `shr` is arithmetic — it preserves the sign. `not` exposes the runtime word — there is no machine complement instruction, so it is the library `xor` against `-1` (the all-ones word), which is also the complement `-a - 1`.
 
 | Binding       | Type                | Description                                       |
 | ------------- | ------------------- | ------------------------------------------------- |
@@ -65,7 +65,7 @@ Signed integers — unbounded at the type level (a signed i31 at runtime). `of_s
 | `or(a, b)`    | `(Int, Int) -> Int` | Bitwise OR                                        |
 | `xor(a, b)`   | `(Int, Int) -> Int` | Bitwise XOR                                       |
 | `not(a)`      | `(Int) -> Int`      | Bitwise complement (`xor` against `-1`)           |
-| `shl(a, b)`   | `(Int, Int) -> Int` | Left shift by `b`, truncating                     |
+| `shl(a, b)`   | `(Int, Int) -> Int` | Left shift by `b` (the unbounded `a * 2^b`)       |
 | `shr(a, b)`   | `(Int, Int) -> Int` | Arithmetic right shift by `b` (sign-preserving)   |
 | `to_nat(a)`   | `(Int) -> Nat`      | Convert to `Nat`                                  |
 | `to_flt(a)`   | `(Int) -> Flt`      | Convert to `Flt`                                  |
@@ -128,8 +128,8 @@ Raw byte sequences. `fold`, `concat_all`, and `join` are library helpers; the re
 | ------------------- | ----------------------------------------- | ------------------------------------------ |
 | `len(b)`            | `(Bin) -> Nat`                            | Byte length                                |
 | `eql(a, b)`         | `(Bin, Bin) -> Bln`                       | Equality                                   |
-| `get(b, i)`         | `(Bin, Nat) -> Nat`                       | Byte at index `i`                          |
-| `slice(b, s, e)`    | `(Bin, Nat, Nat) -> Bin`                  | Subsequence from `s` to `e`                |
+| `get(b, i)`         | `(Bin, Nat) -> Nat`                       | Byte at index `i` (traps if out of bounds) |
+| `slice(b, s, e)`    | `(Bin, Nat, Nat) -> Bin`                  | Subsequence from `s` to `e` (traps if out of range) |
 | `append(b, x)`      | `(Bin, Nat) -> Bin`                       | Append a single byte (`x` taken mod 256)   |
 | `concat(a, b)`      | `(Bin, Bin) -> Bin`                       | Concatenate two sequences                  |
 | `fold(b, init, f)`  | `(@A : Type, Bin, A, (Nat, A) -> A) -> A` | Left fold over the bytes                   |
@@ -454,7 +454,6 @@ Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Str)
 | `bind`                              | Sequencing, shaped for `let ! = Parse/bind;` blocks |
 | `or(p, q)`                          | Try `p`, fall back to `q`                           |
 | `and(p, q)`                         | Both in sequence; pairs the results as `{ A, B }`   |
-| `and_drop(p, q)` / `and_keep(p, q)` | Both in sequence; keep the first / second result    |
 | `any_byte` / `peek_byte`            | Next byte, consuming / not consuming                |
 | `take_byte(expected)`               | Exactly the given byte                              |
 | `take_while(pred)`                  | Longest run of bytes satisfying `pred`              |
