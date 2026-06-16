@@ -51,8 +51,8 @@ and parse_lit : Parse(Fmt) =
     | none() => Parse/fail("invalid UTF-8 in format string")
     end;
 
-pub let parse(input : Bin) -> Fmt =
-    match Parse/run(parse_fmt, input)
+pub let parse(s : Str) -> Fmt =
+    match Parse/run(parse_fmt, Str/to_bin(s))
     | success(value) => value
     | failure(_) => Fmt/nil()
     end;
@@ -65,8 +65,8 @@ rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_wi
     | nat(rest) => (n) => go_with(T, finish, rest, Str/concat(acc, Nat/to_str(n)))
     end;
 
-pub let format(s : Str) -> format_type_with(Str, parse(Str/to_bin(s))) =
-    go_with(Str, (x) => x, parse(Str/to_bin(s)), "");
+pub let format(s : Str) -> format_type_with(Str, parse(s)) =
+    go_with(Str, (x) => x, parse(s), "");
 
-pub let printf(s : Str) -> format_type_with({}, parse(Str/to_bin(s))) =
-    go_with({}, (x) => Io/print(x), parse(Str/to_bin(s)), "");
+pub let printf(s : Str) -> format_type_with({}, parse(s)) =
+    go_with({}, (x) => Io/print(x), parse(s), "");

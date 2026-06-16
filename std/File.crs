@@ -1,4 +1,4 @@
-use /std/{Bin, Nat, Io, Result};
+use /std/{Bin, Nat, Str, Io, Result};
 
 pub union Mode
 | read()
@@ -39,8 +39,8 @@ let decode(status : Nat) -> Error =
     | _ => Error/other(status)
     end;
 
-pub let with(@A : Type, path : Bin, mode : Mode, body : (File) -> A) -> Result(A, Error) =
-    let r = /sys/Io/open(path, token(mode));
+pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> A) -> Result(A, Error) =
+    let r = /sys/Io/open(Str/to_bin(path), token(mode));
     match Nat/eql(r.status, 0)
     | true =>
         let f = File { r.handle };
@@ -57,5 +57,5 @@ rec drain(f : File, acc : Bin) -> Bin =
     | false => acc
     end;
 
-pub let read_all(path : Bin) -> Result(Bin, Error) =
+pub let read_all(path : Str) -> Result(Bin, Error) =
     with(path, Mode/read(), (f) => drain(f, \\));

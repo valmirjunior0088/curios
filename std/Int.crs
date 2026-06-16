@@ -1,22 +1,23 @@
 pub use /sys/{Int};
 pub use /sys/Int/*;
-use /std/{Nat, Bin, Option};
+use /std/{Nat, Str, Option};
 
 pub let not(x : Int) -> Int =
     xor(x, -1);
 
-pub let of_str(str : Bin) -> Option(Int) =
-    match Nat/eql(Bin/len(str), 0)
+pub let of_str(s : Str) -> Option(Int) =
+    match Nat/eql(Str/len(s), 0)
     | true => Option/none(@Int)
     | false =>
         let ! = Option/bind;
+        let first = Str/get(s, 0);
         let digits =
-            match Bin/get(str, 0)
-            | '+' => Bin/slice(str, 1, Bin/len(str))
-            | '-' => Bin/slice(str, 1, Bin/len(str))
-            | _ => str
+            match first
+            | '+' => Str/slice(s, 1, Str/len(s))
+            | '-' => Str/slice(s, 1, Str/len(s))
+            | _ => s
             end;
-        let negative = Nat/eql(Bin/get(str, 0), '-');
+        let negative = Nat/eql(first, '-');
         let n = Nat/of_str(digits)!;
         match negative
         | true => Option/some(Int/sub(+0, Nat/to_int(n)))

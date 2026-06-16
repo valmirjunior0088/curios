@@ -1,16 +1,16 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/*;
-use /std/{Bin, Option, Char};
+use /std/{Str, Option, Char};
 
-pub let of_str(str : Bin) -> Option(Nat) =
-    match Nat/eql(Bin/len(str), 0)
+pub let of_str(s : Str) -> Option(Nat) =
+    match Nat/eql(Str/len(s), 0)
     | true => Option/none(@Nat)
     | false =>
-        Bin/fold(str, Option/some(0), (byte, acc) =>
+        Str/fold(s, Option/some(0), (cp, acc) =>
             let ! = Option/bind;
             let n = acc!;
-            match Char/is_digit(byte)
-            | true => Option/some(Nat/add(Nat/mul(n, 10), Nat/sub(byte, 48)))
+            match Char/is_digit(cp)
+            | true => Option/some(Nat/add(Nat/mul(n, 10), Nat/sub(cp, 48)))
             | false => Option/none(@Nat)
             end)
     end;

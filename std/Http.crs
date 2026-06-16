@@ -114,7 +114,7 @@ pub let status_line : Parse(Status) =
     let _ = Parse/take_byte('\n')!;
     Parse/pure(Status {
         version = as_str(version),
-        code = Option/unwrap_or(Nat/of_str(digits), 0),
+        code = Option/unwrap_or(Nat/of_str(as_str(digits)), 0),
         reason = as_str(reason)
     });
 
@@ -147,7 +147,7 @@ let header_line : Parse({ Str, Str }) =
     let value = Parse/take_while(until('\r'))!;
     let _ = Parse/take_byte('\r')!;
     let _ = Parse/take_byte('\n')!;
-    Parse/pure((as_str(name), as_str(Str/trim(value))));
+    Parse/pure((as_str(name), Str/trim(as_str(value))));
 
 let take_n(n : Nat) -> Parse(Bin) =
     (input, pos) =>
@@ -156,7 +156,7 @@ let take_n(n : Nat) -> Parse(Bin) =
 
 let content_length_of(headers : Arr({ Str, Str })) -> Option(Nat) =
     match header_lookup(headers, "Content-Length") : Option(Nat)
-    | some(value) => Nat/of_str(Str/to_bin(value))
+    | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 

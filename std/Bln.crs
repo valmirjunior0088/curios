@@ -1,6 +1,6 @@
 pub use /sys/{Bln};
 pub use /sys/Bln/*;
-use /std/{Str, Bin, Option};
+use /std/{Str, Option};
 
 pub let not(b : Bln) -> Bln =
     xor(b, true);
@@ -17,11 +17,11 @@ pub let to_str(b : Bln) -> Str =
     | false => "false"
     end;
 
-pub let of_str(s : Bin) -> Option(Bln) =
-    match Bin/eql(s, Str/to_bin("true"))
+pub let of_str(s : Str) -> Option(Bln) =
+    match Str/eql(s, "true")
     | true => Option/some(true)
     | false =>
-        match Bin/eql(s, Str/to_bin("false"))
+        match Str/eql(s, "false")
         | true => Option/some(false)
         | false => Option/none(@Bln)
         end

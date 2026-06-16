@@ -41,7 +41,7 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `to_int(a)`   | `(Nat) -> Int`      | Convert to `Int`                     |
 | `to_flt(a)`   | `(Nat) -> Flt`      | Convert to `Flt`                     |
 | `to_str(a)`   | `(Nat) -> Str`      | Decimal text                         |
-| `of_str(str)` | `(Bin) -> Option(Nat)` | Parse a decimal numeral; `none` unless every byte is a digit |
+| `of_str(s)`   | `(Str) -> Option(Nat)` | Parse a decimal numeral; `none` unless every character is a digit |
 | `min(a, b)`   | `(Nat, Nat) -> Nat` | Minimum                              |
 
 ### `/std/Int`
@@ -70,7 +70,7 @@ Signed integers — unbounded at the type level (a signed i31 at runtime). `of_s
 | `to_nat(a)`   | `(Int) -> Nat`      | Convert to `Nat`                                  |
 | `to_flt(a)`   | `(Int) -> Flt`      | Convert to `Flt`                                  |
 | `to_str(a)`   | `(Int) -> Str`      | Decimal text                                      |
-| `of_str(str)` | `(Bin) -> Option(Int)` | Parse a decimal numeral with optional leading `+`/`-`; `none` on invalid input |
+| `of_str(s)`   | `(Str) -> Option(Int)` | Parse a decimal numeral with optional leading `+`/`-`; `none` on invalid input |
 | `abs(n)`      | `(Int) -> Nat`      | Absolute value                                    |
 
 ### `/std/Flt`
@@ -102,7 +102,7 @@ Floating-point numbers. `of_str` is a library helper; the rest are `/sys` primit
 | `to_int(a)`    | `(Flt) -> Int`      | Convert to `Int`                                                  |
 | `to_le_bin(a)` | `(Flt) -> Bin`      | Little-endian byte encoding                                       |
 | `to_str(a)`    | `(Flt) -> Str`      | Decimal text                                                      |
-| `of_str(str)`  | `(Bin) -> Option(Flt)` | Parse a `digits.digits` numeral with optional sign and `e`/`E` exponent; `none` on invalid input |
+| `of_str(s)`    | `(Str) -> Option(Flt)` | Parse a `digits.digits` numeral with optional sign and `e`/`E` exponent; `none` on invalid input |
 
 ### `/std/Bln`
 
@@ -116,7 +116,7 @@ Booleans. The values are the literals `true`/`false`, eliminated with [`match`](
 | `xor(a, b)` | `(Bln, Bln) -> Bln`    | Exclusive or                                           |
 | `eql(a, b)` | `(Bln, Bln) -> Bln`    | Equality                                               |
 | `to_str(b)` | `(Bln) -> Str`         | `"true"` or `"false"`                                  |
-| `of_str(s)` | `(Bin) -> Option(Bln)` | `some` of the bool for `"true"`/`"false"`, else `none` |
+| `of_str(s)` | `(Str) -> Option(Bln)` | `some` of the bool for `"true"`/`"false"`, else `none` |
 
 ## Bytes and arrays
 
@@ -156,7 +156,7 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 
 ### `/std/Str`
 
-`Str` is the UTF-8 string type (`"..."` literals have this type). It shares `Bin`'s _runtime representation_ — `to_bin` is a no-op carrier projection onto those bytes — but is a distinct type at the surface. Only `to_bin` is a primitive (re-exported from the internal `/sys`); `concat`, `eql`, `len`, and the rest are ordinary library definitions built on `to_bin` and the `Bin` ops. `of_bin` is the single, checked bridge from arbitrary bytes into text; within `Str`-to-`Str` code it is never needed. (There is no unchecked constructor in this API — the lone trust is the internal `/sys/Str/of_bin` substrate, used by the checked `of_bin` behind an `is_utf8` gate and by `concat`, which is sound because UTF-8 is closed under concatenation.)
+`Str` is the UTF-8 string type (`"..."` literals have this type). It shares `Bin`'s _runtime representation_ — `to_bin` is a no-op carrier projection onto those bytes — but is a distinct type at the surface. Only `to_bin` is a primitive (re-exported from the internal `/sys`); `concat`, `eql`, `len`, and the rest are ordinary library definitions built on `to_bin` and the `Bin` ops. `of_bin` is the single, checked bridge from arbitrary bytes into text; within `Str`-to-`Str` code it is never needed. (There is no unchecked constructor in this API — the lone trust is the internal `/sys/Str/of_bin` substrate, used by the checked `of_bin` behind an `is_utf8` gate and by `concat`/`slice`, which is sound because UTF-8 is closed under concatenation and codepoint-boundary slicing.) The read side — `get`, `slice`, `len`, and `fold` — indexes by Unicode scalar value, not byte, so `slice` cuts only on codepoint boundaries and always yields valid text.
 
 | Binding             | Type                     | Description                                                    |
 | ------------------- | ------------------------ | -------------------------------------------------------------- |
@@ -168,9 +168,10 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 | `join(sep, parts)`  | `(Str, Arr(Str)) -> Str` | Concatenate with a separator between parts                     |
 | `eql(a, b)`         | `(Str, Str) -> Bln`      | String equality (byte equality; UTF-8 is canonical)            |
 | `len(s)`            | `(Str) -> Nat`           | Codepoint count (Unicode scalar values, _not_ bytes/graphemes) |
-| `trim_start(str)`   | `(Bin) -> Nat`           | Index of the first non-whitespace byte                         |
-| `trim_stop(str)`    | `(Bin) -> Nat`           | Index one past the last non-whitespace byte                    |
-| `trim(str)`         | `(Bin) -> Bin`           | The slice between the two                                      |
+| `get(s, i)`         | `(Str, Nat) -> Nat`      | Codepoint at index `i` (traps if out of bounds)                |
+| `slice(s, x, y)`    | `(Str, Nat, Nat) -> Str` | Codepoints `[x, y)` (traps if out of range)                    |
+| `fold(s, init, f)`  | `(@A : Type, Str, A, (Nat, A) -> A) -> A` | Left fold over the codepoints                  |
+| `trim(s)`           | `(Str) -> Str`           | Strip leading and trailing ASCII whitespace                    |
 
 ## IO
 
@@ -223,8 +224,8 @@ The safe conveniences below layer a buffered reader over the primitive handle.
 union Mode  | read() | write() | append() end   -- File/Mode/read() etc.
 union Error | not_found() | permission_denied() | exists() | other(Nat) end
 
-File/with(path, mode, body)    -- (@A : Type, Bin, Mode, (File) -> A) -> Result(A, Error)
-File/read_all(path)            -- (Bin) -> Result(Bin, Error)
+File/with(path, mode, body)    -- (@A : Type, Str, Mode, (File) -> A) -> Result(A, Error)
+File/read_all(path)            -- (Str) -> Result(Bin, Error)
 File/read(f, n)                -- (File, Nat) -> { status : Nat, bytes : Bin }
 File/write(f, b)               -- (File, Bin) -> Nat
 ```
@@ -332,7 +333,7 @@ Access to the process environment. `args` is a value — an immutable snapshot t
 | Binding      | Type                   | Description                                                      |
 | ------------ | ---------------------- | ---------------------------------------------------------------- |
 | `args`       | `Arr(Bin)`             | The command-line arguments                                       |
-| `env(name)`  | `(Bin) -> Option(Bin)` | The value of environment variable `name`, if set                 |
+| `env(name)`  | `(Str) -> Option(Bin)` | The value of environment variable `name`, if set                 |
 | `exit(code)` | `(Nat) -> Void`        | Terminate the process with status `code`; never returns (`Void`) |
 
 ## Data types
@@ -487,7 +488,7 @@ Typed format strings: the argument list of `printf` is computed from the format 
 | Binding                  | Description                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------- |
 | `Fmt`                    | The parsed format AST: `nil()`, `lit(Str, Fmt)`, `str(Fmt)` (`%s`), `nat(Fmt)` (`%d`) |
-| `parse(input)`           | `(Bin) -> Fmt` — parse a format string                                                |
+| `parse(s)`               | `(Str) -> Fmt` — parse a format string                                                |
 | `format_type_with(T, f)` | The dependent-type computation: the curried function type a format demands            |
 | `format(s)`              | Build a `Str` by applying the demanded arguments (`s : Str`)                          |
 | `printf(s)`              | Like `format`, but also prints the result                                             |

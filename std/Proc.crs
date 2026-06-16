@@ -1,11 +1,11 @@
 use /sys/{Io};
-use /std/{Arr, Bin, Nat, Option, Void};
+use /std/{Arr, Bin, Nat, Str, Option, Void};
 
 pub let args : Arr(Bin) =
     Io/args;
 
-pub let env(name : Bin) -> Option(Bin) =
-    let r = Io/env(name);
+pub let env(name : Str) -> Option(Bin) =
+    let r = Io/env(Str/to_bin(name));
     match Nat/eql(r.status, 0)
     | true => Option/some(r.value)
     | false => Option/none()

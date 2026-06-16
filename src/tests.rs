@@ -155,7 +155,7 @@ fn io_read_short_reads_and_eof() {
 fn file_read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Io};
-        match File/read_all(/std/Str/to_bin("data.txt"))
+        match File/read_all("data.txt")
         | success(contents) => Io/write(Io/stdout, contents)
         | failure(_) => Io/write(Io/stdout, /std/Str/to_bin("error"))
         end
@@ -174,7 +174,7 @@ fn file_read_all_reads_a_seeded_file() {
 fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
         use /std/{File, Io};
-        match File/read_all(/std/Str/to_bin("nope.txt"))
+        match File/read_all("nope.txt")
         | success(_) => Io/print("contents")
         | failure(e) =>
             match e : {}
@@ -198,7 +198,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io};
-        match File/with(/std/Str/to_bin("out.txt"), File/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written")))
+        match File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -223,7 +223,7 @@ fn file_with_write_mode_persists_through_close() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io};
-        match File/with(/std/Str/to_bin("log.txt"), File/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x")))
+        match File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x")))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -248,7 +248,7 @@ fn effectful_match_scrutinee_runs_once() {
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
         use /std/{File, Io, Str};
-        match File/with(/std/Str/to_bin("lines.txt"), File/Mode/read(), (f) => File/read(f, 1024).bytes)
+        match File/with("lines.txt", File/Mode/read(), (f) => File/read(f, 1024).bytes)
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
@@ -630,9 +630,8 @@ fn printf_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        let name_bytes = Str/trim(Io/read(Io/stdin, 1024).bytes);
-        match Str/of_bin(name_bytes) : {}
-        | some(name) => Fmt/printf("%s is %d")(name)(30)
+        match Str/of_bin(Io/read(Io/stdin, 1024).bytes) : {}
+        | some(s) => Fmt/printf("%s is %d")(Str/trim(s))(30)
         | none() => Io/print("invalid input")
         end
         "#;
@@ -1618,6 +1617,94 @@ fn str_of_bin_rejects_truncated_multibyte() {
     );
 }
 
+// `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
+// `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
+// codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
+#[test]
+fn str_get_indexes_codepoints_of_every_width() {
+    let source = r#"
+        use /std/{Str, Nat, Io};
+        match Str/of_bin(\61\e2\82\ac\f0\9f\98\80) : {}
+        | some(s) =>
+            Io/print(Str/concat_all([
+                Nat/to_str(Str/len(s)), ",",
+                Nat/to_str(Str/get(s, 0)), ",",
+                Nat/to_str(Str/get(s, 1)), ",",
+                Nat/to_str(Str/get(s, 2))
+            ]))
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"3,97,8364,128512".to_vec()]
+    );
+}
+
+// `Str/slice` cuts at codepoint boundaries, so slicing `[1, 2)` out of `a€😀`
+// yields the whole 3-byte euro sign — never a split sequence.
+#[test]
+fn str_slice_cuts_on_codepoint_boundaries() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\61\e2\82\ac\f0\9f\98\80) : {}
+        | some(s) => Io/print(Str/slice(s, 1, 2))
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![vec![0xe2, 0x82, 0xac]]
+    );
+}
+
+// `Str/trim` is string-typed and strips only the leading/trailing ASCII
+// whitespace, leaving the interior multibyte scalar (`café`, with a 2-byte `é`)
+// intact.
+#[test]
+fn str_trim_keeps_interior_multibyte() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\20\20\63\61\66\c3\a9\20\20) : {}
+        | some(s) => Io/print(Str/trim(s))
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![vec![0x63, 0x61, 0x66, 0xc3, 0xa9]]
+    );
+}
+
+// An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`,
+// and the `Nat/min` guard collapses the slice to nothing rather than trapping.
+#[test]
+fn str_trim_all_whitespace_is_empty() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\20\09\20) : {}
+        | some(s) => Io/print(Str/concat(Str/trim(s), "!"))
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"!".to_vec()]
+    );
+}
+
 // A *non-productive* inner `rec` forced in a type position must degrade to the
 // reduce deadline (an error), never hang or panic — the regression guard for
 // inner-`rec` reduction at the type level (a `Subterm::Rec` demanded by an
@@ -1665,7 +1752,7 @@ fn bln_logic_and_of_str() {
         r#"
         use /std/{Bln, Str, Option, Io};
         let computed = Bln/and(Bln/or(false, true), Bln/not(false));
-        let parsed = match Bln/of_str(Str/to_bin("false")) : Bln
+        let parsed = match Bln/of_str("false") : Bln
             | some(b) => b
             | none() => true
             end;
@@ -1777,9 +1864,9 @@ fn nat_of_str_returns_option() {
         Duration::from_secs(5),
         r#"
         use /std/{Nat, Str, Option, Io};
-        let ok = Option/unwrap_or(Nat/of_str(Str/to_bin("123")), 0);
-        let bad = Option/unwrap_or(Nat/of_str(Str/to_bin("12a")), 7);
-        let empty = Option/unwrap_or(Nat/of_str(Str/to_bin("")), 9);
+        let ok = Option/unwrap_or(Nat/of_str("123"), 0);
+        let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
+        let empty = Option/unwrap_or(Nat/of_str(""), 9);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
         "#,
         system,
@@ -1800,9 +1887,9 @@ fn int_of_str_returns_option() {
         Duration::from_secs(5),
         r#"
         use /std/{Nat, Int, Str, Option, Io};
-        let neg = Int/abs(Option/unwrap_or(Int/of_str(Str/to_bin("-5")), +0));
-        let pos = Int/abs(Option/unwrap_or(Int/of_str(Str/to_bin("+7")), +0));
-        let bad = Int/abs(Option/unwrap_or(Int/of_str(Str/to_bin("x")), +3));
+        let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
+        let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
+        let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
         "#,
         system,
@@ -1825,10 +1912,10 @@ fn flt_of_str_returns_option() {
         Duration::from_secs(5),
         r#"
         use /std/{Nat, Flt, Str, Option, Io};
-        let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str(Str/to_bin("12.0")), +0.0));
-        let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(Str/to_bin(".5")), +0.0), +2.0));
-        let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str(Str/to_bin("1e3")), +0.0));
-        let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str(Str/to_bin("abc")), +4.0));
+        let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
+        let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
+        let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
+        let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
         "#,
         system,
@@ -1933,7 +2020,7 @@ fn proc_env_found_unwraps_to_some() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        match /std/Proc/env(/std/Str/to_bin("HOME")) : std/Nat
+        match /std/Proc/env("HOME") : std/Nat
         | some(v) => std/Io/write(std/Io/stdout, v)
         | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing"))
         end
@@ -1954,7 +2041,7 @@ fn proc_env_absent_is_none() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        match /std/Proc/env(/std/Str/to_bin("NOPE")) : std/Nat
+        match /std/Proc/env("NOPE") : std/Nat
         | some(v) => std/Io/write(std/Io/stdout, v)
         | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing"))
         end

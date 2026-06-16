@@ -66,12 +66,75 @@ pub let eql(a : Str, b : Str) -> Bln =
 pub let concat(a : Str, b : Str) -> Str =
     Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
 
+let codepoint_width(lead : Nat) -> Nat =
+    match Nat/lt(lead, 128)
+    | true => 1
+    | false =>
+        match Nat/lt(lead, 224)
+        | true => 2
+        | false =>
+            match Nat/lt(lead, 240)
+            | true => 3
+            | false => 4
+            end
+        end
+    end;
+
+let decode_at(b : Bin, off : Nat) -> Nat =
+    let lead = Bin/get(b, off);
+    match Nat/lt(lead, 128)
+    | true => lead
+    | false =>
+        match Nat/lt(lead, 224)
+        | true =>
+            Nat/add(
+                Nat/mul(Nat/sub(lead, 192), 64),
+                Nat/sub(Bin/get(b, Nat/add(off, 1)), 128))
+        | false =>
+            match Nat/lt(lead, 240)
+            | true =>
+                Nat/add(
+                    Nat/add(
+                        Nat/mul(Nat/sub(lead, 224), 4096),
+                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 128), 64)),
+                    Nat/sub(Bin/get(b, Nat/add(off, 2)), 128))
+            | false =>
+                Nat/add(
+                    Nat/add(
+                        Nat/add(
+                            Nat/mul(Nat/sub(lead, 240), 262144),
+                            Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 128), 4096)),
+                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 2)), 128), 64)),
+                    Nat/sub(Bin/get(b, Nat/add(off, 3)), 128))
+            end
+        end
+    end;
+
+let byte_offset(b : Bin, i : Nat) -> Nat =
+    match i : Nat
+    | 0 => 0
+    | pred + 1, ih => Nat/add(ih, codepoint_width(Bin/get(b, ih)))
+    end;
+
+pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
+    let b = to_bin(s);
+    rec go(off : Nat, acc : A) -> A =
+        match Nat/lt(off, Bin/len(b))
+        | false => acc
+        | true => go(Nat/add(off, codepoint_width(Bin/get(b, off))), f(decode_at(b, off), acc))
+        end;
+    go(0, init);
+
 pub let len(s : Str) -> Nat =
-    Bin/fold(to_bin(s), 0, (byte, acc) =>
-        match in_range(byte, 128, 191)
-        | true => acc
-        | false => Nat/add(acc, 1)
-        end);
+    fold(s, 0, (cp, acc) => Nat/add(acc, 1));
+
+pub let get(s : Str, i : Nat) -> Nat =
+    let b = to_bin(s);
+    decode_at(b, byte_offset(b, i));
+
+pub let slice(s : Str, start : Nat, stop : Nat) -> Str =
+    let b = to_bin(s);
+    Str/of_bin(Bin/slice(b, byte_offset(b, start), byte_offset(b, stop)));
 
 pub let of_bin(b : Bin) -> Option(Str) =
     match is_utf8(b)
@@ -107,13 +170,13 @@ pub let join(sep : Str, parts : Arr(Str)) -> Str =
         end;
     go(0, Arr/len(parts));
 
-pub let trim_start(str : Bin) -> Nat =
-    match Bin/len(str)
-    | 0 => Bin/len(str)
+let trim_start(s : Str) -> Nat =
+    match len(s)
+    | 0 => len(s)
     | pred + 1, ih =>
         match Nat/lt(pred, ih)
         | true =>
-            match Char/is_whitespace(Bin/get(str, pred))
+            match Char/is_whitespace(get(s, pred))
             | true => ih
             | false => pred
             end
@@ -121,17 +184,15 @@ pub let trim_start(str : Bin) -> Nat =
         end
     end;
 
-pub let trim_stop(str : Bin) -> Nat =
-    match Bin/len(str)
+let trim_end(s : Str) -> Nat =
+    match len(s)
     | 0 => 0
     | pred + 1, ih =>
-        match Char/is_whitespace(Bin/get(str, pred))
+        match Char/is_whitespace(get(s, pred))
         | true => ih
         | false => Nat/add(pred, 1)
         end
     end;
 
-pub let trim(str : Bin) -> Bin =
-    let start = trim_start(str);
-    let stop = trim_stop(str);
-    Bin/slice(str, Nat/min(start, stop), stop);
+pub let trim(s : Str) -> Str =
+    slice(s, Nat/min(trim_start(s), trim_end(s)), trim_end(s));
