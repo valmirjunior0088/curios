@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
+        Apply, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
         LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
         PatternLit, Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term,
         TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType,
@@ -273,7 +273,7 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace())
-        .map(|chunks| Subterm::Prim(Prim::Bin(BinLiteral::String(chunks.concat()))))
+        .map(|chunks| Subterm::Prim(Prim::Str(chunks.concat())))
         .map(Into::into)
 }
 
@@ -282,7 +282,7 @@ fn parse_bin_literal<'a>() -> Parser<'a, Term> {
         .map(|()| Vec::<u8>::new())
         .or(catch(many1(parse_hex_byte)))
         .and_drop(parse_whitespace())
-        .map(|bytes| Subterm::Prim(Prim::Bin(BinLiteral::Bytes(bytes))))
+        .map(|bytes| Subterm::Prim(Prim::Bin(bytes)))
         .map(Into::into)
 }
 

@@ -110,10 +110,10 @@ fn parse_char_literal_escape() {
 }
 
 #[test]
-fn parse_char_literal_no_suffix_is_bin() {
+fn parse_string_literal_is_str() {
     assert_eq!(
         "\"a\"".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Bin(BinLiteral::string("a"))))
+        Term::from(Subterm::Prim(Prim::Str("a".to_string())))
     );
 }
 
@@ -642,7 +642,7 @@ fn parse_union_match_nullary_and_unary() {
                         tag: "null".to_string(),
                         args: vec![],
                     },
-                    Subterm::Prim(Prim::Bin(BinLiteral::string("null"))).into(),
+                    Subterm::Prim(Prim::Str("null".to_string())).into(),
                 ),
                 (
                     Pattern::Variant {

@@ -3,7 +3,7 @@ use {
     num_traits::{FromPrimitive, ToPrimitive, Zero},
     std::{
         fmt,
-        ops::{Add, Mul, Sub},
+        ops::{Add, BitAnd, BitOr, BitXor, Mul, Sub},
     },
 };
 
@@ -25,28 +25,6 @@ impl Int {
 
     pub fn to_i32(&self) -> Option<i32> {
         self.value.to_i32()
-    }
-
-    /// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement
-    /// representation `num-bigint` models. The type level pretends ℤ, so these
-    /// impose no 31-bit limit; the runtime's i31 carrier is enforced only in
-    /// the backend (see `scalar_eval`/`code_emitter`).
-    pub fn bitand(self, other: Self) -> Self {
-        Self {
-            value: self.value & other.value,
-        }
-    }
-
-    pub fn bitor(self, other: Self) -> Self {
-        Self {
-            value: self.value | other.value,
-        }
-    }
-
-    pub fn bitxor(self, other: Self) -> Self {
-        Self {
-            value: self.value ^ other.value,
-        }
     }
 
     /// `self << amount` as `self * 2^amount`, and `self >> amount` as the
@@ -118,6 +96,40 @@ impl Mul for Int {
     fn mul(self, other: Self) -> Self {
         Self {
             value: self.value * other.value,
+        }
+    }
+}
+
+/// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement
+/// representation `num-bigint` models. The type level pretends ℤ, so these
+/// impose no 31-bit limit; the runtime's i31 carrier is enforced only in the
+/// backend (see `scalar_eval`/`code_emitter`).
+impl BitAnd for Int {
+    type Output = Self;
+
+    fn bitand(self, other: Self) -> Self {
+        Self {
+            value: self.value & other.value,
+        }
+    }
+}
+
+impl BitOr for Int {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        Self {
+            value: self.value | other.value,
+        }
+    }
+}
+
+impl BitXor for Int {
+    type Output = Self;
+
+    fn bitxor(self, other: Self) -> Self {
+        Self {
+            value: self.value ^ other.value,
         }
     }
 }

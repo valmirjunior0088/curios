@@ -3,7 +3,7 @@ use {
     crate::{
         core,
         text::{
-            BinLiteral, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
+            Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
             PatternLit, Prim, Subterm, Term,
         },
     },
@@ -1387,11 +1387,11 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::FltToNat(inner) => core::Prim::flt_to_nat(self.term(inner)?),
             Prim::FltToInt(inner) => core::Prim::flt_to_int(self.term(inner)?),
             Prim::BinType => core::Prim::BinType,
-            // `\hex` is a raw byte sequence; `"..."` is a `Str` (UTF-8 by
-            // construction, since source text is UTF-8).
-            Prim::Bin(BinLiteral::Bytes(bytes)) => core::Prim::Bin(bytes.clone()),
-            Prim::Bin(BinLiteral::String(string)) => core::Prim::Str(string.as_bytes().to_vec()),
+            // `\hex` is a raw byte sequence.
+            Prim::Bin(bytes) => core::Prim::Bin(bytes.clone()),
             Prim::StrType => core::Prim::StrType,
+            // `"..."` is a `Str` (UTF-8 by construction, since source text is UTF-8).
+            Prim::Str(string) => core::Prim::Str(string.as_bytes().to_vec()),
             Prim::StrToBin(inner) => core::Prim::str_to_bin(self.term(inner)?),
             Prim::StrOfBin(inner) => core::Prim::str_of_bin(self.term(inner)?),
             Prim::BinLen(inner) => core::Prim::bin_len(self.term(inner)?),

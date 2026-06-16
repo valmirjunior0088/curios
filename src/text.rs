@@ -12,9 +12,6 @@ pub use loader::*;
 mod nat;
 pub use nat::*;
 
-mod bin;
-pub use bin::*;
-
 mod prim;
 pub use prim::*;
 

@@ -73,15 +73,15 @@ impl Nat {
     /// type level pretends ℕ, so these impose no 31-bit limit; the runtime's
     /// i31 carrier is enforced only in the backend. `None` on a symbolic
     /// operand, like [`Nat::checked_add`].
-    pub fn bitand(self, other: Self) -> Option<Self> {
+    pub fn checked_bitand(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? & other.to_big_uint()?))
     }
 
-    pub fn bitor(self, other: Self) -> Option<Self> {
+    pub fn checked_bitor(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? | other.to_big_uint()?))
     }
 
-    pub fn bitxor(self, other: Self) -> Option<Self> {
+    pub fn checked_bitxor(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? ^ other.to_big_uint()?))
     }
 

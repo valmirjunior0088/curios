@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
-        LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
-        Plicity, Prim, Proj, Rec, StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod,
-        TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
+        Apply, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang, LetSignature,
+        Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj,
+        Rec, StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion,
+        TopUse, Tuple, TupleType, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -222,28 +222,12 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltToNat(operand) => print_prim_call("Flt.to_nat", vec![operand]),
         Prim::FltToInt(operand) => print_prim_call("Flt.to_int", vec![operand]),
         Prim::BinType => pure("Bin"),
-        Prim::Bin(bin) => match bin {
-            BinLiteral::Bytes(bytes) => pure(
-                bytes
-                    .iter()
-                    .map(|byte| format!("\\{:02x}", byte))
-                    .collect::<String>(),
-            ),
-            BinLiteral::String(content) => {
-                let escaped = content
-                    .chars()
-                    .map(|character| match character {
-                        '"' => "\\\"".to_string(),
-                        '\\' => "\\\\".to_string(),
-                        '\n' => "\\n".to_string(),
-                        '\t' => "\\t".to_string(),
-                        '\r' => "\\r".to_string(),
-                        _ => character.to_string(),
-                    })
-                    .collect::<String>();
-                pure(format!("\"{escaped}\""))
-            }
-        },
+        Prim::Bin(bytes) => pure(
+            bytes
+                .iter()
+                .map(|byte| format!("\\{:02x}", byte))
+                .collect::<String>(),
+        ),
         Prim::BinLen(operand) => print_prim_call("Bin.len", vec![operand]),
         Prim::BinEql(left, right) => print_prim_call("Bin.eql", vec![left, right]),
         Prim::BinGet(bin, index) => print_prim_call("Bin.get", vec![bin, index]),
@@ -251,6 +235,20 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
         Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
         Prim::StrType => pure("Str"),
+        Prim::Str(content) => pure(format!(
+            "\"{}\"",
+            content
+                .chars()
+                .map(|character| match character {
+                    '"' => "\\\"".to_string(),
+                    '\\' => "\\\\".to_string(),
+                    '\n' => "\\n".to_string(),
+                    '\t' => "\\t".to_string(),
+                    '\r' => "\\r".to_string(),
+                    _ => character.to_string(),
+                })
+                .collect::<String>()
+        )),
         Prim::StrToBin(operand) => print_prim_call("Str.to_bin", vec![operand]),
         Prim::StrOfBin(operand) => print_prim_call("Str.of_bin", vec![operand]),
         Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),

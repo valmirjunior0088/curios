@@ -1,4 +1,4 @@
-use super::{BinLiteral, Nat, Term};
+use super::{Nat, Term};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
@@ -75,7 +75,7 @@ pub enum Prim {
     FltToLeBin(Term),
     FltToInt(Term),
     BinType,
-    Bin(BinLiteral),
+    Bin(Vec<u8>),
     BinLen(Term),
     BinEql(Term, Term),
     BinGet(Term, Term),
@@ -83,6 +83,7 @@ pub enum Prim {
     BinAppend(Term, Term),
     BinConcat(Term, Term),
     StrType,
+    Str(String),
     StrToBin(Term),
     StrOfBin(Term),
     ArrType(Term),
