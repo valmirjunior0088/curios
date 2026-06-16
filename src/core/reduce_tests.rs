@@ -231,6 +231,22 @@ fn reduce_bin_append_adds_byte() {
 }
 
 #[test]
+fn reduce_bin_append_truncates_byte_to_low_eight_bits() {
+    let mut context = context();
+
+    let bin = Subterm::Prim(Prim::Bin(vec![1, 2]));
+    let byte: Subterm = Subterm::Prim(Prim::Nat(Nat::new(259usize)));
+
+    assert_eq!(
+        reduce(
+            &mut context,
+            Subterm::Prim(Prim::bin_append(bin, byte)).into()
+        ),
+        Ok(Subterm::Prim(Prim::Bin(vec![1, 2, 3])).into())
+    );
+}
+
+#[test]
 fn reduce_lst_append_adds_element() {
     let mut context = context();
 

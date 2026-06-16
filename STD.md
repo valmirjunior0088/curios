@@ -130,7 +130,7 @@ Raw byte sequences. `fold`, `concat_all`, and `join` are library helpers; the re
 | `eql(a, b)`         | `(Bin, Bin) -> Bln`                       | Equality                                   |
 | `get(b, i)`         | `(Bin, Nat) -> Nat`                       | Byte at index `i`                          |
 | `slice(b, s, e)`    | `(Bin, Nat, Nat) -> Bin`                  | Subsequence from `s` to `e`                |
-| `append(b, x)`      | `(Bin, Nat) -> Bin`                       | Append a single byte                       |
+| `append(b, x)`      | `(Bin, Nat) -> Bin`                       | Append a single byte (`x` taken mod 256)   |
 | `concat(a, b)`      | `(Bin, Bin) -> Bin`                       | Concatenate two sequences                  |
 | `fold(b, init, f)`  | `(@A : Type, Bin, A, (Nat, A) -> A) -> A` | Left fold over the bytes                   |
 | `concat_all(parts)` | `(Arr(Bin)) -> Bin`                       | Concatenate every part                     |

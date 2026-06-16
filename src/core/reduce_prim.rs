@@ -764,7 +764,13 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::BinAppend(bin, byte) => {
             let bin = reduce(context, bin.clone())?;
             let byte = reduce(context, byte.clone())?;
-            let n = byte.as_nat().and_then(|n| n.to_big_uint()?.to_u8());
+            // A concrete byte is taken mod 256 — its low 8 bits — matching the
+            // runtime's packed-`i8` store and the optimizer's `as u8`. A symbolic
+            // operand has no `as_nat`, so it stays stuck rather than truncating.
+            let n = byte
+                .as_nat()
+                .and_then(|n| n.to_big_uint())
+                .map(|big| big.to_bytes_le().first().copied().unwrap_or(0));
             Ok(match (Term::unwrap_or_clone(bin), n) {
                 (Subterm::Prim(Prim::Bin(mut bytes)), Some(n)) => {
                     bytes.push(n);
