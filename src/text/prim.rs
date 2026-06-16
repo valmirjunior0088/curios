@@ -99,6 +99,8 @@ pub enum Prim {
     IoWrite(Term, Term),
     IoOpen(Term, Term),
     IoConnect(Term, Term, Term, Term, Term),
+    IoListen(Term, Term),
+    IoAccept(Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

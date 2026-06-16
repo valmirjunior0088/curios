@@ -655,6 +655,20 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
+            HostTarget::IoListen { host, port, resume } => flat([
+                pure("Io.listen "),
+                print_value_name(host),
+                pure(" "),
+                print_value_name(port),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoAccept { handle, resume } => flat([
+                pure("Io.accept "),
+                print_value_name(handle),
+                pure(" "),
+                print_block_name(resume),
+            ]),
             HostTarget::IoClose { handle, resume } => flat([
                 pure("Io.close "),
                 print_value_name(handle),

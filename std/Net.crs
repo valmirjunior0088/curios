@@ -60,3 +60,39 @@ pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Resu
     with(settings, host, port, (c) =>
         let sent = write(c, request);
         Io/drain(c.0));
+
+struct Listener { Io }
+
+let listen(host : Str, port : Nat) -> Result(Listener, Error) =
+    let r = /sys/Io/listen(Str/to_bin(host), port);
+    match Nat/eql(r.status, 0) : Result(Listener, Error)
+    | true => Result/success(Listener { r.handle })
+    | false => Result/failure(decode(r.status))
+    end;
+
+let accept(l : Listener) -> Result(Socket, Error) =
+    let r = /sys/Io/accept(l.0);
+    match Nat/eql(r.status, 0) : Result(Socket, Error)
+    | true => Result/success(Socket { r.handle })
+    | false => Result/failure(decode(r.status))
+    end;
+
+let close_listener(l : Listener) -> {} =
+    /sys/Io/close(l.0);
+
+pub let serve(host : Str, port : Nat, handler : (Socket) -> {}) -> Result({}, Error) =
+    match listen(host, port) : Result({}, Error)
+    | success(l) =>
+        rec go(u : {}) -> {} =
+            match accept(l) : {}
+            | success(c) =>
+                let handled = handler(c);
+                let closed = close(c);
+                go(())
+            | failure(_) => ()
+            end;
+        let served = go(());
+        let closed = close_listener(l);
+        Result/success(())
+    | failure(e) => Result/failure(e)
+    end;

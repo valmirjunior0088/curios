@@ -1,11 +1,11 @@
 use {
     crate::Entropy,
     std::{
-        collections::{HashMap, VecDeque},
+        collections::{HashMap, HashSet, VecDeque},
         env,
         fs::OpenOptions,
         io::{ErrorKind, Read, Write, stderr, stdin, stdout},
-        net::{TcpStream, ToSocketAddrs},
+        net::{TcpListener, TcpStream, ToSocketAddrs},
         sync::{
             Arc, Mutex,
             mpsc::{self, Receiver, RecvError, Sender},
@@ -101,6 +101,16 @@ pub trait Host {
         write_timeout: u32,
     ) -> (u32, u32);
 
+    /// Bind a listening socket on `host`:`port`. Returns `(status, handle)` like
+    /// `open`; the handle is a listener `accept` pulls connections from, and
+    /// `close` releases. Meaningful only when the status is `STATUS_OK`.
+    fn listen(&self, host: &[u8], port: u32) -> (u32, u32);
+
+    /// Pull the next connection from the listener `handle`, blocking until one
+    /// arrives. Returns `(status, handle)`; the connection handle is an ordinary
+    /// byte stream the same `read`/`write`/`close` serve, like a `connect`ed one.
+    fn accept(&self, handle: u32) -> (u32, u32);
+
     /// Close `handle`. Closing an unknown handle is a no-op.
     fn close(&self, handle: u32);
 
@@ -134,6 +144,10 @@ pub trait Host {
 
 pub struct StdioHost {
     streams: Mutex<HashMap<u32, Box<dyn Conduit>>>,
+    /// Listening sockets minted by `listen`. A `TcpListener` is not `Read +
+    /// Write`, so it cannot share the `streams` map; `accept` pulls a `TcpStream`
+    /// from one and files that in `streams` as an ordinary conduit.
+    listeners: Mutex<HashMap<u32, TcpListener>>,
     handles: Mutex<Entropy>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
     start: Instant,
@@ -157,6 +171,7 @@ impl StdioHost {
     pub fn with_args(args: Vec<Vec<u8>>) -> Self {
         Self {
             streams: Mutex::new(HashMap::new()),
+            listeners: Mutex::new(HashMap::new()),
             handles: handle_entropy(),
             start: Instant::now(),
             args,
@@ -228,8 +243,43 @@ impl Host for StdioHost {
         (STATUS_OK, handle)
     }
 
+    fn listen(&self, host: &[u8], port: u32) -> (u32, u32) {
+        let host = String::from_utf8_lossy(host).into_owned();
+        let address = format!("{host}:{port}");
+
+        match TcpListener::bind(&address) {
+            Ok(listener) => {
+                let handle = fresh_handle(&self.handles);
+                self.listeners.lock().unwrap().insert(handle, listener);
+
+                (STATUS_OK, handle)
+            }
+            Err(error) => (status_of(error.kind()), 0),
+        }
+    }
+
+    fn accept(&self, handle: u32) -> (u32, u32) {
+        // `accept` blocks until a connection arrives, so clone the listener fd
+        // out and drop the map lock before the wait — never hold it across one.
+        let listener = match self.listeners.lock().unwrap().get(&handle) {
+            Some(listener) => listener.try_clone(),
+            None => return (STATUS_OTHER, 0),
+        };
+
+        match listener.and_then(|listener| listener.accept()) {
+            Ok((stream, _)) => {
+                let conn = fresh_handle(&self.handles);
+                self.streams.lock().unwrap().insert(conn, Box::new(stream));
+
+                (STATUS_OK, conn)
+            }
+            Err(error) => (status_of(error.kind()), 0),
+        }
+    }
+
     fn close(&self, handle: u32) {
         self.streams.lock().unwrap().remove(&handle);
+        self.listeners.lock().unwrap().remove(&handle);
     }
 
     fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
@@ -325,6 +375,15 @@ struct NetConn {
     position: usize,
 }
 
+/// A live in-memory *inbound* connection minted by `accept`: `read` serves the
+/// scripted request from `position`, and `write` appends to `captures[capture]`
+/// so a test can inspect what the server sent back.
+struct ServerConn {
+    request: Vec<u8>,
+    position: usize,
+    capture: usize,
+}
+
 pub struct ChannelHost {
     input_receiver: Mutex<Receiver<Vec<u8>>>,
     /// Bytes received from the channel but not yet consumed by `read` —
@@ -341,6 +400,16 @@ pub struct ChannelHost {
     endpoints: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
     /// Live in-memory connections keyed by handle.
     connections: Mutex<HashMap<u32, NetConn>>,
+    /// Listening sockets minted by `listen` — a set of valid handles; the test
+    /// host does no real binding.
+    listeners: Mutex<HashSet<u32>>,
+    /// Scripted inbound requests, one served per `accept` (FIFO).
+    inbound: Mutex<VecDeque<Vec<u8>>>,
+    /// Captured server responses: one entry per accepted connection, the
+    /// concatenation of its writes. Inspectable after the run.
+    captures: Arc<Mutex<Vec<Vec<u8>>>>,
+    /// Live accepted (inbound) connections keyed by handle.
+    server_conns: Mutex<HashMap<u32, ServerConn>>,
     handles: Mutex<Entropy>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
     clock_wall_seq: Mutex<VecDeque<(u32, u32, u32)>>,
@@ -388,6 +457,10 @@ impl ChannelHost {
                 open_files: Mutex::new(HashMap::new()),
                 endpoints: Mutex::new(HashMap::new()),
                 connections: Mutex::new(HashMap::new()),
+                listeners: Mutex::new(HashSet::new()),
+                inbound: Mutex::new(VecDeque::new()),
+                captures: Arc::new(Mutex::new(Vec::new())),
+                server_conns: Mutex::new(HashMap::new()),
                 handles: handle_entropy(),
                 clock_wall_seq: Mutex::new(VecDeque::new()),
                 clock_mono_seq: Mutex::new(VecDeque::new()),
@@ -457,6 +530,20 @@ impl ChannelHost {
             .map(|(endpoint, response)| (endpoint.as_ref().to_vec(), response.as_ref().to_vec()))
             .collect();
     }
+
+    /// Script the inbound requests served by `accept`, in order — one request
+    /// per accepted connection. An exhausted queue makes `accept` fail, which
+    /// ends a `serve` loop (a real blocking `accept` would park there).
+    pub fn script_inbound<R: AsRef<[u8]>, I: IntoIterator<Item = R>>(&self, requests: I) {
+        *self.inbound.lock().unwrap() =
+            requests.into_iter().map(|r| r.as_ref().to_vec()).collect();
+    }
+
+    /// The captured server responses: one entry per accepted connection, the
+    /// concatenation of the bytes written to it.
+    pub fn captures(&self) -> Arc<Mutex<Vec<Vec<u8>>>> {
+        self.captures.clone()
+    }
 }
 
 impl Host for ChannelHost {
@@ -519,9 +606,50 @@ impl Host for ChannelHost {
         (STATUS_OK, handle)
     }
 
+    fn listen(&self, _host: &[u8], _port: u32) -> (u32, u32) {
+        let handle = fresh_handle(&self.handles);
+        self.listeners.lock().unwrap().insert(handle);
+
+        (STATUS_OK, handle)
+    }
+
+    fn accept(&self, handle: u32) -> (u32, u32) {
+        if !self.listeners.lock().unwrap().contains(&handle) {
+            return (STATUS_OTHER, 0);
+        }
+
+        // Pull the next scripted request. An exhausted queue fails the accept,
+        // ending the serve loop (a real blocking accept would park forever).
+        let request = match self.inbound.lock().unwrap().pop_front() {
+            Some(request) => request,
+            None => return (STATUS_OTHER, 0),
+        };
+
+        let capture = {
+            let mut captures = self.captures.lock().unwrap();
+            let index = captures.len();
+            captures.push(Vec::new());
+            index
+        };
+
+        let conn = fresh_handle(&self.handles);
+        self.server_conns.lock().unwrap().insert(
+            conn,
+            ServerConn {
+                request,
+                position: 0,
+                capture,
+            },
+        );
+
+        (STATUS_OK, conn)
+    }
+
     fn close(&self, handle: u32) {
         self.open_files.lock().unwrap().remove(&handle);
         self.connections.lock().unwrap().remove(&handle);
+        self.server_conns.lock().unwrap().remove(&handle);
+        self.listeners.lock().unwrap().remove(&handle);
     }
 
     fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
@@ -545,6 +673,23 @@ impl Host for ChannelHost {
                     let stop = contents.len().min(open.position + count as usize);
                     let bytes = contents[open.position..stop].to_vec();
                     open.position = stop;
+
+                    return (STATUS_OK, bytes);
+                }
+            }
+
+            // Inbound (accepted) connection? Serve the scripted request bytes.
+            {
+                let mut server_conns = self.server_conns.lock().unwrap();
+
+                if let Some(conn) = server_conns.get_mut(&handle) {
+                    if conn.position >= conn.request.len() {
+                        return (STATUS_EOF, vec![]);
+                    }
+
+                    let stop = conn.request.len().min(conn.position + count as usize);
+                    let bytes = conn.request[conn.position..stop].to_vec();
+                    conn.position = stop;
 
                     return (STATUS_OK, bytes);
                 }
@@ -618,8 +763,20 @@ impl Host for ChannelHost {
             }
         }
 
-        // Socket-backed handle: accept and discard (the in-memory test host
-        // does not capture request bytes in Phase A).
+        // Inbound (accepted) connection: capture the response bytes so a test
+        // can inspect what the server wrote back.
+        {
+            let server_conns = self.server_conns.lock().unwrap();
+
+            if let Some(conn) = server_conns.get(&handle) {
+                self.captures.lock().unwrap()[conn.capture].extend_from_slice(bytes);
+
+                return STATUS_OK;
+            }
+        }
+
+        // Socket-backed (outbound) handle: accept and discard (the in-memory
+        // test host does not capture request bytes in Phase A).
         if self.connections.lock().unwrap().contains_key(&handle) {
             return STATUS_OK;
         }

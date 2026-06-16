@@ -375,6 +375,18 @@ fn io_ops() -> Vec<TopItem> {
             )),
         ),
         pub_fn(
+            "listen",
+            vec![("host", bin()), ("port", nat())],
+            record(vec![("status", nat()), ("handle", io())]),
+            prim(Prim::IoListen(name("host"), name("port"))),
+        ),
+        pub_fn(
+            "accept",
+            vec![("h", io())],
+            record(vec![("status", nat()), ("handle", io())]),
+            prim(Prim::IoAccept(name("h"))),
+        ),
+        pub_fn(
             "close",
             vec![("h", io())],
             unit(),

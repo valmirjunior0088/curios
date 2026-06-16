@@ -371,6 +371,11 @@ fn constrain_region(
             seed(path, liveness);
             seed(mode, liveness);
         }
+        Tail::Host(HostTarget::IoListen { host, port, .. }) => {
+            seed(host, liveness);
+            seed(port, liveness);
+        }
+        Tail::Host(HostTarget::IoAccept { handle, .. }) => seed(handle, liveness),
         Tail::Host(HostTarget::IoConnect {
             host,
             port,

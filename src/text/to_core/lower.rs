@@ -1374,6 +1374,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                     self.term(write_timeout)?,
                 )
             }
+            Prim::IoListen(host, port) => {
+                core::Prim::IoListen(self.term(host)?, self.term(port)?)
+            }
+            Prim::IoAccept(handle) => core::Prim::IoAccept(self.term(handle)?),
             Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
             Prim::IoClockWall => core::Prim::IoClockWall,
             Prim::IoClockMono => core::Prim::IoClockMono,

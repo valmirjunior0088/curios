@@ -574,6 +574,48 @@ pub fn lower_value_prim<'b>(
                 )
             }),
         ),
+        ersd::Prim::Host(ersd::HostPrim::IoListen(host, port)) => work.lower_value_name(
+            host,
+            frame,
+            Cont::new(move |work, host| {
+                work.lower_value_name(
+                    port,
+                    frame,
+                    Cont::new(move |work, port| {
+                        // (status, handle) packs into `{ status, handle }`,
+                        // exactly like `IoOpen`.
+                        let resume = work.fresh_block();
+                        let status = work.fresh_value();
+                        let handle = work.fresh_value();
+                        let params = vec![status.clone(), handle.clone()];
+                        work.add_resume_block(resume.clone(), params, move |inner| {
+                            let record = inner
+                                .fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, handle])));
+                            cont.call(inner, record)
+                        });
+                        cont::Tail::Host(cont::HostTarget::IoListen { host, port, resume })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoAccept(handle)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                // (status, handle) packs into `{ status, handle }`, like `IoEnv`:
+                // one operand in, a two-field status record out.
+                let resume = work.fresh_block();
+                let status = work.fresh_value();
+                let conn = work.fresh_value();
+                let params = vec![status.clone(), conn.clone()];
+                work.add_resume_block(resume.clone(), params, move |inner| {
+                    let record =
+                        inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, conn])));
+                    cont.call(inner, record)
+                });
+                cont::Tail::Host(cont::HostTarget::IoAccept { handle, resume })
+            }),
+        ),
         ersd::Prim::Host(ersd::HostPrim::IoClose(handle)) => work.lower_value_name(
             handle,
             frame,

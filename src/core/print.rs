@@ -831,6 +831,13 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(write_timeout, depth),
         ]),
+        Prim::IoListen(host, port) => flat([
+            pure("Io.listen "),
+            print_term(host, depth),
+            pure(" "),
+            print_term(port, depth),
+        ]),
+        Prim::IoAccept(handle) => flat([pure("Io.accept "), print_term(handle, depth)]),
         Prim::IoClose(handle) => flat([pure("Io.close "), print_term(handle, depth)]),
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),

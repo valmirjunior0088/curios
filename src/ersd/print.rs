@@ -189,6 +189,10 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
             pure(" "),
             print_term(wt),
         ]),
+        HostPrim::IoListen(h, p) => {
+            flat([pure("Io.listen "), print_term(h), pure(" "), print_term(p)])
+        }
+        HostPrim::IoAccept(h) => flat([pure("Io.accept "), print_term(h)]),
         HostPrim::IoClose(h) => flat([pure("Io.close "), print_term(h)]),
         HostPrim::IoClockWall => pure("Io.clock_wall"),
         HostPrim::IoClockMono => pure("Io.clock_mono"),

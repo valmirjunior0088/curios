@@ -277,6 +277,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                 vec![host, port, connect_timeout, read_timeout, write_timeout],
             )
         }
+        Prim::IoListen(host, port) => print_prim_call("Io.listen", vec![host, port]),
+        Prim::IoAccept(handle) => print_prim_call("Io.accept", vec![handle]),
         Prim::IoClose(handle) => print_prim_call("Io.close", vec![handle]),
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),

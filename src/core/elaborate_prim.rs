@@ -400,6 +400,23 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
         }
+        Prim::IoListen(host, port) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let host = elaborate(context, host, Mode::Check(bin_type))?.0;
+            let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
+            (
+                Prim::IoListen(host, port),
+                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
+            )
+        }
+        Prim::IoAccept(handle) => {
+            let io_type: Term = Subterm::Prim(Prim::IoType).into();
+            let handle = elaborate(context, handle, Mode::Check(io_type.clone()))?.0;
+            (
+                Prim::IoAccept(handle),
+                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
+            )
+        }
         Prim::IoClose(handle) => {
             let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;

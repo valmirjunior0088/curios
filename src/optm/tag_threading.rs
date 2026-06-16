@@ -379,6 +379,8 @@ fn freshen_tail_blocks(tail: &mut Tail, bound_blocks: &HashSet<BlockName>, suffi
         | Tail::Host(HostTarget::IoWrite { resume, .. })
         | Tail::Host(HostTarget::IoOpen { resume, .. })
         | Tail::Host(HostTarget::IoConnect { resume, .. })
+        | Tail::Host(HostTarget::IoListen { resume, .. })
+        | Tail::Host(HostTarget::IoAccept { resume, .. })
         | Tail::Host(HostTarget::IoClose { resume, .. })
         | Tail::Host(HostTarget::IoClockWall { resume })
         | Tail::Host(HostTarget::IoClockMono { resume })

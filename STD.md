@@ -237,7 +237,7 @@ File/write(f, b)               -- (File, Bin) -> Nat
 
 ### `/std/Net`
 
-A TCP client. `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. There is no public `close`: `with`/`call` bracket the connection so a handle never outlives the body and cannot be used after close. It builds on the `/sys/Io/connect` primitive; TLS (`https://`) and a server side are future work.
+A TCP client and a sequential TCP server. `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. There is no public `close`: `with`/`call`/`serve` bracket every connection so a handle never outlives the body and cannot be used after close. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives; TLS (`https://`) and concurrent (non-blocking) connection handling are future work.
 
 ```
 union Error | refused() | other(Nat) end
@@ -258,8 +258,11 @@ struct Settings pub {
 | `call(settings, host, port, request)` | `(Settings, Str, Nat, Bin) -> Result(Bin, Error)`                    | Connect, send `request`, read the whole response to EOF, close |
 | `read(c, n)`                          | `(Socket, Nat) -> { status : Nat, bytes : Bin }`                     | Read up to `n` bytes from the socket                           |
 | `write(c, b)`                         | `(Socket, Bin) -> Nat`                                               | Write `b` to the socket; returns a status                      |
+| `serve(host, port, handler)`          | `(Str, Nat, (Socket) -> {}) -> Result({}, Error)`                    | Bind `host`:`port`, then accept connections one at a time, running `handler` on each `Socket` before closing it |
 
-As with `File`, the `Socket` must not outlive the `with` body — a delayed effect would touch a closed connection.
+As with `File`, the `Socket` must not outlive the `with` or `handler` body — a delayed effect would touch a closed connection.
+
+`serve` is a **sequential** server: it binds a listening socket (the listener is private and fully bracketed — closed when the loop ends), then loops `accept` → `handler` → close, one connection fully served before the next. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Error`. Concurrent connection handling is future work.
 
 ### `/std/Http`
 

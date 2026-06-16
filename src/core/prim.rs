@@ -103,6 +103,13 @@ pub enum Prim {
     // timeout. The handle is a bare `Io`, so the existing read/write/close
     // plumbing serves the socket.
     IoConnect(Term, Term, Term, Term, Term),
+    // (host, port) -> { status, handle }: bind a listening socket. The handle is
+    // a bare `Io`; `accept` pulls connections from it and `close` releases it.
+    IoListen(Term, Term),
+    // (handle) -> { status, handle }: pull the next connection from a listener.
+    // The returned handle is an ordinary `Io` the read/write/close plumbing
+    // serves, exactly like a `connect`ed socket.
+    IoAccept(Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

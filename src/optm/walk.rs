@@ -136,6 +136,11 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(path);
             sink.value_use(mode);
         }
+        Tail::Host(HostTarget::IoListen { host, port, .. }) => {
+            sink.value_use(host);
+            sink.value_use(port);
+        }
+        Tail::Host(HostTarget::IoAccept { handle, .. }) => sink.value_use(handle),
         Tail::Host(HostTarget::IoConnect {
             host,
             port,
@@ -379,6 +384,11 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
             sink.value_use(path);
             sink.value_use(mode);
         }
+        Tail::Host(HostTarget::IoListen { host, port, .. }) => {
+            sink.value_use(host);
+            sink.value_use(port);
+        }
+        Tail::Host(HostTarget::IoAccept { handle, .. }) => sink.value_use(handle),
         Tail::Host(HostTarget::IoConnect {
             host,
             port,

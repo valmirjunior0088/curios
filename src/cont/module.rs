@@ -182,6 +182,19 @@ pub enum HostTarget {
         write_timeout: ValueName,
         resume: BlockName,
     },
+    /// Bind a listening socket on `host`:`port` (a `Bin` and an i32). Returns
+    /// (status, handle); `resume` takes two block parameters.
+    IoListen {
+        host: ValueName,
+        port: ValueName,
+        resume: BlockName,
+    },
+    /// Pull the next connection from the listener `handle`. Returns
+    /// (status, handle); `resume` takes two block parameters.
+    IoAccept {
+        handle: ValueName,
+        resume: BlockName,
+    },
     /// Close `handle`. Returns no payload; `resume` takes zero block
     /// parameters.
     IoClose {
@@ -216,6 +229,8 @@ impl HostTarget {
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
             | HostTarget::IoConnect { resume, .. }
+            | HostTarget::IoListen { resume, .. }
+            | HostTarget::IoAccept { resume, .. }
             | HostTarget::IoClose { resume, .. }
             | HostTarget::IoClockWall { resume }
             | HostTarget::IoClockMono { resume }

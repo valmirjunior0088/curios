@@ -2278,6 +2278,34 @@ fn net_with_custom_timeout_config_reads_response() {
     );
 }
 
+// Server network IO (Stage A): `serve` binds a listener, pulls the scripted
+// inbound connection, and runs the handler per connection — which reads the
+// request off the socket and writes a response the host captures. The exhausted
+// inbound queue then fails the next `accept`, ending the loop and closing the
+// bracketed listener.
+#[test]
+fn net_serve_handles_a_scripted_inbound_connection() {
+    let source = r#"
+        use /std/{Net, Io, Str, Bin};
+        match Net/serve("0.0.0.0", 8080, (c) =>
+            let req = Net/read(c, 64);
+            let wrote = Net/write(c, Bin/concat(Str/to_bin("echo: "), req.bytes));
+            ()) : {}
+        | success(u) => ()
+        | failure(_) => Io/print("listen failed")
+        end
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    system.script_inbound(["ping"]);
+    let captures = system.captures();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(
+        captures.lock().unwrap().clone(),
+        vec![b"echo: ping".to_vec()]
+    );
+}
+
 // HTTP client (Phase B): `Http/perform` renders a `Request`, sends it through
 // `/std/Net`, and runs the `/std/Parse`-based response parser over the reply —
 // exercising the byte-scanning parser end to end through codegen.

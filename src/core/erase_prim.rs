@@ -471,6 +471,15 @@ pub fn erase_prim(
                 erase(context, write_timeout, &nat_type())?,
             )))
         }
+        Prim::IoListen(address, port) => Ok(host(ersd::HostPrim::IoListen(
+            erase(context, address, &bin_type())?,
+            erase(context, port, &nat_type())?,
+        ))),
+        Prim::IoAccept(handle) => Ok(host(ersd::HostPrim::IoAccept(erase(
+            context,
+            handle,
+            &prim_type(Prim::IoType),
+        )?))),
         Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
             context,
             handle,

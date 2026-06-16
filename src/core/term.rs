@@ -1354,6 +1354,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoAccept(t)
         | Prim::IoRandom(t)
         | Prim::IoEnv(t) => t.reach(),
 
@@ -1411,6 +1412,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
+        | Prim::IoListen(a, b)
         | Prim::IoExit(a, b) => a.reach().max(b.reach()),
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
@@ -1475,6 +1477,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoAccept(t)
         | Prim::IoRandom(t)
         | Prim::IoEnv(t) => t.collect_metavars(ids),
 
@@ -1532,6 +1535,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
+        | Prim::IoListen(a, b)
         | Prim::IoExit(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
@@ -1800,6 +1804,10 @@ where
         Prim::IoOpen(path, mode) => {
             Prim::IoOpen(visit.visit_subterm(path), visit.visit_subterm(mode))
         }
+        Prim::IoListen(host, port) => {
+            Prim::IoListen(visit.visit_subterm(host), visit.visit_subterm(port))
+        }
+        Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
         Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
             Prim::IoConnect(
                 visit.visit_subterm(host),

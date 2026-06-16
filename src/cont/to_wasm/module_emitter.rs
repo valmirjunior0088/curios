@@ -267,6 +267,64 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        if self.table.io_listen_used() {
+            // `(host, port) -> (status, handle)` — the same shape as `io_open`.
+            // Recompute the reference types, moved by the blocks above.
+            let bin_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+            });
+            let status_ref = wasm::ValType::Ref(self.table.int_type(false));
+            let io_listen = wasm::TypeName::from("io_listen");
+            self.module.add_type(
+                io_listen.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([
+                            bin_ref,
+                            wasm::ValType::Num(wasm::NumType::I32),
+                        ]),
+                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_listen",
+                wasm::Import::Func {
+                    func_name: self.table.io_listen_func().clone(),
+                    type_name: io_listen,
+                },
+            );
+        }
+
+        if self.table.io_accept_used() {
+            // `(handle) -> (status, handle)`: one i32 in, a status record out.
+            let status_ref = wasm::ValType::Ref(self.table.int_type(false));
+            let io_accept = wasm::TypeName::from("io_accept");
+            self.module.add_type(
+                io_accept.clone(),
+                wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: wasm::CompType::Func(wasm::FuncType {
+                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
+                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
+                    }),
+                },
+            );
+            self.module.add_import(
+                "env",
+                "io_accept",
+                wasm::Import::Func {
+                    func_name: self.table.io_accept_func().clone(),
+                    type_name: io_accept,
+                },
+            );
+        }
+
         // `bin_ref`/`status_ref` above are moved by the `io_open` block, so the
         // clock/random imports recompute their own i31 and bin reference types.
         let i31_ref = wasm::ValType::Ref(self.table.int_type(false));

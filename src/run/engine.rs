@@ -135,6 +135,13 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         ],
         [i31_ref.clone(), i31_ref.clone()],
     );
+    let io_listen_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), ValType::I32],
+        [i31_ref.clone(), i31_ref.clone()],
+    );
+    let io_accept_type =
+        FuncType::new(engine, [ValType::I32], [i31_ref.clone(), i31_ref.clone()]);
     let io_open_type = FuncType::new(engine, [bin_ref, ValType::I32], [i31_ref.clone(), i31_ref]);
     let io_close_type = FuncType::new(engine, [ValType::I32], []);
 
@@ -185,6 +192,18 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
             u32,
             u32,
         )| { host.connect(&address, port, connect_timeout, read_timeout, write_timeout) }
+    })?;
+
+    define_import(&mut linker, "io_listen", io_listen_type, {
+        let host = host.clone();
+
+        move |(address, port): (Vec<u8>, u32)| host.listen(&address, port)
+    })?;
+
+    define_import(&mut linker, "io_accept", io_accept_type, {
+        let host = host.clone();
+
+        move |handle: u32| host.accept(handle)
     })?;
 
     define_import(&mut linker, "io_close", io_close_type, {

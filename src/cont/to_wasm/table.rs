@@ -228,6 +228,8 @@ pub struct Table<'a> {
     io_write: OnceCell<wasm::FuncName>,
     io_open: OnceCell<wasm::FuncName>,
     io_connect: OnceCell<wasm::FuncName>,
+    io_listen: OnceCell<wasm::FuncName>,
+    io_accept: OnceCell<wasm::FuncName>,
     io_close: OnceCell<wasm::FuncName>,
     io_clock_wall: OnceCell<wasm::FuncName>,
     io_clock_mono: OnceCell<wasm::FuncName>,
@@ -288,6 +290,8 @@ impl<'a> Table<'a> {
             io_write: OnceCell::new(),
             io_open: OnceCell::new(),
             io_connect: OnceCell::new(),
+            io_listen: OnceCell::new(),
+            io_accept: OnceCell::new(),
             io_close: OnceCell::new(),
             io_clock_wall: OnceCell::new(),
             io_clock_mono: OnceCell::new(),
@@ -466,6 +470,24 @@ impl<'a> Table<'a> {
 
     pub fn io_connect_used(&self) -> bool {
         self.io_connect.get().is_some()
+    }
+
+    pub fn io_listen_func(&self) -> &wasm::FuncName {
+        self.io_listen
+            .get_or_init(|| wasm::FuncName::from("io_listen"))
+    }
+
+    pub fn io_listen_used(&self) -> bool {
+        self.io_listen.get().is_some()
+    }
+
+    pub fn io_accept_func(&self) -> &wasm::FuncName {
+        self.io_accept
+            .get_or_init(|| wasm::FuncName::from("io_accept"))
+    }
+
+    pub fn io_accept_used(&self) -> bool {
+        self.io_accept.get().is_some()
     }
 
     pub fn io_close_func(&self) -> &wasm::FuncName {

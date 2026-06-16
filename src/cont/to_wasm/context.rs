@@ -643,6 +643,35 @@ impl<'a, 'b> Context<'a, 'b> {
                 let block_data = self.find_block(resume);
                 output.extend(block_data.enter(2));
             }
+            cont::HostTarget::IoListen { host, port, resume } => {
+                output.extend(self.load_value_instrs(host, LoadAs::Bin));
+                output.extend(self.load_value_instrs(port, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_listen_func().clone(),
+                });
+
+                // Same two-result invariant as `IoOpen`.
+                assert!(
+                    !self.is_resume(resume),
+                    "two-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(2));
+            }
+            cont::HostTarget::IoAccept { handle, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_accept_func().clone(),
+                });
+
+                // Same two-result invariant as `IoOpen`.
+                assert!(
+                    !self.is_resume(resume),
+                    "two-result host resume cannot be the sentinel"
+                );
+                let block_data = self.find_block(resume);
+                output.extend(block_data.enter(2));
+            }
             cont::HostTarget::IoClose { handle, resume } => {
                 output.extend(self.load_value_instrs(handle, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
