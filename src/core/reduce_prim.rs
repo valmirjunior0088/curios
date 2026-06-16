@@ -4,13 +4,6 @@ use {
     num_traits::{ToPrimitive, Zero},
 };
 
-/// The low 31 bits of a `Nat` literal — the i31 carrier the runtime represents
-/// it with. Mirrors the masking in `NatToInt`'s fold; a symbolic operand has no
-/// `BigUint` and yields `None`, so the bitwise op stays a neutral term.
-fn nat_bits(n: &Nat) -> Option<u32> {
-    Some(n.to_big_uint()?.to_u32().unwrap_or(0) & 0x7FFF_FFFF)
-}
-
 /// Reduce both operands of a `Bln` binary primitive, then either `fold` the two
 /// literals or `rebuild` the neutral term. `Bln` has no numeric carrier at the
 /// type level, so the fold reads the `true`/`false` constructors directly.
@@ -88,21 +81,26 @@ fn reduce_nat_division(
     }))
 }
 
-/// `Int` counterpart of [`reduce_nat_binary`].
+/// `Int` counterpart of [`reduce_nat_binary`]: fold both literal operands or
+/// rebuild the neutral term. The fold is partial for the same reason — the
+/// shifts decline a negative or oversized literal shift count (`None`); the
+/// total ops just wrap their result in `Some`.
 fn reduce_int_binary(
     context: &mut Context,
     left: &Term,
     right: &Term,
-    fold: impl FnOnce(Int, Int) -> Prim,
+    fold: impl FnOnce(Int, Int) -> Option<Prim>,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
     let left = reduce(context, left.clone())?;
     let right = reduce(context, right.clone())?;
 
-    Ok(Subterm::Prim(match (left.as_int(), right.as_int()) {
+    let folded = match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => fold(l, r),
-        _ => rebuild(left, right),
-    }))
+        _ => None,
+    };
+
+    Ok(Subterm::Prim(folded.unwrap_or_else(|| rebuild(left, right))))
 }
 
 /// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that
@@ -343,51 +341,43 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |l, r| l.gte(&r).map(Prim::Bln),
             Prim::NatGte,
         ),
-        // Bitwise ops fold on the 31-bit carrier, matching the runtime: `and`,
-        // `or`, and `xor` all stay inside 31 bits; `shl` truncates the result
-        // back into the carrier like the backend's `ref.i31`, while `shr` is
-        // logical and never overflows.
+        // Bitwise ops fold on the unbounded ℕ the type level pretends: `and`,
+        // `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and
+        // `shr` as `⌊·/2^n⌋`. The runtime's 31-bit carrier (truncating `shl`,
+        // logical `shr`) is imposed only in the backend, never here.
         Prim::NatAnd(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Some(Prim::Nat(Nat::new(nat_bits(&l)? & nat_bits(&r)?))),
+            |l, r| l.bitand(r).map(Prim::Nat),
             Prim::NatAnd,
         ),
         Prim::NatOr(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Some(Prim::Nat(Nat::new(nat_bits(&l)? | nat_bits(&r)?))),
+            |l, r| l.bitor(r).map(Prim::Nat),
             Prim::NatOr,
         ),
         Prim::NatXor(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| Some(Prim::Nat(Nat::new(nat_bits(&l)? ^ nat_bits(&r)?))),
+            |l, r| l.bitxor(r).map(Prim::Nat),
             Prim::NatXor,
         ),
         Prim::NatShl(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| {
-                Some(Prim::Nat(Nat::new(
-                    nat_bits(&l)?.wrapping_shl(nat_bits(&r)?) & 0x7FFF_FFFF,
-                )))
-            },
+            |l, r| l.checked_shl(r).map(Prim::Nat),
             Prim::NatShl,
         ),
         Prim::NatShr(left, right) => reduce_nat_binary(
             context,
             left,
             right,
-            |l, r| {
-                Some(Prim::Nat(Nat::new(
-                    nat_bits(&l)?.wrapping_shr(nat_bits(&r)?),
-                )))
-            },
+            |l, r| l.checked_shr(r).map(Prim::Nat),
             Prim::NatShr,
         ),
         Prim::IntType => Ok(Subterm::Prim(Prim::IntType)),
@@ -396,35 +386,35 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             context,
             left,
             right,
-            |left, right| Prim::Bln(left == right),
+            |left, right| Some(Prim::Bln(left == right)),
             Prim::IntEql,
         ),
         Prim::IntNeq(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left != right),
+            |left, right| Some(Prim::Bln(left != right)),
             Prim::IntNeq,
         ),
         Prim::IntAdd(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left + right),
+            |left, right| Some(Prim::Int(left + right)),
             Prim::IntAdd,
         ),
         Prim::IntSub(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left - right),
+            |left, right| Some(Prim::Int(left - right)),
             Prim::IntSub,
         ),
         Prim::IntMul(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Int(left * right),
+            |left, right| Some(Prim::Int(left * right)),
             Prim::IntMul,
         ),
         Prim::IntDiv(left, right) => reduce_int_division(
@@ -447,29 +437,69 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             context,
             left,
             right,
-            |left, right| Prim::Bln(left < right),
+            |left, right| Some(Prim::Bln(left < right)),
             Prim::IntLt,
         ),
         Prim::IntGt(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left > right),
+            |left, right| Some(Prim::Bln(left > right)),
             Prim::IntGt,
         ),
         Prim::IntLte(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left <= right),
+            |left, right| Some(Prim::Bln(left <= right)),
             Prim::IntLte,
         ),
         Prim::IntGte(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left >= right),
+            |left, right| Some(Prim::Bln(left >= right)),
             Prim::IntGte,
+        ),
+        // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`,
+        // `or`, `xor` on the infinite two's-complement expansion, `shl` as
+        // `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed
+        // 31-bit carrier (truncating `shl`, `shr_s`) is imposed only in the
+        // backend, never here.
+        Prim::IntAnd(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Some(Prim::Int(left.bitand(right))),
+            Prim::IntAnd,
+        ),
+        Prim::IntOr(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Some(Prim::Int(left.bitor(right))),
+            Prim::IntOr,
+        ),
+        Prim::IntXor(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| Some(Prim::Int(left.bitxor(right))),
+            Prim::IntXor,
+        ),
+        Prim::IntShl(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| left.checked_shl(right).map(Prim::Int),
+            Prim::IntShl,
+        ),
+        Prim::IntShr(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |left, right| left.checked_shr(right).map(Prim::Int),
+            Prim::IntShr,
         ),
         Prim::FltType => Ok(Subterm::Prim(Prim::FltType)),
         Prim::Flt(flt) => Ok(Subterm::Prim(Prim::Flt(*flt))),

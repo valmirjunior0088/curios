@@ -549,36 +549,18 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            cont::Code::IntShl(left, right) => {
-                let local_name = self
-                    .context
-                    .push_local("int_shl", wasm::ValType::Num(wasm::NumType::I32));
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Shl);
-                self.emit_instr(wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Const { value: 1 });
-                self.emit_instr(wasm::Instr::I32Shl);
-                self.emit_instr(wasm::Instr::LocalGet {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Xor);
-                self.emit_instr(wasm::Instr::I32Const { value: 31 });
-                self.emit_instr(wasm::Instr::I32ShrU);
-                self.emit_instr(wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: wasm::BlockType::Empty,
-                    then_instructions: vec![wasm::Instr::Unreachable],
-                    else_instructions: vec![],
-                });
-                self.emit_instr(wasm::Instr::LocalGet { local_name });
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
+            // Left shift truncates into the signed 31-bit carrier rather than
+            // trapping: `ref.i31` drops bit 31 and the value reloads sign-extended
+            // from bit 30, so `i32.shl` + `WrapAs::I31` is a guard-free truncating
+            // shift, matching `Nat/shl` and `shr` (which never overflow).
+            cont::Code::IntShl(left, right) => self.emit_binary_op(
+                &result_local,
+                left,
+                right,
+                LoadAs::Int,
+                wasm::Instr::I32Shl,
+                WrapAs::I31,
+            ),
             cont::Code::IntShr(left, right) => self.emit_binary_op(
                 &result_local,
                 left,

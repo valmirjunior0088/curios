@@ -2,6 +2,9 @@ pub use /sys/{Int};
 pub use /sys/Int/*;
 use /std/{Nat, Bin, Option};
 
+pub let not(x : Int) -> Int =
+    xor(x, -1);
+
 pub let of_str(str : Bin) -> Option(Int) =
     match Nat/eql(Bin/len(str), 0)
     | true => Option/none(@Int)

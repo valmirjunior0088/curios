@@ -206,6 +206,26 @@ pub fn erase_prim(
             erase(context, left, &int_type())?,
             erase(context, right, &int_type())?,
         ))),
+        Prim::IntAnd(left, right) => Ok(pure(ersd::PurePrim::IntAnd(
+            erase(context, left, &int_type())?,
+            erase(context, right, &int_type())?,
+        ))),
+        Prim::IntOr(left, right) => Ok(pure(ersd::PurePrim::IntOr(
+            erase(context, left, &int_type())?,
+            erase(context, right, &int_type())?,
+        ))),
+        Prim::IntXor(left, right) => Ok(pure(ersd::PurePrim::IntXor(
+            erase(context, left, &int_type())?,
+            erase(context, right, &int_type())?,
+        ))),
+        Prim::IntShl(left, right) => Ok(pure(ersd::PurePrim::IntShl(
+            erase(context, left, &int_type())?,
+            erase(context, right, &int_type())?,
+        ))),
+        Prim::IntShr(left, right) => Ok(pure(ersd::PurePrim::IntShr(
+            erase(context, left, &int_type())?,
+            erase(context, right, &int_type())?,
+        ))),
         Prim::FltType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Flt(flt) => Ok(pure(ersd::PurePrim::Flt(flt.to_f32()))),
         Prim::FltAdd(left, right) => Ok(pure(ersd::PurePrim::FltAdd(

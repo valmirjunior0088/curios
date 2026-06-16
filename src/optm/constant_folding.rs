@@ -645,16 +645,14 @@ mod tests {
     }
 
     #[test]
-    fn does_not_fold_int_shift_overflow() {
-        // 2^29 << 1 = 2^30, just past the signed 31-bit range — a trap.
-        stays_eval(
-            vec![
-                (v("a"), Value::Pure(Data::Int(1 << 29))),
-                (v("b"), Value::Pure(Data::Int(1))),
-                (v("r"), Value::Eval(Code::IntShl(v("a"), v("b")))),
-            ],
-            "r",
-        );
+    fn folds_int_shl_truncating() {
+        // 2^29 << 1 sets bit 30 — the sign bit of the 31-bit carrier — so the
+        // truncating left shift folds to -2^30 rather than trapping, matching
+        // `Nat/shl` and the backend's `ref.i31`.
+        assert!(matches!(
+            binary(Data::Int(1 << 29), Data::Int(1), Code::IntShl),
+            Data::Int(v) if v == -(1 << 30)
+        ));
     }
 
     #[test]

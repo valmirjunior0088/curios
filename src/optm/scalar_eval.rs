@@ -246,15 +246,16 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
         NatPopcnt(a) => Some(Scalar::Nat(env.nat(a)?.count_ones())),
         NatEqz(a) => Some(Scalar::bln(env.nat(a)? == 0)),
 
-        // Int — bitwise, shifts, rotates, and bit scans. Bitwise, right shift, and
+        // Int — bitwise, shifts, rotates, and bit scans. Bitwise, both shifts, and
         // the scans are total once the result is reduced to its 31-bit payload
-        // (`wrap31s`); the left shift and rotates trap-check like `Int` arithmetic.
+        // (`wrap31s`); the left shift truncates into the carrier like `Nat/shl`
+        // rather than trapping. Only the rotates trap-check, like `Int` arithmetic.
         IntAnd(a, b) => Some(Scalar::Int(wrap31s(env.int(a)? & env.int(b)?))),
         IntOr(a, b) => Some(Scalar::Int(wrap31s(env.int(a)? | env.int(b)?))),
         IntXor(a, b) => Some(Scalar::Int(wrap31s(env.int(a)? ^ env.int(b)?))),
-        IntShl(a, b) => {
-            fits31s(env.int(a)?.wrapping_shl(env.int(b)? as u32) as i64).map(Scalar::Int)
-        }
+        IntShl(a, b) => Some(Scalar::Int(wrap31s(
+            env.int(a)?.wrapping_shl(env.int(b)? as u32),
+        ))),
         IntShr(a, b) => Some(Scalar::Int(wrap31s(
             env.int(a)?.wrapping_shr(env.int(b)? as u32),
         ))),

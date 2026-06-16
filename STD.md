@@ -47,7 +47,7 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 
 ### `/std/Int`
 
-Signed integers. `of_str` and `abs` are library helpers; the rest are `/sys` primitives.
+Signed integers — unbounded at the type level (a signed i31 at runtime). `of_str`, `not`, and `abs` are library helpers; the rest are `/sys` primitives. The bitwise ops are total and never trap: `and`/`or`/`xor` are the usual operations on the two's-complement bits, `shl` drops the bits shifted off the top, and `shr` is arithmetic — it preserves the sign. `not` exposes the runtime word — there is no machine complement instruction, so it is the library `xor` against `-1` (the all-ones word), which is also the complement `-a - 1`.
 
 | Binding       | Type                | Description                                       |
 | ------------- | ------------------- | ------------------------------------------------- |
@@ -62,6 +62,12 @@ Signed integers. `of_str` and `abs` are library helpers; the rest are `/sys` pri
 | `gt(a, b)`    | `(Int, Int) -> Bln` | Greater than                                      |
 | `lte(a, b)`   | `(Int, Int) -> Bln` | Less than or equal                                |
 | `gte(a, b)`   | `(Int, Int) -> Bln` | Greater than or equal                             |
+| `and(a, b)`   | `(Int, Int) -> Int` | Bitwise AND                                       |
+| `or(a, b)`    | `(Int, Int) -> Int` | Bitwise OR                                        |
+| `xor(a, b)`   | `(Int, Int) -> Int` | Bitwise XOR                                       |
+| `not(a)`      | `(Int) -> Int`      | Bitwise complement (`xor` against `-1`)           |
+| `shl(a, b)`   | `(Int, Int) -> Int` | Left shift by `b`, truncating                     |
+| `shr(a, b)`   | `(Int, Int) -> Int` | Arithmetic right shift by `b` (sign-preserving)   |
 | `to_nat(a)`   | `(Int) -> Nat`      | Convert to `Nat`                                  |
 | `to_flt(a)`   | `(Int) -> Flt`      | Convert to `Flt`                                  |
 | `to_str(a)`   | `(Int) -> Str`      | Decimal text                                      |

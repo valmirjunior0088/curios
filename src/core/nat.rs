@@ -1,7 +1,7 @@
 use {
     super::{Prim, Subterm, Term},
     num_bigint::BigUint,
-    num_traits::Zero,
+    num_traits::{ToPrimitive, Zero},
     std::fmt,
 };
 
@@ -67,6 +67,33 @@ impl Nat {
         let right = other.to_big_uint()?;
 
         (!right.is_zero()).then(|| Self::new(left % right))
+    }
+
+    /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. The
+    /// type level pretends ℕ, so these impose no 31-bit limit; the runtime's
+    /// i31 carrier is enforced only in the backend. `None` on a symbolic
+    /// operand, like [`Nat::checked_add`].
+    pub fn bitand(self, other: Self) -> Option<Self> {
+        Some(Self::new(self.to_big_uint()? & other.to_big_uint()?))
+    }
+
+    pub fn bitor(self, other: Self) -> Option<Self> {
+        Some(Self::new(self.to_big_uint()? | other.to_big_uint()?))
+    }
+
+    pub fn bitxor(self, other: Self) -> Option<Self> {
+        Some(Self::new(self.to_big_uint()? ^ other.to_big_uint()?))
+    }
+
+    /// `self << amount` as `self * 2^amount`, and `self >> amount` as
+    /// `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an
+    /// `amount` too large to be a shift count.
+    pub fn checked_shl(self, amount: Self) -> Option<Self> {
+        Some(Self::new(self.to_big_uint()? << amount.to_big_uint()?.to_usize()?))
+    }
+
+    pub fn checked_shr(self, amount: Self) -> Option<Self> {
+        Some(Self::new(self.to_big_uint()? >> amount.to_big_uint()?.to_usize()?))
     }
 
     pub fn eql(&self, other: &Self) -> Option<bool> {

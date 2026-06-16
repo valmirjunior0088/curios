@@ -99,7 +99,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         | Prim::IntSub(left, right)
         | Prim::IntMul(left, right)
         | Prim::IntDiv(left, right)
-        | Prim::IntRem(left, right) => {
+        | Prim::IntRem(left, right)
+        | Prim::IntAnd(left, right)
+        | Prim::IntOr(left, right)
+        | Prim::IntXor(left, right)
+        | Prim::IntShl(left, right)
+        | Prim::IntShr(left, right) => {
             let left = elaborate(context, left, Mode::Check(int_type.clone()))?.0;
             let right = elaborate(context, right, Mode::Check(int_type.clone()))?.0;
             let prim = match prim {
@@ -108,6 +113,11 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Prim::IntMul(..) => Prim::IntMul(left, right),
                 Prim::IntDiv(..) => Prim::IntDiv(left, right),
                 Prim::IntRem(..) => Prim::IntRem(left, right),
+                Prim::IntAnd(..) => Prim::IntAnd(left, right),
+                Prim::IntOr(..) => Prim::IntOr(left, right),
+                Prim::IntXor(..) => Prim::IntXor(left, right),
+                Prim::IntShl(..) => Prim::IntShl(left, right),
+                Prim::IntShr(..) => Prim::IntShr(left, right),
                 _ => unreachable!(),
             };
             (prim, int_type)

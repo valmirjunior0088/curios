@@ -27,6 +27,44 @@ impl Int {
         self.value.to_i32()
     }
 
+    /// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement
+    /// representation `num-bigint` models. The type level pretends ℤ, so these
+    /// impose no 31-bit limit; the runtime's i31 carrier is enforced only in
+    /// the backend (see `scalar_eval`/`code_emitter`).
+    pub fn bitand(self, other: Self) -> Self {
+        Self {
+            value: self.value & other.value,
+        }
+    }
+
+    pub fn bitor(self, other: Self) -> Self {
+        Self {
+            value: self.value | other.value,
+        }
+    }
+
+    pub fn bitxor(self, other: Self) -> Self {
+        Self {
+            value: self.value ^ other.value,
+        }
+    }
+
+    /// `self << amount` as `self * 2^amount`, and `self >> amount` as the
+    /// arithmetic (floor) shift `num-bigint` provides — both unbounded. `None`
+    /// when `amount` is negative or too large to be a shift count, leaving the
+    /// op a neutral term rather than fabricating a value.
+    pub fn checked_shl(self, amount: Self) -> Option<Self> {
+        Some(Self {
+            value: self.value << amount.value.to_usize()?,
+        })
+    }
+
+    pub fn checked_shr(self, amount: Self) -> Option<Self> {
+        Some(Self {
+            value: self.value >> amount.value.to_usize()?,
+        })
+    }
+
     pub fn is_zero(&self) -> bool {
         self.value.is_zero()
     }

@@ -1736,6 +1736,40 @@ fn nat_bitwise_ops_execute() {
 }
 
 #[test]
+fn int_bitwise_ops_execute() {
+    // `x` is the host byte `A` (65) read as an `Int`, kept opaque to the
+    // optimizer so each op lowers to its WebAssembly instruction. This exercises
+    // the Int-distinctive behaviors: a truncating `shl` that lands on bit 30 and
+    // so reloads negative (65 << 24), an arithmetic (sign-preserving) `shr` on a
+    // negative operand (-65 >> 1 = -33), and the `xor`-based `not` (-x - 1).
+    let (system, receiver) = ChannelHost::in_out(["A"]);
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Io, Bin, Nat, Int, Str};
+        let x = Nat/to_int(Bin/get(Io/read(Io/stdin, 16).bytes, 0));
+        let neg = Int/sub(+0, x);
+        let r = Str/concat_all([
+            Int/to_str(Int/and(x, +15)), ",",
+            Int/to_str(Int/or(x, +128)), ",",
+            Int/to_str(Int/xor(x, +255)), ",",
+            Int/to_str(Int/shl(x, +24)), ",",
+            Int/to_str(Int/shr(neg, +1)), ",",
+            Int/to_str(Int/not(x))
+        ]);
+        Io/write(Io/stdout, Str/to_bin(r))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        receiver.try_iter().collect::<Vec<_>>(),
+        vec![b"+1,+193,+190,-1056964608,-33,-66".to_vec()]
+    );
+}
+
+#[test]
 fn nat_of_str_returns_option() {
     // `123` parses; `12a` (non-digit) and the empty string are `none`, taking
     // the `unwrap_or` defaults — `123 + 7 + 9`.

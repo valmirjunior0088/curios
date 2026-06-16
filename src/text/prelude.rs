@@ -198,6 +198,14 @@ fn int_ops() -> Vec<TopItem> {
         binary("gt", int(), bln(), Prim::IntGt),
         binary("lte", int(), bln(), Prim::IntLte),
         binary("gte", int(), bln(), Prim::IntGte),
+        // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit
+        // ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is
+        // arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
+        binary("and", int(), int(), Prim::IntAnd),
+        binary("or", int(), int(), Prim::IntOr),
+        binary("xor", int(), int(), Prim::IntXor),
+        binary("shl", int(), int(), Prim::IntShl),
+        binary("shr", int(), int(), Prim::IntShr),
         unary("to_nat", int(), nat(), Prim::IntToNat),
         unary("to_flt", int(), flt(), Prim::IntToFlt),
         to_str(int(), Prim::IntToStr),

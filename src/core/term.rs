@@ -1387,6 +1387,11 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IntGt(a, b)
         | Prim::IntLte(a, b)
         | Prim::IntGte(a, b)
+        | Prim::IntAnd(a, b)
+        | Prim::IntOr(a, b)
+        | Prim::IntXor(a, b)
+        | Prim::IntShl(a, b)
+        | Prim::IntShr(a, b)
         | Prim::FltAdd(a, b)
         | Prim::FltSub(a, b)
         | Prim::FltMul(a, b)
@@ -1503,6 +1508,11 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IntGt(a, b)
         | Prim::IntLte(a, b)
         | Prim::IntGte(a, b)
+        | Prim::IntAnd(a, b)
+        | Prim::IntOr(a, b)
+        | Prim::IntXor(a, b)
+        | Prim::IntShl(a, b)
+        | Prim::IntShr(a, b)
         | Prim::FltAdd(a, b)
         | Prim::FltSub(a, b)
         | Prim::FltMul(a, b)
@@ -1661,6 +1671,21 @@ where
         }
         Prim::IntGte(left, right) => {
             Prim::IntGte(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntAnd(left, right) => {
+            Prim::IntAnd(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntOr(left, right) => {
+            Prim::IntOr(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntXor(left, right) => {
+            Prim::IntXor(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntShl(left, right) => {
+            Prim::IntShl(visit.visit_subterm(left), visit.visit_subterm(right))
+        }
+        Prim::IntShr(left, right) => {
+            Prim::IntShr(visit.visit_subterm(left), visit.visit_subterm(right))
         }
         Prim::FltType => Prim::FltType,
         Prim::Flt(flt) => Prim::Flt(*flt),
