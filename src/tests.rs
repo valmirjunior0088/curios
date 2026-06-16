@@ -1297,6 +1297,213 @@ fn struct_destructure_private_field_rejected() {
     );
 }
 
+// === Pattern matrix compilation =========================================
+
+// A nested constructor pattern dispatches on the tail of the list as well as its
+// head — `cons(x, cons(y, _))` reads the first two elements in one arm.
+#[test]
+fn matrix_nested_constructor_pattern() {
+    let source = r#"
+        use /std/{Nat, Io};
+        use /std/Lst/*;
+        let xs : Lst(Nat) = cons(4, cons(5, nil()));
+        let out : Nat =
+            match xs
+            | cons(x, cons(y, _)) => Nat/add(x, y)
+            | cons(x, nil())      => x
+            | nil()               => 0
+            end;
+        Io/print(Nat/to_str(out))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"9".to_vec()]);
+}
+
+// A `Nat` literal nested in a constructor payload compiles to a `switch`: the
+// `0`-headed list takes the special arm, any other head the binder default.
+#[test]
+fn matrix_nat_literal_in_nested_column() {
+    let source = r#"
+        use /std/{Nat, Io};
+        use /std/Lst/*;
+        let special : Lst(Nat) = cons(0, cons(5, nil()));
+        let other : Lst(Nat)   = cons(7, nil());
+        let head_code(xs : Lst(Nat)) -> Nat =
+            match xs
+            | cons(0, _) => 100
+            | cons(x, _) => x
+            | nil()      => 0
+            end;
+        Io/print(Nat/to_str(Nat/add(head_code(special), head_code(other))))
+        "#;
+
+    // special -> 100 (head is 0), other -> 7 (head binder). 100 + 7 = 107.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"107".to_vec()]);
+}
+
+// A top-level `Nat` match with a *named* default falls through to the matrix —
+// the dedicated nat-match form only accepts an anonymous `| _ =>`, so binding the
+// non-literal case is new. It compiles to a `switch` whose default binds `k`.
+#[test]
+fn matrix_nat_literal_named_default() {
+    let source = r#"
+        use /std/{Nat, Io};
+        let label(n : Nat) -> Nat =
+            match n
+            | 0 => 100
+            | 1 => 200
+            | k => Nat/add(k, 1000)
+            end;
+        Io/print(Nat/to_str(Nat/add(Nat/add(label(0), label(1)), label(7))))
+        "#;
+
+    // 100 + 200 + 1007 = 1307.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"1307".to_vec()]);
+}
+
+// A `Nat` literal nested inside a struct field pattern: the struct column expands
+// to its labels, and the `tag` sub-column dispatches via `switch`.
+#[test]
+fn matrix_nat_literal_in_struct_field() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub struct Tagged pub { tag : Nat, val : Nat }
+        let read(t : Tagged) -> Nat =
+            match t
+            | Tagged { tag = 0, val = v } => v
+            | Tagged { tag = _, val = _ } => 999
+            end;
+        Io/print(Nat/to_str(read(Tagged { tag = 0, val = 42 })))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"42".to_vec()]);
+}
+
+// A `_` fallthrough at a union column expands into the *unlisted* constructors:
+// here it covers `nil()` (and any non-matching `cons`), which needs the
+// constructor's arity from the registry.
+#[test]
+fn matrix_wildcard_expands_unlisted_constructors() {
+    let source = r#"
+        use /std/{Nat, Io};
+        use /std/Lst/*;
+        let head_or_zero(xs : Lst(Nat)) -> Nat =
+            match xs
+            | cons(x, _) => x
+            | _          => 0
+            end;
+        let full : Lst(Nat)  = cons(9, nil());
+        let empty : Lst(Nat) = nil();
+        Io/print(Nat/to_str(Nat/add(head_or_zero(full), head_or_zero(empty))))
+        "#;
+
+    // full -> 9, empty -> 0 (the `_` materializes the nil arm). 9 + 0 = 9.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"9".to_vec()]);
+}
+
+// Two rows may share a head constructor, distinguished by a nested literal — the
+// whole point of an ordered matrix over a per-constructor map.
+#[test]
+fn matrix_repeated_constructor_head() {
+    let source = r#"
+        use /std/{Nat, Io};
+        use /std/Lst/*;
+        let classify(xs : Lst(Nat)) -> Nat =
+            match xs
+            | cons(0, _) => 1
+            | cons(1, _) => 2
+            | cons(_, _) => 3
+            | nil()      => 0
+            end;
+        let a : Lst(Nat) = cons(0, nil());
+        let b : Lst(Nat) = cons(1, nil());
+        let c : Lst(Nat) = cons(8, nil());
+        Io/print(Nat/to_str(Nat/add(Nat/add(classify(a), classify(b)), classify(c))))
+        "#;
+
+    // 1 + 2 + 3 = 6.
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"6".to_vec()]);
+}
+
+// Multiple scrutinees fall out of a tuple scrutinee: `(a, b)` with refutable
+// fields is a one-row matrix that expands into two `Bln` columns.
+#[test]
+fn matrix_multi_scrutinee_via_tuple() {
+    let source = r#"
+        use /std/{Nat, Io, Bln};
+        let combine(a : Bln, b : Bln) -> Nat =
+            match (a, b)
+            | (true, true)  => 3
+            | (true, false) => 2
+            | (false, _)    => 1
+            end;
+        Io/print(Nat/to_str(combine(true, false)))
+        "#;
+
+    let (system, receiver) = ChannelHost::out();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+}
+
+// Coverage is left to core: a union match that lists neither every constructor
+// nor a `_` fallthrough is rejected as non-exhaustive (the `nil` arm is missing).
+#[test]
+fn matrix_non_exhaustive_missing_constructor_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        use /std/Lst/*;
+        let head(xs : Lst(Nat)) -> Nat =
+            match xs
+            | cons(0, _) => 100
+            | cons(x, _) => x
+            end;
+        Io/print(Nat/to_str(head(nil())))
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("missing match case") && error.contains("nil"),
+        "unexpected error: {error}"
+    );
+}
+
+// Expanding a `_` at a union column needs the constructor's union; when the
+// constructors are not in scope (no `use`), the tag cannot be resolved and the
+// match is rejected with an actionable error.
+#[test]
+fn matrix_wildcard_unresolved_constructor_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        union Shape | dot() | line(Nat) end
+        let area(s : Shape) -> Nat =
+            match s
+            | line(n) => n
+            | _       => 0
+            end;
+        Io/print(Nat/to_str(area(Shape/dot())))
+        "#;
+
+    let (system, _receiver) = ChannelHost::out();
+    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    assert!(
+        error.contains("line") && error.contains("resolve"),
+        "unexpected error: {error}"
+    );
+}
+
 // === Str (std/Str) ======================================================
 
 // `"..."` is a `Str` primitive value (UTF-8 by construction); `Io/print` writes

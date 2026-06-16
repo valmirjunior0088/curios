@@ -636,24 +636,22 @@ fn parse_union_match_nullary_and_unary() {
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["Bin".to_string()])).into()
             )),
-            cases: [
+            rows: vec![
                 (
-                    "null".to_string(),
-                    UnionCase {
-                        binders: vec![],
-                        body: Subterm::Prim(Prim::Bin(BinLiteral::string("null"))).into(),
+                    Pattern::Variant {
+                        tag: "null".to_string(),
+                        args: vec![],
                     },
+                    Subterm::Prim(Prim::Bin(BinLiteral::string("null"))).into(),
                 ),
                 (
-                    "bln".to_string(),
-                    UnionCase {
-                        binders: vec![Pattern::Bind("b".to_string())],
-                        body: Subterm::Name(Name::from(["b".to_string()])).into(),
+                    Pattern::Variant {
+                        tag: "bln".to_string(),
+                        args: vec![Pattern::Bind("b".to_string())],
                     },
+                    Subterm::Name(Name::from(["b".to_string()])).into(),
                 ),
-            ]
-            .into_iter()
-            .collect(),
+            ],
         }))
         .into()
     );
@@ -670,15 +668,13 @@ fn parse_union_match_multi_binder() {
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["T".to_string()])).into()
             )),
-            cases: [(
-                "lit".to_string(),
-                UnionCase {
-                    binders: vec![Pattern::Bind("a".to_string()), Pattern::Bind("b".to_string())],
-                    body: Subterm::Name(Name::from(["a".to_string()])).into(),
+            rows: vec![(
+                Pattern::Variant {
+                    tag: "lit".to_string(),
+                    args: vec![Pattern::Bind("a".to_string()), Pattern::Bind("b".to_string())],
                 },
-            )]
-            .into_iter()
-            .collect(),
+                Subterm::Name(Name::from(["a".to_string()])).into(),
+            )],
         }))
         .into()
     );
@@ -693,15 +689,13 @@ fn parse_match_omitted_motive() {
         Subterm::Match(Match::Union(UnionMatch {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
-            cases: [(
-                "foo".to_string(),
-                UnionCase {
-                    binders: vec![Pattern::Bind("y".to_string())],
-                    body: Subterm::Name(Name::from(["y".to_string()])).into(),
+            rows: vec![(
+                Pattern::Variant {
+                    tag: "foo".to_string(),
+                    args: vec![Pattern::Bind("y".to_string())],
                 },
-            )]
-            .into_iter()
-            .collect(),
+                Subterm::Name(Name::from(["y".to_string()])).into(),
+            )],
         }))
         .into()
     );
@@ -944,10 +938,11 @@ fn parse_bang_in_match_scrutinee_and_arm() {
     match term.into_subterm() {
         Subterm::Match(Match::Union(m)) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
-            assert_eq!(
-                m.cases.get("foo").map(|case| &case.body),
-                Some(&Subterm::Bang(name("y")).into())
-            );
+            let foo = m.rows.iter().find_map(|(pattern, body)| match pattern {
+                Pattern::Variant { tag, .. } if tag == "foo" => Some(body),
+                _ => None,
+            });
+            assert_eq!(foo, Some(&Subterm::Bang(name("y")).into()));
         }
         other => panic!("expected union match, got {other:?}"),
     }
@@ -1104,6 +1099,25 @@ fn struct_pattern_round_trips() {
             term.to_string().parse::<Term>().unwrap(),
             term,
             "struct pattern round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn matrix_pattern_round_trips() {
+    // Refutable match rows survive print → re-parse: nested constructor patterns,
+    // scalar literals, a `_` catch-all, and a tuple scrutinee with literal fields.
+    for source in [
+        "match xs | cons(x, cons(y, _)) => y | nil() => x end",
+        "match xs | cons(0, _) => x | cons(n, _) => n | nil() => x end",
+        "match xs | cons(x, _) => x | _ => y end",
+        "match p | (true, false) => x | (_, b) => b end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "match pattern round-trip failed for {source:?}"
         );
     }
 }

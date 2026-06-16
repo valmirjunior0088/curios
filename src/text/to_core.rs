@@ -141,6 +141,49 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     Ok(info)
 }
 
+// Walk the resolved module tree (mirroring `Resolved::discover`) collecting
+// every union's constructor roster. Each constructor's canonical name
+// `<module>/<union>/<ctor>` maps to the union's full `(tag, payload arity)` list
+// — the arity is just the declared payload count, so no core lowering is needed.
+fn scan_union_ctors(
+    items: &[TopItem],
+    prefix: &Qualifier,
+    modules: &HashMap<Qualifier, Rc<Module>>,
+    out: &mut HashMap<String, Vec<(String, usize)>>,
+) {
+    for item in items {
+        match item {
+            TopItem::Union(unions) => {
+                for u in unions {
+                    let roster: Vec<(String, usize)> = u
+                        .cases
+                        .iter()
+                        .map(|c| (c.label.clone(), c.payload.len()))
+                        .collect();
+                    let union_name = prefix.with(&u.label);
+
+                    for c in &u.cases {
+                        out.insert(union_name.with(&c.label).join(), roster.clone());
+                    }
+                }
+            }
+            TopItem::Mod(m) => {
+                let path = prefix.with(&m.label);
+
+                match &m.module {
+                    Some(module) => scan_union_ctors(&module.items, &path, modules, out),
+                    None => {
+                        if let Some(module) = modules.get(&path) {
+                            scan_union_ctors(&module.items, &path, modules, out);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
@@ -822,7 +865,20 @@ pub fn to_core(
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
-    let mut context = Context::new(&table, &public, &metavars, &binders);
+
+    // Precompute every union's constructor roster program-wide (before any body
+    // is lowered, so forward references resolve too), keyed by each constructor's
+    // canonical name. The pattern-matrix compiler reads it to expand a union-column
+    // `_` into the unlisted constructors.
+    let mut union_ctors = HashMap::new();
+    scan_union_ctors(
+        &entrypoint.module.items,
+        &Qualifier::empty(),
+        &modules,
+        &mut union_ctors,
+    );
+
+    let mut context = Context::new(&table, &public, &metavars, &binders, &union_ctors);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();

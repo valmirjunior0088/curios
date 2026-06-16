@@ -62,6 +62,33 @@ pub enum Error {
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
     /// union scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
     AnnotatedMotiveNotUnion,
+    /// One match-arm column mixes constructor patterns with scalar literal
+    /// patterns (`cons(…)` and `0` under the same scrutinee position) — the
+    /// pattern-matrix compiler cannot dispatch on a column of inconsistent kind.
+    PatternColumnConflict,
+    /// A `_`/binder fallthrough sits at a union column whose unlisted
+    /// constructors must be materialized, but `tag` (an explicit constructor in
+    /// the same column) does not resolve to a known union — bring the
+    /// constructors into scope (`use …`) or list every constructor explicitly.
+    UnresolvedMatchConstructor {
+        tag: String,
+    },
+    /// A constructor pattern `tag(…)`'s argument count disagrees with the
+    /// constructor's declared payload arity.
+    PatternArityMismatch {
+        tag: String,
+        expected: usize,
+        found: usize,
+    },
+    /// A scalar (`Nat`/`Bln`) literal column is not total: a `Nat` column needs a
+    /// `_`/binder catch-all for its default, and a `Bln` column needs both
+    /// `true` and `false` or a catch-all.
+    NonExhaustiveScalarMatch,
+    /// An annotated (indexed) motive `(x : T(...)) => P` was written on a match
+    /// whose arms nest refutable patterns. The matrix compiler synthesizes the
+    /// inner matches with inferred motives, so it cannot thread an index-dependent
+    /// motive through them — keep the dependent match single-level.
+    DependentMatrixMotive,
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -146,6 +173,32 @@ impl fmt::Display for Error {
                     "an annotated motive `(x : T(...)) => P` is only legal on a union match"
                 )
             }
+            Error::PatternColumnConflict => write!(
+                f,
+                "a match column mixes constructor patterns with scalar literal patterns"
+            ),
+            Error::UnresolvedMatchConstructor { tag } => write!(
+                f,
+                "cannot resolve the union of constructor `{tag}` to expand a `_` arm; \
+                 bring the constructors into scope or list every constructor"
+            ),
+            Error::PatternArityMismatch {
+                tag,
+                expected,
+                found,
+            } => write!(
+                f,
+                "constructor pattern `{tag}` expects {expected} argument(s), found {found}"
+            ),
+            Error::NonExhaustiveScalarMatch => write!(
+                f,
+                "a scalar literal match column needs a `_`/binder catch-all (or, for `Bln`, both cases)"
+            ),
+            Error::DependentMatrixMotive => write!(
+                f,
+                "an annotated motive `(x : T(...)) => P` cannot be threaded through nested patterns; \
+                 keep the dependent match single-level"
+            ),
             Error::ModuleLoadFailed { label, cause } => {
                 write!(f, "failed to load module {label}:\n{}", cause.format())
             }

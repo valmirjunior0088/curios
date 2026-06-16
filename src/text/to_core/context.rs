@@ -107,6 +107,12 @@ pub struct Context<'a> {
     // `core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
     // tests must be order-stable.
     binders: &'a Entropy,
+    // Every union's constructor roster, keyed by each constructor's canonical
+    // (joined) name `<module>/<union>/<ctor>` and mapping to the union's full
+    // `(tag, payload arity)` list. Precomputed program-wide so the pattern-matrix
+    // compiler can expand a `_` fallthrough at a union column into the unlisted
+    // constructors (it needs their arities, which are otherwise registry-only).
+    union_ctors: &'a HashMap<String, Vec<(String, usize)>>,
 }
 
 fn attach(error: Error, name: &Name) -> Error {
@@ -122,6 +128,7 @@ impl<'a> Context<'a> {
         public: &'a HashMap<Qualifier, PublicInterface>,
         metavars: &'a Entropy,
         binders: &'a Entropy,
+        union_ctors: &'a HashMap<String, Vec<(String, usize)>>,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
@@ -131,6 +138,7 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             metavars,
             binders,
+            union_ctors,
         }
     }
 
@@ -143,7 +151,15 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             metavars: self.metavars,
             binders: self.binders,
+            union_ctors: self.union_ctors,
         }
+    }
+
+    /// The constructor roster of the union owning the constructor whose canonical
+    /// (joined) name is `ctor` — `(tag, payload arity)` for every sibling, or
+    /// `None` if `ctor` names no known constructor (e.g. an out-of-scope tag).
+    pub fn union_ctors(&self, ctor: &str) -> Option<&[(String, usize)]> {
+        self.union_ctors.get(ctor).map(Vec::as_slice)
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.

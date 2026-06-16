@@ -86,17 +86,42 @@ pub enum Pattern {
         head: Name,
         fields: Vec<(String, Pattern)>,
     },
+    /// A *refutable* nominal constructor pattern `tag(p, …)` — `nil()` is the
+    /// nullary form. Mandatory parens distinguish it from a `Bind`. Appears only
+    /// in match-arm rows (stage 2 — the pattern-matrix compiler consumes it);
+    /// the irrefutable binder positions (`let`, lambda params) reject it.
+    Variant {
+        tag: String,
+        args: Vec<Pattern>,
+    },
+    /// A *refutable* scalar literal pattern — `0`/`'c'` (Nat) or `true`/`false`
+    /// (Bln) — nested in the matrix. Compiles to a `switch` / `bln_match`
+    /// dispatch with the catch-all rows as the default.
+    Lit(PatternLit),
+}
+
+/// The scalar literal a [`Pattern::Lit`] tests. Only the kinds with a core
+/// dispatch node are representable: `Nat` (→ `switch`, `u32`-ranged like the
+/// surface `match`) and `Bln` (→ `bln_match`). `Int`/`Flt`/`Str` have no
+/// elimination node, so they are not pattern-matchable.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternLit {
+    Nat(u32),
+    Bln(bool),
 }
 
 impl Pattern {
     /// The name a Π-binder should carry when this pattern is a function
     /// parameter: a plain `Bind`'s name (so dependent domains/outputs can refer
-    /// to it), or `None` for a tuple/struct pattern (no whole-value name to
-    /// refer to).
+    /// to it), or `None` for any compound/refutable pattern (no whole-value name
+    /// to refer to).
     pub fn binder_name(&self) -> Option<String> {
         match self {
             Pattern::Bind(name) => Some(name.clone()),
-            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
+            Pattern::Tuple(_)
+            | Pattern::Struct { .. }
+            | Pattern::Variant { .. }
+            | Pattern::Lit(_) => None,
         }
     }
 }
@@ -218,19 +243,16 @@ pub struct StructLit {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct UnionCase {
-    /// One pattern per constructor payload field. A plain `Bind` names the field
-    /// directly (the common `Cons(x, xs) => …` case, unchanged); a tuple pattern
-    /// destructures it — `Cons((a, b), xs) => …`.
-    pub binders: Vec<Pattern>,
-    pub body: Term,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct UnionMatch {
     pub head: Term,
     pub motive: Option<Motive>,
-    pub cases: BTreeMap<String, UnionCase>,
+    /// The arm rows, in source order. Each row pairs a (refutable) pattern with
+    /// its body. Unlike a per-constructor map, the rows are *ordered* and may
+    /// *repeat* a head constructor (`cons(0, _) => … | cons(x, _) => …`) — the
+    /// matrix the pattern compiler consumes. The legacy single-level shape is
+    /// the special case of distinct-tag [`Pattern::Variant`] rows whose args are
+    /// all irrefutable.
+    pub rows: Vec<(Pattern, Term)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

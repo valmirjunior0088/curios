@@ -3,7 +3,7 @@ use {
         Apply, BinLiteral, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, Plicity,
         Prim, Proj, Rec, StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct,
-        TopUnion, TopUse, LetBang, Tuple, TupleType, UnionCase, UnionMatch, UseGroup,
+        TopUnion, TopUse, LetBang, PatternLit, Tuple, TupleType, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -39,6 +39,14 @@ fn print_pattern(pattern: Pattern) -> Printer<'static> {
             ),
             pure(" }"),
         ]),
+        Pattern::Variant { tag, args } => flat([
+            pure(tag),
+            pure("("),
+            sep_flat(args.into_iter().map(print_pattern), || pure(", ")),
+            pure(")"),
+        ]),
+        Pattern::Lit(PatternLit::Nat(n)) => pure(n.to_string()),
+        Pattern::Lit(PatternLit::Bln(b)) => pure(b.to_string()),
     }
 }
 
@@ -424,22 +432,17 @@ fn print_term(term: Term) -> Printer<'static> {
                 indent(print_term(default)),
                 pure("\nend"),
             ]),
-            Match::Union(UnionMatch {
-                head,
-                motive,
-                cases,
-            }) => flat([
+            Match::Union(UnionMatch { head, motive, rows }) => flat([
                 pure("match "),
                 print_term(head),
                 print_motive(motive),
                 flat(
-                    cases
-                        .into_iter()
-                        .map(|(label, UnionCase { binders, body })| {
+                    rows.into_iter()
+                        .map(|(pattern, body)| {
                             flat([
-                                pure(format!("\n| {label}(")),
-                                sep_flat(binders.into_iter().map(print_pattern), || pure(", ")),
-                                pure(") =>\n"),
+                                pure("\n| "),
+                                print_pattern(pattern),
+                                pure(" =>\n"),
                                 indent(print_term(body)),
                             ])
                         })
