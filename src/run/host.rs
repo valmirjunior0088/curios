@@ -2,6 +2,7 @@ use {
     crate::Entropy,
     std::{
         collections::{HashMap, VecDeque},
+        env,
         fs::OpenOptions,
         io::{ErrorKind, Read, Write, stderr, stdin, stdout},
         net::{TcpStream, ToSocketAddrs},
@@ -148,11 +149,7 @@ impl Default for StdioHost {
 
 impl StdioHost {
     pub fn new() -> Self {
-        Self::with_args(
-            std::env::args_os()
-                .map(|arg| arg.into_encoded_bytes())
-                .collect(),
-        )
+        Self::with_args(env::args_os().map(|arg| arg.into_encoded_bytes()).collect())
     }
 
     /// Build a host whose `args` are the given byte strings — used by the CLI to
@@ -304,7 +301,7 @@ impl Host for StdioHost {
     }
 
     fn env(&self, name: &[u8]) -> (u32, Vec<u8>) {
-        match std::env::var_os(String::from_utf8_lossy(name).as_ref()) {
+        match env::var_os(String::from_utf8_lossy(name).as_ref()) {
             Some(value) => (STATUS_OK, value.into_encoded_bytes()),
             None => (STATUS_NOT_FOUND, vec![]),
         }
