@@ -1,10 +1,9 @@
 use {
     super::{
-        Apply, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
-        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
-        PatternLit, Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term,
-        TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType,
-        UnionMatch, UseGroup,
+        Apply, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang, LetSignature,
+        LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
+        Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem,
+        TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
     },
     crate::{
         Source,

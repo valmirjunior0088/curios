@@ -89,11 +89,15 @@ impl Nat {
     /// `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an
     /// `amount` too large to be a shift count.
     pub fn checked_shl(self, amount: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? << amount.to_big_uint()?.to_usize()?))
+        Some(Self::new(
+            self.to_big_uint()? << amount.to_big_uint()?.to_usize()?,
+        ))
     }
 
     pub fn checked_shr(self, amount: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? >> amount.to_big_uint()?.to_usize()?))
+        Some(Self::new(
+            self.to_big_uint()? >> amount.to_big_uint()?.to_usize()?,
+        ))
     }
 
     pub fn eql(&self, other: &Self) -> Option<bool> {

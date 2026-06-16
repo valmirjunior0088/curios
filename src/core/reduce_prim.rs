@@ -100,7 +100,9 @@ fn reduce_int_binary(
         _ => None,
     };
 
-    Ok(Subterm::Prim(folded.unwrap_or_else(|| rebuild(left, right))))
+    Ok(Subterm::Prim(
+        folded.unwrap_or_else(|| rebuild(left, right)),
+    ))
 }
 
 /// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that

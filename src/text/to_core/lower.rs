@@ -3,8 +3,8 @@ use {
     crate::{
         core,
         text::{
-            Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
-            PatternLit, Prim, Subterm, Term,
+            Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
+            Prim, Subterm, Term,
         },
     },
     num_bigint::BigUint,
