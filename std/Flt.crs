@@ -3,18 +3,19 @@ pub use /sys/Flt/*;
 use /std/{Nat, Int, Str, Bln, Option};
 
 let find_cp(target : Nat, s : Str) -> Nat =
-    match Str/len(s)
-    | 0 => Str/len(s)
-    | pred + 1, ih =>
-        match Nat/lt(pred, ih)
-        | true =>
-            match Nat/eql(Str/get(s, pred), target)
-            | true => pred
-            | false => ih
-            end
-        | false => ih
-        end
-    end;
+    let n = Str/len(s);
+    let init : { Nat, Nat } = (0, n);
+    let r =
+        Str/fold(s, init, (cp, acc) =>
+            match Nat/lt(acc.1, n) : { Nat, Nat }
+            | true => (Nat/add(acc.0, 1), acc.1)
+            | false =>
+                match Nat/eql(cp, target)
+                | true => (Nat/add(acc.0, 1), acc.0)
+                | false => (Nat/add(acc.0, 1), n)
+                end
+            end);
+    r.1;
 
 let pow10(n : Nat) -> Flt =
     match n

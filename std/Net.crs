@@ -56,14 +56,7 @@ pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket
     | false => Result/failure(decode(r.status))
     end;
 
-rec drain(c : Socket, acc : Bin) -> Bin =
-    let r = read(c, 4096);
-    match Nat/eql(r.status, 0)
-    | true => drain(c, Bin/concat(acc, r.bytes))
-    | false => acc
-    end;
-
 pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Result(Bin, Error) =
     with(settings, host, port, (c) =>
         let sent = write(c, request);
-        drain(c, \\));
+        Io/drain(c.0));

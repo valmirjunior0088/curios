@@ -1008,6 +1008,42 @@ mod tests {
     }
 
     #[test]
+    fn bare_polymorphic_function_inserts_implicits_in_value_position() {
+        // Passing a bare `Arr/concat : (@T, Arr T, Arr T) -> Arr T` where an
+        // explicit `(Arr Nat, Arr Nat) -> Arr Nat` is expected: the check
+        // turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and
+        // eta-expands over the explicit binders, so no hand-written
+        // `(l, r) => concat(l, r)` wrapper is needed. Lowers end-to-end — the
+        // eta-expansion is an ordinary closure over a saturated call.
+        let source = r#"
+            use /std/{Arr};
+            use /std/{Nat};
+            let pairwise(f : (Arr(Nat), Arr(Nat)) -> Arr(Nat), a : Arr(Nat)) -> Arr(Nat) =
+                f(a, a);
+            pairwise(Arr/concat, [1])
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
+    fn polymorphic_value_assignment_keeps_its_implicit() {
+        // The guard arm: when the *expected* type also leads with an implicit
+        // binder, implicit-eta must not fire — the polymorphic function is assigned
+        // as-is, implicit intact, and stays applicable at a chosen instance. Without
+        // the expected-not-implicit gate this would wrongly eta-expand and fail to
+        // convert against the implicit-leading annotation.
+        let source = r#"
+            use /std/{Arr};
+            use /std/{Nat};
+            let g : (@T : Type, Arr(T), Arr(T)) -> Arr(T) = Arr/concat;
+            g(@Nat, [1], [2])
+        "#;
+
+        assert!(compile(source, None).is_ok());
+    }
+
+    #[test]
     fn typeless_let_infers_a_literal_body() {
         // A local `let` with no type annotation infers the body's type (`Nat`
         // here) and lowers end-to-end.

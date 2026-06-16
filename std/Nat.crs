@@ -20,3 +20,9 @@ pub let min(a : Nat, b : Nat) -> Nat =
     | true => a
     | false => b
     end;
+
+pub let max(a : Nat, b : Nat) -> Nat =
+    match lt(a, b)
+    | true => b
+    | false => a
+    end;

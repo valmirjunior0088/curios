@@ -43,6 +43,7 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `to_str(a)`   | `(Nat) -> Str`      | Decimal text                         |
 | `of_str(s)`   | `(Str) -> Option(Nat)` | Parse a decimal numeral; `none` unless every character is a digit |
 | `min(a, b)`   | `(Nat, Nat) -> Nat` | Minimum                              |
+| `max(a, b)`   | `(Nat, Nat) -> Nat` | Maximum                              |
 
 ### `/std/Int`
 
@@ -138,7 +139,7 @@ Raw byte sequences. `fold`, `concat_all`, and `join` are library helpers; the re
 
 ### `/std/Arr`
 
-Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold` and `map` are library helpers; the rest are `/sys` primitives.
+Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold`, `map`, and `balanced` are library helpers; the rest are `/sys` primitives.
 
 | Binding              | Type                                                  | Description                 |
 | -------------------- | ----------------------------------------------------- | --------------------------- |
@@ -149,6 +150,7 @@ Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold` and `map` ar
 | `concat(a, b)`       | `(@T : Type, Arr(T), Arr(T)) -> Arr(T)`               | Concatenate two arrays      |
 | `fold(arr, init, f)` | `(@T : Type, @A : Type, Arr(T), A, (T, A) -> A) -> A` | Left fold over the elements |
 | `map(f, arr)`        | `(@A : Type, @B : Type, (A) -> B, Arr(A)) -> Arr(B)`  | Elementwise map             |
+| `balanced(n, empty, single, combine)` | `(@A : Type, Nat, A, (Nat) -> A, (A, A) -> A) -> A` | Balanced fold over indices `0..n`: `single` per index, `combine` to merge halves, `empty` when `n = 0` |
 
 ### `/std/Char`
 
@@ -213,6 +215,7 @@ The safe conveniences below layer a buffered reader over the primitive handle.
 | `bind`      | `(@A, @B) -> (Buf(A), (A) -> Buf(B)) -> Buf(B)`  | Sequence two actions (use with `let ! = Io/bind;` blocks)                                                                                 |
 | `run(m, h)` | `(@A : Type, Buf(A), Io) -> A`                   | Run an action against a fresh reader on `h`                                                                                               |
 | `read_line` | `Buf(Option(Bin))`                               | The next line, including its trailing `\n`; `none` means end of input                                                                     |
+| `drain(h)`  | `(Io) -> Bin`                                    | Read from the raw handle `h` until a non-ok status, returning every byte read (used by `File/read_all` and `Net/call`)                    |
 
 `read_line` delivers a final unterminated line before EOF as `some`; any non-ok refill status (EOF or an IO error) ends the stream — an error-propagating reader is future work.
 
@@ -337,6 +340,8 @@ Access to the process environment. `args` is a value — an immutable snapshot t
 | `exit(code)` | `(Nat) -> Void`        | Terminate the process with status `code`; never returns (`Void`) |
 
 ## Data types
+
+Across these modules a deliberate argument-order convention holds: `bind` takes the container first (`bind(m, f)`), so it fits the `let ! = …/bind;` do-notation, while `map`/`fold` take the function first (`map(f, m)`), matching `Arr/map`. The asymmetry is intentional, not an oversight.
 
 ### `/std/Option`
 

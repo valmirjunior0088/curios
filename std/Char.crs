@@ -1,53 +1,53 @@
 use /std/{Nat, Bln};
 
-pub let is_whitespace(byte : Nat) -> Bln =
-    match Nat/eql(byte, 32)
+pub let is_whitespace(c : Nat) -> Bln =
+    match Nat/eql(c, 32)
     | true => true
     | false =>
-        match Nat/gte(byte, 9)
-        | true => Nat/lte(byte, 13)
+        match Nat/gte(c, 9)
+        | true => Nat/lte(c, 13)
         | false => false
         end
     end;
 
-pub let is_digit(byte : Nat) -> Bln =
-    match Nat/lte('0', byte)
-    | true => Nat/lte(byte, '9')
+pub let is_digit(c : Nat) -> Bln =
+    match Nat/lte('0', c)
+    | true => Nat/lte(c, '9')
     | false => false
     end;
 
-pub let is_lower(byte : Nat) -> Bln =
-    match Nat/lte('a', byte)
-    | true => Nat/lte(byte, 'z')
+pub let is_lower(c : Nat) -> Bln =
+    match Nat/lte('a', c)
+    | true => Nat/lte(c, 'z')
     | false => false
     end;
 
-pub let is_upper(byte : Nat) -> Bln =
-    match Nat/lte('A', byte)
-    | true => Nat/lte(byte, 'Z')
+pub let is_upper(c : Nat) -> Bln =
+    match Nat/lte('A', c)
+    | true => Nat/lte(c, 'Z')
     | false => false
     end;
 
-pub let is_alpha(byte : Nat) -> Bln =
-    match is_lower(byte)
+pub let is_alpha(c : Nat) -> Bln =
+    match is_lower(c)
     | true => true
-    | false => is_upper(byte)
+    | false => is_upper(c)
     end;
 
-pub let is_alphanumeric(byte : Nat) -> Bln =
-    match is_alpha(byte)
+pub let is_alphanumeric(c : Nat) -> Bln =
+    match is_alpha(c)
     | true => true
-    | false => is_digit(byte)
+    | false => is_digit(c)
     end;
 
-pub let to_lower(byte : Nat) -> Nat =
-    match is_upper(byte)
-    | true => Nat/add(byte, 32)
-    | false => byte
+pub let to_lower(c : Nat) -> Nat =
+    match is_upper(c)
+    | true => Nat/add(c, 32)
+    | false => c
     end;
 
-pub let to_upper(byte : Nat) -> Nat =
-    match is_lower(byte)
-    | true => Nat/sub(byte, 32)
-    | false => byte
+pub let to_upper(c : Nat) -> Nat =
+    match is_lower(c)
+    | true => Nat/sub(c, 32)
+    | false => c
     end;

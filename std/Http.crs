@@ -37,12 +37,6 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         settings = Net/default
     };
 
-let as_str(b : Bin) -> Str =
-    match Str/of_bin(b)
-    | some(s) => s
-    | none() => ""
-    end;
-
 let until(target : Nat) -> (Nat) -> Bln =
     (byte) =>
         match Nat/eql(byte, target)
@@ -50,18 +44,8 @@ let until(target : Nat) -> (Nat) -> Bln =
         | false => true
         end;
 
-let lower_byte(byte : Nat) -> Nat =
-    match Nat/gte(byte, 65) : Nat
-    | true =>
-        match Nat/lte(byte, 90) : Nat
-        | true => Nat/add(byte, 32)
-        | false => byte
-        end
-    | false => byte
-    end;
-
 let lower(b : Bin) -> Bin =
-    Bin/fold(b, \\, (byte, acc) => Bin/append(acc, lower_byte(byte)));
+    Bin/fold(b, \\, (byte, acc) => Bin/append(acc, Char/to_lower(byte)));
 
 let eql_ci(a : Str, b : Str) -> Bln =
     Bin/eql(lower(Str/to_bin(a)), lower(Str/to_bin(b)));
@@ -87,15 +71,16 @@ let content_length(body : Bin) -> Str =
     end;
 
 pub let render(request : Request) -> Bin =
-    let head = Str/concat_all([
-        method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
-        "Host: ", request.host, "\r\n",
-        "Connection: close\r\n",
-        content_length(request.body),
-        Str/concat_all(Arr/map(render_header, request.headers)),
-        "\r\n"
-    ]);
-    Bin/concat(Str/to_bin(head), request.body);
+    Bin/concat(
+        Str/to_bin(Str/concat_all([
+            method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
+            "Host: ", request.host, "\r\n",
+            "Connection: close\r\n",
+            content_length(request.body),
+            Str/concat_all(Arr/map(render_header, request.headers)),
+            "\r\n"
+        ])),
+        request.body);
 
 pub struct Status pub {
     version : Str,
@@ -113,9 +98,9 @@ pub let status_line : Parse(Status) =
     let _ = Parse/take_byte('\r')!;
     let _ = Parse/take_byte('\n')!;
     Parse/pure(Status {
-        version = as_str(version),
-        code = Option/unwrap_or(Nat/of_str(as_str(digits)), 0),
-        reason = as_str(reason)
+        version = Option/unwrap_or(Str/of_bin(version), ""),
+        code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bin(digits), "")), 0),
+        reason = Option/unwrap_or(Str/of_bin(reason), "")
     });
 
 pub struct Response pub {
@@ -147,7 +132,7 @@ let header_line : Parse({ Str, Str }) =
     let value = Parse/take_while(until('\r'))!;
     let _ = Parse/take_byte('\r')!;
     let _ = Parse/take_byte('\n')!;
-    Parse/pure((as_str(name), Str/trim(as_str(value))));
+    Parse/pure((Option/unwrap_or(Str/of_bin(name), ""), Str/trim(Option/unwrap_or(Str/of_bin(value), ""))));
 
 let take_n(n : Nat) -> Parse(Bin) =
     (input, pos) =>

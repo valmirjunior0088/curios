@@ -64,7 +64,7 @@ pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
 
 pub let concat(a : Str, b : Str) -> Str =
-    Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
+    /sys/Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
 
 let codepoint_width(lead : Nat) -> Nat =
     match Nat/lt(lead, 128)
@@ -134,65 +134,41 @@ pub let get(s : Str, i : Nat) -> Nat =
 
 pub let slice(s : Str, start : Nat, stop : Nat) -> Str =
     let b = to_bin(s);
-    Str/of_bin(Bin/slice(b, byte_offset(b, start), byte_offset(b, stop)));
+    /sys/Str/of_bin(Bin/slice(b, byte_offset(b, start), byte_offset(b, stop)));
 
 pub let of_bin(b : Bin) -> Option(Str) =
     match is_utf8(b)
-    | true => Option/some(Str/of_bin(b))
+    | true => Option/some(/sys/Str/of_bin(b))
     | false => Option/none()
     end;
 
 pub let concat_all(parts : Arr(Str)) -> Str =
-    rec go(lo : Nat, hi : Nat) -> Str =
-        match Nat/lt(Nat/add(lo, 1), hi)
-        | false =>
-            match Nat/lt(lo, hi)
-            | false => ""
-            | true => Arr/get(parts, lo)
-            end
-        | true =>
-            let mid = Nat/div(Nat/add(lo, hi), 2);
-            concat(go(lo, mid), go(mid, hi))
-        end;
-    go(0, Arr/len(parts));
+    Arr/balanced(Arr/len(parts), "", (i) => Arr/get(parts, i), concat);
 
 pub let join(sep : Str, parts : Arr(Str)) -> Str =
-    rec go(lo : Nat, hi : Nat) -> Str =
-        match Nat/lt(Nat/add(lo, 1), hi)
-        | false =>
-            match Nat/lt(lo, hi)
-            | false => ""
-            | true => Arr/get(parts, lo)
-            end
-        | true =>
-            let mid = Nat/div(Nat/add(lo, hi), 2);
-            concat(concat(go(lo, mid), sep), go(mid, hi))
-        end;
-    go(0, Arr/len(parts));
+    Arr/balanced(Arr/len(parts), "", (i) => Arr/get(parts, i),
+        (l, r) => concat(concat(l, sep), r));
 
-let trim_start(s : Str) -> Nat =
-    match len(s)
-    | 0 => len(s)
-    | pred + 1, ih =>
-        match Nat/lt(pred, ih)
-        | true =>
-            match Char/is_whitespace(get(s, pred))
-            | true => ih
-            | false => pred
-            end
-        | false => ih
-        end
-    end;
-
-let trim_end(s : Str) -> Nat =
-    match len(s)
-    | 0 => 0
-    | pred + 1, ih =>
-        match Char/is_whitespace(get(s, pred))
-        | true => ih
-        | false => Nat/add(pred, 1)
-        end
-    end;
+let trim_bounds(s : Str) -> { Nat, Nat } =
+    let n = len(s);
+    let init : { Nat, Nat, Nat } = (0, n, 0);
+    let r =
+        fold(s, init, (cp, acc) =>
+            match Char/is_whitespace(cp) : { Nat, Nat, Nat }
+            | true => (Nat/add(acc.0, 1), acc.1, acc.2)
+            | false =>
+                let start =
+                    match Nat/lt(acc.1, n)
+                    | true => acc.1
+                    | false => acc.0
+                    end;
+                (Nat/add(acc.0, 1), start, Nat/add(acc.0, 1))
+            end);
+    (r.1, r.2);
 
 pub let trim(s : Str) -> Str =
-    slice(s, Nat/min(trim_start(s), trim_end(s)), trim_end(s));
+    let b = trim_bounds(s);
+    match Nat/lt(b.0, b.1)
+    | false => ""
+    | true => slice(s, b.0, b.1)
+    end;

@@ -2162,6 +2162,110 @@ fn module_of(name: &str) -> &str {
     }
 }
 
+/// Implicit-eta on the check turnaround. A reference whose type leads with an
+/// implicit binder, checked against a concrete *explicit* function type, has its
+/// leading implicits inserted as metavariables and is eta-expanded over the
+/// remaining explicit binders — so a bare `Arr/concat` is accepted where
+/// `(Arr B, Arr B) -> Arr B` is expected, instead of demanding
+/// `(l, r) => concat(l, r)`. Implicit insertion is otherwise an application-site
+/// mechanism (`elaborate_apply`); this is the one extension into value position.
+/// Producing a full lambda (rather than a partial application) keeps erase/CPS
+/// untouched: the output is an ordinary closure over a saturated call.
+///
+/// Fires only for `Var`/`Proj` heads against a ground explicit-arrow expectation;
+/// every other shape returns the term unchanged for the ordinary `expect`. The
+/// expected-not-implicit gate preserves polymorphic-value assignment
+/// (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when
+/// it does not fire, or the inserted shape does not convert, behavior is as before.
+fn insert_implicits_on_check(
+    context: &mut Context,
+    term: &Term,
+    rebuilt: Term,
+    type_: Term,
+    expected: &Term,
+) -> Result<(Term, Term), Error> {
+    if !matches!(&**term, Subterm::Var(_) | Subterm::Proj(_)) {
+        return Ok((rebuilt, type_));
+    }
+
+    let inferred = reduce_with(context, &type_)?;
+    let Subterm::FuncType(ift) = &*inferred else {
+        return Ok((rebuilt, type_));
+    };
+    if ift.plicities.first() != Some(&Plicity::Implicit) {
+        return Ok((rebuilt, type_));
+    }
+
+    let expected_reduced = reduce_with(context, expected)?;
+    let expected_explicit = matches!(
+        &*expected_reduced,
+        Subterm::FuncType(eft) if eft.plicities.first() != Some(&Plicity::Implicit)
+    );
+    if !expected_explicit {
+        return Ok((rebuilt, type_));
+    }
+
+    let ift = ift.clone();
+    let span = term.span();
+    let func_label = match &**term {
+        Subterm::Var(var) => var.unwrap().to_string(),
+        _ => "<function>".to_string(),
+    };
+
+    // Walk the head's telescope: implicit binders become fresh metavariables (the
+    // inserted arguments), explicit binders become fresh lambda parameters (the
+    // eta variables). `head_args` records both in telescope order so the body
+    // re-applies the head fully saturated; `open` threads the dependent
+    // substitution so a later binder mentioning an earlier one is instantiated.
+    let mut head_args: Vec<(Plicity, Term)> = Vec::new();
+    let mut binders: Vec<(String, Term)> = Vec::new();
+    let output = context.with_frame(|context| {
+        let mut tele = ift.telescope.clone();
+        let mut plicities = ift.plicities.iter();
+        loop {
+            match tele {
+                Telescope::Done(output) => break *output,
+                Telescope::Cons(domain, rest) => match plicities.next() {
+                    Some(Plicity::Implicit) => {
+                        let binder = binder_name(rest.first_label().unwrap_or("_"));
+                        let metavar = context.fresh_metavar(
+                            domain,
+                            span.clone(),
+                            ImplicitOrigin {
+                                func: func_label.clone(),
+                                binder,
+                            },
+                        );
+                        tele = rest.open(&[&metavar]);
+                        head_args.push((Plicity::Implicit, metavar));
+                    }
+                    Some(Plicity::Explicit) => {
+                        let label = context.fresh(rest.first_label());
+                        context.assume(&label, &domain);
+                        let var = Term::var(Var::free(&label));
+                        tele = rest.open(&[&var]);
+                        binders.push((label, domain));
+                        head_args.push((Plicity::Explicit, var));
+                    }
+                    None => unreachable!("plicities parallel the telescope"),
+                },
+            }
+        }
+    });
+
+    let body = Term::apply_marked(rebuilt, head_args);
+
+    // No explicit binders to eta over (an all-implicit curried prefix, e.g.
+    // `(@A, @B) -> …`): the implicit-saturated application *is* the value, and its
+    // type is the opened output. Erasure drops the implicit arguments anyway.
+    if binders.is_empty() {
+        return Ok((body, output));
+    }
+
+    let func_type = Term::func_type(binders.clone(), output);
+    Ok((Term::func(binders, body), func_type))
+}
+
 pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
     let result = elaborate_subterm(context, term, mode);
 
@@ -2208,7 +2312,9 @@ fn elaborate_subterm(
     };
 
     if let Mode::Check(expected) = &mode {
+        let (rebuilt, type_) = insert_implicits_on_check(context, term, rebuilt, type_, expected)?;
         expect(context, term, &type_, expected)?;
+        return Ok((rebuilt, type_));
     }
 
     Ok((rebuilt, type_))

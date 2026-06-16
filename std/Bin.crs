@@ -9,29 +9,8 @@ pub let fold(@A : Type, str : Bin, init : A, f : (Nat, A) -> A) -> A =
     end;
 
 pub let concat_all(parts : Arr(Bin)) -> Bin =
-    rec go(lo : Nat, hi : Nat) -> Bin =
-        match Nat/lt(Nat/add(lo, 1), hi)
-        | false =>
-            match Nat/lt(lo, hi)
-            | false => \\
-            | true => Arr/get(parts, lo)
-            end
-        | true =>
-            let mid = Nat/div(Nat/add(lo, hi), 2);
-            concat(go(lo, mid), go(mid, hi))
-        end;
-    go(0, Arr/len(parts));
+    Arr/balanced(Arr/len(parts), \\, (i) => Arr/get(parts, i), concat);
 
 pub let join(sep : Bin, parts : Arr(Bin)) -> Bin =
-    rec go(lo : Nat, hi : Nat) -> Bin =
-        match Nat/lt(Nat/add(lo, 1), hi)
-        | false =>
-            match Nat/lt(lo, hi)
-            | false => \\
-            | true => Arr/get(parts, lo)
-            end
-        | true =>
-            let mid = Nat/div(Nat/add(lo, hi), 2);
-            concat(concat(go(lo, mid), sep), go(mid, hi))
-        end;
-    go(0, Arr/len(parts));
+    Arr/balanced(Arr/len(parts), \\, (i) => Arr/get(parts, i),
+        (l, r) => concat(concat(l, sep), r));

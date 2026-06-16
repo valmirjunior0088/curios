@@ -8,16 +8,20 @@ pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A
     | pred + 1, ih => f(get(arr, pred), ih)
     end;
 
-pub let map(@A : Type, @B : Type, f : (A) -> B, arr : Arr(A)) -> Arr(B) =
-    rec go(lo : Nat, hi : Nat) -> Arr(B) =
+pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =
+    rec go(lo : Nat, hi : Nat) -> A =
         match Nat/lt(Nat/add(lo, 1), hi)
         | false =>
             match Nat/lt(lo, hi)
-            | false => []
-            | true => [f(get(arr, lo))]
+            | false => empty
+            | true => single(lo)
             end
         | true =>
             let mid = Nat/div(Nat/add(lo, hi), 2);
-            concat(go(lo, mid), go(mid, hi))
+            combine(go(lo, mid), go(mid, hi))
         end;
-    go(0, len(arr));
+    go(0, n);
+
+pub let map(@A : Type, @B : Type, f : (A) -> B, arr : Arr(A)) -> Arr(B) =
+    let empty : Arr(B) = [];
+    balanced(len(arr), empty, (i) => [f(get(arr, i))], concat);

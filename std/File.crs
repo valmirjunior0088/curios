@@ -50,12 +50,5 @@ pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> A) -> Result(A
     | false => Result/failure(decode(r.status))
     end;
 
-rec drain(f : File, acc : Bin) -> Bin =
-    let r = read(f, 4096);
-    match Nat/eql(r.status, 0)
-    | true => drain(f, Bin/concat(acc, r.bytes))
-    | false => acc
-    end;
-
 pub let read_all(path : Str) -> Result(Bin, Error) =
-    with(path, Mode/read(), (f) => drain(f, \\));
+    with(path, Mode/read(), (f) => Io/drain(f.0));

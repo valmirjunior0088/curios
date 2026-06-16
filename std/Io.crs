@@ -23,6 +23,15 @@ pub let bind(@A : Type, @B : Type) -> (Buf(A), (A) -> Buf(B)) -> Buf(B) =
 pub let run(@A : Type, m : Buf(A), h : Io) -> A =
     m(reader(h)).1;
 
+pub let drain(h : Io) -> Bin =
+    rec go(acc : Bin) -> Bin =
+        let r = read(h, 4096);
+        match Nat/eql(r.status, 0)
+        | true => go(Bin/concat(acc, r.bytes))
+        | false => acc
+        end;
+    go(\\);
+
 let find_newline(buf : Bin) -> Option(Nat) =
     let init : { Nat, Option(Nat) } = (0, Option/none());
     let r =
