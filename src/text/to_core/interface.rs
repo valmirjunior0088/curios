@@ -282,42 +282,17 @@ fn resolvable(
 // later segment, and every segment of an absolute path, must be a public child.
 // `None` if any segment is not (yet) reachable — during the fixed point that
 // means "retry next round".
+// The `Option` view of `resolve_provider`, for callers where non-resolution is
+// benign: a selector that does not resolve *yet* during the fixed point, or a
+// chain hop that simply does not exist. The terminal `classify_dead` pass calls
+// `resolve_provider` directly to surface the precise error instead.
 fn provider(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
     module: &Qualifier,
     name: &Name,
 ) -> Option<Qualifier> {
-    let segments = name.qualifier().segments();
-
-    let (mut current, walk) = if name.is_abs() {
-        (Qualifier::empty(), segments)
-    } else {
-        let first = &segments[0];
-        let start = match public.get(module).and_then(|i| i.children.get(first)) {
-            Some(entry) => entry.target.clone(),
-            // Not a public/re-exported child: allow the module's own direct
-            // (e.g. private) child, but nothing else.
-            None => match table.get(module).and_then(|i| i.get_child(first)) {
-                Some(_) => module.with(first),
-                None => return None,
-            },
-        };
-
-        (start, &segments[1..])
-    };
-
-    // Guard each resolved hop, so a non-privileged consumer cannot follow a
-    // re-export into an internal root (`sys`) by any spelling. Failing the guard
-    // resolves to `None` here; `unreachable_path` reports the actual error.
-    super::guard_internal_root(module, current.segments()).ok()?;
-    for segment in walk {
-        let entry = public.get(&current)?.children.get(segment)?;
-        current = entry.target.clone();
-        super::guard_internal_root(module, current.segments()).ok()?;
-    }
-
-    Some(current)
+    resolve_provider(public, table, module, name).ok()
 }
 
 // Insert one resolved entry into a slot. Returns whether the map changed.
@@ -353,9 +328,7 @@ fn classify_dead(
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     for use_ in pub_uses {
-        let Some(provider) = provider(public, table, &use_.module, &use_.name) else {
-            return Err(unreachable_path(public, table, &use_.module, &use_.name));
-        };
+        let provider = resolve_provider(public, table, &use_.module, &use_.name)?;
 
         let interface = public.get(&provider).expect("seeded module");
 
@@ -464,14 +437,17 @@ fn producer(
     None
 }
 
-// Re-walk a path that failed to resolve to pinpoint the offending segment, using
-// the direct-interface table to tell private from absent.
-fn unreachable_path(
+// Walk a `use` source path to its provider module. Each resolved hop is guarded
+// so a non-privileged consumer cannot follow a re-export into an internal root
+// (`sys`) by any spelling. On failure, returns the precise error at the
+// offending segment, using the direct-interface table to tell private from
+// absent; `provider` is the `Option` view for callers where that is benign.
+fn resolve_provider(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
     module: &Qualifier,
     name: &Name,
-) -> Error {
+) -> Result<Qualifier, Error> {
     let segments = name.qualifier().segments();
 
     let (mut current, walk) = if name.is_abs() {
@@ -485,9 +461,9 @@ fn unreachable_path(
                 // outright non-child fails here.
                 Some(_) => module.with(first),
                 None => {
-                    return Error::ChildModuleNotFound {
+                    return Err(Error::ChildModuleNotFound {
                         segment: first.clone(),
-                    };
+                    });
                 }
             },
         };
@@ -495,25 +471,16 @@ fn unreachable_path(
         (start, &segments[1..])
     };
 
-    // Mirror `provider`'s per-hop guard, so an internal root (`sys`) reached by
-    // any spelling reports `InternalRootModule` before its contents are probed.
-    if let Err(error) = super::guard_internal_root(module, current.segments()) {
-        return error;
-    }
+    super::guard_internal_root(module, current.segments())?;
     for segment in walk {
         match public.get(&current).and_then(|i| i.children.get(segment)) {
             Some(entry) => current = entry.target.clone(),
-            None => return segment_error(table, &current, segment),
+            None => return Err(segment_error(table, &current, segment)),
         }
-        if let Err(error) = super::guard_internal_root(module, current.segments()) {
-            return error;
-        }
+        super::guard_internal_root(module, current.segments())?;
     }
 
-    Error::NoSuchUseTarget {
-        label: name.last().to_string(),
-        parent: current.join(),
-    }
+    Ok(current)
 }
 
 fn segment_error(

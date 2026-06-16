@@ -110,6 +110,13 @@ fn print_named_field((name, field): (Option<String>, Term)) -> Printer<'static> 
     }
 }
 
+fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {
+    match label {
+        Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
+        None => print_term(ty),
+    }
+}
+
 fn print_prim_call(name: &'static str, args: Vec<Term>) -> Printer<'static> {
     flat([
         pure(name),
@@ -306,13 +313,7 @@ fn print_term(term: Term) -> Printer<'static> {
             pure("("),
             sep_flat(
                 params.into_iter().map(|(plicity, label, ty)| {
-                    flat([
-                        print_plicity(plicity),
-                        match label {
-                            Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
-                            None => print_term(ty),
-                        },
-                    ])
+                    flat([print_plicity(plicity), print_labeled((label, ty))])
                 }),
                 || pure(", "),
             ),
@@ -345,10 +346,7 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(")"),
         ]),
         Subterm::TupleType(TupleType { fields }) => {
-            let items = fields.into_iter().map(|(label, field_type)| match label {
-                Some(label) => indent(flat([pure(label), pure(" : "), print_term(field_type)])),
-                None => indent(print_term(field_type)),
-            });
+            let items = fields.into_iter().map(|field| indent(print_labeled(field)));
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Subterm::Tuple(Tuple { fields }) => {
@@ -637,13 +635,7 @@ fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
 fn print_top_union_case(case: TopCase) -> Printer<'static> {
     let payload = sep_flat(
         case.payload.into_iter().map(|(plicity, name, ty)| {
-            flat([
-                print_plicity(plicity),
-                match name {
-                    Some(name) => flat([pure(name), pure(" : "), print_term(ty)]),
-                    None => print_term(ty),
-                },
-            ])
+            flat([print_plicity(plicity), print_labeled((name, ty))])
         }),
         || pure(", "),
     );
@@ -694,13 +686,7 @@ fn print_top_union_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'sta
 
     flat([
         pure(" : ("),
-        sep_flat(
-            indices.into_iter().map(|(name, ty)| match name {
-                Some(name) => flat([pure(name), pure(" : "), print_term(ty)]),
-                None => print_term(ty),
-            }),
-            || pure(", "),
-        ),
+        sep_flat(indices.into_iter().map(print_labeled), || pure(", ")),
         pure(")"),
     ])
 }
@@ -756,13 +742,7 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
         pure(" "),
         print_pub(item.rep_pub),
         pure("{ "),
-        sep_flat(
-            item.fields.into_iter().map(|(label, ty)| match label {
-                Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
-                None => print_term(ty),
-            }),
-            || pure(", "),
-        ),
+        sep_flat(item.fields.into_iter().map(print_labeled), || pure(", ")),
         pure(" }"),
     ])
 }
