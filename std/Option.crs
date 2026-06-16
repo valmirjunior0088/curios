@@ -17,7 +17,7 @@ pub let bind(@A : Type, @B : Type) -> (Option(A), (A) -> Option(B)) -> Option(B)
 pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
     match m
     | some(a) => Option/some(f(a))
-    | none() => Option/none(@B)
+    | none() => Option/none()
     end;
 
 pub let unwrap_or(@A : Type, m : Option(A), default : A) -> A =

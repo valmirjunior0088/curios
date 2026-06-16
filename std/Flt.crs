@@ -2,20 +2,6 @@ pub use /sys/{Flt};
 pub use /sys/Flt/*;
 use /std/{Nat, Int, Str, Bln, Option};
 
-let find_codepoint(target : Nat, s : Str) -> Nat =
-    let n = Str/len(s);
-    let r : { Nat, Nat } =
-        Str/fold(s, (0, n), (cp, acc) =>
-            match Nat/lt(acc.1, n)
-            | true => (Nat/add(acc.0, 1), acc.1)
-            | false =>
-                match Nat/eql(cp, target)
-                | true => (Nat/add(acc.0, 1), acc.0)
-                | false => (Nat/add(acc.0, 1), n)
-                end
-            end);
-    r.1;
-
 let pow10(n : Nat) -> Flt =
     match n
     | 0 => +1.0
@@ -43,7 +29,7 @@ let exp_factor_of(s : Str, e_pos : Nat, len : Nat) -> Option(Flt) =
 pub let of_str(s : Str) -> Option(Flt) =
     let ! = Option/bind;
     match Nat/eql(Str/len(s), 0)
-    | true => Option/none(@Flt)
+    | true => Option/none()
     | false =>
         let is_neg = Nat/eql(Str/get(s, 0), '-');
         let start =
@@ -53,8 +39,10 @@ pub let of_str(s : Str) -> Option(Flt) =
             | _ => 0
             end;
         let len = Str/len(s);
-        let dot_pos = find_codepoint('.', s);
-        let e_pos = Nat/min(find_codepoint('e', s), find_codepoint('E', s));
+        let dot_pos = Option/unwrap_or(Str/find(s, '.'), len);
+        let e_pos = Nat/min(
+            Option/unwrap_or(Str/find(s, 'e'), len),
+            Option/unwrap_or(Str/find(s, 'E'), len));
         let int_end = Nat/min(dot_pos, e_pos);
         let int_slice = Str/slice(s, start, int_end);
         let frac_slice =
@@ -63,7 +51,7 @@ pub let of_str(s : Str) -> Option(Flt) =
             | false => ""
             end;
         match Bln/or(Nat/gt(Str/len(int_slice), 0), Nat/gt(Str/len(frac_slice), 0))
-        | false => Option/none(@Flt)
+        | false => Option/none()
         | true =>
             let int_val = digits_or_zero(int_slice)!;
             let frac_val = digits_or_zero(frac_slice)!;

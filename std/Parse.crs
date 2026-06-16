@@ -117,7 +117,11 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
                 | success(sp) =>
                     match elem(input, sp.0)
                     | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
-                    | success(tp) => go(Lst/cons(tp.1, acc), tp.0)
+                    | success(tp) =>
+                        match Nat/eql(tp.0, cur)
+                        | true => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                        | false => go(Lst/cons(tp.1, acc), tp.0)
+                        end
                     end
                 end;
             go(Lst/cons(rp.1, Lst/nil()), rp.0)

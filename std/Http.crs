@@ -37,6 +37,17 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         settings = Net/default
     };
 
+pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
+    Request {
+        method = Method/post(),
+        host = host,
+        port = port,
+        path = path,
+        headers = [],
+        body = body,
+        settings = Net/default
+    };
+
 let until(target : Nat) -> (Nat) -> Bln =
     (byte) =>
         match Nat/eql(byte, target)
@@ -51,7 +62,7 @@ let eql_ci(a : Str, b : Str) -> Bln =
     Bin/eql(lower(Str/to_bin(a)), lower(Str/to_bin(b)));
 
 let header_lookup(headers : Arr({ Str, Str }), name : Str) -> Option(Str) =
-    Arr/fold(headers, Option/none(@Str), (pair, acc) =>
+    Arr/fold(headers, Option/none(), (pair, acc) =>
         match acc : Option(Str)
         | some(found) => Option/some(found)
         | none() =>

@@ -13,10 +13,15 @@ pub use Json/*;
 
 let encode_num(n : Flt) -> Str =
     let raw = Flt/to_str(n);
-    let bytes = Str/to_bin(raw);
-    match Nat/eql(Bin/get(bytes, 0), '+')
-    | true => Option/unwrap_or(Str/of_bin(Bin/slice(bytes, 1, Bin/len(bytes))), "")
+    match Nat/eql(Str/get(raw, 0), '+')
+    | true => Str/slice(raw, 1, Str/len(raw))
     | false => raw
+    end;
+
+let hex_char(nibble : Nat) -> Nat =
+    match Nat/lt(nibble, 10)
+    | true => Nat/add(nibble, '0')
+    | false => Nat/add(Nat/sub(nibble, 10), 'a')
     end;
 
 let escape_byte(byte : Nat) -> Bin =
@@ -26,13 +31,22 @@ let escape_byte(byte : Nat) -> Bin =
     | '\n' => Str/to_bin("\\n")
     | '\r' => Str/to_bin("\\r")
     | '\t' => Str/to_bin("\\t")
-    | _ => Bin/append(\\, byte)
+    | 8 => Str/to_bin("\\b")
+    | 12 => Str/to_bin("\\f")
+    | _ =>
+        match Nat/lt(byte, 32)
+        | true =>
+            Bin/append(
+                Bin/append(Str/to_bin("\\u00"), hex_char(Nat/div(byte, 16))),
+                hex_char(Nat/rem(byte, 16)))
+        | false => Bin/append(\\, byte)
+        end
     end;
 
 let encode_str(s : Str) -> Str =
     let body =
         Bin/concat_all(Lst/to_arr(Lst/rev(
-            Bin/fold(Str/to_bin(s), Lst/nil(@Bin), (byte, acc) =>
+            Bin/fold(Str/to_bin(s), Lst/nil(), (byte, acc) =>
                 Lst/cons(escape_byte(byte), acc)))));
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bin(body), "")), "\"");
 
@@ -119,6 +133,89 @@ let is_not_string_special(byte : Nat) -> Bln =
     | _ => true
     end;
 
+let between(c : Nat, lo : Nat, hi : Nat) -> Bln =
+    match Nat/lte(lo, c)
+    | true => Nat/lte(c, hi)
+    | false => false
+    end;
+
+let hex_val(byte : Nat) -> Option(Nat) =
+    match Char/is_digit(byte)
+    | true => Option/some(Nat/sub(byte, '0'))
+    | false =>
+        match between(byte, 'a', 'f')
+        | true => Option/some(Nat/add(Nat/sub(byte, 'a'), 10))
+        | false =>
+            match between(byte, 'A', 'F')
+            | true => Option/some(Nat/add(Nat/sub(byte, 'A'), 10))
+            | false => Option/none()
+            end
+        end
+    end;
+
+let hex_digit : Parse(Nat) =
+    let ! = Parse/bind;
+    let byte = Parse/any_byte!;
+    match hex_val(byte) : Parse(Nat)
+    | some(v) => Parse/pure(v)
+    | none() => Parse/fail("invalid hex digit")
+    end;
+
+let hex4 : Parse(Nat) =
+    let ! = Parse/bind;
+    let a = hex_digit!;
+    let b = hex_digit!;
+    let c = hex_digit!;
+    let d = hex_digit!;
+    Parse/pure(
+        Nat/add(
+            Nat/add(Nat/add(Nat/mul(a, 4096), Nat/mul(b, 256)), Nat/mul(c, 16)),
+            d));
+
+let utf8_encode(cp : Nat) -> Bin =
+    match Nat/lt(cp, 128)
+    | true => Bin/append(\\, cp)
+    | false =>
+        match Nat/lt(cp, 2048)
+        | true =>
+            Bin/append(
+                Bin/append(\\, Nat/add(192, Nat/div(cp, 64))),
+                Nat/add(128, Nat/rem(cp, 64)))
+        | false =>
+            match Nat/lt(cp, 65536)
+            | true =>
+                Bin/append(
+                    Bin/append(
+                        Bin/append(\\, Nat/add(224, Nat/div(cp, 4096))),
+                        Nat/add(128, Nat/rem(Nat/div(cp, 64), 64))),
+                    Nat/add(128, Nat/rem(cp, 64)))
+            | false =>
+                Bin/append(
+                    Bin/append(
+                        Bin/append(
+                            Bin/append(\\, Nat/add(240, Nat/div(cp, 262144))),
+                            Nat/add(128, Nat/rem(Nat/div(cp, 4096), 64))),
+                        Nat/add(128, Nat/rem(Nat/div(cp, 64), 64))),
+                    Nat/add(128, Nat/rem(cp, 64)))
+            end
+        end
+    end;
+
+let parse_unicode : Parse(Bin) =
+    let ! = Parse/bind;
+    let hi = hex4!;
+    match Bln/and(Nat/gte(hi, 55296), Nat/lte(hi, 56319)) : Parse(Bin)
+    | true =>
+        let _ = Parse/take_byte('\\')!;
+        let _ = Parse/take_byte('u')!;
+        let lo = hex4!;
+        Parse/pure(utf8_encode(
+            Nat/add(
+                65536,
+                Nat/add(Nat/mul(Nat/sub(hi, 55296), 1024), Nat/sub(lo, 56320)))))
+    | false => Parse/pure(utf8_encode(hi))
+    end;
+
 let parse_str_escape : Parse(Bin) =
     let ! = Parse/bind;
     let _ = Parse/take_byte('\\')!;
@@ -126,9 +223,13 @@ let parse_str_escape : Parse(Bin) =
     match byte : Parse(Bin)
     | '"' => Parse/pure(Str/to_bin("\""))
     | '\\' => Parse/pure(Str/to_bin("\\"))
+    | '/' => Parse/pure(Str/to_bin("/"))
+    | 'b' => Parse/pure(Bin/append(\\, 8))
+    | 'f' => Parse/pure(Bin/append(\\, 12))
     | 'n' => Parse/pure(Str/to_bin("\n"))
     | 'r' => Parse/pure(Str/to_bin("\r"))
     | 't' => Parse/pure(Str/to_bin("\t"))
+    | 'u' => parse_unicode
     | _ => Parse/fail("unknown escape")
     end;
 

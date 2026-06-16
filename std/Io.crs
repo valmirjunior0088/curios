@@ -54,7 +54,7 @@ pub rec read_line : Buf(Option(Bin)) =
             let rest = Bin/slice(r.1, stop, Bin/len(r.1));
             ((r.0, rest), Option/some(line))
         | none() =>
-            let chunk = read(r.0, 1024);
+            let chunk = read(r.0, 4096);
             match Nat/eql(chunk.status, 0)
             | false =>
                 match Nat/eql(Bin/len(r.1), 0)

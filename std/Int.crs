@@ -7,7 +7,7 @@ pub let not(x : Int) -> Int =
 
 pub let of_str(s : Str) -> Option(Int) =
     match Nat/eql(Str/len(s), 0)
-    | true => Option/none(@Int)
+    | true => Option/none()
     | false =>
         let ! = Option/bind;
         let first = Str/get(s, 0);

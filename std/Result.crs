@@ -37,3 +37,9 @@ pub let is_ok(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
     | success(_) => true
     | failure(_) => false
     end;
+
+pub let is_err(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
+    match r
+    | success(_) => false
+    | failure(_) => true
+    end;

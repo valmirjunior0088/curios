@@ -23,6 +23,6 @@ pub let of_str(s : Str) -> Option(Bln) =
     | false =>
         match Str/eql(s, "false")
         | true => Option/some(false)
-        | false => Option/none(@Bln)
+        | false => Option/none()
         end
     end;
