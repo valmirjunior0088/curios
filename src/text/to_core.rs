@@ -16,38 +16,49 @@ use {
 };
 
 // Root modules reachable only from the standard library — the trusted primitive
-// substrate (`sys`). User code reaches them through their `/std` wrappers; an
-// absolute reference into one from outside is rejected during resolution.
+// substrate (`sys`). User code reaches them through their `/std` wrappers; any
+// reference that resolves into one from outside is rejected during resolution.
 const INTERNAL_ROOTS: &[&str] = &["sys"];
 // Consuming roots permitted to reference an internal root: the standard library,
 // and the internal roots themselves (so they may reference one another).
 const PRIVILEGED_ROOTS: &[&str] = &["std", "sys"];
 
-// Reject an absolute reference whose first segment is an internal root (`sys`)
-// when the consuming module lies outside the privileged roots. `referenced` is
-// the absolute path's segments; `consumer` is the module containing the
-// reference. A non-internal target or a privileged consumer passes through.
-fn guard_internal_root(consumer: &Qualifier, referenced: &[String]) -> Result<(), Error> {
-    let Some(root) = referenced.first() else {
+// Reject a reference that *resolves into* an internal root (`sys`) when the
+// consuming module lies outside the privileged roots. `resolved` is the segments
+// of the qualifier the reference resolved to — not the raw spelled path — so
+// absolute and relative spellings are guarded identically. A non-internal target
+// or a privileged consumer passes through.
+fn guard_internal_root(consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
+    let Some(root) = resolved.first() else {
         return Ok(());
     };
 
-    if !INTERNAL_ROOTS.contains(&root.as_str()) {
+    if !is_internal_root(root) {
         return Ok(());
     }
 
-    let privileged = consumer
-        .segments()
-        .first()
-        .is_some_and(|r| PRIVILEGED_ROOTS.contains(&r.as_str()));
-
-    if privileged {
+    if privileged(consumer) {
         Ok(())
     } else {
         Err(Error::InternalRootModule {
             segment: root.clone(),
         })
     }
+}
+
+// Whether `label` names an internal root: discoverable so the standard library
+// can resolve it by absolute path, but unreachable from user code.
+fn is_internal_root(label: &str) -> bool {
+    INTERNAL_ROOTS.contains(&label)
+}
+
+// Whether `consumer` is rooted in a privileged root (the standard library or an
+// internal root itself), and so may reference internal roots.
+fn privileged(consumer: &Qualifier) -> bool {
+    consumer
+        .segments()
+        .first()
+        .is_some_and(|r| PRIVILEGED_ROOTS.contains(&r.as_str()))
 }
 
 struct Resolved {

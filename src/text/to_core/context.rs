@@ -244,7 +244,6 @@ impl<'a> Context<'a> {
         let last = segments.len() - 1;
 
         let parent = if name.is_abs() {
-            super::guard_internal_root(&self.prefix, segments)?;
             self.walk_children(Qualifier::empty(), &segments[..last])?
         } else {
             let head = name.head();
@@ -259,6 +258,9 @@ impl<'a> Context<'a> {
             self.walk_children(start, &segments[1..last])?
         };
 
+        // Guard the *resolved* containing module, so a relative spelling is
+        // rejected exactly as the absolute one is.
+        super::guard_internal_root(&self.prefix, parent.segments())?;
         Ok((parent, label))
     }
 
@@ -404,7 +406,6 @@ impl<'a> Context<'a> {
             let segments = name.qualifier().segments();
 
             let module = if name.is_abs() {
-                super::guard_internal_root(&self.prefix, segments)?;
                 self.walk_children(Qualifier::empty(), segments)?
             } else {
                 let head = name.head();
@@ -418,6 +419,10 @@ impl<'a> Context<'a> {
 
                 self.walk_children(start, &segments[1..])?
             };
+
+            // Guard the *resolved* module, so a relative spelling is rejected
+            // exactly as the absolute one is.
+            super::guard_internal_root(&self.prefix, module.segments())?;
 
             let interface = self
                 .public

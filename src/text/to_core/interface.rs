@@ -291,7 +291,6 @@ fn provider(
     let segments = name.qualifier().segments();
 
     let (mut current, walk) = if name.is_abs() {
-        super::guard_internal_root(module, segments).ok()?;
         (Qualifier::empty(), segments)
     } else {
         let first = &segments[0];
@@ -308,9 +307,14 @@ fn provider(
         (start, &segments[1..])
     };
 
+    // Guard each resolved hop, so a non-privileged consumer cannot follow a
+    // re-export into an internal root (`sys`) by any spelling. Failing the guard
+    // resolves to `None` here; `unreachable_path` reports the actual error.
+    super::guard_internal_root(module, current.segments()).ok()?;
     for segment in walk {
         let entry = public.get(&current)?.children.get(segment)?;
         current = entry.target.clone();
+        super::guard_internal_root(module, current.segments()).ok()?;
     }
 
     Some(current)
@@ -470,12 +474,6 @@ fn unreachable_path(
 ) -> Error {
     let segments = name.qualifier().segments();
 
-    if let Err(error) = super::guard_internal_root(module, segments)
-        && name.is_abs()
-    {
-        return error;
-    }
-
     let (mut current, walk) = if name.is_abs() {
         (Qualifier::empty(), segments)
     } else {
@@ -497,10 +495,18 @@ fn unreachable_path(
         (start, &segments[1..])
     };
 
+    // Mirror `provider`'s per-hop guard, so an internal root (`sys`) reached by
+    // any spelling reports `InternalRootModule` before its contents are probed.
+    if let Err(error) = super::guard_internal_root(module, current.segments()) {
+        return error;
+    }
     for segment in walk {
         match public.get(&current).and_then(|i| i.children.get(segment)) {
             Some(entry) => current = entry.target.clone(),
             None => return segment_error(table, &current, segment),
+        }
+        if let Err(error) = super::guard_internal_root(module, current.segments()) {
+            return error;
         }
     }
 

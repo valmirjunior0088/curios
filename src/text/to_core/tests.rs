@@ -617,6 +617,48 @@ fn rejects_sys_reference_in_term_from_user_code() {
     );
 }
 
+// The guard rides the *resolved* qualifier, not the spelling, so a relative
+// reference is rejected exactly as the absolute one is — the leading `/` is not
+// the boundary.
+#[test]
+fn rejects_relative_sys_reference_in_term() {
+    let error = lower_with_prelude("sys/Nat/add(1, 2)").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_relative_sys_use() {
+    let error = lower_with_prelude("use sys/{Nat}; Nat/add(1, 2)").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_relative_sys_glob() {
+    let error = lower_with_prelude("use sys/*; Nat/add(1, 2)").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+// The interface (`pub use`) phase guards too: a user module cannot launder `sys`
+// into its own public surface.
+#[test]
+fn rejects_sys_pub_use_reexport_from_user_code() {
+    let error = lower_with_prelude("pub mod Foo\n    pub use /sys/{Nat};\nend\nType")
+        .unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
 // The same primitive reached through its `/std` wrapper resolves: `std` is
 // privileged to reference `sys`, and re-exports it.
 #[test]
