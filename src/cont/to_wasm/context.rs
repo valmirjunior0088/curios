@@ -551,6 +551,47 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// Resume after a host op that returns `results` stack values into a
+    /// record-defining block. Such a resume always defines a value, so it can
+    /// never be the bare-forwarder sentinel.
+    fn host_multi_resume(
+        &self,
+        output: &mut Vec<wasm::Instr>,
+        resume: &cont::BlockName,
+        results: usize,
+    ) {
+        assert!(
+            !self.is_resume(resume),
+            "multi-result host resume cannot be the sentinel"
+        );
+        output.extend(self.find_block(resume).enter(results));
+    }
+
+    /// Resume after a host op whose single result already matches the
+    /// function's anyref return shape: return it directly on the sentinel, else
+    /// enter the resume block with one value.
+    fn host_single_resume(&self, output: &mut Vec<wasm::Instr>, resume: &cont::BlockName) {
+        if self.is_resume(resume) {
+            output.push(wasm::Instr::Return);
+        } else {
+            output.extend(self.find_block(resume).enter(1));
+        }
+    }
+
+    /// Resume after a host op with no payload: materialise a unit for the
+    /// single-value return sentinel, else enter the resume block with no
+    /// values.
+    fn host_unit_resume(&self, output: &mut Vec<wasm::Instr>, resume: &cont::BlockName) {
+        if self.is_resume(resume) {
+            output.push(wasm::Instr::StructNew {
+                type_name: self.table().find_tpl_type(0),
+            });
+            output.push(wasm::Instr::Return);
+        } else {
+            output.extend(self.find_block(resume).enter(0));
+        }
+    }
+
     /// Emit a host primitive call in tail position, then branch to its resume.
     /// Models `call_direct_instrs`: load operands, call the host import, then
     /// either fall through to the function's return (when the resume happens
@@ -571,15 +612,8 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_read_func().clone(),
                 });
 
-                // A two-result host op's resume block defines a value (the
-                // packed status record), so it is never a bare forwarder and
-                // can never be threaded onto the single-value return sentinel.
-                assert!(
-                    !self.is_resume(resume),
-                    "two-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+                // Two-result: resume defines the packed status record.
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoWrite {
                 handle,
@@ -592,16 +626,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_write_func().clone(),
                 });
 
-                if self.is_resume(resume) {
-                    // The import returns the status pre-boxed as an i31 ref
-                    // (scalar results cross the boundary boxed so they can
-                    // land in anyref block params), so it already matches the
-                    // function's single-anyref return shape.
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(1));
-                }
+                // The import returns the status pre-boxed as an i31 ref, so it
+                // already matches the function's single-anyref return shape.
+                self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoOpen { path, mode, resume } => {
                 output.extend(self.load_value_instrs(path, LoadAs::Bin));
@@ -610,13 +637,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_open_func().clone(),
                 });
 
-                // Same two-result invariant as `IoRead`.
-                assert!(
-                    !self.is_resume(resume),
-                    "two-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoConnect {
                 host,
@@ -635,13 +656,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_connect_func().clone(),
                 });
 
-                // Same two-result invariant as `IoOpen`.
-                assert!(
-                    !self.is_resume(resume),
-                    "two-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoListen { host, port, resume } => {
                 output.extend(self.load_value_instrs(host, LoadAs::Bin));
@@ -650,13 +665,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_listen_func().clone(),
                 });
 
-                // Same two-result invariant as `IoOpen`.
-                assert!(
-                    !self.is_resume(resume),
-                    "two-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoAccept { handle, resume } => {
                 output.extend(self.load_value_instrs(handle, LoadAs::Nat));
@@ -664,13 +673,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_accept_func().clone(),
                 });
 
-                // Same two-result invariant as `IoOpen`.
-                assert!(
-                    !self.is_resume(resume),
-                    "two-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoClose { handle, resume } => {
                 output.extend(self.load_value_instrs(handle, LoadAs::Nat));
@@ -678,41 +681,22 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_close_func().clone(),
                 });
 
-                if self.is_resume(resume) {
-                    // No payload: materialise a unit for the single-value
-                    // return sentinel.
-                    output.push(wasm::Instr::StructNew {
-                        type_name: self.table().find_tpl_type(0),
-                    });
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(0));
-                }
+                self.host_unit_resume(&mut output, resume);
             }
             cont::HostTarget::IoClockWall { resume } => {
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_clock_wall_func().clone(),
                 });
-                // Three-result host op: its resume defines a record value, so it
-                // is never a bare forwarder and never the sentinel.
-                assert!(
-                    !self.is_resume(resume),
-                    "multi-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(3));
+
+                // Three-result: resume defines the clock record.
+                self.host_multi_resume(&mut output, resume, 3);
             }
             cont::HostTarget::IoClockMono { resume } => {
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_clock_mono_func().clone(),
                 });
-                assert!(
-                    !self.is_resume(resume),
-                    "multi-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoRandom { count, resume } => {
                 output.extend(self.load_value_instrs(count, LoadAs::Nat));
@@ -720,29 +704,18 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_random_func().clone(),
                 });
 
-                if self.is_resume(resume) {
-                    // The import returns the Bin directly (a bin_ref, an anyref
-                    // subtype), already matching the single-anyref return shape.
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(1));
-                }
+                // The import returns the Bin directly (a bin_ref, an anyref
+                // subtype), already matching the single-anyref return shape.
+                self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoArgs { resume } => {
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_args_func().clone(),
                 });
 
-                if self.is_resume(resume) {
-                    // The import returns the `Arr(Bin)` directly (an array ref,
-                    // an anyref subtype), already matching the single-anyref
-                    // return shape.
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(1));
-                }
+                // The import returns the `Arr(Bin)` directly (an array ref, an
+                // anyref subtype), already matching the single-anyref shape.
+                self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoEnv { name, resume } => {
                 output.extend(self.load_value_instrs(name, LoadAs::Bin));
@@ -750,13 +723,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_env_func().clone(),
                 });
 
-                // Same two-result invariant as `IoOpen`.
-                assert!(
-                    !self.is_resume(resume),
-                    "two-result host resume cannot be the sentinel"
-                );
-                let block_data = self.find_block(resume);
-                output.extend(block_data.enter(2));
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoExit { code, resume } => {
                 output.extend(self.load_value_instrs(code, LoadAs::Nat));
@@ -766,15 +733,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 // The host traps, so control never returns; the resume path is
                 // dead code but must stay well-typed, exactly like `IoClose`.
-                if self.is_resume(resume) {
-                    output.push(wasm::Instr::StructNew {
-                        type_name: self.table().find_tpl_type(0),
-                    });
-                    output.push(wasm::Instr::Return);
-                } else {
-                    let block_data = self.find_block(resume);
-                    output.extend(block_data.enter(0));
-                }
+                self.host_unit_resume(&mut output, resume);
             }
         }
 
