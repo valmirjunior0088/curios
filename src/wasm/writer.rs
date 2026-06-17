@@ -87,6 +87,25 @@ where
         self.write_index(self.table.resolve_field(type_name, field_name))
     }
 
+    /// Emit the `0xfb` GC-opcode prefix and its sub-opcode.
+    fn gc_op(&mut self, sub: u64) -> Result<()> {
+        self.buffer.push_byte(0xfb)?;
+        self.buffer.push_leb128_unsigned(sub)
+    }
+
+    /// A GC op with one type operand (`struct.new`, `array.get`, …).
+    fn gc_type_op(&mut self, sub: u64, type_name: &TypeName) -> Result<()> {
+        self.gc_op(sub)?;
+        self.write_type_name(type_name)
+    }
+
+    /// A GC op with a struct-field operand (`struct.get`, `struct.set`, …).
+    fn gc_field_op(&mut self, sub: u64, type_name: &TypeName, field_name: &FieldName) -> Result<()> {
+        self.gc_op(sub)?;
+        self.write_type_name(type_name)?;
+        self.write_field_name(type_name, field_name)
+    }
+
     fn write_func_name(&mut self, func_name: &FuncName) -> Result<()> {
         self.write_index(self.table.resolve_func(func_name))
     }
@@ -630,147 +649,64 @@ where
             }
             Instr::RefEq => self.buffer.push_byte(0xd3)?,
             Instr::RefAsNonNull => self.buffer.push_byte(0xd4)?,
-            Instr::StructNew { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(0)?;
-                self.write_type_name(type_name)?;
-            }
-            Instr::StructNewDefault { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(1)?;
-                self.write_type_name(type_name)?;
-            }
+            Instr::StructNew { type_name } => self.gc_type_op(0, type_name)?,
+            Instr::StructNewDefault { type_name } => self.gc_type_op(1, type_name)?,
             Instr::StructGet {
                 type_name,
                 field_name,
-            } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(2)?;
-                self.write_type_name(type_name)?;
-                self.write_field_name(type_name, field_name)?;
-            }
+            } => self.gc_field_op(2, type_name, field_name)?,
             Instr::StructGetS {
                 type_name,
                 field_name,
-            } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(3)?;
-                self.write_type_name(type_name)?;
-                self.write_field_name(type_name, field_name)?;
-            }
+            } => self.gc_field_op(3, type_name, field_name)?,
             Instr::StructGetU {
                 type_name,
                 field_name,
-            } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(4)?;
-                self.write_type_name(type_name)?;
-                self.write_field_name(type_name, field_name)?;
-            }
+            } => self.gc_field_op(4, type_name, field_name)?,
             Instr::StructSet {
                 type_name,
                 field_name,
-            } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(5)?;
-                self.write_type_name(type_name)?;
-                self.write_field_name(type_name, field_name)?;
-            }
-            Instr::ArrayNew { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(6)?;
-                self.write_type_name(type_name)?;
-            }
-            Instr::ArrayNewDefault { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(7)?;
-                self.write_type_name(type_name)?;
-            }
+            } => self.gc_field_op(5, type_name, field_name)?,
+            Instr::ArrayNew { type_name } => self.gc_type_op(6, type_name)?,
+            Instr::ArrayNewDefault { type_name } => self.gc_type_op(7, type_name)?,
             Instr::ArrayNewFixed { type_name, length } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(8)?;
-                self.write_type_name(type_name)?;
+                self.gc_type_op(8, type_name)?;
                 self.buffer.push_leb128_unsigned(*length as u64)?;
             }
             Instr::ArrayNewData {
                 type_name,
                 data_name,
             } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(9)?;
-                self.write_type_name(type_name)?;
+                self.gc_type_op(9, type_name)?;
                 self.write_data_name(data_name)?;
             }
-            Instr::ArrayGet { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(11)?;
-                self.write_type_name(type_name)?;
-            }
-            Instr::ArrayGetS { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(12)?;
-                self.write_type_name(type_name)?;
-            }
-            Instr::ArrayGetU { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(13)?;
-                self.write_type_name(type_name)?;
-            }
-            Instr::ArraySet { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(14)?;
-                self.write_type_name(type_name)?;
-            }
-            Instr::ArrayLen => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(15)?;
-            }
-            Instr::ArrayFill { type_name } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(16)?;
-                self.write_type_name(type_name)?;
-            }
+            Instr::ArrayGet { type_name } => self.gc_type_op(11, type_name)?,
+            Instr::ArrayGetS { type_name } => self.gc_type_op(12, type_name)?,
+            Instr::ArrayGetU { type_name } => self.gc_type_op(13, type_name)?,
+            Instr::ArraySet { type_name } => self.gc_type_op(14, type_name)?,
+            Instr::ArrayLen => self.gc_op(15)?,
+            Instr::ArrayFill { type_name } => self.gc_type_op(16, type_name)?,
             Instr::ArrayCopy {
                 source_name,
                 target_name,
             } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(17)?;
+                self.gc_op(17)?;
                 self.write_type_name(source_name)?;
                 self.write_type_name(target_name)?;
             }
             Instr::RefTest { ref_type } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer
-                    .push_leb128_unsigned(if ref_type.is_nullable { 21 } else { 20 })?;
+                self.gc_op(if ref_type.is_nullable { 21 } else { 20 })?;
                 self.write_heap_type(&ref_type.heap_type)?;
             }
             Instr::RefCast { ref_type } => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer
-                    .push_leb128_unsigned(if ref_type.is_nullable { 23 } else { 22 })?;
+                self.gc_op(if ref_type.is_nullable { 23 } else { 22 })?;
                 self.write_heap_type(&ref_type.heap_type)?;
             }
-            Instr::AnyConvertExtern => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(26)?;
-            }
-            Instr::ExternConvertAny => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(27)?;
-            }
-            Instr::RefI31 => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(28)?;
-            }
-            Instr::I31GetS => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(29)?;
-            }
-            Instr::I31GetU => {
-                self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(30)?;
-            }
+            Instr::AnyConvertExtern => self.gc_op(26)?,
+            Instr::ExternConvertAny => self.gc_op(27)?,
+            Instr::RefI31 => self.gc_op(28)?,
+            Instr::I31GetS => self.gc_op(29)?,
+            Instr::I31GetU => self.gc_op(30)?,
             Instr::Drop => self.buffer.push_byte(0x1a)?,
             Instr::Select { val_types } => {
                 if val_types.is_empty() {
