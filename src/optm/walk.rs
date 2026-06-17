@@ -124,44 +124,11 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
             sink.value_use(target);
             walk_uses(params, sink);
         }
-        Tail::Host(HostTarget::IoRead { handle, count, .. }) => {
-            sink.value_use(handle);
-            sink.value_use(count);
+        Tail::Host(host) => {
+            for name in host.operands() {
+                sink.value_use(name);
+            }
         }
-        Tail::Host(HostTarget::IoWrite { handle, bytes, .. }) => {
-            sink.value_use(handle);
-            sink.value_use(bytes);
-        }
-        Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
-            sink.value_use(path);
-            sink.value_use(mode);
-        }
-        Tail::Host(HostTarget::IoListen { host, port, .. }) => {
-            sink.value_use(host);
-            sink.value_use(port);
-        }
-        Tail::Host(HostTarget::IoAccept { handle, .. }) => sink.value_use(handle),
-        Tail::Host(HostTarget::IoConnect {
-            host,
-            port,
-            connect_timeout,
-            read_timeout,
-            write_timeout,
-            ..
-        }) => {
-            sink.value_use(host);
-            sink.value_use(port);
-            sink.value_use(connect_timeout);
-            sink.value_use(read_timeout);
-            sink.value_use(write_timeout);
-        }
-        Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
-        Tail::Host(HostTarget::IoClockWall { .. })
-        | Tail::Host(HostTarget::IoClockMono { .. })
-        | Tail::Host(HostTarget::IoArgs { .. }) => {}
-        Tail::Host(HostTarget::IoRandom { count, .. }) => sink.value_use(count),
-        Tail::Host(HostTarget::IoEnv { name, .. }) => sink.value_use(name),
-        Tail::Host(HostTarget::IoExit { code, .. }) => sink.value_use(code),
         Tail::Unreachable => {}
     }
 }
@@ -372,44 +339,11 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
             sink.value_use(target);
             walk_uses_mut(params, sink);
         }
-        Tail::Host(HostTarget::IoRead { handle, count, .. }) => {
-            sink.value_use(handle);
-            sink.value_use(count);
+        Tail::Host(host) => {
+            for name in host.operands_mut() {
+                sink.value_use(name);
+            }
         }
-        Tail::Host(HostTarget::IoWrite { handle, bytes, .. }) => {
-            sink.value_use(handle);
-            sink.value_use(bytes);
-        }
-        Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
-            sink.value_use(path);
-            sink.value_use(mode);
-        }
-        Tail::Host(HostTarget::IoListen { host, port, .. }) => {
-            sink.value_use(host);
-            sink.value_use(port);
-        }
-        Tail::Host(HostTarget::IoAccept { handle, .. }) => sink.value_use(handle),
-        Tail::Host(HostTarget::IoConnect {
-            host,
-            port,
-            connect_timeout,
-            read_timeout,
-            write_timeout,
-            ..
-        }) => {
-            sink.value_use(host);
-            sink.value_use(port);
-            sink.value_use(connect_timeout);
-            sink.value_use(read_timeout);
-            sink.value_use(write_timeout);
-        }
-        Tail::Host(HostTarget::IoClose { handle, .. }) => sink.value_use(handle),
-        Tail::Host(HostTarget::IoClockWall { .. })
-        | Tail::Host(HostTarget::IoClockMono { .. })
-        | Tail::Host(HostTarget::IoArgs { .. }) => {}
-        Tail::Host(HostTarget::IoRandom { count, .. }) => sink.value_use(count),
-        Tail::Host(HostTarget::IoEnv { name, .. }) => sink.value_use(name),
-        Tail::Host(HostTarget::IoExit { code, .. }) => sink.value_use(code),
         Tail::Unreachable => {}
     }
 }

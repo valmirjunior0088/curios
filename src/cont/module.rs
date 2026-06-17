@@ -258,6 +258,59 @@ impl HostTarget {
             | HostTarget::IoExit { resume, .. } => resume,
         }
     }
+
+    /// The value operands this host op reads, in argument order.
+    pub fn operands(&self) -> Vec<&ValueName> {
+        match self {
+            HostTarget::IoRead { handle, count, .. } => vec![handle, count],
+            HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
+            HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
+            HostTarget::IoListen { host, port, .. } => vec![host, port],
+            HostTarget::IoAccept { handle, .. } => vec![handle],
+            HostTarget::IoConnect {
+                host,
+                port,
+                connect_timeout,
+                read_timeout,
+                write_timeout,
+                ..
+            } => vec![host, port, connect_timeout, read_timeout, write_timeout],
+            HostTarget::IoClose { handle, .. } => vec![handle],
+            HostTarget::IoClockWall { .. }
+            | HostTarget::IoClockMono { .. }
+            | HostTarget::IoArgs { .. } => vec![],
+            HostTarget::IoRandom { count, .. } => vec![count],
+            HostTarget::IoEnv { name, .. } => vec![name],
+            HostTarget::IoExit { code, .. } => vec![code],
+        }
+    }
+
+    /// The value operands this host op reads, as mutable references, in
+    /// argument order.
+    pub fn operands_mut(&mut self) -> Vec<&mut ValueName> {
+        match self {
+            HostTarget::IoRead { handle, count, .. } => vec![handle, count],
+            HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
+            HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
+            HostTarget::IoListen { host, port, .. } => vec![host, port],
+            HostTarget::IoAccept { handle, .. } => vec![handle],
+            HostTarget::IoConnect {
+                host,
+                port,
+                connect_timeout,
+                read_timeout,
+                write_timeout,
+                ..
+            } => vec![host, port, connect_timeout, read_timeout, write_timeout],
+            HostTarget::IoClose { handle, .. } => vec![handle],
+            HostTarget::IoClockWall { .. }
+            | HostTarget::IoClockMono { .. }
+            | HostTarget::IoArgs { .. } => vec![],
+            HostTarget::IoRandom { count, .. } => vec![count],
+            HostTarget::IoEnv { name, .. } => vec![name],
+            HostTarget::IoExit { code, .. } => vec![code],
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

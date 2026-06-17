@@ -359,44 +359,11 @@ fn constrain_region(
                 seed(arg, liveness);
             }
         }
-        Tail::Host(HostTarget::IoRead { handle, count, .. }) => {
-            seed(handle, liveness);
-            seed(count, liveness);
+        Tail::Host(host) => {
+            for operand in host.operands() {
+                seed(operand, liveness);
+            }
         }
-        Tail::Host(HostTarget::IoWrite { handle, bytes, .. }) => {
-            seed(handle, liveness);
-            seed(bytes, liveness);
-        }
-        Tail::Host(HostTarget::IoOpen { path, mode, .. }) => {
-            seed(path, liveness);
-            seed(mode, liveness);
-        }
-        Tail::Host(HostTarget::IoListen { host, port, .. }) => {
-            seed(host, liveness);
-            seed(port, liveness);
-        }
-        Tail::Host(HostTarget::IoAccept { handle, .. }) => seed(handle, liveness),
-        Tail::Host(HostTarget::IoConnect {
-            host,
-            port,
-            connect_timeout,
-            read_timeout,
-            write_timeout,
-            ..
-        }) => {
-            seed(host, liveness);
-            seed(port, liveness);
-            seed(connect_timeout, liveness);
-            seed(read_timeout, liveness);
-            seed(write_timeout, liveness);
-        }
-        Tail::Host(HostTarget::IoClose { handle, .. }) => seed(handle, liveness),
-        Tail::Host(HostTarget::IoClockWall { .. })
-        | Tail::Host(HostTarget::IoClockMono { .. })
-        | Tail::Host(HostTarget::IoArgs { .. }) => {}
-        Tail::Host(HostTarget::IoRandom { count, .. }) => seed(count, liveness),
-        Tail::Host(HostTarget::IoEnv { name, .. }) => seed(name, liveness),
-        Tail::Host(HostTarget::IoExit { code, .. }) => seed(code, liveness),
         Tail::Unreachable => {}
     }
 
