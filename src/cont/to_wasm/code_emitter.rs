@@ -87,6 +87,47 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
+    /// Lower a signed-`Int` binary op that may overflow the i31 carrier: apply
+    /// `op`, trap (via the special label) if the result leaves the signed
+    /// 31-bit range, else box with `ref.i31` and store.
+    fn emit_checked_int_op(
+        &mut self,
+        result_local: &wasm::LocalName,
+        left: &cont::ValueName,
+        right: &cont::ValueName,
+        name: &str,
+        op: wasm::Instr,
+    ) {
+        let local_name = self
+            .context
+            .push_local(name, wasm::ValType::Num(wasm::NumType::I32));
+        self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
+        self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
+        self.emit_instr(op);
+        self.emit_instr(wasm::Instr::LocalTee {
+            local_name: local_name.clone(),
+        });
+        self.emit_instr(wasm::Instr::I32Const { value: 1 });
+        self.emit_instr(wasm::Instr::I32Shl);
+        self.emit_instr(wasm::Instr::LocalGet {
+            local_name: local_name.clone(),
+        });
+        self.emit_instr(wasm::Instr::I32Xor);
+        self.emit_instr(wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(wasm::Instr::I32ShrU);
+        self.emit_instr(wasm::Instr::If {
+            label_name: self.context.table().special_label(),
+            block_type: wasm::BlockType::Empty,
+            then_instructions: vec![wasm::Instr::Unreachable],
+            else_instructions: vec![],
+        });
+        self.emit_instr(wasm::Instr::LocalGet { local_name });
+        self.emit_instr(wasm::Instr::RefI31);
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: result_local.clone(),
+        });
+    }
+
     pub fn emit(&mut self, value_name: &'a cont::ValueName, op: &'a cont::Code) {
         let result_local = self
             .context
@@ -244,64 +285,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::I31,
             ),
             cont::Code::IntAdd(left, right) => {
-                let local_name = self
-                    .context
-                    .push_local("int_add", wasm::ValType::Num(wasm::NumType::I32));
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Add);
-                self.emit_instr(wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Const { value: 1 });
-                self.emit_instr(wasm::Instr::I32Shl);
-                self.emit_instr(wasm::Instr::LocalGet {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Xor);
-                self.emit_instr(wasm::Instr::I32Const { value: 31 });
-                self.emit_instr(wasm::Instr::I32ShrU);
-                self.emit_instr(wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: wasm::BlockType::Empty,
-                    then_instructions: vec![wasm::Instr::Unreachable],
-                    else_instructions: vec![],
-                });
-                self.emit_instr(wasm::Instr::LocalGet { local_name });
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
+                self.emit_checked_int_op(&result_local, left, right, "int_add", wasm::Instr::I32Add)
             }
             cont::Code::IntSub(left, right) => {
-                let local_name = self
-                    .context
-                    .push_local("int_sub", wasm::ValType::Num(wasm::NumType::I32));
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32Sub);
-                self.emit_instr(wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Const { value: 1 });
-                self.emit_instr(wasm::Instr::I32Shl);
-                self.emit_instr(wasm::Instr::LocalGet {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Xor);
-                self.emit_instr(wasm::Instr::I32Const { value: 31 });
-                self.emit_instr(wasm::Instr::I32ShrU);
-                self.emit_instr(wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: wasm::BlockType::Empty,
-                    then_instructions: vec![wasm::Instr::Unreachable],
-                    else_instructions: vec![],
-                });
-                self.emit_instr(wasm::Instr::LocalGet { local_name });
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
+                self.emit_checked_int_op(&result_local, left, right, "int_sub", wasm::Instr::I32Sub)
             }
             cont::Code::IntMul(left, right) => {
                 let local_name = self
@@ -337,34 +324,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             cont::Code::IntDiv(left, right) => {
-                let local_name = self
-                    .context
-                    .push_local("int_div", wasm::ValType::Num(wasm::NumType::I32));
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Int));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Int));
-                self.emit_instr(wasm::Instr::I32DivS);
-                self.emit_instr(wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Const { value: 1 });
-                self.emit_instr(wasm::Instr::I32Shl);
-                self.emit_instr(wasm::Instr::LocalGet {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(wasm::Instr::I32Xor);
-                self.emit_instr(wasm::Instr::I32Const { value: 31 });
-                self.emit_instr(wasm::Instr::I32ShrU);
-                self.emit_instr(wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: wasm::BlockType::Empty,
-                    then_instructions: vec![wasm::Instr::Unreachable],
-                    else_instructions: vec![],
-                });
-                self.emit_instr(wasm::Instr::LocalGet { local_name });
-                self.emit_instr(wasm::Instr::RefI31);
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
+                self.emit_checked_int_op(&result_local, left, right, "int_div", wasm::Instr::I32DivS)
             }
             cont::Code::IntRem(left, right) => self.emit_binary_op(
                 &result_local,
