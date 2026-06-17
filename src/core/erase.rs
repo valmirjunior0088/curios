@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, Cases, Context, Error, Field, Func, Item, Let, Many, Match, Module,
+        Apply, Atom, Bound, Cases, Context, Error, Field, Func, Item, Let, Many, Match, Module,
         MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
         Telescope, Term, Tuple, TupleType, Two, UnionType, Var, Variant, erase_prim,
         expect_prim_head, infer, reduce_with, refine_head,
@@ -151,6 +151,30 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
     .into())
 }
 
+/// Erase each value against its telescope domain, opening the telescope with
+/// the value as we go so later domains see the earlier values (the dependency).
+/// The arity is checked by elaborate (§9), so a `Done` reached before the values
+/// are exhausted is an internal invariant violation.
+fn erase_telescoped<B: Bound>(
+    context: &mut Context,
+    mut telescope: Telescope<B>,
+    values: &[Term],
+) -> Result<Vec<ersd::Term>, Error> {
+    let mut erased = Vec::with_capacity(values.len());
+
+    for value in values {
+        match telescope {
+            Telescope::Cons(ty, rest) => {
+                erased.push(erase(context, value, &ty)?);
+                telescope = rest.open(&[value]);
+            }
+            Telescope::Done(_) => unreachable!("erase: arity checked by elaborate"),
+        }
+    }
+
+    Ok(erased)
+}
+
 fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
     let Tuple { fields, .. } = tuple;
 
@@ -167,24 +191,7 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
         "erase: tuple width disagrees with the tuple type",
     );
 
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<()>,
-        fields: &[Term],
-        erased: &mut Vec<ersd::Term>,
-    ) -> Result<(), Error> {
-        match tele {
-            Telescope::Done(_) => Ok(()),
-            Telescope::Cons(ty, rest) => {
-                let head = &fields[0];
-                erased.push(erase(context, head, &ty)?);
-                walk(context, rest.open(&[head]), &fields[1..], erased)
-            }
-        }
-    }
-
-    let mut erased_fields = Vec::<ersd::Term>::new();
-    walk(context, type_telescope, fields, &mut erased_fields)?;
+    let erased_fields = erase_telescoped(context, type_telescope, fields)?;
 
     Ok(ersd::Subterm::Tuple(ersd::Tuple {
         fields: erased_fields,
@@ -408,7 +415,7 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
         .tag_index(tag)
         .expect("erase: constructor tag registered with its inductive");
 
-    let mut telescope = inductive
+    let telescope = inductive
         .instantiate(tag, params)
         .expect("erase: constructor instantiates at its inductive's parameters");
 
@@ -416,16 +423,7 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
     // inline after the tag.
     let mut fields = Vec::with_capacity(payload.len() + 1);
     fields.push(ersd::Subterm::Atom(ersd::Atom { index }).into());
-
-    for value in payload {
-        match telescope {
-            Telescope::Cons(ty, rest) => {
-                fields.push(erase(context, value, &ty)?);
-                telescope = rest.open(&[value]);
-            }
-            Telescope::Done(_) => unreachable!("erase: constructor arity checked by elaborate"),
-        }
-    }
+    fields.extend(erase_telescoped(context, telescope, payload)?);
 
     Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
 }
@@ -448,17 +446,7 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
         .expect("erase: struct names a registered struct");
 
     // Erase the fields against the instantiated (dependent) field telescope.
-    let mut telescope = structure.fields_at(params);
-    let mut erased = Vec::with_capacity(fields.len());
-    for value in fields {
-        match telescope {
-            Telescope::Cons(ty, rest) => {
-                erased.push(erase(context, value, &ty)?);
-                telescope = rest.open(&[value]);
-            }
-            Telescope::Done(_) => unreachable!("erase: struct arity checked by elaborate"),
-        }
-    }
+    let erased = erase_telescoped(context, structure.fields_at(params), fields)?;
 
     Ok(match erased.len() {
         1 => erased.into_iter().next().expect("one field"),
