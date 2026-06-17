@@ -100,44 +100,23 @@ fn free_names_prim(prim: &ersd::Prim) -> BTreeSet<String> {
 }
 
 fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
-    match prim {
-        ersd::HostPrim::IoRead(handle, count) => {
-            let mut names = free_names(handle);
-            names.extend(free_names(count));
-            names
-        }
-        ersd::HostPrim::IoWrite(handle, bytes) => {
-            let mut names = free_names(handle);
-            names.extend(free_names(bytes));
-            names
-        }
-        ersd::HostPrim::IoOpen(path, mode) => {
-            let mut names = free_names(path);
-            names.extend(free_names(mode));
-            names
-        }
-        ersd::HostPrim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
-            let mut names = free_names(host);
-            names.extend(free_names(port));
-            names.extend(free_names(connect_timeout));
-            names.extend(free_names(read_timeout));
-            names.extend(free_names(write_timeout));
-            names
-        }
-        ersd::HostPrim::IoListen(host, port) => {
-            let mut names = free_names(host);
-            names.extend(free_names(port));
-            names
-        }
-        ersd::HostPrim::IoAccept(handle) => free_names(handle),
-        ersd::HostPrim::IoClose(handle) => free_names(handle),
+    let operands: Vec<&ersd::Term> = match prim {
         ersd::HostPrim::IoClockWall | ersd::HostPrim::IoClockMono | ersd::HostPrim::IoArgs => {
-            BTreeSet::new()
+            vec![]
         }
-        ersd::HostPrim::IoRandom(count) => free_names(count),
-        ersd::HostPrim::IoEnv(name) => free_names(name),
-        ersd::HostPrim::IoExit(code) => free_names(code),
-    }
+        ersd::HostPrim::IoAccept(a)
+        | ersd::HostPrim::IoClose(a)
+        | ersd::HostPrim::IoRandom(a)
+        | ersd::HostPrim::IoEnv(a)
+        | ersd::HostPrim::IoExit(a) => vec![a],
+        ersd::HostPrim::IoRead(a, b)
+        | ersd::HostPrim::IoWrite(a, b)
+        | ersd::HostPrim::IoOpen(a, b)
+        | ersd::HostPrim::IoListen(a, b) => vec![a, b],
+        ersd::HostPrim::IoConnect(a, b, c, d, e) => vec![a, b, c, d, e],
+    };
+
+    operands.into_iter().flat_map(free_names).collect()
 }
 
 fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
