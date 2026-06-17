@@ -299,6 +299,18 @@ pub fn erase_prim(
             handle,
             &prim_type(Prim::IoType),
         )?))),
+        Prim::IoStartTls(handle, sni) => Ok(host(ersd::HostPrim::IoStartTls(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, sni, &bin_type())?,
+        ))),
+        Prim::IoTlsServerConfig(cert, key) => Ok(host(ersd::HostPrim::IoTlsServerConfig(
+            erase(context, cert, &bin_type())?,
+            erase(context, key, &bin_type())?,
+        ))),
+        Prim::IoStartTlsServer(handle, cfg) => Ok(host(ersd::HostPrim::IoStartTlsServer(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, cfg, &prim_type(Prim::IoType))?,
+        ))),
         Prim::IoSetNonblocking(handle, on) => Ok(host(ersd::HostPrim::IoSetNonblocking(
             erase(context, handle, &prim_type(Prim::IoType))?,
             erase(context, on, &bln_type())?,

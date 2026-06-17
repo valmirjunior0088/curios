@@ -141,6 +141,15 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [bin_ref.clone()],
         [i31_ref.clone(), i31_ref.clone()],
     );
+    let io_start_tls_type =
+        FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_tls_server_config_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), bin_ref.clone()],
+        [i31_ref.clone(), i31_ref.clone()],
+    );
+    let io_start_tls_server_type =
+        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
     let io_bind_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
     let io_set_nonblocking_type =
         FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
@@ -203,6 +212,34 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
 
         move |(io, addr): (Io, Vec<u8>)| host.connect(io, &addr)
     })?;
+
+    define_import(&mut linker, "io_start_tls", io_start_tls_type, {
+        let host = host.clone();
+
+        move |(io, sni): (Io, Vec<u8>)| host.start_tls(io, &sni)
+    })?;
+
+    define_import(
+        &mut linker,
+        "io_tls_server_config",
+        io_tls_server_config_type,
+        {
+            let host = host.clone();
+
+            move |(cert, key): (Vec<u8>, Vec<u8>)| host.tls_server_config(&cert, &key)
+        },
+    )?;
+
+    define_import(
+        &mut linker,
+        "io_start_tls_server",
+        io_start_tls_server_type,
+        {
+            let host = host.clone();
+
+            move |(io, cfg): (Io, Io)| host.start_tls_server(io, cfg)
+        },
+    )?;
 
     define_import(&mut linker, "io_listen", io_listen_type, {
         let host = host.clone();

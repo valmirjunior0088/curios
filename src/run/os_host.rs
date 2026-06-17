@@ -10,24 +10,54 @@ use {
         net::{SocketAddr, ToSocketAddrs},
         os::fd::AsFd,
         sync::{
-            Mutex,
+            Arc, LazyLock, Mutex,
             atomic::{AtomicU32, Ordering},
         },
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
 };
 
+/// The shared client TLS configuration: a bundled `webpki-roots` trust-anchor
+/// set with certificate verification on, built once and `Arc`-cloned by every
+/// `start_tls`. An explicit `ring` crypto provider is wired in so the config
+/// never depends on a process-global default provider being installed.
+static CLIENT_CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+    Arc::new(
+        rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("ring provider supports the default protocol versions")
+        .with_root_certificates(roots)
+        .with_no_client_auth(),
+    )
+});
+
 /// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle
 /// with one concrete type per state: `open` files a `File`; `socket` mints an
 /// `Unconnected` socket, `connect` turns it into a `Connected` one (as does
-/// `accept`), and `listen` turns it into a `Listener`. `read`/`write` serve
-/// `File` and `Connected` alike (both are `Read + Write`); `close` drops any
-/// kind, releasing its descriptor.
+/// `accept`), and `listen` turns it into a `Listener`. `start_tls` /
+/// `start_tls_server` upgrade a `Connected` socket in place to a `ClientTls` /
+/// `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig`
+/// token. `read`/`write` serve `File`, `Connected`, and both TLS streams alike
+/// (all are `Read + Write`); `close` drops any kind, releasing its descriptor.
 enum OsResource {
     File(File),
     Connected(Socket),
     Unconnected(Socket),
     Listener(Socket),
+    /// A client-side TLS stream: the encrypted conduit a `Connected` socket
+    /// became under `start_tls`, serving the same `read`/`write`/`close`.
+    ClientTls(rustls::StreamOwned<rustls::ClientConnection, Socket>),
+    /// A server-side TLS stream: the encrypted conduit an accepted socket
+    /// became under `start_tls_server`.
+    ServerTls(rustls::StreamOwned<rustls::ServerConnection, Socket>),
+    /// An opaque server TLS configuration minted by `tls_server_config`, held
+    /// in the table as a handle and consumed by `start_tls_server`.
+    TlsConfig(Arc<rustls::ServerConfig>),
 }
 
 pub struct OsHost {
@@ -75,6 +105,23 @@ impl OsHost {
         }
     }
 
+    /// Pull a connected stream socket out of the table by handle, leaving any
+    /// other resource (or none) in place. Lets `start_tls`/`start_tls_server`
+    /// upgrade a handle without holding the lock across the blocking handshake.
+    fn take_connected(&self, handle: u32) -> Option<Socket> {
+        let mut table = self.table.lock().unwrap();
+
+        match table.remove(&handle) {
+            Some(OsResource::Connected(socket)) => Some(socket),
+            Some(other) => {
+                table.insert(handle, other);
+
+                None
+            }
+            None => None,
+        }
+    }
+
     /// Apply a `socket2` setter to a configurable handle. Every socket kind —
     /// unconnected, connected, or listening — exposes its typed setters directly;
     /// a `File` has no socket options, so that path records nothing and succeeds.
@@ -93,7 +140,18 @@ impl OsHost {
                 Ok(()) => Status::Ok,
                 Err(error) => Status::from(error),
             },
-            Some(OsResource::File(_)) => Status::Ok,
+            // A TLS stream forwards setters to its underlying socket, so a
+            // timeout set after the upgrade still takes effect.
+            Some(OsResource::ClientTls(stream)) => match apply(&stream.sock) {
+                Ok(()) => Status::Ok,
+                Err(error) => Status::from(error),
+            },
+            Some(OsResource::ServerTls(stream)) => match apply(&stream.sock) {
+                Ok(()) => Status::Ok,
+                Err(error) => Status::from(error),
+            },
+            // A file and a config token have no socket options: record nothing.
+            Some(OsResource::File(_) | OsResource::TlsConfig(_)) => Status::Ok,
             None => Status::NotFound,
         }
     }
@@ -220,6 +278,112 @@ impl Host for OsHost {
         }
     }
 
+    fn start_tls(&self, io: Io, sni: &[u8]) -> Status {
+        let server_name = match std::str::from_utf8(sni)
+            .ok()
+            .and_then(|name| rustls::pki_types::ServerName::try_from(name.to_owned()).ok())
+        {
+            Some(name) => name,
+            None => return Status::TlsError,
+        };
+
+        // Take the connected socket out so the blocking handshake runs without
+        // the table lock held. A failed upgrade drops the (now unusable)
+        // connection rather than re-filing it as cleartext.
+        let socket = match self.take_connected(io.token()) {
+            Some(socket) => socket,
+            None => return Status::NotFound,
+        };
+
+        let conn = match rustls::ClientConnection::new(CLIENT_CONFIG.clone(), server_name) {
+            Ok(conn) => conn,
+            Err(_) => return Status::TlsError,
+        };
+
+        let mut stream = rustls::StreamOwned::new(conn, socket);
+
+        // Drive the handshake to completion inline so a verification or protocol
+        // failure surfaces here, at the upgrade, not on a later read.
+        match stream.conn.complete_io(&mut stream.sock) {
+            Ok(_) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(io.token(), OsResource::ClientTls(stream));
+
+                Status::Ok
+            }
+            Err(_) => Status::TlsError,
+        }
+    }
+
+    fn tls_server_config(&self, cert: &[u8], key: &[u8]) -> (Status, Io) {
+        let mut cert_reader: &[u8] = cert;
+        let certs = match rustls_pemfile::certs(&mut cert_reader).collect::<Result<Vec<_>, _>>() {
+            Ok(certs) if !certs.is_empty() => certs,
+            _ => return (Status::TlsError, Io::Other(0)),
+        };
+
+        let mut key_reader: &[u8] = key;
+        let key = match rustls_pemfile::private_key(&mut key_reader) {
+            Ok(Some(key)) => key,
+            _ => return (Status::TlsError, Io::Other(0)),
+        };
+
+        let config = match rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("ring provider supports the default protocol versions")
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        {
+            Ok(config) => Arc::new(config),
+            Err(_) => return (Status::TlsError, Io::Other(0)),
+        };
+
+        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
+        self.table
+            .lock()
+            .unwrap()
+            .insert(handle, OsResource::TlsConfig(config));
+
+        (Status::Ok, Io::Other(handle))
+    }
+
+    fn start_tls_server(&self, io: Io, cfg: Io) -> Status {
+        // Clone the config `Arc` out, never holding the lock across the
+        // handshake. The config handle stays in the table for reuse.
+        let config = match self.table.lock().unwrap().get(&cfg.token()) {
+            Some(OsResource::TlsConfig(config)) => config.clone(),
+            _ => return Status::NotFound,
+        };
+
+        let socket = match self.take_connected(io.token()) {
+            Some(socket) => socket,
+            None => return Status::NotFound,
+        };
+
+        let conn = match rustls::ServerConnection::new(config) {
+            Ok(conn) => conn,
+            Err(_) => return Status::TlsError,
+        };
+
+        let mut stream = rustls::StreamOwned::new(conn, socket);
+
+        match stream.conn.complete_io(&mut stream.sock) {
+            Ok(_) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(io.token(), OsResource::ServerTls(stream));
+
+                Status::Ok
+            }
+            Err(_) => Status::TlsError,
+        }
+    }
+
     fn listen(&self, io: Io, backlog: u32) -> Status {
         let socket = match self.take_unconnected(io.token()) {
             Some(socket) => socket,
@@ -300,11 +464,19 @@ impl Host for OsHost {
                 Io::Stdin => Some(in_handle.as_fd()),
                 Io::Stdout => Some(out_handle.as_fd()),
                 Io::Stderr => Some(err_handle.as_fd()),
-                Io::Other(token) => table.get(token).map(|resource| match resource {
-                    OsResource::File(file) => file.as_fd(),
+                Io::Other(token) => table.get(token).and_then(|resource| match resource {
+                    OsResource::File(file) => Some(file.as_fd()),
                     OsResource::Connected(socket)
                     | OsResource::Unconnected(socket)
-                    | OsResource::Listener(socket) => socket.as_fd(),
+                    | OsResource::Listener(socket) => Some(socket.as_fd()),
+                    // TLS record readiness is not socket readiness (rustls
+                    // buffers records, and an app read can require a socket
+                    // write), so a TLS stream is not polled at the socket layer
+                    // under the sync model; the config token has no fd. Both
+                    // report as unrecognized — an `empty()` revents slot.
+                    OsResource::ClientTls(_)
+                    | OsResource::ServerTls(_)
+                    | OsResource::TlsConfig(_) => None,
                 }),
             };
 
@@ -351,6 +523,8 @@ impl Host for OsHost {
                 let stream: &mut dyn Read = match table.get_mut(&handle) {
                     Some(OsResource::File(file)) => file,
                     Some(OsResource::Connected(socket)) => socket,
+                    Some(OsResource::ClientTls(tls)) => tls,
+                    Some(OsResource::ServerTls(tls)) => tls,
                     _ => return (Status::Eof, vec![]),
                 };
 
@@ -381,6 +555,8 @@ impl Host for OsHost {
                 let stream: &mut dyn Write = match table.get_mut(&handle) {
                     Some(OsResource::File(file)) => file,
                     Some(OsResource::Connected(socket)) => socket,
+                    Some(OsResource::ClientTls(tls)) => tls,
+                    Some(OsResource::ServerTls(tls)) => tls,
                     _ => return Status::NotFound,
                 };
 

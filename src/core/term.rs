@@ -1421,6 +1421,9 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoSetRecvTimeout(a, b)
         | Prim::IoSetSendTimeout(a, b)
         | Prim::IoSetReuseaddr(a, b)
+        | Prim::IoStartTls(a, b)
+        | Prim::IoTlsServerConfig(a, b)
+        | Prim::IoStartTlsServer(a, b)
         | Prim::IoExit(a, b) => a.reach().max(b.reach()),
 
         Prim::BinSlice(a, b, c)
@@ -1546,6 +1549,9 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoSetRecvTimeout(a, b)
         | Prim::IoSetSendTimeout(a, b)
         | Prim::IoSetReuseaddr(a, b)
+        | Prim::IoStartTls(a, b)
+        | Prim::IoTlsServerConfig(a, b)
+        | Prim::IoStartTlsServer(a, b)
         | Prim::IoExit(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
@@ -1727,6 +1733,13 @@ where
         }
         Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
         Prim::IoConnect(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoConnect),
+        Prim::IoStartTls(handle, sni) => traverse_binary(handle, sni, visit, Prim::IoStartTls),
+        Prim::IoTlsServerConfig(cert, key) => {
+            traverse_binary(cert, key, visit, Prim::IoTlsServerConfig)
+        }
+        Prim::IoStartTlsServer(handle, cfg) => {
+            traverse_binary(handle, cfg, visit, Prim::IoStartTlsServer)
+        }
         Prim::IoSetNonblocking(handle, on) => {
             traverse_binary(handle, on, visit, Prim::IoSetNonblocking)
         }

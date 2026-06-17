@@ -2219,6 +2219,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
         | failure(e) =>
             match e : {}
             | refused() => Io/print("refused")
+            | tls() => Io/print("tls")
             | other(_) => Io/print("other")
             end
         end
@@ -2241,7 +2242,8 @@ fn net_with_custom_timeout_config_reads_response() {
         let settings = Net/Settings {
             connect_timeout = Option/some(Time/of_millis(500)),
             read_timeout = Option/none(),
-            write_timeout = Option/none()
+            write_timeout = Option/none(),
+            tls = false
         };
         match Net/with(settings, "db.internal", 5432, (s) => Net/read(s, 64).bytes)
         | success(bytes) => Io/write(Io/stdout, bytes)
@@ -2278,6 +2280,56 @@ fn net_serve_handles_a_scripted_inbound_connection() {
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
+}
+
+// TLS client (Stage A): `Net/with` with `tls = true` upgrades the connected
+// socket via `start_tls` before the body runs. The mock host serves the
+// scripted endpoint cleartext (no real handshake under test), so the upgrade is
+// a no-op identity and the round-trip still succeeds — exercising the wiring,
+// types, and prim threading end to end through codegen.
+#[test]
+fn net_with_tls_upgrades_and_reads() {
+    let source = r#"
+        use /std/{Net, Io, Str, Option};
+        let settings = Net/Settings {
+            connect_timeout = Option/none(),
+            read_timeout = Option/none(),
+            write_timeout = Option/none(),
+            tls = true
+        };
+        match Net/with(settings, "secure.example", 443, (s) => Net/read(s, 64).bytes)
+        | success(bytes) => Io/write(Io/stdout, bytes)
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
+        end
+        "#;
+
+    let (system, io) = MockHost::builder()
+        .net([("secure.example:443", "SECURE-PONG")])
+        .build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"SECURE-PONG");
+}
+
+// Server TLS termination (Stage A): `serve_tls` builds a config token, then
+// upgrades each accepted connection via `start_tls_server` before the handler
+// runs. The mock host runs cleartext, so the upgrade is a no-op identity and
+// the handler echoes the scripted request the host captures.
+#[test]
+fn net_serve_tls_handles_a_scripted_inbound_connection() {
+    let source = r#"
+        use /std/{Net, Io, Str, Bin};
+        match Net/serve_tls("0.0.0.0", 8443, Str/to_bin("CERT"), Str/to_bin("KEY"), (c) =>
+            let req = Net/read(c, 64);
+            let wrote = Net/write(c, Bin/concat(Str/to_bin("tls: "), req.bytes));
+            ()) : {}
+        | success(u) => ()
+        | failure(_) => Io/print("serve failed")
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().inbound(["ping"]).build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.captures(), vec![b"tls: ping".to_vec()]);
 }
 
 // HTTP client (Phase B): `Http/perform` renders a `Request`, sends it through

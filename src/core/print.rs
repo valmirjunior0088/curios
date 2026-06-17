@@ -607,6 +607,24 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             print_term(backlog, depth),
         ]),
         Prim::IoAccept(handle) => flat([pure("Io.accept "), print_term(handle, depth)]),
+        Prim::IoStartTls(handle, sni) => flat([
+            pure("Io.start_tls "),
+            print_term(handle, depth),
+            pure(" "),
+            print_term(sni, depth),
+        ]),
+        Prim::IoTlsServerConfig(cert, key) => flat([
+            pure("Io.tls_server_config "),
+            print_term(cert, depth),
+            pure(" "),
+            print_term(key, depth),
+        ]),
+        Prim::IoStartTlsServer(handle, cfg) => flat([
+            pure("Io.start_tls_server "),
+            print_term(handle, depth),
+            pure(" "),
+            print_term(cfg, depth),
+        ]),
         Prim::IoSetNonblocking(handle, on) => flat([
             pure("Io.set_nonblocking "),
             print_term(handle, depth),

@@ -354,6 +354,38 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
+            HostTarget::IoStartTls {
+                handle,
+                sni,
+                resume,
+            } => flat([
+                pure("Io.start_tls "),
+                print_value_name(handle),
+                pure(" "),
+                print_value_name(sni),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoTlsServerConfig { cert, key, resume } => flat([
+                pure("Io.tls_server_config "),
+                print_value_name(cert),
+                pure(" "),
+                print_value_name(key),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoStartTlsServer {
+                handle,
+                cfg,
+                resume,
+            } => flat([
+                pure("Io.start_tls_server "),
+                print_value_name(handle),
+                pure(" "),
+                print_value_name(cfg),
+                pure(" "),
+                print_block_name(resume),
+            ]),
             HostTarget::IoListen {
                 handle,
                 backlog,

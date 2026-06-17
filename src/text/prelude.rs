@@ -393,6 +393,24 @@ fn io_ops() -> Vec<TopItem> {
             prim(Prim::IoAccept(name("h"))),
         ),
         pub_fn(
+            "start_tls",
+            vec![("h", io()), ("sni", bin())],
+            nat(),
+            prim(Prim::IoStartTls(name("h"), name("sni"))),
+        ),
+        pub_fn(
+            "tls_server_config",
+            vec![("cert", bin()), ("key", bin())],
+            record(vec![("status", nat()), ("handle", io())]),
+            prim(Prim::IoTlsServerConfig(name("cert"), name("key"))),
+        ),
+        pub_fn(
+            "start_tls_server",
+            vec![("h", io()), ("cfg", io())],
+            nat(),
+            prim(Prim::IoStartTlsServer(name("h"), name("cfg"))),
+        ),
+        pub_fn(
             "set_nonblocking",
             vec![("h", io()), ("on", bln())],
             nat(),

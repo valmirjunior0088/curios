@@ -291,6 +291,13 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoConnect(handle, addr) => print_prim_call("Io.connect", vec![handle, addr]),
         Prim::IoListen(handle, backlog) => print_prim_call("Io.listen", vec![handle, backlog]),
         Prim::IoAccept(handle) => print_prim_call("Io.accept", vec![handle]),
+        Prim::IoStartTls(handle, sni) => print_prim_call("Io.start_tls", vec![handle, sni]),
+        Prim::IoTlsServerConfig(cert, key) => {
+            print_prim_call("Io.tls_server_config", vec![cert, key])
+        }
+        Prim::IoStartTlsServer(handle, cfg) => {
+            print_prim_call("Io.start_tls_server", vec![handle, cfg])
+        }
         Prim::IoSetNonblocking(handle, on) => {
             print_prim_call("Io.set_nonblocking", vec![handle, on])
         }

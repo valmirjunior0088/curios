@@ -179,6 +179,12 @@ pub enum Status {
     /// Phase-1 caller sets `NONBLOCK`, so it is never observed yet; the `/std`
     /// scheduler consumes it once the readiness model lands.
     WouldBlock,
+    /// A TLS upgrade (`start_tls`/`start_tls_server`) or server-config build
+    /// failed: an unparseable certificate/key, an invalid SNI, or a failed
+    /// handshake (bad cert chain, protocol error). These are `rustls`'s own
+    /// errors, not OS errnos, so they collapse to this one named code rather
+    /// than passing through the `From<io::Error>` errno mapping.
+    TlsError,
     /// An otherwise-unrecognized failure, carrying the OS errno that produced it.
     Other(u32),
 }
@@ -195,6 +201,7 @@ impl Status {
             Status::AlreadyExists => 4,
             Status::ConnectionRefused => 6,
             Status::WouldBlock => 7,
+            Status::TlsError => 8,
             Status::Other(code) => code,
         }
     }
@@ -253,6 +260,25 @@ pub trait Host {
     /// Connect socket `io` to the resolved address `addr`. On `Status::Ok` the
     /// handle is an ordinary byte stream `read`/`write`/`close` serve.
     fn connect(&self, io: Io, addr: &[u8]) -> Status;
+
+    /// Upgrade the connected socket `io` to a TLS client stream in place,
+    /// running the handshake inline. `sni` is the server name to present and
+    /// verify against (derived from the connect hostname); the client trusts a
+    /// bundled root set, verification always on. On `Status::Ok` the same handle
+    /// is now an encrypted byte stream the existing `read`/`write`/`close` serve;
+    /// on failure the connection is dropped and `Status::TlsError` is reported.
+    fn start_tls(&self, io: Io, sni: &[u8]) -> Status;
+
+    /// Build an opaque server-side TLS configuration from a PEM certificate
+    /// chain and private key. Returns `(status, io)` like `socket`: the handle
+    /// is a host-owned config token (no socket), consumed by `start_tls_server`
+    /// and released by `close`. Certs/keys cross as opaque `Bin`, parsed here.
+    fn tls_server_config(&self, cert: &[u8], key: &[u8]) -> (Status, Io);
+
+    /// Upgrade the accepted socket `io` to a TLS server stream in place using
+    /// the configuration handle `cfg` (from `tls_server_config`), running the
+    /// handshake inline. Same in-place conduit swap as `start_tls`.
+    fn start_tls_server(&self, io: Io, cfg: Io) -> Status;
 
     /// Mark bound socket `io` as listening with accept-queue depth `backlog`
     /// (OS-clamped to `somaxconn`); `accept` then pulls connections and `close`

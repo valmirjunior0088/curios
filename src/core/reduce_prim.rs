@@ -958,6 +958,18 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoAccept",
             span: handle.span(),
         }),
+        Prim::IoStartTls(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoStartTls",
+            span: handle.span(),
+        }),
+        Prim::IoTlsServerConfig(cert, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoTlsServerConfig",
+            span: cert.span(),
+        }),
+        Prim::IoStartTlsServer(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoStartTlsServer",
+            span: handle.span(),
+        }),
         Prim::IoSetNonblocking(handle, ..) => Err(ReduceError::IoAtTypeLevel {
             kind: "IoSetNonblocking",
             span: handle.span(),

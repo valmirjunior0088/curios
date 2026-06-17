@@ -344,6 +344,24 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
         }
+        Prim::IoStartTls(handle, sni) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let sni = elaborate(context, sni, Mode::Check(bin_type))?.0;
+            (Prim::IoStartTls(handle, sni), nat_type)
+        }
+        Prim::IoTlsServerConfig(cert, key) => {
+            let cert = elaborate(context, cert, Mode::Check(bin_type.clone()))?.0;
+            let key = elaborate(context, key, Mode::Check(bin_type))?.0;
+            (
+                Prim::IoTlsServerConfig(cert, key),
+                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
+            )
+        }
+        Prim::IoStartTlsServer(handle, cfg) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type.clone()))?.0;
+            let cfg = elaborate(context, cfg, Mode::Check(io_type))?.0;
+            (Prim::IoStartTlsServer(handle, cfg), nat_type)
+        }
         Prim::IoSetNonblocking(handle, on) => {
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             let on = elaborate(context, on, Mode::Check(bln_type))?.0;

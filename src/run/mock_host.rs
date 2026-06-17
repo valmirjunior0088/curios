@@ -98,6 +98,10 @@ enum MockResource {
     Inbound(MockServer),
     Socket,
     Listener,
+    /// A server TLS config token minted by `tls_server_config`. The scripted
+    /// host runs cleartext, so it carries no real configuration — it only marks
+    /// the handle so `start_tls_server` can recognise it.
+    TlsConfig,
 }
 
 /// The scripted, in-memory [`Host`] used by the test suite — the mirror of
@@ -246,6 +250,45 @@ impl Host for MockHost {
         );
 
         Status::Ok
+    }
+
+    fn start_tls(&self, io: Io, _sni: &[u8]) -> Status {
+        // The scripted host serves cleartext; a client TLS upgrade is a no-op
+        // identity over the existing outbound connection.
+        if matches!(
+            self.table.lock().unwrap().get(&io.token()),
+            Some(MockResource::Outbound(_))
+        ) {
+            Status::Ok
+        } else {
+            Status::NotFound
+        }
+    }
+
+    fn tls_server_config(&self, _cert: &[u8], _key: &[u8]) -> (Status, Io) {
+        // No real config under test — just mint a token the handle table can
+        // hand back to `start_tls_server`.
+        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
+        self.table
+            .lock()
+            .unwrap()
+            .insert(handle, MockResource::TlsConfig);
+
+        (Status::Ok, Io::Other(handle))
+    }
+
+    fn start_tls_server(&self, io: Io, cfg: Io) -> Status {
+        // A no-op identity over the accepted connection, given a config token.
+        let table = self.table.lock().unwrap();
+
+        let has_config = matches!(table.get(&cfg.token()), Some(MockResource::TlsConfig));
+        let has_conn = matches!(table.get(&io.token()), Some(MockResource::Inbound(_)));
+
+        if has_config && has_conn {
+            Status::Ok
+        } else {
+            Status::NotFound
+        }
     }
 
     fn listen(&self, io: Io, _backlog: u32) -> Status {

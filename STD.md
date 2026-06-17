@@ -237,19 +237,20 @@ File/write(f, b)               -- (File, Bin) -> Nat
 
 ### `/std/Net`
 
-A TCP client and a sequential TCP server. `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. There is no public `close`: `with`/`call`/`serve` bracket every connection so a handle never outlives the body and cannot be used after close. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives; TLS (`https://`) and concurrent (non-blocking) connection handling are future work.
+A TCP client and a sequential TCP server, in cleartext or over TLS. `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. There is no public `close`: `with`/`call`/`serve`/`serve_tls` bracket every connection so a handle never outlives the body and cannot be used after close. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Concurrent (non-blocking) connection handling, custom roots, and client certificates are future work.
 
 ```
-union Error | refused() | other(Nat) end
+union Error | refused() | tls() | other(Nat) end
 
 struct Settings pub {
     connect_timeout : Option(Time/Duration),
     read_timeout : Option(Time/Duration),
-    write_timeout : Option(Time/Duration)
+    write_timeout : Option(Time/Duration),
+    tls : Bln
 }
 ```
 
-`Settings` has a public representation — build one as `Settings { ... }` or start from `default`. Each timeout is optional; `none` blocks forever. `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout` bound subsequent reads and writes on the handle. `Error` decodes the connect status: `refused` (status 6) or `other(status)`.
+`Settings` has a public representation — build one as `Settings { ... }` or start from `default`. Each timeout is optional; `none` blocks forever. `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout` bound subsequent reads and writes on the handle. `tls` upgrades the connection to TLS right after connect (verification on, SNI from `host`); `default` leaves it `false`. `Error` decodes the connect status: `refused` (status 6), `tls` (status 8 — a failed certificate verification, handshake, or upgrade), or `other(status)`.
 
 | Binding                               | Type                                                                 | Description                                                    |
 | ------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -259,14 +260,15 @@ struct Settings pub {
 | `read(c, n)`                          | `(Socket, Nat) -> { status : Nat, bytes : Bin }`                     | Read up to `n` bytes from the socket                           |
 | `write(c, b)`                         | `(Socket, Bin) -> Nat`                                               | Write `b` to the socket; returns a status                      |
 | `serve(host, port, handler)`          | `(Str, Nat, (Socket) -> {}) -> Result({}, Error)`                    | Bind `host`:`port`, then accept connections one at a time, running `handler` on each `Socket` before closing it |
+| `serve_tls(host, port, cert, key, handler)` | `(Str, Nat, Bin, Bin, (Socket) -> {}) -> Result({}, Error)`    | Like `serve`, terminating TLS on each accepted connection with the PEM `cert` chain and `key` |
 
-As with `File`, the `Socket` must not outlive the `with` or `handler` body — a delayed effect would touch a closed connection.
+As with `File`, the `Socket` must not outlive the `with` or `handler` body — a delayed effect would touch a closed connection. A TLS `with`/`call` (`settings.tls`) upgrades the connection right after connect; `read`/`write` then transparently serve the encrypted stream.
 
-`serve` is a **sequential** server: it binds a listening socket (the listener is private and fully bracketed — closed when the loop ends), then loops `accept` → `handler` → close, one connection fully served before the next. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Error`. Concurrent connection handling is future work.
+`serve` is a **sequential** server: it binds a listening socket (the listener is private and fully bracketed — closed when the loop ends), then loops `accept` → `handler` → close, one connection fully served before the next. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Error`. `serve_tls` is the same loop with TLS termination: it builds a server config from the PEM `cert`/`key` once, then upgrades each accepted connection before the handler runs — a connection whose handshake fails is dropped and the loop continues (unlike a failed `accept`, which ends it). Concurrent connection handling is future work.
 
 ### `/std/Http`
 
-A plain (cleartext, `http://`) HTTP/1.1 client layered on `/std/Net`: there is no new host primitive, a request is just bytes written to a socket and a response is bytes read back, so the module is request formatting plus a `/std/Parse` parser over the reply. The surface is value-centric — build a `Request`, hand it to `perform`, get back a `Result(Response, Error)`. TLS (`https://`) is a separate future phase needing a host-side primitive.
+An HTTP/1.1 client layered on `/std/Net`, over cleartext (`http://`) or TLS (`https://`): a request is just bytes written to a socket and a response is bytes read back, so the module is request formatting plus a `/std/Parse` parser over the reply. TLS is handled entirely by `/std/Net` through the request's `settings.tls` flag — there is no HTTP-specific crypto machinery. The surface is value-centric — build a `Request`, hand it to `perform`, get back a `Result(Response, Error)`. `secure` flips a request to TLS; `get_tls`/`post_tls` are the shorthands.
 
 ```
 union Method | get() | post() end
@@ -291,6 +293,9 @@ struct Response pub { status : Status, headers : Arr({ Str, Str }), body : Bin }
 | Binding                 | Type                                   | Description                                                                          |
 | ----------------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
 | `get(host, port, path)` | `(Str, Nat, Str) -> Request`           | A bare GET with default settings and no extra headers or body                        |
+| `secure(request)`       | `(Request) -> Request`                 | Flip a request to TLS (`settings.tls = true`); `perform` then speaks `https://`       |
+| `get_tls(host, port, path)` | `(Str, Nat, Str) -> Request`       | `secure(get(...))` — a GET over TLS (use port 443)                                    |
+| `post_tls(host, port, path, body)` | `(Str, Nat, Str, Bin) -> Request` | `secure(post(...))` — a POST over TLS (use port 443)                              |
 | `perform(request)`      | `(Request) -> Result(Response, Error)` | Drive one request end to end: render, send through `/std/Net`, parse the reply       |
 | `render(request)`       | `(Request) -> Bin`                     | Serialize a request to the raw bytes written on the wire (pure; testable on its own) |
 | `header(resp, name)`    | `(Response, Str) -> Option(Str)`       | The first header whose name matches `name`, case-insensitively                       |

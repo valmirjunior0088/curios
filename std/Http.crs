@@ -48,6 +48,31 @@ pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
         settings = Net/default
     };
 
+let with_tls(s : Net/Settings) -> Net/Settings =
+    Net/Settings {
+        connect_timeout = s.connect_timeout,
+        read_timeout = s.read_timeout,
+        write_timeout = s.write_timeout,
+        tls = true
+    };
+
+pub let secure(request : Request) -> Request =
+    Request {
+        method = request.method,
+        host = request.host,
+        port = request.port,
+        path = request.path,
+        headers = request.headers,
+        body = request.body,
+        settings = with_tls(request.settings)
+    };
+
+pub let get_tls(host : Str, port : Nat, path : Str) -> Request =
+    secure(get(host, port, path));
+
+pub let post_tls(host : Str, port : Nat, path : Str, body : Bin) -> Request =
+    secure(post(host, port, path, body));
+
 let until(target : Nat) -> (Nat) -> Bln =
     (byte) =>
         match Nat/eql(byte, target)

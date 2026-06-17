@@ -1,7 +1,8 @@
-use /std/{Bin, Str, Nat, Io, Result, Option, Time, Arr};
+use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Arr};
 
 pub union Error
 | refused()
+| tls()
 | other(Nat)
 end
 
@@ -10,13 +11,15 @@ pub struct Socket { Io }
 pub struct Settings pub {
     connect_timeout : Option(Time/Duration),
     read_timeout : Option(Time/Duration),
-    write_timeout : Option(Time/Duration)
+    write_timeout : Option(Time/Duration),
+    tls : Bln
 }
 
 pub let default : Settings = Settings {
     connect_timeout = Option/none(),
     read_timeout = Option/none(),
-    write_timeout = Option/none()
+    write_timeout = Option/none(),
+    tls = false
 };
 
 pub let read(c : Socket, n : Nat) -> { status : Nat, bytes : Bin } =
@@ -37,6 +40,7 @@ let timeout_ms(t : Option(Time/Duration)) -> Nat =
 let decode(status : Nat) -> Error =
     match status : Error
     | 6 => Error/refused()
+    | 8 => Error/tls()
     | _ => Error/other(status)
     end;
 
@@ -44,6 +48,12 @@ let configure(h : Io, settings : Settings) -> {} =
     let r = /sys/Io/set_recv_timeout(h, timeout_ms(settings.read_timeout));
     let w = /sys/Io/set_send_timeout(h, timeout_ms(settings.write_timeout));
     ();
+
+let upgrade(h : Io, host : Str, tls : Bln) -> Nat =
+    match tls : Nat
+    | false => 0
+    | true => /sys/Io/start_tls(h, Str/to_bin(host))
+    end;
 
 pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> A) -> Result(A, Error) =
     let r = /sys/Io/resolve(Str/to_bin(host), port);
@@ -62,10 +72,17 @@ pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket
                 let closed = /sys/Io/close(s.handle);
                 Result/failure(decode(status))
             | true =>
-                let c = Socket { s.handle };
-                let value = f(c);
-                let closed = close(c);
-                Result/success(value)
+                let upgraded = upgrade(s.handle, host, settings.tls);
+                match Nat/eql(upgraded, 0) : Result(A, Error)
+                | false =>
+                    let closed = /sys/Io/close(s.handle);
+                    Result/failure(decode(upgraded))
+                | true =>
+                    let c = Socket { s.handle };
+                    let value = f(c);
+                    let closed = close(c);
+                    Result/success(value)
+                end
             end
         end
     end;
@@ -130,4 +147,36 @@ pub let serve(host : Str, port : Nat, handler : (Socket) -> {}) -> Result({}, Er
         let closed = close_listener(l);
         Result/success(())
     | failure(e) => Result/failure(e)
+    end;
+
+pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Socket) -> {}) -> Result({}, Error) =
+    let cfg = /sys/Io/tls_server_config(cert, key);
+    match Nat/eql(cfg.status, 0) : Result({}, Error)
+    | false => Result/failure(decode(cfg.status))
+    | true =>
+        match listen(host, port) : Result({}, Error)
+        | failure(e) =>
+            let dropped = /sys/Io/close(cfg.handle);
+            Result/failure(e)
+        | success(l) =>
+            rec go(u : {}) -> {} =
+                match accept(l) : {}
+                | failure(_) => ()
+                | success(c) =>
+                    let status = /sys/Io/start_tls_server(c.0, cfg.handle);
+                    match Nat/eql(status, 0) : {}
+                    | true =>
+                        let handled = handler(c);
+                        let closed = close(c);
+                        go(())
+                    | false =>
+                        let closed = close(c);
+                        go(())
+                    end
+                end;
+            let served = go(());
+            let closed = close_listener(l);
+            let dropped = /sys/Io/close(cfg.handle);
+            Result/success(())
+        end
     end;

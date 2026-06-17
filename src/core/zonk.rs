@@ -502,6 +502,13 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoConnect(a, b) => Prim::IoConnect(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoListen(a, b) => Prim::IoListen(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoAccept(a) => Prim::IoAccept(zonk_term(context, a)?),
+        Prim::IoStartTls(a, b) => Prim::IoStartTls(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoTlsServerConfig(a, b) => {
+            Prim::IoTlsServerConfig(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::IoStartTlsServer(a, b) => {
+            Prim::IoStartTlsServer(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
         Prim::IoSetNonblocking(a, b) => {
             Prim::IoSetNonblocking(zonk_term(context, a)?, zonk_term(context, b)?)
         }

@@ -120,6 +120,17 @@ pub enum Prim {
     // The returned handle is an ordinary `Io` the read/write/close plumbing
     // serves, exactly like a `connect`ed socket.
     IoAccept(Term),
+    // (handle, sni) -> Nat status: upgrade a connected socket to a TLS client
+    // stream in place, running the handshake inline. The same handle then
+    // serves the read/write/close plumbing as an encrypted byte stream.
+    IoStartTls(Term, Term),
+    // (cert, key) -> { status, handle }: build an opaque server TLS config from
+    // a PEM certificate chain and key. The handle is a host-owned config token
+    // (no socket), consumed by `start_tls_server` and released by `close`.
+    IoTlsServerConfig(Term, Term),
+    // (handle, cfg) -> Nat status: upgrade an accepted socket to a TLS server
+    // stream in place using a config token, running the handshake inline.
+    IoStartTlsServer(Term, Term),
     // (handle, on) -> Nat status: set the handle's non-blocking flag (`on` is a
     // `Bln` riding the i31 carrier). fcntl O_NONBLOCK.
     IoSetNonblocking(Term, Term),
