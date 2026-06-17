@@ -276,13 +276,6 @@ impl Context {
         }
     }
 
-    /// The local assumption context in binding order — the Γ a metavariable
-    /// freezes at birth (§5). Includes every `assume`d binder currently in
-    /// scope, across all open frames.
-    pub fn local_context(&self) -> &[(String, Term)] {
-        &self.local
-    }
-
     pub fn assumption(&self, label: &str) -> Option<&Term> {
         self.assumptions
             .iter()

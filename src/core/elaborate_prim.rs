@@ -1,5 +1,34 @@
 use super::{Context, Error, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with};
 
+/// Elaborate both operands of a homogeneous binary primitive at `operand`, then
+/// rebuild the variant through its constructor (`build`) and pair it with
+/// `result`. Lets each arm name itself once instead of destructuring an
+/// OR-pattern and re-matching just to reattach the elaborated operands.
+fn binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    operand: &Term,
+    result: Term,
+    build: fn(Term, Term) -> Prim,
+) -> Result<(Prim, Term), Error> {
+    let left = elaborate(context, left, Mode::Check(operand.clone()))?.0;
+    let right = elaborate(context, right, Mode::Check(operand.clone()))?.0;
+    Ok((build(left, right), result))
+}
+
+/// The unary counterpart of [`binary`], for the float-unary primitives.
+fn unary(
+    context: &mut Context,
+    inner: &Term,
+    operand: &Term,
+    result: Term,
+    build: fn(Term) -> Prim,
+) -> Result<(Prim, Term), Error> {
+    let inner = elaborate(context, inner, Mode::Check(operand.clone()))?.0;
+    Ok((build(inner), result))
+}
+
 /// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors
 /// the old `infer_prim`, but every operand obligation goes through
 /// `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim`
@@ -17,171 +46,64 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::Bln(_) => (prim.clone(), bln_type),
         Prim::NatType => (prim.clone(), Term::type_()),
         Prim::Nat(_) => (prim.clone(), nat_type),
-        Prim::NatEql(left, right)
-        | Prim::NatNeq(left, right)
-        | Prim::NatLt(left, right)
-        | Prim::NatGt(left, right)
-        | Prim::NatLte(left, right)
-        | Prim::NatGte(left, right) => {
-            let left = elaborate(context, left, Mode::Check(nat_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(nat_type))?.0;
-            let prim = match prim {
-                Prim::NatEql(..) => Prim::NatEql(left, right),
-                Prim::NatNeq(..) => Prim::NatNeq(left, right),
-                Prim::NatLt(..) => Prim::NatLt(left, right),
-                Prim::NatGt(..) => Prim::NatGt(left, right),
-                Prim::NatLte(..) => Prim::NatLte(left, right),
-                Prim::NatGte(..) => Prim::NatGte(left, right),
-                _ => unreachable!(),
-            };
-            (prim, bln_type)
-        }
-        Prim::NatAdd(left, right)
-        | Prim::NatSub(left, right)
-        | Prim::NatMul(left, right)
-        | Prim::NatDiv(left, right)
-        | Prim::NatRem(left, right)
-        | Prim::NatAnd(left, right)
-        | Prim::NatOr(left, right)
-        | Prim::NatXor(left, right)
-        | Prim::NatShl(left, right)
-        | Prim::NatShr(left, right) => {
-            let left = elaborate(context, left, Mode::Check(nat_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(nat_type.clone()))?.0;
-            let prim = match prim {
-                Prim::NatAdd(..) => Prim::NatAdd(left, right),
-                Prim::NatSub(..) => Prim::NatSub(left, right),
-                Prim::NatMul(..) => Prim::NatMul(left, right),
-                Prim::NatDiv(..) => Prim::NatDiv(left, right),
-                Prim::NatRem(..) => Prim::NatRem(left, right),
-                Prim::NatAnd(..) => Prim::NatAnd(left, right),
-                Prim::NatOr(..) => Prim::NatOr(left, right),
-                Prim::NatXor(..) => Prim::NatXor(left, right),
-                Prim::NatShl(..) => Prim::NatShl(left, right),
-                Prim::NatShr(..) => Prim::NatShr(left, right),
-                _ => unreachable!(),
-            };
-            (prim, nat_type)
-        }
-        Prim::BlnAnd(left, right) | Prim::BlnOr(left, right) | Prim::BlnXor(left, right) => {
-            let left = elaborate(context, left, Mode::Check(bln_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(bln_type.clone()))?.0;
-            let prim = match prim {
-                Prim::BlnAnd(..) => Prim::BlnAnd(left, right),
-                Prim::BlnOr(..) => Prim::BlnOr(left, right),
-                Prim::BlnXor(..) => Prim::BlnXor(left, right),
-                _ => unreachable!(),
-            };
-            (prim, bln_type)
-        }
+        Prim::NatEql(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatEql)?,
+        Prim::NatNeq(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatNeq)?,
+        Prim::NatLt(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatLt)?,
+        Prim::NatGt(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatGt)?,
+        Prim::NatLte(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatLte)?,
+        Prim::NatGte(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatGte)?,
+        Prim::NatAdd(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatAdd)?,
+        Prim::NatSub(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatSub)?,
+        Prim::NatMul(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatMul)?,
+        Prim::NatDiv(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatDiv)?,
+        Prim::NatRem(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatRem)?,
+        Prim::NatAnd(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatAnd)?,
+        Prim::NatOr(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatOr)?,
+        Prim::NatXor(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatXor)?,
+        Prim::NatShl(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatShl)?,
+        Prim::NatShr(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatShr)?,
+        Prim::BlnAnd(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnAnd)?,
+        Prim::BlnOr(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnOr)?,
+        Prim::BlnXor(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnXor)?,
         Prim::IntType => (prim.clone(), Term::type_()),
         Prim::Int(_) => (prim.clone(), int_type),
-        Prim::IntEql(left, right)
-        | Prim::IntNeq(left, right)
-        | Prim::IntLt(left, right)
-        | Prim::IntGt(left, right)
-        | Prim::IntLte(left, right)
-        | Prim::IntGte(left, right) => {
-            let left = elaborate(context, left, Mode::Check(int_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(int_type))?.0;
-            let prim = match prim {
-                Prim::IntEql(..) => Prim::IntEql(left, right),
-                Prim::IntNeq(..) => Prim::IntNeq(left, right),
-                Prim::IntLt(..) => Prim::IntLt(left, right),
-                Prim::IntGt(..) => Prim::IntGt(left, right),
-                Prim::IntLte(..) => Prim::IntLte(left, right),
-                Prim::IntGte(..) => Prim::IntGte(left, right),
-                _ => unreachable!(),
-            };
-            (prim, bln_type)
-        }
-        Prim::IntAdd(left, right)
-        | Prim::IntSub(left, right)
-        | Prim::IntMul(left, right)
-        | Prim::IntDiv(left, right)
-        | Prim::IntRem(left, right)
-        | Prim::IntAnd(left, right)
-        | Prim::IntOr(left, right)
-        | Prim::IntXor(left, right)
-        | Prim::IntShl(left, right)
-        | Prim::IntShr(left, right) => {
-            let left = elaborate(context, left, Mode::Check(int_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(int_type.clone()))?.0;
-            let prim = match prim {
-                Prim::IntAdd(..) => Prim::IntAdd(left, right),
-                Prim::IntSub(..) => Prim::IntSub(left, right),
-                Prim::IntMul(..) => Prim::IntMul(left, right),
-                Prim::IntDiv(..) => Prim::IntDiv(left, right),
-                Prim::IntRem(..) => Prim::IntRem(left, right),
-                Prim::IntAnd(..) => Prim::IntAnd(left, right),
-                Prim::IntOr(..) => Prim::IntOr(left, right),
-                Prim::IntXor(..) => Prim::IntXor(left, right),
-                Prim::IntShl(..) => Prim::IntShl(left, right),
-                Prim::IntShr(..) => Prim::IntShr(left, right),
-                _ => unreachable!(),
-            };
-            (prim, int_type)
-        }
+        Prim::IntEql(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntEql)?,
+        Prim::IntNeq(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntNeq)?,
+        Prim::IntLt(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntLt)?,
+        Prim::IntGt(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntGt)?,
+        Prim::IntLte(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntLte)?,
+        Prim::IntGte(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntGte)?,
+        Prim::IntAdd(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntAdd)?,
+        Prim::IntSub(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntSub)?,
+        Prim::IntMul(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntMul)?,
+        Prim::IntDiv(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntDiv)?,
+        Prim::IntRem(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntRem)?,
+        Prim::IntAnd(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntAnd)?,
+        Prim::IntOr(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntOr)?,
+        Prim::IntXor(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntXor)?,
+        Prim::IntShl(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntShl)?,
+        Prim::IntShr(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntShr)?,
         Prim::FltType => (prim.clone(), Term::type_()),
         Prim::Flt(_) => (prim.clone(), flt_type),
-        Prim::FltAdd(left, right)
-        | Prim::FltSub(left, right)
-        | Prim::FltMul(left, right)
-        | Prim::FltDiv(left, right)
-        | Prim::FltMin(left, right)
-        | Prim::FltMax(left, right) => {
-            let left = elaborate(context, left, Mode::Check(flt_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(flt_type.clone()))?.0;
-            let prim = match prim {
-                Prim::FltAdd(..) => Prim::FltAdd(left, right),
-                Prim::FltSub(..) => Prim::FltSub(left, right),
-                Prim::FltMul(..) => Prim::FltMul(left, right),
-                Prim::FltDiv(..) => Prim::FltDiv(left, right),
-                Prim::FltMin(..) => Prim::FltMin(left, right),
-                Prim::FltMax(..) => Prim::FltMax(left, right),
-                _ => unreachable!(),
-            };
-            (prim, flt_type)
-        }
-        Prim::FltNeg(inner)
-        | Prim::FltAbs(inner)
-        | Prim::FltSqrt(inner)
-        | Prim::FltFloor(inner)
-        | Prim::FltCeil(inner)
-        | Prim::FltTrunc(inner)
-        | Prim::FltNearest(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(flt_type.clone()))?.0;
-            let prim = match prim {
-                Prim::FltNeg(..) => Prim::FltNeg(inner),
-                Prim::FltAbs(..) => Prim::FltAbs(inner),
-                Prim::FltSqrt(..) => Prim::FltSqrt(inner),
-                Prim::FltFloor(..) => Prim::FltFloor(inner),
-                Prim::FltCeil(..) => Prim::FltCeil(inner),
-                Prim::FltTrunc(..) => Prim::FltTrunc(inner),
-                Prim::FltNearest(..) => Prim::FltNearest(inner),
-                _ => unreachable!(),
-            };
-            (prim, flt_type)
-        }
-        Prim::FltEql(left, right)
-        | Prim::FltNeq(left, right)
-        | Prim::FltLt(left, right)
-        | Prim::FltGt(left, right)
-        | Prim::FltLte(left, right)
-        | Prim::FltGte(left, right) => {
-            let left = elaborate(context, left, Mode::Check(flt_type.clone()))?.0;
-            let right = elaborate(context, right, Mode::Check(flt_type))?.0;
-            let prim = match prim {
-                Prim::FltEql(..) => Prim::FltEql(left, right),
-                Prim::FltNeq(..) => Prim::FltNeq(left, right),
-                Prim::FltLt(..) => Prim::FltLt(left, right),
-                Prim::FltGt(..) => Prim::FltGt(left, right),
-                Prim::FltLte(..) => Prim::FltLte(left, right),
-                Prim::FltGte(..) => Prim::FltGte(left, right),
-                _ => unreachable!(),
-            };
-            (prim, bln_type)
-        }
+        Prim::FltAdd(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltAdd)?,
+        Prim::FltSub(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltSub)?,
+        Prim::FltMul(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltMul)?,
+        Prim::FltDiv(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltDiv)?,
+        Prim::FltMin(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltMin)?,
+        Prim::FltMax(l, r) => binary(context, l, r, &flt_type, flt_type.clone(), Prim::FltMax)?,
+        Prim::FltNeg(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltNeg)?,
+        Prim::FltAbs(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltAbs)?,
+        Prim::FltSqrt(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltSqrt)?,
+        Prim::FltFloor(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltFloor)?,
+        Prim::FltCeil(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltCeil)?,
+        Prim::FltTrunc(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltTrunc)?,
+        Prim::FltNearest(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltNearest)?,
+        Prim::FltEql(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltEql)?,
+        Prim::FltNeq(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltNeq)?,
+        Prim::FltLt(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltLt)?,
+        Prim::FltGt(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGt)?,
+        Prim::FltLte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltLte)?,
+        Prim::FltGte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGte)?,
         Prim::NatToStr(inner) => {
             let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
             (Prim::NatToStr(inner), str_type)

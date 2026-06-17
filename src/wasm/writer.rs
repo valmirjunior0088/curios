@@ -68,11 +68,12 @@ where
         Ok(())
     }
 
-    fn write_type_name(&mut self, type_name: &TypeName) -> Result<()> {
-        self.buffer
-            .push_leb128_unsigned(self.table.resolve_type(type_name) as u64)?;
+    fn write_index(&mut self, index: usize) -> Result<()> {
+        self.buffer.push_leb128_unsigned(index as u64)
+    }
 
-        Ok(())
+    fn write_type_name(&mut self, type_name: &TypeName) -> Result<()> {
+        self.write_index(self.table.resolve_type(type_name))
     }
 
     fn write_type_name_signed(&mut self, type_name: &TypeName) -> Result<()> {
@@ -83,38 +84,23 @@ where
     }
 
     fn write_field_name(&mut self, type_name: &TypeName, field_name: &FieldName) -> Result<()> {
-        self.buffer
-            .push_leb128_unsigned(self.table.resolve_field(type_name, field_name) as u64)?;
-
-        Ok(())
+        self.write_index(self.table.resolve_field(type_name, field_name))
     }
 
     fn write_func_name(&mut self, func_name: &FuncName) -> Result<()> {
-        self.buffer
-            .push_leb128_unsigned(self.table.resolve_func(func_name) as u64)?;
-
-        Ok(())
+        self.write_index(self.table.resolve_func(func_name))
     }
 
     fn write_local_name(&mut self, func_name: &FuncName, local_name: &LocalName) -> Result<()> {
-        self.buffer
-            .push_leb128_unsigned(self.table.resolve_local(func_name, local_name) as u64)?;
-
-        Ok(())
+        self.write_index(self.table.resolve_local(func_name, local_name))
     }
 
     fn write_global_name(&mut self, global_name: &GlobalName) -> Result<()> {
-        self.buffer
-            .push_leb128_unsigned(self.table.resolve_global(global_name) as u64)?;
-
-        Ok(())
+        self.write_index(self.table.resolve_global(global_name))
     }
 
     fn write_data_name(&mut self, data_name: &DataName) -> Result<()> {
-        self.buffer
-            .push_leb128_unsigned(self.table.resolve_data(data_name) as u64)?;
-
-        Ok(())
+        self.write_index(self.table.resolve_data(data_name))
     }
 
     fn write_name_map<'a, I>(&mut self, i: I) -> Result<()>

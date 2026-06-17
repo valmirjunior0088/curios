@@ -98,12 +98,6 @@ pub enum Error {
     NotATupleType {
         expected: Box<Term>,
     },
-    NotAnArrayType {
-        expected: Box<Term>,
-    },
-    NotArrType {
-        head_type: Box<Term>,
-    },
     TupleArityMismatch {
         expected: usize,
         got: usize,
@@ -290,18 +284,6 @@ impl Error {
     pub fn not_a_tuple_type<U: Into<Term>>(expected: U) -> Self {
         Self::NotATupleType {
             expected: Box::new(expected.into()),
-        }
-    }
-
-    pub fn not_an_array_type<U: Into<Term>>(expected: U) -> Self {
-        Self::NotAnArrayType {
-            expected: Box::new(expected.into()),
-        }
-    }
-
-    pub fn not_arr_type<U: Into<Term>>(head_type: U) -> Self {
-        Self::NotArrType {
-            head_type: Box::new(head_type.into()),
         }
     }
 
@@ -535,13 +517,12 @@ impl Error {
             }
             Self::NotAFunction { head_type }
             | Self::NotATuple { head_type }
-            | Self::NotArrType { head_type }
             | Self::NotNatType { head_type }
             | Self::NotBlnType { head_type }
             | Self::NotAUnionType { head_type } => out.push(head_type),
-            Self::NotAFunctionType { expected }
-            | Self::NotATupleType { expected }
-            | Self::NotAnArrayType { expected } => out.push(expected),
+            Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
+                out.push(expected)
+            }
             Self::NotAStructType { found } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
@@ -590,15 +571,6 @@ impl fmt::Display for Error {
                     f,
                     "introduced a tuple where the expected type is not a tuple type\n  expected: {expected}"
                 )
-            }
-            Error::NotAnArrayType { expected } => {
-                write!(
-                    f,
-                    "introduced an array where the expected type is not an array type\n  expected: {expected}"
-                )
-            }
-            Error::NotArrType { head_type } => {
-                write!(f, "expected Arr but got {head_type}")
             }
             Error::TupleArityMismatch { expected, got } => {
                 write!(
