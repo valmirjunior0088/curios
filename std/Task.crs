@@ -1,0 +1,154 @@
+use /std/{Io, Bin, Nat, Bln, Arr, Lst};
+
+let READ : Nat = 1;
+let WRITE : Nat = 2;
+let ERR : Nat = 4;
+let HUP : Nat = 8;
+
+let WOULD_BLOCK : Nat = 7;
+
+pub union Task(A : Type)
+| done(A)
+| wait(Io, Nat, (({}) -> Task(A)))
+| spawn(Task({}), (({}) -> Task(A)))
+end
+
+pub use Task/*;
+
+pub let pure(@A : Type, a : A) -> Task(A) =
+    Task/done(a);
+
+pub rec bind(@A : Type, @B : Type) -> (Task(A), (A) -> Task(B)) -> Task(B) =
+    (m, f) =>
+        match m : Task(B)
+        | done(a) => f(a)
+        | wait(h, ev, k) => Task/wait(h, ev, (u) => bind(k(u), f))
+        | spawn(child, k) => Task/spawn(child, (u) => bind(k(u), f))
+        end;
+
+pub let nonblocking(h : Io) -> {} =
+    let status = /sys/Io/set_nonblocking(h, true);
+    ();
+
+pub rec read(h : Io, n : Nat) -> Task({ status : Nat, bytes : Bin }) =
+    let r = Io/read(h, n);
+    match Nat/eql(r.status, WOULD_BLOCK) : Task({ status : Nat, bytes : Bin })
+    | true => Task/wait(h, READ, (u) => read(h, n))
+    | false => Task/done(r)
+    end;
+
+pub rec write(h : Io, b : Bin) -> Task(Nat) =
+    let status = Io/write(h, b);
+    match Nat/eql(status, WOULD_BLOCK) : Task(Nat)
+    | true => Task/wait(h, WRITE, (u) => write(h, b))
+    | false => Task/done(status)
+    end;
+
+pub rec accept(l : Io) -> Task({ status : Nat, handle : Io }) =
+    let r = /sys/Io/accept(l);
+    match Nat/eql(r.status, WOULD_BLOCK) : Task({ status : Nat, handle : Io })
+    | true => Task/wait(l, READ, (u) => accept(l))
+    | false => Task/done(r)
+    end;
+
+pub let go(child : Task({})) -> Task({}) =
+    Task/spawn(child, (u) => Task/done(()));
+
+-- A fiber: a `Task(A)` with its result type hidden behind an existential, so one
+-- ready queue can hold tasks of differing result types. `fiber` packs `A` (read
+-- off the argument at construction, forgotten in `Fiber`); `@A` erases, so a
+-- `Fiber` is just its task at runtime. This is the one fiber representation the
+-- scheduler runs -- a fire-and-forget `Task({})` is the case `fiber(t)`, `A := {}`.
+pub union Fiber
+| fiber(@A : Type, Task(A))
+end
+
+pub use Fiber/*;
+
+-- A parked fiber. Its resume re-packs into `Fiber`, resealing the existential at
+-- the boundary, so the blocked list stays a homogeneous `Lst(Parked)`.
+struct Parked pub { handle : Io, interest : Nat, resume : (({}) -> Fiber) }
+
+let is_ready(results : Nat, interest : Nat) -> Bln =
+    Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(ERR, HUP))), 0);
+
+-- Wake the parked fibers whose handle became ready (covering their interest, or
+-- reporting ERR/HUP) and leave the rest parked. `start` offsets into `results`,
+-- letting a caller reserve leading slots -- `block_on` puts its root at slot 0.
+let partition(blocked : Lst(Parked), results : Arr(Nat), start : Nat) -> { Lst(Fiber), Lst(Parked) } =
+    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Fiber), still : Lst(Parked)) -> { Lst(Fiber), Lst(Parked) } =
+        match rest : { Lst(Fiber), Lst(Parked) }
+        | nil() => (woken, still)
+        | cons(p, tail) =>
+            match is_ready(Arr/get(results, i), p.interest) : { Lst(Fiber), Lst(Parked) }
+            | true =>
+                let resume = p.resume;
+                walk(tail, Nat/add(i, 1), Lst/cons(resume(()), woken), still)
+            | false => walk(tail, Nat/add(i, 1), woken, Lst/cons(p, still))
+            end
+        end;
+    walk(blocked, start, Lst/nil(), Lst/nil());
+
+-- Run a set of fibers to completion, multiplexing them over one `Io/poll`.
+-- Fire-and-forget: each fiber's result is discarded (the queue has forgotten its
+-- type). Reach for `block_on` when you need one fiber's value back.
+pub rec run(ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
+    match ready : {}
+    | cons(f, rest) =>
+        match f : {}
+        | fiber(_, t) =>
+            match t : {}
+            | done(_) => run(rest, blocked)
+            | wait(h, ev, k) =>
+                run(rest, Lst/cons(Parked { handle = h, interest = ev, resume = (u) => Fiber/fiber(k(u)) }, blocked))
+            | spawn(child, k) =>
+                run(Lst/cons(Fiber/fiber(k(())), Lst/cons(Fiber/fiber(child), rest)), blocked)
+            end
+        end
+    | nil() =>
+        match blocked : {}
+        | nil() => ()
+        | cons(_, _) =>
+            let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
+            let events = Lst/to_arr(Lst/map((p) => p.interest, blocked));
+            let results = Io/poll(handles, events, -1);
+            let split = partition(blocked, results, 0);
+            run(split.0, split.1)
+        end
+    end;
+
+-- Drive one fiber to its value while multiplexing any fibers it spawns. The root
+-- stays an un-boxed `Task(A)` (so its `A` survives) in its own poll slot (index
+-- 0); spawned children ride the same `Lst(Fiber)`/`Lst(Parked)` machinery as
+-- `run`. Returns once the root completes; any outstanding children are dropped.
+pub let block_on(@A : Type, t : Task(A)) -> A =
+    rec loop(root : Task(A), ready : Lst(Fiber), blocked : Lst(Parked)) -> A =
+        match root : A
+        | done(a) => a
+        | spawn(child, k) => loop(k(()), Lst/cons(Fiber/fiber(child), ready), blocked)
+        | wait(rh, rev, rk) =>
+            match ready : A
+            | cons(f, rest) =>
+                match f : A
+                | fiber(_, ct) =>
+                    match ct : A
+                    | done(_) => loop(Task/wait(rh, rev, rk), rest, blocked)
+                    | wait(ch, cev, ck) =>
+                        loop(Task/wait(rh, rev, rk), rest,
+                            Lst/cons(Parked { handle = ch, interest = cev, resume = (u) => Fiber/fiber(ck(u)) }, blocked))
+                    | spawn(gc, ck) =>
+                        loop(Task/wait(rh, rev, rk), Lst/cons(Fiber/fiber(ck(())), Lst/cons(Fiber/fiber(gc), rest)), blocked)
+                    end
+                end
+            | nil() =>
+                let handles = Lst/to_arr(Lst/cons(rh, Lst/map((p) => p.handle, blocked)));
+                let events = Lst/to_arr(Lst/cons(rev, Lst/map((p) => p.interest, blocked)));
+                let results = Io/poll(handles, events, -1);
+                let split = partition(blocked, results, 1);
+                match is_ready(Arr/get(results, 0), rev) : A
+                | true => loop(rk(()), split.0, split.1)
+                | false => loop(Task/wait(rh, rev, rk), split.0, split.1)
+                end
+            end
+        end;
+    loop(t, Lst/nil(), Lst/nil());

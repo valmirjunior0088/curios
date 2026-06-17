@@ -1,6 +1,6 @@
 use {
     super::{BlockName, ClsrName, FuncName, ValueName},
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 #[derive(Debug, Clone)]
@@ -420,6 +420,23 @@ pub struct Region {
     pub tail: Tail,
 }
 
+impl Region {
+    /// Collect the arity of every *indirect* call site in this region (and its nested blocks).
+    /// A closure of that arity is invoked here even when the optimizer has specialized its
+    /// definition away (a higher-order function's argument inlined, dropping the only closure
+    /// of that arity while a `call_ref` in its body survives), so a closure type for the arity
+    /// is needed even though no closure of it is defined.
+    fn collect_indirect_arities(&self, out: &mut BTreeSet<usize>) {
+        if let Tail::Call(CallTarget::Indirect { params, .. }) = &self.tail {
+            out.insert(params.len());
+        }
+
+        for (_, block) in &self.blocks {
+            block.region.collect_indirect_arities(out);
+        }
+    }
+}
+
 /// A function or closure argument: its bound name, plus whether it is a
 /// specialization *candidate* — i.e. its erased type was a function (a first-class
 /// closure value), a `Type`, or unit, each a compile-time constant the specializer
@@ -529,6 +546,25 @@ impl Module {
 
     pub fn add_func(&mut self, func_name: FuncName, func: Func) {
         self.funcs.push((func_name, func));
+    }
+
+    /// Every closure arity the module needs closure types for: the arities of the surviving
+    /// closure definitions, unioned with the arities of indirect call sites (whose target
+    /// definition may have been inlined away). Sizing closure types from definitions alone
+    /// misses the latter, leaving a surviving `call_ref` with no declared type for its arity.
+    pub fn clsr_arities(&self) -> BTreeSet<usize> {
+        let mut arities = BTreeSet::new();
+
+        for (_, clsr) in &self.clsrs {
+            arities.insert(clsr.params.len());
+            clsr.region.collect_indirect_arities(&mut arities);
+        }
+
+        for (_, func) in &self.funcs {
+            func.region.collect_indirect_arities(&mut arities);
+        }
+
+        arities
     }
 
     /// The entrypoint function — the program's sole root: the value the host

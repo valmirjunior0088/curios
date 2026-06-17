@@ -340,15 +340,13 @@ impl<'a> Table<'a> {
                     .collect()
             },
             envr_types: module
-                .clsrs()
-                .iter()
-                .map(|(_, clsr)| clsr.params.len())
+                .clsr_arities()
+                .into_iter()
                 .map(|arity| (arity, wasm::TypeName::from(format!("envr/{}", arity))))
                 .collect(),
             clsr_types: module
-                .clsrs()
-                .iter()
-                .map(|(_, clsr)| clsr.params.len())
+                .clsr_arities()
+                .into_iter()
                 .map(|arity| (arity, wasm::TypeName::from(format!("clsr/{}", arity))))
                 .collect(),
             func_types: module

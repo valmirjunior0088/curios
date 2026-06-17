@@ -23,6 +23,12 @@ pub let rev(@A : Type, l : Lst(A)) -> Lst(A) =
         end;
     go(l, Lst/nil());
 
+pub rec map(@A : Type, @B : Type, f : (A) -> B, l : Lst(A)) -> Lst(B) =
+    match l : Lst(B)
+    | nil() => Lst/nil()
+    | cons(x, tail) => Lst/cons(f(x), map(f, tail))
+    end;
+
 pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
     rec go(rest : Lst(A), n : Nat) -> { Arr(A), Lst(A) } =
         match Nat/lt(n, 2)

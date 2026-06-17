@@ -951,9 +951,16 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
         match tele {
             Telescope::Done(_) => Ok(()),
             Telescope::Cons(ty, rest) => {
-                let head = &fields[0];
-                elaborated.push(check(context, head, ty)?);
-                walk(context, rest.open(&[head]), &fields[1..], elaborated)
+                // Open the rest of the dependent telescope with the *elaborated*
+                // field, not the raw surface term: the elaborated form carries
+                // label projections rebuilt positionally (and implicits inserted),
+                // whereas a raw `Field::Label` substituted into a later field type
+                // would panic once that type is reduced (e.g. `Task(b.A)` arising
+                // from a field typed `Task(A)` in `{ A : Type, t : Task(A) }`).
+                let head = check(context, &fields[0], ty)?;
+                let rest = rest.open(&[&head]);
+                elaborated.push(head);
+                walk(context, rest, &fields[1..], elaborated)
             }
         }
     }
@@ -1721,9 +1728,16 @@ fn elaborate_tuple(
         match tele {
             Telescope::Done(_) => Ok(()),
             Telescope::Cons(ty, rest) => {
-                let head = &fields[0];
-                elaborated.push(check(context, head, ty)?);
-                walk(context, rest.open(&[head]), &fields[1..], elaborated)
+                // Open the rest of the dependent telescope with the *elaborated*
+                // field, not the raw surface term: the elaborated form carries
+                // label projections rebuilt positionally (and implicits inserted),
+                // whereas a raw `Field::Label` substituted into a later field type
+                // would panic once that type is reduced (e.g. `Task(b.A)` arising
+                // from a field typed `Task(A)` in `{ A : Type, t : Task(A) }`).
+                let head = check(context, &fields[0], ty)?;
+                let rest = rest.open(&[&head]);
+                elaborated.push(head);
+                walk(context, rest, &fields[1..], elaborated)
             }
         }
     }

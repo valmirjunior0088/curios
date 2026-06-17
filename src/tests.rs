@@ -2371,3 +2371,164 @@ fn io_poll_os_reports_stdout_writable() {
     let revents = OsHost::new().poll(&[Io::Stdout], &[PollEvents::WRITE], 0);
     assert!(revents[0].contains(PollEvents::WRITE));
 }
+
+#[test]
+fn task_scheduler_parks_polls_and_resumes() {
+    // The `/std/Task` event loop end to end: a single fiber that yields a
+    // `wait` on stdin-READ parks, `run` drains the ready queue, marshals the
+    // parked handle/interest into `Io/poll` (the mock reports it ready), and
+    // resumes the continuation — which performs the write. Exercises the novel
+    // path of a union variant carrying a closure through erasure and codegen.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Lst};
+        let prog : Task({}) =
+            Task/wait(Io/stdin, 1, (u) =>
+                let wrote = Io/write(Io/stdout, Str/to_bin("ok"));
+                Task/done(()));
+        Task/run(Lst/cons(Task/fiber(prog), Lst/nil()), Lst/nil())
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
+#[test]
+fn task_bind_reads_and_echoes() {
+    // The monad surface: a `with`-bind do-block over `Task/bind`, sequencing the
+    // `read` leaf (which completes without parking under the mock) into `write`,
+    // driven to its value by `block_on`. Exercises `bind`, the leaf actions, and
+    // do-notation against the new module.
+    let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Nat};
+        let prog : Task(Nat) =
+            let ! = Task/bind;
+            let r = Task/read(Io/stdin, 1024)!;
+            Task/write(Io/stdout, r.bytes);
+        Task/block_on(prog)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"hello\n");
+}
+
+#[test]
+fn task_block_on_multiplexes_children_with_a_typed_root() {
+    // `block_on` returns a typed value AND multiplexes spawned children: the root
+    // spawns a child, both park on stdin-READ, a single `poll` wakes both, the
+    // child's write fires (concurrency, not the old sequential drain), the root's
+    // write fires, and `block_on` hands back the root's `Nat`. Output proves all
+    // three: child effect, root effect, returned value.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        let child : Task({}) =
+            Task/wait(Io/stdin, 1, (u) =>
+                let w = Io/write(Io/stdout, Str/to_bin("child;"));
+                Task/done(()));
+        let root : Task(Nat) =
+            Task/spawn(child, (u) =>
+                Task/wait(Io/stdin, 1, (v) =>
+                    let w = Io/write(Io/stdout, Str/to_bin("root;"));
+                    Task/pure(7)));
+        let result = Task/block_on(root);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(result)))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"child;root;7");
+}
+
+#[test]
+fn run_schedules_a_heterogeneous_fiber_list() {
+    // One list holds a `Task(Nat)` and a `Task({})` together (boxed as `Fiber`),
+    // the unified `run` parks both, a single poll wakes them, and both
+    // continuations fire. Differing result types coexist in one ready queue —
+    // the whole point of the flattened, `Fiber`-based scheduler.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Nat, Lst};
+        let one : Task(Nat) =
+            Task/wait(Io/stdin, 1, (u) =>
+                let w = Io/write(Io/stdout, Str/to_bin("one;"));
+                Task/pure(1));
+        let two : Task({}) =
+            Task/wait(Io/stdin, 1, (v) =>
+                let w = Io/write(Io/stdout, Str/to_bin("two;"));
+                Task/done(()));
+        let ready : Lst(Task/Fiber) =
+            Lst/cons(Task/fiber(one), Lst/cons(Task/fiber(two), Lst/nil()));
+        Task/run(ready, Lst/nil())
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"two;one;");
+}
+
+#[test]
+fn label_projection_resolves_on_a_type_valued_field() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        let Box : Type = { A : Type, t : Task(A) };
+        let step(b : Box) -> Box =
+            match b.t : Box
+            | done(a) => (b.A, Task/done(a))
+            | wait(h, ev, k) => (b.A, k(()))
+            | spawn(c, k) => (b.A, k(()))
+            end;
+        let boxed : Box = (Nat, Task/pure(7));
+        let stepped = step(boxed);
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
+#[test]
+fn heterogeneous_existential_task_list_through_a_generic_map() {
+    // A `Lst` of existential-boxed tasks of DIFFERENT result types, mapped by a
+    // generic HOF whose body does an indirect closure call on a continuation
+    // pulled out of the box. The arity-1 closure definition is inlined away by
+    // the specializer, leaving the `call_ref` with no surviving definition — the
+    // codegen path that needs the call-site arity registered for `envr`/`clsr`.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Nat, Lst};
+        let Box : Type = { A : Type, t : Task(A) };
+        let boxes : Lst(Box) =
+            Lst/cons((Nat, Task/pure(7)),
+            Lst/cons(({}, Task/pure(())),
+            Lst/nil()));
+        let stepped = Lst/map((b : Box) =>
+            match b.t : Box
+            | done(a) => (b.A, Task/done(a))
+            | wait(h, ev, k) => (b.A, k(()))
+            | spawn(c, k) => (b.A, k(()))
+            end, boxes);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"2");
+}
