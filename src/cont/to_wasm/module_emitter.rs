@@ -36,373 +36,206 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    /// Declare a host import: a final func type plus an `("env", name)` import
+    /// bound to `func_name`.
+    fn add_host_import(
+        &mut self,
+        name: &str,
+        type_name: wasm::TypeName,
+        func_name: wasm::FuncName,
+        inputs: wasm::ResultType,
+        outputs: wasm::ResultType,
+    ) {
+        self.module.add_type(
+            type_name.clone(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Func(wasm::FuncType { inputs, outputs }),
+            },
+        );
+        self.module.add_import(
+            "env",
+            name,
+            wasm::Import::Func {
+                func_name,
+                type_name,
+            },
+        );
+    }
+
     fn emit_to_str_imports(&mut self) {
         let bin_ref = wasm::ValType::Ref(wasm::RefType {
             is_nullable: false,
             heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
         });
-
-        let i32_to_bin_type = wasm::SubType {
-            is_final: true,
-            super_types: vec![],
-            comp_type: wasm::CompType::Func(wasm::FuncType {
-                inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
-                outputs: wasm::ResultType::from([bin_ref.clone()]),
-            }),
-        };
+        let i32 = wasm::ValType::Num(wasm::NumType::I32);
+        let f32 = wasm::ValType::Num(wasm::NumType::F32);
 
         if self.table.nat_to_str_used() {
-            let nat_to_str_type = wasm::TypeName::from("nat_to_str_type");
-            self.module
-                .add_type(nat_to_str_type.clone(), i32_to_bin_type.clone());
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "nat_to_str",
-                wasm::Import::Func {
-                    func_name: self.table.nat_to_str_func().clone(),
-                    type_name: nat_to_str_type,
-                },
+                wasm::TypeName::from("nat_to_str_type"),
+                self.table.nat_to_str_func().clone(),
+                wasm::ResultType::from([i32.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
             );
         }
 
         if self.table.int_to_str_used() {
-            let int_to_str_type = wasm::TypeName::from("int_to_str_type");
-            self.module
-                .add_type(int_to_str_type.clone(), i32_to_bin_type);
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "int_to_str",
-                wasm::Import::Func {
-                    func_name: self.table.int_to_str_func().clone(),
-                    type_name: int_to_str_type,
-                },
+                wasm::TypeName::from("int_to_str_type"),
+                self.table.int_to_str_func().clone(),
+                wasm::ResultType::from([i32.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
             );
         }
 
         if self.table.flt_to_str_used() {
-            let flt_to_str_type = wasm::TypeName::from("flt_to_str_type");
-            self.module.add_type(
-                flt_to_str_type.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::F32)]),
-                        outputs: wasm::ResultType::from([bin_ref.clone()]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "flt_to_str",
-                wasm::Import::Func {
-                    func_name: self.table.flt_to_str_func().clone(),
-                    type_name: flt_to_str_type,
-                },
+                wasm::TypeName::from("flt_to_str_type"),
+                self.table.flt_to_str_func().clone(),
+                wasm::ResultType::from([f32.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
             );
         }
 
         if self.table.flt_to_le_bin_used() {
-            let flt_to_le_bin_type = wasm::TypeName::from("flt_to_le_bin_type");
-            self.module.add_type(
-                flt_to_le_bin_type.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::F32)]),
-                        outputs: wasm::ResultType::from([bin_ref]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "flt_to_le_bin",
-                wasm::Import::Func {
-                    func_name: self.table.flt_to_le_bin_func().clone(),
-                    type_name: flt_to_le_bin_type,
-                },
+                wasm::TypeName::from("flt_to_le_bin_type"),
+                self.table.flt_to_le_bin_func().clone(),
+                wasm::ResultType::from([f32]),
+                wasm::ResultType::from([bin_ref]),
             );
         }
     }
 
     fn emit_sys_imports(&mut self) {
+        let i32_val = wasm::ValType::Num(wasm::NumType::I32);
         let bin_ref = wasm::ValType::Ref(wasm::RefType {
             is_nullable: false,
             heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
         });
-
-        let i32_val = wasm::ValType::Num(wasm::NumType::I32);
-        // Scalar *results* cross the boundary pre-boxed as i31 refs so they
-        // can land directly in anyref block params; scalar *params* stay raw
-        // i32 (the call site unboxes via `LoadAs::Nat` as usual).
+        // Scalar *results* cross the boundary pre-boxed as i31 refs so they can
+        // land directly in anyref block params; scalar *params* stay raw i32
+        // (the call site unboxes via `LoadAs::Nat` as usual).
         let status_ref = wasm::ValType::Ref(self.table.int_type(false));
 
         if self.table.io_read_used() {
-            let io_read = wasm::TypeName::from("io_read");
-            self.module.add_type(
-                io_read.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
-                        outputs: wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            // `(handle, count) -> (status, bytes)`.
+            self.add_host_import(
                 "io_read",
-                wasm::Import::Func {
-                    func_name: self.table.io_read_func().clone(),
-                    type_name: io_read,
-                },
+                wasm::TypeName::from("io_read"),
+                self.table.io_read_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
 
         if self.table.io_write_used() {
-            let io_write = wasm::TypeName::from("io_write");
-            self.module.add_type(
-                io_write.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
-                        outputs: wasm::ResultType::from([status_ref.clone()]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_write",
-                wasm::Import::Func {
-                    func_name: self.table.io_write_func().clone(),
-                    type_name: io_write,
-                },
+                wasm::TypeName::from("io_write"),
+                self.table.io_write_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
             );
         }
 
         if self.table.io_open_used() {
-            let io_open = wasm::TypeName::from("io_open");
-            self.module.add_type(
-                io_open.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([bin_ref, i32_val.clone()]),
-                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_open",
-                wasm::Import::Func {
-                    func_name: self.table.io_open_func().clone(),
-                    type_name: io_open,
-                },
+                wasm::TypeName::from("io_open"),
+                self.table.io_open_func().clone(),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
 
         if self.table.io_connect_used() {
-            // `bin_ref`/`status_ref` were moved by the `io_open` block above, so
-            // recompute them (the `io_connect` signature is `(host, port,
-            // connect_timeout, read_timeout, write_timeout) -> (status, handle)`).
-            let bin_ref = wasm::ValType::Ref(wasm::RefType {
-                is_nullable: false,
-                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
-            });
-            let status_ref = wasm::ValType::Ref(self.table.int_type(false));
-            let io_connect = wasm::TypeName::from("io_connect");
-            self.module.add_type(
-                io_connect.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([
-                            bin_ref,
-                            i32_val.clone(),
-                            i32_val.clone(),
-                            i32_val.clone(),
-                            i32_val.clone(),
-                        ]),
-                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            // `(host, port, connect_timeout, read_timeout, write_timeout)
+            //  -> (status, handle)`.
+            self.add_host_import(
                 "io_connect",
-                wasm::Import::Func {
-                    func_name: self.table.io_connect_func().clone(),
-                    type_name: io_connect,
-                },
+                wasm::TypeName::from("io_connect"),
+                self.table.io_connect_func().clone(),
+                wasm::ResultType::from([
+                    bin_ref.clone(),
+                    i32_val.clone(),
+                    i32_val.clone(),
+                    i32_val.clone(),
+                    i32_val.clone(),
+                ]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
 
         if self.table.io_close_used() {
-            let io_close = wasm::TypeName::from("io_close");
-            self.module.add_type(
-                io_close.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([i32_val]),
-                        outputs: wasm::ResultType::from([]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_close",
-                wasm::Import::Func {
-                    func_name: self.table.io_close_func().clone(),
-                    type_name: io_close,
-                },
+                wasm::TypeName::from("io_close"),
+                self.table.io_close_func().clone(),
+                wasm::ResultType::from([i32_val.clone()]),
+                wasm::ResultType::from([]),
             );
         }
 
         if self.table.io_listen_used() {
             // `(host, port) -> (status, handle)` — the same shape as `io_open`.
-            // Recompute the reference types, moved by the blocks above.
-            let bin_ref = wasm::ValType::Ref(wasm::RefType {
-                is_nullable: false,
-                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
-            });
-            let status_ref = wasm::ValType::Ref(self.table.int_type(false));
-            let io_listen = wasm::TypeName::from("io_listen");
-            self.module.add_type(
-                io_listen.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([
-                            bin_ref,
-                            wasm::ValType::Num(wasm::NumType::I32),
-                        ]),
-                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_listen",
-                wasm::Import::Func {
-                    func_name: self.table.io_listen_func().clone(),
-                    type_name: io_listen,
-                },
+                wasm::TypeName::from("io_listen"),
+                self.table.io_listen_func().clone(),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
 
         if self.table.io_accept_used() {
             // `(handle) -> (status, handle)`: one i32 in, a status record out.
-            let status_ref = wasm::ValType::Ref(self.table.int_type(false));
-            let io_accept = wasm::TypeName::from("io_accept");
-            self.module.add_type(
-                io_accept.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
-                        outputs: wasm::ResultType::from([status_ref.clone(), status_ref]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_accept",
-                wasm::Import::Func {
-                    func_name: self.table.io_accept_func().clone(),
-                    type_name: io_accept,
-                },
+                wasm::TypeName::from("io_accept"),
+                self.table.io_accept_func().clone(),
+                wasm::ResultType::from([i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
 
-        // `bin_ref`/`status_ref` above are moved by the `io_open` block, so the
-        // clock/random imports recompute their own i31 and bin reference types.
-        let i31_ref = wasm::ValType::Ref(self.table.int_type(false));
-        let bin_out = wasm::ValType::Ref(wasm::RefType {
-            is_nullable: false,
-            heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
-        });
-
         if self.table.io_clock_wall_used() {
-            let io_clock_wall = wasm::TypeName::from("io_clock_wall");
-            self.module.add_type(
-                io_clock_wall.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([]),
-                        outputs: wasm::ResultType::from([
-                            i31_ref.clone(),
-                            i31_ref.clone(),
-                            i31_ref.clone(),
-                        ]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_clock_wall",
-                wasm::Import::Func {
-                    func_name: self.table.io_clock_wall_func().clone(),
-                    type_name: io_clock_wall,
-                },
+                wasm::TypeName::from("io_clock_wall"),
+                self.table.io_clock_wall_func().clone(),
+                wasm::ResultType::from([]),
+                wasm::ResultType::from([
+                    status_ref.clone(),
+                    status_ref.clone(),
+                    status_ref.clone(),
+                ]),
             );
         }
 
         if self.table.io_clock_mono_used() {
-            let io_clock_mono = wasm::TypeName::from("io_clock_mono");
-            self.module.add_type(
-                io_clock_mono.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([]),
-                        outputs: wasm::ResultType::from([i31_ref.clone(), i31_ref.clone()]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_clock_mono",
-                wasm::Import::Func {
-                    func_name: self.table.io_clock_mono_func().clone(),
-                    type_name: io_clock_mono,
-                },
+                wasm::TypeName::from("io_clock_mono"),
+                self.table.io_clock_mono_func().clone(),
+                wasm::ResultType::from([]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
 
         if self.table.io_random_used() {
-            let io_random = wasm::TypeName::from("io_random");
-            self.module.add_type(
-                io_random.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
-                        outputs: wasm::ResultType::from([bin_out.clone()]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_random",
-                wasm::Import::Func {
-                    func_name: self.table.io_random_func().clone(),
-                    type_name: io_random,
-                },
+                wasm::TypeName::from("io_random"),
+                self.table.io_random_func().clone(),
+                wasm::ResultType::from([i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
             );
         }
 
@@ -413,71 +246,32 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 is_nullable: false,
                 heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
             });
-            let io_args = wasm::TypeName::from("io_args");
-            self.module.add_type(
-                io_args.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([]),
-                        outputs: wasm::ResultType::from([arr_ref]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_args",
-                wasm::Import::Func {
-                    func_name: self.table.io_args_func().clone(),
-                    type_name: io_args,
-                },
+                wasm::TypeName::from("io_args"),
+                self.table.io_args_func().clone(),
+                wasm::ResultType::from([]),
+                wasm::ResultType::from([arr_ref]),
             );
         }
 
         if self.table.io_env_used() {
-            let io_env = wasm::TypeName::from("io_env");
-            self.module.add_type(
-                io_env.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([bin_out.clone()]),
-                        outputs: wasm::ResultType::from([i31_ref.clone(), bin_out.clone()]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_env",
-                wasm::Import::Func {
-                    func_name: self.table.io_env_func().clone(),
-                    type_name: io_env,
-                },
+                wasm::TypeName::from("io_env"),
+                self.table.io_env_func().clone(),
+                wasm::ResultType::from([bin_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
 
         if self.table.io_exit_used() {
-            let io_exit = wasm::TypeName::from("io_exit");
-            self.module.add_type(
-                io_exit.clone(),
-                wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from([wasm::ValType::Num(wasm::NumType::I32)]),
-                        outputs: wasm::ResultType::from([]),
-                    }),
-                },
-            );
-            self.module.add_import(
-                "env",
+            self.add_host_import(
                 "io_exit",
-                wasm::Import::Func {
-                    func_name: self.table.io_exit_func().clone(),
-                    type_name: io_exit,
-                },
+                wasm::TypeName::from("io_exit"),
+                self.table.io_exit_func().clone(),
+                wasm::ResultType::from([i32_val.clone()]),
+                wasm::ResultType::from([]),
             );
         }
     }
