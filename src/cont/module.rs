@@ -240,6 +240,24 @@ impl HostTarget {
             | HostTarget::IoExit { resume, .. } => resume,
         }
     }
+
+    pub fn resume_mut(&mut self) -> &mut BlockName {
+        match self {
+            HostTarget::IoRead { resume, .. }
+            | HostTarget::IoWrite { resume, .. }
+            | HostTarget::IoOpen { resume, .. }
+            | HostTarget::IoConnect { resume, .. }
+            | HostTarget::IoListen { resume, .. }
+            | HostTarget::IoAccept { resume, .. }
+            | HostTarget::IoClose { resume, .. }
+            | HostTarget::IoClockWall { resume }
+            | HostTarget::IoClockMono { resume }
+            | HostTarget::IoRandom { resume, .. }
+            | HostTarget::IoArgs { resume }
+            | HostTarget::IoEnv { resume, .. }
+            | HostTarget::IoExit { resume, .. } => resume,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
