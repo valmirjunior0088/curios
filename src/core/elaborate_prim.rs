@@ -40,6 +40,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
     let bin_type: Term = Subterm::Prim(Prim::BinType).into();
     let str_type: Term = Subterm::Prim(Prim::StrType).into();
+    let io_type: Term = Subterm::Prim(Prim::IoType).into();
 
     Ok(match prim {
         Prim::BlnType => (prim.clone(), Term::type_()),
@@ -278,12 +279,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::ArrConcat(type_, elaborated), list_type)
         }
         Prim::IoType => (prim.clone(), Term::type_()),
-        Prim::Io(_) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
-            (prim.clone(), io_type)
-        }
+        Prim::Io(_) => (prim.clone(), io_type),
         Prim::IoRead(handle, count) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             let count = elaborate(context, count, Mode::Check(nat_type.clone()))?.0;
             // Failable host ops report through a status record: 0 ok, 1 eof
@@ -295,13 +292,11 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             )
         }
         Prim::IoWrite(handle, bytes) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             let bytes = elaborate(context, bytes, Mode::Check(bin_type))?.0;
             (Prim::IoWrite(handle, bytes), nat_type)
         }
         Prim::IoOpen(path, mode) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let path = elaborate(context, path, Mode::Check(bin_type))?.0;
             let mode = elaborate(context, mode, Mode::Check(nat_type.clone()))?.0;
             (
@@ -310,7 +305,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             )
         }
         Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let host = elaborate(context, host, Mode::Check(bin_type))?.0;
             let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
             let connect_timeout =
@@ -323,7 +317,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             )
         }
         Prim::IoListen(host, port) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let host = elaborate(context, host, Mode::Check(bin_type))?.0;
             let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
             (
@@ -332,7 +325,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             )
         }
         Prim::IoAccept(handle) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type.clone()))?.0;
             (
                 Prim::IoAccept(handle),
@@ -340,7 +332,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             )
         }
         Prim::IoClose(handle) => {
-            let io_type: Term = Subterm::Prim(Prim::IoType).into();
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             (Prim::IoClose(handle), Term::tuple_type_unit())
         }
