@@ -5,20 +5,21 @@ edition = "2024"
 description = "Work-in-progress functional dependently typed programming language"
 
 [features]
-run = ["dep:wasmtime", "dep:getrandom"]
-cli = ["dep:clap", "run"]
+run = ["dep:wasmtime", "dep:getrandom", "dep:socket2"]
 binaryen = ["dep:cmake"]
-default = ["cli", "binaryen"]
+cli = ["dep:clap", "run"]
+default = ["binaryen", "cli"]
 
 [build-dependencies]
 cmake = { version = "0.1.54", optional = true }
 
+[dev-dependencies]
+curios = { path = ".", default-features = false, features = ["run"] }
+
 [dependencies]
 wasmtime = { version = "44.0.1", optional = true }
 getrandom = { version = "0.3.3", optional = true }
+socket2 = { version = "0.5.8", optional = true }
 clap = { version = "4.5.60", features = ["derive"], optional = true }
 num-bigint = { version = "0.4.6" }
 num-traits = { version = "0.2.19" }
-
-[dev-dependencies]
-curios = { path = ".", default-features = false, features = ["run"] }

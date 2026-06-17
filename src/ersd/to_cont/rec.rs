@@ -105,6 +105,7 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
             vec![]
         }
         ersd::HostPrim::IoAccept(a)
+        | ersd::HostPrim::IoSocket(a)
         | ersd::HostPrim::IoClose(a)
         | ersd::HostPrim::IoRandom(a)
         | ersd::HostPrim::IoEnv(a)
@@ -112,8 +113,14 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
         ersd::HostPrim::IoRead(a, b)
         | ersd::HostPrim::IoWrite(a, b)
         | ersd::HostPrim::IoOpen(a, b)
-        | ersd::HostPrim::IoListen(a, b) => vec![a, b],
-        ersd::HostPrim::IoConnect(a, b, c, d, e) => vec![a, b, c, d, e],
+        | ersd::HostPrim::IoResolve(a, b)
+        | ersd::HostPrim::IoBind(a, b)
+        | ersd::HostPrim::IoConnect(a, b)
+        | ersd::HostPrim::IoListen(a, b)
+        | ersd::HostPrim::IoSetNonblocking(a, b)
+        | ersd::HostPrim::IoSetRecvTimeout(a, b)
+        | ersd::HostPrim::IoSetSendTimeout(a, b)
+        | ersd::HostPrim::IoSetReuseaddr(a, b) => vec![a, b],
     };
 
     operands.into_iter().flat_map(free_names).collect()

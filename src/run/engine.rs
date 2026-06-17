@@ -111,7 +111,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         ),
     );
     let arr_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(arr_array_type)));
-    let io_args_type = FuncType::new(engine, std::iter::empty::<ValType>(), [arr_ref]);
+    let io_args_type = FuncType::new(engine, std::iter::empty::<ValType>(), [arr_ref.clone()]);
     let io_env_type = FuncType::new(
         engine,
         [bin_ref.clone()],
@@ -124,24 +124,32 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [i31_ref.clone(), bin_ref.clone()],
     );
     let io_write_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
-    let io_connect_type = FuncType::new(
-        engine,
-        [
-            bin_ref.clone(),
-            ValType::I32,
-            ValType::I32,
-            ValType::I32,
-            ValType::I32,
-        ],
-        [i31_ref.clone(), i31_ref.clone()],
-    );
-    let io_listen_type = FuncType::new(
-        engine,
-        [bin_ref.clone(), ValType::I32],
-        [i31_ref.clone(), i31_ref.clone()],
-    );
+    let io_connect_type =
+        FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_listen_type =
+        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
     let io_accept_type =
         FuncType::new(engine, [ValType::I32], [i31_ref.clone(), i31_ref.clone()]);
+    let io_resolve_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), ValType::I32],
+        [i31_ref.clone(), arr_ref.clone()],
+    );
+    let io_socket_type = FuncType::new(
+        engine,
+        [bin_ref.clone()],
+        [i31_ref.clone(), i31_ref.clone()],
+    );
+    let io_bind_type =
+        FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_set_nonblocking_type =
+        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+    let io_set_recv_timeout_type =
+        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+    let io_set_send_timeout_type =
+        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+    let io_set_reuseaddr_type =
+        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
     let io_open_type = FuncType::new(engine, [bin_ref, ValType::I32], [i31_ref.clone(), i31_ref]);
     let io_close_type = FuncType::new(engine, [ValType::I32], []);
 
@@ -185,25 +193,71 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     define_import(&mut linker, "io_connect", io_connect_type, {
         let host = host.clone();
 
-        move |(address, port, connect_timeout, read_timeout, write_timeout): (
-            Vec<u8>,
-            u32,
-            u32,
-            u32,
-            u32,
-        )| { host.connect(&address, port, connect_timeout, read_timeout, write_timeout) }
+        move |(handle, addr): (u32, Vec<u8>)| host.connect(handle, &addr)
     })?;
 
     define_import(&mut linker, "io_listen", io_listen_type, {
         let host = host.clone();
 
-        move |(address, port): (Vec<u8>, u32)| host.listen(&address, port)
+        move |(handle, backlog): (u32, u32)| host.listen(handle, backlog)
     })?;
 
     define_import(&mut linker, "io_accept", io_accept_type, {
         let host = host.clone();
 
         move |handle: u32| host.accept(handle)
+    })?;
+
+    define_import(&mut linker, "io_resolve", io_resolve_type, {
+        let host = host.clone();
+
+        move |(name, port): (Vec<u8>, u32)| host.resolve(&name, port)
+    })?;
+
+    define_import(&mut linker, "io_socket", io_socket_type, {
+        let host = host.clone();
+
+        move |addr: Vec<u8>| host.socket(&addr)
+    })?;
+
+    define_import(&mut linker, "io_bind", io_bind_type, {
+        let host = host.clone();
+
+        move |(handle, addr): (u32, Vec<u8>)| host.bind(handle, &addr)
+    })?;
+
+    define_import(&mut linker, "io_set_nonblocking", io_set_nonblocking_type, {
+        let host = host.clone();
+
+        move |(handle, on): (u32, u32)| host.set_nonblocking(handle, on)
+    })?;
+
+    define_import(
+        &mut linker,
+        "io_set_recv_timeout",
+        io_set_recv_timeout_type,
+        {
+            let host = host.clone();
+
+            move |(handle, ms): (u32, u32)| host.set_recv_timeout(handle, ms)
+        },
+    )?;
+
+    define_import(
+        &mut linker,
+        "io_set_send_timeout",
+        io_set_send_timeout_type,
+        {
+            let host = host.clone();
+
+            move |(handle, ms): (u32, u32)| host.set_send_timeout(handle, ms)
+        },
+    )?;
+
+    define_import(&mut linker, "io_set_reuseaddr", io_set_reuseaddr_type, {
+        let host = host.clone();
+
+        move |(handle, on): (u32, u32)| host.set_reuseaddr(handle, on)
     })?;
 
     define_import(&mut linker, "io_close", io_close_type, {

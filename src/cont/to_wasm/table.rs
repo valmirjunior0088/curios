@@ -227,9 +227,16 @@ pub struct Table<'a> {
     io_read: OnceCell<wasm::FuncName>,
     io_write: OnceCell<wasm::FuncName>,
     io_open: OnceCell<wasm::FuncName>,
+    io_resolve: OnceCell<wasm::FuncName>,
+    io_socket: OnceCell<wasm::FuncName>,
+    io_bind: OnceCell<wasm::FuncName>,
     io_connect: OnceCell<wasm::FuncName>,
     io_listen: OnceCell<wasm::FuncName>,
     io_accept: OnceCell<wasm::FuncName>,
+    io_set_nonblocking: OnceCell<wasm::FuncName>,
+    io_set_recv_timeout: OnceCell<wasm::FuncName>,
+    io_set_send_timeout: OnceCell<wasm::FuncName>,
+    io_set_reuseaddr: OnceCell<wasm::FuncName>,
     io_close: OnceCell<wasm::FuncName>,
     io_clock_wall: OnceCell<wasm::FuncName>,
     io_clock_mono: OnceCell<wasm::FuncName>,
@@ -289,9 +296,16 @@ impl<'a> Table<'a> {
             io_read: OnceCell::new(),
             io_write: OnceCell::new(),
             io_open: OnceCell::new(),
+            io_resolve: OnceCell::new(),
+            io_socket: OnceCell::new(),
+            io_bind: OnceCell::new(),
             io_connect: OnceCell::new(),
             io_listen: OnceCell::new(),
             io_accept: OnceCell::new(),
+            io_set_nonblocking: OnceCell::new(),
+            io_set_recv_timeout: OnceCell::new(),
+            io_set_send_timeout: OnceCell::new(),
+            io_set_reuseaddr: OnceCell::new(),
             io_close: OnceCell::new(),
             io_clock_wall: OnceCell::new(),
             io_clock_mono: OnceCell::new(),
@@ -488,6 +502,68 @@ impl<'a> Table<'a> {
 
     pub fn io_accept_used(&self) -> bool {
         self.io_accept.get().is_some()
+    }
+
+    pub fn io_resolve_func(&self) -> &wasm::FuncName {
+        self.io_resolve
+            .get_or_init(|| wasm::FuncName::from("io_resolve"))
+    }
+
+    pub fn io_resolve_used(&self) -> bool {
+        self.io_resolve.get().is_some()
+    }
+
+    pub fn io_socket_func(&self) -> &wasm::FuncName {
+        self.io_socket
+            .get_or_init(|| wasm::FuncName::from("io_socket"))
+    }
+
+    pub fn io_socket_used(&self) -> bool {
+        self.io_socket.get().is_some()
+    }
+
+    pub fn io_bind_func(&self) -> &wasm::FuncName {
+        self.io_bind.get_or_init(|| wasm::FuncName::from("io_bind"))
+    }
+
+    pub fn io_bind_used(&self) -> bool {
+        self.io_bind.get().is_some()
+    }
+
+    pub fn io_set_nonblocking_func(&self) -> &wasm::FuncName {
+        self.io_set_nonblocking
+            .get_or_init(|| wasm::FuncName::from("io_set_nonblocking"))
+    }
+
+    pub fn io_set_nonblocking_used(&self) -> bool {
+        self.io_set_nonblocking.get().is_some()
+    }
+
+    pub fn io_set_recv_timeout_func(&self) -> &wasm::FuncName {
+        self.io_set_recv_timeout
+            .get_or_init(|| wasm::FuncName::from("io_set_recv_timeout"))
+    }
+
+    pub fn io_set_recv_timeout_used(&self) -> bool {
+        self.io_set_recv_timeout.get().is_some()
+    }
+
+    pub fn io_set_send_timeout_func(&self) -> &wasm::FuncName {
+        self.io_set_send_timeout
+            .get_or_init(|| wasm::FuncName::from("io_set_send_timeout"))
+    }
+
+    pub fn io_set_send_timeout_used(&self) -> bool {
+        self.io_set_send_timeout.get().is_some()
+    }
+
+    pub fn io_set_reuseaddr_func(&self) -> &wasm::FuncName {
+        self.io_set_reuseaddr
+            .get_or_init(|| wasm::FuncName::from("io_set_reuseaddr"))
+    }
+
+    pub fn io_set_reuseaddr_used(&self) -> bool {
+        self.io_set_reuseaddr.get().is_some()
     }
 
     pub fn io_close_func(&self) -> &wasm::FuncName {

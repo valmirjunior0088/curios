@@ -1354,6 +1354,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoSocket(t)
         | Prim::IoAccept(t)
         | Prim::IoRandom(t)
         | Prim::IoEnv(t) => t.reach(),
@@ -1412,7 +1413,14 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
+        | Prim::IoResolve(a, b)
+        | Prim::IoBind(a, b)
+        | Prim::IoConnect(a, b)
         | Prim::IoListen(a, b)
+        | Prim::IoSetNonblocking(a, b)
+        | Prim::IoSetRecvTimeout(a, b)
+        | Prim::IoSetSendTimeout(a, b)
+        | Prim::IoSetReuseaddr(a, b)
         | Prim::IoExit(a, b) => a.reach().max(b.reach()),
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
@@ -1420,13 +1428,6 @@ fn prim_reach(prim: &Prim) -> usize {
         }
 
         Prim::ArrSlice(a, b, c, d) => a.reach().max(b.reach()).max(c.reach()).max(d.reach()),
-
-        Prim::IoConnect(a, b, c, d, e) => a
-            .reach()
-            .max(b.reach())
-            .max(c.reach())
-            .max(d.reach())
-            .max(e.reach()),
 
         Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
         Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
@@ -1477,6 +1478,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoSocket(t)
         | Prim::IoAccept(t)
         | Prim::IoRandom(t)
         | Prim::IoEnv(t) => t.collect_metavars(ids),
@@ -1535,18 +1537,17 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
+        | Prim::IoResolve(a, b)
+        | Prim::IoBind(a, b)
+        | Prim::IoConnect(a, b)
         | Prim::IoListen(a, b)
+        | Prim::IoSetNonblocking(a, b)
+        | Prim::IoSetRecvTimeout(a, b)
+        | Prim::IoSetSendTimeout(a, b)
+        | Prim::IoSetReuseaddr(a, b)
         | Prim::IoExit(a, b) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
-        }
-
-        Prim::IoConnect(a, b, c, d, e) => {
-            a.collect_metavars(ids);
-            b.collect_metavars(ids);
-            c.collect_metavars(ids);
-            d.collect_metavars(ids);
-            e.collect_metavars(ids);
         }
 
         Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
@@ -1714,16 +1715,25 @@ where
         Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),
         Prim::IoWrite(handle, bytes) => traverse_binary(handle, bytes, visit, Prim::IoWrite),
         Prim::IoOpen(path, mode) => traverse_binary(path, mode, visit, Prim::IoOpen),
-        Prim::IoListen(host, port) => traverse_binary(host, port, visit, Prim::IoListen),
+        Prim::IoResolve(host, port) => traverse_binary(host, port, visit, Prim::IoResolve),
+        Prim::IoSocket(addr) => Prim::IoSocket(visit.visit_subterm(addr)),
+        Prim::IoBind(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoBind),
+        Prim::IoListen(handle, backlog) => {
+            traverse_binary(handle, backlog, visit, Prim::IoListen)
+        }
         Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
-        Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
-            Prim::IoConnect(
-                visit.visit_subterm(host),
-                visit.visit_subterm(port),
-                visit.visit_subterm(connect_timeout),
-                visit.visit_subterm(read_timeout),
-                visit.visit_subterm(write_timeout),
-            )
+        Prim::IoConnect(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoConnect),
+        Prim::IoSetNonblocking(handle, on) => {
+            traverse_binary(handle, on, visit, Prim::IoSetNonblocking)
+        }
+        Prim::IoSetRecvTimeout(handle, ms) => {
+            traverse_binary(handle, ms, visit, Prim::IoSetRecvTimeout)
+        }
+        Prim::IoSetSendTimeout(handle, ms) => {
+            traverse_binary(handle, ms, visit, Prim::IoSetSendTimeout)
+        }
+        Prim::IoSetReuseaddr(handle, on) => {
+            traverse_binary(handle, on, visit, Prim::IoSetReuseaddr)
         }
         Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
         Prim::IoClockWall => Prim::IoClockWall,

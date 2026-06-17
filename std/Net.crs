@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Io, Result, Option, Time};
+use /std/{Bin, Str, Nat, Io, Result, Option, Time, Arr};
 
 pub union Error
 | refused()
@@ -40,20 +40,34 @@ let decode(status : Nat) -> Error =
     | _ => Error/other(status)
     end;
 
+let configure(h : Io, settings : Settings) -> {} =
+    let r = /sys/Io/set_recv_timeout(h, timeout_ms(settings.read_timeout));
+    let w = /sys/Io/set_send_timeout(h, timeout_ms(settings.write_timeout));
+    ();
+
 pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> A) -> Result(A, Error) =
-    let r = /sys/Io/connect(
-        Str/to_bin(host),
-        port,
-        timeout_ms(settings.connect_timeout),
-        timeout_ms(settings.read_timeout),
-        timeout_ms(settings.write_timeout));
-    match Nat/eql(r.status, 0)
-    | true =>
-        let c = Socket { r.handle };
-        let value = f(c);
-        let closed = close(c);
-        Result/success(value)
+    let r = /sys/Io/resolve(Str/to_bin(host), port);
+    match Nat/eql(r.status, 0) : Result(A, Error)
     | false => Result/failure(decode(r.status))
+    | true =>
+        let addr = Arr/get(r.addresses, 0);
+        let s = /sys/Io/socket(addr);
+        match Nat/eql(s.status, 0) : Result(A, Error)
+        | false => Result/failure(decode(s.status))
+        | true =>
+            let configured = configure(s.handle, settings);
+            let status = /sys/Io/connect(s.handle, addr);
+            match Nat/eql(status, 0) : Result(A, Error)
+            | false =>
+                let closed = /sys/Io/close(s.handle);
+                Result/failure(decode(status))
+            | true =>
+                let c = Socket { s.handle };
+                let value = f(c);
+                let closed = close(c);
+                Result/success(value)
+            end
+        end
     end;
 
 pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Result(Bin, Error) =
@@ -64,10 +78,31 @@ pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Resu
 struct Listener { Io }
 
 let listen(host : Str, port : Nat) -> Result(Listener, Error) =
-    let r = /sys/Io/listen(Str/to_bin(host), port);
+    let r = /sys/Io/resolve(Str/to_bin(host), port);
     match Nat/eql(r.status, 0) : Result(Listener, Error)
-    | true => Result/success(Listener { r.handle })
     | false => Result/failure(decode(r.status))
+    | true =>
+        let addr = Arr/get(r.addresses, 0);
+        let s = /sys/Io/socket(addr);
+        match Nat/eql(s.status, 0) : Result(Listener, Error)
+        | false => Result/failure(decode(s.status))
+        | true =>
+            let reused = /sys/Io/set_reuseaddr(s.handle, true);
+            let bound = /sys/Io/bind(s.handle, addr);
+            match Nat/eql(bound, 0) : Result(Listener, Error)
+            | false =>
+                let closed = /sys/Io/close(s.handle);
+                Result/failure(decode(bound))
+            | true =>
+                let status = /sys/Io/listen(s.handle, 128);
+                match Nat/eql(status, 0) : Result(Listener, Error)
+                | false =>
+                    let closed = /sys/Io/close(s.handle);
+                    Result/failure(decode(status))
+                | true => Result/success(Listener { s.handle })
+                end
+            end
+        end
     end;
 
 let accept(l : Listener) -> Result(Socket, Error) =

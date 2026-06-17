@@ -304,25 +304,38 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
         }
-        Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
-            let host = elaborate(context, host, Mode::Check(bin_type))?.0;
+        Prim::IoResolve(host, port) => {
+            let host = elaborate(context, host, Mode::Check(bin_type.clone()))?.0;
             let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
-            let connect_timeout =
-                elaborate(context, connect_timeout, Mode::Check(nat_type.clone()))?.0;
-            let read_timeout = elaborate(context, read_timeout, Mode::Check(nat_type.clone()))?.0;
-            let write_timeout = elaborate(context, write_timeout, Mode::Check(nat_type.clone()))?.0;
             (
-                Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout),
+                Prim::IoResolve(host, port),
+                Term::tuple_type([
+                    ("status", nat_type.clone()),
+                    ("addresses", Subterm::Prim(Prim::ArrType(bin_type)).into()),
+                ]),
+            )
+        }
+        Prim::IoSocket(addr) => {
+            let addr = elaborate(context, addr, Mode::Check(bin_type))?.0;
+            (
+                Prim::IoSocket(addr),
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
         }
-        Prim::IoListen(host, port) => {
-            let host = elaborate(context, host, Mode::Check(bin_type))?.0;
-            let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
-            (
-                Prim::IoListen(host, port),
-                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
-            )
+        Prim::IoBind(handle, addr) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let addr = elaborate(context, addr, Mode::Check(bin_type))?.0;
+            (Prim::IoBind(handle, addr), nat_type)
+        }
+        Prim::IoConnect(handle, addr) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let addr = elaborate(context, addr, Mode::Check(bin_type))?.0;
+            (Prim::IoConnect(handle, addr), nat_type)
+        }
+        Prim::IoListen(handle, backlog) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let backlog = elaborate(context, backlog, Mode::Check(nat_type.clone()))?.0;
+            (Prim::IoListen(handle, backlog), nat_type)
         }
         Prim::IoAccept(handle) => {
             let handle = elaborate(context, handle, Mode::Check(io_type.clone()))?.0;
@@ -330,6 +343,26 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Prim::IoAccept(handle),
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
+        }
+        Prim::IoSetNonblocking(handle, on) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let on = elaborate(context, on, Mode::Check(bln_type))?.0;
+            (Prim::IoSetNonblocking(handle, on), nat_type)
+        }
+        Prim::IoSetRecvTimeout(handle, ms) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let ms = elaborate(context, ms, Mode::Check(nat_type.clone()))?.0;
+            (Prim::IoSetRecvTimeout(handle, ms), nat_type)
+        }
+        Prim::IoSetSendTimeout(handle, ms) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let ms = elaborate(context, ms, Mode::Check(nat_type.clone()))?.0;
+            (Prim::IoSetSendTimeout(handle, ms), nat_type)
+        }
+        Prim::IoSetReuseaddr(handle, on) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            let on = elaborate(context, on, Mode::Check(bln_type))?.0;
+            (Prim::IoSetReuseaddr(handle, on), nat_type)
         }
         Prim::IoClose(handle) => {
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;

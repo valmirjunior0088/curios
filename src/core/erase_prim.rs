@@ -273,24 +273,48 @@ pub fn erase_prim(
             erase(context, path, &bin_type())?,
             erase(context, mode, &nat_type())?,
         ))),
-        Prim::IoConnect(address, port, connect_timeout, read_timeout, write_timeout) => {
-            Ok(host(ersd::HostPrim::IoConnect(
-                erase(context, address, &bin_type())?,
-                erase(context, port, &nat_type())?,
-                erase(context, connect_timeout, &nat_type())?,
-                erase(context, read_timeout, &nat_type())?,
-                erase(context, write_timeout, &nat_type())?,
-            )))
-        }
-        Prim::IoListen(address, port) => Ok(host(ersd::HostPrim::IoListen(
-            erase(context, address, &bin_type())?,
+        Prim::IoResolve(host_, port) => Ok(host(ersd::HostPrim::IoResolve(
+            erase(context, host_, &bin_type())?,
             erase(context, port, &nat_type())?,
+        ))),
+        Prim::IoSocket(addr) => Ok(host(ersd::HostPrim::IoSocket(erase(
+            context,
+            addr,
+            &bin_type(),
+        )?))),
+        Prim::IoBind(handle, addr) => Ok(host(ersd::HostPrim::IoBind(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, addr, &bin_type())?,
+        ))),
+        Prim::IoConnect(handle, addr) => Ok(host(ersd::HostPrim::IoConnect(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, addr, &bin_type())?,
+        ))),
+        Prim::IoListen(handle, backlog) => Ok(host(ersd::HostPrim::IoListen(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, backlog, &nat_type())?,
         ))),
         Prim::IoAccept(handle) => Ok(host(ersd::HostPrim::IoAccept(erase(
             context,
             handle,
             &prim_type(Prim::IoType),
         )?))),
+        Prim::IoSetNonblocking(handle, on) => Ok(host(ersd::HostPrim::IoSetNonblocking(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, on, &bln_type())?,
+        ))),
+        Prim::IoSetRecvTimeout(handle, ms) => Ok(host(ersd::HostPrim::IoSetRecvTimeout(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, ms, &nat_type())?,
+        ))),
+        Prim::IoSetSendTimeout(handle, ms) => Ok(host(ersd::HostPrim::IoSetSendTimeout(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, ms, &nat_type())?,
+        ))),
+        Prim::IoSetReuseaddr(handle, on) => Ok(host(ersd::HostPrim::IoSetReuseaddr(
+            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, on, &bln_type())?,
+        ))),
         Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
             context,
             handle,

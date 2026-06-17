@@ -98,18 +98,37 @@ pub enum Prim {
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
-    // (host, port, connect_timeout, read_timeout, write_timeout) -> { status,
-    // handle }. The three timeouts are `Nat` milliseconds; `0` means no
-    // timeout. The handle is a bare `Io`, so the existing read/write/close
-    // plumbing serves the socket.
-    IoConnect(Term, Term, Term, Term, Term),
-    // (host, port) -> { status, handle }: bind a listening socket. The handle is
-    // a bare `Io`; `accept` pulls connections from it and `close` releases it.
+    // (host, port) -> { status, addresses }: resolve a host:port to a list of
+    // opaque address blobs the socket lifecycle consumes. The blobs are the
+    // host's private encoding (it derives the address family from them); the
+    // guest only shuttles them back into `socket`/`bind`/`connect`.
+    IoResolve(Term, Term),
+    // (addr) -> { status, handle }: create an unconnected socket for the address
+    // family encoded in `addr`. The handle is a bare `Io`, configured via the
+    // setters before `bind`/`connect`/`listen` transition it.
+    IoSocket(Term),
+    // (handle, addr) -> Nat status: bind a socket to a local address.
+    IoBind(Term, Term),
+    // (handle, addr) -> Nat status: connect a socket to a resolved address. The
+    // handle then serves the read/write/close plumbing like any byte stream.
+    IoConnect(Term, Term),
+    // (handle, backlog) -> Nat status: mark a bound socket as listening with the
+    // given accept-queue depth (OS-clamped to somaxconn). `accept` pulls
+    // connections from it and `close` releases it.
     IoListen(Term, Term),
     // (handle) -> { status, handle }: pull the next connection from a listener.
     // The returned handle is an ordinary `Io` the read/write/close plumbing
     // serves, exactly like a `connect`ed socket.
     IoAccept(Term),
+    // (handle, on) -> Nat status: set the handle's non-blocking flag (`on` is a
+    // `Bln` riding the i31 carrier). fcntl O_NONBLOCK.
+    IoSetNonblocking(Term, Term),
+    // (handle, ms) -> Nat status: SO_RCVTIMEO; `0` ms clears the timeout.
+    IoSetRecvTimeout(Term, Term),
+    // (handle, ms) -> Nat status: SO_SNDTIMEO; `0` ms clears the timeout.
+    IoSetSendTimeout(Term, Term),
+    // (handle, on) -> Nat status: SO_REUSEADDR (`on` a `Bln`); set before bind.
+    IoSetReuseaddr(Term, Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

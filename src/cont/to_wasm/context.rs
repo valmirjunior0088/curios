@@ -639,33 +639,63 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 self.host_multi_resume(&mut output, resume, 2);
             }
-            cont::HostTarget::IoConnect {
-                host,
-                port,
-                connect_timeout,
-                read_timeout,
-                write_timeout,
-                resume,
-            } => {
+            cont::HostTarget::IoResolve { host, port, resume } => {
                 output.extend(self.load_value_instrs(host, LoadAs::Bin));
                 output.extend(self.load_value_instrs(port, LoadAs::Nat));
-                output.extend(self.load_value_instrs(connect_timeout, LoadAs::Nat));
-                output.extend(self.load_value_instrs(read_timeout, LoadAs::Nat));
-                output.extend(self.load_value_instrs(write_timeout, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
-                    func_name: self.table().io_connect_func().clone(),
+                    func_name: self.table().io_resolve_func().clone(),
+                });
+
+                // Two-result: resume defines the `{ status, addresses }` record.
+                self.host_multi_resume(&mut output, resume, 2);
+            }
+            cont::HostTarget::IoSocket { addr, resume } => {
+                output.extend(self.load_value_instrs(addr, LoadAs::Bin));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_socket_func().clone(),
                 });
 
                 self.host_multi_resume(&mut output, resume, 2);
             }
-            cont::HostTarget::IoListen { host, port, resume } => {
-                output.extend(self.load_value_instrs(host, LoadAs::Bin));
-                output.extend(self.load_value_instrs(port, LoadAs::Nat));
+            cont::HostTarget::IoBind {
+                handle,
+                addr,
+                resume,
+            } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(addr, LoadAs::Bin));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_bind_func().clone(),
+                });
+
+                // The import returns the status pre-boxed as an i31 ref.
+                self.host_single_resume(&mut output, resume);
+            }
+            cont::HostTarget::IoConnect {
+                handle,
+                addr,
+                resume,
+            } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(addr, LoadAs::Bin));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_connect_func().clone(),
+                });
+
+                self.host_single_resume(&mut output, resume);
+            }
+            cont::HostTarget::IoListen {
+                handle,
+                backlog,
+                resume,
+            } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(backlog, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_listen_func().clone(),
                 });
 
-                self.host_multi_resume(&mut output, resume, 2);
+                self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoAccept { handle, resume } => {
                 output.extend(self.load_value_instrs(handle, LoadAs::Nat));
@@ -674,6 +704,42 @@ impl<'a, 'b> Context<'a, 'b> {
                 });
 
                 self.host_multi_resume(&mut output, resume, 2);
+            }
+            cont::HostTarget::IoSetNonblocking { handle, on, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(on, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_set_nonblocking_func().clone(),
+                });
+
+                self.host_single_resume(&mut output, resume);
+            }
+            cont::HostTarget::IoSetRecvTimeout { handle, ms, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(ms, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_set_recv_timeout_func().clone(),
+                });
+
+                self.host_single_resume(&mut output, resume);
+            }
+            cont::HostTarget::IoSetSendTimeout { handle, ms, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(ms, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_set_send_timeout_func().clone(),
+                });
+
+                self.host_single_resume(&mut output, resume);
+            }
+            cont::HostTarget::IoSetReuseaddr { handle, on, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(on, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_set_reuseaddr_func().clone(),
+                });
+
+                self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoClose { handle, resume } => {
                 output.extend(self.load_value_instrs(handle, LoadAs::Nat));

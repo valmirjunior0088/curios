@@ -520,13 +520,7 @@ pub fn lower_value_prim<'b>(
                 )
             }),
         ),
-        ersd::Prim::Host(ersd::HostPrim::IoConnect(
-            host,
-            port,
-            connect_timeout,
-            read_timeout,
-            write_timeout,
-        )) => work.lower_value_name(
+        ersd::Prim::Host(ersd::HostPrim::IoResolve(host, port)) => work.lower_value_name(
             host,
             frame,
             Cont::new(move |work, host| {
@@ -534,52 +528,81 @@ pub fn lower_value_prim<'b>(
                     port,
                     frame,
                     Cont::new(move |work, port| {
-                        work.lower_value_name(
-                            connect_timeout,
-                            frame,
-                            Cont::new(move |work, connect_timeout| {
-                                work.lower_value_name(
-                                    read_timeout,
-                                    frame,
-                                    Cont::new(move |work, read_timeout| {
-                                        work.lower_value_name(
-                                            write_timeout,
-                                            frame,
-                                            Cont::new(move |work, write_timeout| {
-                                                // (status, handle) packs into
-                                                // `{ status, handle }`, like `IoOpen`.
-                                                let resume = record_resume(work, 2, cont);
+                        // (status, addresses) packs into `{ status, addresses }`,
+                        // the second field an `Arr(Bin)` (still one anyref slot).
+                        let resume = record_resume(work, 2, cont);
 
-                                                cont::Tail::Host(cont::HostTarget::IoConnect {
-                                                    host,
-                                                    port,
-                                                    connect_timeout,
-                                                    read_timeout,
-                                                    write_timeout,
-                                                    resume,
-                                                })
-                                            }),
-                                        )
-                                    }),
-                                )
-                            }),
-                        )
+                        cont::Tail::Host(cont::HostTarget::IoResolve { host, port, resume })
                     }),
                 )
             }),
         ),
-        ersd::Prim::Host(ersd::HostPrim::IoListen(host, port)) => work.lower_value_name(
-            host,
+        ersd::Prim::Host(ersd::HostPrim::IoSocket(addr)) => work.lower_value_name(
+            addr,
             frame,
-            Cont::new(move |work, host| {
-                work.lower_value_name(
-                    port,
-                    frame,
-                    Cont::new(move |work, port| {
-                        // (status, handle) packs into `{ status, handle }`.
-                        let resume = record_resume(work, 2, cont);
+            Cont::new(move |work, addr| {
+                // (status, handle) packs into `{ status, handle }`, like `IoOpen`.
+                let resume = record_resume(work, 2, cont);
 
-                        cont::Tail::Host(cont::HostTarget::IoListen { host, port, resume })
+                cont::Tail::Host(cont::HostTarget::IoSocket { addr, resume })
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoBind(handle, addr)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    addr,
+                    frame,
+                    Cont::new(move |work, addr| {
+                        // `Io.bind` returns its status scalar; forward it straight.
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoBind {
+                            handle,
+                            addr,
+                            resume,
+                        })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoConnect(handle, addr)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    addr,
+                    frame,
+                    Cont::new(move |work, addr| {
+                        // `Io.connect` returns its status scalar; forward it straight.
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoConnect {
+                            handle,
+                            addr,
+                            resume,
+                        })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoListen(handle, backlog)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    backlog,
+                    frame,
+                    Cont::new(move |work, backlog| {
+                        // `Io.listen` returns its status scalar; forward it straight.
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoListen {
+                            handle,
+                            backlog,
+                            resume,
+                        })
                     }),
                 )
             }),
@@ -593,6 +616,67 @@ pub fn lower_value_prim<'b>(
                 let resume = record_resume(work, 2, cont);
 
                 cont::Tail::Host(cont::HostTarget::IoAccept { handle, resume })
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoSetNonblocking(handle, on)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    on,
+                    frame,
+                    Cont::new(move |work, on| {
+                        // The setters return their status scalar; forward it straight.
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoSetNonblocking { handle, on, resume })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoSetRecvTimeout(handle, ms)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    ms,
+                    frame,
+                    Cont::new(move |work, ms| {
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoSetRecvTimeout { handle, ms, resume })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoSetSendTimeout(handle, ms)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    ms,
+                    frame,
+                    Cont::new(move |work, ms| {
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoSetSendTimeout { handle, ms, resume })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoSetReuseaddr(handle, on)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                work.lower_value_name(
+                    on,
+                    frame,
+                    Cont::new(move |work, on| {
+                        let resume = forward_resume(work, cont);
+
+                        cont::Tail::Host(cont::HostTarget::IoSetReuseaddr { handle, on, resume })
+                    }),
+                )
             }),
         ),
         ersd::Prim::Host(ersd::HostPrim::IoClose(handle)) => work.lower_value_name(

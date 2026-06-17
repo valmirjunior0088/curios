@@ -1,11 +1,12 @@
 use {
     crate::Entropy,
+    socket2::{Domain, SockAddr, Socket, Type},
     std::{
         collections::{HashMap, HashSet, VecDeque},
         env,
         fs::OpenOptions,
         io::{ErrorKind, Read, Write, stderr, stdin, stdout},
-        net::{TcpListener, TcpStream, ToSocketAddrs},
+        net::{SocketAddr, ToSocketAddrs},
         sync::{
             Arc, Mutex,
             mpsc::{self, Receiver, RecvError, Sender},
@@ -48,6 +49,10 @@ pub const STATUS_EXISTS: u32 = 4;
 pub const STATUS_OTHER: u32 = 5;
 /// A `connect` was actively refused — no listener at the target host:port.
 pub const STATUS_REFUSED: u32 = 6;
+/// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). No
+/// Phase-1 caller sets `NONBLOCK`, so it is never observed yet; the `/std`
+/// scheduler consumes it once the readiness model lands.
+pub const STATUS_WOULD_BLOCK: u32 = 7;
 
 /// The mode tokens of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` union.
 pub const MODE_READ: u32 = 0;
@@ -60,6 +65,7 @@ fn status_of(kind: ErrorKind) -> u32 {
         ErrorKind::PermissionDenied => STATUS_PERMISSION_DENIED,
         ErrorKind::AlreadyExists => STATUS_EXISTS,
         ErrorKind::ConnectionRefused => STATUS_REFUSED,
+        ErrorKind::WouldBlock => STATUS_WOULD_BLOCK,
         _ => STATUS_OTHER,
     }
 }
@@ -83,33 +89,115 @@ fn fresh_handle(handles: &Mutex<Entropy>) -> u32 {
 trait Conduit: Read + Write + Send {}
 impl<T: Read + Write + Send> Conduit for T {}
 
+/// A non-stdio handle in [`StdioHost`]'s unified table. The BSD lifecycle moves
+/// a handle between states: `socket` mints an `Unconnected` socket, `connect`
+/// turns it into a `Stream` (a byte conduit `read`/`write` serve), `listen`
+/// turns it into a `Listener` `accept` pulls from. A `socket2::Socket` is itself
+/// `Read + Write`, so a connected one boxes straight into a `Stream` with no
+/// conversion; files from `open` are `Stream`s too.
+enum Resource {
+    Stream(Box<dyn Conduit>),
+    Unconnected(Socket),
+    Listener(Socket),
+}
+
+/// Parse an address blob (a canonical "ip:port" string) back into a
+/// `SocketAddr`. The encoding is `StdioHost`'s private contract with `resolve`.
+fn parse_addr(addr: &[u8]) -> Option<SocketAddr> {
+    String::from_utf8_lossy(addr).parse().ok()
+}
+
+/// `0` ms means "no timeout" (clear it); any other value is a duration.
+fn duration_ms(ms: u32) -> Option<Duration> {
+    (ms != 0).then(|| Duration::from_millis(ms.into()))
+}
+
+/// Pull an unconnected socket out of the table by handle, leaving any other
+/// resource (or none) in place. Used by `connect`/`listen` to transition a
+/// handle without holding the lock across the blocking syscall.
+fn take_unconnected(table: &Mutex<HashMap<u32, Resource>>, handle: u32) -> Option<Socket> {
+    let mut table = table.lock().unwrap();
+
+    match table.remove(&handle) {
+        Some(Resource::Unconnected(socket)) => Some(socket),
+        Some(other) => {
+            table.insert(handle, other);
+            None
+        }
+        None => None,
+    }
+}
+
+/// Apply a `socket2` setter to a configurable handle. Unconnected sockets and
+/// listeners expose their typed setters directly; a connected stream or file has
+/// its socket boxed away, but no Phase-1 caller sets flags there, so that path
+/// records nothing and reports success.
+fn with_socket<F>(table: &Mutex<HashMap<u32, Resource>>, handle: u32, apply: F) -> u32
+where
+    F: FnOnce(&Socket) -> std::io::Result<()>,
+{
+    let table = table.lock().unwrap();
+
+    match table.get(&handle) {
+        Some(Resource::Unconnected(socket) | Resource::Listener(socket)) => match apply(socket) {
+            Ok(()) => STATUS_OK,
+            Err(error) => status_of(error.kind()),
+        },
+        Some(Resource::Stream(_)) => STATUS_OK,
+        None => STATUS_OTHER,
+    }
+}
+
 pub trait Host {
     /// Open the file at `path` with `MODE_*` semantics. Returns
     /// `(status, handle)`; the handle is meaningful only when the status is
     /// `STATUS_OK`.
     fn open(&self, path: &[u8], mode: u32) -> (u32, u32);
 
-    /// Connect to `host`:`port`. The three timeouts are milliseconds (`0` = no
-    /// timeout). Returns `(status, handle)` like `open`; the handle is an
-    /// ordinary byte stream the same `read`/`write`/`close` serve.
-    fn connect(
-        &self,
-        host: &[u8],
-        port: u32,
-        connect_timeout: u32,
-        read_timeout: u32,
-        write_timeout: u32,
-    ) -> (u32, u32);
+    /// Resolve `host`:`port` to a list of opaque address blobs the socket
+    /// lifecycle consumes. Returns `(status, addresses)`; each blob is the host's
+    /// private encoding (canonical address string here) the guest only shuttles
+    /// back into `socket`/`bind`/`connect`. On `STATUS_OK` the list is non-empty.
+    fn resolve(&self, host: &[u8], port: u32) -> (u32, Vec<Vec<u8>>);
 
-    /// Bind a listening socket on `host`:`port`. Returns `(status, handle)` like
-    /// `open`; the handle is a listener `accept` pulls connections from, and
-    /// `close` releases. Meaningful only when the status is `STATUS_OK`.
-    fn listen(&self, host: &[u8], port: u32) -> (u32, u32);
+    /// Create an unconnected socket for the address family encoded in `addr`.
+    /// Returns `(status, handle)` like `open`; the handle is configured via the
+    /// setters, then `bind`/`connect`/`listen` transition it.
+    fn socket(&self, addr: &[u8]) -> (u32, u32);
+
+    /// Bind socket `handle` to the local address `addr`. Returns a status.
+    fn bind(&self, handle: u32, addr: &[u8]) -> u32;
+
+    /// Connect socket `handle` to the resolved address `addr`. Returns a status;
+    /// on `STATUS_OK` the handle is an ordinary byte stream `read`/`write`/`close`
+    /// serve.
+    fn connect(&self, handle: u32, addr: &[u8]) -> u32;
+
+    /// Mark bound socket `handle` as listening with accept-queue depth `backlog`
+    /// (OS-clamped to `somaxconn`). Returns a status; `accept` then pulls
+    /// connections and `close` releases it.
+    fn listen(&self, handle: u32, backlog: u32) -> u32;
 
     /// Pull the next connection from the listener `handle`, blocking until one
     /// arrives. Returns `(status, handle)`; the connection handle is an ordinary
     /// byte stream the same `read`/`write`/`close` serve, like a `connect`ed one.
     fn accept(&self, handle: u32) -> (u32, u32);
+
+    /// Set socket `handle`'s non-blocking flag. Returns a status. A no-op on a
+    /// file handle (recorded, not enforced).
+    fn set_nonblocking(&self, handle: u32, on: u32) -> u32;
+
+    /// Set socket `handle`'s receive timeout to `ms` milliseconds (`0` clears).
+    /// Returns a status.
+    fn set_recv_timeout(&self, handle: u32, ms: u32) -> u32;
+
+    /// Set socket `handle`'s send timeout to `ms` milliseconds (`0` clears).
+    /// Returns a status.
+    fn set_send_timeout(&self, handle: u32, ms: u32) -> u32;
+
+    /// Set socket `handle`'s `SO_REUSEADDR` flag. Returns a status; set before
+    /// `bind`.
+    fn set_reuseaddr(&self, handle: u32, on: u32) -> u32;
 
     /// Close `handle`. Closing an unknown handle is a no-op.
     fn close(&self, handle: u32);
@@ -143,11 +231,10 @@ pub trait Host {
 }
 
 pub struct StdioHost {
-    streams: Mutex<HashMap<u32, Box<dyn Conduit>>>,
-    /// Listening sockets minted by `listen`. A `TcpListener` is not `Read +
-    /// Write`, so it cannot share the `streams` map; `accept` pulls a `TcpStream`
-    /// from one and files that in `streams` as an ordinary conduit.
-    listeners: Mutex<HashMap<u32, TcpListener>>,
+    /// One table for every non-stdio handle, keyed by token. Files, unconnected
+    /// sockets, connected streams, and listeners share it so the BSD lifecycle
+    /// can transition a handle in place and `close` releases any kind uniformly.
+    table: Mutex<HashMap<u32, Resource>>,
     handles: Mutex<Entropy>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
     start: Instant,
@@ -170,8 +257,7 @@ impl StdioHost {
     /// forward a program's own arguments instead of the `curios` process's.
     pub fn with_args(args: Vec<Vec<u8>>) -> Self {
         Self {
-            streams: Mutex::new(HashMap::new()),
-            listeners: Mutex::new(HashMap::new()),
+            table: Mutex::new(HashMap::new()),
             handles: handle_entropy(),
             start: Instant::now(),
             args,
@@ -195,7 +281,10 @@ impl Host for StdioHost {
         match options.open(&path) {
             Ok(file) => {
                 let handle = fresh_handle(&self.handles);
-                self.streams.lock().unwrap().insert(handle, Box::new(file));
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(handle, Resource::Stream(Box::new(file)));
 
                 (STATUS_OK, handle)
             }
@@ -203,73 +292,123 @@ impl Host for StdioHost {
         }
     }
 
-    fn connect(
-        &self,
-        host: &[u8],
-        port: u32,
-        connect_timeout: u32,
-        read_timeout: u32,
-        write_timeout: u32,
-    ) -> (u32, u32) {
+    fn resolve(&self, host: &[u8], port: u32) -> (u32, Vec<Vec<u8>>) {
         let host = String::from_utf8_lossy(host).into_owned();
         let address = format!("{host}:{port}");
 
-        let stream = if connect_timeout == 0 {
-            TcpStream::connect(&address)
-        } else {
-            match address.to_socket_addrs().ok().and_then(|mut a| a.next()) {
-                Some(addr) => {
-                    TcpStream::connect_timeout(&addr, Duration::from_millis(connect_timeout.into()))
+        match address.to_socket_addrs() {
+            Ok(addresses) => {
+                // Each blob is the canonical "ip:port" string — debuggable, and
+                // `socket` recovers the address family from it.
+                let addresses: Vec<Vec<u8>> = addresses
+                    .map(|addr| addr.to_string().into_bytes())
+                    .collect();
+
+                if addresses.is_empty() {
+                    (STATUS_NOT_FOUND, vec![])
+                } else {
+                    (STATUS_OK, addresses)
                 }
-                None => return (STATUS_OTHER, 0),
             }
-        };
-
-        let stream = match stream {
-            Ok(stream) => stream,
-            Err(error) => return (status_of(error.kind()), 0),
-        };
-
-        let timeout = |ms: u32| (ms != 0).then(|| Duration::from_millis(ms.into()));
-        let _ = stream.set_read_timeout(timeout(read_timeout));
-        let _ = stream.set_write_timeout(timeout(write_timeout));
-
-        let handle = fresh_handle(&self.handles);
-        self.streams
-            .lock()
-            .unwrap()
-            .insert(handle, Box::new(stream));
-
-        (STATUS_OK, handle)
+            Err(error) => (status_of(error.kind()), vec![]),
+        }
     }
 
-    fn listen(&self, host: &[u8], port: u32) -> (u32, u32) {
-        let host = String::from_utf8_lossy(host).into_owned();
-        let address = format!("{host}:{port}");
+    fn socket(&self, addr: &[u8]) -> (u32, u32) {
+        let address = match parse_addr(addr) {
+            Some(address) => address,
+            None => return (STATUS_OTHER, 0),
+        };
 
-        match TcpListener::bind(&address) {
-            Ok(listener) => {
+        match Socket::new(Domain::for_address(address), Type::STREAM, None) {
+            Ok(socket) => {
                 let handle = fresh_handle(&self.handles);
-                self.listeners.lock().unwrap().insert(handle, listener);
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(handle, Resource::Unconnected(socket));
 
                 (STATUS_OK, handle)
             }
             Err(error) => (status_of(error.kind()), 0),
+        }
+    }
+
+    fn bind(&self, handle: u32, addr: &[u8]) -> u32 {
+        let address = match parse_addr(addr) {
+            Some(address) => address,
+            None => return STATUS_OTHER,
+        };
+
+        match self.table.lock().unwrap().get(&handle) {
+            Some(Resource::Unconnected(socket)) => match socket.bind(&SockAddr::from(address)) {
+                Ok(()) => STATUS_OK,
+                Err(error) => status_of(error.kind()),
+            },
+            _ => STATUS_OTHER,
+        }
+    }
+
+    fn connect(&self, handle: u32, addr: &[u8]) -> u32 {
+        let address = match parse_addr(addr) {
+            Some(address) => address,
+            None => return STATUS_OTHER,
+        };
+
+        // Take the socket out so the blocking connect runs without the table
+        // lock held; re-file the connected socket as a byte stream on success.
+        let socket = match take_unconnected(&self.table, handle) {
+            Some(socket) => socket,
+            None => return STATUS_OTHER,
+        };
+
+        match socket.connect(&SockAddr::from(address)) {
+            Ok(()) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(handle, Resource::Stream(Box::new(socket)));
+
+                STATUS_OK
+            }
+            Err(error) => status_of(error.kind()),
+        }
+    }
+
+    fn listen(&self, handle: u32, backlog: u32) -> u32 {
+        let socket = match take_unconnected(&self.table, handle) {
+            Some(socket) => socket,
+            None => return STATUS_OTHER,
+        };
+
+        match socket.listen(backlog as i32) {
+            Ok(()) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(handle, Resource::Listener(socket));
+
+                STATUS_OK
+            }
+            Err(error) => status_of(error.kind()),
         }
     }
 
     fn accept(&self, handle: u32) -> (u32, u32) {
         // `accept` blocks until a connection arrives, so clone the listener fd
-        // out and drop the map lock before the wait — never hold it across one.
-        let listener = match self.listeners.lock().unwrap().get(&handle) {
-            Some(listener) => listener.try_clone(),
-            None => return (STATUS_OTHER, 0),
+        // out and drop the table lock before the wait — never hold it across one.
+        let listener = match self.table.lock().unwrap().get(&handle) {
+            Some(Resource::Listener(socket)) => socket.try_clone(),
+            _ => return (STATUS_OTHER, 0),
         };
 
         match listener.and_then(|listener| listener.accept()) {
             Ok((stream, _)) => {
                 let conn = fresh_handle(&self.handles);
-                self.streams.lock().unwrap().insert(conn, Box::new(stream));
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(conn, Resource::Stream(Box::new(stream)));
 
                 (STATUS_OK, conn)
             }
@@ -277,9 +416,30 @@ impl Host for StdioHost {
         }
     }
 
+    fn set_nonblocking(&self, handle: u32, on: u32) -> u32 {
+        with_socket(&self.table, handle, |socket| socket.set_nonblocking(on != 0))
+    }
+
+    fn set_recv_timeout(&self, handle: u32, ms: u32) -> u32 {
+        with_socket(&self.table, handle, |socket| {
+            socket.set_read_timeout(duration_ms(ms))
+        })
+    }
+
+    fn set_send_timeout(&self, handle: u32, ms: u32) -> u32 {
+        with_socket(&self.table, handle, |socket| {
+            socket.set_write_timeout(duration_ms(ms))
+        })
+    }
+
+    fn set_reuseaddr(&self, handle: u32, on: u32) -> u32 {
+        with_socket(&self.table, handle, |socket| {
+            socket.set_reuse_address(on != 0)
+        })
+    }
+
     fn close(&self, handle: u32) {
-        self.streams.lock().unwrap().remove(&handle);
-        self.listeners.lock().unwrap().remove(&handle);
+        self.table.lock().unwrap().remove(&handle);
     }
 
     fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
@@ -287,9 +447,9 @@ impl Host for StdioHost {
 
         let result = match handle {
             STDIN => stdin().lock().read(&mut buffer),
-            _ => match self.streams.lock().unwrap().get_mut(&handle) {
-                Some(stream) => stream.read(&mut buffer),
-                None => return (STATUS_EOF, vec![]),
+            _ => match self.table.lock().unwrap().get_mut(&handle) {
+                Some(Resource::Stream(stream)) => stream.read(&mut buffer),
+                _ => return (STATUS_EOF, vec![]),
             },
         };
 
@@ -308,9 +468,9 @@ impl Host for StdioHost {
         let result = match handle {
             STDOUT => stdout().write_all(bytes),
             STDERR => stderr().write_all(bytes),
-            _ => match self.streams.lock().unwrap().get_mut(&handle) {
-                Some(stream) => stream.write_all(bytes),
-                None => return STATUS_OTHER,
+            _ => match self.table.lock().unwrap().get_mut(&handle) {
+                Some(Resource::Stream(stream)) => stream.write_all(bytes),
+                _ => return STATUS_OTHER,
             },
         };
 
@@ -400,6 +560,9 @@ pub struct ChannelHost {
     endpoints: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
     /// Live in-memory connections keyed by handle.
     connections: Mutex<HashMap<u32, NetConn>>,
+    /// Unconnected sockets minted by `socket`, awaiting `connect` or `listen` —
+    /// a set of valid handles; the test host does no real socket allocation.
+    sockets: Mutex<HashSet<u32>>,
     /// Listening sockets minted by `listen` — a set of valid handles; the test
     /// host does no real binding.
     listeners: Mutex<HashSet<u32>>,
@@ -457,6 +620,7 @@ impl ChannelHost {
                 open_files: Mutex::new(HashMap::new()),
                 endpoints: Mutex::new(HashMap::new()),
                 connections: Mutex::new(HashMap::new()),
+                sockets: Mutex::new(HashSet::new()),
                 listeners: Mutex::new(HashSet::new()),
                 inbound: Mutex::new(VecDeque::new()),
                 captures: Arc::new(Mutex::new(Vec::new())),
@@ -579,22 +743,40 @@ impl Host for ChannelHost {
         (STATUS_OK, handle)
     }
 
-    fn connect(
-        &self,
-        host: &[u8],
-        port: u32,
-        _connect_timeout: u32,
-        _read_timeout: u32,
-        _write_timeout: u32,
-    ) -> (u32, u32) {
+    fn resolve(&self, host: &[u8], port: u32) -> (u32, Vec<Vec<u8>>) {
+        // One synthetic address blob: the `host:port` key `script_net` uses, so
+        // `connect` can recover the scripted endpoint from the blob.
         let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
 
-        let response = match self.endpoints.lock().unwrap().get(&endpoint) {
+        (STATUS_OK, vec![endpoint])
+    }
+
+    fn socket(&self, _addr: &[u8]) -> (u32, u32) {
+        let handle = fresh_handle(&self.handles);
+        self.sockets.lock().unwrap().insert(handle);
+
+        (STATUS_OK, handle)
+    }
+
+    fn bind(&self, handle: u32, _addr: &[u8]) -> u32 {
+        if self.sockets.lock().unwrap().contains(&handle) {
+            STATUS_OK
+        } else {
+            STATUS_OTHER
+        }
+    }
+
+    fn connect(&self, handle: u32, addr: &[u8]) -> u32 {
+        // The handle must be an unconnected socket minted by `socket`.
+        if !self.sockets.lock().unwrap().remove(&handle) {
+            return STATUS_OTHER;
+        }
+
+        let response = match self.endpoints.lock().unwrap().get(addr) {
             Some(response) => response.clone(),
-            None => return (STATUS_REFUSED, 0),
+            None => return STATUS_REFUSED,
         };
 
-        let handle = fresh_handle(&self.handles);
         self.connections.lock().unwrap().insert(
             handle,
             NetConn {
@@ -603,14 +785,33 @@ impl Host for ChannelHost {
             },
         );
 
-        (STATUS_OK, handle)
+        STATUS_OK
     }
 
-    fn listen(&self, _host: &[u8], _port: u32) -> (u32, u32) {
-        let handle = fresh_handle(&self.handles);
+    fn listen(&self, handle: u32, _backlog: u32) -> u32 {
+        if !self.sockets.lock().unwrap().remove(&handle) {
+            return STATUS_OTHER;
+        }
+
         self.listeners.lock().unwrap().insert(handle);
 
-        (STATUS_OK, handle)
+        STATUS_OK
+    }
+
+    fn set_nonblocking(&self, _handle: u32, _on: u32) -> u32 {
+        STATUS_OK
+    }
+
+    fn set_recv_timeout(&self, _handle: u32, _ms: u32) -> u32 {
+        STATUS_OK
+    }
+
+    fn set_send_timeout(&self, _handle: u32, _ms: u32) -> u32 {
+        STATUS_OK
+    }
+
+    fn set_reuseaddr(&self, _handle: u32, _on: u32) -> u32 {
+        STATUS_OK
     }
 
     fn accept(&self, handle: u32) -> (u32, u32) {
@@ -649,6 +850,7 @@ impl Host for ChannelHost {
         self.open_files.lock().unwrap().remove(&handle);
         self.connections.lock().unwrap().remove(&handle);
         self.server_conns.lock().unwrap().remove(&handle);
+        self.sockets.lock().unwrap().remove(&handle);
         self.listeners.lock().unwrap().remove(&handle);
     }
 

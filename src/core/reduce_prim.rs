@@ -934,16 +934,44 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoOpen",
             span: path.span(),
         }),
-        Prim::IoConnect(host, ..) => Err(ReduceError::IoAtTypeLevel {
-            kind: "IoConnect",
+        Prim::IoResolve(host, _) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoResolve",
             span: host.span(),
         }),
-        Prim::IoListen(host, ..) => Err(ReduceError::IoAtTypeLevel {
+        Prim::IoSocket(addr) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoSocket",
+            span: addr.span(),
+        }),
+        Prim::IoBind(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoBind",
+            span: handle.span(),
+        }),
+        Prim::IoConnect(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoConnect",
+            span: handle.span(),
+        }),
+        Prim::IoListen(handle, ..) => Err(ReduceError::IoAtTypeLevel {
             kind: "IoListen",
-            span: host.span(),
+            span: handle.span(),
         }),
         Prim::IoAccept(handle) => Err(ReduceError::IoAtTypeLevel {
             kind: "IoAccept",
+            span: handle.span(),
+        }),
+        Prim::IoSetNonblocking(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoSetNonblocking",
+            span: handle.span(),
+        }),
+        Prim::IoSetRecvTimeout(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoSetRecvTimeout",
+            span: handle.span(),
+        }),
+        Prim::IoSetSendTimeout(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoSetSendTimeout",
+            span: handle.span(),
+        }),
+        Prim::IoSetReuseaddr(handle, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoSetReuseaddr",
             span: handle.span(),
         }),
         Prim::IoClose(handle) => Err(ReduceError::IoAtTypeLevel {

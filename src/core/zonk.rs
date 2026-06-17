@@ -494,15 +494,26 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoConnect(a, b, c, d, e) => Prim::IoConnect(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-            zonk_term(context, d)?,
-            zonk_term(context, e)?,
-        ),
+        Prim::IoResolve(a, b) => {
+            Prim::IoResolve(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::IoSocket(a) => Prim::IoSocket(zonk_term(context, a)?),
+        Prim::IoBind(a, b) => Prim::IoBind(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoConnect(a, b) => Prim::IoConnect(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoListen(a, b) => Prim::IoListen(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoAccept(a) => Prim::IoAccept(zonk_term(context, a)?),
+        Prim::IoSetNonblocking(a, b) => {
+            Prim::IoSetNonblocking(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::IoSetRecvTimeout(a, b) => {
+            Prim::IoSetRecvTimeout(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::IoSetSendTimeout(a, b) => {
+            Prim::IoSetSendTimeout(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::IoSetReuseaddr(a, b) => {
+            Prim::IoSetReuseaddr(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
         Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a)?),
         Prim::IoRandom(a) => Prim::IoRandom(zonk_term(context, a)?),
         Prim::IoEnv(a) => Prim::IoEnv(zonk_term(context, a)?),

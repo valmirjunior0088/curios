@@ -156,20 +156,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.io_connect_used() {
-            // `(host, port, connect_timeout, read_timeout, write_timeout)
-            //  -> (status, handle)`.
+            // `(handle, addr) -> status`.
             self.add_host_import(
                 "io_connect",
                 wasm::TypeName::from("io_connect"),
                 self.table.io_connect_func().clone(),
-                wasm::ResultType::from([
-                    bin_ref.clone(),
-                    i32_val.clone(),
-                    i32_val.clone(),
-                    i32_val.clone(),
-                    i32_val.clone(),
-                ]),
-                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
             );
         }
 
@@ -184,13 +177,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.io_listen_used() {
-            // `(host, port) -> (status, handle)` — the same shape as `io_open`.
+            // `(handle, backlog) -> status`.
             self.add_host_import(
                 "io_listen",
                 wasm::TypeName::from("io_listen"),
                 self.table.io_listen_func().clone(),
-                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
-                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
             );
         }
 
@@ -202,6 +195,88 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 self.table.io_accept_func().clone(),
                 wasm::ResultType::from([i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+            );
+        }
+
+        if self.table.io_resolve_used() {
+            // `(host, port) -> (status, addresses)`; addresses is the module's
+            // uniform `Arr(Bin)`, each element a `bin_ref` (like `io_args`).
+            let arr_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
+            });
+            self.add_host_import(
+                "io_resolve",
+                wasm::TypeName::from("io_resolve"),
+                self.table.io_resolve_func().clone(),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone(), arr_ref]),
+            );
+        }
+
+        if self.table.io_socket_used() {
+            // `(addr) -> (status, handle)` — the same shape as `io_open`.
+            self.add_host_import(
+                "io_socket",
+                wasm::TypeName::from("io_socket"),
+                self.table.io_socket_func().clone(),
+                wasm::ResultType::from([bin_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+            );
+        }
+
+        if self.table.io_bind_used() {
+            // `(handle, addr) -> status`.
+            self.add_host_import(
+                "io_bind",
+                wasm::TypeName::from("io_bind"),
+                self.table.io_bind_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
+            );
+        }
+
+        if self.table.io_set_nonblocking_used() {
+            // `(handle, on) -> status`.
+            self.add_host_import(
+                "io_set_nonblocking",
+                wasm::TypeName::from("io_set_nonblocking"),
+                self.table.io_set_nonblocking_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
+            );
+        }
+
+        if self.table.io_set_recv_timeout_used() {
+            // `(handle, ms) -> status`.
+            self.add_host_import(
+                "io_set_recv_timeout",
+                wasm::TypeName::from("io_set_recv_timeout"),
+                self.table.io_set_recv_timeout_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
+            );
+        }
+
+        if self.table.io_set_send_timeout_used() {
+            // `(handle, ms) -> status`.
+            self.add_host_import(
+                "io_set_send_timeout",
+                wasm::TypeName::from("io_set_send_timeout"),
+                self.table.io_set_send_timeout_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
+            );
+        }
+
+        if self.table.io_set_reuseaddr_used() {
+            // `(handle, on) -> status`.
+            self.add_host_import(
+                "io_set_reuseaddr",
+                wasm::TypeName::from("io_set_reuseaddr"),
+                self.table.io_set_reuseaddr_func().clone(),
+                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone()]),
             );
         }
 

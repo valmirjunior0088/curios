@@ -1345,19 +1345,32 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
             }
             Prim::IoOpen(path, mode) => core::Prim::IoOpen(self.term(path)?, self.term(mode)?),
-            Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
-                core::Prim::IoConnect(
-                    self.term(host)?,
-                    self.term(port)?,
-                    self.term(connect_timeout)?,
-                    self.term(read_timeout)?,
-                    self.term(write_timeout)?,
-                )
+            Prim::IoResolve(host, port) => {
+                core::Prim::IoResolve(self.term(host)?, self.term(port)?)
             }
-            Prim::IoListen(host, port) => {
-                core::Prim::IoListen(self.term(host)?, self.term(port)?)
+            Prim::IoSocket(addr) => core::Prim::IoSocket(self.term(addr)?),
+            Prim::IoBind(handle, addr) => {
+                core::Prim::IoBind(self.term(handle)?, self.term(addr)?)
+            }
+            Prim::IoConnect(handle, addr) => {
+                core::Prim::IoConnect(self.term(handle)?, self.term(addr)?)
+            }
+            Prim::IoListen(handle, backlog) => {
+                core::Prim::IoListen(self.term(handle)?, self.term(backlog)?)
             }
             Prim::IoAccept(handle) => core::Prim::IoAccept(self.term(handle)?),
+            Prim::IoSetNonblocking(handle, on) => {
+                core::Prim::IoSetNonblocking(self.term(handle)?, self.term(on)?)
+            }
+            Prim::IoSetRecvTimeout(handle, ms) => {
+                core::Prim::IoSetRecvTimeout(self.term(handle)?, self.term(ms)?)
+            }
+            Prim::IoSetSendTimeout(handle, ms) => {
+                core::Prim::IoSetSendTimeout(self.term(handle)?, self.term(ms)?)
+            }
+            Prim::IoSetReuseaddr(handle, on) => {
+                core::Prim::IoSetReuseaddr(self.term(handle)?, self.term(on)?)
+            }
             Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
             Prim::IoClockWall => core::Prim::IoClockWall,
             Prim::IoClockMono => core::Prim::IoClockMono,
