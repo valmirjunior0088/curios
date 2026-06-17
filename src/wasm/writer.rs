@@ -166,6 +166,22 @@ where
         Ok(())
     }
 
+    /// Build a section's payload into a forked buffer, then emit it as section
+    /// `id`.
+    fn write_section_with<F>(&mut self, id: u8, build: F) -> Result<()>
+    where
+        F: for<'u> FnOnce(&mut Writer<'t, 'u, Vec<u8>>) -> Result<()>,
+    {
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = self.fork(&mut bytes);
+            build(&mut writer)?;
+        }
+
+        self.write_section(id, bytes)
+    }
+
     fn write_magic(&mut self) -> Result<()> {
         self.buffer.push_bytes(b"\0asm")?;
 
@@ -1000,106 +1016,39 @@ where
     }
 
     fn write_type_section(&mut self, types: &[RecType]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
-            writer.write_vec(types, |writer, rec_type| {
-                writer.write_rec_type(rec_type)?;
-
-                Ok(())
-            })?;
-        }
-
-        self.write_section(1, bytes)?;
-
-        Ok(())
+        self.write_section_with(1, |writer| {
+            writer.write_vec(types, |writer, rec_type| writer.write_rec_type(rec_type))
+        })
     }
 
     fn write_import_section(&mut self, imports: &[(String, String, Import)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(2, |writer| {
             writer.write_vec(imports, |writer, (module_name, name, import)| {
-                writer.write_import(module_name, name, import)?;
-
-                Ok(())
-            })?;
-        }
-
-        self.write_section(2, bytes)?;
-
-        Ok(())
+                writer.write_import(module_name, name, import)
+            })
+        })
     }
 
     fn write_func_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
-            writer.write_vec(funcs, |writer, (_, func)| {
-                writer.write_func(func)?;
-
-                Ok(())
-            })?;
-        }
-
-        self.write_section(3, bytes)?;
-
-        Ok(())
+        self.write_section_with(3, |writer| {
+            writer.write_vec(funcs, |writer, (_, func)| writer.write_func(func))
+        })
     }
 
     fn write_global_section(&mut self, globals: &[(GlobalName, Global)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
-            writer.write_vec(globals, |writer, (_, global)| {
-                writer.write_global(global)?;
-
-                Ok(())
-            })?;
-        }
-
-        self.write_section(6, bytes)?;
-
-        Ok(())
+        self.write_section_with(6, |writer| {
+            writer.write_vec(globals, |writer, (_, global)| writer.write_global(global))
+        })
     }
 
     fn write_export_section(&mut self, exports: &[(String, Export)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
-            writer.write_vec(exports, |writer, (name, export)| {
-                writer.write_export(name, export)?;
-
-                Ok(())
-            })?;
-        }
-
-        self.write_section(7, bytes)?;
-
-        Ok(())
+        self.write_section_with(7, |writer| {
+            writer.write_vec(exports, |writer, (name, export)| writer.write_export(name, export))
+        })
     }
 
     fn write_start_section(&mut self, start: &FuncName) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-            writer.write_func_name(start)?;
-        }
-
-        self.write_section(8, bytes)?;
-
-        Ok(())
+        self.write_section_with(8, |writer| writer.write_func_name(start))
     }
 
     /// A single declarative element segment listing the funcs eligible for
@@ -1110,59 +1059,28 @@ where
             return Ok(());
         }
 
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(9, |writer| {
             writer.buffer.push_leb128_unsigned(1)?;
             writer.buffer.push_byte(0x03)?;
             writer.buffer.push_byte(0x00)?;
-            writer.write_vec(elems, |writer, func_name| writer.write_func_name(func_name))?;
-        }
-
-        self.write_section(9, bytes)?;
-
-        Ok(())
+            writer.write_vec(elems, |writer, func_name| writer.write_func_name(func_name))
+        })
     }
 
     fn write_code_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
-            writer.write_vec(funcs, |writer, (func_name, func)| {
-                writer.write_code(func_name, func)?;
-
-                Ok(())
-            })?;
-        }
-
-        self.write_section(10, bytes)?;
-
-        Ok(())
+        self.write_section_with(10, |writer| {
+            writer.write_vec(funcs, |writer, (func_name, func)| writer.write_code(func_name, func))
+        })
     }
 
     fn write_data_count_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-            writer.buffer.push_leb128_unsigned(datas.len() as u64)?;
-        }
-
-        self.write_section(12, bytes)?;
-
-        Ok(())
+        self.write_section_with(12, |writer| {
+            writer.buffer.push_leb128_unsigned(datas.len() as u64)
+        })
     }
 
     fn write_data_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(11, |writer| {
             writer.write_vec(datas, |writer, (_, segment)| {
                 writer.buffer.push_byte(0x01)?; // passive flag
                 writer
@@ -1174,12 +1092,8 @@ where
                 }
 
                 Ok(())
-            })?;
-        }
-
-        self.write_section(11, bytes)?;
-
-        Ok(())
+            })
+        })
     }
 
     fn write_module_name_subsection(&mut self, module_name: &str) -> Result<()> {
