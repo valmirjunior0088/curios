@@ -1572,6 +1572,22 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
     }
 }
 
+/// Visit both operands of a binary primitive and rebuild it through `build`. The
+/// constructor is taken generically (not as a `fn` pointer) so every call site
+/// monomorphises to the same direct construction — this is the de Bruijn
+/// traversal hot path, so the indirection must vanish.
+fn traverse_binary<F>(
+    left: &Term,
+    right: &Term,
+    visit: &mut Visit<F>,
+    build: impl FnOnce(Term, Term) -> Prim,
+) -> Prim
+where
+    F: FnMut(usize, &Var) -> Option<Subterm>,
+{
+    build(visit.visit_subterm(left), visit.visit_subterm(right))
+}
+
 fn traverse_prim<F>(prim: &Prim, visit: &mut Visit<F>) -> Prim
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
@@ -1584,151 +1600,57 @@ where
         Prim::Nat(Nat::Succ(spine, inner)) => {
             Prim::Nat(Nat::Succ(spine.clone(), visit.visit_subterm(inner)))
         }
-        Prim::NatEql(left, right) => {
-            Prim::NatEql(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatNeq(left, right) => {
-            Prim::NatNeq(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatAdd(left, right) => {
-            Prim::NatAdd(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatSub(left, right) => {
-            Prim::NatSub(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatMul(left, right) => {
-            Prim::NatMul(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatLt(left, right) => {
-            Prim::NatLt(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatDiv(left, right) => {
-            Prim::NatDiv(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatRem(left, right) => {
-            Prim::NatRem(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatGt(left, right) => {
-            Prim::NatGt(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatLte(left, right) => {
-            Prim::NatLte(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatGte(left, right) => {
-            Prim::NatGte(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatAnd(left, right) => {
-            Prim::NatAnd(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatOr(left, right) => {
-            Prim::NatOr(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatXor(left, right) => {
-            Prim::NatXor(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatShl(left, right) => {
-            Prim::NatShl(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::NatShr(left, right) => {
-            Prim::NatShr(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::BlnAnd(left, right) => {
-            Prim::BlnAnd(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::BlnOr(left, right) => {
-            Prim::BlnOr(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::BlnXor(left, right) => {
-            Prim::BlnXor(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
+        Prim::NatEql(l, r) => traverse_binary(l, r, visit, Prim::NatEql),
+        Prim::NatNeq(l, r) => traverse_binary(l, r, visit, Prim::NatNeq),
+        Prim::NatAdd(l, r) => traverse_binary(l, r, visit, Prim::NatAdd),
+        Prim::NatSub(l, r) => traverse_binary(l, r, visit, Prim::NatSub),
+        Prim::NatMul(l, r) => traverse_binary(l, r, visit, Prim::NatMul),
+        Prim::NatLt(l, r) => traverse_binary(l, r, visit, Prim::NatLt),
+        Prim::NatDiv(l, r) => traverse_binary(l, r, visit, Prim::NatDiv),
+        Prim::NatRem(l, r) => traverse_binary(l, r, visit, Prim::NatRem),
+        Prim::NatGt(l, r) => traverse_binary(l, r, visit, Prim::NatGt),
+        Prim::NatLte(l, r) => traverse_binary(l, r, visit, Prim::NatLte),
+        Prim::NatGte(l, r) => traverse_binary(l, r, visit, Prim::NatGte),
+        Prim::NatAnd(l, r) => traverse_binary(l, r, visit, Prim::NatAnd),
+        Prim::NatOr(l, r) => traverse_binary(l, r, visit, Prim::NatOr),
+        Prim::NatXor(l, r) => traverse_binary(l, r, visit, Prim::NatXor),
+        Prim::NatShl(l, r) => traverse_binary(l, r, visit, Prim::NatShl),
+        Prim::NatShr(l, r) => traverse_binary(l, r, visit, Prim::NatShr),
+        Prim::BlnAnd(l, r) => traverse_binary(l, r, visit, Prim::BlnAnd),
+        Prim::BlnOr(l, r) => traverse_binary(l, r, visit, Prim::BlnOr),
+        Prim::BlnXor(l, r) => traverse_binary(l, r, visit, Prim::BlnXor),
         Prim::IntType => Prim::IntType,
         Prim::Int(value) => Prim::Int(value.clone()),
-        Prim::IntEql(left, right) => {
-            Prim::IntEql(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntNeq(left, right) => {
-            Prim::IntNeq(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntAdd(left, right) => {
-            Prim::IntAdd(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntSub(left, right) => {
-            Prim::IntSub(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntMul(left, right) => {
-            Prim::IntMul(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntDiv(left, right) => {
-            Prim::IntDiv(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntRem(left, right) => {
-            Prim::IntRem(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntLt(left, right) => {
-            Prim::IntLt(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntGt(left, right) => {
-            Prim::IntGt(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntLte(left, right) => {
-            Prim::IntLte(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntGte(left, right) => {
-            Prim::IntGte(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntAnd(left, right) => {
-            Prim::IntAnd(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntOr(left, right) => {
-            Prim::IntOr(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntXor(left, right) => {
-            Prim::IntXor(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntShl(left, right) => {
-            Prim::IntShl(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::IntShr(left, right) => {
-            Prim::IntShr(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
+        Prim::IntEql(l, r) => traverse_binary(l, r, visit, Prim::IntEql),
+        Prim::IntNeq(l, r) => traverse_binary(l, r, visit, Prim::IntNeq),
+        Prim::IntAdd(l, r) => traverse_binary(l, r, visit, Prim::IntAdd),
+        Prim::IntSub(l, r) => traverse_binary(l, r, visit, Prim::IntSub),
+        Prim::IntMul(l, r) => traverse_binary(l, r, visit, Prim::IntMul),
+        Prim::IntDiv(l, r) => traverse_binary(l, r, visit, Prim::IntDiv),
+        Prim::IntRem(l, r) => traverse_binary(l, r, visit, Prim::IntRem),
+        Prim::IntLt(l, r) => traverse_binary(l, r, visit, Prim::IntLt),
+        Prim::IntGt(l, r) => traverse_binary(l, r, visit, Prim::IntGt),
+        Prim::IntLte(l, r) => traverse_binary(l, r, visit, Prim::IntLte),
+        Prim::IntGte(l, r) => traverse_binary(l, r, visit, Prim::IntGte),
+        Prim::IntAnd(l, r) => traverse_binary(l, r, visit, Prim::IntAnd),
+        Prim::IntOr(l, r) => traverse_binary(l, r, visit, Prim::IntOr),
+        Prim::IntXor(l, r) => traverse_binary(l, r, visit, Prim::IntXor),
+        Prim::IntShl(l, r) => traverse_binary(l, r, visit, Prim::IntShl),
+        Prim::IntShr(l, r) => traverse_binary(l, r, visit, Prim::IntShr),
         Prim::FltType => Prim::FltType,
         Prim::Flt(flt) => Prim::Flt(*flt),
-        Prim::FltAdd(left, right) => {
-            Prim::FltAdd(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltSub(left, right) => {
-            Prim::FltSub(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltMul(left, right) => {
-            Prim::FltMul(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltDiv(left, right) => {
-            Prim::FltDiv(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltEql(left, right) => {
-            Prim::FltEql(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltNeq(left, right) => {
-            Prim::FltNeq(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltLt(left, right) => {
-            Prim::FltLt(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltGt(left, right) => {
-            Prim::FltGt(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltLte(left, right) => {
-            Prim::FltLte(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltGte(left, right) => {
-            Prim::FltGte(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltMin(left, right) => {
-            Prim::FltMin(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::FltMax(left, right) => {
-            Prim::FltMax(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
+        Prim::FltAdd(l, r) => traverse_binary(l, r, visit, Prim::FltAdd),
+        Prim::FltSub(l, r) => traverse_binary(l, r, visit, Prim::FltSub),
+        Prim::FltMul(l, r) => traverse_binary(l, r, visit, Prim::FltMul),
+        Prim::FltDiv(l, r) => traverse_binary(l, r, visit, Prim::FltDiv),
+        Prim::FltEql(l, r) => traverse_binary(l, r, visit, Prim::FltEql),
+        Prim::FltNeq(l, r) => traverse_binary(l, r, visit, Prim::FltNeq),
+        Prim::FltLt(l, r) => traverse_binary(l, r, visit, Prim::FltLt),
+        Prim::FltGt(l, r) => traverse_binary(l, r, visit, Prim::FltGt),
+        Prim::FltLte(l, r) => traverse_binary(l, r, visit, Prim::FltLte),
+        Prim::FltGte(l, r) => traverse_binary(l, r, visit, Prim::FltGte),
+        Prim::FltMin(l, r) => traverse_binary(l, r, visit, Prim::FltMin),
+        Prim::FltMax(l, r) => traverse_binary(l, r, visit, Prim::FltMax),
         Prim::FltNeg(inner) => Prim::FltNeg(visit.visit_subterm(inner)),
         Prim::FltAbs(inner) => Prim::FltAbs(visit.visit_subterm(inner)),
         Prim::FltSqrt(inner) => Prim::FltSqrt(visit.visit_subterm(inner)),
@@ -1749,20 +1671,14 @@ where
         Prim::BinType => Prim::BinType,
         Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
         Prim::BinLen(bin) => Prim::BinLen(visit.visit_subterm(bin)),
-        Prim::BinEql(left, right) => {
-            Prim::BinEql(visit.visit_subterm(left), visit.visit_subterm(right))
-        }
-        Prim::BinGet(bin, index) => {
-            Prim::BinGet(visit.visit_subterm(bin), visit.visit_subterm(index))
-        }
+        Prim::BinEql(l, r) => traverse_binary(l, r, visit, Prim::BinEql),
+        Prim::BinGet(b, i) => traverse_binary(b, i, visit, Prim::BinGet),
         Prim::BinSlice(bin, start, end) => Prim::BinSlice(
             visit.visit_subterm(bin),
             visit.visit_subterm(start),
             visit.visit_subterm(end),
         ),
-        Prim::BinAppend(bin, byte) => {
-            Prim::BinAppend(visit.visit_subterm(bin), visit.visit_subterm(byte))
-        }
+        Prim::BinAppend(b, byte) => traverse_binary(b, byte, visit, Prim::BinAppend),
         Prim::BinConcat(operands) => {
             Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
         }
@@ -1772,7 +1688,7 @@ where
         Prim::StrOfBin(bin) => Prim::StrOfBin(visit.visit_subterm(bin)),
         Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
         Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
-        Prim::ArrLen(ty, list) => Prim::ArrLen(visit.visit_subterm(ty), visit.visit_subterm(list)),
+        Prim::ArrLen(ty, list) => traverse_binary(ty, list, visit, Prim::ArrLen),
         Prim::ArrGet(ty, list, index) => Prim::ArrGet(
             visit.visit_subterm(ty),
             visit.visit_subterm(list),
@@ -1795,18 +1711,10 @@ where
         ),
         Prim::IoType => Prim::IoType,
         Prim::Io(token) => Prim::Io(*token),
-        Prim::IoRead(handle, count) => {
-            Prim::IoRead(visit.visit_subterm(handle), visit.visit_subterm(count))
-        }
-        Prim::IoWrite(handle, bytes) => {
-            Prim::IoWrite(visit.visit_subterm(handle), visit.visit_subterm(bytes))
-        }
-        Prim::IoOpen(path, mode) => {
-            Prim::IoOpen(visit.visit_subterm(path), visit.visit_subterm(mode))
-        }
-        Prim::IoListen(host, port) => {
-            Prim::IoListen(visit.visit_subterm(host), visit.visit_subterm(port))
-        }
+        Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),
+        Prim::IoWrite(handle, bytes) => traverse_binary(handle, bytes, visit, Prim::IoWrite),
+        Prim::IoOpen(path, mode) => traverse_binary(path, mode, visit, Prim::IoOpen),
+        Prim::IoListen(host, port) => traverse_binary(host, port, visit, Prim::IoListen),
         Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
         Prim::IoConnect(host, port, connect_timeout, read_timeout, write_timeout) => {
             Prim::IoConnect(
@@ -1823,9 +1731,7 @@ where
         Prim::IoRandom(count) => Prim::IoRandom(visit.visit_subterm(count)),
         Prim::IoArgs => Prim::IoArgs,
         Prim::IoEnv(name) => Prim::IoEnv(visit.visit_subterm(name)),
-        Prim::IoExit(type_, code) => {
-            Prim::IoExit(visit.visit_subterm(type_), visit.visit_subterm(code))
-        }
+        Prim::IoExit(type_, code) => traverse_binary(type_, code, visit, Prim::IoExit),
     }
 }
 
