@@ -4,7 +4,7 @@
 //! and decode+re-encode, so the encoder's contribution shows up as the gap between them.
 
 use {
-    curios::{ChannelHost, compile_entrypoint, text},
+    curios::{MockHost, compile_entrypoint, text},
     std::time::{Duration, Instant},
 };
 
@@ -60,7 +60,7 @@ fn bench(label: &str, src: &str, sizes: &[usize]) {
         let bytes = input.len();
         let mut best = Duration::MAX;
         for _ in 0..3 {
-            let (host, receiver) = ChannelHost::in_out([input.as_str()]);
+            let (host, receiver) = MockHost::in_out([input.as_str()]);
             let t = Instant::now();
             curios::run_wasm(&module, host).expect("run");
             best = best.min(t.elapsed());

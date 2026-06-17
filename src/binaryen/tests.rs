@@ -1,6 +1,6 @@
 use {
     super::optimize,
-    crate::{ChannelHost, compile_entrypoint, run_wasm, text, wasm},
+    crate::{MockHost, compile_entrypoint, run_wasm, text, wasm},
     std::time::Duration,
 };
 
@@ -40,7 +40,7 @@ fn optimizes_to_a_smaller_module_that_behaves_identically() {
     );
 
     // `run_wasm` optimizes internally, so this executes the optimized module.
-    let (host, receiver) = ChannelHost::out();
+    let (host, receiver) = MockHost::out();
     run_wasm(&module, host).expect("run failed");
     let printed = String::from_utf8(receiver.try_iter().flatten().collect()).unwrap();
     assert_eq!(printed, "55");

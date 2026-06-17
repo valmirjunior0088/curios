@@ -53,7 +53,7 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, receiver) = curios::ChannelHost::out();
+    let (system, receiver) = curios::MockHost::out();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());

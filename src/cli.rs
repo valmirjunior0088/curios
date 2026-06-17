@@ -1,5 +1,5 @@
 use {
-    super::{Stage, StdioHost, compile_entrypoint, run_wasm, text, typecheck_entrypoint, wasm},
+    super::{Stage, OsHost, compile_entrypoint, run_wasm, text, typecheck_entrypoint, wasm},
     clap::{Parser, Subcommand},
     std::{
         fs, iter,
@@ -132,7 +132,7 @@ pub fn cli() -> Result<(), String> {
 
             let code = run_wasm(
                 &module,
-                StdioHost::with_args(
+                OsHost::with_args(
                     iter::once(input_path.to_string_lossy().into_owned().into_bytes())
                         .chain(args.into_iter().map(String::into_bytes))
                         .collect(),

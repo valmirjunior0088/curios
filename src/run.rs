@@ -1,6 +1,12 @@
 mod host;
 pub use host::*;
 
+mod os_host;
+pub use os_host::*;
+
+mod mock_host;
+pub use mock_host::*;
+
 mod lift;
 pub use lift::*;
 
