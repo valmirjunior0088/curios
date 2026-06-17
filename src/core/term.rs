@@ -1423,9 +1423,10 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoSetReuseaddr(a, b)
         | Prim::IoExit(a, b) => a.reach().max(b.reach()),
 
-        Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
-            a.reach().max(b.reach()).max(c.reach())
-        }
+        Prim::BinSlice(a, b, c)
+        | Prim::ArrGet(a, b, c)
+        | Prim::ArrAppend(a, b, c)
+        | Prim::IoPoll(a, b, c) => a.reach().max(b.reach()).max(c.reach()),
 
         Prim::ArrSlice(a, b, c, d) => a.reach().max(b.reach()).max(c.reach()).max(d.reach()),
 
@@ -1550,7 +1551,10 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
             b.collect_metavars(ids);
         }
 
-        Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
+        Prim::BinSlice(a, b, c)
+        | Prim::ArrGet(a, b, c)
+        | Prim::ArrAppend(a, b, c)
+        | Prim::IoPoll(a, b, c) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
             c.collect_metavars(ids);
@@ -1735,6 +1739,11 @@ where
         Prim::IoSetReuseaddr(handle, on) => {
             traverse_binary(handle, on, visit, Prim::IoSetReuseaddr)
         }
+        Prim::IoPoll(handles, events, timeout) => Prim::IoPoll(
+            visit.visit_subterm(handles),
+            visit.visit_subterm(events),
+            visit.visit_subterm(timeout),
+        ),
         Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
         Prim::IoClockWall => Prim::IoClockWall,
         Prim::IoClockMono => Prim::IoClockMono,

@@ -121,6 +121,7 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
         | ersd::HostPrim::IoSetRecvTimeout(a, b)
         | ersd::HostPrim::IoSetSendTimeout(a, b)
         | ersd::HostPrim::IoSetReuseaddr(a, b) => vec![a, b],
+        ersd::HostPrim::IoPoll(a, b, c) => vec![a, b, c],
     };
 
     operands.into_iter().flat_map(free_names).collect()

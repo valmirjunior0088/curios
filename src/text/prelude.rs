@@ -416,6 +416,20 @@ fn io_ops() -> Vec<TopItem> {
             nat(),
             prim(Prim::IoSetReuseaddr(name("h"), name("on"))),
         ),
+        // The readiness oracle: `handles` and `events` are parallel — `events[i]`
+        // is the interest bitmask (`POLL_*`) for `handles[i]` — and the result is
+        // parallel too. `timeout : Int` follows `poll(2)`: `< 0` forever, `0`
+        // immediate, `> 0` milliseconds.
+        pub_fn(
+            "poll",
+            vec![
+                ("handles", arr_of(io())),
+                ("events", arr_of(nat())),
+                ("timeout", int()),
+            ],
+            arr_of(nat()),
+            prim(Prim::IoPoll(name("handles"), name("events"), name("timeout"))),
+        ),
         pub_fn(
             "close",
             vec![("h", io())],

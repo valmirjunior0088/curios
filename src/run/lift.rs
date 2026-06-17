@@ -1,5 +1,5 @@
 use {
-    super::{Io, Mode},
+    super::{Io, Mode, PollEvents},
     wasmtime::{Caller, Val},
 };
 
@@ -17,12 +17,7 @@ impl Lift for () {
 /// the named streams, anything else is a host-minted handle.
 impl Lift for Io {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(match params[0].unwrap_i32() as u32 {
-            Io::STDIN => Io::Stdin,
-            Io::STDOUT => Io::Stdout,
-            Io::STDERR => Io::Stderr,
-            token => Io::Other(token),
-        })
+        Ok(Io::from_token(params[0].unwrap_i32() as u32))
     }
 }
 
@@ -68,6 +63,18 @@ impl<A: Lift, B: Lift> Lift for (A, B) {
     }
 }
 
+// Triples lift positionally too — `poll(handles, events, timeout)` is the one
+// host import with three operands.
+impl<A: Lift, B: Lift, C: Lift> Lift for (A, B, C) {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok((
+            A::lift(caller, &params[0..1])?,
+            B::lift(caller, &params[1..2])?,
+            C::lift(caller, &params[2..3])?,
+        ))
+    }
+}
+
 impl Lift for Vec<u8> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let Val::AnyRef(Some(anyref)) = &params[0] else {
@@ -87,5 +94,51 @@ impl Lift for Vec<u8> {
                     .map(|value| value.unwrap_i32() as u8)
             })
             .collect()
+    }
+}
+
+/// Read an `Arr(Nat)`/`Arr(Io)` host-import argument: a `params[0]` anyref array
+/// whose elements are i31-boxed scalars (the module's uniform `Arr` shape, not
+/// `Bin`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
+fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, wasmtime::Error> {
+    let Val::AnyRef(Some(anyref)) = param else {
+        return Err(wasmtime::Error::msg("expected non-null anyref"));
+    };
+
+    let array_ref = anyref
+        .as_array(&*caller)?
+        .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
+
+    let len = array_ref.len(&*caller)?;
+
+    (0..len)
+        .map(|index| {
+            let Val::AnyRef(Some(element)) = array_ref.get(&mut *caller, index)? else {
+                return Err(wasmtime::Error::msg("expected non-null anyref element"));
+            };
+
+            Ok(element.unwrap_i31(&*caller)?.get_u32())
+        })
+        .collect()
+}
+
+/// `Arr(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
+impl Lift for Vec<PollEvents> {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(lift_i31_array(caller, &params[0])?
+            .into_iter()
+            .map(PollEvents::from_bits)
+            .collect())
+    }
+}
+
+/// `Arr(Io)` lifts each token through the same stdio/handle classification a
+/// single `Io` does — `poll`'s `handles` array.
+impl Lift for Vec<Io> {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(lift_i31_array(caller, &params[0])?
+            .into_iter()
+            .map(Io::from_token)
+            .collect())
     }
 }

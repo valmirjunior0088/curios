@@ -315,6 +315,15 @@ pub fn erase_prim(
             erase(context, handle, &prim_type(Prim::IoType))?,
             erase(context, on, &bln_type())?,
         ))),
+        Prim::IoPoll(handles, events, timeout) => {
+            let arr_io: Term = Subterm::Prim(Prim::ArrType(prim_type(Prim::IoType))).into();
+            let arr_nat: Term = Subterm::Prim(Prim::ArrType(nat_type())).into();
+            Ok(host(ersd::HostPrim::IoPoll(
+                erase(context, handles, &arr_io)?,
+                erase(context, events, &arr_nat)?,
+                erase(context, timeout, &int_type())?,
+            )))
+        }
         Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
             context,
             handle,

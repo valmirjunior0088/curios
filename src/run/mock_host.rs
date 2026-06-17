@@ -199,7 +199,10 @@ impl Host for MockHost {
 
     fn socket(&self, _addr: &[u8]) -> (Status, Io) {
         let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
-        self.table.lock().unwrap().insert(handle, MockResource::Socket);
+        self.table
+            .lock()
+            .unwrap()
+            .insert(handle, MockResource::Socket);
 
         (Status::Ok, Io::Other(handle))
     }
@@ -308,6 +311,31 @@ impl Host for MockHost {
         Status::Ok
     }
 
+    fn poll(&self, handles: &[Io], events: &[PollEvents], _: i32) -> Vec<PollEvents> {
+        // In-memory data is always ready, so readiness just mirrors the requested
+        // interest: a known handle reports `revents == events`, an unknown one
+        // reports nothing. The deterministic in-memory oracle — any scheduler
+        // resolves in a single step under test.
+        let table = self.table.lock().unwrap();
+
+        handles
+            .iter()
+            .enumerate()
+            .map(|(slot, handle)| {
+                let known = match handle {
+                    Io::Stdin | Io::Stdout | Io::Stderr => true,
+                    Io::Other(token) => table.contains_key(token),
+                };
+
+                if known {
+                    events.get(slot).copied().unwrap_or_else(PollEvents::empty)
+                } else {
+                    PollEvents::empty()
+                }
+            })
+            .collect()
+    }
+
     fn close(&self, io: Io) {
         self.table.lock().unwrap().remove(&io.token());
     }
@@ -345,9 +373,13 @@ impl Host for MockHost {
                 })
             }
             // Inbound (accepted) connection: serve the scripted request.
-            Some(MockResource::Inbound(conn)) => Self::serve_from(&conn.request, &mut conn.position, count),
+            Some(MockResource::Inbound(conn)) => {
+                Self::serve_from(&conn.request, &mut conn.position, count)
+            }
             // Outbound connection: serve the scripted response.
-            Some(MockResource::Outbound(conn)) => Self::serve_from(&conn.response, &mut conn.position, count),
+            Some(MockResource::Outbound(conn)) => {
+                Self::serve_from(&conn.response, &mut conn.position, count)
+            }
             _ => (Status::Eof, vec![]),
         }
     }

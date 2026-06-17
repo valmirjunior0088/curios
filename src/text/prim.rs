@@ -108,6 +108,7 @@ pub enum Prim {
     IoSetRecvTimeout(Term, Term),
     IoSetSendTimeout(Term, Term),
     IoSetReuseaddr(Term, Term),
+    IoPoll(Term, Term, Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

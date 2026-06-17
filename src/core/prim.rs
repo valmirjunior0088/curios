@@ -129,6 +129,12 @@ pub enum Prim {
     IoSetSendTimeout(Term, Term),
     // (handle, on) -> Nat status: SO_REUSEADDR (`on` a `Bln`); set before bind.
     IoSetReuseaddr(Term, Term),
+    // (handles, events, timeout) -> Arr(Nat) revents: the readiness oracle. The
+    // `handles : Arr(Io)` and `events : Arr(Nat)` are parallel — `events[i]` is
+    // the interest bitmask for `handles[i]` — and the result is parallel too.
+    // `timeout : Int` mirrors `poll(2)`: `< 0` waits forever, `0` returns
+    // immediately, `> 0` waits that many milliseconds.
+    IoPoll(Term, Term, Term),
     IoClose(Term),
     IoClockWall,
     IoClockMono,

@@ -1371,6 +1371,11 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::IoSetReuseaddr(handle, on) => {
                 core::Prim::IoSetReuseaddr(self.term(handle)?, self.term(on)?)
             }
+            Prim::IoPoll(handles, events, timeout) => core::Prim::IoPoll(
+                self.term(handles)?,
+                self.term(events)?,
+                self.term(timeout)?,
+            ),
             Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
             Prim::IoClockWall => core::Prim::IoClockWall,
             Prim::IoClockMono => core::Prim::IoClockMono,

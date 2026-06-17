@@ -330,6 +330,24 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        if self.table.io_poll_used() {
+            // `(handles : Arr(Io), events : Arr(Nat), timeout : Int) -> revents :
+            // Arr(Nat)`. Both array params and the result cross as the module's
+            // uniform `Arr` (an i31-element array); `timeout` is a raw i32 like
+            // every other scalar param.
+            let arr_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
+            });
+            self.add_host_import(
+                "io_poll",
+                wasm::TypeName::from("io_poll"),
+                self.table.io_poll_func().clone(),
+                wasm::ResultType::from([arr_ref.clone(), arr_ref.clone(), i32_val.clone()]),
+                wasm::ResultType::from([arr_ref]),
+            );
+        }
+
         if self.table.io_env_used() {
             self.add_host_import(
                 "io_env",

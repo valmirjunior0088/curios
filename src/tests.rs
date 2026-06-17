@@ -1,5 +1,5 @@
 use {
-    super::{MockHost, OsHost},
+    super::{Host, Io, MockHost, OsHost, PollEvents},
     std::{path::Path, time::Duration},
 };
 
@@ -2340,4 +2340,34 @@ fn http_perform_smoke_tests_example_com() {
         "#;
 
     crate::run_text(Duration::from_secs(30), source, OsHost::new()).expect("expected result");
+}
+
+#[test]
+fn io_poll_mock_echoes_interest() {
+    // The mock readiness oracle reports a known handle ready for exactly the
+    // requested interest, so polling stdin for READ (mask `1`) yields revents
+    // `[1]`. Drives the whole new path end to end: building `Arr(Io)` and
+    // `Arr(Nat)` in the guest, marshalling both into the host import, and
+    // marshalling the `Arr(Nat)` result back out.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        let revents = std/Io/poll([std/Io/stdin], [1], +0);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(std/Arr/get(revents, 0))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"1");
+}
+
+#[test]
+#[ignore]
+fn io_poll_os_reports_stdout_writable() {
+    // A real `poll(2)` through rustix: stdout (fd 1) is essentially always ready
+    // to write, and `timeout 0` returns at once. Drives the rustix call, the
+    // stdio `BorrowedFd` path, and the `PollEvents` <-> `PollFlags` mapping.
+    let revents = OsHost::new().poll(&[Io::Stdout], &[PollEvents::WRITE], 0);
+    assert!(revents[0].contains(PollEvents::WRITE));
 }

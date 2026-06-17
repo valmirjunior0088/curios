@@ -404,6 +404,21 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
+            HostTarget::IoPoll {
+                handles,
+                events,
+                timeout,
+                resume,
+            } => flat([
+                pure("Io.poll "),
+                print_value_name(handles),
+                pure(" "),
+                print_value_name(events),
+                pure(" "),
+                print_value_name(timeout),
+                pure(" "),
+                print_block_name(resume),
+            ]),
             HostTarget::IoClose { handle, resume } => flat([
                 pure("Io.close "),
                 print_value_name(handle),

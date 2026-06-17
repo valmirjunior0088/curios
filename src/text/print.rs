@@ -303,6 +303,9 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoSetReuseaddr(handle, on) => {
             print_prim_call("Io.set_reuseaddr", vec![handle, on])
         }
+        Prim::IoPoll(handles, events, timeout) => {
+            print_prim_call("Io.poll", vec![handles, events, timeout])
+        }
         Prim::IoClose(handle) => print_prim_call("Io.close", vec![handle]),
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),

@@ -514,6 +514,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoSetReuseaddr(a, b) => {
             Prim::IoSetReuseaddr(zonk_term(context, a)?, zonk_term(context, b)?)
         }
+        Prim::IoPoll(a, b, c) => Prim::IoPoll(
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+            zonk_term(context, c)?,
+        ),
         Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a)?),
         Prim::IoRandom(a) => Prim::IoRandom(zonk_term(context, a)?),
         Prim::IoEnv(a) => Prim::IoEnv(zonk_term(context, a)?),

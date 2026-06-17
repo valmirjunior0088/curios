@@ -240,6 +240,16 @@ pub enum HostTarget {
         on: ValueName,
         resume: BlockName,
     },
+    /// Poll `handles` (an `Arr(Io)`) for the parallel `events` (an `Arr(Nat)` of
+    /// interest masks), waiting up to `timeout` (an `Int`: `<0` forever, `0`
+    /// immediate, `>0` ms). Returns the parallel `Arr(Nat)` of revents directly;
+    /// `resume` takes one block parameter.
+    IoPoll {
+        handles: ValueName,
+        events: ValueName,
+        timeout: ValueName,
+        resume: BlockName,
+    },
     /// Close `handle`. Returns no payload; `resume` takes zero block
     /// parameters.
     IoClose {
@@ -283,6 +293,7 @@ impl HostTarget {
             | HostTarget::IoSetRecvTimeout { resume, .. }
             | HostTarget::IoSetSendTimeout { resume, .. }
             | HostTarget::IoSetReuseaddr { resume, .. }
+            | HostTarget::IoPoll { resume, .. }
             | HostTarget::IoClose { resume, .. }
             | HostTarget::IoClockWall { resume }
             | HostTarget::IoClockMono { resume }
@@ -308,6 +319,7 @@ impl HostTarget {
             | HostTarget::IoSetRecvTimeout { resume, .. }
             | HostTarget::IoSetSendTimeout { resume, .. }
             | HostTarget::IoSetReuseaddr { resume, .. }
+            | HostTarget::IoPoll { resume, .. }
             | HostTarget::IoClose { resume, .. }
             | HostTarget::IoClockWall { resume }
             | HostTarget::IoClockMono { resume }
@@ -336,6 +348,12 @@ impl HostTarget {
             HostTarget::IoSetRecvTimeout { handle, ms, .. } => vec![handle, ms],
             HostTarget::IoSetSendTimeout { handle, ms, .. } => vec![handle, ms],
             HostTarget::IoSetReuseaddr { handle, on, .. } => vec![handle, on],
+            HostTarget::IoPoll {
+                handles,
+                events,
+                timeout,
+                ..
+            } => vec![handles, events, timeout],
             HostTarget::IoClose { handle, .. } => vec![handle],
             HostTarget::IoClockWall { .. }
             | HostTarget::IoClockMono { .. }
@@ -365,6 +383,12 @@ impl HostTarget {
             HostTarget::IoSetRecvTimeout { handle, ms, .. } => vec![handle, ms],
             HostTarget::IoSetSendTimeout { handle, ms, .. } => vec![handle, ms],
             HostTarget::IoSetReuseaddr { handle, on, .. } => vec![handle, on],
+            HostTarget::IoPoll {
+                handles,
+                events,
+                timeout,
+                ..
+            } => vec![handles, events, timeout],
             HostTarget::IoClose { handle, .. } => vec![handle],
             HostTarget::IoClockWall { .. }
             | HostTarget::IoClockMono { .. }

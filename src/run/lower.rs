@@ -1,5 +1,5 @@
 use {
-    super::{Io, Status},
+    super::{Io, PollEvents, Status},
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability,
         RefType, StorageType, Val, ValType,
@@ -100,6 +100,41 @@ impl Lower for Vec<u8> {
                     .collect::<Vec<_>>(),
             )?
             .to_anyref(),
+        ));
+
+        Ok(())
+    }
+}
+
+/// `Arr(Nat)`: `poll`'s parallel `revents` masks, lowered as an array of
+/// i31-boxed bits. Same uniform `Arr` shape as `Vec<Vec<u8>>` below (anyref
+/// elements over the codegen's `arr_type`), only the elements are i31s rather
+/// than `Bin`s — the outbound dual of `lift.rs`'s `lift_i31_array`.
+impl Lower for Vec<PollEvents> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        let outer_type = ArrayType::new(
+            caller.engine(),
+            FieldType::new(
+                Mutability::Var,
+                StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
+            ),
+        );
+        let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
+
+        let mut elements = Vec::with_capacity(self.len());
+        for mask in self {
+            elements.push(Val::AnyRef(Some(AnyRef::from_i31(
+                &mut *caller,
+                I31::wrapping_u32(mask.bits()),
+            ))));
+        }
+
+        results[0] = Val::AnyRef(Some(
+            ArrayRef::new_fixed(&mut *caller, &outer_pre, &elements)?.to_anyref(),
         ));
 
         Ok(())

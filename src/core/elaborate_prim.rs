@@ -364,6 +364,17 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let on = elaborate(context, on, Mode::Check(bln_type))?.0;
             (Prim::IoSetReuseaddr(handle, on), nat_type)
         }
+        Prim::IoPoll(handles, events, timeout) => {
+            // `handles : Arr(Io)`, `events : Arr(Nat)` (parallel interest masks),
+            // `timeout : Int` (poll(2) sign convention); result is the parallel
+            // `Arr(Nat)` of revents.
+            let arr_io: Term = Subterm::Prim(Prim::ArrType(io_type)).into();
+            let arr_nat: Term = Subterm::Prim(Prim::ArrType(nat_type)).into();
+            let handles = elaborate(context, handles, Mode::Check(arr_io))?.0;
+            let events = elaborate(context, events, Mode::Check(arr_nat.clone()))?.0;
+            let timeout = elaborate(context, timeout, Mode::Check(int_type))?.0;
+            (Prim::IoPoll(handles, events, timeout), arr_nat)
+        }
         Prim::IoClose(handle) => {
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
             (Prim::IoClose(handle), Term::tuple_type_unit())

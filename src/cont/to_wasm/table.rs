@@ -237,6 +237,7 @@ pub struct Table<'a> {
     io_set_recv_timeout: OnceCell<wasm::FuncName>,
     io_set_send_timeout: OnceCell<wasm::FuncName>,
     io_set_reuseaddr: OnceCell<wasm::FuncName>,
+    io_poll: OnceCell<wasm::FuncName>,
     io_close: OnceCell<wasm::FuncName>,
     io_clock_wall: OnceCell<wasm::FuncName>,
     io_clock_mono: OnceCell<wasm::FuncName>,
@@ -306,6 +307,7 @@ impl<'a> Table<'a> {
             io_set_recv_timeout: OnceCell::new(),
             io_set_send_timeout: OnceCell::new(),
             io_set_reuseaddr: OnceCell::new(),
+            io_poll: OnceCell::new(),
             io_close: OnceCell::new(),
             io_clock_wall: OnceCell::new(),
             io_clock_mono: OnceCell::new(),
@@ -564,6 +566,14 @@ impl<'a> Table<'a> {
 
     pub fn io_set_reuseaddr_used(&self) -> bool {
         self.io_set_reuseaddr.get().is_some()
+    }
+
+    pub fn io_poll_func(&self) -> &wasm::FuncName {
+        self.io_poll.get_or_init(|| wasm::FuncName::from("io_poll"))
+    }
+
+    pub fn io_poll_used(&self) -> bool {
+        self.io_poll.get().is_some()
     }
 
     pub fn io_close_func(&self) -> &wasm::FuncName {

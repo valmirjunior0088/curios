@@ -1,5 +1,6 @@
 use {
     super::host::*,
+    rustix::event::{PollFd, Timespec, poll},
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         collections::HashMap,
@@ -7,6 +8,7 @@ use {
         fs::{File, OpenOptions},
         io::{Read, Write, stderr, stdin, stdout},
         net::{SocketAddr, ToSocketAddrs},
+        os::fd::AsFd,
         sync::{
             Mutex,
             atomic::{AtomicU32, Ordering},
@@ -277,6 +279,62 @@ impl Host for OsHost {
 
     fn set_reuseaddr(&self, io: Io, on: u32) -> Status {
         self.with_socket(io.token(), |socket| socket.set_reuse_address(on != 0))
+    }
+
+    fn poll(&self, handles: &[Io], events: &[PollEvents], timeout_ms: i32) -> Vec<PollEvents> {
+        let table = self.table.lock().unwrap();
+
+        // Keep the stdio owners alive for the duration of the borrow: each
+        // `PollFd` holds a `BorrowedFd` into one of these (or into the table).
+        let (in_handle, out_handle, err_handle) = (stdin(), stdout(), stderr());
+
+        // Build a `PollFd` only for resolvable handles, remembering which input
+        // slot each maps to so revents land back in parallel; an unknown handle
+        // keeps its `empty()` slot and is never polled.
+        let mut polls = Vec::with_capacity(handles.len());
+        let mut slots = Vec::with_capacity(handles.len());
+        let mut results = vec![PollEvents::empty(); handles.len()];
+
+        for (slot, handle) in handles.iter().enumerate() {
+            let fd = match handle {
+                Io::Stdin => Some(in_handle.as_fd()),
+                Io::Stdout => Some(out_handle.as_fd()),
+                Io::Stderr => Some(err_handle.as_fd()),
+                Io::Other(token) => table.get(token).map(|resource| match resource {
+                    OsResource::File(file) => file.as_fd(),
+                    OsResource::Connected(socket)
+                    | OsResource::Unconnected(socket)
+                    | OsResource::Listener(socket) => socket.as_fd(),
+                }),
+            };
+
+            if let Some(fd) = fd {
+                let interest = events.get(slot).copied().unwrap_or_else(PollEvents::empty);
+                polls.push(PollFd::from_borrowed_fd(fd, interest.to_poll_flags()));
+                slots.push(slot);
+            }
+        }
+
+        // `Int` timeout, poll(2)-style: negative waits forever (no `Timespec`),
+        // otherwise a millisecond deadline (`0` returns immediately).
+        let timeout = (timeout_ms >= 0).then(|| {
+            let ms = i64::from(timeout_ms);
+
+            Timespec {
+                tv_sec: ms / 1000,
+                tv_nsec: ((ms % 1000) * 1_000_000) as _,
+            }
+        });
+
+        // A failed poll (e.g. `EINTR`) reports no readiness; the scheduler
+        // re-polls. On success, scatter each revents back to its input slot.
+        if poll(&mut polls, timeout.as_ref()).is_ok() {
+            for (index, &slot) in slots.iter().enumerate() {
+                results[slot] = PollEvents::from_poll_flags(polls[index].revents());
+            }
+        }
+
+        results
     }
 
     fn close(&self, io: Io) {

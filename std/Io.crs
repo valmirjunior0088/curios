@@ -1,5 +1,5 @@
 pub use /sys/{Io};
-pub use /sys/Io/{let stdin, let stdout, let stderr, let read, let write};
+pub use /sys/Io/{let stdin, let stdout, let stderr, let read, let write, let poll};
 use /std/{Bin, Str, Nat, Option};
 
 pub let print(s : Str) -> {} =

@@ -741,6 +741,26 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 self.host_single_resume(&mut output, resume);
             }
+            cont::HostTarget::IoPoll {
+                handles,
+                events,
+                timeout,
+                resume,
+            } => {
+                output.extend(self.load_value_instrs(handles, LoadAs::Arr));
+                output.extend(self.load_value_instrs(events, LoadAs::Arr));
+                // `timeout` is an `Int` (poll(2) sign convention), so it unboxes
+                // signed via `I31GetS`.
+                output.extend(self.load_value_instrs(timeout, LoadAs::Int));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_poll_func().clone(),
+                });
+
+                // The import returns the `Arr(Nat)` of revents directly (an array
+                // ref, an anyref subtype), already matching the single-anyref
+                // return shape, like `IoArgs`.
+                self.host_single_resume(&mut output, resume);
+            }
             cont::HostTarget::IoClose { handle, resume } => {
                 output.extend(self.load_value_instrs(handle, LoadAs::Nat));
                 output.push(wasm::Instr::Call {

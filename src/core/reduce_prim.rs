@@ -974,6 +974,10 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoSetReuseaddr",
             span: handle.span(),
         }),
+        Prim::IoPoll(handles, ..) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoPoll",
+            span: handles.span(),
+        }),
         Prim::IoClose(handle) => Err(ReduceError::IoAtTypeLevel {
             kind: "IoClose",
             span: handle.span(),

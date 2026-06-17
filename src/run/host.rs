@@ -1,4 +1,10 @@
-use std::io::{Error, ErrorKind};
+use {
+    rustix::event::PollFlags,
+    std::{
+        io::{Error, ErrorKind},
+        ops::{BitOr, BitOrAssign},
+    },
+};
 
 /// Number → string conversions used by both the wasm runtime (via the
 /// `nat_to_str`/`int_to_str`/`flt_to_str` imports) and the `scalar_eval`
@@ -49,6 +55,110 @@ impl Io {
             Io::Stderr => Self::STDERR,
             Io::Other(token) => token,
         }
+    }
+
+    /// Lift a wire token back to a descriptor: the three stdio numbers map to the
+    /// named streams, anything else is a host-minted handle. The inverse of
+    /// [`token`](Self::token).
+    pub fn from_token(token: u32) -> Self {
+        match token {
+            Self::STDIN => Io::Stdin,
+            Self::STDOUT => Io::Stdout,
+            Self::STDERR => Io::Stderr,
+            token => Io::Other(token),
+        }
+    }
+}
+
+/// A `poll` event mask — the interest a guest registers for a handle, and the
+/// readiness the host reports back. The one bitfield in the IO design: a set of
+/// flags riding a `u32`, mirroring the guest's per-handle `Nat`
+/// mask, that the host maps to platform `POLLIN`/`POLLOUT`/… (whose raw values
+/// differ per platform). `READ`/`WRITE` are settable interests; the host also
+/// reports the result-only `ERR`/`HUP`, requested or not. Lifts from / lowers to
+/// the raw `Nat` bits, exactly as [`Status`] does for its code.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct PollEvents(u32);
+
+impl PollEvents {
+    pub const READ: Self = Self(0b0001);
+    pub const WRITE: Self = Self(0b0010);
+    pub const ERR: Self = Self(0b0100);
+    pub const HUP: Self = Self(0b1000);
+
+    /// The empty mask — no interest, or no readiness.
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    /// Lift the raw `Nat` bits the guest marshals into a mask.
+    pub fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+
+    /// The raw bits, to lower back to the guest's `Nat`.
+    pub fn bits(self) -> u32 {
+        self.0
+    }
+
+    /// Whether every flag in `other` is set — the per-interest readiness test.
+    pub fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Map this interest mask to the platform `poll` flags. Only `READ`/`WRITE`
+    /// are settable interests; the result-only `ERR`/`HUP` are never requested.
+    pub fn to_poll_flags(self) -> PollFlags {
+        let mut flags = PollFlags::empty();
+
+        if self.contains(Self::READ) {
+            flags |= PollFlags::IN;
+        }
+
+        if self.contains(Self::WRITE) {
+            flags |= PollFlags::OUT;
+        }
+
+        flags
+    }
+
+    /// Map the platform `revents` back to a readiness mask, including the
+    /// result-only `ERR`/`HUP` the kernel reports whether or not they were asked
+    /// for.
+    pub fn from_poll_flags(flags: PollFlags) -> Self {
+        let mut events = Self::empty();
+
+        if flags.contains(PollFlags::IN) {
+            events |= Self::READ;
+        }
+
+        if flags.contains(PollFlags::OUT) {
+            events |= Self::WRITE;
+        }
+
+        if flags.contains(PollFlags::ERR) {
+            events |= Self::ERR;
+        }
+
+        if flags.contains(PollFlags::HUP) {
+            events |= Self::HUP;
+        }
+
+        events
+    }
+}
+
+impl BitOr for PollEvents {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+impl BitOrAssign for PollEvents {
+    fn bitor_assign(&mut self, other: Self) {
+        self.0 |= other.0;
     }
 }
 
@@ -166,6 +276,14 @@ pub trait Host {
 
     /// Set socket `io`'s `SO_REUSEADDR` flag; set before `bind`.
     fn set_reuseaddr(&self, io: Io, on: u32) -> Status;
+
+    /// The readiness oracle. Wait until at least one of `handles` is ready for
+    /// the interest in the parallel `events` mask (`PollEvents::READ`/`WRITE`),
+    /// or `timeout_ms` elapses. `timeout_ms` follows `poll(2)`'s sign convention:
+    /// negative waits forever, `0` returns immediately, positive waits that many
+    /// milliseconds. Returns the parallel `revents` masks, one per handle; a
+    /// handle the host does not recognize reports `PollEvents::empty()`.
+    fn poll(&self, handles: &[Io], events: &[PollEvents], timeout_ms: i32) -> Vec<PollEvents>;
 
     /// Close `io`. Closing an unknown handle is a no-op.
     fn close(&self, io: Io);

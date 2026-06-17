@@ -1,5 +1,5 @@
 use {
-    super::{Host, Io, Lift, Lower, Mode},
+    super::{Host, Io, Lift, Lower, Mode, PollEvents},
     crate::wasm,
     std::{
         error::Error,
@@ -151,6 +151,14 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let io_set_reuseaddr_type =
         FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
     let io_open_type = FuncType::new(engine, [bin_ref, ValType::I32], [i31_ref.clone(), i31_ref]);
+    // `(handles : Arr(Io), events : Arr(Nat), timeout : Int) -> revents :
+    // Arr(Nat)`: the two array params and the array result all cross as the
+    // uniform `arr_ref`; `timeout` is a raw i32 (the signed poll(2) convention).
+    let io_poll_type = FuncType::new(
+        engine,
+        [arr_ref.clone(), arr_ref.clone(), ValType::I32],
+        [arr_ref.clone()],
+    );
     let io_close_type = FuncType::new(engine, [ValType::I32], []);
 
     let mut linker = Linker::new(engine);
@@ -263,6 +271,14 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         let host = host.clone();
 
         move |(io, on): (Io, u32)| host.set_reuseaddr(io, on)
+    })?;
+
+    define_import(&mut linker, "io_poll", io_poll_type, {
+        let host = host.clone();
+
+        move |(handles, events, timeout): (Vec<Io>, Vec<PollEvents>, i32)| {
+            host.poll(&handles, &events, timeout)
+        }
     })?;
 
     define_import(&mut linker, "io_close", io_close_type, {

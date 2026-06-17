@@ -166,6 +166,7 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
         HostPrim::IoSetRecvTimeout(h, ms) => print_binary("Io.set_recv_timeout", h, ms),
         HostPrim::IoSetSendTimeout(h, ms) => print_binary("Io.set_send_timeout", h, ms),
         HostPrim::IoSetReuseaddr(h, on) => print_binary("Io.set_reuseaddr", h, on),
+        HostPrim::IoPoll(h, e, t) => print_ternary("Io.poll", h, e, t),
         HostPrim::IoClose(h) => print_unary("Io.close", h),
         HostPrim::IoClockWall => pure("Io.clock_wall"),
         HostPrim::IoClockMono => pure("Io.clock_mono"),

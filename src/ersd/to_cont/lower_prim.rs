@@ -679,6 +679,35 @@ pub fn lower_value_prim<'b>(
                 )
             }),
         ),
+        ersd::Prim::Host(ersd::HostPrim::IoPoll(handles, events, timeout)) => work
+            .lower_value_name(
+                handles,
+                frame,
+                Cont::new(move |work, handles| {
+                    work.lower_value_name(
+                        events,
+                        frame,
+                        Cont::new(move |work, events| {
+                            work.lower_value_name(
+                                timeout,
+                                frame,
+                                Cont::new(move |work, timeout| {
+                                    // `Io.poll` returns the `Arr(Nat)` of revents
+                                    // directly; forward it straight, like `IoArgs`.
+                                    let resume = forward_resume(work, cont);
+
+                                    cont::Tail::Host(cont::HostTarget::IoPoll {
+                                        handles,
+                                        events,
+                                        timeout,
+                                        resume,
+                                    })
+                                }),
+                            )
+                        }),
+                    )
+                }),
+            ),
         ersd::Prim::Host(ersd::HostPrim::IoClose(handle)) => work.lower_value_name(
             handle,
             frame,
