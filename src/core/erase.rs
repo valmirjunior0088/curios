@@ -199,6 +199,22 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
     .into())
 }
 
+/// Erase a case body in a frame where `head` is refined to `scrutinee` (the
+/// value this arm matched) and the motive is opened at that same value — the two
+/// must agree, so both are derived from one `scrutinee`.
+fn erase_refined_case(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    scrutinee: &Term,
+    body: &Term,
+) -> Result<ersd::Term, Error> {
+    context.with_frame(|context| {
+        refine_head(context, head, scrutinee);
+        erase(context, body, &motive.open(&[scrutinee]))
+    })
+}
+
 fn erase_nat_match(
     context: &mut Context,
     head: &Term,
@@ -263,16 +279,8 @@ fn erase_switch(
     let erased_cases = cases
         .iter()
         .map(|(n, body)| {
-            let case_expected = motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(*n))).into()]);
-            context.with_frame(|context| {
-                refine_head(
-                    context,
-                    head,
-                    &Subterm::Prim(Prim::Nat(Nat::new(*n))).into(),
-                );
-
-                erase(context, body, &case_expected).map(|e| (*n, e))
-            })
+            let scrutinee = Subterm::Prim(Prim::Nat(Nat::new(*n))).into();
+            erase_refined_case(context, head, motive, &scrutinee, body).map(|e| (*n, e))
         })
         .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
@@ -319,23 +327,21 @@ fn erase_bln_match(
 ) -> Result<ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, Prim::BlnType)?;
 
-    let erased_false = context.with_frame(|context| {
-        refine_head(context, head, &Subterm::Prim(Prim::Bln(false)).into());
-        erase(
-            context,
-            false_case,
-            &motive.open(&[&Subterm::Prim(Prim::Bln(false)).into()]),
-        )
-    })?;
+    let erased_false = erase_refined_case(
+        context,
+        head,
+        motive,
+        &Subterm::Prim(Prim::Bln(false)).into(),
+        false_case,
+    )?;
 
-    let erased_true = context.with_frame(|context| {
-        refine_head(context, head, &Subterm::Prim(Prim::Bln(true)).into());
-        erase(
-            context,
-            true_case,
-            &motive.open(&[&Subterm::Prim(Prim::Bln(true)).into()]),
-        )
-    })?;
+    let erased_true = erase_refined_case(
+        context,
+        head,
+        motive,
+        &Subterm::Prim(Prim::Bln(true)).into(),
+        true_case,
+    )?;
 
     let erased_head = erase(context, head, &head_type)?;
 
