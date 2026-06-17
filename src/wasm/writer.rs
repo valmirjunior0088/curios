@@ -1097,17 +1097,7 @@ where
     }
 
     fn write_module_name_subsection(&mut self, module_name: &str) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
-            writer.write_name(module_name)?;
-        }
-
-        self.write_section(0, bytes)?;
-
-        Ok(())
+        self.write_section_with(0, |writer| writer.write_name(module_name))
     }
 
     fn write_func_name_section(
@@ -1115,11 +1105,7 @@ where
         imports: &[(String, String, Import)],
         funcs: &[(FuncName, Func)],
     ) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(1, |writer| {
             writer.write_name_map(
                 imports
                     .iter()
@@ -1127,35 +1113,27 @@ where
                     .chain(funcs.iter().map(|(func_name, _)| func_name))
                     .map(|func_name| {
                         (
-                            self.table.resolve_func(func_name) as u64,
+                            writer.table.resolve_func(func_name) as u64,
                             func_name.as_str(),
                         )
                     })
                     .collect::<Vec<_>>(),
-            )?;
-        }
-
-        self.write_section(1, bytes)?;
-
-        Ok(())
+            )
+        })
     }
 
     fn write_local_name_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(2, |writer| {
             writer.write_indirect_name_map(
                 funcs
                     .iter()
                     .map(|(func_name, func)| {
                         (
-                            self.table.resolve_func(func_name) as u64,
+                            writer.table.resolve_func(func_name) as u64,
                             func.local_names()
                                 .map(|local_name| {
                                     (
-                                        self.table.resolve_local(func_name, local_name) as u64,
+                                        writer.table.resolve_local(func_name, local_name) as u64,
                                         local_name.as_str(),
                                     )
                                 })
@@ -1163,45 +1141,29 @@ where
                         )
                     })
                     .collect::<Vec<_>>(),
-            )?;
-        }
-
-        self.write_section(2, bytes)?;
-
-        Ok(())
+            )
+        })
     }
 
     fn write_type_name_section(&mut self, types: &[RecType]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(4, |writer| {
             writer.write_name_map(
                 types
                     .iter()
                     .flat_map(|rec_type| rec_type.sub_types.iter())
                     .map(|(type_name, _)| {
                         (
-                            self.table.resolve_type(type_name) as u64,
+                            writer.table.resolve_type(type_name) as u64,
                             type_name.as_str(),
                         )
                     })
                     .collect::<Vec<_>>(),
-            )?;
-        }
-
-        self.write_section(4, bytes)?;
-
-        Ok(())
+            )
+        })
     }
 
     fn write_field_name_section(&mut self, types: &[RecType]) -> Result<()> {
-        let mut bytes = Vec::new();
-
-        {
-            let mut writer = self.fork(&mut bytes);
-
+        self.write_section_with(10, |writer| {
             writer.write_indirect_name_map(
                 types
                     .iter()
@@ -1209,12 +1171,13 @@ where
                     .filter_map(|(type_name, sub_type)| {
                         sub_type.struct_type().map(|struct_type| {
                             (
-                                self.table.resolve_type(type_name) as u64,
+                                writer.table.resolve_type(type_name) as u64,
                                 struct_type
                                     .field_names()
                                     .map(|field_name| {
                                         (
-                                            self.table.resolve_field(type_name, field_name) as u64,
+                                            writer.table.resolve_field(type_name, field_name)
+                                                as u64,
                                             field_name.as_str(),
                                         )
                                     })
@@ -1223,12 +1186,8 @@ where
                         })
                     })
                     .collect::<Vec<_>>(),
-            )?;
-        }
-
-        self.write_section(10, bytes)?;
-
-        Ok(())
+            )
+        })
     }
 
     fn write_name_section(&mut self, module: &Module) -> Result<()> {
