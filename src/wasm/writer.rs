@@ -466,12 +466,8 @@ where
 
     fn write_instr<'f, 'l>(&mut self, state: &mut State<'f, 'l>, instr: &'l Instr) -> Result<()> {
         match instr {
-            Instr::Unreachable => {
-                self.buffer.push_byte(0x00)?;
-            }
-            Instr::Nop => {
-                self.buffer.push_byte(0x01)?;
-            }
+            Instr::Unreachable => self.buffer.push_byte(0x00)?,
+            Instr::Nop => self.buffer.push_byte(0x01)?,
             Instr::Block {
                 label_name,
                 block_type,
@@ -564,9 +560,7 @@ where
                 self.buffer
                     .push_leb128_unsigned(state.resolve(label_name) as u64)?;
             }
-            Instr::Return => {
-                self.buffer.push_byte(0x0f)?;
-            }
+            Instr::Return => self.buffer.push_byte(0x0f)?,
             Instr::Call { func_name } => {
                 self.buffer.push_byte(0x10)?;
                 self.write_func_name(func_name)?;
@@ -629,19 +623,13 @@ where
                 self.buffer.push_byte(0xd0)?;
                 self.write_heap_type(heap_type)?;
             }
-            Instr::RefIsNull => {
-                self.buffer.push_byte(0xd1)?;
-            }
+            Instr::RefIsNull => self.buffer.push_byte(0xd1)?,
             Instr::RefFunc { func_name } => {
                 self.buffer.push_byte(0xd2)?;
                 self.write_func_name(func_name)?;
             }
-            Instr::RefEq => {
-                self.buffer.push_byte(0xd3)?;
-            }
-            Instr::RefAsNonNull => {
-                self.buffer.push_byte(0xd4)?;
-            }
+            Instr::RefEq => self.buffer.push_byte(0xd3)?,
+            Instr::RefAsNonNull => self.buffer.push_byte(0xd4)?,
             Instr::StructNew { type_name } => {
                 self.buffer.push_byte(0xfb)?;
                 self.buffer.push_leb128_unsigned(0)?;
@@ -783,9 +771,7 @@ where
                 self.buffer.push_byte(0xfb)?;
                 self.buffer.push_leb128_unsigned(30)?;
             }
-            Instr::Drop => {
-                self.buffer.push_byte(0x1a)?;
-            }
+            Instr::Drop => self.buffer.push_byte(0x1a)?,
             Instr::Select { val_types } => {
                 if val_types.is_empty() {
                     self.buffer.push_byte(0x1b)?;
@@ -835,390 +821,134 @@ where
                 self.buffer.push_byte(0x44)?;
                 self.buffer.push_ieee754_double(*value)?;
             }
-            Instr::I32Eqz => {
-                self.buffer.push_byte(0x45)?;
-            }
-            Instr::I32Eq => {
-                self.buffer.push_byte(0x46)?;
-            }
-            Instr::I32Ne => {
-                self.buffer.push_byte(0x47)?;
-            }
-            Instr::I32LtS => {
-                self.buffer.push_byte(0x48)?;
-            }
-            Instr::I32LtU => {
-                self.buffer.push_byte(0x49)?;
-            }
-            Instr::I32GtS => {
-                self.buffer.push_byte(0x4a)?;
-            }
-            Instr::I32GtU => {
-                self.buffer.push_byte(0x4b)?;
-            }
-            Instr::I32LeS => {
-                self.buffer.push_byte(0x4c)?;
-            }
-            Instr::I32LeU => {
-                self.buffer.push_byte(0x4d)?;
-            }
-            Instr::I32GeS => {
-                self.buffer.push_byte(0x4e)?;
-            }
-            Instr::I32GeU => {
-                self.buffer.push_byte(0x4f)?;
-            }
-            Instr::I64Eqz => {
-                self.buffer.push_byte(0x50)?;
-            }
-            Instr::I64Eq => {
-                self.buffer.push_byte(0x51)?;
-            }
-            Instr::I64Ne => {
-                self.buffer.push_byte(0x52)?;
-            }
-            Instr::I64LtS => {
-                self.buffer.push_byte(0x53)?;
-            }
-            Instr::I64LtU => {
-                self.buffer.push_byte(0x54)?;
-            }
-            Instr::I64GtS => {
-                self.buffer.push_byte(0x55)?;
-            }
-            Instr::I64GtU => {
-                self.buffer.push_byte(0x56)?;
-            }
-            Instr::I64LeS => {
-                self.buffer.push_byte(0x57)?;
-            }
-            Instr::I64LeU => {
-                self.buffer.push_byte(0x58)?;
-            }
-            Instr::I64GeS => {
-                self.buffer.push_byte(0x59)?;
-            }
-            Instr::I64GeU => {
-                self.buffer.push_byte(0x5a)?;
-            }
-            Instr::F32Eq => {
-                self.buffer.push_byte(0x5b)?;
-            }
-            Instr::F32Ne => {
-                self.buffer.push_byte(0x5c)?;
-            }
-            Instr::F32Lt => {
-                self.buffer.push_byte(0x5d)?;
-            }
-            Instr::F32Gt => {
-                self.buffer.push_byte(0x5e)?;
-            }
-            Instr::F32Le => {
-                self.buffer.push_byte(0x5f)?;
-            }
-            Instr::F32Ge => {
-                self.buffer.push_byte(0x60)?;
-            }
-            Instr::F64Eq => {
-                self.buffer.push_byte(0x61)?;
-            }
-            Instr::F64Ne => {
-                self.buffer.push_byte(0x62)?;
-            }
-            Instr::F64Lt => {
-                self.buffer.push_byte(0x63)?;
-            }
-            Instr::F64Gt => {
-                self.buffer.push_byte(0x64)?;
-            }
-            Instr::F64Le => {
-                self.buffer.push_byte(0x65)?;
-            }
-            Instr::F64Ge => {
-                self.buffer.push_byte(0x66)?;
-            }
-            Instr::I32Clz => {
-                self.buffer.push_byte(0x67)?;
-            }
-            Instr::I32Ctz => {
-                self.buffer.push_byte(0x68)?;
-            }
-            Instr::I32Popcnt => {
-                self.buffer.push_byte(0x69)?;
-            }
-            Instr::I32Add => {
-                self.buffer.push_byte(0x6a)?;
-            }
-            Instr::I32Sub => {
-                self.buffer.push_byte(0x6b)?;
-            }
-            Instr::I32Mul => {
-                self.buffer.push_byte(0x6c)?;
-            }
-            Instr::I32DivS => {
-                self.buffer.push_byte(0x6d)?;
-            }
-            Instr::I32DivU => {
-                self.buffer.push_byte(0x6e)?;
-            }
-            Instr::I32RemS => {
-                self.buffer.push_byte(0x6f)?;
-            }
-            Instr::I32RemU => {
-                self.buffer.push_byte(0x70)?;
-            }
-            Instr::I32And => {
-                self.buffer.push_byte(0x71)?;
-            }
-            Instr::I32Or => {
-                self.buffer.push_byte(0x72)?;
-            }
-            Instr::I32Xor => {
-                self.buffer.push_byte(0x73)?;
-            }
-            Instr::I32Shl => {
-                self.buffer.push_byte(0x74)?;
-            }
-            Instr::I32ShrS => {
-                self.buffer.push_byte(0x75)?;
-            }
-            Instr::I32ShrU => {
-                self.buffer.push_byte(0x76)?;
-            }
-            Instr::I32Rotl => {
-                self.buffer.push_byte(0x77)?;
-            }
-            Instr::I32Rotr => {
-                self.buffer.push_byte(0x78)?;
-            }
-            Instr::I64Clz => {
-                self.buffer.push_byte(0x79)?;
-            }
-            Instr::I64Ctz => {
-                self.buffer.push_byte(0x7a)?;
-            }
-            Instr::I64Popcnt => {
-                self.buffer.push_byte(0x7b)?;
-            }
-            Instr::I64Add => {
-                self.buffer.push_byte(0x7c)?;
-            }
-            Instr::I64Sub => {
-                self.buffer.push_byte(0x7d)?;
-            }
-            Instr::I64Mul => {
-                self.buffer.push_byte(0x7e)?;
-            }
-            Instr::I64DivS => {
-                self.buffer.push_byte(0x7f)?;
-            }
-            Instr::I64DivU => {
-                self.buffer.push_byte(0x80)?;
-            }
-            Instr::I64RemS => {
-                self.buffer.push_byte(0x81)?;
-            }
-            Instr::I64RemU => {
-                self.buffer.push_byte(0x82)?;
-            }
-            Instr::I64And => {
-                self.buffer.push_byte(0x83)?;
-            }
-            Instr::I64Or => {
-                self.buffer.push_byte(0x84)?;
-            }
-            Instr::I64Xor => {
-                self.buffer.push_byte(0x85)?;
-            }
-            Instr::I64Shl => {
-                self.buffer.push_byte(0x86)?;
-            }
-            Instr::I64ShrS => {
-                self.buffer.push_byte(0x87)?;
-            }
-            Instr::I64ShrU => {
-                self.buffer.push_byte(0x88)?;
-            }
-            Instr::I64Rotl => {
-                self.buffer.push_byte(0x89)?;
-            }
-            Instr::I64Rotr => {
-                self.buffer.push_byte(0x8a)?;
-            }
-            Instr::F32Abs => {
-                self.buffer.push_byte(0x8b)?;
-            }
-            Instr::F32Neg => {
-                self.buffer.push_byte(0x8c)?;
-            }
-            Instr::F32Ceil => {
-                self.buffer.push_byte(0x8d)?;
-            }
-            Instr::F32Floor => {
-                self.buffer.push_byte(0x8e)?;
-            }
-            Instr::F32Trunc => {
-                self.buffer.push_byte(0x8f)?;
-            }
-            Instr::F32Nearest => {
-                self.buffer.push_byte(0x90)?;
-            }
-            Instr::F32Sqrt => {
-                self.buffer.push_byte(0x91)?;
-            }
-            Instr::F32Add => {
-                self.buffer.push_byte(0x92)?;
-            }
-            Instr::F32Sub => {
-                self.buffer.push_byte(0x93)?;
-            }
-            Instr::F32Mul => {
-                self.buffer.push_byte(0x94)?;
-            }
-            Instr::F32Div => {
-                self.buffer.push_byte(0x95)?;
-            }
-            Instr::F32Min => {
-                self.buffer.push_byte(0x96)?;
-            }
-            Instr::F32Max => {
-                self.buffer.push_byte(0x97)?;
-            }
-            Instr::F32Copysign => {
-                self.buffer.push_byte(0x98)?;
-            }
-            Instr::F64Abs => {
-                self.buffer.push_byte(0x99)?;
-            }
-            Instr::F64Neg => {
-                self.buffer.push_byte(0x9a)?;
-            }
-            Instr::F64Ceil => {
-                self.buffer.push_byte(0x9b)?;
-            }
-            Instr::F64Floor => {
-                self.buffer.push_byte(0x9c)?;
-            }
-            Instr::F64Trunc => {
-                self.buffer.push_byte(0x9d)?;
-            }
-            Instr::F64Nearest => {
-                self.buffer.push_byte(0x9e)?;
-            }
-            Instr::F64Sqrt => {
-                self.buffer.push_byte(0x9f)?;
-            }
-            Instr::F64Add => {
-                self.buffer.push_byte(0xa0)?;
-            }
-            Instr::F64Sub => {
-                self.buffer.push_byte(0xa1)?;
-            }
-            Instr::F64Mul => {
-                self.buffer.push_byte(0xa2)?;
-            }
-            Instr::F64Div => {
-                self.buffer.push_byte(0xa3)?;
-            }
-            Instr::F64Min => {
-                self.buffer.push_byte(0xa4)?;
-            }
-            Instr::F64Max => {
-                self.buffer.push_byte(0xa5)?;
-            }
-            Instr::F64Copysign => {
-                self.buffer.push_byte(0xa6)?;
-            }
-            Instr::I32WrapI64 => {
-                self.buffer.push_byte(0xa7)?;
-            }
-            Instr::I32TruncF32S => {
-                self.buffer.push_byte(0xa8)?;
-            }
-            Instr::I32TruncF32U => {
-                self.buffer.push_byte(0xa9)?;
-            }
-            Instr::I32TruncF64S => {
-                self.buffer.push_byte(0xaa)?;
-            }
-            Instr::I32TruncF64U => {
-                self.buffer.push_byte(0xab)?;
-            }
-            Instr::I64ExtendI32S => {
-                self.buffer.push_byte(0xac)?;
-            }
-            Instr::I64ExtendI32U => {
-                self.buffer.push_byte(0xad)?;
-            }
-            Instr::I64TruncF32S => {
-                self.buffer.push_byte(0xae)?;
-            }
-            Instr::I64TruncF32U => {
-                self.buffer.push_byte(0xaf)?;
-            }
-            Instr::I64TruncF64S => {
-                self.buffer.push_byte(0xb0)?;
-            }
-            Instr::I64TruncF64U => {
-                self.buffer.push_byte(0xb1)?;
-            }
-            Instr::F32ConvertI32S => {
-                self.buffer.push_byte(0xb2)?;
-            }
-            Instr::F32ConvertI32U => {
-                self.buffer.push_byte(0xb3)?;
-            }
-            Instr::F32ConvertI64S => {
-                self.buffer.push_byte(0xb4)?;
-            }
-            Instr::F32ConvertI64U => {
-                self.buffer.push_byte(0xb5)?;
-            }
-            Instr::F32DemoteF64 => {
-                self.buffer.push_byte(0xb6)?;
-            }
-            Instr::F64ConvertI32S => {
-                self.buffer.push_byte(0xb7)?;
-            }
-            Instr::F64ConvertI32U => {
-                self.buffer.push_byte(0xb8)?;
-            }
-            Instr::F64ConvertI64S => {
-                self.buffer.push_byte(0xb9)?;
-            }
-            Instr::F64ConvertI64U => {
-                self.buffer.push_byte(0xba)?;
-            }
-            Instr::F64PromoteF32 => {
-                self.buffer.push_byte(0xbb)?;
-            }
-            Instr::I32ReinterpretF32 => {
-                self.buffer.push_byte(0xbc)?;
-            }
-            Instr::I64ReinterpretF64 => {
-                self.buffer.push_byte(0xbd)?;
-            }
-            Instr::F32ReinterpretI32 => {
-                self.buffer.push_byte(0xbe)?;
-            }
-            Instr::F64ReinterpretI64 => {
-                self.buffer.push_byte(0xbf)?;
-            }
-            Instr::I32Extend8S => {
-                self.buffer.push_byte(0xc0)?;
-            }
-            Instr::I32Extend16S => {
-                self.buffer.push_byte(0xc1)?;
-            }
-            Instr::I64Extend8S => {
-                self.buffer.push_byte(0xc2)?;
-            }
-            Instr::I64Extend16S => {
-                self.buffer.push_byte(0xc3)?;
-            }
-            Instr::I64Extend32S => {
-                self.buffer.push_byte(0xc4)?;
-            }
+            Instr::I32Eqz => self.buffer.push_byte(0x45)?,
+            Instr::I32Eq => self.buffer.push_byte(0x46)?,
+            Instr::I32Ne => self.buffer.push_byte(0x47)?,
+            Instr::I32LtS => self.buffer.push_byte(0x48)?,
+            Instr::I32LtU => self.buffer.push_byte(0x49)?,
+            Instr::I32GtS => self.buffer.push_byte(0x4a)?,
+            Instr::I32GtU => self.buffer.push_byte(0x4b)?,
+            Instr::I32LeS => self.buffer.push_byte(0x4c)?,
+            Instr::I32LeU => self.buffer.push_byte(0x4d)?,
+            Instr::I32GeS => self.buffer.push_byte(0x4e)?,
+            Instr::I32GeU => self.buffer.push_byte(0x4f)?,
+            Instr::I64Eqz => self.buffer.push_byte(0x50)?,
+            Instr::I64Eq => self.buffer.push_byte(0x51)?,
+            Instr::I64Ne => self.buffer.push_byte(0x52)?,
+            Instr::I64LtS => self.buffer.push_byte(0x53)?,
+            Instr::I64LtU => self.buffer.push_byte(0x54)?,
+            Instr::I64GtS => self.buffer.push_byte(0x55)?,
+            Instr::I64GtU => self.buffer.push_byte(0x56)?,
+            Instr::I64LeS => self.buffer.push_byte(0x57)?,
+            Instr::I64LeU => self.buffer.push_byte(0x58)?,
+            Instr::I64GeS => self.buffer.push_byte(0x59)?,
+            Instr::I64GeU => self.buffer.push_byte(0x5a)?,
+            Instr::F32Eq => self.buffer.push_byte(0x5b)?,
+            Instr::F32Ne => self.buffer.push_byte(0x5c)?,
+            Instr::F32Lt => self.buffer.push_byte(0x5d)?,
+            Instr::F32Gt => self.buffer.push_byte(0x5e)?,
+            Instr::F32Le => self.buffer.push_byte(0x5f)?,
+            Instr::F32Ge => self.buffer.push_byte(0x60)?,
+            Instr::F64Eq => self.buffer.push_byte(0x61)?,
+            Instr::F64Ne => self.buffer.push_byte(0x62)?,
+            Instr::F64Lt => self.buffer.push_byte(0x63)?,
+            Instr::F64Gt => self.buffer.push_byte(0x64)?,
+            Instr::F64Le => self.buffer.push_byte(0x65)?,
+            Instr::F64Ge => self.buffer.push_byte(0x66)?,
+            Instr::I32Clz => self.buffer.push_byte(0x67)?,
+            Instr::I32Ctz => self.buffer.push_byte(0x68)?,
+            Instr::I32Popcnt => self.buffer.push_byte(0x69)?,
+            Instr::I32Add => self.buffer.push_byte(0x6a)?,
+            Instr::I32Sub => self.buffer.push_byte(0x6b)?,
+            Instr::I32Mul => self.buffer.push_byte(0x6c)?,
+            Instr::I32DivS => self.buffer.push_byte(0x6d)?,
+            Instr::I32DivU => self.buffer.push_byte(0x6e)?,
+            Instr::I32RemS => self.buffer.push_byte(0x6f)?,
+            Instr::I32RemU => self.buffer.push_byte(0x70)?,
+            Instr::I32And => self.buffer.push_byte(0x71)?,
+            Instr::I32Or => self.buffer.push_byte(0x72)?,
+            Instr::I32Xor => self.buffer.push_byte(0x73)?,
+            Instr::I32Shl => self.buffer.push_byte(0x74)?,
+            Instr::I32ShrS => self.buffer.push_byte(0x75)?,
+            Instr::I32ShrU => self.buffer.push_byte(0x76)?,
+            Instr::I32Rotl => self.buffer.push_byte(0x77)?,
+            Instr::I32Rotr => self.buffer.push_byte(0x78)?,
+            Instr::I64Clz => self.buffer.push_byte(0x79)?,
+            Instr::I64Ctz => self.buffer.push_byte(0x7a)?,
+            Instr::I64Popcnt => self.buffer.push_byte(0x7b)?,
+            Instr::I64Add => self.buffer.push_byte(0x7c)?,
+            Instr::I64Sub => self.buffer.push_byte(0x7d)?,
+            Instr::I64Mul => self.buffer.push_byte(0x7e)?,
+            Instr::I64DivS => self.buffer.push_byte(0x7f)?,
+            Instr::I64DivU => self.buffer.push_byte(0x80)?,
+            Instr::I64RemS => self.buffer.push_byte(0x81)?,
+            Instr::I64RemU => self.buffer.push_byte(0x82)?,
+            Instr::I64And => self.buffer.push_byte(0x83)?,
+            Instr::I64Or => self.buffer.push_byte(0x84)?,
+            Instr::I64Xor => self.buffer.push_byte(0x85)?,
+            Instr::I64Shl => self.buffer.push_byte(0x86)?,
+            Instr::I64ShrS => self.buffer.push_byte(0x87)?,
+            Instr::I64ShrU => self.buffer.push_byte(0x88)?,
+            Instr::I64Rotl => self.buffer.push_byte(0x89)?,
+            Instr::I64Rotr => self.buffer.push_byte(0x8a)?,
+            Instr::F32Abs => self.buffer.push_byte(0x8b)?,
+            Instr::F32Neg => self.buffer.push_byte(0x8c)?,
+            Instr::F32Ceil => self.buffer.push_byte(0x8d)?,
+            Instr::F32Floor => self.buffer.push_byte(0x8e)?,
+            Instr::F32Trunc => self.buffer.push_byte(0x8f)?,
+            Instr::F32Nearest => self.buffer.push_byte(0x90)?,
+            Instr::F32Sqrt => self.buffer.push_byte(0x91)?,
+            Instr::F32Add => self.buffer.push_byte(0x92)?,
+            Instr::F32Sub => self.buffer.push_byte(0x93)?,
+            Instr::F32Mul => self.buffer.push_byte(0x94)?,
+            Instr::F32Div => self.buffer.push_byte(0x95)?,
+            Instr::F32Min => self.buffer.push_byte(0x96)?,
+            Instr::F32Max => self.buffer.push_byte(0x97)?,
+            Instr::F32Copysign => self.buffer.push_byte(0x98)?,
+            Instr::F64Abs => self.buffer.push_byte(0x99)?,
+            Instr::F64Neg => self.buffer.push_byte(0x9a)?,
+            Instr::F64Ceil => self.buffer.push_byte(0x9b)?,
+            Instr::F64Floor => self.buffer.push_byte(0x9c)?,
+            Instr::F64Trunc => self.buffer.push_byte(0x9d)?,
+            Instr::F64Nearest => self.buffer.push_byte(0x9e)?,
+            Instr::F64Sqrt => self.buffer.push_byte(0x9f)?,
+            Instr::F64Add => self.buffer.push_byte(0xa0)?,
+            Instr::F64Sub => self.buffer.push_byte(0xa1)?,
+            Instr::F64Mul => self.buffer.push_byte(0xa2)?,
+            Instr::F64Div => self.buffer.push_byte(0xa3)?,
+            Instr::F64Min => self.buffer.push_byte(0xa4)?,
+            Instr::F64Max => self.buffer.push_byte(0xa5)?,
+            Instr::F64Copysign => self.buffer.push_byte(0xa6)?,
+            Instr::I32WrapI64 => self.buffer.push_byte(0xa7)?,
+            Instr::I32TruncF32S => self.buffer.push_byte(0xa8)?,
+            Instr::I32TruncF32U => self.buffer.push_byte(0xa9)?,
+            Instr::I32TruncF64S => self.buffer.push_byte(0xaa)?,
+            Instr::I32TruncF64U => self.buffer.push_byte(0xab)?,
+            Instr::I64ExtendI32S => self.buffer.push_byte(0xac)?,
+            Instr::I64ExtendI32U => self.buffer.push_byte(0xad)?,
+            Instr::I64TruncF32S => self.buffer.push_byte(0xae)?,
+            Instr::I64TruncF32U => self.buffer.push_byte(0xaf)?,
+            Instr::I64TruncF64S => self.buffer.push_byte(0xb0)?,
+            Instr::I64TruncF64U => self.buffer.push_byte(0xb1)?,
+            Instr::F32ConvertI32S => self.buffer.push_byte(0xb2)?,
+            Instr::F32ConvertI32U => self.buffer.push_byte(0xb3)?,
+            Instr::F32ConvertI64S => self.buffer.push_byte(0xb4)?,
+            Instr::F32ConvertI64U => self.buffer.push_byte(0xb5)?,
+            Instr::F32DemoteF64 => self.buffer.push_byte(0xb6)?,
+            Instr::F64ConvertI32S => self.buffer.push_byte(0xb7)?,
+            Instr::F64ConvertI32U => self.buffer.push_byte(0xb8)?,
+            Instr::F64ConvertI64S => self.buffer.push_byte(0xb9)?,
+            Instr::F64ConvertI64U => self.buffer.push_byte(0xba)?,
+            Instr::F64PromoteF32 => self.buffer.push_byte(0xbb)?,
+            Instr::I32ReinterpretF32 => self.buffer.push_byte(0xbc)?,
+            Instr::I64ReinterpretF64 => self.buffer.push_byte(0xbd)?,
+            Instr::F32ReinterpretI32 => self.buffer.push_byte(0xbe)?,
+            Instr::F64ReinterpretI64 => self.buffer.push_byte(0xbf)?,
+            Instr::I32Extend8S => self.buffer.push_byte(0xc0)?,
+            Instr::I32Extend16S => self.buffer.push_byte(0xc1)?,
+            Instr::I64Extend8S => self.buffer.push_byte(0xc2)?,
+            Instr::I64Extend16S => self.buffer.push_byte(0xc3)?,
+            Instr::I64Extend32S => self.buffer.push_byte(0xc4)?,
             Instr::I32TruncSatF32S => {
                 self.buffer.push_byte(0xfc)?;
                 self.buffer.push_leb128_unsigned(0)?;
