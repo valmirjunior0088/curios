@@ -1,6 +1,9 @@
-use wasmtime::{
-    AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability,
-    RefType, StorageType, Val, ValType,
+use {
+    super::{Io, Status},
+    wasmtime::{
+        AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability,
+        RefType, StorageType, Val, ValType,
+    },
 };
 
 pub trait Lower {
@@ -11,6 +14,20 @@ pub trait Lower {
 impl Lower for () {
     fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
         Ok(())
+    }
+}
+
+/// A Curios IO status lowers as its `u32` wire code (an i31).
+impl Lower for Status {
+    fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+        self.code().lower(caller, results)
+    }
+}
+
+/// A descriptor lowers as its `u32` wire token (an i31).
+impl Lower for Io {
+    fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+        self.token().lower(caller, results)
     }
 }
 

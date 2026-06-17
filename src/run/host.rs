@@ -1,4 +1,4 @@
-use {crate::Entropy, std::sync::Mutex};
+use std::io::{Error, ErrorKind};
 
 /// Number → string conversions used by both the wasm runtime (via the
 /// `nat_to_str`/`int_to_str`/`flt_to_str` imports) and the `scalar_eval`
@@ -20,105 +20,163 @@ pub fn flt_to_le_bin(value: f32) -> Vec<u8> {
     value.to_le_bytes().to_vec()
 }
 
-/// The well-known handle tokens minted by the `/sys/Io` prelude constants.
-pub const STDIN: u32 = 0;
-pub const STDOUT: u32 = 1;
-pub const STDERR: u32 = 2;
-
-/// The status contract of failable IO ops, mirrored by `/std/File`'s `decode`.
-pub const STATUS_OK: u32 = 0;
-pub const STATUS_EOF: u32 = 1;
-pub const STATUS_NOT_FOUND: u32 = 2;
-pub const STATUS_PERMISSION_DENIED: u32 = 3;
-pub const STATUS_EXISTS: u32 = 4;
-pub const STATUS_OTHER: u32 = 5;
-/// A `connect` was actively refused — no listener at the target host:port.
-pub const STATUS_REFUSED: u32 = 6;
-/// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). No
-/// Phase-1 caller sets `NONBLOCK`, so it is never observed yet; the `/std`
-/// scheduler consumes it once the readiness model lands.
-pub const STATUS_WOULD_BLOCK: u32 = 7;
-
-/// The mode tokens of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` union.
-pub const MODE_READ: u32 = 0;
-pub const MODE_WRITE: u32 = 1;
-pub const MODE_APPEND: u32 = 2;
-
-/// The handle-token gensym, seeded past the well-known stdio tokens. `Entropy`
-/// is `Cell`-backed, so the host's `Send + Sync` bound puts it behind a mutex.
-/// Both host implementations mint handles from one of these.
-pub(crate) fn handle_entropy() -> Mutex<Entropy> {
-    let entropy = Entropy::new();
-    entropy.seed(STDERR as usize + 1);
-
-    Mutex::new(entropy)
+/// A handle the guest shuttles across the IO boundary: one of the three standard
+/// streams, or a host-minted token for an open file or socket. Mirrors the
+/// guest's `/std/Io` handles; lifts from / lowers to its `u32` wire token.
+#[derive(Clone, Copy)]
+pub enum Io {
+    Stdin,
+    Stdout,
+    Stderr,
+    Other(u32),
 }
 
-pub(crate) fn fresh_handle(handles: &Mutex<Entropy>) -> u32 {
-    handles.lock().unwrap().fresh() as u32
+impl Io {
+    /// The well-known stdio handle tokens minted by the `/sys/Io` prelude.
+    pub const STDIN: u32 = 0;
+    pub const STDOUT: u32 = 1;
+    pub const STDERR: u32 = 2;
+    /// The first handle token a host mints, one past the stdio tokens so a minted
+    /// file or socket handle never collides with stdin/stdout/stderr; each host
+    /// counts up from here with an `AtomicU32`.
+    pub const HANDLE_SEED: u32 = Self::STDERR + 1;
+
+    /// The raw wire token: the stdio numbers, or the minted handle.
+    pub fn token(self) -> u32 {
+        match self {
+            Io::Stdin => Self::STDIN,
+            Io::Stdout => Self::STDOUT,
+            Io::Stderr => Self::STDERR,
+            Io::Other(token) => token,
+        }
+    }
+}
+
+/// The status contract of failable IO ops, mirrored by `/std/File`'s `decode`.
+/// Each named status has a fixed wire code; `Other` is the catch-all carrying
+/// the OS errno of an otherwise-unrecognized failure, exactly like the guest's
+/// `Error/other(Nat)`. `Status` lowers to that code.
+#[derive(Clone, Copy)]
+pub enum Status {
+    Ok,
+    Eof,
+    NotFound,
+    PermissionDenied,
+    AlreadyExists,
+    /// A `connect` was actively refused — no listener at the target host:port.
+    ConnectionRefused,
+    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). No
+    /// Phase-1 caller sets `NONBLOCK`, so it is never observed yet; the `/std`
+    /// scheduler consumes it once the readiness model lands.
+    WouldBlock,
+    /// An otherwise-unrecognized failure, carrying the OS errno that produced it.
+    Other(u32),
+}
+
+impl Status {
+    /// The wire code the guest decodes. The named statuses have fixed tags;
+    /// `Other(code)` lowers its carried errno raw.
+    pub fn code(self) -> u32 {
+        match self {
+            Status::Ok => 0,
+            Status::Eof => 1,
+            Status::NotFound => 2,
+            Status::PermissionDenied => 3,
+            Status::AlreadyExists => 4,
+            Status::ConnectionRefused => 6,
+            Status::WouldBlock => 7,
+            Status::Other(code) => code,
+        }
+    }
+}
+
+impl From<Error> for Status {
+    fn from(error: Error) -> Self {
+        match error.kind() {
+            ErrorKind::NotFound => Status::NotFound,
+            ErrorKind::PermissionDenied => Status::PermissionDenied,
+            ErrorKind::AlreadyExists => Status::AlreadyExists,
+            ErrorKind::ConnectionRefused => Status::ConnectionRefused,
+            ErrorKind::WouldBlock => Status::WouldBlock,
+            // Unmapped but with an errno (a file/socket syscall): surface it raw
+            // through the guest's `other(n)`. An errno-less failure (e.g.
+            // `write_all`'s synthesized `WriteZero`) is unclassifiable here, so
+            // report the catch-all `other(0)`; callers that can name it (e.g.
+            // `resolve` → `NotFound`) map it at the call site.
+            _ => match error.raw_os_error() {
+                Some(errno) => Status::Other(errno as u32),
+                None => Status::Other(0),
+            },
+        }
+    }
+}
+
+/// The open mode of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` union.
+/// Lifts from its `0`/`1`/`2` tag; an out-of-range tag panics — `/std/File`
+/// only ever marshals those three, so anything else is a codegen bug.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Mode {
+    Read,
+    Write,
+    Append,
 }
 
 pub trait Host {
-    /// Open the file at `path` with `MODE_*` semantics. Returns
-    /// `(status, handle)`; the handle is meaningful only when the status is
-    /// `STATUS_OK`.
-    fn open(&self, path: &[u8], mode: u32) -> (u32, u32);
+    /// Open the file at `path` in `mode`. Returns `(status, io)`; the handle is
+    /// meaningful only when the status is `Status::Ok`.
+    fn open(&self, path: &[u8], mode: Mode) -> (Status, Io);
 
     /// Resolve `host`:`port` to a list of opaque address blobs the socket
     /// lifecycle consumes. Returns `(status, addresses)`; each blob is the host's
     /// private encoding (canonical address string here) the guest only shuttles
-    /// back into `socket`/`bind`/`connect`. On `STATUS_OK` the list is non-empty.
-    fn resolve(&self, host: &[u8], port: u32) -> (u32, Vec<Vec<u8>>);
+    /// back into `socket`/`bind`/`connect`. On `Status::Ok` the list is non-empty.
+    fn resolve(&self, host: &[u8], port: u32) -> (Status, Vec<Vec<u8>>);
 
     /// Create an unconnected socket for the address family encoded in `addr`.
-    /// Returns `(status, handle)` like `open`; the handle is configured via the
+    /// Returns `(status, io)` like `open`; the handle is configured via the
     /// setters, then `bind`/`connect`/`listen` transition it.
-    fn socket(&self, addr: &[u8]) -> (u32, u32);
+    fn socket(&self, addr: &[u8]) -> (Status, Io);
 
-    /// Bind socket `handle` to the local address `addr`. Returns a status.
-    fn bind(&self, handle: u32, addr: &[u8]) -> u32;
+    /// Bind socket `io` to the local address `addr`.
+    fn bind(&self, io: Io, addr: &[u8]) -> Status;
 
-    /// Connect socket `handle` to the resolved address `addr`. Returns a status;
-    /// on `STATUS_OK` the handle is an ordinary byte stream `read`/`write`/`close`
-    /// serve.
-    fn connect(&self, handle: u32, addr: &[u8]) -> u32;
+    /// Connect socket `io` to the resolved address `addr`. On `Status::Ok` the
+    /// handle is an ordinary byte stream `read`/`write`/`close` serve.
+    fn connect(&self, io: Io, addr: &[u8]) -> Status;
 
-    /// Mark bound socket `handle` as listening with accept-queue depth `backlog`
-    /// (OS-clamped to `somaxconn`). Returns a status; `accept` then pulls
-    /// connections and `close` releases it.
-    fn listen(&self, handle: u32, backlog: u32) -> u32;
+    /// Mark bound socket `io` as listening with accept-queue depth `backlog`
+    /// (OS-clamped to `somaxconn`); `accept` then pulls connections and `close`
+    /// releases it.
+    fn listen(&self, io: Io, backlog: u32) -> Status;
 
-    /// Pull the next connection from the listener `handle`, blocking until one
-    /// arrives. Returns `(status, handle)`; the connection handle is an ordinary
+    /// Pull the next connection from the listener `io`, blocking until one
+    /// arrives. Returns `(status, io)`; the connection handle is an ordinary
     /// byte stream the same `read`/`write`/`close` serve, like a `connect`ed one.
-    fn accept(&self, handle: u32) -> (u32, u32);
+    fn accept(&self, io: Io) -> (Status, Io);
 
-    /// Set socket `handle`'s non-blocking flag. Returns a status. A no-op on a
-    /// file handle (recorded, not enforced).
-    fn set_nonblocking(&self, handle: u32, on: u32) -> u32;
+    /// Set socket `io`'s non-blocking flag. A no-op on a file handle
+    /// (recorded, not enforced).
+    fn set_nonblocking(&self, io: Io, on: u32) -> Status;
 
-    /// Set socket `handle`'s receive timeout to `ms` milliseconds (`0` clears).
-    /// Returns a status.
-    fn set_recv_timeout(&self, handle: u32, ms: u32) -> u32;
+    /// Set socket `io`'s receive timeout to `ms` milliseconds (`0` clears).
+    fn set_recv_timeout(&self, io: Io, ms: u32) -> Status;
 
-    /// Set socket `handle`'s send timeout to `ms` milliseconds (`0` clears).
-    /// Returns a status.
-    fn set_send_timeout(&self, handle: u32, ms: u32) -> u32;
+    /// Set socket `io`'s send timeout to `ms` milliseconds (`0` clears).
+    fn set_send_timeout(&self, io: Io, ms: u32) -> Status;
 
-    /// Set socket `handle`'s `SO_REUSEADDR` flag. Returns a status; set before
-    /// `bind`.
-    fn set_reuseaddr(&self, handle: u32, on: u32) -> u32;
+    /// Set socket `io`'s `SO_REUSEADDR` flag; set before `bind`.
+    fn set_reuseaddr(&self, io: Io, on: u32) -> Status;
 
-    /// Close `handle`. Closing an unknown handle is a no-op.
-    fn close(&self, handle: u32);
+    /// Close `io`. Closing an unknown handle is a no-op.
+    fn close(&self, io: Io);
 
-    /// Read up to `count` bytes from `handle`, blocking until at least one
-    /// byte is available. Returns `(status, bytes)`: `STATUS_OK` with 1..count
-    /// bytes, `STATUS_EOF` with empty bytes, or an error status.
-    fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>);
+    /// Read up to `count` bytes from `io`, blocking until at least one byte is
+    /// available. Returns `(status, bytes)`: `Status::Ok` with 1..count bytes,
+    /// `Status::Eof` with empty bytes, or an error status.
+    fn read(&self, io: Io, count: u32) -> (Status, Vec<u8>);
 
-    /// Write `bytes` to `handle`, returning a status.
-    fn write(&self, handle: u32, bytes: &[u8]) -> u32;
+    /// Write `bytes` to `io`, returning a status.
+    fn write(&self, io: Io, bytes: &[u8]) -> Status;
 
     /// Read the wall clock. Returns `(secs_hi, secs_lo, nanos)`: seconds since
     /// the Unix epoch split base-10⁹ so each limb fits an i31, plus sub-second
@@ -136,6 +194,6 @@ pub trait Host {
     fn args(&self) -> Vec<Vec<u8>>;
 
     /// Look up the environment variable `name`. Returns `(status, value)`:
-    /// `STATUS_OK` with the value, or `STATUS_NOT_FOUND` with empty bytes.
-    fn env(&self, name: &[u8]) -> (u32, Vec<u8>);
+    /// `Status::Ok` with the value, or `Status::NotFound` with empty bytes.
+    fn env(&self, name: &[u8]) -> (Status, Vec<u8>);
 }

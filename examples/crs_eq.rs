@@ -53,14 +53,11 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, receiver) = curios::MockHost::out();
+    let (system, io) = curios::MockHost::builder().build();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ok".to_vec()]
-    );
+    assert_eq!(io.output(), b"ok");
 
     // `refl` only inhabits `Eq` at equal indices: claiming `Eq(2, 3)`
     // is a compile-time `TypeMismatch`.

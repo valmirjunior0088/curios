@@ -1,28 +1,79 @@
 use {
     super::host::*,
-    crate::Entropy,
     std::{
         collections::{HashMap, VecDeque},
         sync::{
             Arc, Mutex,
-            mpsc::{self, Receiver, RecvError, Sender},
+            atomic::{AtomicU32, Ordering},
         },
     },
 };
 
-/// The in-memory file map shared between a [`MockHost`] and the test that
-/// seeded it: path → contents, inspectable after the run.
-pub type MockFs = Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>;
+/// The in-memory file map: path → contents, behind a shared lock. A live
+/// [`MockHost`] writes it during the run; the [`MockIo`] handle a test holds
+/// reads it back afterwards. `clone` shares the one underlying map.
+#[derive(Clone)]
+struct MockFileSystem {
+    inner: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
+}
 
-struct OpenFile {
+impl MockFileSystem {
+    /// Wrap a seeded `path → contents` map.
+    fn new(files: HashMap<Vec<u8>, Vec<u8>>) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(files)),
+        }
+    }
+
+    /// Whether `path` exists — `open`'s existence check in read mode.
+    fn contains(&self, path: &[u8]) -> bool {
+        self.inner.lock().unwrap().contains_key(path)
+    }
+
+    /// Reset `path` to empty, creating it if absent — `open` in write mode.
+    fn truncate(&self, path: &[u8]) {
+        self.inner.lock().unwrap().insert(path.to_vec(), vec![]);
+    }
+
+    /// Create `path` empty if absent, leaving any existing contents — `open` in
+    /// append mode.
+    fn ensure(&self, path: &[u8]) {
+        self.inner.lock().unwrap().entry(path.to_vec()).or_default();
+    }
+
+    /// Append `bytes` to `path`, creating it if absent.
+    fn append(&self, path: &[u8], bytes: &[u8]) {
+        self.inner
+            .lock()
+            .unwrap()
+            .entry(path.to_vec())
+            .or_default()
+            .extend_from_slice(bytes);
+    }
+
+    /// Borrow `path`'s contents (empty if absent) under the lock, so a read can
+    /// serve a slice without cloning the whole file.
+    fn with<R>(&self, path: &[u8], serve: impl FnOnce(&[u8]) -> R) -> R {
+        let files = self.inner.lock().unwrap();
+
+        serve(files.get(path).map(Vec::as_slice).unwrap_or(&[]))
+    }
+
+    /// A clone of `path`'s contents, or `None` if absent — post-run inspection.
+    fn get(&self, path: &[u8]) -> Option<Vec<u8>> {
+        self.inner.lock().unwrap().get(path).cloned()
+    }
+}
+
+struct MockFile {
     path: Vec<u8>,
-    mode: u32,
+    mode: Mode,
     position: usize,
 }
 
-/// A live in-memory connection: the scripted response and a read cursor into
-/// it. Writes to a connection are accepted and discarded.
-struct NetConn {
+/// A live in-memory *outbound* connection: the scripted response and a read
+/// cursor into it. Writes to a connection are accepted and discarded.
+struct MockClient {
     response: Vec<u8>,
     position: usize,
 }
@@ -30,65 +81,53 @@ struct NetConn {
 /// A live in-memory *inbound* connection minted by `accept`: `read` serves the
 /// scripted request from `position`, and `write` appends to `captures[capture]`
 /// so a test can inspect what the server sent back.
-struct ServerConn {
+struct MockServer {
     request: Vec<u8>,
     position: usize,
     capture: usize,
 }
 
 /// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-
-/// memory mirror of `OsHost`'s `Resource`. The BSD lifecycle moves a handle
+/// memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle
 /// between states: `socket` mints a `Socket`, `connect` turns it into an
 /// `Outbound` stream, `listen` turns it into a `Listener` that `accept` pulls
 /// `Inbound` streams from; `open` files a `File`. `close` drops any kind.
-enum Slot {
-    File(OpenFile),
-    Outbound(NetConn),
-    Inbound(ServerConn),
+enum MockResource {
+    File(MockFile),
+    Outbound(MockClient),
+    Inbound(MockServer),
     Socket,
     Listener,
 }
 
-/// Serve up to `count` bytes of `contents` from `*position`, advancing the
-/// cursor; `STATUS_EOF` with empty bytes once it reaches the end. The shared
-/// shape of every scripted read (file, inbound request, outbound response).
-fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (u32, Vec<u8>) {
-    if *position >= contents.len() {
-        return (STATUS_EOF, vec![]);
-    }
-
-    let stop = contents.len().min(*position + count as usize);
-    let bytes = contents[*position..stop].to_vec();
-    *position = stop;
-
-    (STATUS_OK, bytes)
-}
-
+/// The scripted, in-memory [`Host`] used by the test suite — the mirror of
+/// `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and
+/// read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    input_receiver: Mutex<Receiver<Vec<u8>>>,
-    /// Bytes received from the channel but not yet consumed by `read` —
-    /// short reads must never drop the remainder of a message.
-    input_leftover: Mutex<Vec<u8>>,
-    /// Writes to stdout and stderr both land here; tests do not distinguish
-    /// the two streams.
-    output_sender: Arc<Mutex<Sender<Vec<u8>>>>,
-    /// The in-memory filesystem backing `open`/`close` and file handles.
-    files: MockFs,
+    handle_seed: AtomicU32,
+    /// Scripted stdin, pre-joined and newline-terminated; `read(Io::Stdin, …)`
+    /// drains its front and reports `Status::Eof` once it runs dry.
+    input: Mutex<VecDeque<u8>>,
+    /// Every byte written to stdout and stderr, concatenated in write order —
+    /// the streams are not distinguished. Shared with [`MockIo::output`].
+    output: Arc<Mutex<Vec<u8>>>,
+    /// The in-memory filesystem backing `open`/`read`/`write`/`close`. Shared
+    /// with [`MockIo::file`].
+    files: MockFileSystem,
     /// One table for every non-stdio handle, keyed by token: open files,
     /// outbound/inbound connections, and unconnected/listening sockets. The BSD
     /// lifecycle transitions a handle in place (`socket` → `connect`/`listen` →
     /// `accept`) and `close` releases any kind uniformly — the scripted mirror
     /// of `OsHost`'s real-resource table.
-    table: Mutex<HashMap<u32, Slot>>,
+    table: Mutex<HashMap<u32, MockResource>>,
     /// Scripted network endpoints: `host:port` → the bytes a connection serves
-    /// on read. Connecting to an unscripted endpoint is refused.
-    endpoints: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
+    /// on read. Read-only during the run; connecting elsewhere is refused.
+    endpoints: HashMap<Vec<u8>, Vec<u8>>,
     /// Scripted inbound requests, one served per `accept` (FIFO).
     inbound: Mutex<VecDeque<Vec<u8>>>,
     /// Captured server responses: one entry per accepted connection, the
-    /// concatenation of its writes. Inspectable after the run.
+    /// concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
-    handles: Mutex<Entropy>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
     clock_wall_seq: Mutex<VecDeque<(u32, u32, u32)>>,
     /// Scripted monotonic readings, served in order by `clock_mono`.
@@ -96,241 +135,141 @@ pub struct MockHost {
     /// Deterministic xorshift64 state backing `random`.
     rng: Mutex<u64>,
     /// Scripted process arguments served by `args`.
-    args: Mutex<Vec<Vec<u8>>>,
+    args: Vec<Vec<u8>>,
     /// Scripted environment served by `env`: name → value.
-    env: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
+    env: HashMap<Vec<u8>, Vec<u8>>,
 }
 
 impl MockHost {
-    /// Like `in_out`, but pre-seeds the in-memory filesystem and returns it so
-    /// the test can inspect written files after the run.
-    pub fn with_fs<L, I, P, C, F>(lines: I, files: F) -> (Self, Receiver<Vec<u8>>, MockFs)
-    where
-        L: AsRef<[u8]>,
-        I: IntoIterator<Item = L>,
-        P: AsRef<[u8]>,
-        C: AsRef<[u8]>,
-        F: IntoIterator<Item = (P, C)>,
-    {
-        let (input_sender, input_receiver) = mpsc::channel();
-        let (output_sender, output_receiver) = mpsc::channel();
+    /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters,
+    /// then `build` for the `(host, io)` pair.
+    pub fn builder() -> MockHostBuilder {
+        MockHostBuilder::default()
+    }
 
-        for line in lines {
-            input_sender.send(line.as_ref().to_vec()).unwrap();
+    /// Serve up to `count` bytes of `contents` from `*position`, advancing the
+    /// cursor; `Status::Eof` with empty bytes once it reaches the end. The shared
+    /// shape of every scripted read (file, inbound request, outbound response).
+    fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec<u8>) {
+        if *position >= contents.len() {
+            return (Status::Eof, vec![]);
         }
 
-        let files = Arc::new(Mutex::new(
-            files
-                .into_iter()
-                .map(|(path, contents)| (path.as_ref().to_vec(), contents.as_ref().to_vec()))
-                .collect(),
-        ));
+        let stop = contents.len().min(*position + count as usize);
+        let bytes = contents[*position..stop].to_vec();
+        *position = stop;
 
-        (
-            MockHost {
-                input_receiver: Mutex::new(input_receiver),
-                input_leftover: Mutex::new(Vec::new()),
-                output_sender: Arc::new(Mutex::new(output_sender)),
-                files: files.clone(),
-                table: Mutex::new(HashMap::new()),
-                endpoints: Mutex::new(HashMap::new()),
-                inbound: Mutex::new(VecDeque::new()),
-                captures: Arc::new(Mutex::new(Vec::new())),
-                handles: handle_entropy(),
-                clock_wall_seq: Mutex::new(VecDeque::new()),
-                clock_mono_seq: Mutex::new(VecDeque::new()),
-                rng: Mutex::new(0x2545_F491_4F6C_DD1D),
-                args: Mutex::new(Vec::new()),
-                env: Mutex::new(HashMap::new()),
-            },
-            output_receiver,
-            files,
-        )
-    }
-
-    pub fn in_out<L, I>(lines: I) -> (Self, Receiver<Vec<u8>>)
-    where
-        L: AsRef<[u8]>,
-        I: IntoIterator<Item = L>,
-    {
-        let (host, output_receiver, _) = Self::with_fs(lines, [] as [(&[u8], &[u8]); 0]);
-
-        (host, output_receiver)
-    }
-
-    pub fn out() -> (Self, Receiver<Vec<u8>>) {
-        Self::in_out::<&[u8], [&[u8]; 0]>([])
-    }
-
-    /// Script the wall-clock readings served by `clock_wall`, in order. When
-    /// the script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
-    pub fn script_wall<I: IntoIterator<Item = (u32, u32, u32)>>(&self, readings: I) {
-        self.clock_wall_seq.lock().unwrap().extend(readings);
-    }
-
-    /// Script the monotonic readings served by `clock_mono`, in order.
-    pub fn script_mono<I: IntoIterator<Item = (u32, u32)>>(&self, readings: I) {
-        self.clock_mono_seq.lock().unwrap().extend(readings);
-    }
-
-    /// Reseed the deterministic RNG backing `random` (must be non-zero).
-    pub fn seed_random(&self, seed: u64) {
-        *self.rng.lock().unwrap() = seed;
-    }
-
-    /// Set the process arguments served by `args`.
-    pub fn script_args<L: AsRef<[u8]>, I: IntoIterator<Item = L>>(&self, args: I) {
-        *self.args.lock().unwrap() = args.into_iter().map(|a| a.as_ref().to_vec()).collect();
-    }
-
-    /// Set the environment served by `env`: `(name, value)` pairs.
-    pub fn script_env<N: AsRef<[u8]>, V: AsRef<[u8]>, I: IntoIterator<Item = (N, V)>>(
-        &self,
-        vars: I,
-    ) {
-        *self.env.lock().unwrap() = vars
-            .into_iter()
-            .map(|(name, value)| (name.as_ref().to_vec(), value.as_ref().to_vec()))
-            .collect();
-    }
-
-    /// Script the network endpoints served by `connect`: `(host:port, response)`
-    /// pairs. Connecting to an unscripted endpoint is refused.
-    pub fn script_net<E: AsRef<[u8]>, R: AsRef<[u8]>, I: IntoIterator<Item = (E, R)>>(
-        &self,
-        endpoints: I,
-    ) {
-        *self.endpoints.lock().unwrap() = endpoints
-            .into_iter()
-            .map(|(endpoint, response)| (endpoint.as_ref().to_vec(), response.as_ref().to_vec()))
-            .collect();
-    }
-
-    /// Script the inbound requests served by `accept`, in order — one request
-    /// per accepted connection. An exhausted queue makes `accept` fail, which
-    /// ends a `serve` loop (a real blocking `accept` would park there).
-    pub fn script_inbound<R: AsRef<[u8]>, I: IntoIterator<Item = R>>(&self, requests: I) {
-        *self.inbound.lock().unwrap() =
-            requests.into_iter().map(|r| r.as_ref().to_vec()).collect();
-    }
-
-    /// The captured server responses: one entry per accepted connection, the
-    /// concatenation of the bytes written to it.
-    pub fn captures(&self) -> Arc<Mutex<Vec<Vec<u8>>>> {
-        self.captures.clone()
+        (Status::Ok, bytes)
     }
 }
 
 impl Host for MockHost {
-    fn open(&self, path: &[u8], mode: u32) -> (u32, u32) {
-        {
-            let mut files = self.files.lock().unwrap();
-
-            match mode {
-                MODE_READ => {
-                    if !files.contains_key(path) {
-                        return (STATUS_NOT_FOUND, 0);
-                    }
+    fn open(&self, path: &[u8], mode: Mode) -> (Status, Io) {
+        match mode {
+            Mode::Read => {
+                if !self.files.contains(path) {
+                    return (Status::NotFound, Io::Other(0));
                 }
-                MODE_WRITE => {
-                    files.insert(path.to_vec(), vec![]);
-                }
-                MODE_APPEND => {
-                    files.entry(path.to_vec()).or_default();
-                }
-                _ => return (STATUS_OTHER, 0),
             }
+            Mode::Write => self.files.truncate(path),
+            Mode::Append => self.files.ensure(path),
         }
 
-        let handle = fresh_handle(&self.handles);
+        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
 
         self.table.lock().unwrap().insert(
             handle,
-            Slot::File(OpenFile {
+            MockResource::File(MockFile {
                 path: path.to_vec(),
                 mode,
                 position: 0,
             }),
         );
 
-        (STATUS_OK, handle)
+        (Status::Ok, Io::Other(handle))
     }
 
-    fn resolve(&self, host: &[u8], port: u32) -> (u32, Vec<Vec<u8>>) {
-        // One synthetic address blob: the `host:port` key `script_net` uses, so
+    fn resolve(&self, host: &[u8], port: u32) -> (Status, Vec<Vec<u8>>) {
+        // One synthetic address blob: the `host:port` key `net` uses, so
         // `connect` can recover the scripted endpoint from the blob.
         let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
 
-        (STATUS_OK, vec![endpoint])
+        (Status::Ok, vec![endpoint])
     }
 
-    fn socket(&self, _addr: &[u8]) -> (u32, u32) {
-        let handle = fresh_handle(&self.handles);
-        self.table.lock().unwrap().insert(handle, Slot::Socket);
+    fn socket(&self, _addr: &[u8]) -> (Status, Io) {
+        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
+        self.table.lock().unwrap().insert(handle, MockResource::Socket);
 
-        (STATUS_OK, handle)
+        (Status::Ok, Io::Other(handle))
     }
 
-    fn bind(&self, handle: u32, _addr: &[u8]) -> u32 {
-        if matches!(self.table.lock().unwrap().get(&handle), Some(Slot::Socket)) {
-            STATUS_OK
+    fn bind(&self, io: Io, _addr: &[u8]) -> Status {
+        if matches!(
+            self.table.lock().unwrap().get(&io.token()),
+            Some(MockResource::Socket)
+        ) {
+            Status::Ok
         } else {
-            STATUS_OTHER
+            Status::NotFound
         }
     }
 
-    fn connect(&self, handle: u32, addr: &[u8]) -> u32 {
+    fn connect(&self, io: Io, addr: &[u8]) -> Status {
         // The handle must be an unconnected socket minted by `socket`; consume
         // it up front so a refusal leaves no half-open handle behind.
         {
             let mut table = self.table.lock().unwrap();
 
-            match table.get(&handle) {
-                Some(Slot::Socket) => {
-                    table.remove(&handle);
+            match table.get(&io.token()) {
+                Some(MockResource::Socket) => {
+                    table.remove(&io.token());
                 }
-                _ => return STATUS_OTHER,
+                _ => return Status::NotFound,
             }
         }
 
-        let response = match self.endpoints.lock().unwrap().get(addr) {
+        let response = match self.endpoints.get(addr) {
             Some(response) => response.clone(),
-            None => return STATUS_REFUSED,
+            None => return Status::ConnectionRefused,
         };
 
         self.table.lock().unwrap().insert(
-            handle,
-            Slot::Outbound(NetConn {
+            io.token(),
+            MockResource::Outbound(MockClient {
                 response,
                 position: 0,
             }),
         );
 
-        STATUS_OK
+        Status::Ok
     }
 
-    fn listen(&self, handle: u32, _backlog: u32) -> u32 {
+    fn listen(&self, io: Io, _backlog: u32) -> Status {
         let mut table = self.table.lock().unwrap();
 
-        match table.get(&handle) {
-            Some(Slot::Socket) => {
-                table.insert(handle, Slot::Listener);
-                STATUS_OK
+        match table.get(&io.token()) {
+            Some(MockResource::Socket) => {
+                table.insert(io.token(), MockResource::Listener);
+                Status::Ok
             }
-            _ => STATUS_OTHER,
+            _ => Status::NotFound,
         }
     }
 
-    fn accept(&self, handle: u32) -> (u32, u32) {
-        if !matches!(self.table.lock().unwrap().get(&handle), Some(Slot::Listener)) {
-            return (STATUS_OTHER, 0);
+    fn accept(&self, io: Io) -> (Status, Io) {
+        if !matches!(
+            self.table.lock().unwrap().get(&io.token()),
+            Some(MockResource::Listener)
+        ) {
+            return (Status::NotFound, Io::Other(0));
         }
 
         // Pull the next scripted request. An exhausted queue fails the accept,
         // ending the serve loop (a real blocking accept would park forever).
         let request = match self.inbound.lock().unwrap().pop_front() {
             Some(request) => request,
-            None => return (STATUS_OTHER, 0),
+            None => return (Status::NotFound, Io::Other(0)),
         };
 
         let capture = {
@@ -340,121 +279,113 @@ impl Host for MockHost {
             index
         };
 
-        let conn = fresh_handle(&self.handles);
+        let conn = self.handle_seed.fetch_add(1, Ordering::Relaxed);
         self.table.lock().unwrap().insert(
             conn,
-            Slot::Inbound(ServerConn {
+            MockResource::Inbound(MockServer {
                 request,
                 position: 0,
                 capture,
             }),
         );
 
-        (STATUS_OK, conn)
+        (Status::Ok, Io::Other(conn))
     }
 
-    fn set_nonblocking(&self, _handle: u32, _on: u32) -> u32 {
-        STATUS_OK
+    fn set_nonblocking(&self, _io: Io, _on: u32) -> Status {
+        Status::Ok
     }
 
-    fn set_recv_timeout(&self, _handle: u32, _ms: u32) -> u32 {
-        STATUS_OK
+    fn set_recv_timeout(&self, _io: Io, _ms: u32) -> Status {
+        Status::Ok
     }
 
-    fn set_send_timeout(&self, _handle: u32, _ms: u32) -> u32 {
-        STATUS_OK
+    fn set_send_timeout(&self, _io: Io, _ms: u32) -> Status {
+        Status::Ok
     }
 
-    fn set_reuseaddr(&self, _handle: u32, _on: u32) -> u32 {
-        STATUS_OK
+    fn set_reuseaddr(&self, _io: Io, _on: u32) -> Status {
+        Status::Ok
     }
 
-    fn close(&self, handle: u32) {
-        self.table.lock().unwrap().remove(&handle);
+    fn close(&self, io: Io) {
+        self.table.lock().unwrap().remove(&io.token());
     }
 
-    fn read(&self, handle: u32, count: u32) -> (u32, Vec<u8>) {
-        if handle != STDIN {
-            return match self.table.lock().unwrap().get_mut(&handle) {
-                // File-backed handle: serve from the in-memory filesystem.
-                Some(Slot::File(open)) => {
-                    if open.mode != MODE_READ {
-                        return (STATUS_OTHER, vec![]);
-                    }
+    fn read(&self, io: Io, count: u32) -> (Status, Vec<u8>) {
+        let handle = match io {
+            Io::Stdin => {
+                // Scripted stdin is one pre-joined buffer; serve up to `count` of
+                // its front and report EOF once it is drained (the sender is fixed
+                // at build time, so a dry buffer is end-of-input, never a wait).
+                let mut input = self.input.lock().unwrap();
 
-                    let files = self.files.lock().unwrap();
-                    let contents = files.get(&open.path).map(Vec::as_slice).unwrap_or(&[]);
-
-                    serve_from(contents, &mut open.position, count)
+                if input.is_empty() {
+                    return (Status::Eof, vec![]);
                 }
-                // Inbound (accepted) connection: serve the scripted request.
-                Some(Slot::Inbound(conn)) => serve_from(&conn.request, &mut conn.position, count),
-                // Outbound connection: serve the scripted response.
-                Some(Slot::Outbound(conn)) => {
-                    serve_from(&conn.response, &mut conn.position, count)
-                }
-                _ => (STATUS_EOF, vec![]),
-            };
-        }
 
-        let mut leftover = self.input_leftover.lock().unwrap();
+                let served = input.len().min(count as usize);
 
-        // Each channel message is one injected line; the newline the terminal
-        // would deliver is appended here. Refill only when the buffer is dry,
-        // then serve up to `count` bytes and stash the rest.
-        if leftover.is_empty() {
-            match self.input_receiver.lock().unwrap().recv() {
-                Ok(line) => {
-                    leftover.extend(line);
-                    leftover.push(b'\n');
-                }
-                Err(RecvError) => return (STATUS_EOF, vec![]),
+                return (Status::Ok, input.drain(..served).collect());
             }
+            Io::Other(handle) => handle,
+            // stdout/stderr are not readable.
+            _ => return (Status::Eof, vec![]),
+        };
+
+        match self.table.lock().unwrap().get_mut(&handle) {
+            // File-backed handle: serve from the in-memory filesystem.
+            Some(MockResource::File(open)) => {
+                if open.mode != Mode::Read {
+                    return (Status::NotFound, vec![]);
+                }
+
+                self.files.with(&open.path, |contents| {
+                    Self::serve_from(contents, &mut open.position, count)
+                })
+            }
+            // Inbound (accepted) connection: serve the scripted request.
+            Some(MockResource::Inbound(conn)) => Self::serve_from(&conn.request, &mut conn.position, count),
+            // Outbound connection: serve the scripted response.
+            Some(MockResource::Outbound(conn)) => Self::serve_from(&conn.response, &mut conn.position, count),
+            _ => (Status::Eof, vec![]),
         }
-
-        let served = leftover.len().min(count as usize);
-
-        (STATUS_OK, leftover.drain(..served).collect())
     }
 
-    fn write(&self, handle: u32, bytes: &[u8]) -> u32 {
-        if handle == STDOUT || handle == STDERR {
-            self.output_sender
-                .lock()
-                .unwrap()
-                .send(bytes.to_owned())
-                .unwrap();
+    fn write(&self, io: Io, bytes: &[u8]) -> Status {
+        let handle = match io {
+            Io::Stdout | Io::Stderr => {
+                self.output.lock().unwrap().extend_from_slice(bytes);
 
-            return STATUS_OK;
-        }
+                return Status::Ok;
+            }
+            Io::Other(handle) => handle,
+            // stdin is not writable; the guest's `/std/Io` never issues this.
+            Io::Stdin => panic!("write to stdin"),
+        };
 
         match self.table.lock().unwrap().get(&handle) {
             // File-backed handle: append to the in-memory filesystem.
-            Some(Slot::File(open)) => {
-                if open.mode == MODE_READ {
-                    return STATUS_OTHER;
+            Some(MockResource::File(open)) => {
+                if open.mode == Mode::Read {
+                    return Status::NotFound;
                 }
 
-                self.files
-                    .lock()
-                    .unwrap()
-                    .entry(open.path.clone())
-                    .or_default()
-                    .extend_from_slice(bytes);
+                self.files.append(&open.path, bytes);
 
-                STATUS_OK
+                Status::Ok
             }
             // Inbound (accepted) connection: capture the response bytes so a
             // test can inspect what the server wrote back.
-            Some(Slot::Inbound(conn)) => {
+            Some(MockResource::Inbound(conn)) => {
                 self.captures.lock().unwrap()[conn.capture].extend_from_slice(bytes);
 
-                STATUS_OK
+                Status::Ok
             }
             // Outbound connection: accept and discard (the in-memory test host
             // does not capture request bytes).
-            Some(Slot::Outbound(_)) => STATUS_OK,
-            _ => STATUS_OTHER,
+            Some(MockResource::Outbound(_)) => Status::Ok,
+            _ => Status::NotFound,
         }
     }
 
@@ -492,13 +423,212 @@ impl Host for MockHost {
     }
 
     fn args(&self) -> Vec<Vec<u8>> {
-        self.args.lock().unwrap().clone()
+        self.args.clone()
     }
 
-    fn env(&self, name: &[u8]) -> (u32, Vec<u8>) {
-        match self.env.lock().unwrap().get(name) {
-            Some(value) => (STATUS_OK, value.clone()),
-            None => (STATUS_NOT_FOUND, vec![]),
+    fn env(&self, name: &[u8]) -> (Status, Vec<u8>) {
+        match self.env.get(name) {
+            Some(value) => (Status::Ok, value.clone()),
+            None => (Status::NotFound, vec![]),
         }
+    }
+}
+
+/// The inspectable side of a [`MockHost`]: the shared buffers the run writes
+/// into. The host is moved into the runner, so a test holds this handle to read
+/// stdout, files, and server captures back out afterwards.
+pub struct MockIo {
+    output: Arc<Mutex<Vec<u8>>>,
+    files: MockFileSystem,
+    captures: Arc<Mutex<Vec<Vec<u8>>>>,
+}
+
+impl MockIo {
+    /// Every byte the guest wrote to stdout and stderr, concatenated in write
+    /// order. The two streams are not distinguished.
+    pub fn output(&self) -> Vec<u8> {
+        self.output.lock().unwrap().clone()
+    }
+
+    /// The contents of `path` in the in-memory filesystem after the run, or
+    /// `None` if it was never seeded or written.
+    pub fn file(&self, path: &[u8]) -> Option<Vec<u8>> {
+        self.files.get(path)
+    }
+
+    /// The captured server responses: one entry per accepted connection, the
+    /// concatenation of the bytes its handler wrote back.
+    pub fn captures(&self) -> Vec<Vec<u8>> {
+        self.captures.lock().unwrap().clone()
+    }
+}
+
+/// Fluent seed for a [`MockHost`]: gather the scripted inputs (stdin, files,
+/// network endpoints, clocks, …) as plain values, then [`build`](Self::build)
+/// wraps them for the run and hands back the host and its [`MockIo`].
+pub struct MockHostBuilder {
+    input: Vec<u8>,
+    files: HashMap<Vec<u8>, Vec<u8>>,
+    endpoints: HashMap<Vec<u8>, Vec<u8>>,
+    inbound: VecDeque<Vec<u8>>,
+    clock_wall_seq: VecDeque<(u32, u32, u32)>,
+    clock_mono_seq: VecDeque<(u32, u32)>,
+    rng: u64,
+    args: Vec<Vec<u8>>,
+    env: HashMap<Vec<u8>, Vec<u8>>,
+}
+
+impl Default for MockHostBuilder {
+    fn default() -> Self {
+        Self {
+            input: Vec::new(),
+            files: HashMap::new(),
+            endpoints: HashMap::new(),
+            inbound: VecDeque::new(),
+            clock_wall_seq: VecDeque::new(),
+            clock_mono_seq: VecDeque::new(),
+            // A fixed non-zero xorshift64 seed: deterministic across runs.
+            rng: 0x2545_F491_4F6C_DD1D,
+            args: Vec::new(),
+            env: HashMap::new(),
+        }
+    }
+}
+
+impl MockHostBuilder {
+    /// Append one line to scripted stdin; the newline the terminal would
+    /// deliver is appended for you.
+    pub fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
+        self.input.extend_from_slice(line.as_ref());
+        self.input.push(b'\n');
+        self
+    }
+
+    /// Append several newline-terminated lines to scripted stdin, in order.
+    pub fn stdin_lines<L: AsRef<[u8]>, I: IntoIterator<Item = L>>(mut self, lines: I) -> Self {
+        for line in lines {
+            self = self.stdin_line(line);
+        }
+
+        self
+    }
+
+    /// Seed the in-memory filesystem with `(path, contents)` entries.
+    pub fn files<P, C, I>(mut self, files: I) -> Self
+    where
+        P: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+        I: IntoIterator<Item = (P, C)>,
+    {
+        self.files.extend(
+            files
+                .into_iter()
+                .map(|(path, contents)| (path.as_ref().to_vec(), contents.as_ref().to_vec())),
+        );
+
+        self
+    }
+
+    /// Script the network endpoints served by `connect`: `(host:port, response)`
+    /// pairs. Connecting to an unscripted endpoint is refused.
+    pub fn net<E, R, I>(mut self, endpoints: I) -> Self
+    where
+        E: AsRef<[u8]>,
+        R: AsRef<[u8]>,
+        I: IntoIterator<Item = (E, R)>,
+    {
+        self.endpoints.extend(
+            endpoints.into_iter().map(|(endpoint, response)| {
+                (endpoint.as_ref().to_vec(), response.as_ref().to_vec())
+            }),
+        );
+
+        self
+    }
+
+    /// Script the inbound requests served by `accept`, one per accepted
+    /// connection (FIFO). An exhausted queue makes `accept` fail, which ends a
+    /// `serve` loop (a real blocking `accept` would park there).
+    pub fn inbound<R: AsRef<[u8]>, I: IntoIterator<Item = R>>(mut self, requests: I) -> Self {
+        self.inbound
+            .extend(requests.into_iter().map(|r| r.as_ref().to_vec()));
+
+        self
+    }
+
+    /// Script the wall-clock readings served by `clock_wall`, in order. When the
+    /// script is exhausted `clock_wall` falls back to `(0, 0, 0)`.
+    pub fn wall<I: IntoIterator<Item = (u32, u32, u32)>>(mut self, readings: I) -> Self {
+        self.clock_wall_seq.extend(readings);
+
+        self
+    }
+
+    /// Script the monotonic readings served by `clock_mono`, in order.
+    pub fn mono<I: IntoIterator<Item = (u32, u32)>>(mut self, readings: I) -> Self {
+        self.clock_mono_seq.extend(readings);
+
+        self
+    }
+
+    /// Seed the deterministic RNG backing `random` (must be non-zero).
+    pub fn seed(mut self, seed: u64) -> Self {
+        self.rng = seed;
+
+        self
+    }
+
+    /// Set the process arguments served by `args` (argv[0] is the program name).
+    pub fn args<A: AsRef<[u8]>, I: IntoIterator<Item = A>>(mut self, args: I) -> Self {
+        self.args = args.into_iter().map(|a| a.as_ref().to_vec()).collect();
+
+        self
+    }
+
+    /// Set the environment served by `env`: `(name, value)` pairs.
+    pub fn env<N, V, I>(mut self, vars: I) -> Self
+    where
+        N: AsRef<[u8]>,
+        V: AsRef<[u8]>,
+        I: IntoIterator<Item = (N, V)>,
+    {
+        self.env = vars
+            .into_iter()
+            .map(|(name, value)| (name.as_ref().to_vec(), value.as_ref().to_vec()))
+            .collect();
+
+        self
+    }
+
+    /// Wrap the seeded values into a live host and its [`MockIo`] inspection
+    /// handle: the host is moved into the runner, the handle stays behind.
+    pub fn build(self) -> (MockHost, MockIo) {
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let files = MockFileSystem::new(self.files);
+        let captures = Arc::new(Mutex::new(Vec::new()));
+
+        let io = MockIo {
+            output: output.clone(),
+            files: files.clone(),
+            captures: captures.clone(),
+        };
+
+        let host = MockHost {
+            handle_seed: AtomicU32::new(Io::HANDLE_SEED),
+            input: Mutex::new(self.input.into()),
+            output,
+            files,
+            table: Mutex::new(HashMap::new()),
+            endpoints: self.endpoints,
+            inbound: Mutex::new(self.inbound),
+            captures,
+            clock_wall_seq: Mutex::new(self.clock_wall_seq),
+            clock_mono_seq: Mutex::new(self.clock_mono_seq),
+            rng: Mutex::new(self.rng),
+            args: self.args,
+            env: self.env,
+        };
+
+        (host, io)
     }
 }

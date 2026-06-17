@@ -1,9 +1,9 @@
 use super::*;
 
 pub fn printed(module: &cont::Module) -> String {
-    let (system, receiver) = crate::MockHost::out();
+    let (system, io) = crate::MockHost::builder().build();
     crate::run_wasm(&to_wasm(module), system).expect("run failed");
-    String::from_utf8(receiver.try_iter().flatten().collect()).unwrap()
+    String::from_utf8(io.output()).unwrap()
 }
 
 pub fn i32_result(module: &cont::Module) -> i32 {
@@ -15,7 +15,7 @@ pub fn f32_result(module: &cont::Module) -> f32 {
 }
 
 pub fn traps(module: &cont::Module) -> bool {
-    let (system, _receiver) = crate::MockHost::out();
+    let (system, _io) = crate::MockHost::builder().build();
 
     crate::run_wasm(&to_wasm(module), system).is_err()
 }

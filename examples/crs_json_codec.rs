@@ -51,12 +51,12 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, receiver) = curios::MockHost::out();
+    let (system, io) = curios::MockHost::builder().build();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"{\"name\":\"Alice\",\"score\":9.5,\"active\":true,\"tags\":[\"x\",\"y\"],\"extra\":null}".to_vec()]
+        io.output(),
+        b"{\"name\":\"Alice\",\"score\":9.5,\"active\":true,\"tags\":[\"x\",\"y\"],\"extra\":null}"
     );
 }

@@ -128,14 +128,11 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, receiver) = curios::MockHost::out();
+    let (system, io) = curios::MockHost::builder().build();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ok".to_vec()]
-    );
+    assert_eq!(io.output(), b"ok");
 
     // PROOFS_101.md's two rejections. First: a zero-arm match on
     // `Eq(0, 1)` — `refl`'s binder pins both index positions, which is

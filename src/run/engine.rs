@@ -1,7 +1,11 @@
 use {
-    super::{Host, Lift, Lower},
+    super::{Host, Io, Lift, Lower, Mode},
     crate::wasm,
-    std::sync::{Arc, LazyLock},
+    std::{
+        error::Error,
+        fmt,
+        sync::{Arc, LazyLock},
+    },
     wasmtime::{
         AnyRef, ArrayType, Config, Engine, FieldType, FuncType, HeapType, Linker, Module,
         Mutability, RefType, Rooted, StorageType, Store, ValType,
@@ -52,13 +56,13 @@ where
 #[derive(Debug)]
 struct ExitTrap(i32);
 
-impl std::fmt::Display for ExitTrap {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ExitTrap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "process exited with code {}", self.0)
     }
 }
 
-impl std::error::Error for ExitTrap {}
+impl Error for ExitTrap {}
 
 /// Run `module`'s entrypoint, returning the process exit code — `0` when `main`
 /// returns normally, otherwise the code passed to `Proc/exit`.
@@ -124,12 +128,9 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [i31_ref.clone(), bin_ref.clone()],
     );
     let io_write_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
-    let io_connect_type =
-        FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
-    let io_listen_type =
-        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
-    let io_accept_type =
-        FuncType::new(engine, [ValType::I32], [i31_ref.clone(), i31_ref.clone()]);
+    let io_connect_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_listen_type = FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+    let io_accept_type = FuncType::new(engine, [ValType::I32], [i31_ref.clone(), i31_ref.clone()]);
     let io_resolve_type = FuncType::new(
         engine,
         [bin_ref.clone(), ValType::I32],
@@ -140,8 +141,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [bin_ref.clone()],
         [i31_ref.clone(), i31_ref.clone()],
     );
-    let io_bind_type =
-        FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_bind_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
     let io_set_nonblocking_type =
         FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
     let io_set_recv_timeout_type =
@@ -153,7 +153,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let io_open_type = FuncType::new(engine, [bin_ref, ValType::I32], [i31_ref.clone(), i31_ref]);
     let io_close_type = FuncType::new(engine, [ValType::I32], []);
 
-    let mut linker: Linker<()> = Linker::new(engine);
+    let mut linker = Linker::new(engine);
     let host = Arc::new(host);
 
     define_import(&mut linker, "nat_to_str", i32_to_bin_type.clone(), {
@@ -175,37 +175,37 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     define_import(&mut linker, "io_read", io_read_type, {
         let host = host.clone();
 
-        move |(handle, count): (u32, u32)| host.read(handle, count)
+        move |(io, count): (Io, u32)| host.read(io, count)
     })?;
 
     define_import(&mut linker, "io_write", io_write_type, {
         let host = host.clone();
 
-        move |(handle, bytes): (u32, Vec<u8>)| host.write(handle, &bytes)
+        move |(io, bytes): (Io, Vec<u8>)| host.write(io, &bytes)
     })?;
 
     define_import(&mut linker, "io_open", io_open_type, {
         let host = host.clone();
 
-        move |(path, mode): (Vec<u8>, u32)| host.open(&path, mode)
+        move |(path, mode): (Vec<u8>, Mode)| host.open(&path, mode)
     })?;
 
     define_import(&mut linker, "io_connect", io_connect_type, {
         let host = host.clone();
 
-        move |(handle, addr): (u32, Vec<u8>)| host.connect(handle, &addr)
+        move |(io, addr): (Io, Vec<u8>)| host.connect(io, &addr)
     })?;
 
     define_import(&mut linker, "io_listen", io_listen_type, {
         let host = host.clone();
 
-        move |(handle, backlog): (u32, u32)| host.listen(handle, backlog)
+        move |(io, backlog): (Io, u32)| host.listen(io, backlog)
     })?;
 
     define_import(&mut linker, "io_accept", io_accept_type, {
         let host = host.clone();
 
-        move |handle: u32| host.accept(handle)
+        move |io: Io| host.accept(io)
     })?;
 
     define_import(&mut linker, "io_resolve", io_resolve_type, {
@@ -223,14 +223,19 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     define_import(&mut linker, "io_bind", io_bind_type, {
         let host = host.clone();
 
-        move |(handle, addr): (u32, Vec<u8>)| host.bind(handle, &addr)
+        move |(io, addr): (Io, Vec<u8>)| host.bind(io, &addr)
     })?;
 
-    define_import(&mut linker, "io_set_nonblocking", io_set_nonblocking_type, {
-        let host = host.clone();
+    define_import(
+        &mut linker,
+        "io_set_nonblocking",
+        io_set_nonblocking_type,
+        {
+            let host = host.clone();
 
-        move |(handle, on): (u32, u32)| host.set_nonblocking(handle, on)
-    })?;
+            move |(io, on): (Io, u32)| host.set_nonblocking(io, on)
+        },
+    )?;
 
     define_import(
         &mut linker,
@@ -239,7 +244,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         {
             let host = host.clone();
 
-            move |(handle, ms): (u32, u32)| host.set_recv_timeout(handle, ms)
+            move |(io, ms): (Io, u32)| host.set_recv_timeout(io, ms)
         },
     )?;
 
@@ -250,20 +255,20 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         {
             let host = host.clone();
 
-            move |(handle, ms): (u32, u32)| host.set_send_timeout(handle, ms)
+            move |(io, ms): (Io, u32)| host.set_send_timeout(io, ms)
         },
     )?;
 
     define_import(&mut linker, "io_set_reuseaddr", io_set_reuseaddr_type, {
         let host = host.clone();
 
-        move |(handle, on): (u32, u32)| host.set_reuseaddr(handle, on)
+        move |(io, on): (Io, u32)| host.set_reuseaddr(io, on)
     })?;
 
     define_import(&mut linker, "io_close", io_close_type, {
         let host = host.clone();
 
-        move |handle: u32| host.close(handle)
+        move |io: Io| host.close(io)
     })?;
 
     define_import(&mut linker, "io_clock_wall", io_clock_wall_type, {

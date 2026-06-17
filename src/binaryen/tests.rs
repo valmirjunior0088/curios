@@ -40,8 +40,8 @@ fn optimizes_to_a_smaller_module_that_behaves_identically() {
     );
 
     // `run_wasm` optimizes internally, so this executes the optimized module.
-    let (host, receiver) = MockHost::out();
+    let (host, io) = MockHost::builder().build();
     run_wasm(&module, host).expect("run failed");
-    let printed = String::from_utf8(receiver.try_iter().flatten().collect()).unwrap();
+    let printed = String::from_utf8(io.output()).unwrap();
     assert_eq!(printed, "55");
 }

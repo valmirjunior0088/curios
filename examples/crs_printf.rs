@@ -41,14 +41,11 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, receiver) = curios::MockHost::in_out(["Alice"]);
+    let (system, io) = curios::MockHost::builder().stdin_lines(["Alice"]).build();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"Alice is 30".to_vec()]
-    );
+    assert_eq!(io.output(), b"Alice is 30");
 
     let ill_typed = r#"
         /std/Fmt/printf("%d")("Alice")

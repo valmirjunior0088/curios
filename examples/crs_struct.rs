@@ -58,14 +58,11 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, receiver) = curios::MockHost::out();
+    let (system, io) = curios::MockHost::builder().build();
     let t = Instant::now();
     curios::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"hi".to_vec(), b"12".to_vec()]
-    );
+    assert_eq!(io.output(), b"hi12");
 
     // The representation boundary: building a private-representation struct from
     // outside its declaring module is a compile-time `PrivateRepresentation`.

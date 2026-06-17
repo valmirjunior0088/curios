@@ -60,11 +60,10 @@ fn bench(label: &str, src: &str, sizes: &[usize]) {
         let bytes = input.len();
         let mut best = Duration::MAX;
         for _ in 0..3 {
-            let (host, receiver) = MockHost::in_out([input.as_str()]);
+            let (host, _io) = MockHost::builder().stdin_lines([input.as_str()]).build();
             let t = Instant::now();
             curios::run_wasm(&module, host).expect("run");
             best = best.min(t.elapsed());
-            let _ = receiver.try_iter().collect::<Vec<_>>();
         }
         println!("{n:>8}  {bytes:>8}  {best:>12?}");
         points.push((bytes as f64, best.as_secs_f64() * 1e6));

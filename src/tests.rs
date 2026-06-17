@@ -19,11 +19,11 @@ fn end_to_end() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(score(pair))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+42".to_vec()]
+        io.output(),
+        b"+42"
     );
 }
 
@@ -33,17 +33,17 @@ fn flt_to_le_bin_prints_raw_bytes() {
         std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![1.5f32.to_le_bytes().to_vec()]
+        io.output(),
+        1.5f32.to_le_bytes()
     );
 }
 
 #[test]
 fn io_write() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"std/Io/write(std/Io/stdout, /std/Str/to_bin("hello"))"#,
@@ -51,14 +51,14 @@ fn io_write() {
     )
     .expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"hello".to_vec()]
+        io.output(),
+        b"hello"
     );
 }
 
 #[test]
 fn io_write_stderr() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"std/Io/write(std/Io/stderr, /std/Str/to_bin("oops"))"#,
@@ -66,14 +66,14 @@ fn io_write_stderr() {
     )
     .expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"oops".to_vec()]
+        io.output(),
+        b"oops"
     );
 }
 
 #[test]
 fn io_read() {
-    let (system, receiver) = MockHost::in_out(["hello"]);
+    let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"std/Io/write(std/Io/stdout, std/Io/read(std/Io/stdin, 1024).bytes)"#,
@@ -81,15 +81,15 @@ fn io_read() {
     )
     .expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"hello\n".to_vec()]
+        io.output(),
+        b"hello\n"
     );
 }
 
 #[test]
 fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bin` literal concatenated with a value is the identity.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"std/Io/write(std/Io/stdout, std/Bin/concat(\\, /std/Str/to_bin("ok")))"#,
@@ -97,8 +97,8 @@ fn empty_bin_literal_is_the_empty_sequence() {
     )
     .expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ok".to_vec()]
+        io.output(),
+        b"ok"
     );
 }
 
@@ -119,11 +119,11 @@ fn named_fields_run_end_to_end() {
         Io/print(Nat/to_str(Nat/add(total(p.v, 0), Nat/mul(p.0, 0))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"42".to_vec()]
+        io.output(),
+        b"42"
     );
 }
 
@@ -143,12 +143,9 @@ fn io_read_short_reads_and_eof() {
         Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(c.status)))
         "#;
 
-    let (system, receiver) = MockHost::in_out(["abc"]);
+    let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ab".to_vec(), b"c\n".to_vec(), b"".to_vec(), b"1".to_vec()]
-    );
+    assert_eq!(io.output(), b"abc\n1");
 }
 
 #[test]
@@ -161,12 +158,12 @@ fn file_read_all_reads_a_seeded_file() {
         end
         "#;
 
-    let (system, receiver, _fs) =
-        MockHost::with_fs::<&[u8], _, _, _, _>([], [("data.txt", "file contents")]);
+    let (system, io) =
+        MockHost::builder().files([("data.txt", "file contents")]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"file contents".to_vec()]
+        io.output(),
+        b"file contents"
     );
 }
 
@@ -186,11 +183,11 @@ fn file_read_all_of_a_missing_path_is_not_found() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"not found".to_vec()]
+        io.output(),
+        b"not found"
     );
 }
 
@@ -204,16 +201,13 @@ fn file_with_write_mode_persists_through_close() {
         end
         "#;
 
-    let (system, receiver, fs) = MockHost::with_fs::<&[u8], _, &[u8], &[u8], _>([], []);
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ok".to_vec()]
+        io.output(),
+        b"ok"
     );
-    assert_eq!(
-        fs.lock().unwrap().get(b"out.txt".as_slice()),
-        Some(&b"written".to_vec())
-    );
+    assert_eq!(io.file(b"out.txt"), Some(b"written".to_vec()));
 }
 
 // Matching on an effectful scrutinee must evaluate it exactly once — the
@@ -229,16 +223,13 @@ fn effectful_match_scrutinee_runs_once() {
         end
         "#;
 
-    let (system, receiver, fs) = MockHost::with_fs::<&[u8], _, &[u8], &[u8], _>([], []);
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"ok".to_vec()]
+        io.output(),
+        b"ok"
     );
-    assert_eq!(
-        fs.lock().unwrap().get(b"log.txt".as_slice()),
-        Some(&b"x".to_vec())
-    );
+    assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
 // The public file ops run on the opaque handle inside the bracket: `File/read`
@@ -254,12 +245,12 @@ fn file_read_pulls_bytes_inside_the_bracket() {
         end
         "#;
 
-    let (system, receiver, _fs) =
-        MockHost::with_fs::<&[u8], _, _, _, _>([], [("lines.txt", "first\nsecond\n")]);
+    let (system, io) =
+        MockHost::builder().files([("lines.txt", "first\nsecond\n")]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"first\nsecond\n".to_vec()]
+        io.output(),
+        b"first\nsecond\n"
     );
 }
 
@@ -286,11 +277,11 @@ fn std_io_read_line_sequences_lines() {
         Io/run(program, Io/stdin)
         "#;
 
-    let (system, receiver) = MockHost::in_out(["alpha", "beta"]);
+    let (system, io) = MockHost::builder().stdin_lines(["alpha", "beta"]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"alpha\nbeta\n".to_vec()]
+        io.output(),
+        b"alpha\nbeta\n"
     );
 }
 
@@ -309,11 +300,11 @@ fn std_io_read_line_signals_eof_with_none() {
         Io/run(program, Io/stdin)
         "#;
 
-    let (system, receiver) = MockHost::in_out(["only"]);
+    let (system, io) = MockHost::builder().stdin_lines(["only"]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"eof".to_vec()]
+        io.output(),
+        b"eof"
     );
 }
 
@@ -334,11 +325,11 @@ fn std_io_read_line_spans_refills() {
         "#;
 
     let long_line = "a".repeat(1500);
-    let (system, receiver) = MockHost::in_out([long_line.as_str()]);
+    let (system, io) = MockHost::builder().stdin_lines([long_line.as_str()]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"1501".to_vec()]
+        io.output(),
+        b"1501"
     );
 }
 
@@ -353,11 +344,11 @@ fn triangular_sum() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"10".to_vec()]
+        io.output(),
+        b"10"
     );
 }
 
@@ -375,11 +366,11 @@ fn match_omitted_motive_infers() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"10".to_vec()]
+        io.output(),
+        b"10"
     );
 }
 
@@ -390,11 +381,11 @@ fn multi_arg_function() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3, +4))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+7".to_vec()]
+        io.output(),
+        b"+7"
     );
 }
 
@@ -405,11 +396,11 @@ fn curried_function() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3)(+4))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+7".to_vec()]
+        io.output(),
+        b"+7"
     );
 }
 
@@ -427,9 +418,9 @@ fn let_bang_identity_monad_sequences_bangs() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(io.output(), b"7");
 }
 
 #[test]
@@ -460,10 +451,10 @@ fn let_bang_std_parse_threads_bangs_left_to_right() {
         .expect("failed to parse source");
     let loader = crate::text::FileLoader::new(base);
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, &loader, system)
         .expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"1".to_vec()]);
+    assert_eq!(io.output(), b"1");
 }
 
 #[test]
@@ -500,12 +491,12 @@ fn let_bang_region_mixes_action_types() {
         .expect("failed to parse source");
     let loader = crate::text::FileLoader::new(base);
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, &loader, system)
         .expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"AB".to_vec()]
+        io.output(),
+        b"AB"
     );
 }
 
@@ -528,11 +519,11 @@ fn vec_cons_with_nat_succ() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(head(std/Nat, 0, v))))
     "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"42".to_vec()]
+        io.output(),
+        b"42"
     );
 }
 
@@ -662,11 +653,11 @@ fn printf_partial_evaluation_reduces_residual() {
          size-bounded multi-site inlining, got {funcs}",
     );
 
-    let (system, receiver) = MockHost::in_out(["Alice"]);
+    let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
     crate::run_wasm(&wasm_module, system).expect("execution succeeded");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"Alice is 30".to_vec()]
+        io.output(),
+        b"Alice is 30"
     );
 }
 
@@ -702,9 +693,9 @@ fn indexed_vec_append_executes() {
         Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(total(c, 0))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(io.output(), b"7");
 }
 
 #[test]
@@ -733,9 +724,9 @@ fn implicit_union_type_param_executes() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+    assert_eq!(io.output(), b"2");
 }
 
 #[test]
@@ -752,7 +743,7 @@ fn implicit_union_type_param_rejects_explicit_spelling() {
         Io/write(Io/stdout, /std/Str/to_bin("no"))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -780,9 +771,9 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"3".to_vec()]);
+    assert_eq!(io.output(), b"3");
 }
 
 #[test]
@@ -799,7 +790,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         Io/write(Io/stdout, /std/Str/to_bin("no"))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -825,9 +816,9 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
         Io/print(Nat/to_str(Vec/len(d(2))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"4".to_vec()]);
+    assert_eq!(io.output(), b"4");
 }
 
 #[test]
@@ -851,11 +842,11 @@ fn bare_tuple_continuation_tail_infers() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"104".to_vec()]
+        io.output(),
+        b"104"
     );
 }
 
@@ -877,9 +868,9 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+    assert_eq!(io.output(), b"2");
 }
 
 #[test]
@@ -893,7 +884,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(n)))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -910,9 +901,9 @@ fn struct_transparent_pair_projects() {
         Io/print(Nat/to_str(Nat/add(p.fst, p.1)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(io.output(), b"7");
 }
 
 // The bare-name head infers the parameters from the fields (and the expected
@@ -926,11 +917,11 @@ fn struct_parameter_inference_at_construction() {
         Io/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"12".to_vec()]
+        io.output(),
+        b"12"
     );
 }
 
@@ -945,9 +936,9 @@ fn struct_newtype_projects() {
         Io/print(Nat/to_str(m.0))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"5".to_vec()]);
+    assert_eq!(io.output(), b"5");
 }
 
 // A dependent field: a later field's type mentions an earlier field (the
@@ -966,11 +957,11 @@ fn struct_dependent_fields_run_end_to_end() {
         Io/print(Nat/to_str(total(s.v, 0)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"42".to_vec()]
+        io.output(),
+        b"42"
     );
 }
 
@@ -989,11 +980,11 @@ fn struct_abstract_smart_constructor_round_trips() {
         Io/print(Nat/to_str(Celsius/to_nat(Celsius/of_nat(42))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"42".to_vec()]
+        io.output(),
+        b"42"
     );
 }
 
@@ -1011,7 +1002,7 @@ fn struct_private_construction_rejected() {
         Io/print("no")
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("representation"),
@@ -1034,7 +1025,7 @@ fn struct_private_projection_rejected() {
         Io/print(Nat/to_str(c.0))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("field") && error.contains("private"),
@@ -1054,7 +1045,7 @@ fn diagnostic_uses_source_binder_names() {
         bad
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("inferred: (n : Nat) -> Nat"),
@@ -1075,7 +1066,7 @@ fn diagnostic_disambiguates_shadowed_binders() {
         bad
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("inferred: (n : Nat) -> (n2 : Nat) -> Nat"),
@@ -1095,7 +1086,7 @@ fn diagnostic_shortens_global_names() {
         bad
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("inferred: Vec(Nat, n)"),
@@ -1122,7 +1113,7 @@ fn struct_is_not_a_tuple() {
         Io/print("no")
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -1136,7 +1127,7 @@ fn struct_wrong_field_count_rejected() {
         Io/print("no")
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -1150,7 +1141,7 @@ fn struct_field_label_out_of_order_rejected() {
         Io/print("no")
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -1165,7 +1156,7 @@ fn struct_literal_non_struct_head_rejected() {
         Io/print("no")
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
@@ -1184,9 +1175,9 @@ fn struct_destructure_pun_binds_fields_by_label() {
         Io/print(Nat/to_str(Nat/add(fst, snd)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(io.output(), b"7");
 }
 
 // A rename field `fst = a` binds the field to a fresh name.
@@ -1200,11 +1191,11 @@ fn struct_destructure_rename_binds_new_names() {
         Io/print(Nat/to_str(Nat/mul(a, b)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"10".to_vec()]
+        io.output(),
+        b"10"
     );
 }
 
@@ -1219,9 +1210,9 @@ fn struct_destructure_partial_ignores_unlisted_fields() {
         Io/print(Nat/to_str(fst))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"9".to_vec()]);
+    assert_eq!(io.output(), b"9");
 }
 
 // Patterns nest: a renamed field can itself be a struct pattern.
@@ -1236,9 +1227,9 @@ fn struct_destructure_nested_struct_pattern() {
         Io/print(Nat/to_str(Nat/add(Nat/add(a, b), c)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"6".to_vec()]);
+    assert_eq!(io.output(), b"6");
 }
 
 // The head is checked nominally: destructuring a `Pair` as a structurally
@@ -1254,7 +1245,7 @@ fn struct_destructure_wrong_head_rejected() {
         Io/print("no")
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
 }
 
@@ -1270,9 +1261,9 @@ fn struct_destructure_in_lambda_parameter() {
         Io/print(Nat/to_str(sum(p)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"7".to_vec()]);
+    assert_eq!(io.output(), b"7");
 }
 
 // A struct pattern destructures a constructor's payload in a match arm.
@@ -1290,11 +1281,11 @@ fn struct_destructure_in_match_arm() {
         Io/print(Nat/to_str(out))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"11".to_vec()]
+        io.output(),
+        b"11"
     );
 }
 
@@ -1314,7 +1305,7 @@ fn struct_destructure_private_field_rejected() {
         Io/print(Nat/to_str(value))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("field") && error.contains("private"),
@@ -1341,9 +1332,9 @@ fn matrix_nested_constructor_pattern() {
         Io/print(Nat/to_str(out))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"9".to_vec()]);
+    assert_eq!(io.output(), b"9");
 }
 
 // A `Nat` literal nested in a constructor payload compiles to a `switch`: the
@@ -1365,11 +1356,11 @@ fn matrix_nat_literal_in_nested_column() {
         "#;
 
     // special -> 100 (head is 0), other -> 7 (head binder). 100 + 7 = 107.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"107".to_vec()]
+        io.output(),
+        b"107"
     );
 }
 
@@ -1390,11 +1381,11 @@ fn matrix_nat_literal_named_default() {
         "#;
 
     // 100 + 200 + 1007 = 1307.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"1307".to_vec()]
+        io.output(),
+        b"1307"
     );
 }
 
@@ -1413,11 +1404,11 @@ fn matrix_nat_literal_in_struct_field() {
         Io/print(Nat/to_str(read(Tagged { tag = 0, val = 42 })))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"42".to_vec()]
+        io.output(),
+        b"42"
     );
 }
 
@@ -1440,9 +1431,9 @@ fn matrix_wildcard_expands_unlisted_constructors() {
         "#;
 
     // full -> 9, empty -> 0 (the `_` materializes the nil arm). 9 + 0 = 9.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"9".to_vec()]);
+    assert_eq!(io.output(), b"9");
 }
 
 // Two rows may share a head constructor, distinguished by a nested literal — the
@@ -1466,9 +1457,9 @@ fn matrix_repeated_constructor_head() {
         "#;
 
     // 1 + 2 + 3 = 6.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"6".to_vec()]);
+    assert_eq!(io.output(), b"6");
 }
 
 // Multiple scrutinees fall out of a tuple scrutinee: `(a, b)` with refutable
@@ -1486,9 +1477,9 @@ fn matrix_multi_scrutinee_via_tuple() {
         Io/print(Nat/to_str(combine(true, false)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+    assert_eq!(io.output(), b"2");
 }
 
 // Coverage is left to core: a union match that lists neither every constructor
@@ -1506,7 +1497,7 @@ fn matrix_non_exhaustive_missing_constructor_rejected() {
         Io/print(Nat/to_str(head(nil())))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("missing match case") && error.contains("nil"),
@@ -1530,7 +1521,7 @@ fn matrix_wildcard_unresolved_constructor_rejected() {
         Io/print(Nat/to_str(area(Shape/dot())))
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
     assert!(
         error.contains("line") && error.contains("resolve"),
@@ -1550,11 +1541,11 @@ fn str_literal_prints_its_bytes() {
         Io/print(s)
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"hello".to_vec()]
+        io.output(),
+        b"hello"
     );
 }
 
@@ -1570,12 +1561,9 @@ fn str_of_bin_accepts_multibyte_utf8() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![vec![0xc3, 0xa9]]
-    );
+    assert_eq!(io.output(), [0xc3, 0xa9]);
 }
 
 // An invalid lead byte fails `is_utf8`, so `Str/of_bin` returns `none`.
@@ -1589,11 +1577,11 @@ fn str_of_bin_rejects_invalid_utf8() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"rejected".to_vec()]
+        io.output(),
+        b"rejected"
     );
 }
 
@@ -1609,11 +1597,11 @@ fn str_of_bin_rejects_truncated_multibyte() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"rejected".to_vec()]
+        io.output(),
+        b"rejected"
     );
 }
 
@@ -1636,11 +1624,11 @@ fn str_get_indexes_codepoints_of_every_width() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"3,97,8364,128512".to_vec()]
+        io.output(),
+        b"3,97,8364,128512"
     );
 }
 
@@ -1656,12 +1644,9 @@ fn str_slice_cuts_on_codepoint_boundaries() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![vec![0xe2, 0x82, 0xac]]
-    );
+    assert_eq!(io.output(), [0xe2, 0x82, 0xac]);
 }
 
 // `Str/trim` is string-typed and strips only the leading/trailing ASCII
@@ -1677,12 +1662,9 @@ fn str_trim_keeps_interior_multibyte() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![vec![0x63, 0x61, 0x66, 0xc3, 0xa9]]
-    );
+    assert_eq!(io.output(), [0x63, 0x61, 0x66, 0xc3, 0xa9]);
 }
 
 // An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`,
@@ -1697,11 +1679,11 @@ fn str_trim_all_whitespace_is_empty() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"!".to_vec()]
+        io.output(),
+        b"!"
     );
 }
 
@@ -1725,13 +1707,13 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
         0
         "#;
 
-    let (system, _receiver) = MockHost::out();
+    let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(1), source, system).is_err());
 }
 
 #[test]
 fn random_bin_returns_requested_length() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"std/Io/write(std/Io/stdout, /std/Rand/bin(8))"#,
@@ -1739,14 +1721,13 @@ fn random_bin_returns_requested_length() {
     )
     .expect("expected result");
 
-    let output = receiver.try_iter().collect::<Vec<_>>();
-    assert_eq!(output.len(), 1);
-    assert_eq!(output[0].len(), 8);
+    let output = io.output();
+    assert_eq!(output.len(), 8);
 }
 
 #[test]
 fn bln_logic_and_of_str() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1763,14 +1744,14 @@ fn bln_logic_and_of_str() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"truefalse".to_vec()]
+        io.output(),
+        b"truefalse"
     );
 }
 
 #[test]
 fn bln_xor_executes() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1784,8 +1765,8 @@ fn bln_xor_executes() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"truefalse".to_vec()]
+        io.output(),
+        b"truefalse"
     );
 }
 
@@ -1796,7 +1777,7 @@ fn nat_bitwise_ops_execute() {
     // instruction and executed for real rather than folded at compile time. This
     // is what exercises the truncating `shl` (65 << 25 sets bit 31, which the
     // i31 carrier drops to leave 2^25).
-    let (system, receiver) = MockHost::in_out(["A"]);
+    let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1816,8 +1797,8 @@ fn nat_bitwise_ops_execute() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"1,193,190,33554432,32".to_vec()]
+        io.output(),
+        b"1,193,190,33554432,32"
     );
 }
 
@@ -1828,7 +1809,7 @@ fn int_bitwise_ops_execute() {
     // the Int-distinctive behaviors: a truncating `shl` that lands on bit 30 and
     // so reloads negative (65 << 24), an arithmetic (sign-preserving) `shr` on a
     // negative operand (-65 >> 1 = -33), and the `xor`-based `not` (-x - 1).
-    let (system, receiver) = MockHost::in_out(["A"]);
+    let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1850,8 +1831,8 @@ fn int_bitwise_ops_execute() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+1,+193,+190,-1056964608,-33,-66".to_vec()]
+        io.output(),
+        b"+1,+193,+190,-1056964608,-33,-66"
     );
 }
 
@@ -1859,7 +1840,7 @@ fn int_bitwise_ops_execute() {
 fn nat_of_str_returns_option() {
     // `123` parses; `12a` (non-digit) and the empty string are `none`, taking
     // the `unwrap_or` defaults — `123 + 7 + 9`.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1874,15 +1855,15 @@ fn nat_of_str_returns_option() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"139".to_vec()]
+        io.output(),
+        b"139"
     );
 }
 
 #[test]
 fn int_of_str_returns_option() {
     // `-5` and `+7` parse (compared by magnitude); `x` is `none` → default `+3`.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1897,8 +1878,8 @@ fn int_of_str_returns_option() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"15".to_vec()]
+        io.output(),
+        b"15"
     );
 }
 
@@ -1907,7 +1888,7 @@ fn flt_of_str_returns_option() {
     // `12.0`, `.5` (empty integer part), and `1e3` parse; `abc` is `none` →
     // default `+4.0`. Values are truncated to `Nat` for an exact assertion:
     // `12 + (0.5*2) + 1000 + 4`.
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1923,14 +1904,14 @@ fn flt_of_str_returns_option() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"1017".to_vec()]
+        io.output(),
+        b"1017"
     );
 }
 
 #[test]
 fn option_result_char_helpers() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1947,8 +1928,8 @@ fn option_result_char_helpers() {
 
     // opt = 5, res = 10, up = 'A' = 65  ->  80
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"80".to_vec()]
+        io.output(),
+        b"80"
     );
 }
 
@@ -1958,8 +1939,8 @@ fn clock_diff_of_two_distinct_now_readings() {
     // twice must perform two *distinct* host calls (the nullary-effect
     // distinctness the struct-head reduction relies on), so the diff is the
     // gap between them, not zero.
-    let (system, receiver) = MockHost::out();
-    system.script_wall([(1, 100, 500), (1, 130, 900)]);
+    let (system, io) =
+        MockHost::builder().wall([(1, 100, 500), (1, 130, 900)]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1973,15 +1954,14 @@ fn clock_diff_of_two_distinct_now_readings() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"30".to_vec()]
+        io.output(),
+        b"30"
     );
 }
 
 #[test]
 fn clock_mono_reads_scripted_elapsed() {
-    let (system, receiver) = MockHost::out();
-    system.script_mono([(2, 7)]);
+    let (system, io) = MockHost::builder().mono([(2, 7)]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -1992,14 +1972,14 @@ fn clock_mono_reads_scripted_elapsed() {
     )
     .expect("expected result");
 
-    assert_eq!(receiver.try_iter().collect::<Vec<_>>(), vec![b"2".to_vec()]);
+    assert_eq!(io.output(), b"2");
 }
 
 #[test]
 fn proc_args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `Arr(Bin)`; indexing it round-trips one entry.
-    let (system, receiver) = MockHost::out();
-    system.script_args(["prog", "hello", "world"]);
+    let (system, io) =
+        MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"std/Io/write(std/Io/stdout, /std/Arr/get(/std/Proc/args, 1))"#,
@@ -2008,15 +1988,14 @@ fn proc_args_indexes_the_argv_snapshot() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"hello".to_vec()]
+        io.output(),
+        b"hello"
     );
 }
 
 #[test]
 fn proc_env_found_unwraps_to_some() {
-    let (system, receiver) = MockHost::out();
-    system.script_env([("HOME", "/root")]);
+    let (system, io) = MockHost::builder().env([("HOME", "/root")]).build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -2030,14 +2009,14 @@ fn proc_env_found_unwraps_to_some() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"/root".to_vec()]
+        io.output(),
+        b"/root"
     );
 }
 
 #[test]
 fn proc_env_absent_is_none() {
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
@@ -2051,8 +2030,8 @@ fn proc_env_absent_is_none() {
     .expect("expected result");
 
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"missing".to_vec()]
+        io.output(),
+        b"missing"
     );
 }
 
@@ -2074,11 +2053,11 @@ fn proc_exit_halts_with_code() {
     )
     .expect("compile succeeded");
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     let code = crate::run_wasm(&module, system).expect("execution succeeded");
 
     assert_eq!(code, 7);
-    assert!(receiver.try_iter().next().is_none());
+    assert!(io.output().is_empty());
 }
 
 #[test]
@@ -2091,11 +2070,11 @@ fn let_tuple_destructures() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(b)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+4".to_vec()]
+        io.output(),
+        b"+4"
     );
 }
 
@@ -2109,11 +2088,11 @@ fn nested_let_tuple_destructures() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(c)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+3".to_vec()]
+        io.output(),
+        b"+3"
     );
 }
 
@@ -2126,11 +2105,11 @@ fn let_tuple_destructures_without_annotation() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(b)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+4".to_vec()]
+        io.output(),
+        b"+4"
     );
 }
 
@@ -2143,11 +2122,11 @@ fn let_three_tuple_destructures() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(c)))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+30".to_vec()]
+        io.output(),
+        b"+30"
     );
 }
 
@@ -2160,11 +2139,11 @@ fn func_tuple_param_destructures() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(snd((+7, +8)))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+8".to_vec()]
+        io.output(),
+        b"+8"
     );
 }
 
@@ -2176,11 +2155,11 @@ fn lambda_tuple_param_destructures() {
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(fst((+5, +6)))))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+5".to_vec()]
+        io.output(),
+        b"+5"
     );
 }
 
@@ -2199,11 +2178,11 @@ fn match_arm_tuple_destructures() {
         )))
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"+9".to_vec()]
+        io.output(),
+        b"+9"
     );
 }
 
@@ -2219,12 +2198,13 @@ fn net_call_round_trips_a_scripted_endpoint() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
-    system.script_net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")]);
+    let (system, io) = MockHost::builder()
+        .net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")])
+        .build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"HTTP/1.0 200 OK\r\n\r\nhello".to_vec()]
+        io.output(),
+        b"HTTP/1.0 200 OK\r\n\r\nhello"
     );
 }
 
@@ -2244,11 +2224,11 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
+    let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"refused".to_vec()]
+        io.output(),
+        b"refused"
     );
 }
 
@@ -2269,12 +2249,11 @@ fn net_with_custom_timeout_config_reads_response() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
-    system.script_net([("db.internal:5432", "PONG")]);
+    let (system, io) = MockHost::builder().net([("db.internal:5432", "PONG")]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"PONG".to_vec()]
+        io.output(),
+        b"PONG"
     );
 }
 
@@ -2296,14 +2275,9 @@ fn net_serve_handles_a_scripted_inbound_connection() {
         end
         "#;
 
-    let (system, _receiver) = MockHost::out();
-    system.script_inbound(["ping"]);
-    let captures = system.captures();
+    let (system, io) = MockHost::builder().inbound(["ping"]).build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
-    assert_eq!(
-        captures.lock().unwrap().clone(),
-        vec![b"echo: ping".to_vec()]
-    );
+    assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
 }
 
 // HTTP client (Phase B): `Http/perform` renders a `Request`, sends it through
@@ -2330,17 +2304,18 @@ fn http_perform_parses_a_scripted_response() {
         end
         "#;
 
-    let (system, receiver) = MockHost::out();
     // The trailing bytes past `Content-Length: 5` must be dropped by the body
     // framing, leaving the body exactly "hello".
-    system.script_net([(
-        "example.com:80",
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE",
-    )]);
+    let (system, io) = MockHost::builder()
+        .net([(
+            "example.com:80",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE",
+        )])
+        .build();
     crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
     assert_eq!(
-        receiver.try_iter().collect::<Vec<_>>(),
-        vec![b"200 text/plain hello".to_vec()]
+        io.output(),
+        b"200 text/plain hello"
     );
 }
 

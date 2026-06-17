@@ -46,7 +46,7 @@ let escape_byte(byte : Nat) -> Bin =
 let encode_str(s : Str) -> Str =
     let body =
         Bin/concat_all(Lst/to_arr(Lst/rev(
-            Bin/fold(Str/to_bin(s), Lst/nil(), (byte, acc) =>
+            Bin/fold(Str/to_bin(s), Lst/nil(@Bin), (byte, acc) =>
                 Lst/cons(escape_byte(byte), acc)))));
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bin(body), "")), "\"");
 
