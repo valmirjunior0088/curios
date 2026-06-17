@@ -46,6 +46,35 @@ fn lower_pure_names(work: &mut Work, terms: &[ersd::Term], frame: &Frame) -> Vec
         .collect()
 }
 
+/// A resume block that packs a host op's `arity` results into an `arity`-field
+/// record and feeds it to `cont`; returns the block name to plug into the
+/// `HostTarget`. Arity 0 yields unit, 2/3 the status records.
+fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> cont::BlockName {
+    let resume = work.fresh_block();
+    let fields = (0..arity).map(|_| work.fresh_value()).collect::<Vec<_>>();
+
+    work.add_resume_block(resume.clone(), fields.clone(), move |inner| {
+        let record = inner.fresh(cont::Value::Pure(cont::Data::Tpl(fields)));
+
+        cont.call(inner, record)
+    });
+
+    resume
+}
+
+/// A resume block that forwards a host op's single result straight to `cont`.
+fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> cont::BlockName {
+    let resume = work.fresh_block();
+    let value = work.fresh_value();
+    let value_clone = value.clone();
+
+    work.add_resume_block(resume.clone(), vec![value], move |inner| {
+        cont.call(inner, value_clone)
+    });
+
+    resume
+}
+
 fn lower_unary_code<'b>(
     work: &mut Work,
     operand: &'b ersd::Term,
@@ -442,18 +471,10 @@ pub fn lower_value_prim<'b>(
                     count,
                     frame,
                     Cont::new(move |work, count| {
-                        // The host returns (status, bytes) as two resume params;
-                        // generated code packs them into the `{ status, bytes }`
-                        // record the prim's type promises.
-                        let resume = work.fresh_block();
-                        let status = work.fresh_value();
-                        let bytes = work.fresh_value();
-                        let params = vec![status.clone(), bytes.clone()];
-                        work.add_resume_block(resume.clone(), params, move |inner| {
-                            let record = inner
-                                .fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, bytes])));
-                            cont.call(inner, record)
-                        });
+                        // The host returns (status, bytes), packed into the
+                        // `{ status, bytes }` record the prim's type promises.
+                        let resume = record_resume(work, 2, cont);
+
                         cont::Tail::Host(cont::HostTarget::IoRead {
                             handle,
                             count,
@@ -471,14 +492,9 @@ pub fn lower_value_prim<'b>(
                     bytes,
                     frame,
                     Cont::new(move |work, bytes| {
-                        // `Io.write` returns its status scalar; the resume's lone
-                        // param threads straight into the continuation.
-                        let resume = work.fresh_block();
-                        let status = work.fresh_value();
-                        let status_clone = status.clone();
-                        work.add_resume_block(resume.clone(), vec![status], move |inner| {
-                            cont.call(inner, status_clone)
-                        });
+                        // `Io.write` returns its status scalar; forward it straight.
+                        let resume = forward_resume(work, cont);
+
                         cont::Tail::Host(cont::HostTarget::IoWrite {
                             handle,
                             bytes,
@@ -496,17 +512,9 @@ pub fn lower_value_prim<'b>(
                     mode,
                     frame,
                     Cont::new(move |work, mode| {
-                        // (status, handle) packs into `{ status, handle }`,
-                        // exactly like `IoRead`.
-                        let resume = work.fresh_block();
-                        let status = work.fresh_value();
-                        let handle = work.fresh_value();
-                        let params = vec![status.clone(), handle.clone()];
-                        work.add_resume_block(resume.clone(), params, move |inner| {
-                            let record = inner
-                                .fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, handle])));
-                            cont.call(inner, record)
-                        });
+                        // (status, handle) packs into `{ status, handle }`.
+                        let resume = record_resume(work, 2, cont);
+
                         cont::Tail::Host(cont::HostTarget::IoOpen { path, mode, resume })
                     }),
                 )
@@ -540,22 +548,8 @@ pub fn lower_value_prim<'b>(
                                             Cont::new(move |work, write_timeout| {
                                                 // (status, handle) packs into
                                                 // `{ status, handle }`, like `IoOpen`.
-                                                let resume = work.fresh_block();
-                                                let status = work.fresh_value();
-                                                let handle = work.fresh_value();
-                                                let params = vec![status.clone(), handle.clone()];
-                                                work.add_resume_block(
-                                                    resume.clone(),
-                                                    params,
-                                                    move |inner| {
-                                                        let record = inner.fresh(
-                                                            cont::Value::Pure(cont::Data::Tpl(
-                                                                vec![status, handle],
-                                                            )),
-                                                        );
-                                                        cont.call(inner, record)
-                                                    },
-                                                );
+                                                let resume = record_resume(work, 2, cont);
+
                                                 cont::Tail::Host(cont::HostTarget::IoConnect {
                                                     host,
                                                     port,
@@ -582,17 +576,9 @@ pub fn lower_value_prim<'b>(
                     port,
                     frame,
                     Cont::new(move |work, port| {
-                        // (status, handle) packs into `{ status, handle }`,
-                        // exactly like `IoOpen`.
-                        let resume = work.fresh_block();
-                        let status = work.fresh_value();
-                        let handle = work.fresh_value();
-                        let params = vec![status.clone(), handle.clone()];
-                        work.add_resume_block(resume.clone(), params, move |inner| {
-                            let record = inner
-                                .fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, handle])));
-                            cont.call(inner, record)
-                        });
+                        // (status, handle) packs into `{ status, handle }`.
+                        let resume = record_resume(work, 2, cont);
+
                         cont::Tail::Host(cont::HostTarget::IoListen { host, port, resume })
                     }),
                 )
@@ -602,17 +588,10 @@ pub fn lower_value_prim<'b>(
             handle,
             frame,
             Cont::new(move |work, handle| {
-                // (status, handle) packs into `{ status, handle }`, like `IoEnv`:
-                // one operand in, a two-field status record out.
-                let resume = work.fresh_block();
-                let status = work.fresh_value();
-                let conn = work.fresh_value();
-                let params = vec![status.clone(), conn.clone()];
-                work.add_resume_block(resume.clone(), params, move |inner| {
-                    let record =
-                        inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, conn])));
-                    cont.call(inner, record)
-                });
+                // (status, handle) packs into `{ status, handle }`: one operand
+                // in, a two-field status record out.
+                let resume = record_resume(work, 2, cont);
+
                 cont::Tail::Host(cont::HostTarget::IoAccept { handle, resume })
             }),
         ),
@@ -621,67 +600,39 @@ pub fn lower_value_prim<'b>(
             frame,
             Cont::new(move |work, handle| {
                 // After `Io.close` the IR continues with `()`.
-                let resume = work.fresh_block();
-                work.add_resume_block(resume.clone(), vec![], move |inner| {
-                    let unit = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
-                    cont.call(inner, unit)
-                });
+                let resume = record_resume(work, 0, cont);
+
                 cont::Tail::Host(cont::HostTarget::IoClose { handle, resume })
             }),
         ),
         ersd::Prim::Host(ersd::HostPrim::IoClockWall) => {
-            // Ambient: no operands. The host returns (secs_hi, secs_lo, nanos)
-            // as three resume params, packed into the `{ secs_hi, secs_lo,
-            // nanos }` record the prim's type promises.
-            let resume = work.fresh_block();
-            let secs_hi = work.fresh_value();
-            let secs_lo = work.fresh_value();
-            let nanos = work.fresh_value();
-            let params = vec![secs_hi.clone(), secs_lo.clone(), nanos.clone()];
-            work.add_resume_block(resume.clone(), params, move |inner| {
-                let record = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![
-                    secs_hi, secs_lo, nanos,
-                ])));
-                cont.call(inner, record)
-            });
+            // Ambient: no operands. The host returns (secs_hi, secs_lo, nanos),
+            // packed into the `{ secs_hi, secs_lo, nanos }` record.
+            let resume = record_resume(work, 3, cont);
+
             cont::Tail::Host(cont::HostTarget::IoClockWall { resume })
         }
         ersd::Prim::Host(ersd::HostPrim::IoClockMono) => {
             // (secs, nanos) packs into `{ secs, nanos }`, like IoClockWall.
-            let resume = work.fresh_block();
-            let secs = work.fresh_value();
-            let nanos = work.fresh_value();
-            let params = vec![secs.clone(), nanos.clone()];
-            work.add_resume_block(resume.clone(), params, move |inner| {
-                let record = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![secs, nanos])));
-                cont.call(inner, record)
-            });
+            let resume = record_resume(work, 2, cont);
+
             cont::Tail::Host(cont::HostTarget::IoClockMono { resume })
         }
         ersd::Prim::Host(ersd::HostPrim::IoRandom(count)) => work.lower_value_name(
             count,
             frame,
             Cont::new(move |work, count| {
-                // `Io.random` returns the Bin directly; the resume's lone param
-                // threads straight into the continuation, like `IoWrite`.
-                let resume = work.fresh_block();
-                let bytes = work.fresh_value();
-                let bytes_clone = bytes.clone();
-                work.add_resume_block(resume.clone(), vec![bytes], move |inner| {
-                    cont.call(inner, bytes_clone)
-                });
+                // `Io.random` returns the Bin directly; forward it straight.
+                let resume = forward_resume(work, cont);
+
                 cont::Tail::Host(cont::HostTarget::IoRandom { count, resume })
             }),
         ),
         ersd::Prim::Host(ersd::HostPrim::IoArgs) => {
             // Ambient: no operands. The host returns the `Arr(Bin)` directly;
-            // the resume's lone param threads straight in, like `IoRandom`.
-            let resume = work.fresh_block();
-            let args = work.fresh_value();
-            let args_clone = args.clone();
-            work.add_resume_block(resume.clone(), vec![args], move |inner| {
-                cont.call(inner, args_clone)
-            });
+            // forward it straight, like `IoRandom`.
+            let resume = forward_resume(work, cont);
+
             cont::Tail::Host(cont::HostTarget::IoArgs { resume })
         }
         ersd::Prim::Host(ersd::HostPrim::IoEnv(name)) => work.lower_value_name(
@@ -689,15 +640,8 @@ pub fn lower_value_prim<'b>(
             frame,
             Cont::new(move |work, name| {
                 // (status, value) packs into `{ status, value }`, like `IoOpen`.
-                let resume = work.fresh_block();
-                let status = work.fresh_value();
-                let value = work.fresh_value();
-                let params = vec![status.clone(), value.clone()];
-                work.add_resume_block(resume.clone(), params, move |inner| {
-                    let record =
-                        inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![status, value])));
-                    cont.call(inner, record)
-                });
+                let resume = record_resume(work, 2, cont);
+
                 cont::Tail::Host(cont::HostTarget::IoEnv { name, resume })
             }),
         ),
@@ -706,13 +650,9 @@ pub fn lower_value_prim<'b>(
             frame,
             Cont::new(move |work, code| {
                 // exit never returns — the host traps — so the resume is dead
-                // code, kept only for the uniform shape (like `IoClose`'s unit
-                // resume).
-                let resume = work.fresh_block();
-                work.add_resume_block(resume.clone(), vec![], move |inner| {
-                    let unit = inner.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
-                    cont.call(inner, unit)
-                });
+                // code, kept only for the uniform shape (like `IoClose`).
+                let resume = record_resume(work, 0, cont);
+
                 cont::Tail::Host(cont::HostTarget::IoExit { code, resume })
             }),
         ),
