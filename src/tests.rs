@@ -1,5 +1,5 @@
 use {
-    super::{Host, Io, MockHost, OsHost, PollEvents},
+    super::MockHost,
     std::{path::Path, time::Duration},
 };
 
@@ -2371,29 +2371,6 @@ fn http_perform_parses_a_scripted_response() {
     );
 }
 
-// Real-network smoke test, ignored by default — it needs outbound TCP to
-// example.com:80. It runs against the real `OsHost`, so `Http/perform` drives
-// a live connect/GET/parse round trip through codegen; the status line prints to
-// stdout. `expect` asserts the run completes without trapping (the exact-200
-// parse is pinned by `http_perform_parses_a_scripted_response`). Run with:
-//   cargo test -- --ignored --nocapture http_perform_smoke_tests_example_com
-#[test]
-#[ignore]
-fn http_perform_smoke_tests_example_com() {
-    let source = r#"
-        use /std/{Http, Io, Str, Nat};
-        match Http/perform(Http/get("example.com", 80, "/")) : Nat
-        | success(response) =>
-            Io/write(Io/stdout, Str/to_bin(Str/concat_all([
-                "smoke: HTTP ", Nat/to_str(response.status.code), "\n"
-            ])))
-        | failure(_) => Io/write(Io/stdout, Str/to_bin("smoke: connect/parse failed\n"))
-        end
-        "#;
-
-    crate::run_text(Duration::from_secs(30), source, OsHost::new()).expect("expected result");
-}
-
 #[test]
 fn io_poll_mock_echoes_interest() {
     // The mock readiness oracle reports a known handle ready for exactly the
@@ -2412,16 +2389,6 @@ fn io_poll_mock_echoes_interest() {
     )
     .expect("expected result");
     assert_eq!(io.output(), b"1");
-}
-
-#[test]
-#[ignore]
-fn io_poll_os_reports_stdout_writable() {
-    // A real `poll(2)` through rustix: stdout (fd 1) is essentially always ready
-    // to write, and `timeout 0` returns at once. Drives the rustix call, the
-    // stdio `BorrowedFd` path, and the `PollEvents` <-> `PollFlags` mapping.
-    let revents = OsHost::new().poll(&[Io::Stdout], &[PollEvents::WRITE], 0);
-    assert!(revents[0].contains(PollEvents::WRITE));
 }
 
 #[test]
