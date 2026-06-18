@@ -2756,6 +2756,84 @@ fn run_schedules_a_heterogeneous_fiber_list() {
 }
 
 #[test]
+fn recycled_root_group_id_does_not_inherit_cancelled_status() {
+    // Indirect smoke test for group-id reuse and its coupled `cancelled` prune,
+    // through `block_on`'s root-join recycle site. `scoped` cancels its parked
+    // helper: the scope's id lands in `cancelled`, the helper drains, and the id is
+    // returned to the free list AND pruned from `cancelled`. The following
+    // `nursery` mints a scope that REUSES that exact id, and its child must still
+    // run. A recycle that freed the id without pruning `cancelled` would see the
+    // reused id as still-cancelled and reap the child before it writes. Correct
+    // output is "a;live;"; the un-pruned bug yields just "a;". (This cannot prove
+    // reuse *fires* — that is behaviour-preserving and unobservable — only that a
+    // reused id is clean.)
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str};
+        let helper : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("helper;"));
+                Task/done(()));
+        let child : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("live;"));
+                Task/done(()));
+        let reused : Task({}) =
+            Task/nursery(Task/go(child));
+        let main : Task({}) =
+            Task/bind(
+                Task/scoped(
+                    Task/bind(Task/go(helper), (started) =>
+                        let w = Io/write(Io/stdout, Str/to_bin("a;"));
+                        Task/pure(()))),
+                (first : {}) => reused);
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"a;live;");
+}
+
+#[test]
+fn recycled_spawned_group_id_does_not_inherit_cancelled_status() {
+    // The same property through the scheduler's OTHER recycle site: a scope nested
+    // in a spawned fiber is reclaimed by `wake` (not by `block_on`'s root join).
+    // The worker `scoped`-cancels a parked helper, freeing and pruning the scope
+    // id, then opens a `nursery` that reuses it; the nursery's child must still run.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str};
+        let helper : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("helper;"));
+                Task/done(()));
+        let child : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("live;"));
+                Task/done(()));
+        let reused : Task({}) =
+            Task/nursery(Task/go(child));
+        let worker : Task({}) =
+            Task/bind(
+                Task/scoped(
+                    Task/bind(Task/go(helper), (started) =>
+                        let w = Io/write(Io/stdout, Str/to_bin("a;"));
+                        Task/pure(()))),
+                (first : {}) => reused);
+        Task/run(Task/nursery(Task/go(worker)))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"a;live;");
+}
+
+#[test]
 fn label_projection_resolves_on_a_type_valued_field() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(

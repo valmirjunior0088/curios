@@ -102,10 +102,28 @@ struct Group { Nat }
 let group_eql(a : Group, b : Group) -> Bln =
     Nat/eql(a.0, b.0);
 
-struct Entropy { Nat }
+let drop_group(g : Group, xs : Lst(Group)) -> Lst(Group) =
+    rec go(rest : Lst(Group)) -> Lst(Group) =
+        match rest : Lst(Group)
+        | nil() => Lst/nil()
+        | cons(x, more) =>
+            match group_eql(g, x) : Lst(Group)
+            | true => go(more)
+            | false => Lst/cons(x, go(more))
+            end
+        end;
+    go(xs);
+
+struct Entropy pub { next : Nat, free : Lst(Nat) }
 
 let fresh(e : Entropy) -> { Group, Entropy } =
-    (Group { e.0 }, Entropy { Nat/succ(e.0) });
+    match e.free : { Group, Entropy }
+    | cons(n, rest) => (Group { n }, Entropy { next = e.next, free = rest })
+    | nil() => (Group { e.next }, Entropy { next = Nat/succ(e.next), free = Lst/nil() })
+    end;
+
+let recycle(e : Entropy, g : Group) -> Entropy =
+    Entropy { next = e.next, free = Lst/cons(g.0, e.free) };
 
 union Fiber
 | fiber(@A : Type, Task(A), Lst(Guard), Lst(Group))
@@ -121,21 +139,6 @@ struct Parked pub {
     resume : () -> Fiber
 }
 
-struct Joined pub {
-    awaited : Group,
-    groups : Lst(Group),
-    guards : Lst(Guard),
-    resume : () -> Fiber
-}
-
-struct World pub {
-    ready : Lst(Fiber),
-    blocked : Lst(Parked),
-    joining : Lst(Joined),
-    cancelled : Lst(Group),
-    entropy : Entropy
-}
-
 let park(@A : Type, h : Io, ev : Nat, gs : Lst(Guard), groups : Lst(Group), k : () -> Task(A)) -> Parked =
     Parked {
         handle = h,
@@ -145,6 +148,13 @@ let park(@A : Type, h : Io, ev : Nat, gs : Lst(Guard), groups : Lst(Group), k : 
         resume = () => Fiber/fiber(k(), gs, groups)
     };
 
+struct Joined pub {
+    awaited : Group,
+    groups : Lst(Group),
+    guards : Lst(Guard),
+    resume : () -> Fiber
+}
+
 let joined(@A : Type, awaited : Group, groups : Lst(Group), gs : Lst(Guard), k : () -> Task(A)) -> Joined =
     Joined {
         awaited = awaited,
@@ -152,6 +162,14 @@ let joined(@A : Type, awaited : Group, groups : Lst(Group), gs : Lst(Guard), k :
         guards = gs,
         resume = () => Fiber/fiber(k(), gs, groups)
     };
+
+struct World pub {
+    ready : Lst(Fiber),
+    blocked : Lst(Parked),
+    joining : Lst(Joined),
+    cancelled : Lst(Group),
+    entropy : Entropy
+}
 
 let with_ready(w : World, ready : Lst(Fiber)) -> World =
     World {
@@ -316,19 +334,26 @@ let sweep_joining(joining : Lst(Joined), cancelled : Lst(Group)) -> Lst(Joined) 
         end;
     go(joining);
 
-let wake(joining : Lst(Joined), ready : Lst(Fiber), blocked : Lst(Parked)) -> { Lst(Fiber), Lst(Joined) } =
-    rec go(rest : Lst(Joined), woken : Lst(Fiber), still : Lst(Joined)) -> { Lst(Fiber), Lst(Joined) } =
-        match rest : { Lst(Fiber), Lst(Joined) }
-        | nil() => (woken, still)
+struct Woken pub {
+    woken : Lst(Fiber),
+    still : Lst(Joined),
+    entropy : Entropy,
+    cancelled : Lst(Group)
+}
+
+let wake(joining : Lst(Joined), ready : Lst(Fiber), blocked : Lst(Parked), entropy : Entropy, cancelled : Lst(Group)) -> Woken =
+    rec go(rest : Lst(Joined), woken : Lst(Fiber), still : Lst(Joined), e : Entropy, canc : Lst(Group)) -> Woken =
+        match rest : Woken
+        | nil() => Woken { woken = woken, still = still, entropy = e, cancelled = canc }
         | cons(j, more) =>
-            match group_present(j.awaited, ready, blocked, joining) : { Lst(Fiber), Lst(Joined) }
-            | true => go(more, woken, Lst/cons(j, still))
+            match group_present(j.awaited, ready, blocked, joining) : Woken
+            | true => go(more, woken, Lst/cons(j, still), e, canc)
             | false =>
                 let resume = j.resume;
-                go(more, Lst/cons(resume(), woken), still)
+                go(more, Lst/cons(resume(), woken), still, recycle(e, j.awaited), drop_group(j.awaited, canc))
             end
         end;
-    go(joining, Lst/nil(), Lst/nil());
+    go(joining, Lst/nil(), Lst/nil(), entropy, cancelled);
 
 let drain_joining(joining : Lst(Joined)) -> {} =
     rec go(rest : Lst(Joined)) -> {} =
@@ -409,13 +434,13 @@ let step(f : Fiber, entropy : Entropy) -> Stepped =
 let housekeep(w : World) -> World =
     let blocked1 = sweep_blocked(w.blocked, w.cancelled);
     let joining1 = sweep_joining(w.joining, w.cancelled);
-    let woken = wake(joining1, w.ready, blocked1);
+    let woken = wake(joining1, w.ready, blocked1, w.entropy, w.cancelled);
     World {
-        ready = splice(woken.0, w.ready),
+        ready = splice(woken.woken, w.ready),
         blocked = blocked1,
-        joining = woken.1,
-        cancelled = w.cancelled,
-        entropy = w.entropy
+        joining = woken.still,
+        cancelled = woken.cancelled,
+        entropy = woken.entropy
     };
 
 let drive(w : World) -> World =
@@ -513,7 +538,9 @@ pub let block_on(@A : Type, t : Task(A)) -> A =
             match rgroups : A
             | cons(g, grest) =>
                 match group_present(g, h.ready, h.blocked, h.joining) : A
-                | false => loop(k(), grest, rguards, h)
+                | false =>
+                    loop(k(), grest, rguards,
+                        with_cancelled(with_entropy(h, recycle(h.entropy, g)), drop_group(g, h.cancelled)))
                 | true =>
                     match h.ready : A
                     | cons(_, _) => loop(Task/join(k), rgroups, rguards, drive(h))
@@ -553,7 +580,7 @@ pub let block_on(@A : Type, t : Task(A)) -> A =
             blocked = Lst/nil(),
             joining = Lst/nil(),
             cancelled = Lst/nil(),
-            entropy = Entropy { 1 }
+            entropy = Entropy { next = 1, free = Lst/nil() }
         });
 
 pub let run(main : Task({})) -> {} =
