@@ -267,7 +267,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io, Task};
-        match Task/block_on(File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written"))))
+        match Task/block_on(File/with("out.txt", Io/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -289,7 +289,7 @@ fn file_with_write_mode_persists_through_close() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io, Task};
-        match Task/block_on(File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x"))))
+        match Task/block_on(File/with("log.txt", Io/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -311,7 +311,7 @@ fn effectful_match_scrutinee_runs_once() {
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
         use /std/{File, Io, Str, Bin, Task};
-        match Task/block_on(File/with("lines.txt", File/Mode/read(), (f) =>
+        match Task/block_on(File/with("lines.txt", Io/Mode/read(), (f) =>
             Task/bind(File/read(f, 1024), (r) =>
                 match r : Task(Bin)
                 | chunk(b) => Task/pure(b)

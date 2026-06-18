@@ -1,14 +1,5 @@
 use /std/{Io, Bin, Nat, Bln, Arr, Lst, Result};
 
-let READ : Nat = 1;
-let WRITE : Nat = 2;
-let ERR : Nat = 4;
-let HUP : Nat = 8;
-
-let OK : Nat = 0;
-let EOF : Nat = 1;
-let WOULD_BLOCK : Nat = 6;
-
 pub let Finalizer : Type =
     () -> {};
 
@@ -55,13 +46,13 @@ pub let nonblocking(h : Io) -> {} =
 
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
     let r = /sys/Io/read(h, n);
-    match Nat/eql(r.status, WOULD_BLOCK) : Task(Io/Read)
-    | true => Task/wait(h, READ, () => read(h, n))
+    match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Io/Read)
+    | true => Task/wait(h, /sys/Io/Poll/read, () => read(h, n))
     | false =>
-        match Nat/eql(r.status, EOF) : Task(Io/Read)
+        match Nat/eql(r.status, /sys/Io/Status/eof) : Task(Io/Read)
         | true => Task/done(Io/Read/eof())
         | false =>
-            match Nat/eql(r.status, OK) : Task(Io/Read)
+            match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Io/Read)
             | true => Task/done(Io/Read/chunk(r.bytes))
             | false => Task/done(Io/Read/error(Io/error_of(r.status)))
             end
@@ -70,13 +61,13 @@ pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
 
 pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
     let r = /sys/Io/write(h, b);
-    match Nat/eql(r.status, WOULD_BLOCK) : Task(Result({}, Io/Error))
-    | true => Task/wait(h, WRITE, () => write(h, b))
+    match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result({}, Io/Error))
+    | true => Task/wait(h, /sys/Io/Poll/write, () => write(h, b))
     | false =>
-        match Nat/eql(r.status, OK) : Task(Result({}, Io/Error))
+        match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result({}, Io/Error))
         | true =>
             match Nat/lt(r.written, Bin/len(b)) : Task(Result({}, Io/Error))
-            | true => Task/wait(h, WRITE, () => write(h, Bin/slice(b, r.written, Bin/len(b))))
+            | true => Task/wait(h, /sys/Io/Poll/write, () => write(h, Bin/slice(b, r.written, Bin/len(b))))
             | false => Task/done(Result/success(()))
             end
         | false => Task/done(Result/failure(Io/error_of(r.status)))
@@ -85,10 +76,10 @@ pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
 
 pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     let r = /sys/Io/accept(l);
-    match Nat/eql(r.status, WOULD_BLOCK) : Task(Result(Io, Io/Error))
-    | true => Task/wait(l, READ, () => accept(l))
+    match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result(Io, Io/Error))
+    | true => Task/wait(l, /sys/Io/Poll/read, () => accept(l))
     | false =>
-        match Nat/eql(r.status, OK) : Task(Result(Io, Io/Error))
+        match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(Io, Io/Error))
         | true => Task/done(Result/success(r.handle))
         | false => Task/done(Result/failure(Io/error_of(r.status)))
         end
@@ -190,7 +181,7 @@ let with_entropy(w : World, entropy : Entropy) -> World =
     };
 
 let is_ready(results : Nat, interest : Nat) -> Bln =
-    Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(ERR, HUP))), 0);
+    Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(/sys/Io/Poll/err, /sys/Io/Poll/hup))), 0);
 
 let partition(blocked : Lst(Parked), results : Arr(Nat), start : Nat) -> { Lst(Fiber), Lst(Parked) } =
     rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Fiber), still : Lst(Parked)) -> { Lst(Fiber), Lst(Parked) } =

@@ -1,4 +1,5 @@
 use {
+    crate::wire,
     rustix::event::PollFlags,
     std::{
         io::{Error, ErrorKind},
@@ -81,10 +82,10 @@ impl Io {
 pub struct PollEvents(u32);
 
 impl PollEvents {
-    pub const READ: Self = Self(0b0001);
-    pub const WRITE: Self = Self(0b0010);
-    pub const ERR: Self = Self(0b0100);
-    pub const HUP: Self = Self(0b1000);
+    pub const READ: Self = Self(wire::poll::READ);
+    pub const WRITE: Self = Self(wire::poll::WRITE);
+    pub const ERR: Self = Self(wire::poll::ERR);
+    pub const HUP: Self = Self(wire::poll::HUP);
 
     /// The empty mask — no interest, or no readiness.
     pub const fn empty() -> Self {
@@ -194,14 +195,14 @@ impl Status {
     /// `Other(code)` lowers its carried errno raw.
     pub fn code(self) -> u32 {
         match self {
-            Status::Ok => 0,
-            Status::Eof => 1,
-            Status::NotFound => 2,
-            Status::PermissionDenied => 3,
-            Status::AlreadyExists => 4,
-            Status::ConnectionRefused => 5,
-            Status::WouldBlock => 6,
-            Status::TlsError => 7,
+            Status::Ok => wire::status::OK,
+            Status::Eof => wire::status::EOF,
+            Status::NotFound => wire::status::NOT_FOUND,
+            Status::PermissionDenied => wire::status::PERMISSION_DENIED,
+            Status::AlreadyExists => wire::status::ALREADY_EXISTS,
+            Status::ConnectionRefused => wire::status::CONNECTION_REFUSED,
+            Status::WouldBlock => wire::status::WOULD_BLOCK,
+            Status::TlsError => wire::status::TLS_ERROR,
             Status::Other(code) => code,
         }
     }
@@ -236,6 +237,18 @@ pub enum Mode {
     Read,
     Write,
     Append,
+}
+
+impl Mode {
+    /// The wire tag the guest marshals, mirrored by `/sys/Io/Mode`. The inverse
+    /// of `Lift for Mode`.
+    pub fn code(self) -> u32 {
+        match self {
+            Mode::Read => wire::mode::READ,
+            Mode::Write => wire::mode::WRITE,
+            Mode::Append => wire::mode::APPEND,
+        }
+    }
 }
 
 pub trait Host {

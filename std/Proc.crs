@@ -6,7 +6,7 @@ pub let args : Arr(Bin) =
 
 pub let env(name : Str) -> Option(Bin) =
     let r = Io/env(Str/to_bin(name));
-    match Nat/eql(r.status, 0)
+    match Nat/eql(r.status, /sys/Io/Status/ok)
     | true => Option/some(r.value)
     | false => Option/none()
     end;

@@ -1,18 +1,5 @@
 use /std/{Bin, Nat, Str, Io, Result, Task};
 
-pub union Mode
-| read()
-| write()
-| append()
-end
-
-let token(mode : Mode) -> Nat =
-    match mode : Nat
-    | read() => 0
-    | write() => 1
-    | append() => 2
-    end;
-
 pub struct File { Io }
 
 pub let read(f : File, n : Nat) -> Task(Io/Read) =
@@ -21,9 +8,9 @@ pub let read(f : File, n : Nat) -> Task(Io/Read) =
 pub let write(f : File, b : Bin) -> Task(Result({}, Io/Error)) =
     Task/write(f.0, b);
 
-pub let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
-    let r = /sys/Io/open(Str/to_bin(path), token(mode));
-    match Nat/eql(r.status, 0) : Task(Result(File, Io/Error))
+pub let open(path : Str, mode : Io/Mode) -> Task(Result(File, Io/Error)) =
+    let r = /sys/Io/open(Str/to_bin(path), Io/of_mode(mode));
+    match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(File, Io/Error))
     | true =>
         let _ = Task/nonblocking(r.handle);
         Task/acquire(r.handle, () => /sys/Io/close(r.handle), () =>
@@ -34,7 +21,7 @@ pub let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
 pub let close(f : File) -> Task({}) =
     Task/release(f.0, () => Task/done(()));
 
-pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> Task(A)) -> Task(Result(A, Io/Error)) =
+pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Task(A)) -> Task(Result(A, Io/Error)) =
     Task/bind(open(path, mode), (opened) =>
         match opened : Task(Result(A, Io/Error))
         | success(f) =>
@@ -54,4 +41,4 @@ let drain(f : File) -> Task(Bin) =
     go(\\);
 
 pub let read_all(path : Str) -> Task(Result(Bin, Io/Error)) =
-    with(path, Mode/read(), (f) => drain(f));
+    with(path, Io/Mode/read(), (f) => drain(f));

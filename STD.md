@@ -216,9 +216,10 @@ Codes are the host's `Status` discriminants; any code without a typed form decod
 ```
 union Error | not_found() | permission_denied() | exists() | refused() | tls() | other(Nat) end
 union Read  | chunk(Bin) | eof() | error(Error) end
+union Mode  | read() | write() | append() end
 ```
 
-`error_of(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 5 → `refused`, 7 → `tls`, else `other`). `Read` is the result of a read: a `chunk` of bytes, the distinct `eof`, or an `error`.
+`error_of(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 5 → `refused`, 7 → `tls`, else `other`). `Read` is the result of a read: a `chunk` of bytes, the distinct `eof`, or an `error`. `Mode` is the open mode (`read`/`write`/`append`); `of_mode(mode) : (Mode) -> Nat` is the wire tag `/std/File/open` marshals.
 
 ### `/std/Reader`
 
@@ -288,11 +289,9 @@ The constructors are the raw interpreter surface; programs work through the comb
 `File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. The operations are asynchronous [`Task`](#stdtask)s (the handle is configured non-blocking before it is ever read or written, so its reads and writes yield to the scheduler). `open` and `close` are public and flat — but `open` registers the close as a handle-keyed finalizer the moment it hands back the `File`, so a handle dropped or cancelled before its `close` is still closed by the scheduler (and never closed twice). `with`/`read_all` are the bracketed sugar over that pair.
 
 ```
-union Mode | read() | write() | append() end   -- File/Mode/read() etc.
-
-File/open(path, mode)          -- (Str, Mode) -> Task(Result(File, Io/Error))
+File/open(path, mode)          -- (Str, Io/Mode) -> Task(Result(File, Io/Error))
 File/close(f)                  -- (File) -> Task({})
-File/with(path, mode, body)    -- (@A : Type, Str, Mode, (File) -> Task(A)) -> Task(Result(A, Io/Error))
+File/with(path, mode, body)    -- (@A : Type, Str, Io/Mode, (File) -> Task(A)) -> Task(Result(A, Io/Error))
 File/read_all(path)            -- (Str) -> Task(Result(Bin, Io/Error))
 File/read(f, n)                -- (File, Nat) -> Task(Io/Read)
 File/write(f, b)               -- (File, Bin) -> Task(Result({}, Io/Error))

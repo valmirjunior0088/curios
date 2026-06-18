@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{let stdin, let stdout, let stderr};
-use /std/{Bin, Str, Nat, Option, Result};
+use /std/{Bin, Str, Nat, Option, Result, Arr};
 
 pub union Error
 | not_found()
@@ -11,14 +11,33 @@ pub union Error
 | other(Nat)
 end
 
+let errors : Arr({ Nat, Error }) =
+    [
+        (/sys/Io/Status/not_found, Error/not_found()),
+        (/sys/Io/Status/permission_denied, Error/permission_denied()),
+        (/sys/Io/Status/exists, Error/exists()),
+        (/sys/Io/Status/refused, Error/refused()),
+        (/sys/Io/Status/tls, Error/tls())
+    ];
+
 pub let error_of(status : Nat) -> Error =
-    match status : Error
-    | 2 => Error/not_found()
-    | 3 => Error/permission_denied()
-    | 4 => Error/exists()
-    | 5 => Error/refused()
-    | 7 => Error/tls()
-    | _ => Error/other(status)
+    Arr/fold(errors, Error/other(status), (entry, acc) =>
+        match Nat/eql(status, entry.0) : Error
+        | true => entry.1
+        | false => acc
+        end);
+
+pub union Mode
+| read()
+| write()
+| append()
+end
+
+pub let of_mode(mode : Mode) -> Nat =
+    match mode : Nat
+    | read() => /sys/Io/Mode/read
+    | write() => /sys/Io/Mode/write
+    | append() => /sys/Io/Mode/append
     end;
 
 pub union Read
@@ -29,10 +48,10 @@ end
 
 pub let read(h : Io, n : Nat) -> Read =
     let r = /sys/Io/read(h, n);
-    match Nat/eql(r.status, 0) : Read
+    match Nat/eql(r.status, /sys/Io/Status/ok) : Read
     | true => Read/chunk(r.bytes)
     | false =>
-        match Nat/eql(r.status, 1) : Read
+        match Nat/eql(r.status, /sys/Io/Status/eof) : Read
         | true => Read/eof()
         | false => Read/error(error_of(r.status))
         end
@@ -40,7 +59,7 @@ pub let read(h : Io, n : Nat) -> Read =
 
 pub rec write(h : Io, b : Bin) -> Result({}, Error) =
     let r = /sys/Io/write(h, b);
-    match Nat/eql(r.status, 0) : Result({}, Error)
+    match Nat/eql(r.status, /sys/Io/Status/ok) : Result({}, Error)
     | true =>
         match Nat/lt(r.written, Bin/len(b)) : Result({}, Error)
         | true => write(h, Bin/slice(b, r.written, Bin/len(b)))
@@ -60,7 +79,7 @@ pub let print_err(s : Str) -> {} =
 pub let input() -> Option(Bin) =
     rec go(acc : Bin) -> Option(Bin) =
         let r = /sys/Io/read(stdin, 1);
-        match Nat/eql(r.status, 0) : Option(Bin)
+        match Nat/eql(r.status, /sys/Io/Status/ok) : Option(Bin)
         | false =>
             match Nat/eql(Bin/len(acc), 0) : Option(Bin)
             | true => Option/none()

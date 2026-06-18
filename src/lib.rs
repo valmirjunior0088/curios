@@ -9,6 +9,8 @@ pub use span::*;
 mod monads;
 pub use monads::*;
 
+pub mod wire;
+
 pub mod text;
 
 pub mod core;

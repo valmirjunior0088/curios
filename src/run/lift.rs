@@ -1,5 +1,6 @@
 use {
     super::{Io, Mode, PollEvents},
+    crate::wire,
     wasmtime::{Caller, Val},
 };
 
@@ -21,14 +22,14 @@ impl Lift for Io {
     }
 }
 
-/// `open`'s mode lifts from its `/std/File/Mode` tag. An out-of-range tag is a
+/// `open`'s mode lifts from its `/std/Io/Mode` tag. An out-of-range tag is a
 /// codegen bug (the union only marshals `0`/`1`/`2`), so it panics.
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(match params[0].unwrap_i32() {
-            0 => Mode::Read,
-            1 => Mode::Write,
-            2 => Mode::Append,
+        Ok(match params[0].unwrap_i32() as u32 {
+            wire::mode::READ => Mode::Read,
+            wire::mode::WRITE => Mode::Write,
+            wire::mode::APPEND => Mode::Append,
             tag => panic!("invalid open mode tag: {tag}"),
         })
     }

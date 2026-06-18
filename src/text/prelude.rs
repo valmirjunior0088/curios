@@ -1,6 +1,9 @@
-use super::{
-    Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier,
-    Subterm, Term, TopItem, TopLet, TopMod, TupleType,
+use {
+    super::{
+        Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
+        Qualifier, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
+    },
+    crate::wire,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -19,6 +22,19 @@ fn prim(p: Prim) -> Term {
 
 fn nat() -> Term {
     prim(Prim::NatType)
+}
+
+// A `Nat` literal value term, built exactly as the parser builds one: `0` is
+// bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
+// codes (`crate::wire`) into the `/sys/Io` constant mirror.
+fn nat_lit(n: u32) -> Term {
+    match n {
+        0 => prim(Prim::Nat(Nat::Zero)),
+        n => prim(Prim::Nat(Nat::Succ(
+            NatLiteral::number(n),
+            prim(Prim::Nat(Nat::Zero)),
+        ))),
+    }
 }
 
 fn int() -> Term {
@@ -506,6 +522,44 @@ fn io_ops() -> Vec<TopItem> {
             ],
             name("A"),
             prim(Prim::IoExit(name("A"), name("n"))),
+        ),
+        // The wire-code mirror: the guest counterpart of `crate::wire`, so the
+        // standard library compares against named constants the host derives from
+        // the same source. `read`/`write` already name ops here, so each family
+        // is a sub-module.
+        pub_mod(
+            "Status",
+            vec![
+                pub_let("ok", nat(), nat_lit(wire::status::OK)),
+                pub_let("eof", nat(), nat_lit(wire::status::EOF)),
+                pub_let("not_found", nat(), nat_lit(wire::status::NOT_FOUND)),
+                pub_let(
+                    "permission_denied",
+                    nat(),
+                    nat_lit(wire::status::PERMISSION_DENIED),
+                ),
+                pub_let("exists", nat(), nat_lit(wire::status::ALREADY_EXISTS)),
+                pub_let("refused", nat(), nat_lit(wire::status::CONNECTION_REFUSED)),
+                pub_let("would_block", nat(), nat_lit(wire::status::WOULD_BLOCK)),
+                pub_let("tls", nat(), nat_lit(wire::status::TLS_ERROR)),
+            ],
+        ),
+        pub_mod(
+            "Poll",
+            vec![
+                pub_let("read", nat(), nat_lit(wire::poll::READ)),
+                pub_let("write", nat(), nat_lit(wire::poll::WRITE)),
+                pub_let("err", nat(), nat_lit(wire::poll::ERR)),
+                pub_let("hup", nat(), nat_lit(wire::poll::HUP)),
+            ],
+        ),
+        pub_mod(
+            "Mode",
+            vec![
+                pub_let("read", nat(), nat_lit(wire::mode::READ)),
+                pub_let("write", nat(), nat_lit(wire::mode::WRITE)),
+                pub_let("append", nat(), nat_lit(wire::mode::APPEND)),
+            ],
         ),
     ]
 }
