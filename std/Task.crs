@@ -160,29 +160,89 @@ let drain_blocked(blocked : Lst(Parked)) -> {} =
         end;
     go(blocked);
 
--- A bounded, best-effort shutdown drain that does NOT poll. It steps each ready
--- fiber to its next park or completion: a finished fiber drops cleanly, a fiber
--- that would block is cancelled with its finalizers run, and every still-parked
--- fiber is finalized too. This is where cancellation-safe `close` happens when a
--- root completes with children still outstanding.
-rec drain(ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
+-- The scheduler phase. The ONLY place it is observed is the `wait` arm of
+-- `step`: under `running` a blocked fiber parks; under `draining` it is
+-- cancelled and its finalizers run. That single switch is the whole essence of
+-- "drop".
+union Mode
+| running()
+| draining()
+end
+
+-- The outcome of advancing one fiber by a single scheduler-relevant step.
+-- `advanced` replaces the stepped fiber on the ready queue with zero (it
+-- finished or was cancelled), one, or two (a `spawn`) fibers; `parked` removes
+-- it to the blocked set and never occurs under `draining`.
+union Stepped
+| advanced(Lst(Fiber))
+| parked(Parked)
+end
+
+let splice(xs : Lst(Fiber), tail : Lst(Fiber)) -> Lst(Fiber) =
+    rec go(rest : Lst(Fiber)) -> Lst(Fiber) =
+        match rest : Lst(Fiber)
+        | nil() => tail
+        | cons(x, more) => Lst/cons(x, go(more))
+        end;
+    go(xs);
+
+-- Advance one fiber by a single constructor, running finalizers as
+-- `protect`/`unprotect`/completion dictate. The existential result type is
+-- opened anonymously (`_`) and never named: every continuation is immediately
+-- resealed into a `Fiber`, so the hidden type never escapes into `Stepped`.
+-- This is the single definition of stepping a fiber; `running` vs `draining` is
+-- the only behavioural axis, and it is confined to the `wait` arm.
+let step(mode : Mode, f : Fiber) -> Stepped =
+    match f : Stepped
+    | fiber(_, t, fins) =>
+        match t : Stepped
+        | done(_) =>
+            let ran = run_all(fins);
+            Stepped/advanced(Lst/nil())
+        | spawn(child, k) =>
+            Stepped/advanced(Lst/cons(Fiber/fiber(k(()), fins), Lst/cons(Fiber/fiber(child, Lst/nil()), Lst/nil())))
+        | protect(fin, k) =>
+            Stepped/advanced(Lst/cons(Fiber/fiber(k(()), Lst/cons(fin, fins)), Lst/nil()))
+        | unprotect(k) =>
+            match fins : Stepped
+            | cons(top, more) => let ran = top(()); Stepped/advanced(Lst/cons(Fiber/fiber(k(()), more), Lst/nil()))
+            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(()), Lst/nil()), Lst/nil()))
+            end
+        | wait(h, ev, k) =>
+            match mode : Stepped
+            | running() =>
+                Stepped/parked(Parked { handle = h, interest = ev, finalizers = fins, resume = (u) => Fiber/fiber(k(u), fins) })
+            | draining() =>
+                let ran = run_all(fins);
+                Stepped/advanced(Lst/nil())
+            end
+        end
+    end;
+
+-- The ready/blocked loop over fibers, shared by fire-and-forget `run` (under
+-- `running`, which polls and resumes) and the shutdown drop (under `draining`,
+-- which never polls: ready fibers are stepped to cancellation and the remaining
+-- parked fibers are finalized). `block_on` reuses `step` directly for its
+-- children but keeps its own loop for the slot-0 root.
+rec schedule(mode : Mode, ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
     match ready : {}
-    | nil() => drain_blocked(blocked)
     | cons(f, rest) =>
-        match f : {}
-        | fiber(_, t, fins) =>
-            match t : {}
-            | done(_) => let ran = run_all(fins); drain(rest, blocked)
-            | wait(_, _, _) => let ran = run_all(fins); drain(rest, blocked)
-            | spawn(child, k) =>
-                drain(Lst/cons(Fiber/fiber(k(()), fins), Lst/cons(Fiber/fiber(child, Lst/nil()), rest)), blocked)
-            | protect(fin, k) =>
-                drain(Lst/cons(Fiber/fiber(k(()), Lst/cons(fin, fins)), rest), blocked)
-            | unprotect(k) =>
-                match fins : {}
-                | cons(top, more) => let ran = top(()); drain(Lst/cons(Fiber/fiber(k(()), more), rest), blocked)
-                | nil() => drain(Lst/cons(Fiber/fiber(k(()), Lst/nil()), rest), blocked)
-                end
+        match step(mode, f) : {}
+        | advanced(news) => schedule(mode, splice(news, rest), blocked)
+        | parked(p) => schedule(mode, rest, Lst/cons(p, blocked))
+        end
+    | nil() =>
+        match mode : {}
+        | draining() => drain_blocked(blocked)
+        | running() =>
+            match blocked : {}
+            | nil() => ()
+            | cons(_, _) =>
+                let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
+                let events = Lst/to_arr(Lst/map((p) => p.interest, blocked));
+                let results = Io/poll(handles, events, -1);
+                let split = partition(blocked, results, 0);
+                schedule(mode, split.0, split.1)
             end
         end
     end;
@@ -191,50 +251,22 @@ rec drain(ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
 -- Fire-and-forget: each fiber's result is discarded. `run` only returns once
 -- everything has finished, so no fiber is ever dropped here; finalizers fire
 -- through the normal `protect`/`unprotect` discipline.
-pub rec run(ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
-    match ready : {}
-    | cons(f, rest) =>
-        match f : {}
-        | fiber(_, t, fins) =>
-            match t : {}
-            | done(_) => let ran = run_all(fins); run(rest, blocked)
-            | wait(h, ev, k) =>
-                run(rest, Lst/cons(Parked { handle = h, interest = ev, finalizers = fins, resume = (u) => Fiber/fiber(k(u), fins) }, blocked))
-            | spawn(child, k) =>
-                run(Lst/cons(Fiber/fiber(k(()), fins), Lst/cons(Fiber/fiber(child, Lst/nil()), rest)), blocked)
-            | protect(fin, k) =>
-                run(Lst/cons(Fiber/fiber(k(()), Lst/cons(fin, fins)), rest), blocked)
-            | unprotect(k) =>
-                match fins : {}
-                | cons(top, more) => let ran = top(()); run(Lst/cons(Fiber/fiber(k(()), more), rest), blocked)
-                | nil() => run(Lst/cons(Fiber/fiber(k(()), Lst/nil()), rest), blocked)
-                end
-            end
-        end
-    | nil() =>
-        match blocked : {}
-        | nil() => ()
-        | cons(_, _) =>
-            let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
-            let events = Lst/to_arr(Lst/map((p) => p.interest, blocked));
-            let results = Io/poll(handles, events, -1);
-            let split = partition(blocked, results, 0);
-            run(split.0, split.1)
-        end
-    end;
+pub let run(ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
+    schedule(Mode/running(), ready, blocked);
 
 -- Drive one fiber to its value while multiplexing any fibers it spawns. The root
 -- stays an un-boxed `Task(A)` in its own poll slot (index 0); spawned children
--- ride the same machinery as `run`. The root carries its own finalizer stack
+-- are stepped by the shared `step`. The root carries its own finalizer stack
 -- (`root_fins`). When the root completes, its remaining finalizers run and any
--- outstanding children are drained -- runnable work finishes, blocked work is
--- cancelled and finalized -- so nothing the program acquired is left open.
+-- outstanding children are dropped via `schedule` in `draining` mode -- runnable
+-- work is cancelled and finalized, parked work is finalized -- so nothing the
+-- program acquired is left open.
 pub let block_on(@A : Type, t : Task(A)) -> A =
     rec loop(root : Task(A), root_fins : Lst(Finalizer), ready : Lst(Fiber), blocked : Lst(Parked)) -> A =
         match root : A
         | done(a) =>
             let cleaned = run_all(root_fins);
-            let dropped = drain(ready, blocked);
+            let dropped = schedule(Mode/draining(), ready, blocked);
             a
         | protect(fin, k) => loop(k(()), Lst/cons(fin, root_fins), ready, blocked)
         | unprotect(k) =>
@@ -246,25 +278,9 @@ pub let block_on(@A : Type, t : Task(A)) -> A =
         | wait(rh, rev, rk) =>
             match ready : A
             | cons(f, rest) =>
-                match f : A
-                | fiber(_, ct, cfins) =>
-                    match ct : A
-                    | done(_) => let ran = run_all(cfins); loop(Task/wait(rh, rev, rk), root_fins, rest, blocked)
-                    | wait(ch, cev, ck) =>
-                        loop(Task/wait(rh, rev, rk), root_fins, rest,
-                            Lst/cons(Parked { handle = ch, interest = cev, finalizers = cfins, resume = (u) => Fiber/fiber(ck(u), cfins) }, blocked))
-                    | spawn(gc, ck) =>
-                        loop(Task/wait(rh, rev, rk), root_fins,
-                            Lst/cons(Fiber/fiber(ck(()), cfins), Lst/cons(Fiber/fiber(gc, Lst/nil()), rest)), blocked)
-                    | protect(fin, ck) =>
-                        loop(Task/wait(rh, rev, rk), root_fins,
-                            Lst/cons(Fiber/fiber(ck(()), Lst/cons(fin, cfins)), rest), blocked)
-                    | unprotect(ck) =>
-                        match cfins : A
-                        | cons(top, more) => let ran = top(()); loop(Task/wait(rh, rev, rk), root_fins, Lst/cons(Fiber/fiber(ck(()), more), rest), blocked)
-                        | nil() => loop(Task/wait(rh, rev, rk), root_fins, Lst/cons(Fiber/fiber(ck(()), Lst/nil()), rest), blocked)
-                        end
-                    end
+                match step(Mode/running(), f) : A
+                | advanced(news) => loop(Task/wait(rh, rev, rk), root_fins, splice(news, rest), blocked)
+                | parked(p) => loop(Task/wait(rh, rev, rk), root_fins, rest, Lst/cons(p, blocked))
                 end
             | nil() =>
                 let handles = Lst/to_arr(Lst/cons(rh, Lst/map((p) => p.handle, blocked)));
