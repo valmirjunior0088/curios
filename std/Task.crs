@@ -114,7 +114,10 @@ let drop_group(g : Group, xs : Lst(Group)) -> Lst(Group) =
         end;
     go(xs);
 
-struct Entropy pub { next : Nat, free : Lst(Nat) }
+struct Entropy pub {
+    next : Nat,
+    free : Lst(Nat)
+}
 
 let fresh(e : Entropy) -> { Group, Entropy } =
     match e.free : { Group, Entropy }
