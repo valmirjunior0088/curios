@@ -1464,6 +1464,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::NatToInt(inner) => core::Prim::nat_to_int(self.term(inner)?),
             Prim::IoType => core::Prim::IoType,
             Prim::Io(token) => core::Prim::Io(*token),
+            Prim::IoEql(left, right) => core::Prim::io_eql(self.term(left)?, self.term(right)?),
             Prim::IoRead(handle, count) => {
                 core::Prim::io_read(self.term(handle)?, self.term(count)?)
             }

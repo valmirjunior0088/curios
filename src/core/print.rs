@@ -423,6 +423,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             }
         },
         Prim::NatEql(l, r) => print_binary("Nat.eql ", l, r, depth),
+        Prim::IoEql(l, r) => print_binary("Io.eql ", l, r, depth),
         Prim::NatNeq(l, r) => print_binary("Nat.neq ", l, r, depth),
         Prim::NatAdd(l, r) => print_binary("Nat.add ", l, r, depth),
         Prim::NatSub(l, r) => print_binary("Nat.sub ", l, r, depth),

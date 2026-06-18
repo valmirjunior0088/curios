@@ -95,6 +95,7 @@ pub enum Prim {
     ArrConcat(Term, Term, Term),
     IoType,
     Io(u32),
+    IoEql(Term, Term),
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),

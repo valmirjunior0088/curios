@@ -385,6 +385,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         }
 
         Prim::NatEql(a, b) => Prim::NatEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IoEql(a, b) => Prim::IoEql(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatNeq(a, b) => Prim::NatNeq(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatAdd(a, b) => Prim::NatAdd(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatSub(a, b) => Prim::NatSub(zonk_term(context, a)?, zonk_term(context, b)?),

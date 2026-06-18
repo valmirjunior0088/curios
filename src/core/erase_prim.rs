@@ -49,6 +49,10 @@ fn bln_type() -> Term {
     prim_type(Prim::BlnType)
 }
 
+fn io_type() -> Term {
+    prim_type(Prim::IoType)
+}
+
 fn pure(prim: ersd::PurePrim) -> ersd::Term {
     ersd::Subterm::Prim(ersd::Prim::Pure(prim)).into()
 }
@@ -115,6 +119,8 @@ pub fn erase_prim(
             }
         }
         Prim::NatEql(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatEql),
+        // Handles are i31 tokens, so identity is just the `Nat` equality op.
+        Prim::IoEql(l, r) => binary(context, l, r, io_type, ersd::PurePrim::NatEql),
         Prim::NatAdd(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatAdd),
         Prim::NatSub(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatSub),
         Prim::NatMul(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatMul),

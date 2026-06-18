@@ -2485,6 +2485,27 @@ fn io_poll_mock_echoes_interest() {
 }
 
 #[test]
+fn io_eql_compares_handle_identity() {
+    // `Io/eql` is the one pure operation on handles: it erases to the `Nat`
+    // equality op over the i31 token. stdin equals itself, stdin differs from
+    // stdout, so this writes "true" then "false".
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Io, Bln, Str};
+        let same = std/Io/eql(Io/stdin, Io/stdin);
+        let diff = std/Io/eql(Io/stdin, Io/stdout);
+        let w = Io/write(Io/stdout, Str/to_bin(Bln/to_str(same)));
+        Io/write(Io/stdout, Str/to_bin(Bln/to_str(diff)))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"truefalse");
+}
+
+#[test]
 fn task_scheduler_parks_polls_and_resumes() {
     // The `/std/Task` event loop end to end: the root fiber yields a `wait` on
     // stdin-READ and parks, `run` marshals the parked handle/interest into

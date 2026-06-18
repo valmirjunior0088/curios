@@ -42,7 +42,8 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
 
             Ok(true)
         }
-        (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
+        (Prim::IoEql(this_left, this_right), Prim::IoEql(that_left, that_right))
+        | (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
         | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
         | (Prim::NatAdd(this_left, this_right), Prim::NatAdd(that_left, that_right))
         | (Prim::NatSub(this_left, this_right), Prim::NatSub(that_left, that_right))

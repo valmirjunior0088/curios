@@ -1359,7 +1359,8 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoRandom(t)
         | Prim::IoEnv(t) => t.reach(),
 
-        Prim::NatEql(a, b)
+        Prim::IoEql(a, b)
+        | Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
         | Prim::NatAdd(a, b)
         | Prim::NatSub(a, b)
@@ -1487,7 +1488,8 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoRandom(t)
         | Prim::IoEnv(t) => t.collect_metavars(ids),
 
-        Prim::NatEql(a, b)
+        Prim::IoEql(a, b)
+        | Prim::NatEql(a, b)
         | Prim::NatNeq(a, b)
         | Prim::NatAdd(a, b)
         | Prim::NatSub(a, b)
@@ -1612,6 +1614,7 @@ where
             Prim::Nat(Nat::Succ(spine.clone(), visit.visit_subterm(inner)))
         }
         Prim::NatEql(l, r) => traverse_binary(l, r, visit, Prim::NatEql),
+        Prim::IoEql(l, r) => traverse_binary(l, r, visit, Prim::IoEql),
         Prim::NatNeq(l, r) => traverse_binary(l, r, visit, Prim::NatNeq),
         Prim::NatAdd(l, r) => traverse_binary(l, r, visit, Prim::NatAdd),
         Prim::NatSub(l, r) => traverse_binary(l, r, visit, Prim::NatSub),

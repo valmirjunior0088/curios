@@ -339,6 +339,12 @@ fn io_ops() -> Vec<TopItem> {
         pub_let("stdout", io(), prim(Prim::Io(1))),
         pub_let("stderr", io(), prim(Prim::Io(2))),
         pub_fn(
+            "eql",
+            vec![("a", io()), ("b", io())],
+            bln(),
+            prim(Prim::IoEql(name("a"), name("b"))),
+        ),
+        pub_fn(
             "read",
             vec![("h", io()), ("n", nat())],
             record(vec![("status", nat()), ("bytes", bin())]),

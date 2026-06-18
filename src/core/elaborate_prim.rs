@@ -48,6 +48,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::NatType => (prim.clone(), Term::type_()),
         Prim::Nat(_) => (prim.clone(), nat_type),
         Prim::NatEql(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatEql)?,
+        Prim::IoEql(l, r) => binary(context, l, r, &io_type, bln_type.clone(), Prim::IoEql)?,
         Prim::NatNeq(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatNeq)?,
         Prim::NatLt(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatLt)?,
         Prim::NatGt(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatGt)?,

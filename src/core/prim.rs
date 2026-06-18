@@ -95,6 +95,9 @@ pub enum Prim {
     ArrConcat(Term, Vec<Term>),
     IoType,
     Io(u32),
+    // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
+    // handles are opaque i31 tokens, so this erases to the `Nat` equality op.
+    IoEql(Term, Term),
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
@@ -166,6 +169,14 @@ impl Prim {
         S: Into<Term>,
     {
         Self::NatEql(left.into(), right.into())
+    }
+
+    pub fn io_eql<F, S>(left: F, right: S) -> Self
+    where
+        F: Into<Term>,
+        S: Into<Term>,
+    {
+        Self::IoEql(left.into(), right.into())
     }
 
     pub fn nat_neq<F, S>(left: F, right: S) -> Self
