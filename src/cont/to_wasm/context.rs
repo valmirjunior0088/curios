@@ -626,9 +626,8 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().io_write_func().clone(),
                 });
 
-                // The import returns the status pre-boxed as an i31 ref, so it
-                // already matches the function's single-anyref return shape.
-                self.host_single_resume(&mut output, resume);
+                // Two-result: resume defines the `{ status, written }` record.
+                self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoOpen { path, mode, resume } => {
                 output.extend(self.load_value_instrs(path, LoadAs::Bin));

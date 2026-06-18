@@ -492,8 +492,9 @@ pub fn lower_value_prim<'b>(
                     bytes,
                     frame,
                     Cont::new(move |work, bytes| {
-                        // `Io.write` returns its status scalar; forward it straight.
-                        let resume = forward_resume(work, cont);
+                        // `Io.write` returns `(status, written)`, packed into a
+                        // `{ status, written }` record like `IoRead`/`IoOpen`.
+                        let resume = record_resume(work, 2, cont);
 
                         cont::Tail::Host(cont::HostTarget::IoWrite {
                             handle,

@@ -2,8 +2,33 @@ pub use /sys/{Io};
 pub use /sys/Io/{let stdin, let stdout, let stderr, let read, let write, let poll};
 use /std/{Bin, Str, Nat, Option};
 
+pub union Error
+| not_found()
+| permission_denied()
+| exists()
+| refused()
+| tls()
+| other(Nat)
+end
+
+pub let decode(status : Nat) -> Error =
+    match status : Error
+    | 2 => Error/not_found()
+    | 3 => Error/permission_denied()
+    | 4 => Error/exists()
+    | 6 => Error/refused()
+    | 8 => Error/tls()
+    | _ => Error/other(status)
+    end;
+
+pub union Read
+| chunk(Bin)
+| eof()
+| error(Error)
+end
+
 pub let print(s : Str) -> {} =
-    let status = write(stdout, Str/to_bin(s));
+    let r = write(stdout, Str/to_bin(s));
     ();
 
 pub let Reader : Type = { Io, Bin };

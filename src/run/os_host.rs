@@ -545,30 +545,46 @@ impl Host for OsHost {
         }
     }
 
-    fn write(&self, io: Io, bytes: &[u8]) -> Status {
-        let result = match io {
-            Io::Stdout => stdout().write_all(bytes),
-            Io::Stderr => stderr().write_all(bytes),
-            Io::Other(handle) => {
-                let mut table = self.table.lock().unwrap();
-
-                let stream: &mut dyn Write = match table.get_mut(&handle) {
-                    Some(OsResource::File(file)) => file,
-                    Some(OsResource::Connected(socket)) => socket,
-                    Some(OsResource::ClientTls(tls)) => tls,
-                    Some(OsResource::ServerTls(tls)) => tls,
-                    _ => return Status::NotFound,
+    fn write(&self, io: Io, bytes: &[u8]) -> (Status, u32) {
+        // The blocking std streams write the whole buffer or fail; report the
+        // full length on success so callers see the write completed.
+        match io {
+            Io::Stdout => {
+                return match stdout().write_all(bytes) {
+                    Ok(()) => (Status::Ok, bytes.len() as u32),
+                    Err(error) => (Status::from(error), 0),
                 };
-
-                stream.write_all(bytes)
+            }
+            Io::Stderr => {
+                return match stderr().write_all(bytes) {
+                    Ok(()) => (Status::Ok, bytes.len() as u32),
+                    Err(error) => (Status::from(error), 0),
+                };
             }
             // stdin is not writable; the guest's `/std/Io` never issues this.
             Io::Stdin => panic!("write to stdin"),
+            Io::Other(_) => {}
+        }
+
+        let Io::Other(handle) = io else { unreachable!() };
+
+        let mut table = self.table.lock().unwrap();
+
+        let stream: &mut dyn Write = match table.get_mut(&handle) {
+            Some(OsResource::File(file)) => file,
+            Some(OsResource::Connected(socket)) => socket,
+            Some(OsResource::ClientTls(tls)) => tls,
+            Some(OsResource::ServerTls(tls)) => tls,
+            _ => return (Status::NotFound, 0),
         };
 
-        match result {
-            Ok(()) => Status::Ok,
-            Err(error) => Status::from(error),
+        // A single non-blocking `write`: the kernel takes a prefix and reports
+        // its length. We return that count rather than looping (`write_all`),
+        // because a loop that hits `WouldBlock` mid-buffer would lose the count
+        // of what already went out and the caller would resend it.
+        match stream.write(bytes) {
+            Ok(written) => (Status::Ok, written as u32),
+            Err(error) => (Status::from(error), 0),
         }
     }
 

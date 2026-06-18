@@ -1,12 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Arr};
-
-pub union Error
-| refused()
-| tls()
-| other(Nat)
-end
-
-pub struct Socket { Io }
+use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Arr, Task};
 
 pub struct Settings pub {
     connect_timeout : Option(Time/Duration),
@@ -22,11 +14,13 @@ pub let default : Settings = Settings {
     tls = false
 };
 
-pub let read(c : Socket, n : Nat) -> { status : Nat, bytes : Bin } =
-    Io/read(c.0, n);
+pub struct Socket { Io }
 
-pub let write(c : Socket, b : Bin) -> Nat =
-    Io/write(c.0, b);
+pub let read(c : Socket, n : Nat) -> Task(Io/Read) =
+    Task/read(c.0, n);
+
+pub let write(c : Socket, b : Bin) -> Task(Result({}, Io/Error)) =
+    Task/write(c.0, b);
 
 let close(c : Socket) -> {} =
     /sys/Io/close(c.0);
@@ -35,13 +29,6 @@ let timeout_ms(t : Option(Time/Duration)) -> Nat =
     match t : Nat
     | none() => 0
     | some(d) => Time/to_millis(d)
-    end;
-
-let decode(status : Nat) -> Error =
-    match status : Error
-    | 6 => Error/refused()
-    | 8 => Error/tls()
-    | _ => Error/other(status)
     end;
 
 let configure(h : Io, settings : Settings) -> {} =
@@ -55,128 +42,184 @@ let upgrade(h : Io, host : Str, tls : Bln) -> Nat =
     | true => /sys/Io/start_tls(h, Str/to_bin(host))
     end;
 
-pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> A) -> Result(A, Error) =
+-- A plaintext socket goes non-blocking so its reads and writes yield to the
+-- scheduler; a TLS socket stays blocking (the rustls handshake and record layer
+-- are driven synchronously by the host -- non-blocking TLS is a host concern not
+-- yet wired through).
+let set_nb(h : Io, tls : Bln) -> {} =
+    match tls : {}
+    | false => Task/nonblocking(h)
+    | true => ()
+    end;
+
+-- The synchronous client setup: resolve, socket, configure, connect, and TLS
+-- upgrade, returning the wrapped `Socket` or a typed error. Connect blocks; the
+-- handle is made non-blocking only once it is connected (and not TLS).
+let connect_socket(settings : Settings, host : Str, port : Nat) -> Result(Socket, Io/Error) =
     let r = /sys/Io/resolve(Str/to_bin(host), port);
-    match Nat/eql(r.status, 0) : Result(A, Error)
-    | false => Result/failure(decode(r.status))
+    match Nat/eql(r.status, 0) : Result(Socket, Io/Error)
+    | false => Result/failure(Io/decode(r.status))
     | true =>
         let addr = Arr/get(r.addresses, 0);
         let s = /sys/Io/socket(addr);
-        match Nat/eql(s.status, 0) : Result(A, Error)
-        | false => Result/failure(decode(s.status))
+        match Nat/eql(s.status, 0) : Result(Socket, Io/Error)
+        | false => Result/failure(Io/decode(s.status))
         | true =>
             let configured = configure(s.handle, settings);
             let status = /sys/Io/connect(s.handle, addr);
-            match Nat/eql(status, 0) : Result(A, Error)
+            match Nat/eql(status, 0) : Result(Socket, Io/Error)
             | false =>
                 let closed = /sys/Io/close(s.handle);
-                Result/failure(decode(status))
+                Result/failure(Io/decode(status))
             | true =>
                 let upgraded = upgrade(s.handle, host, settings.tls);
-                match Nat/eql(upgraded, 0) : Result(A, Error)
+                match Nat/eql(upgraded, 0) : Result(Socket, Io/Error)
                 | false =>
                     let closed = /sys/Io/close(s.handle);
-                    Result/failure(decode(upgraded))
+                    Result/failure(Io/decode(upgraded))
                 | true =>
-                    let c = Socket { s.handle };
-                    let value = f(c);
-                    let closed = close(c);
-                    Result/success(value)
+                    let nb = set_nb(s.handle, settings.tls);
+                    Result/success(Socket { s.handle })
                 end
             end
         end
     end;
 
-pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Result(Bin, Error) =
+-- Connect, hand the `Socket` to `f`, and close it when `f`'s task finishes or
+-- the fiber is dropped. The close is bracketed through `Task/using`.
+pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Task(A)) -> Task(Result(A, Io/Error)) =
+    match connect_socket(settings, host, port) : Task(Result(A, Io/Error))
+    | failure(e) => Task/pure(Result/failure(e))
+    | success(c) =>
+        Task/bind(Task/using(Task/pure(c), close, f), (a) =>
+            Task/pure(Result/success(a)))
+    end;
+
+let drain(c : Socket) -> Task(Bin) =
+    rec go(acc : Bin) -> Task(Bin) =
+        Task/bind(read(c, 4096), (r) =>
+            match r : Task(Bin)
+            | chunk(bytes) => go(Bin/concat(acc, bytes))
+            | eof() => Task/pure(acc)
+            | error(_) => Task/pure(acc)
+            end);
+    go(\\);
+
+pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Task(Result(Bin, Io/Error)) =
     with(settings, host, port, (c) =>
-        let sent = write(c, request);
-        Io/drain(c.0));
+        Task/bind(write(c, request), (sent) => drain(c)));
 
 struct Listener { Io }
 
-let listen(host : Str, port : Nat) -> Result(Listener, Error) =
+-- Bind and listen, then make the listener non-blocking so `accept` yields when
+-- there is no pending connection.
+let listen_socket(host : Str, port : Nat) -> Result(Listener, Io/Error) =
     let r = /sys/Io/resolve(Str/to_bin(host), port);
-    match Nat/eql(r.status, 0) : Result(Listener, Error)
-    | false => Result/failure(decode(r.status))
+    match Nat/eql(r.status, 0) : Result(Listener, Io/Error)
+    | false => Result/failure(Io/decode(r.status))
     | true =>
         let addr = Arr/get(r.addresses, 0);
         let s = /sys/Io/socket(addr);
-        match Nat/eql(s.status, 0) : Result(Listener, Error)
-        | false => Result/failure(decode(s.status))
+        match Nat/eql(s.status, 0) : Result(Listener, Io/Error)
+        | false => Result/failure(Io/decode(s.status))
         | true =>
             let reused = /sys/Io/set_reuseaddr(s.handle, true);
             let bound = /sys/Io/bind(s.handle, addr);
-            match Nat/eql(bound, 0) : Result(Listener, Error)
+            match Nat/eql(bound, 0) : Result(Listener, Io/Error)
             | false =>
                 let closed = /sys/Io/close(s.handle);
-                Result/failure(decode(bound))
+                Result/failure(Io/decode(bound))
             | true =>
                 let status = /sys/Io/listen(s.handle, 128);
-                match Nat/eql(status, 0) : Result(Listener, Error)
+                match Nat/eql(status, 0) : Result(Listener, Io/Error)
                 | false =>
                     let closed = /sys/Io/close(s.handle);
-                    Result/failure(decode(status))
-                | true => Result/success(Listener { s.handle })
+                    Result/failure(Io/decode(status))
+                | true =>
+                    let nb = Task/nonblocking(s.handle);
+                    Result/success(Listener { s.handle })
                 end
             end
         end
     end;
 
-let accept(l : Listener) -> Result(Socket, Error) =
-    let r = /sys/Io/accept(l.0);
-    match Nat/eql(r.status, 0) : Result(Socket, Error)
-    | true => Result/success(Socket { r.handle })
-    | false => Result/failure(decode(r.status))
-    end;
+-- Accept the next plaintext connection, making the accepted socket non-blocking
+-- and wrapping it in a `Socket`.
+let accept(l : Listener) -> Task(Result(Socket, Io/Error)) =
+    Task/bind(Task/accept(l.0), (r) =>
+        match r : Task(Result(Socket, Io/Error))
+        | success(h) =>
+            let nb = Task/nonblocking(h);
+            Task/pure(Result/success(Socket { h }))
+        | failure(e) => Task/pure(Result/failure(e))
+        end);
 
 let close_listener(l : Listener) -> {} =
     /sys/Io/close(l.0);
 
-pub let serve(host : Str, port : Nat, handler : (Socket) -> {}) -> Result({}, Error) =
-    match listen(host, port) : Result({}, Error)
+-- One connection's lifetime: hand the socket to the handler, closing it when the
+-- handler's task finishes or the connection fiber is dropped. Bracketing this
+-- *inside* the per-connection fiber is what keeps the close cancellation-safe
+-- even though the accept loop forgets the socket the moment it spawns it.
+let handle_conn(c : Socket, handler : (Socket) -> Task({})) -> Task({}) =
+    Task/using(Task/pure(c), close, handler);
+
+-- A concurrent server: accept in a loop and run each connection's bracketed
+-- handler as its own fiber, so a slow connection never blocks the accept loop or
+-- its peers. The listener is bracketed too. The loop ends when `accept` reports
+-- a terminal failure; on a real listener that never happens (it parks on
+-- would-block), so the server runs until the program ends.
+pub let serve(host : Str, port : Nat, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
+    match listen_socket(host, port) : Task(Result({}, Io/Error))
+    | failure(e) => Task/pure(Result/failure(e))
     | success(l) =>
-        rec go(u : {}) -> {} =
-            match accept(l) : {}
-            | success(c) =>
-                let handled = handler(c);
-                let closed = close(c);
-                go(())
-            | failure(_) => ()
-            end;
-        let served = go(());
-        let closed = close_listener(l);
-        Result/success(())
-    | failure(e) => Result/failure(e)
+        Task/bind(
+            Task/using(Task/pure(l), close_listener, (lis) =>
+                rec go(u : {}) -> Task({}) =
+                    Task/bind(accept(lis), (r) =>
+                        match r : Task({})
+                        | success(c) =>
+                            Task/bind(Task/go(handle_conn(c, handler)), (started) => go(()))
+                        | failure(_) => Task/pure(())
+                        end);
+                go(())),
+            (done) => Task/pure(Result/success(())))
     end;
 
-pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Socket) -> {}) -> Result({}, Error) =
+-- A TLS-terminating server. Connections are handled sequentially: each accepted
+-- socket completes its (synchronous) handshake before the handler runs, and the
+-- next accept waits for the handler to finish -- non-blocking TLS, which would
+-- let handshakes and handlers interleave, is a host concern not yet wired
+-- through. A handshake failure skips just that connection; the bracketed
+-- listener and config are released when the loop ends.
+pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
     let cfg = /sys/Io/tls_server_config(cert, key);
-    match Nat/eql(cfg.status, 0) : Result({}, Error)
-    | false => Result/failure(decode(cfg.status))
+    match Nat/eql(cfg.status, 0) : Task(Result({}, Io/Error))
+    | false => Task/pure(Result/failure(Io/decode(cfg.status)))
     | true =>
-        match listen(host, port) : Result({}, Error)
+        match listen_socket(host, port) : Task(Result({}, Io/Error))
         | failure(e) =>
             let dropped = /sys/Io/close(cfg.handle);
-            Result/failure(e)
+            Task/pure(Result/failure(e))
         | success(l) =>
-            rec go(u : {}) -> {} =
-                match accept(l) : {}
-                | failure(_) => ()
-                | success(c) =>
-                    let status = /sys/Io/start_tls_server(c.0, cfg.handle);
-                    match Nat/eql(status, 0) : {}
-                    | true =>
-                        let handled = handler(c);
-                        let closed = close(c);
-                        go(())
-                    | false =>
-                        let closed = close(c);
-                        go(())
-                    end
-                end;
-            let served = go(());
-            let closed = close_listener(l);
-            let dropped = /sys/Io/close(cfg.handle);
-            Result/success(())
+            Task/bind(
+                Task/using(Task/pure(l), close_listener, (lis) =>
+                    rec go(u : {}) -> Task({}) =
+                        Task/bind(Task/accept(lis.0), (r) =>
+                            match r : Task({})
+                            | failure(_) => Task/pure(())
+                            | success(h) =>
+                                let status = /sys/Io/start_tls_server(h, cfg.handle);
+                                match Nat/eql(status, 0) : Task({})
+                                | true => Task/bind(handle_conn(Socket { h }, handler), (done) => go(()))
+                                | false =>
+                                    let closed = /sys/Io/close(h);
+                                    go(())
+                                end
+                            end);
+                    go(())),
+                (done) =>
+                    let dropped = /sys/Io/close(cfg.handle);
+                    Task/pure(Result/success(())))
         end
     end;

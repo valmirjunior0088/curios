@@ -30,11 +30,28 @@ fn lowers_and_runs_nat_add() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -77,11 +94,28 @@ fn lowers_and_runs_arr_len() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -128,11 +162,28 @@ fn lowers_and_runs_arr_get() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -187,11 +238,28 @@ fn lowers_and_runs_arr_slice() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -246,11 +314,28 @@ fn lowers_and_runs_arr_concat() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -285,11 +370,28 @@ fn lowers_and_runs_flt_floor() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -324,11 +426,28 @@ fn lowers_and_runs_flt_ceil() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -363,11 +482,28 @@ fn lowers_and_runs_flt_trunc() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -402,11 +538,28 @@ fn lowers_and_runs_flt_nearest() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -445,11 +598,28 @@ fn lowers_and_runs_nat_div() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -488,11 +658,28 @@ fn lowers_and_runs_nat_rem() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -531,11 +718,28 @@ fn lowers_and_runs_nat_lt() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -577,11 +781,28 @@ fn lowers_and_runs_int_neg() {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -620,11 +841,28 @@ fn lowers_and_runs_int_div() {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -663,11 +901,28 @@ fn lowers_and_runs_int_lt() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -706,11 +961,28 @@ fn lowers_and_runs_flt_div() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -749,11 +1021,28 @@ fn lowers_and_runs_flt_eql() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -788,11 +1077,28 @@ fn lowers_and_runs_flt_sqrt() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -827,11 +1133,28 @@ fn lowers_and_runs_int_to_flt() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -866,11 +1189,28 @@ fn lowers_and_runs_nat_to_flt() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -907,11 +1247,28 @@ fn lowers_and_runs_flt_to_int() {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -946,11 +1303,28 @@ fn lowers_and_runs_nat_to_int() {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -989,11 +1363,28 @@ fn lowers_and_runs_nat_neq() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1032,11 +1423,28 @@ fn lowers_and_runs_int_neq() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1075,11 +1483,28 @@ fn lowers_and_runs_flt_neq() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1118,11 +1543,28 @@ fn lowers_and_runs_flt_min() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1161,11 +1603,28 @@ fn lowers_and_runs_flt_max() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1203,11 +1662,28 @@ fn lowers_and_runs_bin_len() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1249,11 +1725,28 @@ fn lowers_and_runs_bin_get() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1303,11 +1796,28 @@ fn lowers_and_runs_bin_append() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1352,11 +1862,28 @@ fn lowers_and_runs_bin_eql_equal() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1401,11 +1928,28 @@ fn lowers_and_runs_bin_eql_unequal() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1460,11 +2004,28 @@ fn lowers_and_runs_arr_append() {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1494,11 +2055,28 @@ fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
                         cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1620,11 +2198,28 @@ fn int_op_module(op: cont::Code, left: i32, right: i32) -> cont::Module {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1741,11 +2336,28 @@ fn flt_to_int_overflow_traps() {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("result"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1784,11 +2396,28 @@ fn single_block_region_lowers_without_dispatch_loop() {
                                 cont::ValueName::from("str"),
                                 cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("x"))),
                             )],
-                            blocks: vec![],
+                            blocks: vec![(
+                                cont::BlockName::from("io_done"),
+                                cont::Block {
+                                    params: vec![
+                                        cont::ValueName::from("io_status"),
+                                        cont::ValueName::from("io_written"),
+                                    ],
+                                    region: cont::Region {
+                                        preallocs: vec![],
+                                        values: vec![],
+                                        blocks: vec![],
+                                        tail: cont::Tail::Jump(cont::JumpTarget {
+                                            target: cont::BlockName::from("r"),
+                                            params: vec![cont::ValueName::from("io_status")],
+                                        }),
+                                    },
+                                },
+                            )],
                             tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                                 handle: cont::ValueName::from("STDOUT"),
                                 bytes: cont::ValueName::from("str"),
-                                resume: cont::BlockName::from("r"),
+                                resume: cont::BlockName::from("io_done"),
                             }),
                         },
                     },

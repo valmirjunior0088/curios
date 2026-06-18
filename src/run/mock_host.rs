@@ -427,12 +427,16 @@ impl Host for MockHost {
         }
     }
 
-    fn write(&self, io: Io, bytes: &[u8]) -> Status {
+    fn write(&self, io: Io, bytes: &[u8]) -> (Status, u32) {
+        // The in-memory sink always takes the whole buffer in one go, so a
+        // successful write reports the full length and never `WouldBlock`.
+        let full = bytes.len() as u32;
+
         let handle = match io {
             Io::Stdout | Io::Stderr => {
                 self.output.lock().unwrap().extend_from_slice(bytes);
 
-                return Status::Ok;
+                return (Status::Ok, full);
             }
             Io::Other(handle) => handle,
             // stdin is not writable; the guest's `/std/Io` never issues this.
@@ -443,24 +447,24 @@ impl Host for MockHost {
             // File-backed handle: append to the in-memory filesystem.
             Some(MockResource::File(open)) => {
                 if open.mode == Mode::Read {
-                    return Status::NotFound;
+                    return (Status::NotFound, 0);
                 }
 
                 self.files.append(&open.path, bytes);
 
-                Status::Ok
+                (Status::Ok, full)
             }
             // Inbound (accepted) connection: capture the response bytes so a
             // test can inspect what the server wrote back.
             Some(MockResource::Inbound(conn)) => {
                 self.captures.lock().unwrap()[conn.capture].extend_from_slice(bytes);
 
-                Status::Ok
+                (Status::Ok, full)
             }
             // Outbound connection: accept and discard (the in-memory test host
             // does not capture request bytes).
-            Some(MockResource::Outbound(_)) => Status::Ok,
-            _ => Status::NotFound,
+            Some(MockResource::Outbound(_)) => (Status::Ok, full),
+            _ => (Status::NotFound, 0),
         }
     }
 

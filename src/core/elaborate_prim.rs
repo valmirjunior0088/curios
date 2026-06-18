@@ -293,8 +293,14 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::IoWrite(handle, bytes) => {
             let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
-            let bytes = elaborate(context, bytes, Mode::Check(bin_type))?.0;
-            (Prim::IoWrite(handle, bytes), nat_type)
+            let bytes = elaborate(context, bytes, Mode::Check(bin_type.clone()))?.0;
+            // Like `IoRead`, write reports through a status record: `status` (0
+            // ok, else error) plus `written`, the number of bytes accepted this
+            // call, so a partial non-blocking write resends only its tail.
+            (
+                Prim::IoWrite(handle, bytes),
+                Term::tuple_type([("status", nat_type.clone()), ("written", nat_type)]),
+            )
         }
         Prim::IoOpen(path, mode) => {
             let path = elaborate(context, path, Mode::Check(bin_type))?.0;

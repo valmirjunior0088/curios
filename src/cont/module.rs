@@ -157,8 +157,8 @@ pub enum HostTarget {
         count: ValueName,
         resume: BlockName,
     },
-    /// Write `bytes` (a `Bin`) to `handle`. Returns the status scalar;
-    /// `resume` takes one block parameter.
+    /// Write `bytes` (a `Bin`) to `handle`. Returns (status, written);
+    /// `resume` takes two block parameters.
     IoWrite {
         handle: ValueName,
         bytes: ValueName,

@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Net};
+use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Net, Io, Task};
 
 pub union Method
 | get()
@@ -12,7 +12,7 @@ let method_str(m : Method) -> Str =
     end;
 
 pub union Error
-| net(Net/Error)
+| net(Io/Error)
 | malformed(Str)
 end
 
@@ -203,12 +203,13 @@ pub let decode : Parse(Response) =
 pub let header(resp : Response, name : Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
-pub let perform(request : Request) -> Result(Response, Error) =
-    match Net/call(request.settings, request.host, request.port, render(request)) : Result(Response, Error)
-    | success(bytes) =>
-        match Parse/run(decode, bytes) : Result(Response, Error)
-        | success(response) => Result/success(response)
-        | failure(message) => Result/failure(Error/malformed(message))
-        end
-    | failure(error) => Result/failure(Error/net(error))
-    end;
+pub let perform(request : Request) -> Task(Result(Response, Error)) =
+    Task/bind(Net/call(request.settings, request.host, request.port, render(request)), (r) =>
+        match r : Task(Result(Response, Error))
+        | success(bytes) =>
+            match Parse/run(decode, bytes) : Task(Result(Response, Error))
+            | success(response) => Task/pure(Result/success(response))
+            | failure(message) => Task/pure(Result/failure(Error/malformed(message)))
+            end
+        | failure(error) => Task/pure(Result/failure(Error/net(error)))
+        end);

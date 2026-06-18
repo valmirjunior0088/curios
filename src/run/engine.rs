@@ -127,7 +127,11 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [ValType::I32, ValType::I32],
         [i31_ref.clone(), bin_ref.clone()],
     );
-    let io_write_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+    let io_write_type = FuncType::new(
+        engine,
+        [ValType::I32, bin_ref.clone()],
+        [i31_ref.clone(), i31_ref.clone()],
+    );
     let io_connect_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
     let io_listen_type = FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
     let io_accept_type = FuncType::new(engine, [ValType::I32], [i31_ref.clone(), i31_ref.clone()]);

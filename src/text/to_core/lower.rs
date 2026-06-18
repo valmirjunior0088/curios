@@ -8,10 +8,18 @@ use {
         },
     },
     num_bigint::BigUint,
+    std::{cell::RefCell, collections::BTreeSet},
 };
 
 pub struct Lower<'a, 'b> {
     context: &'a Context<'b>,
+    /// The user-written names bound by the enclosing local binders (function and
+    /// `let`/`rec` binders, match-arm patterns, motive labels). A bare reference
+    /// whose name is in this set resolves to the binder rather than a like-named
+    /// module binding — see [`Self::resolve_name`]. Internal gensym binders (the
+    /// `#`-sigil names from [`Context::fresh_binder`]) can never collide with a
+    /// source identifier, so they are deliberately never inserted here.
+    scope: RefCell<BTreeSet<String>>,
 }
 
 /// One elaborated arm of a single-level core union match: the constructor tag,
@@ -27,7 +35,75 @@ struct Bind<'t> {
 
 impl<'a, 'b> Lower<'a, 'b> {
     pub fn new(context: &'a Context<'b>) -> Self {
-        Self { context }
+        Self {
+            context,
+            scope: RefCell::new(BTreeSet::new()),
+        }
+    }
+
+    /// Lowers under an extended local scope: each of `names` is treated as an
+    /// in-scope binder for the duration of `body`, then the previous scope is
+    /// restored. Only names this call *newly* introduces are removed on exit, so
+    /// an inner binder shadowing an outer one of the same name leaves the outer
+    /// binding intact. Empty (unlabelled) and `_` names bind nothing and are
+    /// skipped. The scope borrow is released before `body` runs, so nested
+    /// `scoped` calls and [`Self::resolve_name`] reads inside it are free.
+    fn scoped<T>(
+        &self,
+        names: impl IntoIterator<Item = String>,
+        body: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let mut added = Vec::new();
+        {
+            let mut scope = self.scope.borrow_mut();
+            for name in names {
+                if name.is_empty() || name == "_" {
+                    continue;
+                }
+                if scope.insert(name.clone()) {
+                    added.push(name);
+                }
+            }
+        }
+        let result = body();
+        let mut scope = self.scope.borrow_mut();
+        for name in &added {
+            scope.remove(name);
+        }
+        result
+    }
+
+    /// Collects the user-written identifiers a binder pattern introduces — the
+    /// names that must shadow module bindings inside the binder's scope. Nested
+    /// tuple/struct/variant patterns contribute their leaves; the wildcard `_`
+    /// rides along but is ignored by [`Self::scoped`].
+    fn pattern_names(pattern: &Pattern, out: &mut Vec<String>) {
+        match pattern {
+            Pattern::Bind(name) => out.push(name.clone()),
+            Pattern::Tuple(fields) => fields.iter().for_each(|p| Self::pattern_names(p, out)),
+            Pattern::Struct { fields, .. } => {
+                fields.iter().for_each(|(_, p)| Self::pattern_names(p, out))
+            }
+            Pattern::Variant { args, .. } => args.iter().for_each(|p| Self::pattern_names(p, out)),
+            Pattern::Lit(_) => {}
+        }
+    }
+
+    /// The binder names of a single pattern (see [`Self::pattern_names`]).
+    fn names_of(pattern: &Pattern) -> Vec<String> {
+        let mut out = Vec::new();
+        Self::pattern_names(pattern, &mut out);
+        out
+    }
+
+    /// The binder names of a parameter list — every parameter pattern's leaves,
+    /// all in scope across the body (see [`Self::pattern_names`]).
+    fn param_names(params: &[(Pattern, Option<Term>)]) -> Vec<String> {
+        let mut out = Vec::new();
+        for (pattern, _) in params {
+            Self::pattern_names(pattern, &mut out);
+        }
+        out
     }
 
     pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
@@ -49,6 +125,15 @@ impl<'a, 'b> Lower<'a, 'b> {
     fn resolve_name(&self, name: &Name) -> Result<String, Error> {
         Ok(if name.is_abs() || !name.is_single() {
             self.context.resolve_term_name(name)?.join()
+        } else if self.scope.borrow().contains(name.head()) {
+            // A local binder shadows any like-named module binding: emit the
+            // spelled (unqualified) name, which core then resolves to the
+            // innermost enclosing binder. Without this an in-scope module binding
+            // of the same name would unlawfully capture the reference — and inside
+            // a qualified module the module's name (`std/Task/go`) and the local
+            // binder (`go`) are *different* strings, so core cannot recover from a
+            // wrong choice made here.
+            name.head().to_string()
         } else {
             match self.context.bindings().get(name.head()) {
                 Some(full) => full.join(),
@@ -63,17 +148,24 @@ impl<'a, 'b> Lower<'a, 'b> {
             Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
             Subterm::Name(name) => core::Term::var(core::Var::free(self.resolve_name(name)?)),
-            Subterm::FuncType(ft) => core::Term::func_type_marked(
-                ft.params
-                    .iter()
-                    .map(|(plicity, label, ty)| {
-                        Ok((*plicity, label.clone().unwrap_or_default(), self.term(ty)?))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-                self.term(&ft.output)?,
-            ),
+            // Each parameter type sees the *preceding* parameters' binders, and
+            // the output sees them all (a dependent Π-type), so they lower under a
+            // progressively-extended scope.
+            Subterm::FuncType(ft) => {
+                let mut seen = Vec::new();
+                let mut params = Vec::with_capacity(ft.params.len());
+                for (plicity, label, ty) in &ft.params {
+                    let domain = self.scoped(seen.clone(), || self.term(ty))?;
+                    let name = label.clone().unwrap_or_default();
+                    seen.push(name.clone());
+                    params.push((*plicity, name, domain));
+                }
+                let output = self.scoped(seen, || self.term(&ft.output))?;
+                core::Term::func_type_marked(params, output)
+            }
             Subterm::Func(func) => {
-                let body = self.term(&func.body)?;
+                let body =
+                    self.scoped(Self::param_names(&func.params), || self.term(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, body)?;
                 core::Term::func(params, body)
             }
@@ -85,14 +177,19 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .map(|(plicity, p)| Ok((*plicity, self.term(p)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Subterm::TupleType(tt) => core::Term::tuple_type(
-                tt.fields
-                    .iter()
-                    .map(|(label, type_)| {
-                        Ok((label.clone().unwrap_or_default(), self.term(type_)?))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-            ),
+            // A dependent Σ-type: each field type sees the preceding fields'
+            // labels, so they lower under a progressively-extended scope.
+            Subterm::TupleType(tt) => {
+                let mut seen = Vec::new();
+                let mut fields = Vec::with_capacity(tt.fields.len());
+                for (label, type_) in &tt.fields {
+                    let lowered = self.scoped(seen.clone(), || self.term(type_))?;
+                    let name = label.clone().unwrap_or_default();
+                    seen.push(name.clone());
+                    fields.push((name, lowered));
+                }
+                core::Term::tuple_type(fields)
+            }
             Subterm::Tuple(tuple) => core::Term::tuple_named(
                 tuple
                     .fields
@@ -151,7 +248,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                         self.term(zero_case)?,
                         pred_label.clone(),
                         ih_label.clone(),
-                        self.term(succ_case)?,
+                        self.scoped([pred_label.clone(), ih_label.clone()], || {
+                            self.term(succ_case)
+                        })?,
                     )
                 }
                 Match::Nat(NatMatch::Dispatch {
@@ -181,30 +280,43 @@ impl<'a, 'b> Lower<'a, 'b> {
                     let rows = um
                         .rows
                         .iter()
-                        .map(|(pattern, body)| Ok((pattern.clone(), self.term(body)?)))
+                        .map(|(pattern, body)| {
+                            let body =
+                                self.scoped(Self::names_of(pattern), || self.term(body))?;
+                            Ok((pattern.clone(), body))
+                        })
                         .collect::<Result<Vec<_>, Error>>()?;
                     self.union_rows(head, &um.motive, rows)?
                 }
             },
+            // A `let` is non-recursive: its binder is in scope only in the tail,
+            // never in its own type or value.
             Subterm::Let(let_) => {
                 let type_ = self.term(&let_.signature.type_())?;
                 let value = self.term(&let_.signature.body())?;
-                let tail = self.term(&let_.tail)?;
+                let tail = self.scoped(Self::names_of(&let_.binder), || self.term(&let_.tail))?;
                 self.lower_let(&let_.binder, type_, value, tail)?
             }
-            Subterm::Rec(rec) => core::Term::rec(
-                rec.items
-                    .iter()
-                    .map(|it| {
-                        Ok((
-                            it.label.clone(),
-                            self.term(&it.signature.type_())?,
-                            self.term(&it.signature.body())?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-                self.term(&rec.tail)?,
-            ),
+            // A `rec` is mutually recursive: every item label is in scope across
+            // all item types, all item bodies, and the tail.
+            Subterm::Rec(rec) => {
+                let labels = rec.items.iter().map(|it| it.label.clone()).collect::<Vec<_>>();
+                self.scoped(labels, || {
+                    Ok(core::Term::rec(
+                        rec.items
+                            .iter()
+                            .map(|it| {
+                                Ok((
+                                    it.label.clone(),
+                                    self.term(&it.signature.type_())?,
+                                    self.term(&it.signature.body())?,
+                                ))
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?,
+                        self.term(&rec.tail)?,
+                    ))
+                })?
+            }
             // `let !` opens a monadic block. The body is desugared (eliminating every
             // `Bang`) into ordinary core terms by re-elaborating the bind and applying
             // it to `(action, continuation)` per `!` site. See `region`/`instantiate`.
@@ -242,7 +354,8 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
             // A lambda re-roots the region (same bind, lexically in scope).
             Subterm::Func(func) => {
-                let body = self.region(&func.body, bind)?;
+                let body = self
+                    .scoped(Self::param_names(&func.params), || self.region(&func.body, bind))?;
                 let (params, body) = self.lower_func_params(&func.params, body)?;
                 Ok(core::Term::func(params, body))
             }
@@ -342,7 +455,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         binds: &mut Vec<(String, core::Term)>,
     ) -> Result<core::Term, Error> {
         let value = self.collect(&let_.signature.body(), bind, binds)?;
-        let tail = self.region(&let_.tail, bind)?;
+        let tail = self.scoped(Self::names_of(&let_.binder), || self.region(&let_.tail, bind))?;
         let type_ = self.term(&let_.signature.type_())?;
         self.lower_let(&let_.binder, type_, value, tail)
     }
@@ -594,7 +707,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     self.region(zero_case, bind)?,
                     pred_label.clone(),
                     ih_label.clone(),
-                    self.region(succ_case, bind)?,
+                    self.scoped([pred_label.clone(), ih_label.clone()], || {
+                        self.region(succ_case, bind)
+                    })?,
                 )
             }
             Match::Nat(NatMatch::Dispatch {
@@ -623,7 +738,11 @@ impl<'a, 'b> Lower<'a, 'b> {
                 let rows = um
                     .rows
                     .iter()
-                    .map(|(pattern, body)| Ok((pattern.clone(), self.region(body, bind)?)))
+                    .map(|(pattern, body)| {
+                        let body =
+                            self.scoped(Self::names_of(pattern), || self.region(body, bind))?;
+                        Ok((pattern.clone(), body))
+                    })
                     .collect::<Result<Vec<_>, Error>>()?;
                 self.union_rows(head, &um.motive, rows)?
             }
@@ -677,7 +796,10 @@ impl<'a, 'b> Lower<'a, 'b> {
     ) -> Result<(Option<&'m str>, core::Term), Error> {
         match motive {
             Some(Motive::Constant(body)) => Ok((None, self.term(body)?)),
-            Some(Motive::Scrutinee { label, body }) => Ok((Some(label), self.term(body)?)),
+            // The scrutinee label binds the matched value inside the motive body.
+            Some(Motive::Scrutinee { label, body }) => {
+                Ok((Some(label), self.scoped([label.clone()], || self.term(body))?))
+            }
             Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotUnion),
             None => Ok((None, core::Term::metavar(self.context.fresh_metavar()))),
         }
@@ -730,11 +852,14 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
         }
 
+        // The index binders are in scope inside the motive body.
+        let motive_body = self.scoped(binders.clone(), || self.term(body))?;
+
         Ok(core::Term::union_match_motive(
             head,
             binders,
             label,
-            self.term(body)?,
+            motive_body,
             core::MotivePattern {
                 name: resolved,
                 slots: pattern_slots,
@@ -817,7 +942,8 @@ impl<'a, 'b> Lower<'a, 'b> {
             None => None,
             Some(Motive::Constant(body)) => Some((None, self.term(body)?)),
             Some(Motive::Scrutinee { label, body }) => {
-                Some((Some(label.clone()), self.term(body)?))
+                let body = self.scoped([label.clone()], || self.term(body))?;
+                Some((Some(label.clone()), body))
             }
             Some(Motive::Annotated { .. }) => return Err(Error::DependentMatrixMotive),
         })

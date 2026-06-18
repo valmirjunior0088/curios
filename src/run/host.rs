@@ -319,8 +319,13 @@ pub trait Host {
     /// `Status::Eof` with empty bytes, or an error status.
     fn read(&self, io: Io, count: u32) -> (Status, Vec<u8>);
 
-    /// Write `bytes` to `io`, returning a status.
-    fn write(&self, io: Io, bytes: &[u8]) -> Status;
+    /// Write `bytes` to `io`, returning `(status, written)`: the number of bytes
+    /// actually accepted this call. On a non-blocking handle a single `write`
+    /// may take only a prefix before the kernel buffer fills — `written` is that
+    /// prefix length so the caller can advance and resend only the unwritten
+    /// tail, never duplicating bytes. `Status::WouldBlock` reports `written` 0
+    /// (nothing moved); the blocking std streams always report the full length.
+    fn write(&self, io: Io, bytes: &[u8]) -> (Status, u32);
 
     /// Read the wall clock. Returns `(secs_hi, secs_lo, nanos)`: seconds since
     /// the Unix epoch split base-10⁹ so each limb fits an i31, plus sub-second

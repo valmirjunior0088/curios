@@ -17,9 +17,9 @@ use {
 //     cargo run --example crs_http --features cli
 fn main() {
     let source = r#"
-        use /std/{Http, Io, Str, Nat};
+        use /std/{Http, Io, Str, Nat, Task};
 
-        match Http/perform(Http/get("example.com", 80, "/")) : {}
+        match Task/block_on(Http/perform(Http/get("example.com", 80, "/"))) : {}
         | success(response) =>
             Io/print(Str/concat_all([
                 "status: ",

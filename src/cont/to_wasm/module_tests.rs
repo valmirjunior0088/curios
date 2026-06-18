@@ -222,11 +222,28 @@ fn lowers_and_runs_mutually_recursive_closures() {
                                     "out",
                                 ))),
                             )],
-                            blocks: vec![],
+                            blocks: vec![(
+                                cont::BlockName::from("io_done"),
+                                cont::Block {
+                                    params: vec![
+                                        cont::ValueName::from("io_status"),
+                                        cont::ValueName::from("io_written"),
+                                    ],
+                                    region: cont::Region {
+                                        preallocs: vec![],
+                                        values: vec![],
+                                        blocks: vec![],
+                                        tail: cont::Tail::Jump(cont::JumpTarget {
+                                            target: cont::BlockName::from("r"),
+                                            params: vec![cont::ValueName::from("io_status")],
+                                        }),
+                                    },
+                                },
+                            )],
                             tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                                 handle: cont::ValueName::from("STDOUT"),
                                 bytes: cont::ValueName::from("str"),
-                                resume: cont::BlockName::from("r"),
+                                resume: cont::BlockName::from("io_done"),
                             }),
                         },
                     },
@@ -296,11 +313,28 @@ fn lowers_and_runs_direct_call() {
                                     "out",
                                 ))),
                             )],
-                            blocks: vec![],
+                            blocks: vec![(
+                                cont::BlockName::from("io_done"),
+                                cont::Block {
+                                    params: vec![
+                                        cont::ValueName::from("io_status"),
+                                        cont::ValueName::from("io_written"),
+                                    ],
+                                    region: cont::Region {
+                                        preallocs: vec![],
+                                        values: vec![],
+                                        blocks: vec![],
+                                        tail: cont::Tail::Jump(cont::JumpTarget {
+                                            target: cont::BlockName::from("r"),
+                                            params: vec![cont::ValueName::from("io_status")],
+                                        }),
+                                    },
+                                },
+                            )],
                             tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                                 handle: cont::ValueName::from("STDOUT"),
                                 bytes: cont::ValueName::from("str"),
-                                resume: cont::BlockName::from("r"),
+                                resume: cont::BlockName::from("io_done"),
                             }),
                         },
                     },
@@ -378,11 +412,28 @@ fn lowers_and_runs_float_result() {
                         cont::Value::Eval(cont::Code::FltToStr(cont::ValueName::from("sum"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -425,11 +476,28 @@ fn lowers_and_runs_global_tuple() {
                         cont::Value::Eval(cont::Code::IntToStr(cont::ValueName::from("out"))),
                     ),
                 ],
-                blocks: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                     handle: cont::ValueName::from("STDOUT"),
                     bytes: cont::ValueName::from("str"),
-                    resume: cont::BlockName::from("r"),
+                    resume: cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -500,11 +568,28 @@ fn lowers_and_runs_global_closure() {
                                     "out",
                                 ))),
                             )],
-                            blocks: vec![],
+                            blocks: vec![(
+                                cont::BlockName::from("io_done"),
+                                cont::Block {
+                                    params: vec![
+                                        cont::ValueName::from("io_status"),
+                                        cont::ValueName::from("io_written"),
+                                    ],
+                                    region: cont::Region {
+                                        preallocs: vec![],
+                                        values: vec![],
+                                        blocks: vec![],
+                                        tail: cont::Tail::Jump(cont::JumpTarget {
+                                            target: cont::BlockName::from("r"),
+                                            params: vec![cont::ValueName::from("io_status")],
+                                        }),
+                                    },
+                                },
+                            )],
                             tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                                 handle: cont::ValueName::from("STDOUT"),
                                 bytes: cont::ValueName::from("str"),
-                                resume: cont::BlockName::from("r"),
+                                resume: cont::BlockName::from("io_done"),
                             }),
                         },
                     },
@@ -555,11 +640,28 @@ fn lowers_and_runs_sparse_match() {
                                         "out",
                                     ))),
                                 )],
-                                blocks: vec![],
+                                blocks: vec![(
+                                    cont::BlockName::from("io_done"),
+                                    cont::Block {
+                                        params: vec![
+                                            cont::ValueName::from("io_status"),
+                                            cont::ValueName::from("io_written"),
+                                        ],
+                                        region: cont::Region {
+                                            preallocs: vec![],
+                                            values: vec![],
+                                            blocks: vec![],
+                                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                                target: cont::BlockName::from("r"),
+                                                params: vec![cont::ValueName::from("io_status")],
+                                            }),
+                                        },
+                                    },
+                                )],
                                 tail: cont::Tail::Host(cont::HostTarget::IoWrite {
                                     handle: cont::ValueName::from("STDOUT"),
                                     bytes: cont::ValueName::from("str"),
-                                    resume: cont::BlockName::from("r"),
+                                    resume: cont::BlockName::from("io_done"),
                                 }),
                             },
                         },

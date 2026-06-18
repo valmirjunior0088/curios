@@ -136,12 +136,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.io_write_used() {
+            // `(handle, bytes) -> (status, written)`.
             self.add_host_import(
                 "io_write",
                 wasm::TypeName::from("io_write"),
                 self.table.io_write_func().clone(),
                 wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
-                wasm::ResultType::from([status_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
 

@@ -102,6 +102,34 @@ fn empty_bin_literal_is_the_empty_sequence() {
     );
 }
 
+// Local binders shadow like-named *module* bindings, and a local name never
+// leaks past its lexical scope. Inside `mod Foo` the module binding is `Foo/go`:
+// an inner `let go` must shadow it (so `shadowed` is 3, not the captured 7),
+// while a `go` that is a sibling of an inner `let go = 3` — reached only after
+// that scope closes — must resolve back to `Foo/go` (so `sibling` is 7, not a
+// leaked, unbound bare `go`). Encoded as 3*10 + 7 = 37, so the unlawful-capture
+// regression reads 77 and a scope leak fails to compile.
+#[test]
+fn local_binders_shadow_module_bindings_without_leaking() {
+    let source = r#"
+        use /std/{Nat, Io, Str};
+        mod Foo
+            pub let go : /std/Nat = 7;
+            pub let shadowed : /std/Nat =
+                let go : /std/Nat = 3;
+                go;
+            pub let sibling : /std/Nat =
+                let probe : /std/Nat = (let go : /std/Nat = 3; go);
+                go;
+        end
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"37");
+}
+
 // Named fields end to end: a dependent record (the vector's length indexes its
 // type) constructed with written names, consumed through `.label` and `.index`
 // access on the same value — both resolve to the same positional projection.
@@ -151,8 +179,8 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn file_read_all_reads_a_seeded_file() {
     let source = r#"
-        use /std/{File, Io};
-        match File/read_all("data.txt")
+        use /std/{File, Io, Task};
+        match Task/block_on(File/read_all("data.txt"))
         | success(contents) => Io/write(Io/stdout, contents)
         | failure(_) => Io/write(Io/stdout, /std/Str/to_bin("error"))
         end
@@ -170,14 +198,16 @@ fn file_read_all_reads_a_seeded_file() {
 #[test]
 fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
-        use /std/{File, Io};
-        match File/read_all("nope.txt")
+        use /std/{File, Io, Task};
+        match Task/block_on(File/read_all("nope.txt"))
         | success(_) => Io/print("contents")
         | failure(e) =>
             match e : {}
             | not_found() => Io/print("not found")
             | permission_denied() => Io/print("denied")
             | exists() => Io/print("exists")
+            | refused() => Io/print("refused")
+            | tls() => Io/print("tls")
             | other(_) => Io/print("other")
             end
         end
@@ -194,8 +224,8 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 #[test]
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
-        use /std/{File, Io};
-        match File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written")))
+        use /std/{File, Io, Task};
+        match Task/block_on(File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -216,8 +246,8 @@ fn file_with_write_mode_persists_through_close() {
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
-        use /std/{File, Io};
-        match File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x")))
+        use /std/{File, Io, Task};
+        match Task/block_on(File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -238,8 +268,14 @@ fn effectful_match_scrutinee_runs_once() {
 #[test]
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Io, Str};
-        match File/with("lines.txt", File/Mode/read(), (f) => File/read(f, 1024).bytes)
+        use /std/{File, Io, Str, Bin, Task};
+        match Task/block_on(File/with("lines.txt", File/Mode/read(), (f) =>
+            Task/bind(File/read(f, 1024), (r) =>
+                match r : Task(Bin)
+                | chunk(b) => Task/pure(b)
+                | eof() => Task/pure(\\)
+                | error(_) => Task/pure(\\)
+                end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
@@ -720,7 +756,7 @@ fn implicit_union_type_param_executes() {
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
         match inferred : Nat
-        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z)))
+        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))).status
         end
         "#;
 
@@ -767,7 +803,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : Nat
-        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z)))
+        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))).status
         end
         "#;
 
@@ -864,7 +900,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
         match v : Nat
         | nil() => 0
-        | cons(p, rest) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1)))
+        | cons(p, rest) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))).status
         end
         "#;
 
@@ -2000,8 +2036,8 @@ fn proc_env_found_unwraps_to_some() {
         Duration::from_secs(5),
         r#"
         match /std/Proc/env("HOME") : std/Nat
-        | some(v) => std/Io/write(std/Io/stdout, v)
-        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing"))
+        | some(v) => std/Io/write(std/Io/stdout, v).status
+        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")).status
         end
         "#,
         system,
@@ -2021,8 +2057,8 @@ fn proc_env_absent_is_none() {
         Duration::from_secs(5),
         r#"
         match /std/Proc/env("NOPE") : std/Nat
-        | some(v) => std/Io/write(std/Io/stdout, v)
-        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing"))
+        | some(v) => std/Io/write(std/Io/stdout, v).status
+        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")).status
         end
         "#,
         system,
@@ -2191,8 +2227,8 @@ fn match_arm_tuple_destructures() {
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
     let source = r#"
-        use /std/{Net, Io, Str};
-        match Net/call(Net/default, "example.com", 80, Str/to_bin("GET /\r\n\r\n"))
+        use /std/{Net, Io, Str, Task};
+        match Task/block_on(Net/call(Net/default, "example.com", 80, Str/to_bin("GET /\r\n\r\n")))
         | success(response) => Io/write(Io/stdout, response)
         | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
@@ -2213,13 +2249,16 @@ fn net_call_round_trips_a_scripted_endpoint() {
 #[test]
 fn net_call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
-        use /std/{Net, Io};
-        match Net/call(Net/default, "example.com", 80, /std/Str/to_bin("ping"))
+        use /std/{Net, Io, Task};
+        match Task/block_on(Net/call(Net/default, "example.com", 80, /std/Str/to_bin("ping")))
         | success(_) => Io/print("connected")
         | failure(e) =>
             match e : {}
             | refused() => Io/print("refused")
             | tls() => Io/print("tls")
+            | not_found() => Io/print("not found")
+            | permission_denied() => Io/print("denied")
+            | exists() => Io/print("exists")
             | other(_) => Io/print("other")
             end
         end
@@ -2238,14 +2277,20 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
-        use /std/{Net, Io, Str, Option, Time};
+        use /std/{Net, Io, Str, Bin, Option, Time, Task};
         let settings = Net/Settings {
             connect_timeout = Option/some(Time/of_millis(500)),
             read_timeout = Option/none(),
             write_timeout = Option/none(),
             tls = false
         };
-        match Net/with(settings, "db.internal", 5432, (s) => Net/read(s, 64).bytes)
+        match Task/block_on(Net/with(settings, "db.internal", 5432, (s) =>
+            Task/bind(Net/read(s, 64), (r) =>
+                match r : Task(Bin)
+                | chunk(b) => Task/pure(b)
+                | eof() => Task/pure(\\)
+                | error(_) => Task/pure(\\)
+                end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
@@ -2267,11 +2312,15 @@ fn net_with_custom_timeout_config_reads_response() {
 #[test]
 fn net_serve_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Net, Io, Str, Bin};
-        match Net/serve("0.0.0.0", 8080, (c) =>
-            let req = Net/read(c, 64);
-            let wrote = Net/write(c, Bin/concat(Str/to_bin("echo: "), req.bytes));
-            ()) : {}
+        use /std/{Net, Io, Str, Bin, Task};
+        match Task/block_on(Net/serve("0.0.0.0", 8080, (c) =>
+            Task/bind(Net/read(c, 64), (r) =>
+                match r : Task({})
+                | chunk(bytes) =>
+                    Task/bind(Net/write(c, Bin/concat(Str/to_bin("echo: "), bytes)), (wrote) => Task/pure(()))
+                | eof() => Task/pure(())
+                | error(_) => Task/pure(())
+                end))) : {}
         | success(u) => ()
         | failure(_) => Io/print("listen failed")
         end
@@ -2290,14 +2339,20 @@ fn net_serve_handles_a_scripted_inbound_connection() {
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"
-        use /std/{Net, Io, Str, Option};
+        use /std/{Net, Io, Str, Bin, Option, Task};
         let settings = Net/Settings {
             connect_timeout = Option/none(),
             read_timeout = Option/none(),
             write_timeout = Option/none(),
             tls = true
         };
-        match Net/with(settings, "secure.example", 443, (s) => Net/read(s, 64).bytes)
+        match Task/block_on(Net/with(settings, "secure.example", 443, (s) =>
+            Task/bind(Net/read(s, 64), (r) =>
+                match r : Task(Bin)
+                | chunk(b) => Task/pure(b)
+                | eof() => Task/pure(\\)
+                | error(_) => Task/pure(\\)
+                end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
@@ -2317,11 +2372,15 @@ fn net_with_tls_upgrades_and_reads() {
 #[test]
 fn net_serve_tls_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Net, Io, Str, Bin};
-        match Net/serve_tls("0.0.0.0", 8443, Str/to_bin("CERT"), Str/to_bin("KEY"), (c) =>
-            let req = Net/read(c, 64);
-            let wrote = Net/write(c, Bin/concat(Str/to_bin("tls: "), req.bytes));
-            ()) : {}
+        use /std/{Net, Io, Str, Bin, Task};
+        match Task/block_on(Net/serve_tls("0.0.0.0", 8443, Str/to_bin("CERT"), Str/to_bin("KEY"), (c) =>
+            Task/bind(Net/read(c, 64), (r) =>
+                match r : Task({})
+                | chunk(bytes) =>
+                    Task/bind(Net/write(c, Bin/concat(Str/to_bin("tls: "), bytes)), (wrote) => Task/pure(()))
+                | eof() => Task/pure(())
+                | error(_) => Task/pure(())
+                end))) : {}
         | success(u) => ()
         | failure(_) => Io/print("serve failed")
         end
@@ -2338,8 +2397,8 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 #[test]
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
-        use /std/{Http, Io, Str, Nat};
-        match Http/perform(Http/get("example.com", 80, "/")) : Nat
+        use /std/{Http, Io, Str, Nat, Task};
+        match Task/block_on(Http/perform(Http/get("example.com", 80, "/"))) : Nat
         | success(response) =>
             let ct = match Http/header(response, "Content-Type") : Str
                 | some(value) => value
@@ -2349,10 +2408,10 @@ fn http_perform_parses_a_scripted_response() {
             | some(body) =>
                 Io/write(Io/stdout, Str/to_bin(Str/concat_all([
                     Nat/to_str(response.status.code), " ", ct, " ", body
-                ])))
-            | none() => Io/write(Io/stdout, Str/to_bin("bad body"))
+                ]))).status
+            | none() => Io/write(Io/stdout, Str/to_bin("bad body")).status
             end
-        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
+        | failure(_) => Io/write(Io/stdout, Str/to_bin("error")).status
         end
         "#;
 
@@ -2407,7 +2466,7 @@ fn task_scheduler_parks_polls_and_resumes() {
             Task/wait(Io/stdin, 1, (u) =>
                 let wrote = Io/write(Io/stdout, Str/to_bin("ok"));
                 Task/done(()));
-        Task/run(Lst/cons(Task/fiber(prog), Lst/nil()), Lst/nil())
+        Task/run(Lst/cons(Task/fiber(prog, Lst/nil()), Lst/nil()), Lst/nil())
         "#,
         system,
     )
@@ -2425,11 +2484,17 @@ fn task_bind_reads_and_echoes() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Task, Io, Nat};
-        let prog : Task(Nat) =
+        use /std/{Task, Io};
+        let prog : Task({}) =
             let ! = Task/bind;
             let r = Task/read(Io/stdin, 1024)!;
-            Task/write(Io/stdout, r.bytes);
+            match r : Task({})
+            | chunk(bytes) =>
+                let wrote = Io/write(Io/stdout, bytes);
+                Task/pure(())
+            | eof() => Task/pure(())
+            | error(_) => Task/pure(())
+            end;
         Task/block_on(prog)
         "#,
         system,
@@ -2488,7 +2553,7 @@ fn run_schedules_a_heterogeneous_fiber_list() {
                 let w = Io/write(Io/stdout, Str/to_bin("two;"));
                 Task/done(()));
         let ready : Lst(Task/Fiber) =
-            Lst/cons(Task/fiber(one), Lst/cons(Task/fiber(two), Lst/nil()));
+            Lst/cons(Task/fiber(one, Lst/nil()), Lst/cons(Task/fiber(two, Lst/nil()), Lst/nil()));
         Task/run(ready, Lst/nil())
         "#,
         system,
@@ -2510,6 +2575,8 @@ fn label_projection_resolves_on_a_type_valued_field() {
             | done(a) => (b.A, Task/done(a))
             | wait(h, ev, k) => (b.A, k(()))
             | spawn(c, k) => (b.A, k(()))
+            | protect(fin, k) => (b.A, k(()))
+            | unprotect(k) => (b.A, k(()))
             end;
         let boxed : Box = (Nat, Task/pure(7));
         let stepped = step(boxed);
@@ -2543,6 +2610,8 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             | done(a) => (b.A, Task/done(a))
             | wait(h, ev, k) => (b.A, k(()))
             | spawn(c, k) => (b.A, k(()))
+            | protect(fin, k) => (b.A, k(()))
+            | unprotect(k) => (b.A, k(()))
             end, boxes);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
         "#,

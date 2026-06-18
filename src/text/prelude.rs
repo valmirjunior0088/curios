@@ -347,7 +347,7 @@ fn io_ops() -> Vec<TopItem> {
         pub_fn(
             "write",
             vec![("h", io()), ("b", bin())],
-            nat(),
+            record(vec![("status", nat()), ("written", nat())]),
             prim(Prim::IoWrite(name("h"), name("b"))),
         ),
         pub_fn(
