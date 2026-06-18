@@ -186,6 +186,7 @@ fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
         | FltMin(a, b)
         | FltMax(a, b)
         | BinEql(a, b)
+        | IoEql(a, b)
         | BinGet(a, b)
         | BinAppend(a, b)
         | ArrGet(a, b)

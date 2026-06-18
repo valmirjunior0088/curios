@@ -606,7 +606,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 count,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(count, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_read_func().clone(),
@@ -620,7 +620,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 bytes,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(bytes, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_write_func().clone(),
@@ -661,7 +661,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 addr,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(addr, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_bind_func().clone(),
@@ -675,7 +675,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 addr,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(addr, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_connect_func().clone(),
@@ -688,7 +688,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 sni,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(sni, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_start_tls_func().clone(),
@@ -711,8 +711,8 @@ impl<'a, 'b> Context<'a, 'b> {
                 cfg,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
-                output.extend(self.load_value_instrs(cfg, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
+                output.extend(self.load_value_instrs(cfg, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_start_tls_server_func().clone(),
                 });
@@ -724,7 +724,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 backlog,
                 resume,
             } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(backlog, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_listen_func().clone(),
@@ -733,7 +733,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoAccept { handle, resume } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_accept_func().clone(),
                 });
@@ -741,7 +741,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_multi_resume(&mut output, resume, 2);
             }
             cont::HostTarget::IoSetNonblocking { handle, on, resume } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(on, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_set_nonblocking_func().clone(),
@@ -750,7 +750,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoSetRecvTimeout { handle, ms, resume } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(ms, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_set_recv_timeout_func().clone(),
@@ -759,7 +759,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoSetSendTimeout { handle, ms, resume } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(ms, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_set_send_timeout_func().clone(),
@@ -768,7 +768,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoSetReuseaddr { handle, on, resume } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.extend(self.load_value_instrs(on, LoadAs::Nat));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_set_reuseaddr_func().clone(),
@@ -797,7 +797,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_single_resume(&mut output, resume);
             }
             cont::HostTarget::IoClose { handle, resume } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Nat));
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_close_func().clone(),
                 });

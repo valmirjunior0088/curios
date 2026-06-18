@@ -147,6 +147,7 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
         PurePrim::Io(token) => pure(format!("Io({token})")),
+        PurePrim::IoEql(left, right) => print_binary("Io.eql", left, right),
         PurePrim::Unit => pure("()"),
     }
 }

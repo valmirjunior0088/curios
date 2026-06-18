@@ -5,7 +5,7 @@ fn lowers_unreachable_tail_to_trap() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_func(
         cont::FuncName::from("main"),
@@ -33,7 +33,7 @@ fn lowers_and_runs_mutually_recursive_closures() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_const(cont::ValueName::from("ZERO"), cont::Data::Int(0));
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
@@ -265,7 +265,7 @@ fn lowers_and_runs_direct_call() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
     module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
@@ -356,7 +356,7 @@ fn lowers_and_runs_unit_result() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_func(
         cont::FuncName::from("main"),
@@ -386,7 +386,7 @@ fn lowers_and_runs_float_result() {
     let mut cont_module = cont::Module::new();
     cont_module.set_entry(cont::FuncName::from("main"));
 
-    cont_module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    cont_module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     cont_module.add_const(cont::ValueName::from("LEFT"), cont::Data::Flt(1.25));
 
@@ -447,7 +447,7 @@ fn lowers_and_runs_global_tuple() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
     module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
@@ -511,7 +511,7 @@ fn lowers_and_runs_global_closure() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_const(cont::ValueName::from("BIAS"), cont::Data::Int(5));
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Int(3));
@@ -611,7 +611,7 @@ fn lowers_and_runs_sparse_match() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
 
     module.add_const(cont::ValueName::from("BYTE"), cont::Data::Nat(123)); // '{'
     module.add_const(cont::ValueName::from("R0"), cont::Data::Nat(0));

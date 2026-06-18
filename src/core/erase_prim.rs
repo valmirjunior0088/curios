@@ -119,8 +119,10 @@ pub fn erase_prim(
             }
         }
         Prim::NatEql(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatEql),
-        // Handles are i31 tokens, so identity is just the `Nat` equality op.
-        Prim::IoEql(l, r) => binary(context, l, r, io_type, ersd::PurePrim::NatEql),
+        // Handle identity stays abstract through `ersd`; the `ersd → cont`
+        // lowering is the one place that knows a handle is bytes and turns this
+        // into the corresponding `Bin` comparison.
+        Prim::IoEql(l, r) => binary(context, l, r, io_type, ersd::PurePrim::IoEql),
         Prim::NatAdd(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatAdd),
         Prim::NatSub(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatSub),
         Prim::NatMul(l, r) => binary(context, l, r, nat_type, ersd::PurePrim::NatMul),

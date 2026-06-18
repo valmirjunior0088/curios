@@ -122,19 +122,23 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [i31_ref.clone(), bin_ref.clone()],
     );
     let io_exit_type = FuncType::new(engine, [ValType::I32], []);
+    // A handle crosses as a `Bin` (`bin_ref`) in both directions now, so every
+    // handle operand and every handle result is `bin_ref`; only non-handle
+    // scalars stay raw `i32` and only the status results stay `i31_ref`.
     let io_read_type = FuncType::new(
         engine,
-        [ValType::I32, ValType::I32],
+        [bin_ref.clone(), ValType::I32],
         [i31_ref.clone(), bin_ref.clone()],
     );
     let io_write_type = FuncType::new(
         engine,
-        [ValType::I32, bin_ref.clone()],
+        [bin_ref.clone(), bin_ref.clone()],
         [i31_ref.clone(), i31_ref.clone()],
     );
-    let io_connect_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
-    let io_listen_type = FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
-    let io_accept_type = FuncType::new(engine, [ValType::I32], [i31_ref.clone(), i31_ref.clone()]);
+    let io_connect_type =
+        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
+    let io_listen_type = FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
+    let io_accept_type = FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), bin_ref.clone()]);
     let io_resolve_type = FuncType::new(
         engine,
         [bin_ref.clone(), ValType::I32],
@@ -143,27 +147,32 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let io_socket_type = FuncType::new(
         engine,
         [bin_ref.clone()],
-        [i31_ref.clone(), i31_ref.clone()],
+        [i31_ref.clone(), bin_ref.clone()],
     );
     let io_start_tls_type =
-        FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
     let io_tls_server_config_type = FuncType::new(
         engine,
         [bin_ref.clone(), bin_ref.clone()],
-        [i31_ref.clone(), i31_ref.clone()],
+        [i31_ref.clone(), bin_ref.clone()],
     );
     let io_start_tls_server_type =
-        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
-    let io_bind_type = FuncType::new(engine, [ValType::I32, bin_ref.clone()], [i31_ref.clone()]);
+        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
+    let io_bind_type =
+        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
     let io_set_nonblocking_type =
-        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+        FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
     let io_set_recv_timeout_type =
-        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+        FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
     let io_set_send_timeout_type =
-        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
+        FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
     let io_set_reuseaddr_type =
-        FuncType::new(engine, [ValType::I32, ValType::I32], [i31_ref.clone()]);
-    let io_open_type = FuncType::new(engine, [bin_ref, ValType::I32], [i31_ref.clone(), i31_ref]);
+        FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
+    let io_open_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), ValType::I32],
+        [i31_ref.clone(), bin_ref.clone()],
+    );
     // `(handles : Arr(Io), events : Arr(Nat), timeout : Int) -> revents :
     // Arr(Nat)`: the two array params and the array result all cross as the
     // uniform `arr_ref`; `timeout` is a raw i32 (the signed poll(2) convention).
@@ -172,7 +181,7 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [arr_ref.clone(), arr_ref.clone(), ValType::I32],
         [arr_ref.clone()],
     );
-    let io_close_type = FuncType::new(engine, [ValType::I32], []);
+    let io_close_type = FuncType::new(engine, [bin_ref.clone()], []);
 
     let mut linker = Linker::new(engine);
     let host = Arc::new(host);

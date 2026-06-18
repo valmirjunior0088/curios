@@ -80,6 +80,10 @@ pub enum PurePrim {
     ArrAppend(Term, Term),
     ArrConcat(Vec<Term>),
     Io(u32),
+    /// Handle identity. Kept abstract through `ersd`: the byte representation a
+    /// handle erases to is only chosen at the `ersd → cont` lowering, where this
+    /// becomes a `Bin` comparison.
+    IoEql(Term, Term),
     Unit,
 }
 

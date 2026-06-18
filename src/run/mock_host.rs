@@ -2,10 +2,7 @@ use {
     super::host::*,
     std::{
         collections::{HashMap, VecDeque},
-        sync::{
-            Arc, Mutex,
-            atomic::{AtomicU32, Ordering},
-        },
+        sync::{Arc, Mutex},
     },
 };
 
@@ -108,7 +105,6 @@ enum MockResource {
 /// `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and
 /// read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    handle_seed: AtomicU32,
     /// Scripted stdin, pre-joined and newline-terminated; `read(Io::Stdin, …)`
     /// drains its front and reports `Status::Eof` once it runs dry.
     input: Mutex<VecDeque<u8>>,
@@ -118,12 +114,12 @@ pub struct MockHost {
     /// The in-memory filesystem backing `open`/`read`/`write`/`close`. Shared
     /// with [`MockIo::file`].
     files: MockFileSystem,
-    /// One table for every non-stdio handle, keyed by token: open files,
+    /// One table for every non-stdio handle, keyed by token bytes: open files,
     /// outbound/inbound connections, and unconnected/listening sockets. The BSD
     /// lifecycle transitions a handle in place (`socket` → `connect`/`listen` →
     /// `accept`) and `close` releases any kind uniformly — the scripted mirror
     /// of `OsHost`'s real-resource table.
-    table: Mutex<HashMap<u32, MockResource>>,
+    table: Mutex<Table<MockResource>>,
     /// Scripted network endpoints: `host:port` → the bytes a connection serves
     /// on read. Read-only during the run; connecting elsewhere is refused.
     endpoints: HashMap<Vec<u8>, Vec<u8>>,
@@ -151,6 +147,12 @@ impl MockHost {
         MockHostBuilder::default()
     }
 
+    /// Mint a fresh handle for `resource` under the table lock (see
+    /// [`MockTable::mint`]).
+    fn mint(&self, resource: MockResource) -> Io {
+        self.table.lock().unwrap().mint(resource)
+    }
+
     /// Serve up to `count` bytes of `contents` from `*position`, advancing the
     /// cursor; `Status::Eof` with empty bytes once it reaches the end. The shared
     /// shape of every scripted read (file, inbound request, outbound response).
@@ -172,25 +174,21 @@ impl Host for MockHost {
         match mode {
             Mode::Read => {
                 if !self.files.contains(path) {
-                    return (Status::NotFound, Io::Other(0));
+                    return (Status::NotFound, Io::Other(Vec::new()));
                 }
             }
             Mode::Write => self.files.truncate(path),
             Mode::Append => self.files.ensure(path),
         }
 
-        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
-
-        self.table.lock().unwrap().insert(
-            handle,
-            MockResource::File(MockFile {
+        (
+            Status::Ok,
+            self.mint(MockResource::File(MockFile {
                 path: path.to_vec(),
                 mode,
                 position: 0,
-            }),
-        );
-
-        (Status::Ok, Io::Other(handle))
+            })),
+        )
     }
 
     fn resolve(&self, host: &[u8], port: u32) -> (Status, Vec<Vec<u8>>) {
@@ -202,18 +200,12 @@ impl Host for MockHost {
     }
 
     fn socket(&self, _addr: &[u8]) -> (Status, Io) {
-        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
-        self.table
-            .lock()
-            .unwrap()
-            .insert(handle, MockResource::Socket);
-
-        (Status::Ok, Io::Other(handle))
+        (Status::Ok, self.mint(MockResource::Socket))
     }
 
     fn bind(&self, io: Io, _addr: &[u8]) -> Status {
         if matches!(
-            self.table.lock().unwrap().get(&io.token()),
+            self.table.lock().unwrap().get(&io),
             Some(MockResource::Socket)
         ) {
             Status::Ok
@@ -228,9 +220,9 @@ impl Host for MockHost {
         {
             let mut table = self.table.lock().unwrap();
 
-            match table.get(&io.token()) {
+            match table.get(&io) {
                 Some(MockResource::Socket) => {
-                    table.remove(&io.token());
+                    table.remove(&io);
                 }
                 _ => return Status::NotFound,
             }
@@ -242,7 +234,7 @@ impl Host for MockHost {
         };
 
         self.table.lock().unwrap().insert(
-            io.token(),
+            &io,
             MockResource::Outbound(MockClient {
                 response,
                 position: 0,
@@ -256,7 +248,7 @@ impl Host for MockHost {
         // The scripted host serves cleartext; a client TLS upgrade is a no-op
         // identity over the existing outbound connection.
         if matches!(
-            self.table.lock().unwrap().get(&io.token()),
+            self.table.lock().unwrap().get(&io),
             Some(MockResource::Outbound(_))
         ) {
             Status::Ok
@@ -268,21 +260,15 @@ impl Host for MockHost {
     fn tls_server_config(&self, _cert: &[u8], _key: &[u8]) -> (Status, Io) {
         // No real config under test — just mint a token the handle table can
         // hand back to `start_tls_server`.
-        let handle = self.handle_seed.fetch_add(1, Ordering::Relaxed);
-        self.table
-            .lock()
-            .unwrap()
-            .insert(handle, MockResource::TlsConfig);
-
-        (Status::Ok, Io::Other(handle))
+        (Status::Ok, self.mint(MockResource::TlsConfig))
     }
 
     fn start_tls_server(&self, io: Io, cfg: Io) -> Status {
         // A no-op identity over the accepted connection, given a config token.
         let table = self.table.lock().unwrap();
 
-        let has_config = matches!(table.get(&cfg.token()), Some(MockResource::TlsConfig));
-        let has_conn = matches!(table.get(&io.token()), Some(MockResource::Inbound(_)));
+        let has_config = matches!(table.get(&cfg), Some(MockResource::TlsConfig));
+        let has_conn = matches!(table.get(&io), Some(MockResource::Inbound(_)));
 
         if has_config && has_conn {
             Status::Ok
@@ -294,9 +280,9 @@ impl Host for MockHost {
     fn listen(&self, io: Io, _backlog: u32) -> Status {
         let mut table = self.table.lock().unwrap();
 
-        match table.get(&io.token()) {
+        match table.get(&io) {
             Some(MockResource::Socket) => {
-                table.insert(io.token(), MockResource::Listener);
+                table.insert(&io, MockResource::Listener);
                 Status::Ok
             }
             _ => Status::NotFound,
@@ -305,17 +291,17 @@ impl Host for MockHost {
 
     fn accept(&self, io: Io) -> (Status, Io) {
         if !matches!(
-            self.table.lock().unwrap().get(&io.token()),
+            self.table.lock().unwrap().get(&io),
             Some(MockResource::Listener)
         ) {
-            return (Status::NotFound, Io::Other(0));
+            return (Status::NotFound, Io::Other(Vec::new()));
         }
 
         // Pull the next scripted request. An exhausted queue fails the accept,
         // ending the serve loop (a real blocking accept would park forever).
         let request = match self.inbound.lock().unwrap().pop_front() {
             Some(request) => request,
-            None => return (Status::NotFound, Io::Other(0)),
+            None => return (Status::NotFound, Io::Other(Vec::new())),
         };
 
         let capture = {
@@ -325,17 +311,14 @@ impl Host for MockHost {
             index
         };
 
-        let conn = self.handle_seed.fetch_add(1, Ordering::Relaxed);
-        self.table.lock().unwrap().insert(
-            conn,
-            MockResource::Inbound(MockServer {
+        (
+            Status::Ok,
+            self.mint(MockResource::Inbound(MockServer {
                 request,
                 position: 0,
                 capture,
-            }),
-        );
-
-        (Status::Ok, Io::Other(conn))
+            })),
+        )
     }
 
     fn set_nonblocking(&self, _io: Io, _on: u32) -> Status {
@@ -367,7 +350,7 @@ impl Host for MockHost {
             .map(|(slot, handle)| {
                 let known = match handle {
                     Io::Stdin | Io::Stdout | Io::Stderr => true,
-                    Io::Other(token) => table.contains_key(token),
+                    Io::Other(_) => table.contains(handle),
                 };
 
                 if known {
@@ -380,11 +363,11 @@ impl Host for MockHost {
     }
 
     fn close(&self, io: Io) {
-        self.table.lock().unwrap().remove(&io.token());
+        self.table.lock().unwrap().remove(&io);
     }
 
     fn read(&self, io: Io, count: u32) -> (Status, Vec<u8>) {
-        let handle = match io {
+        match &io {
             Io::Stdin => {
                 // Scripted stdin is one pre-joined buffer; serve up to `count` of
                 // its front and report EOF once it is drained (the sender is fixed
@@ -399,12 +382,12 @@ impl Host for MockHost {
 
                 return (Status::Ok, input.drain(..served).collect());
             }
-            Io::Other(handle) => handle,
+            Io::Other(_) => {}
             // stdout/stderr are not readable.
             _ => return (Status::Eof, vec![]),
-        };
+        }
 
-        match self.table.lock().unwrap().get_mut(&handle) {
+        match self.table.lock().unwrap().get_mut(&io) {
             // File-backed handle: serve from the in-memory filesystem.
             Some(MockResource::File(open)) => {
                 if open.mode != Mode::Read {
@@ -432,18 +415,18 @@ impl Host for MockHost {
         // successful write reports the full length and never `WouldBlock`.
         let full = bytes.len() as u32;
 
-        let handle = match io {
+        match &io {
             Io::Stdout | Io::Stderr => {
                 self.output.lock().unwrap().extend_from_slice(bytes);
 
                 return (Status::Ok, full);
             }
-            Io::Other(handle) => handle,
+            Io::Other(_) => {}
             // stdin is not writable; the guest's `/std/Io` never issues this.
             Io::Stdin => panic!("write to stdin"),
-        };
+        }
 
-        match self.table.lock().unwrap().get(&handle) {
+        match self.table.lock().unwrap().get(&io) {
             // File-backed handle: append to the in-memory filesystem.
             Some(MockResource::File(open)) => {
                 if open.mode == Mode::Read {
@@ -693,11 +676,10 @@ impl MockHostBuilder {
         };
 
         let host = MockHost {
-            handle_seed: AtomicU32::new(Io::HANDLE_SEED),
             input: Mutex::new(self.input.into()),
             output,
             files,
-            table: Mutex::new(HashMap::new()),
+            table: Mutex::new(Table::new()),
             endpoints: self.endpoints,
             inbound: Mutex::new(self.inbound),
             captures,
@@ -709,5 +691,37 @@ impl MockHostBuilder {
         };
 
         (host, io)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{super::host::*, MockHost};
+
+    #[test]
+    fn use_after_close_on_a_handle_is_a_loud_miss_not_an_alias() {
+        let (host, _io) = MockHost::builder().build();
+
+        // Open a write-mode file, write to it, then close it.
+        let (status, handle) = host.open(b"f", Mode::Write);
+        assert!(matches!(status, Status::Ok));
+        assert!(matches!(host.write(handle.clone(), b"x"), (Status::Ok, 1)));
+        host.close(handle.clone());
+
+        // Write after close is a loud `NotFound`, never a silent success...
+        assert!(matches!(
+            host.write(handle.clone(), b"y"),
+            (Status::NotFound, 0)
+        ));
+        // ...and a double close is a no-op, not a panic.
+        host.close(handle.clone());
+
+        // A second open never reuses the closed token, and the stale handle keeps
+        // missing rather than aliasing the freshly opened file.
+        let (status, fresh) = host.open(b"g", Mode::Write);
+        assert!(matches!(status, Status::Ok));
+        assert_ne!(handle.bytes(), fresh.bytes());
+        assert!(matches!(host.write(handle, b"z"), (Status::NotFound, 0)));
+        assert!(matches!(host.write(fresh, b"ok"), (Status::Ok, 2)));
     }
 }

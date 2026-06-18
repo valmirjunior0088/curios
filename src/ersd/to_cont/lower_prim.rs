@@ -1,6 +1,7 @@
 use {
     super::{Cont, Frame, Work},
     crate::{cont, ersd},
+    num_bigint::BigUint,
 };
 
 fn lower_pure_unary_code(
@@ -415,6 +416,10 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::BinEql(left, right) => {
             lower_pure_binary_code(work, left, right, frame, cont::Code::BinEql)
         }
+        // Handle identity is byte identity: the rep is bytes from here down.
+        ersd::PurePrim::IoEql(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::BinEql)
+        }
         ersd::PurePrim::BinGet(bin, idx) => {
             lower_pure_binary_code(work, bin, idx, frame, cont::Code::BinGet)
         }
@@ -449,8 +454,12 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
 
             work.fresh(cont::Value::Eval(cont::Code::ArrConcat(names)))
         }
-        // Handle tokens are plain i32 scalars once types are gone.
-        ersd::PurePrim::Io(token) => work.fresh(cont::Value::Pure(cont::Data::Nat(*token))),
+        // A handle erases to its host token bytes: the LE encoding of the token
+        // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
+        // This is the lone spot in the pipeline that knows a handle is bytes.
+        ersd::PurePrim::Io(token) => work.fresh(cont::Value::Pure(cont::Data::Bin(
+            BigUint::from(*token).to_bytes_le(),
+        ))),
         ersd::PurePrim::Unit => work.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
     }
 }
@@ -841,9 +850,11 @@ fn lower_value_pure_prim<'b>(
 
             cont.call(work, value)
         }
-        // Handle tokens are plain i32 scalars once types are gone.
+        // A handle erases to its host token bytes (see the pure-position arm).
         ersd::PurePrim::Io(token) => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Nat(*token)));
+            let value = work.fresh(cont::Value::Pure(cont::Data::Bin(
+                BigUint::from(*token).to_bytes_le(),
+            )));
 
             cont.call(work, value)
         }
@@ -1047,6 +1058,10 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::BinLen(bin) => lower_unary_code(work, bin, frame, cont, cont::Code::BinLen),
         ersd::PurePrim::BinEql(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::BinEql)
+        }
+        // Handle identity is byte identity: the rep is bytes from here down.
+        ersd::PurePrim::IoEql(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::BinEql)
         }
         ersd::PurePrim::BinGet(bin, idx) => {

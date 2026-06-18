@@ -24,10 +24,11 @@ impl Lower for Status {
     }
 }
 
-/// A descriptor lowers as its `u32` wire token (an i31).
+/// A descriptor lowers as its wire token bytes — a `Bin` (an i8 array), the same
+/// uniform shape the runtime keys handles on.
 impl Lower for Io {
     fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
-        self.token().lower(caller, results)
+        self.bytes().lower(caller, results)
     }
 }
 

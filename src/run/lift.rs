@@ -14,11 +14,11 @@ impl Lift for () {
     }
 }
 
-/// A descriptor lifts from its `u32` wire token: the three stdio numbers map to
-/// the named streams, anything else is a host-minted handle.
+/// A descriptor lifts from its wire token bytes (a `Bin`): the three stdio
+/// encodings map to the named streams, anything else is a host-minted handle.
 impl Lift for Io {
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(Io::from_token(params[0].unwrap_i32() as u32))
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(Io::from_bytes(Vec::<u8>::lift(caller, params)?))
     }
 }
 
@@ -133,13 +133,36 @@ impl Lift for Vec<PollEvents> {
     }
 }
 
+/// Read an `Arr(Bin)` host-import argument: a `params[0]` anyref array whose
+/// elements are themselves `Bin`s (i8 arrays). The inbound dual of `lower.rs`'s
+/// `Vec<Vec<u8>>` lowering; `Arr(Io)` rides this shape now that a handle is bytes.
+fn lift_bin_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<Vec<u8>>, wasmtime::Error> {
+    let Val::AnyRef(Some(anyref)) = param else {
+        return Err(wasmtime::Error::msg("expected non-null anyref"));
+    };
+
+    let array_ref = anyref
+        .as_array(&*caller)?
+        .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
+
+    let len = array_ref.len(&*caller)?;
+
+    (0..len)
+        .map(|index| {
+            let element = array_ref.get(&mut *caller, index)?;
+
+            Vec::<u8>::lift(caller, &[element])
+        })
+        .collect()
+}
+
 /// `Arr(Io)` lifts each token through the same stdio/handle classification a
 /// single `Io` does — `poll`'s `handles` array.
 impl Lift for Vec<Io> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(lift_i31_array(caller, &params[0])?
+        Ok(lift_bin_array(caller, &params[0])?
             .into_iter()
-            .map(Io::from_token)
+            .map(Io::from_bytes)
             .collect())
     }
 }

@@ -1,7 +1,9 @@
 use {
     crate::wire,
+    num_bigint::BigUint,
     rustix::event::PollFlags,
     std::{
+        collections::HashMap,
         io::{Error, ErrorKind},
         ops::{BitOr, BitOrAssign},
     },
@@ -29,13 +31,14 @@ pub fn flt_to_le_bin(value: f32) -> Vec<u8> {
 
 /// A handle the guest shuttles across the IO boundary: one of the three standard
 /// streams, or a host-minted token for an open file or socket. Mirrors the
-/// guest's `/std/Io` handles; lifts from / lowers to its `u32` wire token.
-#[derive(Clone, Copy)]
+/// guest's `/std/Io` handles; lifts from / lowers to its `Bin` wire token (the
+/// opaque bytes a host mints — see [`bytes`](Self::bytes)).
+#[derive(Clone)]
 pub enum Io {
     Stdin,
     Stdout,
     Stderr,
-    Other(u32),
+    Other(Vec<u8>),
 }
 
 impl Io {
@@ -45,29 +48,105 @@ impl Io {
     pub const STDERR: u32 = 2;
     /// The first handle token a host mints, one past the stdio tokens so a minted
     /// file or socket handle never collides with stdin/stdout/stderr; each host
-    /// counts up from here with an `AtomicU32`.
+    /// counts up from here with an unbounded `BigUint`.
     pub const HANDLE_SEED: u32 = Self::STDERR + 1;
 
-    /// The raw wire token: the stdio numbers, or the minted handle.
-    pub fn token(self) -> u32 {
+    /// The canonical byte encoding of a token integer: its little-endian
+    /// `BigUint` bytes. The single shared convention — the runtime mints and
+    /// keys handles on it, and the `ersd → cont` lowering encodes the stdio
+    /// constants `Io(0/1/2)` the same way — so the two ends cannot drift.
+    pub fn encode(token: u32) -> Vec<u8> {
+        BigUint::from(token).to_bytes_le()
+    }
+
+    /// The raw wire token bytes: the stdio encodings, or the minted handle.
+    pub fn bytes(&self) -> Vec<u8> {
         match self {
-            Io::Stdin => Self::STDIN,
-            Io::Stdout => Self::STDOUT,
-            Io::Stderr => Self::STDERR,
-            Io::Other(token) => token,
+            Io::Stdin => Self::encode(Self::STDIN),
+            Io::Stdout => Self::encode(Self::STDOUT),
+            Io::Stderr => Self::encode(Self::STDERR),
+            Io::Other(bytes) => bytes.clone(),
         }
     }
 
-    /// Lift a wire token back to a descriptor: the three stdio numbers map to the
-    /// named streams, anything else is a host-minted handle. The inverse of
-    /// [`token`](Self::token).
-    pub fn from_token(token: u32) -> Self {
-        match token {
-            Self::STDIN => Io::Stdin,
-            Self::STDOUT => Io::Stdout,
-            Self::STDERR => Io::Stderr,
-            token => Io::Other(token),
+    /// Lift wire token bytes back to a descriptor: the three stdio encodings map
+    /// to the named streams, anything else is a host-minted handle. The inverse
+    /// of [`bytes`](Self::bytes).
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        if bytes == Self::encode(Self::STDIN) {
+            Io::Stdin
+        } else if bytes == Self::encode(Self::STDOUT) {
+            Io::Stdout
+        } else if bytes == Self::encode(Self::STDERR) {
+            Io::Stderr
+        } else {
+            Io::Other(bytes)
         }
+    }
+}
+
+/// A host's handle table: an unbounded `BigUint` mint counter paired with the
+/// live-handle map keyed by minted token bytes, generic over the host's resource
+/// type `T`. Each host wraps one in a `Mutex` so a mint (read the counter, bump
+/// it, file the resource) is atomic. The counter never wraps, so a token is
+/// never reused — a closed handle's bytes are removed and never minted again,
+/// making use-after-close a loud miss rather than a silent alias. The map tracks
+/// live handles only, so it is sized by what is currently open, not by how many
+/// were ever opened.
+pub struct Table<T> {
+    next: BigUint,
+    map: HashMap<Vec<u8>, T>,
+}
+
+impl<T> Table<T> {
+    /// A fresh table: the mint counter seeded one past the stdio tokens, no live
+    /// handles.
+    pub fn new() -> Self {
+        Self {
+            next: BigUint::from(Io::HANDLE_SEED),
+            map: HashMap::new(),
+        }
+    }
+
+    /// Mint a fresh handle for `resource`: encode the next token (its canonical
+    /// LE bytes), bump the counter so the token is never reused, and file the
+    /// resource under those bytes. The bytes are the handle the guest shuttles
+    /// back; `close` removes them and the counter never reproduces them.
+    pub fn mint(&mut self, resource: T) -> Io {
+        let bytes = self.next.to_bytes_le();
+        self.next += 1u32;
+        self.map.insert(bytes.clone(), resource);
+
+        Io::Other(bytes)
+    }
+
+    pub fn get(&self, handle: &Io) -> Option<&T> {
+        self.map.get(&handle.bytes())
+    }
+
+    pub fn get_mut(&mut self, handle: &Io) -> Option<&mut T> {
+        self.map.get_mut(&handle.bytes())
+    }
+
+    /// File `resource` under `handle`, keeping the exact token the guest already
+    /// holds — used to re-file a handle whose state changed in place (e.g.
+    /// `connect` turning a socket into a stream).
+    pub fn insert(&mut self, handle: &Io, resource: T) {
+        self.map.insert(handle.bytes(), resource);
+    }
+
+    pub fn remove(&mut self, handle: &Io) -> Option<T> {
+        self.map.remove(&handle.bytes())
+    }
+
+    pub fn contains(&self, handle: &Io) -> bool {
+        self.map.contains_key(&handle.bytes())
+    }
+}
+
+impl<T> Default for Table<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -358,4 +437,55 @@ pub trait Host {
     /// Look up the environment variable `name`. Returns `(status, value)`:
     /// `Status::Ok` with the value, or `Status::NotFound` with empty bytes.
     fn env(&self, name: &[u8]) -> (Status, Vec<u8>);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokens_are_unique_never_reused_and_clear_of_the_stdio_band() {
+        let mut table: Table<u32> = Table::new();
+
+        let a = table.mint(10);
+        let b = table.mint(20);
+
+        // Distinct live handles get distinct tokens...
+        assert_ne!(a.bytes(), b.bytes());
+        // ...and minted tokens never collide with stdin/stdout/stderr.
+        assert_ne!(a.bytes(), Io::Stdin.bytes());
+        assert_ne!(a.bytes(), Io::Stdout.bytes());
+        assert_ne!(a.bytes(), Io::Stderr.bytes());
+
+        assert_eq!(table.get(&a), Some(&10));
+        assert_eq!(table.get(&b), Some(&20));
+    }
+
+    #[test]
+    fn use_after_close_is_a_loud_miss_never_an_alias() {
+        let mut table: Table<u32> = Table::new();
+
+        let a = table.mint(10);
+        // Closing removes the entry and hands the resource back.
+        assert_eq!(table.remove(&a), Some(10));
+        // Use-after-close misses; double-close is a clean miss, not an alias.
+        assert_eq!(table.get(&a), None);
+        assert_eq!(table.remove(&a), None);
+
+        // A later mint never reuses the closed token (the counter never wraps),
+        // and the stale handle keeps missing rather than aliasing the new entry.
+        let b = table.mint(99);
+        assert_ne!(b.bytes(), a.bytes());
+        assert_eq!(table.get(&a), None);
+        assert_eq!(table.get(&b), Some(&99));
+    }
+
+    #[test]
+    fn stdio_handles_are_never_in_the_table() {
+        let table: Table<u32> = Table::new();
+
+        assert_eq!(table.get(&Io::Stdin), None);
+        assert_eq!(table.get(&Io::Stdout), None);
+        assert_eq!(table.get(&Io::Stderr), None);
+    }
 }

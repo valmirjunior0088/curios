@@ -130,7 +130,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_read",
                 wasm::TypeName::from("io_read"),
                 self.table.io_read_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
@@ -141,7 +141,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_write",
                 wasm::TypeName::from("io_write"),
                 self.table.io_write_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
             );
         }
@@ -152,7 +152,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 wasm::TypeName::from("io_open"),
                 self.table.io_open_func().clone(),
                 wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
-                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
 
@@ -162,7 +162,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_connect",
                 wasm::TypeName::from("io_connect"),
                 self.table.io_connect_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -173,7 +173,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_start_tls",
                 wasm::TypeName::from("io_start_tls"),
                 self.table.io_start_tls_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -186,7 +186,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 wasm::TypeName::from("io_tls_server_config"),
                 self.table.io_tls_server_config_func().clone(),
                 wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
-                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
 
@@ -196,7 +196,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_start_tls_server",
                 wasm::TypeName::from("io_start_tls_server"),
                 self.table.io_start_tls_server_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -206,7 +206,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_close",
                 wasm::TypeName::from("io_close"),
                 self.table.io_close_func().clone(),
-                wasm::ResultType::from([i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
                 wasm::ResultType::from([]),
             );
         }
@@ -217,7 +217,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_listen",
                 wasm::TypeName::from("io_listen"),
                 self.table.io_listen_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -228,8 +228,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_accept",
                 wasm::TypeName::from("io_accept"),
                 self.table.io_accept_func().clone(),
-                wasm::ResultType::from([i32_val.clone()]),
-                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
 
@@ -256,7 +256,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 wasm::TypeName::from("io_socket"),
                 self.table.io_socket_func().clone(),
                 wasm::ResultType::from([bin_ref.clone()]),
-                wasm::ResultType::from([status_ref.clone(), status_ref.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
             );
         }
 
@@ -266,7 +266,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_bind",
                 wasm::TypeName::from("io_bind"),
                 self.table.io_bind_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), bin_ref.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -277,7 +277,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_set_nonblocking",
                 wasm::TypeName::from("io_set_nonblocking"),
                 self.table.io_set_nonblocking_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -288,7 +288,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_set_recv_timeout",
                 wasm::TypeName::from("io_set_recv_timeout"),
                 self.table.io_set_recv_timeout_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -299,7 +299,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_set_send_timeout",
                 wasm::TypeName::from("io_set_send_timeout"),
                 self.table.io_set_send_timeout_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
@@ -310,7 +310,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_set_reuseaddr",
                 wasm::TypeName::from("io_set_reuseaddr"),
                 self.table.io_set_reuseaddr_func().clone(),
-                wasm::ResultType::from([i32_val.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
                 wasm::ResultType::from([status_ref.clone()]),
             );
         }
