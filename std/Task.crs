@@ -7,7 +7,7 @@ let HUP : Nat = 8;
 
 let OK : Nat = 0;
 let EOF : Nat = 1;
-let WOULD_BLOCK : Nat = 7;
+let WOULD_BLOCK : Nat = 6;
 
 pub let Finalizer : Type =
     () -> {};
@@ -50,11 +50,11 @@ pub let using(@A : Type, h : Io, release : Finalizer, body : Task(A)) -> Task(A)
             Task/release(h, () => Task/done(a))));
 
 pub let nonblocking(h : Io) -> {} =
-    let status = /sys/Io/set_nonblocking(h, true);
+    let _ = /sys/Io/set_nonblocking(h, true);
     ();
 
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
-    let r = Io/read(h, n);
+    let r = /sys/Io/read(h, n);
     match Nat/eql(r.status, WOULD_BLOCK) : Task(Io/Read)
     | true => Task/wait(h, READ, () => read(h, n))
     | false =>
@@ -63,13 +63,13 @@ pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
         | false =>
             match Nat/eql(r.status, OK) : Task(Io/Read)
             | true => Task/done(Io/Read/chunk(r.bytes))
-            | false => Task/done(Io/Read/error(Io/decode(r.status)))
+            | false => Task/done(Io/Read/error(Io/error_of(r.status)))
             end
         end
     end;
 
 pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
-    let r = Io/write(h, b);
+    let r = /sys/Io/write(h, b);
     match Nat/eql(r.status, WOULD_BLOCK) : Task(Result({}, Io/Error))
     | true => Task/wait(h, WRITE, () => write(h, b))
     | false =>
@@ -79,7 +79,7 @@ pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
             | true => Task/wait(h, WRITE, () => write(h, Bin/slice(b, r.written, Bin/len(b))))
             | false => Task/done(Result/success(()))
             end
-        | false => Task/done(Result/failure(Io/decode(r.status)))
+        | false => Task/done(Result/failure(Io/error_of(r.status)))
         end
     end;
 
@@ -90,7 +90,7 @@ pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     | false =>
         match Nat/eql(r.status, OK) : Task(Result(Io, Io/Error))
         | true => Task/done(Result/success(r.handle))
-        | false => Task/done(Result/failure(Io/decode(r.status)))
+        | false => Task/done(Result/failure(Io/error_of(r.status)))
         end
     end;
 
@@ -156,7 +156,7 @@ let run_all(gs : Lst(Guard)) -> {} =
     rec go(rest : Lst(Guard)) -> {} =
         match rest : {}
         | nil() => ()
-        | cons(g, more) => let ran = g.1(); go(more)
+        | cons(g, more) => let _ = g.1(); go(more)
         end;
     go(gs);
 
@@ -165,8 +165,8 @@ let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
         match rest : Lst(Guard)
         | nil() => Lst/nil()
         | cons(g, more) =>
-            match Io/eql(g.0, h) : Lst(Guard)
-            | true => let ran = g.1(); more
+            match /sys/Io/eql(g.0, h) : Lst(Guard)
+            | true => let _ = g.1(); more
             | false => Lst/cons(g, go(more))
             end
         end;
@@ -255,7 +255,7 @@ let sweep_blocked(blocked : Lst(Parked), cancelled : Lst(Nat)) -> Lst(Parked) =
         | nil() => Lst/nil()
         | cons(p, more) =>
             match cancelled_any(p.groups, cancelled) : Lst(Parked)
-            | true => let ran = run_all(p.guards); go(more)
+            | true => let _ = run_all(p.guards); go(more)
             | false => Lst/cons(p, go(more))
             end
         end;
@@ -267,7 +267,7 @@ let sweep_joining(joining : Lst(Joined), cancelled : Lst(Nat)) -> Lst(Joined) =
         | nil() => Lst/nil()
         | cons(j, more) =>
             match cancelled_any(j.groups, cancelled) : Lst(Joined)
-            | true => let ran = run_all(j.guards); go(more)
+            | true => let _ = run_all(j.guards); go(more)
             | false => Lst/cons(j, go(more))
             end
         end;
@@ -291,7 +291,7 @@ let drain_joining(joining : Lst(Joined)) -> {} =
     rec go(rest : Lst(Joined)) -> {} =
         match rest : {}
         | nil() => ()
-        | cons(j, more) => let ran = run_all(j.guards); go(more)
+        | cons(j, more) => let _ = run_all(j.guards); go(more)
         end;
     go(joining);
 
@@ -332,7 +332,7 @@ let step(f : Fiber, next_id : Nat) -> Stepped =
     | fiber(_, t, guards, groups) =>
         match t : Stepped
         | done(_) =>
-            let ran = run_all(guards);
+            let _ = run_all(guards);
             Stepped/advanced(Lst/nil(), next_id)
         | spawn(gs, child, k) =>
             Stepped/advanced(
@@ -379,7 +379,7 @@ let drive(w : World) -> World =
     | cons(f, rest) =>
         match fiber_cancelled(f, w.cancelled) : World
         | true =>
-            let ran = run_fiber_fins(f);
+            let _ = run_fiber_fins(f);
             World { ready = rest, blocked = w.blocked, joining = w.joining, cancelled = w.cancelled, next_id = w.next_id }
         | false =>
             match step(f, w.next_id) : World
@@ -396,7 +396,7 @@ let drive(w : World) -> World =
         | cons(_, _) =>
             let handles = Lst/to_arr(Lst/map((p) => p.handle, w.blocked));
             let events = Lst/to_arr(Lst/map((p) => p.interest, w.blocked));
-            let results = Io/poll(handles, events, -1);
+            let results = /sys/Io/poll(handles, events, -1);
             let split = partition(w.blocked, results, 0);
             World { ready = split.0, blocked = split.1, joining = w.joining, cancelled = w.cancelled, next_id = w.next_id }
         | nil() => w
@@ -419,8 +419,8 @@ pub let block_on(@A : Type, t : Task(A)) -> A =
         let h = housekeep(w);
         match root : A
         | done(a) =>
-            let cleaned = run_all(rguards);
-            let dropped = schedule(World { ready = h.ready, blocked = h.blocked, joining = h.joining, cancelled = Lst/cons(0, h.cancelled), next_id = h.next_id });
+            let _ = run_all(rguards);
+            let _ = schedule(World { ready = h.ready, blocked = h.blocked, joining = h.joining, cancelled = Lst/cons(0, h.cancelled), next_id = h.next_id });
             a
         | spawn(gs, child, k) =>
             loop(k(), rgroups, rguards,
@@ -464,7 +464,7 @@ pub let block_on(@A : Type, t : Task(A)) -> A =
             | nil() =>
                 let handles = Lst/to_arr(Lst/cons(rh, Lst/map((p) => p.handle, h.blocked)));
                 let events = Lst/to_arr(Lst/cons(rev, Lst/map((p) => p.interest, h.blocked)));
-                let results = Io/poll(handles, events, -1);
+                let results = /sys/Io/poll(handles, events, -1);
                 let split = partition(h.blocked, results, 1);
                 match is_ready(Arr/get(results, 0), rev) : A
                 | true => loop(rk(), rgroups, rguards, World { ready = split.0, blocked = split.1, joining = h.joining, cancelled = h.cancelled, next_id = h.next_id })
@@ -476,5 +476,5 @@ pub let block_on(@A : Type, t : Task(A)) -> A =
         World { ready = Lst/nil(), blocked = Lst/nil(), joining = Lst/nil(), cancelled = Lst/nil(), next_id = 1 });
 
 pub let run(main : Task({})) -> {} =
-    let result = block_on(main);
+    let _ = block_on(main);
     ();

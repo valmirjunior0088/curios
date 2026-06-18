@@ -41,15 +41,14 @@ A minimal example:
 
 ```
 -- hello.crs
-let msg : /std/Bin = /std/Str/to_bin("hello, world");
-/std/Io/write(/std/Io/stdout, msg)
+/std/Io/print("hello, world")
 ```
 
 ```
 curios run hello.crs
 ```
 
-Programs can read and write files through `/std/File` (and the raw `/std/Io/open`); they run with the invoking user's filesystem access — there is no sandbox.
+Programs can read and write files through `/std/File` (`open`/`close`/`with`); they run with the invoking user's filesystem access — there is no sandbox.
 
 ## Examples
 
@@ -58,10 +57,14 @@ The `examples/` directory contains end-to-end Rust programs that drive the full 
 **Typed format strings** (`examples/crs_printf.rs`) — reads a name from stdin via `Io/read`, trims it, then calls `/std/Fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
 
 ```
-let name_bytes = Str/trim(Io/read(Io/stdin, 1024).bytes);
-match Str/of_bin(name_bytes) : {}
-| some(name) => Fmt/printf("%s is %d")(name)(30)
-| none() => Io/print("invalid input")
+match Io/read(Io/stdin, 1024) : {}
+| chunk(bytes) =>
+    match Str/of_bin(bytes) : {}
+    | some(name) => Fmt/printf("%s is %d")(Str/trim(name))(30)
+    | none() => Io/print("invalid input")
+    end
+| eof() => Io/print("no input")
+| error(_) => Io/print("no input")
 end
 -- with input "Alice": "Alice is 30"
 ```

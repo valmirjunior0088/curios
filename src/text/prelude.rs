@@ -590,6 +590,7 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Int"], include_str!("../../std/Int.crs")),
     (&["std", "Bln"], include_str!("../../std/Bln.crs")),
     (&["std", "Io"], include_str!("../../std/Io.crs")),
+    (&["std", "Reader"], include_str!("../../std/Reader.crs")),
     (&["std", "File"], include_str!("../../std/File.crs")),
     (&["std", "Net"], include_str!("../../std/Net.crs")),
     (&["std", "Task"], include_str!("../../std/Task.crs")),

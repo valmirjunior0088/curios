@@ -6,14 +6,14 @@ pub union Mode
 | append()
 end
 
-pub struct File { Io }
-
 let token(mode : Mode) -> Nat =
     match mode : Nat
     | read() => 0
     | write() => 1
     | append() => 2
     end;
+
+pub struct File { Io }
 
 pub let read(f : File, n : Nat) -> Task(Io/Read) =
     Task/read(f.0, n);
@@ -25,10 +25,10 @@ pub let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
     let r = /sys/Io/open(Str/to_bin(path), token(mode));
     match Nat/eql(r.status, 0) : Task(Result(File, Io/Error))
     | true =>
-        let nb = Task/nonblocking(r.handle);
+        let _ = Task/nonblocking(r.handle);
         Task/acquire(r.handle, () => /sys/Io/close(r.handle), () =>
             Task/done(Result/success(File { r.handle })))
-    | false => Task/done(Result/failure(Io/decode(r.status)))
+    | false => Task/done(Result/failure(Io/error_of(r.status)))
     end;
 
 pub let close(f : File) -> Task({}) =
@@ -39,7 +39,7 @@ pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> Task(A)) -> Ta
         match opened : Task(Result(A, Io/Error))
         | success(f) =>
             Task/bind(body(f), (a) =>
-                Task/bind(close(f), (closed) => Task/done(Result/success(a))))
+                Task/bind(close(f), (()) => Task/done(Result/success(a))))
         | failure(e) => Task/done(Result/failure(e))
         end);
 

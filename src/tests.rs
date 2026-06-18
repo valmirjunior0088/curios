@@ -110,7 +110,13 @@ fn io_read() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
         Duration::from_secs(5),
-        r#"std/Io/write(std/Io/stdout, std/Io/read(std/Io/stdin, 1024).bytes)"#,
+        r#"
+        match std/Io/read(std/Io/stdin, 1024) : {}
+        | chunk(b) => let w = std/Io/write(std/Io/stdout, b); ()
+        | eof() => ()
+        | error(_) => ()
+        end
+        "#,
         system,
     )
     .expect("expected result");
@@ -189,20 +195,22 @@ fn named_fields_run_end_to_end() {
     );
 }
 
-// `read(h, n)` is POSIX-shaped: each call returns 1..n available bytes (here
-// one injected line per refill, served in `n`-byte slices) with status 0, and
-// EOF is status 1 with empty bytes — exercised by the third read.
+// `Io/read(h, n)` is the typed blocking read: each call yields a `chunk` of
+// 1..n available bytes (here one injected line per refill, served in `n`-byte
+// slices), and the third read past the data yields `eof`.
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Io, Nat};
-        let a = Io/read(Io/stdin, 2);
-        let ra = Io/write(Io/stdout, a.bytes);
-        let b = Io/read(Io/stdin, 2);
-        let rb = Io/write(Io/stdout, b.bytes);
-        let c = Io/read(Io/stdin, 2);
-        let rc = Io/write(Io/stdout, c.bytes);
-        Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(c.status)))
+        use /std/{Io};
+        let show(r : Io/Read) -> {} =
+            match r : {}
+            | chunk(b) => let _ = Io/write(Io/stdout, b); ()
+            | eof() => Io/print("1")
+            | error(_) => Io/print("e")
+            end;
+        let _ = show(Io/read(Io/stdin, 2));
+        let _ = show(Io/read(Io/stdin, 2));
+        show(Io/read(Io/stdin, 2))
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
@@ -327,24 +335,24 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 #[test]
 fn std_io_read_line_sequences_lines() {
     let source = r#"
-        use /std/{Io, Option, Bin, Str};
-        let program : Io/Buf({}) =
-            let ! = Io/bind;
-            let first = Io/read_line!;
-            let second = Io/read_line!;
-            match first : Io/Buf({})
+        use /std/{Io, Reader, Option, Bin, Str};
+        let program : Reader({}) =
+            let ! = Reader/bind;
+            let first = Reader/read_line!;
+            let second = Reader/read_line!;
+            match first : Reader({})
             | some(a) =>
-                match second : Io/Buf({})
+                match second : Reader({})
                 | some(b) =>
-                    match Str/of_bin(Bin/concat(a, b)) : Io/Buf({})
-                    | some(s) => Io/pure(Io/print(s))
-                    | none() => Io/pure(Io/print("invalid utf-8"))
+                    match Str/of_bin(Bin/concat(a, b)) : Reader({})
+                    | some(s) => Reader/pure(Io/print(s))
+                    | none() => Reader/pure(Io/print("invalid utf-8"))
                     end
-                | none() => Io/pure(Io/print("missing"))
+                | none() => Reader/pure(Io/print("missing"))
                 end
-            | none() => Io/pure(Io/print("missing"))
+            | none() => Reader/pure(Io/print("missing"))
             end;
-        Io/run(program, Io/stdin)
+        Reader/run(program, Io/stdin)
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["alpha", "beta"]).build();
@@ -358,16 +366,16 @@ fn std_io_read_line_sequences_lines() {
 #[test]
 fn std_io_read_line_signals_eof_with_none() {
     let source = r#"
-        use /std/{Io, Option};
-        let program : Io/Buf({}) =
-            let ! = Io/bind;
-            let first = Io/read_line!;
-            let second = Io/read_line!;
-            match second : Io/Buf({})
-            | some(_) => Io/pure(Io/print("line"))
-            | none() => Io/pure(Io/print("eof"))
+        use /std/{Io, Reader, Option};
+        let program : Reader({}) =
+            let ! = Reader/bind;
+            let first = Reader/read_line!;
+            let second = Reader/read_line!;
+            match second : Reader({})
+            | some(_) => Reader/pure(Io/print("line"))
+            | none() => Reader/pure(Io/print("eof"))
             end;
-        Io/run(program, Io/stdin)
+        Reader/run(program, Io/stdin)
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["only"]).build();
@@ -383,15 +391,15 @@ fn std_io_read_line_signals_eof_with_none() {
 #[test]
 fn std_io_read_line_spans_refills() {
     let source = r#"
-        use /std/{Io, Option, Bin, Nat};
-        let program : Io/Buf({}) =
-            let ! = Io/bind;
-            let line = Io/read_line!;
-            match line : Io/Buf({})
-            | some(bytes) => Io/pure(Io/print(Nat/to_str(Bin/len(bytes))))
-            | none() => Io/pure(Io/print("eof"))
+        use /std/{Io, Reader, Option, Bin, Nat};
+        let program : Reader({}) =
+            let ! = Reader/bind;
+            let line = Reader/read_line!;
+            match line : Reader({})
+            | some(bytes) => Reader/pure(Io/print(Nat/to_str(Bin/len(bytes))))
+            | none() => Reader/pure(Io/print("eof"))
             end;
-        Io/run(program, Io/stdin)
+        Reader/run(program, Io/stdin)
         "#;
 
     let long_line = "a".repeat(1500);
@@ -691,9 +699,14 @@ fn printf_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        match Str/of_bin(Io/read(Io/stdin, 1024).bytes) : {}
-        | some(s) => Fmt/printf("%s is %d")(Str/trim(s))(30)
-        | none() => Io/print("invalid input")
+        match Io/read(Io/stdin, 1024) : {}
+        | chunk(bytes) =>
+            match Str/of_bin(bytes) : {}
+            | some(s) => Fmt/printf("%s is %d")(Str/trim(s))(30)
+            | none() => Io/print("invalid input")
+            end
+        | eof() => Io/print("invalid input")
+        | error(_) => Io/print("invalid input")
         end
         "#;
 
@@ -789,8 +802,8 @@ fn implicit_union_type_param_executes() {
         let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
-        match inferred : Nat
-        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))).status
+        match inferred : {}
+        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))); ()
         end
         "#;
 
@@ -836,8 +849,8 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
             end;
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
-        match chained : Nat
-        | refl(z) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))).status
+        match chained : {}
+        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))); ()
         end
         "#;
 
@@ -932,9 +945,9 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let mk(@A : Type, a : A) -> Lst(A) = Lst/cons(a, Lst/nil());
         let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
-        match v : Nat
-        | nil() => 0
-        | cons(p, rest) => Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))).status
+        match v : {}
+        | nil() => ()
+        | cons(p, rest) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
         end
         "#;
 
@@ -1852,7 +1865,12 @@ fn nat_bitwise_ops_execute() {
         Duration::from_secs(5),
         r#"
         use /std/{Io, Bin, Nat, Str};
-        let x = Bin/get(Io/read(Io/stdin, 16).bytes, 0);
+        let bytes = match Io/read(Io/stdin, 16) : Bin
+            | chunk(b) => b
+            | eof() => \\
+            | error(_) => \\
+            end;
+        let x = Bin/get(bytes, 0);
         let r = Str/concat_all([
             Nat/to_str(Nat/and(x, 15)), ",",
             Nat/to_str(Nat/or(x, 128)), ",",
@@ -1884,7 +1902,12 @@ fn int_bitwise_ops_execute() {
         Duration::from_secs(5),
         r#"
         use /std/{Io, Bin, Nat, Int, Str};
-        let x = Nat/to_int(Bin/get(Io/read(Io/stdin, 16).bytes, 0));
+        let bytes = match Io/read(Io/stdin, 16) : Bin
+            | chunk(b) => b
+            | eof() => \\
+            | error(_) => \\
+            end;
+        let x = Nat/to_int(Bin/get(bytes, 0));
         let neg = Int/sub(+0, x);
         let r = Str/concat_all([
             Int/to_str(Int/and(x, +15)), ",",
@@ -2069,9 +2092,9 @@ fn proc_env_found_unwraps_to_some() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        match /std/Proc/env("HOME") : std/Nat
-        | some(v) => std/Io/write(std/Io/stdout, v).status
-        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")).status
+        match /std/Proc/env("HOME") : {}
+        | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
+        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")); ()
         end
         "#,
         system,
@@ -2090,9 +2113,9 @@ fn proc_env_absent_is_none() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        match /std/Proc/env("NOPE") : std/Nat
-        | some(v) => std/Io/write(std/Io/stdout, v).status
-        | none() => std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")).status
+        match /std/Proc/env("NOPE") : {}
+        | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
+        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")); ()
         end
         "#,
         system,
@@ -2432,20 +2455,20 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
         use /std/{Http, Io, Str, Nat, Task};
-        match Task/block_on(Http/perform(Http/get("example.com", 80, "/"))) : Nat
+        match Task/block_on(Http/perform(Http/get("example.com", 80, "/"))) : {}
         | success(response) =>
             let ct = match Http/header(response, "Content-Type") : Str
                 | some(value) => value
                 | none() => "none"
                 end;
-            match Str/of_bin(response.body) : Nat
+            match Str/of_bin(response.body) : {}
             | some(body) =>
-                Io/write(Io/stdout, Str/to_bin(Str/concat_all([
+                let _ = Io/write(Io/stdout, Str/to_bin(Str/concat_all([
                     Nat/to_str(response.status.code), " ", ct, " ", body
-                ]))).status
-            | none() => Io/write(Io/stdout, Str/to_bin("bad body")).status
+                ]))); ()
+            | none() => let _ = Io/write(Io/stdout, Str/to_bin("bad body")); ()
             end
-        | failure(_) => Io/write(Io/stdout, Str/to_bin("error")).status
+        | failure(_) => let _ = Io/write(Io/stdout, Str/to_bin("error")); ()
         end
         "#;
 
@@ -2462,47 +2485,6 @@ fn http_perform_parses_a_scripted_response() {
         io.output(),
         b"200 text/plain hello"
     );
-}
-
-#[test]
-fn io_poll_mock_echoes_interest() {
-    // The mock readiness oracle reports a known handle ready for exactly the
-    // requested interest, so polling stdin for READ (mask `1`) yields revents
-    // `[1]`. Drives the whole new path end to end: building `Arr(Io)` and
-    // `Arr(Nat)` in the guest, marshalling both into the host import, and
-    // marshalling the `Arr(Nat)` result back out.
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(5),
-        r#"
-        let revents = std/Io/poll([std/Io/stdin], [1], +0);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(std/Arr/get(revents, 0))))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"1");
-}
-
-#[test]
-fn io_eql_compares_handle_identity() {
-    // `Io/eql` is the one pure operation on handles: it erases to the `Nat`
-    // equality op over the i31 token. stdin equals itself, stdin differs from
-    // stdout, so this writes "true" then "false".
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(
-        Duration::from_secs(5),
-        r#"
-        use /std/{Io, Bln, Str};
-        let same = std/Io/eql(Io/stdin, Io/stdin);
-        let diff = std/Io/eql(Io/stdin, Io/stdout);
-        let w = Io/write(Io/stdout, Str/to_bin(Bln/to_str(same)));
-        Io/write(Io/stdout, Str/to_bin(Bln/to_str(diff)))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"truefalse");
 }
 
 #[test]

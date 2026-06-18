@@ -183,52 +183,58 @@ Asynchronous, non-blocking IO and concurrency are layered on top by [`/std/Task`
 
 ### `/std/Io`
 
-The byte-stream handle type — an opaque runtime token, like a file descriptor. `stdin`/`stdout`/`stderr` and the primitive `read`/`write` are re-exported from `/sys`; the rest are buffered-reader conveniences built on top.
+The byte-stream handle type — an opaque runtime token, like a file descriptor. `stdin`/`stdout`/`stderr` are re-exported from `/sys`; `read`/`write` are typed **blocking** operations on a handle, and `print`/`print_err`/`input` are the console conveniences over them. The three handles plus blocking `read`/`write` are the whole synchronous IO doorway — everything else (files, sockets, concurrency) rides the asynchronous [`/std/Task`](#stdtask) layer. (The raw status-record primitives, the `poll` multiplexer, and the pure `eql` handle-identity op stay internal to `/sys`, reached only by the scheduler.)
 
-| Binding       | Type                                         | Description                                                    |
-| ------------- | -------------------------------------------- | -------------------------------------------------------------- |
-| `stdin`       | `Io`                                         | The standard input handle                                      |
-| `stdout`      | `Io`                                         | The standard output handle                                     |
-| `stderr`      | `Io`                                         | The standard error handle                                      |
-| `read(h, n)`  | `(Io, Nat) -> { status : Nat, bytes : Bin }` | Read up to `n` bytes, blocking until at least one is available |
-| `write(h, b)` | `(Io, Bin) -> Nat`                           | Write `b` to `h`; returns a status                             |
+| Binding        | Type                             | Description                                                                  |
+| -------------- | -------------------------------- | ---------------------------------------------------------------------------- |
+| `stdin`        | `Io`                             | The standard input handle                                                    |
+| `stdout`       | `Io`                             | The standard output handle                                                   |
+| `stderr`       | `Io`                             | The standard error handle                                                    |
+| `read(h, n)`   | `(Io, Nat) -> Read`              | Read up to `n` bytes, blocking; yields `chunk` / `eof` / `error`             |
+| `write(h, b)`  | `(Io, Bin) -> Result({}, Error)` | Write all of `b`, looping on partial writes, blocking; also the binary-stdout channel |
+| `print(s)`     | `(Str) -> {}`                    | Write a string to stdout, result discarded (best-effort, like a closed pipe) |
+| `print_err(s)` | `(Str) -> {}`                    | Write a string to stderr, result discarded                                   |
+| `input()`      | `() -> Option(Bin)`              | Read the next line from stdin (trailing `\n` stripped); `none` at end of input |
 
 Failable operations report through a status code — errors are data; traps stay reserved for programmer errors. This is the shared contract across every handle (files, sockets):
 
-| Status | Meaning                                      |
-| ------ | -------------------------------------------- |
-| 0      | ok                                           |
-| 1      | end of input (`read` only; `bytes` is empty) |
-| 2      | not found                                    |
-| 3      | permission denied                            |
-| 4      | already exists                               |
-| 5      | other                                        |
-| 6      | connection refused (`connect` only)          |
+| Status | Meaning                                                       |
+| ------ | ------------------------------------------------------------- |
+| 0      | ok                                                            |
+| 1      | end of input (`read` only; `bytes` is empty)                  |
+| 2      | not found                                                     |
+| 3      | permission denied                                             |
+| 4      | already exists                                                |
+| 5      | connection refused (`connect` only)                           |
+| 6      | would block (non-blocking op; the async layer parks and retries) |
+| 7      | TLS error                                                     |
 
-`/std/Io` also defines the typed forms the asynchronous layer ([`/std/Task`](#stdtask), `/std/File`, `/std/Net`) returns in place of raw status codes:
+Codes are the host's `Status` discriminants; any code without a typed form decodes to `other(status)`.
+
+`/std/Io` also defines the typed forms every IO operation returns in place of raw status codes — the blocking `read`/`write` above, and the [`/std/Task`](#stdtask)/`/std/File`/`/std/Net` layer:
 
 ```
 union Error | not_found() | permission_denied() | exists() | refused() | tls() | other(Nat) end
 union Read  | chunk(Bin) | eof() | error(Error) end
 ```
 
-`decode(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 6 → `refused`, 8 → `tls`, else `other`). `Read` is the result of an asynchronous read: a `chunk` of bytes, the distinct `eof`, or an `error`.
+`error_of(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 5 → `refused`, 7 → `tls`, else `other`). `Read` is the result of a read: a `chunk` of bytes, the distinct `eof`, or an `error`.
 
-The safe conveniences below layer a buffered reader over the primitive handle.
+### `/std/Reader`
 
-| Binding     | Type                                             | Description                                                                                                                               |
-| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `print(s)`  | `(Str) -> {}`                                    | Write a string to stdout, best-effort: the write status is dropped, like printing to a closed pipe                                        |
-| `Reader`    | `Type` (`= { Io, Bin }`)                         | A buffered reader: the handle plus bytes already read but not yet consumed                                                                |
-| `reader(h)` | `(Io) -> Reader`                                 | A fresh reader with an empty buffer                                                                                                       |
-| `Buf(A)`    | `(Type) -> Type` (`= (Reader) -> { Reader, A }`) | The buffered-reader state monad — the reader threads explicitly through actions, exactly like `Parse` threads its (input, position) state |
-| `pure(a)`   | `(@A : Type, A) -> Buf(A)`                       | Lift a value                                                                                                                              |
-| `bind`      | `(@A, @B) -> (Buf(A), (A) -> Buf(B)) -> Buf(B)`  | Sequence two actions (use with `let ! = Io/bind;` blocks)                                                                                 |
-| `run(m, h)` | `(@A : Type, Buf(A), Io) -> A`                   | Run an action against a fresh reader on `h`                                                                                               |
-| `read_line` | `Buf(Option(Bin))`                               | The next line, including its trailing `\n`; `none` means end of input                                                                     |
-| `drain(h)`  | `(Io) -> Bin`                                    | Read from the raw handle `h` until a non-ok status, returning every byte read (used by `File/read_all` and `Net/call`)                    |
+A buffered, line-oriented reader layered over [`/std/Io`](#stdio): a small state monad threading a `Buffer` (a handle plus bytes read ahead but not yet consumed) through actions, exactly as [`/std/Parse`](#stdparse) threads its (input, position).
 
-`read_line` delivers a final unterminated line before EOF as `some`; any non-ok refill status (EOF or an IO error) ends the stream — an error-propagating reader is future work.
+| Binding     | Type                                               | Description                                                              |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `Buffer`    | `Type` (`= { Io, Bin }`)                           | A handle plus bytes already read but not yet consumed                    |
+| `Reader(A)` | `(Type) -> Type` (`= (Buffer) -> { Buffer, A }`)   | The buffered-reader state monad                                          |
+| `buffer(h)` | `(Io) -> Buffer`                                   | A fresh buffer over `h`, empty                                           |
+| `pure(a)`   | `(@A : Type, A) -> Reader(A)`                       | Lift a value                                                             |
+| `bind`      | `(@A, @B) -> (Reader(A), (A) -> Reader(B)) -> Reader(B)` | Sequence two actions (use with `let ! = Reader/bind;` blocks)       |
+| `run(m, h)` | `(@A : Type, Reader(A), Io) -> A`                   | Run an action against a fresh buffer on `h`                              |
+| `read_line` | `Reader(Option(Bin))`                               | The next line, including its trailing `\n`; `none` means end of input    |
+
+`read_line` delivers a final unterminated line before EOF as `some`; any non-ok refill (EOF or an IO error) ends the stream — an error-propagating reader is future work.
 
 ### `/std/Task`
 
@@ -307,7 +313,7 @@ struct Settings pub {
 }
 ```
 
-`Settings` has a public representation — build one as `Settings { ... }` or start from `default`. Each timeout is optional; `none` blocks forever. `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout` bound subsequent reads and writes on the handle. `tls` upgrades the connection to TLS right after connect (verification on, SNI from `host`); `default` leaves it `false`. Failures are the typed [`Io/Error`](#stdio) — a connect surfaces `refused` (status 6), `tls` (status 8, a failed certificate verification, handshake, or upgrade), or `other(status)`.
+`Settings` has a public representation — build one as `Settings { ... }` or start from `default`. Each timeout is optional; `none` blocks forever. `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout` bound subsequent reads and writes on the handle. `tls` upgrades the connection to TLS right after connect (verification on, SNI from `host`); `default` leaves it `false`. Failures are the typed [`Io/Error`](#stdio) — a connect surfaces `refused` (status 5), `tls` (status 7, a failed certificate verification, handshake, or upgrade), or `other(status)`.
 
 | Binding                               | Type                                                                 | Description                                                    |
 | ------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------- |

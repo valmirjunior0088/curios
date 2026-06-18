@@ -199,9 +199,9 @@ impl Status {
             Status::NotFound => 2,
             Status::PermissionDenied => 3,
             Status::AlreadyExists => 4,
-            Status::ConnectionRefused => 6,
-            Status::WouldBlock => 7,
-            Status::TlsError => 8,
+            Status::ConnectionRefused => 5,
+            Status::WouldBlock => 6,
+            Status::TlsError => 7,
             Status::Other(code) => code,
         }
     }

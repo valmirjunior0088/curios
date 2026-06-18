@@ -1,6 +1,6 @@
 pub use /sys/{Io};
-pub use /sys/Io/{let stdin, let stdout, let stderr, let eql, let read, let write, let poll};
-use /std/{Bin, Str, Nat, Option};
+pub use /sys/Io/{let stdin, let stdout, let stderr};
+use /std/{Bin, Str, Nat, Option, Result};
 
 pub union Error
 | not_found()
@@ -11,13 +11,13 @@ pub union Error
 | other(Nat)
 end
 
-pub let decode(status : Nat) -> Error =
+pub let error_of(status : Nat) -> Error =
     match status : Error
     | 2 => Error/not_found()
     | 3 => Error/permission_denied()
     | 4 => Error/exists()
-    | 6 => Error/refused()
-    | 8 => Error/tls()
+    | 5 => Error/refused()
+    | 7 => Error/tls()
     | _ => Error/other(status)
     end;
 
@@ -27,65 +27,49 @@ pub union Read
 | error(Error)
 end
 
+pub let read(h : Io, n : Nat) -> Read =
+    let r = /sys/Io/read(h, n);
+    match Nat/eql(r.status, 0) : Read
+    | true => Read/chunk(r.bytes)
+    | false =>
+        match Nat/eql(r.status, 1) : Read
+        | true => Read/eof()
+        | false => Read/error(error_of(r.status))
+        end
+    end;
+
+pub rec write(h : Io, b : Bin) -> Result({}, Error) =
+    let r = /sys/Io/write(h, b);
+    match Nat/eql(r.status, 0) : Result({}, Error)
+    | true =>
+        match Nat/lt(r.written, Bin/len(b)) : Result({}, Error)
+        | true => write(h, Bin/slice(b, r.written, Bin/len(b)))
+        | false => Result/success(())
+        end
+    | false => Result/failure(error_of(r.status))
+    end;
+
 pub let print(s : Str) -> {} =
-    let r = write(stdout, Str/to_bin(s));
+    let _ = write(stdout, Str/to_bin(s));
     ();
 
-pub let Reader : Type = { Io, Bin };
+pub let print_err(s : Str) -> {} =
+    let _ = write(stderr, Str/to_bin(s));
+    ();
 
-pub let reader(h : Io) -> Reader = (h, \\);
-
-pub let Buf(A : Type) -> Type = (Reader) -> { Reader, A };
-
-pub let pure(@A : Type, a : A) -> Buf(A) =
-    (r) => (r, a);
-
-pub let bind(@A : Type, @B : Type) -> (Buf(A), (A) -> Buf(B)) -> Buf(B) =
-    (m, f) => (r) =>
-        let p = m(r);
-        f(p.1)(p.0);
-
-pub let run(@A : Type, m : Buf(A), h : Io) -> A =
-    m(reader(h)).1;
-
-pub let drain(h : Io) -> Bin =
-    rec go(acc : Bin) -> Bin =
-        let r = read(h, 4096);
-        match Nat/eql(r.status, 0)
-        | true => go(Bin/concat(acc, r.bytes))
-        | false => acc
-        end;
-    go(\\);
-
-let find_newline(buf : Bin) -> Option(Nat) =
-    let r : { Nat, Option(Nat) } =
-        Bin/fold(buf, (0, Option/none()), (byte, acc) =>
-            match acc.1
-            | some(_) => acc
-            | none() =>
-                match Nat/eql(byte, '\n')
-                | true => (acc.0, Option/some(acc.0))
-                | false => (Nat/add(acc.0, 1), Option/none())
-                end
-            end);
-    r.1;
-
-pub rec read_line : Buf(Option(Bin)) =
-    (r) =>
-        match find_newline(r.1) : { Reader, Option(Bin) }
-        | some(i) =>
-            let stop = Nat/add(i, 1);
-            let line = Bin/slice(r.1, 0, stop);
-            let rest = Bin/slice(r.1, stop, Bin/len(r.1));
-            ((r.0, rest), Option/some(line))
-        | none() =>
-            let chunk = read(r.0, 4096);
-            match Nat/eql(chunk.status, 0)
-            | false =>
-                match Nat/eql(Bin/len(r.1), 0)
-                | true => (r, Option/none())
-                | false => ((r.0, \\), Option/some(r.1))
-                end
-            | true => read_line((r.0, Bin/concat(r.1, chunk.bytes)))
+pub let input() -> Option(Bin) =
+    rec go(acc : Bin) -> Option(Bin) =
+        let r = /sys/Io/read(stdin, 1);
+        match Nat/eql(r.status, 0) : Option(Bin)
+        | false =>
+            match Nat/eql(Bin/len(acc), 0) : Option(Bin)
+            | true => Option/none()
+            | false => Option/some(acc)
+            end
+        | true =>
+            match Nat/eql(Bin/get(r.bytes, 0), '\n') : Option(Bin)
+            | true => Option/some(acc)
+            | false => go(Bin/concat(acc, r.bytes))
             end
         end;
+    go(\\);

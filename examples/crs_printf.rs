@@ -9,9 +9,14 @@ fn main() {
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
-        match Str/of_bin(Io/read(Io/stdin, 1024).bytes) : {}
-        | some(s) => Fmt/printf("%s is %d")(Str/trim(s))(30)
-        | none() => Io/print("invalid input")
+        match Io/read(Io/stdin, 1024) : {}
+        | chunk(bytes) =>
+            match Str/of_bin(bytes) : {}
+            | some(s) => Fmt/printf("%s is %d")(Str/trim(s))(30)
+            | none() => Io/print("invalid input")
+            end
+        | eof() => Io/print("invalid input")
+        | error(_) => Io/print("invalid input")
         end
         "#;
 
