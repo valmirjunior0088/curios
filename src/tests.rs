@@ -2569,13 +2569,13 @@ fn task_block_on_multiplexes_children_with_a_typed_root() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Task, Io, Str, Nat};
+        use /std/{Task, Io, Str, Nat, Lst};
         let child : Task({}) =
             Task/wait(Io/stdin, 1, () =>
                 let w = Io/write(Io/stdout, Str/to_bin("child;"));
                 Task/done(()));
         let root : Task(Nat) =
-            Task/spawn(child, () =>
+            Task/spawn(Lst/nil(), child, () =>
                 Task/wait(Io/stdin, 1, () =>
                     let w = Io/write(Io/stdout, Str/to_bin("root;"));
                     Task/pure(7)));
@@ -2613,6 +2613,39 @@ fn nursery_awaits_a_spawned_child() {
 }
 
 #[test]
+fn nested_nurseries_each_await_their_own_scope() {
+    // Structured concurrency composes: a nursery inside a fiber that is itself owned
+    // by an outer nursery. The grandchild is spawned into the INNER scope, so the
+    // inner `join` does not let `child` continue until the grandchild has run; the
+    // outer `join` does not let the root continue until `child` has run. Each scope
+    // awaits only its own fibers, and the orderings stack: "gc;" before "child;"
+    // (inner await), "child;" before "done;" (outer await).
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str};
+        let grandchild : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("gc;"));
+                Task/done(()));
+        let child : Task({}) =
+            Task/bind(Task/nursery(Task/go(grandchild)), (inner) =>
+                let w = Io/write(Io/stdout, Str/to_bin("child;"));
+                Task/done(()));
+        let main : Task({}) =
+            Task/bind(Task/nursery(Task/go(child)), (outer) =>
+                let w = Io/write(Io/stdout, Str/to_bin("done;"));
+                Task/pure(()));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"gc;child;done;");
+}
+
+#[test]
 fn scoped_cancels_a_helper_when_the_body_returns() {
     // Structured concurrency, the cancel-on-exit side: `scoped` runs its body with
     // a background helper, then cancels the helper the instant the body returns.
@@ -2645,28 +2678,29 @@ fn scoped_cancels_a_helper_when_the_body_returns() {
 fn go_using_runs_the_guard_when_the_child_is_reaped_before_it_steps() {
     // The fd-leak fix in `Net/serve`: a connection accepted in the parent is handed
     // to a spawned worker that must close it. A plain `go` spawns the worker with an
-    // EMPTY finalizer list, so the worker only registers its `close` on its first
-    // step — a scope cancel that reaps it before then drops the resource unclosed.
-    // `go_using` seeds the worker's finalizer at birth, so the release runs even on
-    // reap-before-step. Here `scoped` cancels the worker the instant the body
+    // EMPTY guard list, so the worker only registers its `close` on its first step —
+    // a scope cancel that reaps it before then drops the resource unclosed.
+    // `go_using` seeds the worker's handle-keyed guard at birth, so the release runs
+    // even on reap-before-step. Here `scoped` cancels the worker the instant the body
     // returns — before the worker (which would park on stdin and write "worker;")
-    // ever steps — yet "released;" still reaches stdout. With the old `go`/`using`
-    // split this would print only "body;".
+    // ever steps — yet "released;" still reaches stdout. With a plain `go` this would
+    // print only "body;".
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Task, Io, Str, Nat};
-        let release(h : Nat) -> {} =
-            let w = Io/write(Io/stdout, Str/to_bin("released;"));
-            ();
-        let worker(h : Nat) -> Task({}) =
+        use /std/{Task, Io, Str};
+        let release : () -> {} =
+            () =>
+                let w = Io/write(Io/stdout, Str/to_bin("released;"));
+                ();
+        let worker : Task({}) =
             Task/wait(Io/stdin, 1, () =>
                 let w = Io/write(Io/stdout, Str/to_bin("worker;"));
                 Task/done(()));
         let main : Task({}) =
             Task/scoped(
-                Task/bind(Task/go_using(7, release, worker), (started) =>
+                Task/bind(Task/go_using(Io/stdin, release, worker), (started) =>
                     let w = Io/write(Io/stdout, Str/to_bin("body;"));
                     Task/pure(())));
         Task/run(main)
@@ -2751,13 +2785,12 @@ fn label_projection_resolves_on_a_type_valued_field() {
             match b.t : Box
             | done(a) => (b.A, Task/done(a))
             | wait(h, ev, k) => (b.A, k())
-            | spawn(c, k) => (b.A, k())
-            | spawn_guard(fin, c, k) => (b.A, k())
-            | protect(fin, k) => (b.A, k())
-            | unprotect(k) => (b.A, k())
-            | open(k) => (b.A, k())
+            | spawn(gs, c, k) => (b.A, k())
+            | acquire(h, fin, k) => (b.A, k())
+            | release(h, k) => (b.A, k())
+            | scope(k) => (b.A, k())
             | join(k) => (b.A, k())
-            | close(k) => (b.A, k())
+            | cancel(k) => (b.A, k())
             end;
         let boxed : Box = (Nat, Task/pure(7));
         let stepped = step(boxed);
@@ -2790,13 +2823,12 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             match b.t : Box
             | done(a) => (b.A, Task/done(a))
             | wait(h, ev, k) => (b.A, k())
-            | spawn(c, k) => (b.A, k())
-            | spawn_guard(fin, c, k) => (b.A, k())
-            | protect(fin, k) => (b.A, k())
-            | unprotect(k) => (b.A, k())
-            | open(k) => (b.A, k())
+            | spawn(gs, c, k) => (b.A, k())
+            | acquire(h, fin, k) => (b.A, k())
+            | release(h, k) => (b.A, k())
+            | scope(k) => (b.A, k())
             | join(k) => (b.A, k())
-            | close(k) => (b.A, k())
+            | cancel(k) => (b.A, k())
             end, boxes);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
         "#,

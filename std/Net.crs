@@ -22,7 +22,7 @@ pub let read(c : Socket, n : Nat) -> Task(Io/Read) =
 pub let write(c : Socket, b : Bin) -> Task(Result({}, Io/Error)) =
     Task/write(c.0, b);
 
-let close(c : Socket) -> {} =
+let shutdown(c : Socket) -> {} =
     /sys/Io/close(c.0);
 
 let timeout_ms(t : Option(Time/Duration)) -> Nat =
@@ -78,13 +78,24 @@ let connect_socket(settings : Settings, host : Str, port : Nat) -> Result(Socket
         end
     end;
 
-pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Task(A)) -> Task(Result(A, Io/Error)) =
-    match connect_socket(settings, host, port) : Task(Result(A, Io/Error))
-    | failure(e) => Task/pure(Result/failure(e))
+pub let connect(settings : Settings, host : Str, port : Nat) -> Task(Result(Socket, Io/Error)) =
+    match connect_socket(settings, host, port) : Task(Result(Socket, Io/Error))
+    | failure(e) => Task/done(Result/failure(e))
     | success(c) =>
-        Task/bind(Task/using(Task/pure(c), close, f), (a) =>
-            Task/pure(Result/success(a)))
+        Task/acquire(c.0, () => shutdown(c), () => Task/done(Result/success(c)))
     end;
+
+pub let close(c : Socket) -> Task({}) =
+    Task/release(c.0, () => Task/done(()));
+
+pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Task(A)) -> Task(Result(A, Io/Error)) =
+    Task/bind(connect(settings, host, port), (opened) =>
+        match opened : Task(Result(A, Io/Error))
+        | failure(e) => Task/done(Result/failure(e))
+        | success(c) =>
+            Task/bind(f(c), (a) =>
+                Task/bind(close(c), (closed) => Task/done(Result/success(a))))
+        end);
 
 let drain(c : Socket) -> Task(Bin) =
     rec go(acc : Bin) -> Task(Bin) =
@@ -101,6 +112,9 @@ pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Task
         Task/bind(write(c, request), (sent) => drain(c)));
 
 struct Listener { Io }
+
+let close_listener(l : Listener) -> {} =
+    /sys/Io/close(l.0);
 
 let listen_socket(host : Str, port : Nat) -> Result(Listener, Io/Error) =
     let r = /sys/Io/resolve(Str/to_bin(host), port);
@@ -141,24 +155,21 @@ let accept(l : Listener) -> Task(Result(Socket, Io/Error)) =
         | failure(e) => Task/pure(Result/failure(e))
         end);
 
-let close_listener(l : Listener) -> {} =
-    /sys/Io/close(l.0);
-
 let handle_conn(c : Socket, handler : (Socket) -> Task({})) -> Task({}) =
-    Task/using(Task/pure(c), close, handler);
+    Task/using(c.0, () => shutdown(c), handler(c));
 
 pub let serve(host : Str, port : Nat, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
     match listen_socket(host, port) : Task(Result({}, Io/Error))
     | failure(e) => Task/pure(Result/failure(e))
     | success(l) =>
         Task/bind(
-            Task/using(Task/pure(l), close_listener, (lis) =>
+            Task/using(l.0, () => close_listener(l),
                 Task/nursery(
                     rec go() -> Task({}) =
-                        Task/bind(accept(lis), (r) =>
+                        Task/bind(accept(l), (r) =>
                             match r : Task({})
                             | success(c) =>
-                                Task/bind(Task/go_using(c, close, handler), (started) => go())
+                                Task/bind(Task/go_using(c.0, () => shutdown(c), handler(c)), (started) => go())
                             | failure(_) => Task/pure(())
                             end);
                     go())),
@@ -170,18 +181,18 @@ pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Sock
     match Nat/eql(cfg.status, 0) : Task(Result({}, Io/Error))
     | false => Task/pure(Result/failure(Io/decode(cfg.status)))
     | true =>
-        Task/using(Task/pure(cfg.handle), (h) => /sys/Io/close(h), (config) =>
+        Task/using(cfg.handle, () => let closed = /sys/Io/close(cfg.handle); (),
             match listen_socket(host, port) : Task(Result({}, Io/Error))
             | failure(e) => Task/pure(Result/failure(e))
             | success(l) =>
                 Task/bind(
-                    Task/using(Task/pure(l), close_listener, (lis) =>
+                    Task/using(l.0, () => close_listener(l),
                         rec go() -> Task({}) =
-                            Task/bind(Task/accept(lis.0), (r) =>
+                            Task/bind(Task/accept(l.0), (r) =>
                                 match r : Task({})
                                 | failure(_) => Task/pure(())
                                 | success(h) =>
-                                    let status = /sys/Io/start_tls_server(h, config);
+                                    let status = /sys/Io/start_tls_server(h, cfg.handle);
                                     match Nat/eql(status, 0) : Task({})
                                     | true => Task/bind(handle_conn(Socket { h }, handler), (done) => go())
                                     | false =>
