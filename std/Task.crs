@@ -9,19 +9,16 @@ let OK : Nat = 0;
 let EOF : Nat = 1;
 let WOULD_BLOCK : Nat = 7;
 
--- The free monad the scheduler interprets. `done`/`wait`/`spawn` are the effect
--- and concurrency surface; `protect`/`unprotect` bracket a resource scope --
--- `protect` registers a synchronous finalizer (`({}) -> {}`, in practice a
--- `close`) on the running fiber, `unprotect` pops and runs the most recent one
--- when its scope exits normally. A fiber dropped or cancelled before reaching
--- its `unprotect` still has its finalizers run by the scheduler, so a resource
--- acquired through `using` is always released.
 pub union Task(A : Type)
 | done(A)
-| wait(Io, Nat, (({}) -> Task(A)))
-| spawn(Task({}), (({}) -> Task(A)))
-| protect((({}) -> {}), (({}) -> Task(A)))
-| unprotect((({}) -> Task(A)))
+| wait(Io, Nat, (() -> Task(A)))
+| spawn(Task({}), (() -> Task(A)))
+| spawn_guard((() -> {}), Task({}), (() -> Task(A)))
+| protect((() -> {}), (() -> Task(A)))
+| unprotect((() -> Task(A)))
+| open((() -> Task(A)))
+| join((() -> Task(A)))
+| close((() -> Task(A)))
 end
 
 pub use Task/*;
@@ -33,32 +30,30 @@ pub rec bind(@A : Type, @B : Type) -> (Task(A), (A) -> Task(B)) -> Task(B) =
     (m, f) =>
         match m : Task(B)
         | done(a) => f(a)
-        | wait(h, ev, k) => Task/wait(h, ev, (u) => bind(k(u), f))
-        | spawn(child, k) => Task/spawn(child, (u) => bind(k(u), f))
-        | protect(fin, k) => Task/protect(fin, (u) => bind(k(u), f))
-        | unprotect(k) => Task/unprotect((u) => bind(k(u), f))
+        | wait(h, ev, k) => Task/wait(h, ev, () => bind(k(), f))
+        | spawn(child, k) => Task/spawn(child, () => bind(k(), f))
+        | spawn_guard(fin, child, k) => Task/spawn_guard(fin, child, () => bind(k(), f))
+        | protect(fin, k) => Task/protect(fin, () => bind(k(), f))
+        | unprotect(k) => Task/unprotect(() => bind(k(), f))
+        | open(k) => Task/open(() => bind(k(), f))
+        | join(k) => Task/join(() => bind(k(), f))
+        | close(k) => Task/close(() => bind(k(), f))
         end;
 
--- The resource bracket: acquire a resource, run `body` with it, and release it
--- exactly once -- when `body` completes, or when the fiber is dropped/cancelled
--- before it does. `release` is the synchronous finalizer (typically `close`).
 pub let using(@R : Type, @A : Type, acquire : Task(R), release : (R) -> {}, body : (R) -> Task(A)) -> Task(A) =
     bind(acquire, (r) =>
-        Task/protect((u) => release(r), (u) =>
+        Task/protect(() => release(r), () =>
             bind(body(r), (a) =>
-                Task/unprotect((u) => Task/done(a)))));
+                Task/unprotect(() => Task/done(a)))));
 
 pub let nonblocking(h : Io) -> {} =
     let status = /sys/Io/set_nonblocking(h, true);
     ();
 
--- Read up to `n` bytes, yielding on WOULD_BLOCK until the handle is readable.
--- The raw status never escapes: a successful read is `chunk`, end-of-stream is
--- the distinct `eof`, and a failure is `error` carrying a typed `Io/Error`.
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
     let r = Io/read(h, n);
     match Nat/eql(r.status, WOULD_BLOCK) : Task(Io/Read)
-    | true => Task/wait(h, READ, (u) => read(h, n))
+    | true => Task/wait(h, READ, () => read(h, n))
     | false =>
         match Nat/eql(r.status, EOF) : Task(Io/Read)
         | true => Task/done(Io/Read/eof())
@@ -70,33 +65,25 @@ pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
         end
     end;
 
--- Write `b`, yielding on WOULD_BLOCK until the handle is writable. A single
--- non-blocking write may take only a prefix (`written`); we resend exactly the
--- unwritten tail, never the bytes already accepted, so a large write is never
--- duplicated. The raw status never escapes: success is `success(())`, a failure
--- is `failure` carrying a typed `Io/Error`.
 pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
     let r = Io/write(h, b);
     match Nat/eql(r.status, WOULD_BLOCK) : Task(Result({}, Io/Error))
-    | true => Task/wait(h, WRITE, (u) => write(h, b))
+    | true => Task/wait(h, WRITE, () => write(h, b))
     | false =>
         match Nat/eql(r.status, OK) : Task(Result({}, Io/Error))
         | true =>
             match Nat/lt(r.written, Bin/len(b)) : Task(Result({}, Io/Error))
-            | true => Task/wait(h, WRITE, (u) => write(h, Bin/slice(b, r.written, Bin/len(b))))
+            | true => Task/wait(h, WRITE, () => write(h, Bin/slice(b, r.written, Bin/len(b))))
             | false => Task/done(Result/success(()))
             end
         | false => Task/done(Result/failure(Io/decode(r.status)))
         end
     end;
 
--- Accept the next inbound connection on listener `l`, yielding until one is
--- pending. Returns the raw connection handle on success; the caller (`/std/Net`)
--- wraps it in a `Socket` and brackets its close.
 pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     let r = /sys/Io/accept(l);
     match Nat/eql(r.status, WOULD_BLOCK) : Task(Result(Io, Io/Error))
-    | true => Task/wait(l, READ, (u) => accept(l))
+    | true => Task/wait(l, READ, () => accept(l))
     | false =>
         match Nat/eql(r.status, OK) : Task(Result(Io, Io/Error))
         | true => Task/done(Result/success(r.handle))
@@ -105,26 +92,39 @@ pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     end;
 
 pub let go(child : Task({})) -> Task({}) =
-    Task/spawn(child, (u) => Task/done(()));
+    Task/spawn(child, () => Task/done(()));
 
--- A synchronous finalizer: run for effect at scope exit or on cancellation.
-pub let Finalizer : Type = ({}) -> {};
+pub let go_using(@R : Type, r : R, release : (R) -> {}, body : (R) -> Task({})) -> Task({}) =
+    Task/spawn_guard(() => release(r), body(r), () => Task/done(()));
 
--- A fiber: a `Task(A)` with its result type hidden behind an existential, so one
--- ready queue can hold tasks of differing result types, paired with the stack of
--- finalizers it has entered but not yet left. `@A` erases; the finalizer stack
--- is ordinary runtime state the scheduler threads, runs on normal scope exit,
--- and runs on drop so nothing leaks.
+pub let nursery(@A : Type, body : Task(A)) -> Task(A) =
+    Task/open(() => bind(body, (a) => Task/join(() => Task/done(a))));
+
+pub let scoped(@A : Type, body : Task(A)) -> Task(A) =
+    Task/open(() => bind(body, (a) => Task/close(() => Task/done(a))));
+
+pub let Finalizer : Type = () -> {};
+
 pub union Fiber
-| fiber(@A : Type, Task(A), Lst(Finalizer))
+| fiber(@A : Type, Task(A), Lst(Finalizer), Lst(Nat))
 end
 
 pub use Fiber/*;
 
--- A parked fiber. Its resume re-packs into `Fiber`, resealing the existential
--- and carrying the finalizer stack forward; the explicit `finalizers` field lets
--- the scheduler run them if the fiber is dropped while parked, without resuming.
-struct Parked pub { handle : Io, interest : Nat, finalizers : Lst(Finalizer), resume : (({}) -> Fiber) }
+struct Parked pub {
+    handle : Io,
+    interest : Nat,
+    finalizers : Lst(Finalizer),
+    groups : Lst(Nat),
+    resume : (() -> Fiber)
+}
+
+struct Joined pub {
+    awaited : Nat,
+    groups : Lst(Nat),
+    finalizers : Lst(Finalizer),
+    resume : (() -> Fiber)
+}
 
 let is_ready(results : Nat, interest : Nat) -> Bln =
     Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(ERR, HUP))), 0);
@@ -137,45 +137,165 @@ let partition(blocked : Lst(Parked), results : Arr(Nat), start : Nat) -> { Lst(F
             match is_ready(Arr/get(results, i), p.interest) : { Lst(Fiber), Lst(Parked) }
             | true =>
                 let resume = p.resume;
-                walk(tail, Nat/add(i, 1), Lst/cons(resume(()), woken), still)
+                walk(tail, Nat/add(i, 1), Lst/cons(resume(), woken), still)
             | false => walk(tail, Nat/add(i, 1), woken, Lst/cons(p, still))
             end
         end;
     walk(blocked, start, Lst/nil(), Lst/nil());
 
--- Run a finalizer stack for effect, most-recent first.
 let run_all(fins : Lst(Finalizer)) -> {} =
     rec go(rest : Lst(Finalizer)) -> {} =
         match rest : {}
         | nil() => ()
-        | cons(fin, more) => let ran = fin(()); go(more)
+        | cons(fin, more) => let ran = fin(); go(more)
         end;
     go(fins);
 
-let drain_blocked(blocked : Lst(Parked)) -> {} =
-    rec go(rest : Lst(Parked)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(p, more) => let ran = run_all(p.finalizers); go(more)
+let mem(x : Nat, xs : Lst(Nat)) -> Bln =
+    rec go(rest : Lst(Nat)) -> Bln =
+        match rest : Bln
+        | nil() => false
+        | cons(y, more) =>
+            match Nat/eql(x, y) : Bln
+            | true => true
+            | false => go(more)
+            end
+        end;
+    go(xs);
+
+let cancelled_any(groups : Lst(Nat), cancelled : Lst(Nat)) -> Bln =
+    rec go(rest : Lst(Nat)) -> Bln =
+        match rest : Bln
+        | nil() => false
+        | cons(g, more) =>
+            match mem(g, cancelled) : Bln
+            | true => true
+            | false => go(more)
+            end
+        end;
+    go(groups);
+
+let group_in_fibers(g : Nat, fs : Lst(Fiber)) -> Bln =
+    rec go(rest : Lst(Fiber)) -> Bln =
+        match rest : Bln
+        | nil() => false
+        | cons(f, more) =>
+            match f : Bln
+            | fiber(_, _, _, fg) =>
+                match mem(g, fg) : Bln
+                | true => true
+                | false => go(more)
+                end
+            end
+        end;
+    go(fs);
+
+let group_in_parked(g : Nat, ps : Lst(Parked)) -> Bln =
+    rec go(rest : Lst(Parked)) -> Bln =
+        match rest : Bln
+        | nil() => false
+        | cons(p, more) =>
+            match mem(g, p.groups) : Bln
+            | true => true
+            | false => go(more)
+            end
+        end;
+    go(ps);
+
+let group_in_joining(g : Nat, js : Lst(Joined)) -> Bln =
+    rec go(rest : Lst(Joined)) -> Bln =
+        match rest : Bln
+        | nil() => false
+        | cons(j, more) =>
+            match Nat/eql(j.awaited, g) : Bln
+            | true => go(more)
+            | false =>
+                match mem(g, j.groups) : Bln
+                | true => true
+                | false => go(more)
+                end
+            end
+        end;
+    go(js);
+
+let group_present(g : Nat, ready : Lst(Fiber), blocked : Lst(Parked), joining : Lst(Joined)) -> Bln =
+    match group_in_fibers(g, ready) : Bln
+    | true => true
+    | false =>
+        match group_in_parked(g, blocked) : Bln
+        | true => true
+        | false => group_in_joining(g, joining)
+        end
+    end;
+
+let sweep_blocked(blocked : Lst(Parked), cancelled : Lst(Nat)) -> Lst(Parked) =
+    rec go(rest : Lst(Parked)) -> Lst(Parked) =
+        match rest : Lst(Parked)
+        | nil() => Lst/nil()
+        | cons(p, more) =>
+            match cancelled_any(p.groups, cancelled) : Lst(Parked)
+            | true => let ran = run_all(p.finalizers); go(more)
+            | false => Lst/cons(p, go(more))
+            end
         end;
     go(blocked);
 
--- The scheduler phase. The ONLY place it is observed is the `wait` arm of
--- `step`: under `running` a blocked fiber parks; under `draining` it is
--- cancelled and its finalizers run. That single switch is the whole essence of
--- "drop".
-union Mode
-| running()
-| draining()
-end
+let sweep_joining(joining : Lst(Joined), cancelled : Lst(Nat)) -> Lst(Joined) =
+    rec go(rest : Lst(Joined)) -> Lst(Joined) =
+        match rest : Lst(Joined)
+        | nil() => Lst/nil()
+        | cons(j, more) =>
+            match cancelled_any(j.groups, cancelled) : Lst(Joined)
+            | true => let ran = run_all(j.finalizers); go(more)
+            | false => Lst/cons(j, go(more))
+            end
+        end;
+    go(joining);
 
--- The outcome of advancing one fiber by a single scheduler-relevant step.
--- `advanced` replaces the stepped fiber on the ready queue with zero (it
--- finished or was cancelled), one, or two (a `spawn`) fibers; `parked` removes
--- it to the blocked set and never occurs under `draining`.
+let wake(joining : Lst(Joined), ready : Lst(Fiber), blocked : Lst(Parked)) -> { Lst(Fiber), Lst(Joined) } =
+    rec go(rest : Lst(Joined), woken : Lst(Fiber), still : Lst(Joined)) -> { Lst(Fiber), Lst(Joined) } =
+        match rest : { Lst(Fiber), Lst(Joined) }
+        | nil() => (woken, still)
+        | cons(j, more) =>
+            match group_present(j.awaited, ready, blocked, joining) : { Lst(Fiber), Lst(Joined) }
+            | true => go(more, woken, Lst/cons(j, still))
+            | false =>
+                let resume = j.resume;
+                go(more, Lst/cons(resume(), woken), still)
+            end
+        end;
+    go(joining, Lst/nil(), Lst/nil());
+
+let drain_joining(joining : Lst(Joined)) -> {} =
+    rec go(rest : Lst(Joined)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(j, more) => let ran = run_all(j.finalizers); go(more)
+        end;
+    go(joining);
+
+let app_ids(xs : Lst(Nat), tail : Lst(Nat)) -> Lst(Nat) =
+    rec go(rest : Lst(Nat)) -> Lst(Nat) =
+        match rest : Lst(Nat)
+        | nil() => tail
+        | cons(x, more) => Lst/cons(x, go(more))
+        end;
+    go(xs);
+
+let run_fiber_fins(f : Fiber) -> {} =
+    match f : {}
+    | fiber(_, _, fins, _) => run_all(fins)
+    end;
+
+let fiber_cancelled(f : Fiber, cancelled : Lst(Nat)) -> Bln =
+    match f : Bln
+    | fiber(_, _, _, fg) => cancelled_any(fg, cancelled)
+    end;
+
 union Stepped
-| advanced(Lst(Fiber))
-| parked(Parked)
+| advanced(Lst(Fiber), Nat)
+| parked(Parked, Nat)
+| joined(Joined, Lst(Nat), Nat)
 end
 
 let splice(xs : Lst(Fiber), tail : Lst(Fiber)) -> Lst(Fiber) =
@@ -186,111 +306,158 @@ let splice(xs : Lst(Fiber), tail : Lst(Fiber)) -> Lst(Fiber) =
         end;
     go(xs);
 
--- Advance one fiber by a single constructor, running finalizers as
--- `protect`/`unprotect`/completion dictate. The existential result type is
--- opened anonymously (`_`) and never named: every continuation is immediately
--- resealed into a `Fiber`, so the hidden type never escapes into `Stepped`.
--- This is the single definition of stepping a fiber; `running` vs `draining` is
--- the only behavioural axis, and it is confined to the `wait` arm.
-let step(mode : Mode, f : Fiber) -> Stepped =
+let step(f : Fiber, next_id : Nat) -> Stepped =
     match f : Stepped
-    | fiber(_, t, fins) =>
+    | fiber(_, t, fins, groups) =>
         match t : Stepped
         | done(_) =>
             let ran = run_all(fins);
-            Stepped/advanced(Lst/nil())
+            Stepped/advanced(Lst/nil(), next_id)
         | spawn(child, k) =>
-            Stepped/advanced(Lst/cons(Fiber/fiber(k(()), fins), Lst/cons(Fiber/fiber(child, Lst/nil()), Lst/nil())))
+            Stepped/advanced(
+                Lst/cons(Fiber/fiber(k(), fins, groups), Lst/cons(Fiber/fiber(child, Lst/nil(), groups), Lst/nil())),
+                next_id)
+        | spawn_guard(fin, child, k) =>
+            Stepped/advanced(
+                Lst/cons(Fiber/fiber(k(), fins, groups), Lst/cons(Fiber/fiber(child, Lst/cons(fin, Lst/nil()), groups), Lst/nil())),
+                next_id)
         | protect(fin, k) =>
-            Stepped/advanced(Lst/cons(Fiber/fiber(k(()), Lst/cons(fin, fins)), Lst/nil()))
+            Stepped/advanced(Lst/cons(Fiber/fiber(k(), Lst/cons(fin, fins), groups), Lst/nil()), next_id)
         | unprotect(k) =>
             match fins : Stepped
-            | cons(top, more) => let ran = top(()); Stepped/advanced(Lst/cons(Fiber/fiber(k(()), more), Lst/nil()))
-            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(()), Lst/nil()), Lst/nil()))
+            | cons(top, more) => let ran = top(); Stepped/advanced(Lst/cons(Fiber/fiber(k(), more, groups), Lst/nil()), next_id)
+            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(), Lst/nil(), groups), Lst/nil()), next_id)
             end
         | wait(h, ev, k) =>
-            match mode : Stepped
-            | running() =>
-                Stepped/parked(Parked { handle = h, interest = ev, finalizers = fins, resume = (u) => Fiber/fiber(k(u), fins) })
-            | draining() =>
-                let ran = run_all(fins);
-                Stepped/advanced(Lst/nil())
+            Stepped/parked(Parked { handle = h, interest = ev, finalizers = fins, groups = groups, resume = () => Fiber/fiber(k(), fins, groups) }, next_id)
+        | open(k) =>
+            Stepped/advanced(Lst/cons(Fiber/fiber(k(), fins, Lst/cons(next_id, groups)), Lst/nil()), Nat/add(next_id, 1))
+        | join(k) =>
+            match groups : Stepped
+            | cons(g, rest) =>
+                Stepped/joined(Joined { awaited = g, groups = rest, finalizers = fins, resume = () => Fiber/fiber(k(), fins, rest) }, Lst/nil(), next_id)
+            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(), fins, groups), Lst/nil()), next_id)
+            end
+        | close(k) =>
+            match groups : Stepped
+            | cons(g, rest) =>
+                Stepped/joined(Joined { awaited = g, groups = rest, finalizers = fins, resume = () => Fiber/fiber(k(), fins, rest) }, Lst/cons(g, Lst/nil()), next_id)
+            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(), fins, groups), Lst/nil()), next_id)
             end
         end
     end;
 
--- The ready/blocked loop over fibers, shared by fire-and-forget `run` (under
--- `running`, which polls and resumes) and the shutdown drop (under `draining`,
--- which never polls: ready fibers are stepped to cancellation and the remaining
--- parked fibers are finalized). `block_on` reuses `step` directly for its
--- children but keeps its own loop for the slot-0 root.
-rec schedule(mode : Mode, ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
-    match ready : {}
+rec schedule(ready : Lst(Fiber), blocked : Lst(Parked), joining : Lst(Joined), cancelled : Lst(Nat), next_id : Nat) -> {} =
+    let blocked1 = sweep_blocked(blocked, cancelled);
+    let joining1 = sweep_joining(joining, cancelled);
+    let woken = wake(joining1, ready, blocked1);
+    let ready1 = splice(woken.0, ready);
+    let joining2 = woken.1;
+    match ready1 : {}
     | cons(f, rest) =>
-        match step(mode, f) : {}
-        | advanced(news) => schedule(mode, splice(news, rest), blocked)
-        | parked(p) => schedule(mode, rest, Lst/cons(p, blocked))
+        match fiber_cancelled(f, cancelled) : {}
+        | true => let ran = run_fiber_fins(f); schedule(rest, blocked1, joining2, cancelled, next_id)
+        | false =>
+            match step(f, next_id) : {}
+            | advanced(news, nid) => schedule(splice(news, rest), blocked1, joining2, cancelled, nid)
+            | parked(p, nid) => schedule(rest, Lst/cons(p, blocked1), joining2, cancelled, nid)
+            | joined(j, gc, nid) => schedule(rest, blocked1, Lst/cons(j, joining2), app_ids(gc, cancelled), nid)
+            end
         end
     | nil() =>
-        match mode : {}
-        | draining() => drain_blocked(blocked)
-        | running() =>
-            match blocked : {}
-            | nil() => ()
-            | cons(_, _) =>
-                let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
-                let events = Lst/to_arr(Lst/map((p) => p.interest, blocked));
-                let results = Io/poll(handles, events, -1);
-                let split = partition(blocked, results, 0);
-                schedule(mode, split.0, split.1)
-            end
+        match blocked1 : {}
+        | cons(_, _) =>
+            let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked1));
+            let events = Lst/to_arr(Lst/map((p) => p.interest, blocked1));
+            let results = Io/poll(handles, events, -1);
+            let split = partition(blocked1, results, 0);
+            schedule(split.0, split.1, joining2, cancelled, next_id)
+        | nil() => drain_joining(joining2)
         end
     end;
 
--- Run a set of fibers to completion, multiplexing them over one `Io/poll`.
--- Fire-and-forget: each fiber's result is discarded. `run` only returns once
--- everything has finished, so no fiber is ever dropped here; finalizers fire
--- through the normal `protect`/`unprotect` discipline.
-pub let run(ready : Lst(Fiber), blocked : Lst(Parked)) -> {} =
-    schedule(Mode/running(), ready, blocked);
-
--- Drive one fiber to its value while multiplexing any fibers it spawns. The root
--- stays an un-boxed `Task(A)` in its own poll slot (index 0); spawned children
--- are stepped by the shared `step`. The root carries its own finalizer stack
--- (`root_fins`). When the root completes, its remaining finalizers run and any
--- outstanding children are dropped via `schedule` in `draining` mode -- runnable
--- work is cancelled and finalized, parked work is finalized -- so nothing the
--- program acquired is left open.
 pub let block_on(@A : Type, t : Task(A)) -> A =
-    rec loop(root : Task(A), root_fins : Lst(Finalizer), ready : Lst(Fiber), blocked : Lst(Parked)) -> A =
+    rec loop(root : Task(A), rgroups : Lst(Nat), rfins : Lst(Finalizer), ready : Lst(Fiber), blocked : Lst(Parked), joining : Lst(Joined), cancelled : Lst(Nat), next_id : Nat) -> A =
+        let blocked1 = sweep_blocked(blocked, cancelled);
+        let joining1 = sweep_joining(joining, cancelled);
+        let woken = wake(joining1, ready, blocked1);
+        let ready1 = splice(woken.0, ready);
+        let joining2 = woken.1;
         match root : A
         | done(a) =>
-            let cleaned = run_all(root_fins);
-            let dropped = schedule(Mode/draining(), ready, blocked);
+            let cleaned = run_all(rfins);
+            let dropped = schedule(ready1, blocked1, joining2, Lst/cons(0, cancelled), next_id);
             a
-        | protect(fin, k) => loop(k(()), Lst/cons(fin, root_fins), ready, blocked)
+        | protect(fin, k) => loop(k(), rgroups, Lst/cons(fin, rfins), ready1, blocked1, joining2, cancelled, next_id)
         | unprotect(k) =>
-            match root_fins : A
-            | cons(top, more) => let ran = top(()); loop(k(()), more, ready, blocked)
-            | nil() => loop(k(()), Lst/nil(), ready, blocked)
+            match rfins : A
+            | cons(top, more) => let ran = top(); loop(k(), rgroups, more, ready1, blocked1, joining2, cancelled, next_id)
+            | nil() => loop(k(), rgroups, Lst/nil(), ready1, blocked1, joining2, cancelled, next_id)
             end
-        | spawn(child, k) => loop(k(()), root_fins, Lst/cons(Fiber/fiber(child, Lst/nil()), ready), blocked)
+        | spawn(child, k) => loop(k(), rgroups, rfins, Lst/cons(Fiber/fiber(child, Lst/nil(), rgroups), ready1), blocked1, joining2, cancelled, next_id)
+        | spawn_guard(fin, child, k) => loop(k(), rgroups, rfins, Lst/cons(Fiber/fiber(child, Lst/cons(fin, Lst/nil()), rgroups), ready1), blocked1, joining2, cancelled, next_id)
+        | open(k) => loop(k(), Lst/cons(next_id, rgroups), rfins, ready1, blocked1, joining2, cancelled, Nat/add(next_id, 1))
+        | close(k) =>
+            match rgroups : A
+            | cons(g, grest) => loop(Task/join(k), rgroups, rfins, ready1, blocked1, joining2, Lst/cons(g, cancelled), next_id)
+            | nil() => loop(k(), rgroups, rfins, ready1, blocked1, joining2, cancelled, next_id)
+            end
+        | join(k) =>
+            match rgroups : A
+            | cons(g, grest) =>
+                match group_present(g, ready1, blocked1, joining2) : A
+                | false => loop(k(), grest, rfins, ready1, blocked1, joining2, cancelled, next_id)
+                | true =>
+                    match ready1 : A
+                    | cons(cf, crest) =>
+                        match fiber_cancelled(cf, cancelled) : A
+                        | true => let ran = run_fiber_fins(cf); loop(Task/join(k), rgroups, rfins, crest, blocked1, joining2, cancelled, next_id)
+                        | false =>
+                            match step(cf, next_id) : A
+                            | advanced(news, nid) => loop(Task/join(k), rgroups, rfins, splice(news, crest), blocked1, joining2, cancelled, nid)
+                            | parked(p, nid) => loop(Task/join(k), rgroups, rfins, crest, Lst/cons(p, blocked1), joining2, cancelled, nid)
+                            | joined(j, gc, nid) => loop(Task/join(k), rgroups, rfins, crest, blocked1, Lst/cons(j, joining2), app_ids(gc, cancelled), nid)
+                            end
+                        end
+                    | nil() =>
+                        match blocked1 : A
+                        | cons(_, _) =>
+                            let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked1));
+                            let events = Lst/to_arr(Lst/map((p) => p.interest, blocked1));
+                            let results = Io/poll(handles, events, -1);
+                            let split = partition(blocked1, results, 0);
+                            loop(Task/join(k), rgroups, rfins, split.0, split.1, joining2, cancelled, next_id)
+                        | nil() => loop(k(), grest, rfins, ready1, blocked1, joining2, cancelled, next_id)
+                        end
+                    end
+                end
+            | nil() => loop(k(), rgroups, rfins, ready1, blocked1, joining2, cancelled, next_id)
+            end
         | wait(rh, rev, rk) =>
-            match ready : A
-            | cons(f, rest) =>
-                match step(Mode/running(), f) : A
-                | advanced(news) => loop(Task/wait(rh, rev, rk), root_fins, splice(news, rest), blocked)
-                | parked(p) => loop(Task/wait(rh, rev, rk), root_fins, rest, Lst/cons(p, blocked))
+            match ready1 : A
+            | cons(cf, crest) =>
+                match fiber_cancelled(cf, cancelled) : A
+                | true => let ran = run_fiber_fins(cf); loop(Task/wait(rh, rev, rk), rgroups, rfins, crest, blocked1, joining2, cancelled, next_id)
+                | false =>
+                    match step(cf, next_id) : A
+                    | advanced(news, nid) => loop(Task/wait(rh, rev, rk), rgroups, rfins, splice(news, crest), blocked1, joining2, cancelled, nid)
+                    | parked(p, nid) => loop(Task/wait(rh, rev, rk), rgroups, rfins, crest, Lst/cons(p, blocked1), joining2, cancelled, nid)
+                    | joined(j, gc, nid) => loop(Task/wait(rh, rev, rk), rgroups, rfins, crest, blocked1, Lst/cons(j, joining2), app_ids(gc, cancelled), nid)
+                    end
                 end
             | nil() =>
-                let handles = Lst/to_arr(Lst/cons(rh, Lst/map((p) => p.handle, blocked)));
-                let events = Lst/to_arr(Lst/cons(rev, Lst/map((p) => p.interest, blocked)));
+                let handles = Lst/to_arr(Lst/cons(rh, Lst/map((p) => p.handle, blocked1)));
+                let events = Lst/to_arr(Lst/cons(rev, Lst/map((p) => p.interest, blocked1)));
                 let results = Io/poll(handles, events, -1);
-                let split = partition(blocked, results, 1);
+                let split = partition(blocked1, results, 1);
                 match is_ready(Arr/get(results, 0), rev) : A
-                | true => loop(rk(()), root_fins, split.0, split.1)
-                | false => loop(Task/wait(rh, rev, rk), root_fins, split.0, split.1)
+                | true => loop(rk(), rgroups, rfins, split.0, split.1, joining2, cancelled, next_id)
+                | false => loop(Task/wait(rh, rev, rk), rgroups, rfins, split.0, split.1, joining2, cancelled, next_id)
                 end
             end
         end;
-    loop(t, Lst/nil(), Lst/nil(), Lst/nil());
+    loop(t, Lst/cons(0, Lst/nil()), Lst/nil(), Lst/nil(), Lst/nil(), Lst/nil(), Lst/nil(), 1);
+
+pub let run(main : Task({})) -> {} =
+    let result = block_on(main);
+    ();

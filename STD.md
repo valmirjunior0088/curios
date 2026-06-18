@@ -179,6 +179,8 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 
 The handle-based IO primitives (`read`/`write`/`open`/`connect`/`close`) and the ambient host services (clocks, randomness, process environment) all live in `/sys/Io`, but `/std/Io` re-exports only the byte-stream operations on the standard handles. The rest surface through dedicated modules: file handles through [`/std/File`](#stdfile), sockets through [`/std/Net`](#stdnet), time through [`/std/Time`](#stdtime), randomness through [`/std/Rand`](#stdrand), and process access through [`/std/Proc`](#stdproc).
 
+Asynchronous, non-blocking IO and concurrency are layered on top by [`/std/Task`](#stdtask) — a free-monad scheduler with structured concurrency. The `File` and `Net` operations are `Task`s built on its non-blocking `read`/`write`/`accept` leaves, so they multiplex over a single poll and are driven by `Task/block_on`.
+
 ### `/std/Io`
 
 The byte-stream handle type — an opaque runtime token, like a file descriptor. `stdin`/`stdout`/`stderr` and the primitive `read`/`write` are re-exported from `/sys`; the rest are buffered-reader conveniences built on top.
@@ -203,6 +205,15 @@ Failable operations report through a status code — errors are data; traps stay
 | 5      | other                                        |
 | 6      | connection refused (`connect` only)          |
 
+`/std/Io` also defines the typed forms the asynchronous layer ([`/std/Task`](#stdtask), `/std/File`, `/std/Net`) returns in place of raw status codes:
+
+```
+union Error | not_found() | permission_denied() | exists() | refused() | tls() | other(Nat) end
+union Read  | chunk(Bin) | eof() | error(Error) end
+```
+
+`decode(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 6 → `refused`, 8 → `tls`, else `other`). `Read` is the result of an asynchronous read: a `chunk` of bytes, the distinct `eof`, or an `error`.
+
 The safe conveniences below layer a buffered reader over the primitive handle.
 
 | Binding     | Type                                             | Description                                                                                                                               |
@@ -219,29 +230,69 @@ The safe conveniences below layer a buffered reader over the primitive handle.
 
 `read_line` delivers a final unterminated line before EOF as `some`; any non-ok refill status (EOF or an IO error) ends the stream — an error-propagating reader is future work.
 
+### `/std/Task`
+
+The asynchronous effect and concurrency layer. A `Task(A)` is a **free monad** the scheduler interprets: building one is pure — the effects fire only when a scheduler (`run` or `block_on`) drives it — so a task is a first-class, composable description of work. On top of it sits **structured concurrency**: every spawned fiber is *owned* by the scope that launched it, nothing outlives that scope, and cancelling a scope promptly reaps its whole subtree (running each finalizer).
+
+```
+union Task(A : Type)
+| done(A)                          -- a finished value
+| wait(Io, Nat, () -> Task(A))     -- yield until a handle is ready for an interest
+| spawn(Task({}), () -> Task(A))   -- fork a child into the current scope
+| protect(() -> {}, () -> Task(A)) -- push a finalizer onto the running fiber
+| unprotect(() -> Task(A))         -- pop and run the most recent finalizer
+| open(() -> Task(A))              -- enter a fresh cancellation scope (group)
+| join(() -> Task(A))              -- close a scope, waiting for its children
+| close(() -> Task(A))             -- close a scope, cancelling its children
+end
+
+union Fiber | fiber(@A : Type, Task(A), Lst(Finalizer), Lst(Nat)) end
+```
+
+The constructors are the raw interpreter surface; programs work through the combinators below. The `Nat` in `wait` is an interest bitmask (`READ = 1`, `WRITE = 2`, plus `ERR`/`HUP`), but `read`/`write`/`accept` set it for you. `Fiber` is a task with its result type hidden behind an existential (so one ready queue holds tasks of differing result types), paired with its finalizer stack and the stack of cancellation groups it belongs to.
+
+| Binding                          | Type                                                         | Description                                                                       |
+| -------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `pure(a)`                        | `(@A : Type, A) -> Task(A)`                                  | Lift a value into a finished task                                                 |
+| `bind(m, f)`                     | `(@A, @B) -> (Task(A), (A) -> Task(B)) -> Task(B)`           | Sequence two tasks (use with `let ! = Task/bind;` blocks)                         |
+| `using(acquire, release, body)`  | `(@R, @A, Task(R), (R) -> {}, (R) -> Task(A)) -> Task(A)`    | Acquire a resource, run `body`, and release it exactly once — on completion or on drop/cancel |
+| `read(h, n)`                     | `(Io, Nat) -> Task(Io/Read)`                                | Read up to `n` bytes, yielding on would-block; `chunk` / `eof` / `error`          |
+| `write(h, b)`                    | `(Io, Bin) -> Task(Result({}, Io/Error))`                   | Write all of `b`, yielding on would-block and resending only the unwritten tail   |
+| `accept(l)`                      | `(Io) -> Task(Result(Io, Io/Error))`                        | Accept the next connection on listener `l`, yielding until one is pending         |
+| `nonblocking(h)`                 | `(Io) -> {}`                                                | Put a handle into non-blocking mode                                               |
+| `go(child)`                      | `(Task({})) -> Task({})`                                     | Spawn `child` into the current scope, fire-and-forget                             |
+| `nursery(body)`                  | `(@A : Type, Task(A)) -> Task(A)`                           | Run `body`, then wait for every fiber it spawned to finish (join)                 |
+| `scoped(body)`                   | `(@A : Type, Task(A)) -> Task(A)`                           | Run `body`, then cancel every fiber it spawned (cancel-on-exit)                   |
+| `block_on(t)`                    | `(@A : Type, Task(A)) -> A`                                 | Drive `t` to its value, multiplexing everything it spawns over one `Io/poll`      |
+| `run(main)`                      | `(Task({})) -> {}`                                          | `block_on` at the unit result — drive `main` as the program root                  |
+| `Finalizer`                      | `Type` (`= () -> {}`)                                        | A synchronous cleanup action, run at scope exit or on cancellation                |
+
+**Resource brackets.** `using` acquires a resource, runs `body` with it, and releases it exactly once — when `body` completes, or when the fiber is dropped/cancelled before it does. It is built from `protect` (push a finalizer) and `unprotect` (pop and run the most recent one): a fiber dropped before reaching its `unprotect` still has its finalizers run by the scheduler, so a resource acquired through `using` is always released.
+
+**Structured concurrency.** `go`/`spawn` launch a child into the *current* cancellation scope, so it is owned there. `nursery(body)` opens a fresh scope, runs `body`, and does not return until every fiber `body` spawned has finished — the black-box rule, nothing the body forks outlives the call. `scoped(body)` is the daemon-helper form: it *cancels* the helpers the instant `body` returns, running their finalizers before it delivers `body`'s value. Scopes nest, and cancelling one promptly cancels every descendant (a child carries all of its ancestors' group ids, so cancellation reaches the subtree for free).
+
+**Running.** `block_on(t)` drives the root `t` to its value while multiplexing every fiber it spawns over a single `Io/poll`; when the root finishes, every still-outstanding child is dropped and its finalizers run — a stuck background fiber can never hang shutdown. `run` is `block_on` at the unit result. The leaf actions `read`/`write`/`accept` are the non-blocking primitives every higher layer (`/std/File`, `/std/Net`) is built on: each yields to the scheduler on would-block and resumes when the handle is ready, surfacing a typed `Io/Read` or `Result(_, Io/Error)` rather than a raw status.
+
 ### `/std/File`
 
-`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. There is no public `open` or `close` anywhere: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice.
+`File` is an **abstract handle** — its own opaque type, distinct from a bare `Io` handle (stdin/stdout, a socket) and reachable only through the operations below. It is a zero-cost newtype over `Io`, so the abstraction is free at runtime. The operations are asynchronous [`Task`](#stdtask)s (the handle is configured non-blocking before it is ever read or written, so its reads and writes yield to the scheduler). There is no public `open` or `close` anywhere: `with`/`read_all` bracket them automatically, so a handle can never leak from the safe layer or be closed twice.
 
 ```
-union Mode  | read() | write() | append() end   -- File/Mode/read() etc.
-union Error | not_found() | permission_denied() | exists() | other(Nat) end
+union Mode | read() | write() | append() end   -- File/Mode/read() etc.
 
-File/with(path, mode, body)    -- (@A : Type, Str, Mode, (File) -> A) -> Result(A, Error)
-File/read_all(path)            -- (Str) -> Result(Bin, Error)
-File/read(f, n)                -- (File, Nat) -> { status : Nat, bytes : Bin }
-File/write(f, b)               -- (File, Bin) -> Nat
+File/with(path, mode, body)    -- (@A : Type, Str, Mode, (File) -> Task(A)) -> Task(Result(A, Io/Error))
+File/read_all(path)            -- (Str) -> Task(Result(Bin, Io/Error))
+File/read(f, n)                -- (File, Nat) -> Task(Io/Read)
+File/write(f, b)               -- (File, Bin) -> Task(Result({}, Io/Error))
 ```
 
-`with` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. `Error` mirrors the `/std/Io` status contract (0 ok, 1 eof, 2 not found, 3 permission denied, 4 exists, 5+ other). Programs run with the invoking user's filesystem access — there is no sandbox.
+`with` is the one doorway to a file handle: open, run `body` on the `File` it yields, close. The close is bracketed through `Task/using`, so it is cancellation-safe — it runs when `body`'s task finishes or the fiber is dropped first. Inside the body, `read`/`write` are the operations on that handle. The handle never outlives the bracket — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. Failures are typed [`Io/Error`](#stdio); a read yields [`Io/Read`](#stdio) (`chunk`/`eof`/`error`). Programs run with the invoking user's filesystem access — there is no sandbox.
 
 ### `/std/Net`
 
-A TCP client and a sequential TCP server, in cleartext or over TLS. `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. There is no public `close`: `with`/`call`/`serve`/`serve_tls` bracket every connection so a handle never outlives the body and cannot be used after close. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Concurrent (non-blocking) connection handling, custom roots, and client certificates are future work.
+A TCP client and a concurrent TCP server, in cleartext or over TLS. Every operation is an asynchronous [`Task`](#stdtask). `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. There is no public `close`: `with`/`call`/`serve`/`serve_tls` bracket every connection (through `Task/using`) so a handle never outlives the body and cannot be used after close. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Custom roots and client certificates are future work.
 
 ```
-union Error | refused() | tls() | other(Nat) end
-
 struct Settings pub {
     connect_timeout : Option(Time/Duration),
     read_timeout : Option(Time/Duration),
@@ -250,21 +301,21 @@ struct Settings pub {
 }
 ```
 
-`Settings` has a public representation — build one as `Settings { ... }` or start from `default`. Each timeout is optional; `none` blocks forever. `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout` bound subsequent reads and writes on the handle. `tls` upgrades the connection to TLS right after connect (verification on, SNI from `host`); `default` leaves it `false`. `Error` decodes the connect status: `refused` (status 6), `tls` (status 8 — a failed certificate verification, handshake, or upgrade), or `other(status)`.
+`Settings` has a public representation — build one as `Settings { ... }` or start from `default`. Each timeout is optional; `none` blocks forever. `connect_timeout` bounds the connect itself; `read_timeout`/`write_timeout` bound subsequent reads and writes on the handle. `tls` upgrades the connection to TLS right after connect (verification on, SNI from `host`); `default` leaves it `false`. Failures are the typed [`Io/Error`](#stdio) — a connect surfaces `refused` (status 6), `tls` (status 8, a failed certificate verification, handshake, or upgrade), or `other(status)`.
 
 | Binding                               | Type                                                                 | Description                                                    |
 | ------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `default`                             | `Settings`                                                           | All timeouts `none` (block forever)                            |
-| `with(settings, host, port, body)`    | `(@A : Type, Settings, Str, Nat, (Socket) -> A) -> Result(A, Error)` | Connect, run `body` on the `Socket`, then close                |
-| `call(settings, host, port, request)` | `(Settings, Str, Nat, Bin) -> Result(Bin, Error)`                    | Connect, send `request`, read the whole response to EOF, close |
-| `read(c, n)`                          | `(Socket, Nat) -> { status : Nat, bytes : Bin }`                     | Read up to `n` bytes from the socket                           |
-| `write(c, b)`                         | `(Socket, Bin) -> Nat`                                               | Write `b` to the socket; returns a status                      |
-| `serve(host, port, handler)`          | `(Str, Nat, (Socket) -> {}) -> Result({}, Error)`                    | Bind `host`:`port`, then accept connections one at a time, running `handler` on each `Socket` before closing it |
-| `serve_tls(host, port, cert, key, handler)` | `(Str, Nat, Bin, Bin, (Socket) -> {}) -> Result({}, Error)`    | Like `serve`, terminating TLS on each accepted connection with the PEM `cert` chain and `key` |
+| `default`                             | `Settings`                                                                  | All timeouts `none` (block forever)                            |
+| `with(settings, host, port, body)`    | `(@A, Settings, Str, Nat, (Socket) -> Task(A)) -> Task(Result(A, Io/Error))`| Connect, run `body` on the `Socket`, then close                |
+| `call(settings, host, port, request)` | `(Settings, Str, Nat, Bin) -> Task(Result(Bin, Io/Error))`                  | Connect, send `request`, read the whole response to EOF, close |
+| `read(c, n)`                          | `(Socket, Nat) -> Task(Io/Read)`                                            | Read up to `n` bytes from the socket (`chunk`/`eof`/`error`)   |
+| `write(c, b)`                         | `(Socket, Bin) -> Task(Result({}, Io/Error))`                              | Write all of `b` to the socket                                 |
+| `serve(host, port, handler)`          | `(Str, Nat, (Socket) -> Task({})) -> Task(Result({}, Io/Error))`           | Bind `host`:`port`, then accept in a loop, running each connection's `handler` as its own owned fiber |
+| `serve_tls(host, port, cert, key, handler)` | `(Str, Nat, Bin, Bin, (Socket) -> Task({})) -> Task(Result({}, Io/Error))` | Like `serve` but **sequential**, terminating TLS on each accepted connection with the PEM `cert` chain and `key` |
 
 As with `File`, the `Socket` must not outlive the `with` or `handler` body — a delayed effect would touch a closed connection. A TLS `with`/`call` (`settings.tls`) upgrades the connection right after connect; `read`/`write` then transparently serve the encrypted stream.
 
-`serve` is a **sequential** server: it binds a listening socket (the listener is private and fully bracketed — closed when the loop ends), then loops `accept` → `handler` → close, one connection fully served before the next. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Error`. `serve_tls` is the same loop with TLS termination: it builds a server config from the PEM `cert`/`key` once, then upgrades each accepted connection before the handler runs — a connection whose handshake fails is dropped and the loop continues (unlike a failed `accept`, which ends it). Concurrent connection handling is future work.
+`serve` is a **concurrent** server: it binds a listening socket (private and fully bracketed — closed when the loop ends), then loops `accept` → spawn the connection's bracketed handler as its own fiber → accept again, so a slow connection never blocks the accept loop or its peers. The accept loop runs inside a `Task/nursery`, so the handlers are *owned* by the server scope: in-flight connections are awaited when the loop ends, and cancelling the server (or the program shutting down) promptly cancels every handler and runs its `close`. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Io/Error`. `serve_tls` is **sequential** — the rustls handshake and record layer are driven synchronously by the host, so each accepted connection completes its handshake and runs its handler before the next `accept`. It builds a server config from the PEM `cert`/`key` once; a connection whose handshake fails is dropped while the loop continues (unlike a failed `accept`, which ends it). Concurrent TLS handling is future work.
 
 ### `/std/Http`
 

@@ -24,9 +24,6 @@ pub let write(f : File, b : Bin) -> Task(Result({}, Io/Error)) =
 let close(f : File) -> {} =
     /sys/Io/close(f.0);
 
--- Open `path`, configuring the handle non-blocking before it is ever read or
--- written, and wrapping it in the opaque `File`. The raw open status decodes to
--- a typed `Io/Error` on failure.
 let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
     let r = /sys/Io/open(Str/to_bin(path), token(mode));
     match Nat/eql(r.status, 0) : Task(Result(File, Io/Error))
@@ -36,9 +33,6 @@ let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
     | false => Task/done(Result/failure(Io/decode(r.status)))
     end;
 
--- Open `path`, hand the `File` to `body`, and close it when `body`'s task
--- finishes -- or if the fiber is dropped first. The close is bracketed through
--- `Task/using`, so it is cancellation-safe.
 pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> Task(A)) -> Task(Result(A, Io/Error)) =
     Task/bind(open(path, mode), (opened) =>
         match opened : Task(Result(A, Io/Error))

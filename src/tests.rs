@@ -4,6 +4,40 @@ use {
 };
 
 #[test]
+fn nullary_closure_survives_erasure_and_codegen() {
+    // A nullary closure stored in a union field and called indirectly via a
+    // `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity
+    // closures survive it, which is what lets the suspension/continuation thunks
+    // drop their dummy unit argument (`() -> T` rather than `({}) -> T`). Output
+    // proves the suspended effect fired on `force`.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Io, Str};
+        union Susp(A : Type)
+        | now(A)
+        | later(() -> Susp(A))
+        end
+        rec force(@A : Type, s : Susp(A)) -> A =
+            match s : A
+            | now(a) => a
+            | later(k) => force(k())
+            end;
+        let prog : Susp({}) =
+            Susp/later(() =>
+                let w = Io/write(Io/stdout, Str/to_bin("ok"));
+                Susp/now(()));
+        let r = force(prog);
+        Io/write(Io/stdout, Str/to_bin("!"))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"ok!");
+}
+
+#[test]
 fn end_to_end() {
     let source = r#"
         union Pair
@@ -2452,21 +2486,21 @@ fn io_poll_mock_echoes_interest() {
 
 #[test]
 fn task_scheduler_parks_polls_and_resumes() {
-    // The `/std/Task` event loop end to end: a single fiber that yields a
-    // `wait` on stdin-READ parks, `run` drains the ready queue, marshals the
-    // parked handle/interest into `Io/poll` (the mock reports it ready), and
-    // resumes the continuation — which performs the write. Exercises the novel
-    // path of a union variant carrying a closure through erasure and codegen.
+    // The `/std/Task` event loop end to end: the root fiber yields a `wait` on
+    // stdin-READ and parks, `run` marshals the parked handle/interest into
+    // `Io/poll` (the mock reports it ready), and resumes the continuation — which
+    // performs the write. Exercises the novel path of a union variant carrying a
+    // closure through erasure and codegen.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Task, Io, Str, Lst};
+        use /std/{Task, Io, Str};
         let prog : Task({}) =
-            Task/wait(Io/stdin, 1, (u) =>
+            Task/wait(Io/stdin, 1, () =>
                 let wrote = Io/write(Io/stdout, Str/to_bin("ok"));
                 Task/done(()));
-        Task/run(Lst/cons(Task/fiber(prog, Lst/nil()), Lst/nil()), Lst/nil())
+        Task/run(prog)
         "#,
         system,
     )
@@ -2516,12 +2550,12 @@ fn task_block_on_multiplexes_children_with_a_typed_root() {
         r#"
         use /std/{Task, Io, Str, Nat};
         let child : Task({}) =
-            Task/wait(Io/stdin, 1, (u) =>
+            Task/wait(Io/stdin, 1, () =>
                 let w = Io/write(Io/stdout, Str/to_bin("child;"));
                 Task/done(()));
         let root : Task(Nat) =
-            Task/spawn(child, (u) =>
-                Task/wait(Io/stdin, 1, (v) =>
+            Task/spawn(child, () =>
+                Task/wait(Io/stdin, 1, () =>
                     let w = Io/write(Io/stdout, Str/to_bin("root;"));
                     Task/pure(7)));
         let result = Task/block_on(root);
@@ -2534,32 +2568,154 @@ fn task_block_on_multiplexes_children_with_a_typed_root() {
 }
 
 #[test]
-fn run_schedules_a_heterogeneous_fiber_list() {
-    // One list holds a `Task(Nat)` and a `Task({})` together (boxed as `Fiber`),
-    // the unified `run` parks both, a single poll wakes them, and both
-    // continuations fire. Differing result types coexist in one ready queue —
-    // the whole point of the flattened, `Fiber`-based scheduler.
+fn nursery_awaits_a_spawned_child() {
+    // Structured concurrency, the join side: the nursery body finishes immediately
+    // after spawning a child that parks on stdin. Because the child is *owned* by
+    // the nursery, `run` does not return until the child has been polled awake and
+    // performed its write. (Without the nursery the root would finish first and the
+    // child would be dropped — see `block_on_drops_a_parked_child_when_root_done`.)
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Task, Io, Str, Nat, Lst};
-        let one : Task(Nat) =
-            Task/wait(Io/stdin, 1, (u) =>
-                let w = Io/write(Io/stdout, Str/to_bin("one;"));
-                Task/pure(1));
-        let two : Task({}) =
-            Task/wait(Io/stdin, 1, (v) =>
-                let w = Io/write(Io/stdout, Str/to_bin("two;"));
+        use /std/{Task, Io, Str};
+        let child : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("child;"));
                 Task/done(()));
-        let ready : Lst(Task/Fiber) =
-            Lst/cons(Task/fiber(one, Lst/nil()), Lst/cons(Task/fiber(two, Lst/nil()), Lst/nil()));
-        Task/run(ready, Lst/nil())
+        Task/run(Task/nursery(Task/go(child)))
         "#,
         system,
     )
     .expect("expected result");
-    assert_eq!(io.output(), b"two;one;");
+    assert_eq!(io.output(), b"child;");
+}
+
+#[test]
+fn scoped_cancels_a_helper_when_the_body_returns() {
+    // Structured concurrency, the cancel-on-exit side: `scoped` runs its body with
+    // a background helper, then cancels the helper the instant the body returns.
+    // The helper would write "helper;" once polled awake, but the body completes
+    // synchronously first, so `close` cancels the helper before it ever runs — only
+    // the body's "body;" reaches stdout, and the body's value is still delivered.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str};
+        let helper : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("helper;"));
+                Task/done(()));
+        let main : Task({}) =
+            Task/scoped(
+                Task/bind(Task/go(helper), (started) =>
+                    let w = Io/write(Io/stdout, Str/to_bin("body;"));
+                    Task/pure(())));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"body;");
+}
+
+#[test]
+fn go_using_runs_the_guard_when_the_child_is_reaped_before_it_steps() {
+    // The fd-leak fix in `Net/serve`: a connection accepted in the parent is handed
+    // to a spawned worker that must close it. A plain `go` spawns the worker with an
+    // EMPTY finalizer list, so the worker only registers its `close` on its first
+    // step — a scope cancel that reaps it before then drops the resource unclosed.
+    // `go_using` seeds the worker's finalizer at birth, so the release runs even on
+    // reap-before-step. Here `scoped` cancels the worker the instant the body
+    // returns — before the worker (which would park on stdin and write "worker;")
+    // ever steps — yet "released;" still reaches stdout. With the old `go`/`using`
+    // split this would print only "body;".
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        let release(h : Nat) -> {} =
+            let w = Io/write(Io/stdout, Str/to_bin("released;"));
+            ();
+        let worker(h : Nat) -> Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("worker;"));
+                Task/done(()));
+        let main : Task({}) =
+            Task/scoped(
+                Task/bind(Task/go_using(7, release, worker), (started) =>
+                    let w = Io/write(Io/stdout, Str/to_bin("body;"));
+                    Task/pure(())));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"body;released;");
+}
+
+#[test]
+fn block_on_drops_a_parked_child_when_root_done() {
+    // Prompt drop and no deadlock: a fire-and-forget child (no nursery) parks on
+    // stdin, but the root writes and finishes first. The root's completion cancels
+    // the root group, dropping the still-parked child promptly instead of blocking
+    // forever in `Io/poll` on work nothing will ever join. Only "root;" is written,
+    // and `run` returns rather than hanging — the failure mode the old rootless
+    // `run` had.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str};
+        let child : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("child;"));
+                Task/done(()));
+        let main : Task({}) =
+            Task/bind(Task/go(child), (started) =>
+                let w = Io/write(Io/stdout, Str/to_bin("root;"));
+                Task/pure(()));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"root;");
+}
+
+#[test]
+fn run_schedules_a_heterogeneous_fiber_list() {
+    // Two children of different result types (`Task(Nat)` and `Task({})`) spawned
+    // into one nursery, boxed as `Fiber`s in a single ready queue; both park, a
+    // single poll wakes them, and both continuations fire. Differing result types
+    // coexisting in one queue is the point of the flattened, `Fiber`-based
+    // scheduler; the nursery owns the children, so `run` awaits both before it
+    // returns instead of dropping them.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        let one : Task(Nat) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("one;"));
+                Task/pure(1));
+        let two : Task({}) =
+            Task/wait(Io/stdin, 1, () =>
+                let w = Io/write(Io/stdout, Str/to_bin("two;"));
+                Task/done(()));
+        let main : Task({}) =
+            Task/nursery(
+                Task/bind(Task/go(Task/bind(one, (n) => Task/pure(()))), (started) =>
+                    Task/go(two)));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"one;two;");
 }
 
 #[test]
@@ -2573,10 +2729,14 @@ fn label_projection_resolves_on_a_type_valued_field() {
         let step(b : Box) -> Box =
             match b.t : Box
             | done(a) => (b.A, Task/done(a))
-            | wait(h, ev, k) => (b.A, k(()))
-            | spawn(c, k) => (b.A, k(()))
-            | protect(fin, k) => (b.A, k(()))
-            | unprotect(k) => (b.A, k(()))
+            | wait(h, ev, k) => (b.A, k())
+            | spawn(c, k) => (b.A, k())
+            | spawn_guard(fin, c, k) => (b.A, k())
+            | protect(fin, k) => (b.A, k())
+            | unprotect(k) => (b.A, k())
+            | open(k) => (b.A, k())
+            | join(k) => (b.A, k())
+            | close(k) => (b.A, k())
             end;
         let boxed : Box = (Nat, Task/pure(7));
         let stepped = step(boxed);
@@ -2608,10 +2768,14 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
         let stepped = Lst/map((b : Box) =>
             match b.t : Box
             | done(a) => (b.A, Task/done(a))
-            | wait(h, ev, k) => (b.A, k(()))
-            | spawn(c, k) => (b.A, k(()))
-            | protect(fin, k) => (b.A, k(()))
-            | unprotect(k) => (b.A, k(()))
+            | wait(h, ev, k) => (b.A, k())
+            | spawn(c, k) => (b.A, k())
+            | spawn_guard(fin, c, k) => (b.A, k())
+            | protect(fin, k) => (b.A, k())
+            | unprotect(k) => (b.A, k())
+            | open(k) => (b.A, k())
+            | join(k) => (b.A, k())
+            | close(k) => (b.A, k())
             end, boxes);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
         "#,
