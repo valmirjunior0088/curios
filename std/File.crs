@@ -27,7 +27,7 @@ let close(f : File) -> {} =
 -- Open `path`, configuring the handle non-blocking before it is ever read or
 -- written, and wrapping it in the opaque `File`. The raw open status decodes to
 -- a typed `Io/Error` on failure.
-pub let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
+let open(path : Str, mode : Mode) -> Task(Result(File, Io/Error)) =
     let r = /sys/Io/open(Str/to_bin(path), token(mode));
     match Nat/eql(r.status, 0) : Task(Result(File, Io/Error))
     | true =>
