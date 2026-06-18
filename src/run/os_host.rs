@@ -1,6 +1,7 @@
 use {
     super::host::*,
     rustix::event::{PollFd, Timespec, poll},
+    rustls::{ClientConnection, StreamOwned},
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
@@ -44,13 +45,16 @@ enum OsResource {
     File(File),
     Connected(Socket),
     Unconnected(Socket),
-    Listener(Socket),
+    /// A listening socket, held behind an `Arc` so `accept` can share it out and
+    /// drop the table lock across the blocking wait with a cheap refcount bump
+    /// instead of a per-call `dup`/`close`.
+    Listener(Arc<Socket>),
     /// A client-side TLS stream: the encrypted conduit a `Connected` socket
     /// became under `start_tls`, serving the same `read`/`write`/`close`.
-    ClientTls(rustls::StreamOwned<rustls::ClientConnection, Socket>),
+    ClientTls(StreamOwned<ClientConnection, Socket>),
     /// A server-side TLS stream: the encrypted conduit an accepted socket
     /// became under `start_tls_server`.
-    ServerTls(rustls::StreamOwned<rustls::ServerConnection, Socket>),
+    ServerTls(StreamOwned<rustls::ServerConnection, Socket>),
     /// An opaque server TLS configuration minted by `tls_server_config`, held
     /// in the table as a handle and consumed by `start_tls_server`.
     TlsConfig(Arc<rustls::ServerConfig>),
@@ -133,11 +137,15 @@ impl OsHost {
         let table = self.table.lock().unwrap();
 
         match table.get(handle) {
-            Some(
-                OsResource::Unconnected(socket)
-                | OsResource::Connected(socket)
-                | OsResource::Listener(socket),
-            ) => match apply(socket) {
+            Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => {
+                match apply(socket) {
+                    Ok(()) => Status::Ok,
+                    Err(error) => Status::from(error),
+                }
+            }
+            // The listener is `Arc`-held; `&Arc<Socket>` deref-coerces to the
+            // `&Socket` the setter wants.
+            Some(OsResource::Listener(socket)) => match apply(socket) {
                 Ok(()) => Status::Ok,
                 Err(error) => Status::from(error),
             },
@@ -280,12 +288,12 @@ impl Host for OsHost {
             None => return Status::NotFound,
         };
 
-        let conn = match rustls::ClientConnection::new(CLIENT_CONFIG.clone(), server_name) {
+        let conn = match ClientConnection::new(CLIENT_CONFIG.clone(), server_name) {
             Ok(conn) => conn,
             Err(_) => return Status::TlsError,
         };
 
-        let mut stream = rustls::StreamOwned::new(conn, socket);
+        let mut stream = StreamOwned::new(conn, socket);
 
         // Drive the handshake to completion inline so a verification or protocol
         // failure surfaces here, at the upgrade, not on a later read.
@@ -348,7 +356,7 @@ impl Host for OsHost {
             Err(_) => return Status::TlsError,
         };
 
-        let mut stream = rustls::StreamOwned::new(conn, socket);
+        let mut stream = StreamOwned::new(conn, socket);
 
         match stream.conn.complete_io(&mut stream.sock) {
             Ok(_) => {
@@ -374,7 +382,7 @@ impl Host for OsHost {
                 self.table
                     .lock()
                     .unwrap()
-                    .insert(&io, OsResource::Listener(socket));
+                    .insert(&io, OsResource::Listener(Arc::new(socket)));
 
                 Status::Ok
             }
@@ -383,14 +391,15 @@ impl Host for OsHost {
     }
 
     fn accept(&self, io: Io) -> (Status, Io) {
-        // `accept` blocks until a connection arrives, so clone the listener fd
-        // out and drop the table lock before the wait — never hold it across one.
+        // `accept` blocks until a connection arrives, so share the `Arc`-held
+        // listener out and drop the table lock before the wait — never hold it
+        // across one. The `Arc` clone is a refcount bump, not a `dup` syscall.
         let listener = match self.table.lock().unwrap().get(&io) {
-            Some(OsResource::Listener(socket)) => socket.try_clone(),
+            Some(OsResource::Listener(socket)) => Arc::clone(socket),
             _ => return (Status::NotFound, Io::Other(Vec::new())),
         };
 
-        match listener.and_then(|listener| listener.accept()) {
+        match listener.accept() {
             Ok((stream, _)) => (Status::Ok, self.mint(OsResource::Connected(stream))),
             Err(error) => (Status::from(error), Io::Other(Vec::new())),
         }
@@ -437,9 +446,11 @@ impl Host for OsHost {
                 Io::Stderr => Some(err_handle.as_fd()),
                 Io::Other(_) => table.get(handle).and_then(|resource| match resource {
                     OsResource::File(file) => Some(file.as_fd()),
-                    OsResource::Connected(socket)
-                    | OsResource::Unconnected(socket)
-                    | OsResource::Listener(socket) => Some(socket.as_fd()),
+                    OsResource::Connected(socket) | OsResource::Unconnected(socket) => {
+                        Some(socket.as_fd())
+                    }
+                    // `&Arc<Socket>` deref-coerces for the `as_fd` method call.
+                    OsResource::Listener(socket) => Some(socket.as_fd()),
                     // TLS record readiness is not socket readiness (rustls
                     // buffers records, and an app read can require a socket
                     // write), so a TLS stream is not polled at the socket layer
