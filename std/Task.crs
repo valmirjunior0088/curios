@@ -17,13 +17,13 @@ pub let Guard : Type =
 
 pub union Task(A : Type)
 | done(A)
-| wait(Io, Nat, (() -> Task(A)))
-| spawn(Lst(Guard), Task({}), (() -> Task(A)))
-| acquire(Io, (() -> {}), (() -> Task(A)))
-| release(Io, (() -> Task(A)))
-| scope((() -> Task(A)))
-| join((() -> Task(A)))
-| cancel((() -> Task(A)))
+| wait(Io, Nat, () -> Task(A))
+| spawn(Lst(Guard), Task({}), () -> Task(A))
+| acquire(Io, () -> {}, () -> Task(A))
+| release(Io, () -> Task(A))
+| scope(() -> Task(A))
+| join(() -> Task(A))
+| cancel(() -> Task(A))
 end
 
 pub use Task/*;
@@ -117,14 +117,14 @@ struct Parked pub {
     interest : Nat,
     guards : Lst(Guard),
     groups : Lst(Nat),
-    resume : (() -> Fiber)
+    resume : () -> Fiber
 }
 
 struct Joined pub {
     awaited : Nat,
     groups : Lst(Nat),
     guards : Lst(Guard),
-    resume : (() -> Fiber)
+    resume : () -> Fiber
 }
 
 struct World pub {
@@ -144,9 +144,7 @@ let partition(blocked : Lst(Parked), results : Arr(Nat), start : Nat) -> { Lst(F
         | nil() => (woken, still)
         | cons(p, tail) =>
             match is_ready(Arr/get(results, i), p.interest) : { Lst(Fiber), Lst(Parked) }
-            | true =>
-                let resume = p.resume;
-                walk(tail, Nat/add(i, 1), Lst/cons(resume(), woken), still)
+            | true => walk(tail, Nat/add(i, 1), Lst/cons(p.resume(), woken), still)
             | false => walk(tail, Nat/add(i, 1), woken, Lst/cons(p, still))
             end
         end;
