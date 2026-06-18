@@ -3,7 +3,7 @@ use /std/{Io, Bin, Nat, Bln, Arr, Lst, Result};
 pub let Finalizer : Type =
     () -> {};
 
-pub let Guard : Type =
+let Guard : Type =
     { Io, Finalizer };
 
 pub union Task(A : Type)
@@ -97,15 +97,15 @@ pub let nursery(@A : Type, body : Task(A)) -> Task(A) =
 pub let scoped(@A : Type, body : Task(A)) -> Task(A) =
     Task/scope(() => bind(body, (a) => Task/cancel(() => Task/done(a))));
 
-pub struct Group { Nat }
+struct Group { Nat }
 
 let group_eql(a : Group, b : Group) -> Bln =
     Nat/eql(a.0, b.0);
 
-pub struct Entropy { Nat }
+struct Entropy { Nat }
 
 let fresh(e : Entropy) -> { Group, Entropy } =
-    (Group { e.0 }, Entropy { Nat/add(e.0, 1) });
+    (Group { e.0 }, Entropy { Nat/succ(e.0) });
 
 union Fiber
 | fiber(@A : Type, Task(A), Lst(Guard), Lst(Group))
@@ -189,8 +189,8 @@ let partition(blocked : Lst(Parked), results : Arr(Nat), start : Nat) -> { Lst(F
         | nil() => (woken, still)
         | cons(p, tail) =>
             match is_ready(Arr/get(results, i), p.interest) : { Lst(Fiber), Lst(Parked) }
-            | true => walk(tail, Nat/add(i, 1), Lst/cons(p.resume(), woken), still)
-            | false => walk(tail, Nat/add(i, 1), woken, Lst/cons(p, still))
+            | true => walk(tail, Nat/succ(i), Lst/cons(p.resume(), woken), still)
+            | false => walk(tail, Nat/succ(i), woken, Lst/cons(p, still))
             end
         end;
     walk(blocked, start, Lst/nil(), Lst/nil());
