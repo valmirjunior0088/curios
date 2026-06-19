@@ -1436,6 +1436,10 @@ fn prim_reach(prim: &Prim) -> usize {
 
         Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
         Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
+
+        Prim::CellType(a) => a.reach(),
+        Prim::Cell(a, b) | Prim::CellGet(a, b) => a.reach().max(b.reach()),
+        Prim::CellSet(a, b, c) => a.reach().max(b.reach()).max(c.reach()),
     }
 }
 
@@ -1581,6 +1585,17 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         Prim::ArrConcat(ty, terms) => {
             ty.collect_metavars(ids);
             terms.iter().for_each(|term| term.collect_metavars(ids));
+        }
+
+        Prim::CellType(a) => a.collect_metavars(ids),
+        Prim::Cell(a, b) | Prim::CellGet(a, b) => {
+            a.collect_metavars(ids);
+            b.collect_metavars(ids);
+        }
+        Prim::CellSet(a, b, c) => {
+            a.collect_metavars(ids);
+            b.collect_metavars(ids);
+            c.collect_metavars(ids);
         }
     }
 }
@@ -1767,6 +1782,14 @@ where
         Prim::IoArgs => Prim::IoArgs,
         Prim::IoEnv(name) => Prim::IoEnv(visit.visit_subterm(name)),
         Prim::IoExit(type_, code) => traverse_binary(type_, code, visit, Prim::IoExit),
+        Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
+        Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),
+        Prim::CellGet(a, b) => traverse_binary(a, b, visit, Prim::CellGet),
+        Prim::CellSet(a, b, c) => Prim::CellSet(
+            visit.visit_subterm(a),
+            visit.visit_subterm(b),
+            visit.visit_subterm(c),
+        ),
     }
 }
 

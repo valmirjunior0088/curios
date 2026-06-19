@@ -321,6 +321,10 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoArgs => pure("Io.args"),
         Prim::IoEnv(name) => print_prim_call("Io.env", vec![name]),
         Prim::IoExit(type_, code) => print_prim_call("Io.exit", vec![type_, code]),
+        Prim::CellType(elem) => print_prim_call("Cell", vec![elem]),
+        Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),
+        Prim::CellSet(type_, cell, value) => print_prim_call("Cell.set", vec![type_, cell, value]),
+        Prim::CellGet(type_, cell) => print_prim_call("Cell.get", vec![type_, cell]),
     }
 }
 

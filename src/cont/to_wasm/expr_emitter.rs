@@ -456,6 +456,7 @@ fn region_targets_block(region: &cont::Region, block_name: &cont::BlockName) -> 
             cont::Tail::Call(cont::CallTarget::Direct { resume, .. })
             | cont::Tail::Call(cont::CallTarget::Indirect { resume, .. }) => resume == block_name,
             cont::Tail::Host(host) => host.resume() == block_name,
+            cont::Tail::Cell(cell) => cell.resume() == block_name,
             cont::Tail::Unreachable => false,
         }
     }

@@ -388,6 +388,9 @@ fn freshen_tail_blocks(tail: &mut Tail, sentinel: &BlockName, resume: &BlockName
         Tail::Host(host) => {
             freshen_block(host.resume_mut(), sentinel, resume, suffix);
         }
+        Tail::Cell(cell) => {
+            freshen_block(cell.resume_mut(), sentinel, resume, suffix);
+        }
         Tail::Unreachable => {}
     }
 }

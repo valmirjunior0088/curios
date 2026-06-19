@@ -120,4 +120,8 @@ pub enum Prim {
     IoArgs,
     IoEnv(Term),
     IoExit(Term, Term),
+    CellType(Term),
+    Cell(Term, Term),          // type, init
+    CellSet(Term, Term, Term), // type, cell, value
+    CellGet(Term, Term),       // type, cell
 }

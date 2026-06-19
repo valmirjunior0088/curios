@@ -1,7 +1,7 @@
 use {
     super::{
-        Argument, Block, BlockName, CallTarget, Clsr, ClsrName, Code, Data, Func, FuncName,
-        HostTarget, JumpTarget, Module, Region, Tail, Value, ValueName,
+        Argument, Block, BlockName, CallTarget, CellTarget, Clsr, ClsrName, Code, Data, Func,
+        FuncName, HostTarget, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -479,6 +479,28 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
             HostTarget::IoExit { code, resume } => flat([
                 pure("Io.exit "),
                 print_value_name(code),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+        },
+        Tail::Cell(cell) => match cell {
+            CellTarget::New { init, resume } => flat([
+                pure("Cell.new "),
+                print_value_name(init),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            CellTarget::Set { cell, value, resume } => flat([
+                pure("Cell.set "),
+                print_value_name(cell),
+                pure(" "),
+                print_value_name(value),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            CellTarget::Get { cell, resume } => flat([
+                pure("Cell.get "),
+                print_value_name(cell),
                 pure(" "),
                 print_block_name(resume),
             ]),

@@ -61,6 +61,10 @@ fn host(prim: ersd::HostPrim) -> ersd::Term {
     ersd::Subterm::Prim(ersd::Prim::Host(prim)).into()
 }
 
+fn cell(prim: ersd::CellPrim) -> ersd::Term {
+    ersd::Subterm::Prim(ersd::Prim::Cell(prim)).into()
+}
+
 /// Erase both operands of a homogeneous binary primitive at `operand`, then
 /// rebuild as the target `ersd::PurePrim` via its constructor (`build`). Lets the
 /// scalar arms name themselves once instead of spelling the `pure`/`erase`
@@ -368,5 +372,20 @@ pub fn erase_prim(
             code,
             &nat_type(),
         )?))),
+        Prim::CellType(_) => Ok(ersd::Subterm::Erased.into()),
+        Prim::Cell(type_, init) => {
+            Ok(cell(ersd::CellPrim::New(erase(context, init, type_)?)))
+        }
+        Prim::CellSet(type_, c, v) => {
+            let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
+            Ok(cell(ersd::CellPrim::Set(
+                erase(context, c, &cell_type)?,
+                erase(context, v, type_)?,
+            )))
+        }
+        Prim::CellGet(type_, c) => {
+            let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
+            Ok(cell(ersd::CellPrim::Get(erase(context, c, &cell_type)?)))
+        }
     }
 }

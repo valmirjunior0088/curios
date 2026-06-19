@@ -100,6 +100,7 @@ pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
         Tail::Call(CallTarget::Direct { resume, .. })
         | Tail::Call(CallTarget::Indirect { resume, .. }) => vec![resume],
         Tail::Host(host) => vec![host.resume()],
+        Tail::Cell(cell) => vec![cell.resume()],
         Tail::Unreachable => vec![],
     }
 }
@@ -126,6 +127,11 @@ fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
         }
         Tail::Host(host) => {
             for name in host.operands() {
+                sink.value_use(name);
+            }
+        }
+        Tail::Cell(cell) => {
+            for name in cell.operands() {
                 sink.value_use(name);
             }
         }
@@ -341,6 +347,11 @@ fn walk_tail_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
         }
         Tail::Host(host) => {
             for name in host.operands_mut() {
+                sink.value_use(name);
+            }
+        }
+        Tail::Cell(cell) => {
+            for name in cell.operands_mut() {
                 sink.value_use(name);
             }
         }

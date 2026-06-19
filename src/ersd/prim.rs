@@ -112,7 +112,15 @@ pub enum HostPrim {
 }
 
 #[derive(Debug)]
+pub enum CellPrim {
+    New(Term),         // init
+    Set(Term, Term),   // cell, value
+    Get(Term),         // cell
+}
+
+#[derive(Debug)]
 pub enum Prim {
     Pure(PurePrim),
     Host(HostPrim),
+    Cell(CellPrim),
 }

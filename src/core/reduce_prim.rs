@@ -1022,5 +1022,21 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoExit",
             span: code.span(),
         }),
+        Prim::CellType(elem) => {
+            let elem = reduce(context, elem.clone())?;
+            Ok(Subterm::Prim(Prim::cell_type(elem)))
+        }
+        Prim::Cell(_, init) => Err(ReduceError::IoAtTypeLevel {
+            kind: "Cell",
+            span: init.span(),
+        }),
+        Prim::CellSet(_, cell, _) => Err(ReduceError::IoAtTypeLevel {
+            kind: "CellSet",
+            span: cell.span(),
+        }),
+        Prim::CellGet(_, cell) => Err(ReduceError::IoAtTypeLevel {
+            kind: "CellGet",
+            span: cell.span(),
+        }),
     }
 }

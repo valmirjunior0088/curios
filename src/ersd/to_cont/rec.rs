@@ -96,7 +96,17 @@ fn free_names_prim(prim: &ersd::Prim) -> BTreeSet<String> {
     match prim {
         ersd::Prim::Pure(p) => free_names_pure_prim(p),
         ersd::Prim::Host(h) => free_names_host_prim(h),
+        ersd::Prim::Cell(c) => free_names_cell_prim(c),
     }
+}
+
+fn free_names_cell_prim(prim: &ersd::CellPrim) -> BTreeSet<String> {
+    let operands: Vec<&ersd::Term> = match prim {
+        ersd::CellPrim::New(a) | ersd::CellPrim::Get(a) => vec![a],
+        ersd::CellPrim::Set(a, b) => vec![a, b],
+    };
+
+    operands.into_iter().flat_map(free_names).collect()
 }
 
 fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {

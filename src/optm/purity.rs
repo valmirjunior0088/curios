@@ -26,12 +26,13 @@ struct BodyScan {
     /// still resolves indirect calls dynamically when the target is a known
     /// `Pure(Data::Clsr)` and that closure itself is pure.
     has_indirect_call: bool,
-    /// A `Tail::Host(_)` was found — the impure boundary lives at the tail
-    /// position, so any region tree whose tails include a host primitive is
-    /// classified impure. (`Code`-level ops are now all pure: arithmetic and
-    /// conversions are deterministic and folded by `scalar_eval::eval`; trap
-    /// conditions are operand-dependent and handled by it returning `None`.)
-    has_host_tail: bool,
+    /// A `Tail::Host(_)` or `Tail::Cell(_)` was found — the impure boundary
+    /// lives at the tail position, so any region tree whose tails include a
+    /// host or guest-cell primitive is classified impure. (`Code`-level ops are
+    /// now all pure: arithmetic and conversions are deterministic and folded by
+    /// `scalar_eval::eval`; trap conditions are operand-dependent and handled by
+    /// it returning `None`.)
+    has_effect: bool,
 }
 
 fn scan_body(region: &Region) -> BodyScan {
@@ -61,8 +62,8 @@ fn scan_region(region: &Region, scan: &mut BodyScan) {
         Tail::Call(CallTarget::Indirect { .. }) => {
             scan.has_indirect_call = true;
         }
-        Tail::Host(_) => {
-            scan.has_host_tail = true;
+        Tail::Host(_) | Tail::Cell(_) => {
+            scan.has_effect = true;
         }
         Tail::Jump(_) | Tail::Match(_) | Tail::Unreachable => {}
     }
@@ -119,12 +120,12 @@ fn classify(module: &Module) -> (HashSet<FuncName>, HashSet<ClsrName>) {
 
     let mut impure_funcs: HashSet<FuncName> = func_scans
         .iter()
-        .filter(|(_, scan)| scan.has_host_tail || scan.has_indirect_call)
+        .filter(|(_, scan)| scan.has_effect || scan.has_indirect_call)
         .map(|(name, _)| name.clone())
         .collect();
     let mut impure_clsrs: HashSet<ClsrName> = clsr_scans
         .iter()
-        .filter(|(_, scan)| scan.has_host_tail || scan.has_indirect_call)
+        .filter(|(_, scan)| scan.has_effect || scan.has_indirect_call)
         .map(|(name, _)| name.clone())
         .collect();
 

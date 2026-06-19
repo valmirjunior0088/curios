@@ -439,6 +439,23 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    fn emit_cell_type(&mut self) {
+        self.module.add_type(
+            self.table.cell_type(),
+            wasm::SubType {
+                is_final: true,
+                super_types: vec![],
+                comp_type: wasm::CompType::Struct(wasm::StructType::from([(
+                    self.table.special_field(),
+                    wasm::FieldType {
+                        storage_type: wasm::StorageType::Val(self.table.top_type(true)),
+                        mutability: wasm::Mutability::Var,
+                    },
+                )])),
+            },
+        );
+    }
+
     fn emit_tpl_types(&mut self) {
         for (arity, type_name) in self.table.tpl_types() {
             let super_types = match arity {
@@ -767,6 +784,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_flt_type();
         self.emit_bin_type();
         self.emit_arr_type();
+        self.emit_cell_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types();

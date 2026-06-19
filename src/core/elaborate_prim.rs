@@ -438,6 +438,30 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
             (Prim::IoExit(type_.clone(), code), type_)
         }
+        Prim::CellType(elem) => {
+            let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
+            (Prim::CellType(elem), Term::type_())
+        }
+        Prim::Cell(type_, init) => {
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let init = elaborate(context, init, Mode::Check(type_.clone()))?.0;
+            let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
+            (Prim::Cell(type_, init), cell_type)
+        }
+        Prim::CellSet(type_, cell, value) => {
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
+            let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
+            let value = elaborate(context, value, Mode::Check(type_.clone()))?.0;
+            (Prim::CellSet(type_, cell, value), Term::tuple_type_unit())
+        }
+        Prim::CellGet(type_, cell) => {
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
+            let cell = elaborate(context, cell, Mode::Check(cell_type))?.0;
+            let output = type_.clone();
+            (Prim::CellGet(type_, cell), output)
+        }
     })
 }
 

@@ -1565,6 +1565,12 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::ArrConcat(ty, left, right) => {
                 core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
             }
+            Prim::CellType(inner) => core::Prim::cell_type(self.term(inner)?),
+            Prim::Cell(type_, init) => core::Prim::cell_new(self.term(type_)?, self.term(init)?),
+            Prim::CellSet(type_, cell, value) => {
+                core::Prim::cell_set(self.term(type_)?, self.term(cell)?, self.term(value)?)
+            }
+            Prim::CellGet(type_, cell) => core::Prim::cell_get(self.term(type_)?, self.term(cell)?),
         })
     }
 }

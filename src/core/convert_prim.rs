@@ -199,6 +199,11 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
             }
             Ok(true)
         }
+        (Prim::CellType(this), Prim::CellType(that)) => {
+            cmp.enqueue(Term::type_(), this, that);
+
+            Ok(true)
+        }
         (_, _) => Ok(false),
     }
 }

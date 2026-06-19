@@ -220,6 +220,7 @@ pub struct Table<'a> {
     flt_type: wasm::TypeName,
     bin_type: wasm::TypeName,
     arr_type: wasm::TypeName,
+    cell_type: wasm::TypeName,
     nat_to_str: OnceCell<wasm::FuncName>,
     int_to_str: OnceCell<wasm::FuncName>,
     flt_to_str: OnceCell<wasm::FuncName>,
@@ -293,6 +294,7 @@ impl<'a> Table<'a> {
             flt_type: wasm::TypeName::from("flt"),
             bin_type: wasm::TypeName::from("bin"),
             arr_type: wasm::TypeName::from("arr"),
+            cell_type: wasm::TypeName::from("cell"),
             nat_to_str: OnceCell::new(),
             int_to_str: OnceCell::new(),
             flt_to_str: OnceCell::new(),
@@ -420,6 +422,10 @@ impl<'a> Table<'a> {
 
     pub fn arr_type(&self) -> wasm::TypeName {
         self.arr_type.clone()
+    }
+
+    pub fn cell_type(&self) -> wasm::TypeName {
+        self.cell_type.clone()
     }
 
     pub fn nat_to_str_func(&self) -> &wasm::FuncName {

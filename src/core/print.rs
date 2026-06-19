@@ -670,6 +670,27 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(code, depth),
         ]),
+        Prim::CellType(elem) => print_unary("Cell ", elem, depth),
+        Prim::Cell(type_, init) => flat([
+            pure("Cell.new "),
+            print_term(type_, depth),
+            pure(" "),
+            print_term(init, depth),
+        ]),
+        Prim::CellSet(type_, cell, value) => flat([
+            pure("Cell.set "),
+            print_term(type_, depth),
+            pure(" "),
+            print_term(cell, depth),
+            pure(" "),
+            print_term(value, depth),
+        ]),
+        Prim::CellGet(type_, cell) => flat([
+            pure("Cell.get "),
+            print_term(type_, depth),
+            pure(" "),
+            print_term(cell, depth),
+        ]),
     }
 }
 

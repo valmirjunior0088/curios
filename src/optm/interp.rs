@@ -375,7 +375,7 @@ impl<'a> Interp<'a> {
                 };
                 Ok((resume.clone(), vec![snap]))
             }
-            Tail::Host(_) | Tail::Unreachable => Err(Outcome::GaveUp),
+            Tail::Host(_) | Tail::Cell(_) | Tail::Unreachable => Err(Outcome::GaveUp),
         }
     }
 }

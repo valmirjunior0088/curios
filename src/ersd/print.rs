@@ -1,7 +1,7 @@
 use {
     super::{
-        Atom, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj, PurePrim, Rec,
-        Subterm, Term, Tuple,
+        Atom, CellPrim, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj, PurePrim,
+        Rec, Subterm, Term, Tuple,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
@@ -29,6 +29,7 @@ fn print_prim<'a>(prim: &'a Prim) -> Printer<'a> {
     match prim {
         Prim::Pure(pure_prim) => print_pure_prim(pure_prim),
         Prim::Host(host_prim) => print_host_prim(host_prim),
+        Prim::Cell(cell_prim) => print_cell_prim(cell_prim),
     }
 }
 
@@ -177,6 +178,14 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
         HostPrim::IoArgs => pure("Io.args"),
         HostPrim::IoEnv(name) => print_unary("Io.env", name),
         HostPrim::IoExit(code) => print_unary("Io.exit", code),
+    }
+}
+
+fn print_cell_prim<'a>(prim: &'a CellPrim) -> Printer<'a> {
+    match prim {
+        CellPrim::New(init) => print_unary("Cell.new", init),
+        CellPrim::Set(cell, value) => print_binary("Cell.set", cell, value),
+        CellPrim::Get(cell) => print_unary("Cell.get", cell),
     }
 }
 

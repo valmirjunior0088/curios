@@ -79,6 +79,10 @@ fn arr_of(elem: Term) -> Term {
     prim(Prim::ArrType(elem))
 }
 
+fn cell_of(elem: Term) -> Term {
+    prim(Prim::CellType(elem))
+}
+
 fn type_() -> Term {
     Subterm::Type.into()
 }
@@ -349,6 +353,39 @@ fn arr_ops() -> Vec<TopItem> {
     ]
 }
 
+fn cell_ops() -> Vec<TopItem> {
+    vec![
+        pub_fn_marked(
+            "new",
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "x", name("T")),
+            ],
+            cell_of(name("T")),
+            prim(Prim::Cell(name("T"), name("x"))),
+        ),
+        pub_fn_marked(
+            "set",
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "c", cell_of(name("T"))),
+                (Plicity::Explicit, "v", name("T")),
+            ],
+            unit(),
+            prim(Prim::CellSet(name("T"), name("c"), name("v"))),
+        ),
+        pub_fn_marked(
+            "get",
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "c", cell_of(name("T"))),
+            ],
+            name("T"),
+            prim(Prim::CellGet(name("T"), name("c"))),
+        ),
+    ]
+}
+
 fn io_ops() -> Vec<TopItem> {
     vec![
         pub_let("stdin", io(), prim(Prim::Io(0))),
@@ -577,6 +614,7 @@ fn sys_module() -> Module {
             pub_let("Bln", type_(), bln()),
             pub_let("Io", type_(), io()),
             pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
+            pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
             pub_mod("Nat", nat_ops()),
             pub_mod("Bln", bln_ops()),
             pub_mod("Int", int_ops()),
@@ -584,6 +622,7 @@ fn sys_module() -> Module {
             pub_mod("Bin", bin_ops()),
             pub_mod("Str", str_ops()),
             pub_mod("Arr", arr_ops()),
+            pub_mod("Cell", cell_ops()),
             pub_mod("Io", io_ops()),
         ],
     }
@@ -639,6 +678,7 @@ impl<L: Loader> Loader for SysLoader<L> {
 const STD: &[(&[&str], &str)] = &[
     (&["std"], include_str!("../../std.crs")),
     (&["std", "Arr"], include_str!("../../std/Arr.crs")),
+    (&["std", "Cell"], include_str!("../../std/Cell.crs")),
     (&["std", "Bin"], include_str!("../../std/Bin.crs")),
     (&["std", "Nat"], include_str!("../../std/Nat.crs")),
     (&["std", "Int"], include_str!("../../std/Int.crs")),

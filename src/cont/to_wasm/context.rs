@@ -547,6 +547,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 resume,
             }) => self.call_indirect_instrs(target, params, resume),
             cont::Tail::Host(host) => self.host_instrs(host),
+            cont::Tail::Cell(cell) => self.cell_instrs(cell),
             cont::Tail::Unreachable => vec![wasm::Instr::Unreachable],
         }
     }
@@ -855,6 +856,45 @@ impl<'a, 'b> Context<'a, 'b> {
                 // The host traps, so control never returns; the resume path is
                 // dead code but must stay well-typed, exactly like `IoClose`.
                 self.host_unit_resume(&mut output, resume);
+            }
+        }
+
+        output
+    }
+
+    pub fn cell_instrs(&self, cell: &'a cont::CellTarget) -> Vec<wasm::Instr> {
+        let mut output = Vec::new();
+
+        match cell {
+            cont::CellTarget::New { init, resume } => {
+                output.extend(self.load_value_instrs(init, LoadAs::NonNull));
+                output.push(wasm::Instr::StructNew {
+                    type_name: self.table().cell_type(),
+                });
+                self.host_single_resume(&mut output, resume);
+            }
+            cont::CellTarget::Set { cell, value, resume } => {
+                output.extend(self.load_value_instrs(
+                    cell,
+                    LoadAs::Concrete(self.table().cell_type()),
+                ));
+                output.extend(self.load_value_instrs(value, LoadAs::NonNull));
+                output.push(wasm::Instr::StructSet {
+                    type_name: self.table().cell_type(),
+                    field_name: self.table().special_field(),
+                });
+                self.host_unit_resume(&mut output, resume);
+            }
+            cont::CellTarget::Get { cell, resume } => {
+                output.extend(self.load_value_instrs(
+                    cell,
+                    LoadAs::Concrete(self.table().cell_type()),
+                ));
+                output.push(wasm::Instr::StructGet {
+                    type_name: self.table().cell_type(),
+                    field_name: self.table().special_field(),
+                });
+                self.host_single_resume(&mut output, resume);
             }
         }
 

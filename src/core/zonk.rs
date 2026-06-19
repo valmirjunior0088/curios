@@ -531,6 +531,12 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoRandom(a) => Prim::IoRandom(zonk_term(context, a)?),
         Prim::IoEnv(a) => Prim::IoEnv(zonk_term(context, a)?),
         Prim::IoExit(a, b) => Prim::IoExit(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
+        Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::CellSet(a, b, c) => {
+            Prim::CellSet(zonk_term(context, a)?, zonk_term(context, b)?, zonk_term(context, c)?)
+        }
+        Prim::CellGet(a, b) => Prim::CellGet(zonk_term(context, a)?, zonk_term(context, b)?),
     })
 }
 

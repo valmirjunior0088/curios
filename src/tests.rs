@@ -3,6 +3,12 @@ use {
     std::{path::Path, time::Duration},
 };
 
+fn run(source: &str) -> Vec<u8> {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    io.output().to_vec()
+}
+
 #[test]
 fn nullary_closure_survives_erasure_and_codegen() {
     // A nullary closure stored in a union field and called indirectly via a
@@ -2896,4 +2902,50 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     )
     .expect("expected result");
     assert_eq!(io.output(), b"2");
+}
+
+#[test]
+fn cell_get_returns_init_value() {
+    // Round-trip: mint a cell then read it back.
+    assert_eq!(
+        run(r#"
+            use /std/{Cell, Io, Nat, Str};
+            let n : Nat = 42;
+            let cell = Cell/new(n);
+            Io/print(Nat/to_str(Cell/get(cell)))
+        "#),
+        b"42",
+    );
+}
+
+#[test]
+fn cell_set_overwrites_value() {
+    // Write then read: the getter sees the new value, not the init.
+    assert_eq!(
+        run(r#"
+            use /std/{Cell, Io, Nat, Str};
+            let z : Nat = 0;
+            let cell = Cell/new(z);
+            let _ = Cell/set(cell, 99);
+            Io/print(Nat/to_str(Cell/get(cell)))
+        "#),
+        b"99",
+    );
+}
+
+#[test]
+fn cell_two_cells_are_distinct() {
+    // Two cells minted with the same value are independent heap objects.
+    // Setting one must not affect the other.
+    assert_eq!(
+        run(r#"
+            use /std/{Cell, Io, Nat, Str};
+            let n : Nat = 7;
+            let a = Cell/new(n);
+            let b = Cell/new(n);
+            let _ = Cell/set(a, 1);
+            Io/print(Nat/to_str(Cell/get(b)))
+        "#),
+        b"7",
+    );
 }

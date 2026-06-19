@@ -232,6 +232,10 @@ impl Work<'_, '_, '_> {
                 "host primitive reached pure-name context — pure-name lowering cannot \
                  construct the resume block required by Tail::Host"
             ),
+            ersd::Subterm::Prim(ersd::Prim::Cell(_)) => unreachable!(
+                "cell primitive reached pure-name context — pure-name lowering cannot \
+                 construct the resume block required by Tail::Cell"
+            ),
             ersd::Subterm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
 

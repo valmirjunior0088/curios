@@ -364,6 +364,11 @@ fn constrain_region(
                 seed(operand, liveness);
             }
         }
+        Tail::Cell(cell) => {
+            for operand in cell.operands() {
+                seed(operand, liveness);
+            }
+        }
         Tail::Unreachable => {}
     }
 

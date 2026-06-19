@@ -1,6 +1,9 @@
 pub mod Arr;
 pub use Arr/{let Arr};
 
+pub mod Cell;
+pub use Cell/{let Cell};
+
 pub mod Bin;
 pub use Bin/{let Bin};
 

@@ -834,6 +834,39 @@ pub fn lower_value_prim<'b>(
                 cont::Tail::Host(cont::HostTarget::IoExit { code, resume })
             }),
         ),
+        ersd::Prim::Cell(ersd::CellPrim::New(init)) => work.lower_value_name(
+            init,
+            frame,
+            Cont::new(move |work, init| {
+                let resume = forward_resume(work, cont);
+
+                cont::Tail::Cell(cont::CellTarget::New { init, resume })
+            }),
+        ),
+        ersd::Prim::Cell(ersd::CellPrim::Set(cell, value)) => work.lower_value_name(
+            cell,
+            frame,
+            Cont::new(move |work, cell| {
+                work.lower_value_name(
+                    value,
+                    frame,
+                    Cont::new(move |work, value| {
+                        let resume = record_resume(work, 0, cont);
+
+                        cont::Tail::Cell(cont::CellTarget::Set { cell, value, resume })
+                    }),
+                )
+            }),
+        ),
+        ersd::Prim::Cell(ersd::CellPrim::Get(cell)) => work.lower_value_name(
+            cell,
+            frame,
+            Cont::new(move |work, cell| {
+                let resume = forward_resume(work, cont);
+
+                cont::Tail::Cell(cont::CellTarget::Get { cell, resume })
+            }),
+        ),
     }
 }
 

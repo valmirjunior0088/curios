@@ -435,12 +435,57 @@ impl HostTarget {
     }
 }
 
+/// A guest mutable-cell op in tail position. Same `resume` discipline as
+/// `HostTarget`, but serviced inline in codegen (no host import). Purity
+/// analysis treats any `Tail::Cell` as an impure boundary, like `Host`.
+#[derive(Debug, Clone)]
+pub enum CellTarget {
+    New { init: ValueName, resume: BlockName },
+    Set { cell: ValueName, value: ValueName, resume: BlockName },
+    Get { cell: ValueName, resume: BlockName },
+}
+
+impl CellTarget {
+    pub fn resume(&self) -> &BlockName {
+        match self {
+            CellTarget::New { resume, .. }
+            | CellTarget::Set { resume, .. }
+            | CellTarget::Get { resume, .. } => resume,
+        }
+    }
+
+    pub fn resume_mut(&mut self) -> &mut BlockName {
+        match self {
+            CellTarget::New { resume, .. }
+            | CellTarget::Set { resume, .. }
+            | CellTarget::Get { resume, .. } => resume,
+        }
+    }
+
+    pub fn operands(&self) -> Vec<&ValueName> {
+        match self {
+            CellTarget::New { init, .. } => vec![init],
+            CellTarget::Set { cell, value, .. } => vec![cell, value],
+            CellTarget::Get { cell, .. } => vec![cell],
+        }
+    }
+
+    pub fn operands_mut(&mut self) -> Vec<&mut ValueName> {
+        match self {
+            CellTarget::New { init, .. } => vec![init],
+            CellTarget::Set { cell, value, .. } => vec![cell, value],
+            CellTarget::Get { cell, .. } => vec![cell],
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Tail {
     Jump(JumpTarget),
     Match(MatchTarget),
     Call(CallTarget),
     Host(HostTarget),
+    Cell(CellTarget),
     Unreachable,
 }
 

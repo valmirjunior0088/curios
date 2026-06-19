@@ -160,6 +160,10 @@ pub enum Prim {
     // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
     // kernel from naming `/std/Void`; it is dropped at erasure.
     IoExit(Term, Term),
+    CellType(Term),
+    Cell(Term, Term),          // type, init
+    CellSet(Term, Term, Term), // type, cell, value
+    CellGet(Term, Term),       // type, cell
 }
 
 impl Prim {
@@ -701,5 +705,37 @@ impl Prim {
         B: Into<Term>,
     {
         Self::IoWrite(handle.into(), bytes.into())
+    }
+
+    pub fn cell_type<T>(elem: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::CellType(elem.into())
+    }
+
+    pub fn cell_new<T, I>(type_: T, init: I) -> Self
+    where
+        T: Into<Term>,
+        I: Into<Term>,
+    {
+        Self::Cell(type_.into(), init.into())
+    }
+
+    pub fn cell_set<T, C, V>(type_: T, cell: C, value: V) -> Self
+    where
+        T: Into<Term>,
+        C: Into<Term>,
+        V: Into<Term>,
+    {
+        Self::CellSet(type_.into(), cell.into(), value.into())
+    }
+
+    pub fn cell_get<T, C>(type_: T, cell: C) -> Self
+    where
+        T: Into<Term>,
+        C: Into<Term>,
+    {
+        Self::CellGet(type_.into(), cell.into())
     }
 }
