@@ -1,23 +1,33 @@
-use /std/{Io, Bin, Nat, Bln, Arr, Lst, Result};
+use /std/{Io, Bin, Nat, Bln, Arr, Lst, Option, Result, Cell};
+
+union Pause
+| wait(Io, Nat)
+| fork(() -> Task({}), Cell(Bln))
+| park((() -> {}) -> {})
+| acquire(Io, () -> {})
+| release(Io)
+| defer()
+pub and Task(A : Type)
+| done(A)
+| step(Pause, () -> Task(A))
+end
+
+use Task/*;
 
 pub let Finalizer : Type =
     () -> {};
 
+pub let Fiber : Type =
+    () -> Task({});
+
+pub let Waker : Type =
+    () -> {};
+
+pub let Token : Type =
+    Cell(Bln);
+
 let Guard : Type =
     { Io, Finalizer };
-
-pub union Task(A : Type)
-| done(A)
-| wait(Io, Nat, () -> Task(A))
-| spawn(Lst(Guard), Task({}), () -> Task(A))
-| acquire(Io, () -> {}, () -> Task(A))
-| release(Io, () -> Task(A))
-| scope(() -> Task(A))
-| join(() -> Task(A))
-| cancel(() -> Task(A))
-end
-
-pub use Task/*;
 
 pub let pure(@A : Type, a : A) -> Task(A) =
     Task/done(a);
@@ -26,566 +36,352 @@ pub rec bind(@A : Type, @B : Type) -> (Task(A), (A) -> Task(B)) -> Task(B) =
     (m, f) =>
         match m : Task(B)
         | done(a) => f(a)
-        | wait(h, ev, k) => Task/wait(h, ev, () => bind(k(), f))
-        | spawn(gs, child, k) => Task/spawn(gs, child, () => bind(k(), f))
-        | acquire(h, fin, k) => Task/acquire(h, fin, () => bind(k(), f))
-        | release(h, k) => Task/release(h, () => bind(k(), f))
-        | scope(k) => Task/scope(() => bind(k(), f))
-        | join(k) => Task/join(() => bind(k(), f))
-        | cancel(k) => Task/cancel(() => bind(k(), f))
+        | step(p, k) => Task/step(p, () => bind(k(), f))
         end;
 
-pub let using(@A : Type, h : Io, release : Finalizer, body : Task(A)) -> Task(A) =
-    Task/acquire(h, release, () =>
+pub let map(@A : Type, @B : Type, f : (A) -> B, m : Task(A)) -> Task(B) =
+    bind(m, (a) => pure(f(a)));
+
+let fork_with(child : Fiber, t : Token) -> Task({}) =
+    Task/step(Pause/fork(child, t), () => pure(()));
+
+pub let defer(@A : Type, body : () -> Task(A)) -> Task(A) =
+    Task/step(Pause/defer(), body);
+
+pub let wait(h : Io, ev : Nat) -> Task({}) =
+    Task/step(Pause/wait(h, ev), () => pure(()));
+
+pub let park(register : (Waker) -> {}) -> Task({}) =
+    Task/step(Pause/park(register), () => pure(()));
+
+pub let acquire(h : Io, fin : Finalizer) -> Task({}) =
+    Task/step(Pause/acquire(h, fin), () => pure(()));
+
+pub let release(h : Io) -> Task({}) =
+    Task/step(Pause/release(h), () => pure(()));
+
+pub let using(@A : Type, h : Io, fin : Finalizer, body : Task(A)) -> Task(A) =
+    bind(acquire(h, fin), (_) =>
         bind(body, (a) =>
-            Task/release(h, () => Task/done(a))));
+            bind(release(h), (_) => pure(a))));
+
+pub let go(body : Fiber) -> Task({}) =
+    defer(() => fork_with(body, Cell/new(false)));
 
 pub let nonblocking(h : Io) -> {} =
     let _ = /sys/Io/set_nonblocking(h, true);
     ();
 
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
-    let r = /sys/Io/read(h, n);
-    match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Io/Read)
-    | true => Task/wait(h, /sys/Io/Poll/read, () => read(h, n))
-    | false =>
-        match Nat/eql(r.status, /sys/Io/Status/eof) : Task(Io/Read)
-        | true => Task/done(Io/Read/eof())
+    defer(() =>
+        let r = /sys/Io/read(h, n);
+        match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Io/Read)
+        | true => bind(wait(h, /sys/Io/Poll/read), (_) => read(h, n))
         | false =>
-            match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Io/Read)
-            | true => Task/done(Io/Read/chunk(r.bytes))
-            | false => Task/done(Io/Read/error(Io/error_of(r.status)))
+            match Nat/eql(r.status, /sys/Io/Status/eof) : Task(Io/Read)
+            | true => pure(Io/Read/eof())
+            | false =>
+                match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Io/Read)
+                | true => pure(Io/Read/chunk(r.bytes))
+                | false => pure(Io/Read/error(Io/error_of(r.status)))
+                end
             end
-        end
-    end;
+        end);
 
 pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
-    let r = /sys/Io/write(h, b);
-    match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result({}, Io/Error))
-    | true => Task/wait(h, /sys/Io/Poll/write, () => write(h, b))
-    | false =>
-        match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result({}, Io/Error))
-        | true =>
-            match Nat/lt(r.written, Bin/len(b)) : Task(Result({}, Io/Error))
-            | true => Task/wait(h, /sys/Io/Poll/write, () => write(h, Bin/slice(b, r.written, Bin/len(b))))
-            | false => Task/done(Result/success(()))
+    defer(() =>
+        let r = /sys/Io/write(h, b);
+        match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result({}, Io/Error))
+        | true => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, b))
+        | false =>
+            match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result({}, Io/Error))
+            | true =>
+                match Nat/lt(r.written, Bin/len(b)) : Task(Result({}, Io/Error))
+                | true => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bin/slice(b, r.written, Bin/len(b))))
+                | false => pure(Result/success(()))
+                end
+            | false => pure(Result/failure(Io/error_of(r.status)))
             end
-        | false => Task/done(Result/failure(Io/error_of(r.status)))
-        end
-    end;
+        end);
 
 pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
-    let r = /sys/Io/accept(l);
-    match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result(Io, Io/Error))
-    | true => Task/wait(l, /sys/Io/Poll/read, () => accept(l))
-    | false =>
-        match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(Io, Io/Error))
-        | true => Task/done(Result/success(r.handle))
-        | false => Task/done(Result/failure(Io/error_of(r.status)))
-        end
-    end;
-
-pub let go(child : Task({})) -> Task({}) =
-    Task/spawn(Lst/nil(), child, () => Task/done(()));
-
-pub let go_using(h : Io, release : Finalizer, body : Task({})) -> Task({}) =
-    Task/spawn(Lst/cons((h, release), Lst/nil()), body, () => Task/done(()));
-
-pub let nursery(@A : Type, body : Task(A)) -> Task(A) =
-    Task/scope(() => bind(body, (a) => Task/join(() => Task/done(a))));
-
-pub let scoped(@A : Type, body : Task(A)) -> Task(A) =
-    Task/scope(() => bind(body, (a) => Task/cancel(() => Task/done(a))));
-
-struct Group { Nat }
-
-let group_eql(a : Group, b : Group) -> Bln =
-    Nat/eql(a.0, b.0);
-
-let drop_group(g : Group, xs : Lst(Group)) -> Lst(Group) =
-    rec go(rest : Lst(Group)) -> Lst(Group) =
-        match rest : Lst(Group)
-        | nil() => Lst/nil()
-        | cons(x, more) =>
-            match group_eql(g, x) : Lst(Group)
-            | true => go(more)
-            | false => Lst/cons(x, go(more))
+    defer(() =>
+        let r = /sys/Io/accept(l);
+        match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result(Io, Io/Error))
+        | true => bind(wait(l, /sys/Io/Poll/read), (_) => accept(l))
+        | false =>
+            match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(Io, Io/Error))
+            | true => pure(Result/success(r.handle))
+            | false => pure(Result/failure(Io/error_of(r.status)))
             end
-        end;
-    go(xs);
+        end);
 
-struct Entropy pub {
-    next : Nat,
-    free : Lst(Nat)
-}
-
-let fresh(e : Entropy) -> { Group, Entropy } =
-    match e.free : { Group, Entropy }
-    | cons(n, rest) => (Group { n }, Entropy { next = e.next, free = rest })
-    | nil() => (Group { e.next }, Entropy { next = Nat/succ(e.next), free = Lst/nil() })
-    end;
-
-let recycle(e : Entropy, g : Group) -> Entropy =
-    Entropy { next = e.next, free = Lst/cons(g.0, e.free) };
-
-union Fiber
-| fiber(@A : Type, Task(A), Lst(Guard), Lst(Group))
+pub union Fut(A : Type)
+| pending(Lst(Waker))
+| ready(A)
 end
 
-use Fiber/*;
+pub let Future(A : Type) -> Type =
+    Cell(Fut(A));
+
+pub let new_future(@A : Type) -> Future(A) =
+    Cell/new(Fut/pending(@A, Lst/nil(@Waker)));
+
+let wake_all(ws : Lst(Waker)) -> {} =
+    rec each(rest : Lst(Waker)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(w, more) => let _ = w(); each(more)
+        end;
+    each(ws);
+
+pub let fulfill(@A : Type, f : Future(A), a : A) -> {} =
+    match Cell/get(f) : {}
+    | ready(_) => ()
+    | pending(ws) =>
+        let _ = Cell/set(f, Fut/ready(@A, a));
+        wake_all(ws)
+    end;
+
+pub rec await(@A : Type, f : Future(A)) -> Task(A) =
+    match Cell/get(f) : Task(A)
+    | ready(a) => pure(a)
+    | pending(ws) =>
+        bind(park((w) => Cell/set(f, Fut/pending(@A, Lst/cons(w, ws)))), (_) => await(f))
+    end;
+
+struct Job pub {
+    resume : Fiber,
+    token : Token,
+    fins : Lst(Guard)
+}
+
+let Slot : Type =
+    Cell(Option(Job));
 
 struct Parked pub {
     handle : Io,
     interest : Nat,
-    guards : Lst(Guard),
-    groups : Lst(Group),
-    resume : () -> Fiber
+    resume : Fiber,
+    token : Token,
+    fins : Lst(Guard)
 }
 
-let park(@A : Type, h : Io, ev : Nat, gs : Lst(Guard), groups : Lst(Group), k : () -> Task(A)) -> Parked =
-    Parked {
-        handle = h,
-        interest = ev,
-        guards = gs,
-        groups = groups,
-        resume = () => Fiber/fiber(k(), gs, groups)
-    };
+let run_fins(gs : Lst(Guard)) -> {} =
+    rec each(rest : Lst(Guard)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(g, more) => let _ = g.1(); each(more)
+        end;
+    each(gs);
 
-struct Joined pub {
-    awaited : Group,
-    groups : Lst(Group),
-    guards : Lst(Guard),
-    resume : () -> Fiber
-}
+let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
+    rec each(rest : Lst(Guard)) -> Lst(Guard) =
+        match rest : Lst(Guard)
+        | nil() => Lst/nil(@Guard)
+        | cons(g, more) =>
+            match /sys/Io/eql(g.0, h) : Lst(Guard)
+            | true => let _ = g.1(); more
+            | false => Lst/cons(g, each(more))
+            end
+        end;
+    each(gs);
 
-let joined(@A : Type, awaited : Group, groups : Lst(Group), gs : Lst(Guard), k : () -> Task(A)) -> Joined =
-    Joined {
-        awaited = awaited,
-        groups = groups,
-        guards = gs,
-        resume = () => Fiber/fiber(k(), gs, groups)
-    };
+let drain_jobs(js : Lst(Job)) -> {} =
+    rec each(rest : Lst(Job)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(j, more) => let _ = run_fins(j.fins); each(more)
+        end;
+    each(js);
 
-struct World pub {
-    ready : Lst(Fiber),
-    blocked : Lst(Parked),
-    joining : Lst(Joined),
-    cancelled : Lst(Group),
-    entropy : Entropy
-}
+let drain_parked(ps : Lst(Parked)) -> {} =
+    rec each(rest : Lst(Parked)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(p, more) => let _ = run_fins(p.fins); each(more)
+        end;
+    each(ps);
 
-let with_ready(w : World, ready : Lst(Fiber)) -> World =
-    World {
-        ready = ready,
-        blocked = w.blocked,
-        joining = w.joining,
-        cancelled = w.cancelled,
-        entropy = w.entropy
-    };
+let drain_slots(ss : Lst(Slot)) -> {} =
+    rec each(rest : Lst(Slot)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(s, more) =>
+            match Cell/get(s) : {}
+            | none() => each(more)
+            | some(j) => let _ = run_fins(j.fins); each(more)
+            end
+        end;
+    each(ss);
 
-let with_cancelled(w : World, cancelled : Lst(Group)) -> World =
-    World {
-        ready = w.ready,
-        blocked = w.blocked,
-        joining = w.joining,
-        cancelled = cancelled,
-        entropy = w.entropy
-    };
-
-let with_entropy(w : World, entropy : Entropy) -> World =
-    World {
-        ready = w.ready,
-        blocked = w.blocked,
-        joining = w.joining,
-        cancelled = w.cancelled,
-        entropy = entropy
-    };
+let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
+    rec each(rest : Lst(Slot)) -> Lst(Slot) =
+        match rest : Lst(Slot)
+        | nil() => Lst/nil(@Slot)
+        | cons(s, more) =>
+            match Cell/get(s) : Lst(Slot)
+            | none() => each(more)
+            | some(j) =>
+                match Cell/get(j.token) : Lst(Slot)
+                | true => let _ = run_fins(j.fins); let _ = Cell/set(s, Option/none(@Job)); each(more)
+                | false => Lst/cons(s, each(more))
+                end
+            end
+        end;
+    each(ss);
 
 let is_ready(results : Nat, interest : Nat) -> Bln =
     Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(/sys/Io/Poll/err, /sys/Io/Poll/hup))), 0);
 
-let partition(blocked : Lst(Parked), results : Arr(Nat), start : Nat) -> { Lst(Fiber), Lst(Parked) } =
-    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Fiber), still : Lst(Parked)) -> { Lst(Fiber), Lst(Parked) } =
-        match rest : { Lst(Fiber), Lst(Parked) }
+let poll_ready(blocked : Lst(Parked)) -> { Lst(Job), Lst(Parked) } =
+    let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
+    let events = Lst/to_arr(Lst/map((p) => p.interest, blocked));
+    let results = /sys/Io/poll(handles, events, -1);
+    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> { Lst(Job), Lst(Parked) } =
+        match rest : { Lst(Job), Lst(Parked) }
         | nil() => (woken, still)
         | cons(p, tail) =>
-            match is_ready(Arr/get(results, i), p.interest) : { Lst(Fiber), Lst(Parked) }
-            | true => walk(tail, Nat/succ(i), Lst/cons(p.resume(), woken), still)
-            | false => walk(tail, Nat/succ(i), woken, Lst/cons(p, still))
-            end
-        end;
-    walk(blocked, start, Lst/nil(), Lst/nil());
-
-let run_all(gs : Lst(Guard)) -> {} =
-    rec go(rest : Lst(Guard)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(g, more) => let _ = g.1(); go(more)
-        end;
-    go(gs);
-
-let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
-    rec go(rest : Lst(Guard)) -> Lst(Guard) =
-        match rest : Lst(Guard)
-        | nil() => Lst/nil()
-        | cons(g, more) =>
-            match /sys/Io/eql(g.0, h) : Lst(Guard)
-            | true => let _ = g.1(); more
-            | false => Lst/cons(g, go(more))
-            end
-        end;
-    go(gs);
-
-let mem(x : Group, xs : Lst(Group)) -> Bln =
-    rec go(rest : Lst(Group)) -> Bln =
-        match rest : Bln
-        | nil() => false
-        | cons(y, more) =>
-            match group_eql(x, y) : Bln
-            | true => true
-            | false => go(more)
-            end
-        end;
-    go(xs);
-
-let cancelled_any(groups : Lst(Group), cancelled : Lst(Group)) -> Bln =
-    rec go(rest : Lst(Group)) -> Bln =
-        match rest : Bln
-        | nil() => false
-        | cons(g, more) =>
-            match mem(g, cancelled) : Bln
-            | true => true
-            | false => go(more)
-            end
-        end;
-    go(groups);
-
-let group_in_fibers(g : Group, fs : Lst(Fiber)) -> Bln =
-    rec go(rest : Lst(Fiber)) -> Bln =
-        match rest : Bln
-        | nil() => false
-        | cons(f, more) =>
-            match f : Bln
-            | fiber(_, _, _, fg) =>
-                match mem(g, fg) : Bln
-                | true => true
-                | false => go(more)
+            match Cell/get(p.token) : { Lst(Job), Lst(Parked) }
+            | true => let _ = run_fins(p.fins); walk(tail, Nat/succ(i), woken, still)
+            | false =>
+                match is_ready(Arr/get(results, i), p.interest) : { Lst(Job), Lst(Parked) }
+                | true => walk(tail, Nat/succ(i), Lst/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
+                | false => walk(tail, Nat/succ(i), woken, Lst/cons(p, still))
                 end
             end
         end;
-    go(fs);
+    walk(blocked, 0, Lst/nil(@Job), Lst/nil(@Parked));
 
-let group_in_parked(g : Group, ps : Lst(Parked)) -> Bln =
-    rec go(rest : Lst(Parked)) -> Bln =
-        match rest : Bln
-        | nil() => false
-        | cons(p, more) =>
-            match mem(g, p.groups) : Bln
-            | true => true
-            | false => go(more)
-            end
-        end;
-    go(ps);
-
-let group_in_joining(g : Group, js : Lst(Joined)) -> Bln =
-    rec go(rest : Lst(Joined)) -> Bln =
-        match rest : Bln
-        | nil() => false
-        | cons(j, more) =>
-            match group_eql(j.awaited, g) : Bln
-            | true => go(more)
-            | false =>
-                match mem(g, j.groups) : Bln
-                | true => true
-                | false => go(more)
-                end
-            end
-        end;
-    go(js);
-
-let group_present(g : Group, ready : Lst(Fiber), blocked : Lst(Parked), joining : Lst(Joined)) -> Bln =
-    match group_in_fibers(g, ready) : Bln
-    | true => true
-    | false =>
-        match group_in_parked(g, blocked) : Bln
-        | true => true
-        | false => group_in_joining(g, joining)
-        end
-    end;
-
-let sweep_blocked(blocked : Lst(Parked), cancelled : Lst(Group)) -> Lst(Parked) =
-    rec go(rest : Lst(Parked)) -> Lst(Parked) =
-        match rest : Lst(Parked)
-        | nil() => Lst/nil()
-        | cons(p, more) =>
-            match cancelled_any(p.groups, cancelled) : Lst(Parked)
-            | true => let _ = run_all(p.guards); go(more)
-            | false => Lst/cons(p, go(more))
-            end
-        end;
-    go(blocked);
-
-let sweep_joining(joining : Lst(Joined), cancelled : Lst(Group)) -> Lst(Joined) =
-    rec go(rest : Lst(Joined)) -> Lst(Joined) =
-        match rest : Lst(Joined)
-        | nil() => Lst/nil()
-        | cons(j, more) =>
-            match cancelled_any(j.groups, cancelled) : Lst(Joined)
-            | true => let _ = run_all(j.guards); go(more)
-            | false => Lst/cons(j, go(more))
-            end
-        end;
-    go(joining);
-
-struct Woken pub {
-    woken : Lst(Fiber),
-    still : Lst(Joined),
-    entropy : Entropy,
-    cancelled : Lst(Group)
-}
-
-let wake(joining : Lst(Joined), ready : Lst(Fiber), blocked : Lst(Parked), entropy : Entropy, cancelled : Lst(Group)) -> Woken =
-    rec go(rest : Lst(Joined), woken : Lst(Fiber), still : Lst(Joined), e : Entropy, canc : Lst(Group)) -> Woken =
-        match rest : Woken
-        | nil() => Woken { woken = woken, still = still, entropy = e, cancelled = canc }
-        | cons(j, more) =>
-            match group_present(j.awaited, ready, blocked, joining) : Woken
-            | true => go(more, woken, Lst/cons(j, still), e, canc)
-            | false =>
-                let resume = j.resume;
-                go(more, Lst/cons(resume(), woken), still, recycle(e, j.awaited), drop_group(j.awaited, canc))
-            end
-        end;
-    go(joining, Lst/nil(), Lst/nil(), entropy, cancelled);
-
-let drain_joining(joining : Lst(Joined)) -> {} =
-    rec go(rest : Lst(Joined)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(j, more) => let _ = run_all(j.guards); go(more)
-        end;
-    go(joining);
-
-let app_ids(xs : Lst(Group), tail : Lst(Group)) -> Lst(Group) =
-    rec go(rest : Lst(Group)) -> Lst(Group) =
-        match rest : Lst(Group)
-        | nil() => tail
-        | cons(x, more) => Lst/cons(x, go(more))
-        end;
-    go(xs);
-
-let splice(xs : Lst(Fiber), tail : Lst(Fiber)) -> Lst(Fiber) =
-    rec go(rest : Lst(Fiber)) -> Lst(Fiber) =
-        match rest : Lst(Fiber)
-        | nil() => tail
-        | cons(x, more) => Lst/cons(x, go(more))
-        end;
-    go(xs);
-
-let run_fiber_fins(f : Fiber) -> {} =
-    match f : {}
-    | fiber(_, _, gs, _) => run_all(gs)
-    end;
-
-let fiber_cancelled(f : Fiber, cancelled : Lst(Group)) -> Bln =
-    match f : Bln
-    | fiber(_, _, _, fg) => cancelled_any(fg, cancelled)
-    end;
-
-union Stepped
-| advanced(Lst(Fiber), Entropy)
-| parked(Parked, Entropy)
-| joined(Joined, Lst(Group), Entropy)
-end
-
-let step(f : Fiber, entropy : Entropy) -> Stepped =
-    match f : Stepped
-    | fiber(_, t, guards, groups) =>
-        match t : Stepped
-        | done(_) =>
-            let _ = run_all(guards);
-            Stepped/advanced(Lst/nil(), entropy)
-        | spawn(gs, child, k) =>
-            Stepped/advanced(
-                Lst/cons(Fiber/fiber(k(), guards, groups), Lst/cons(Fiber/fiber(child, gs, groups), Lst/nil())),
-                entropy)
-        | acquire(h, fin, k) =>
-            Stepped/advanced(Lst/cons(Fiber/fiber(k(), Lst/cons((h, fin), guards), groups), Lst/nil()), entropy)
-        | release(h, k) =>
-            let gs = release_guard(h, guards);
-            Stepped/advanced(Lst/cons(Fiber/fiber(k(), gs, groups), Lst/nil()), entropy)
-        | wait(h, ev, k) =>
-            Stepped/parked(park(h, ev, guards, groups, k), entropy)
-        | scope(k) =>
-            let minted = fresh(entropy);
-            Stepped/advanced(Lst/cons(Fiber/fiber(k(), guards, Lst/cons(minted.0, groups)), Lst/nil()), minted.1)
-        | join(k) =>
-            match groups : Stepped
-            | cons(g, rest) =>
-                Stepped/joined(joined(g, rest, guards, k), Lst/nil(), entropy)
-            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(), guards, groups), Lst/nil()), entropy)
-            end
-        | cancel(k) =>
-            match groups : Stepped
-            | cons(g, rest) =>
-                Stepped/joined(joined(g, rest, guards, k), Lst/cons(g, Lst/nil()), entropy)
-            | nil() => Stepped/advanced(Lst/cons(Fiber/fiber(k(), guards, groups), Lst/nil()), entropy)
-            end
-        end
-    end;
-
-let housekeep(w : World) -> World =
-    let blocked1 = sweep_blocked(w.blocked, w.cancelled);
-    let joining1 = sweep_joining(w.joining, w.cancelled);
-    let woken = wake(joining1, w.ready, blocked1, w.entropy, w.cancelled);
-    World {
-        ready = splice(woken.woken, w.ready),
-        blocked = blocked1,
-        joining = woken.still,
-        cancelled = woken.cancelled,
-        entropy = woken.entropy
-    };
-
-let drive(w : World) -> World =
-    match w.ready : World
-    | cons(f, rest) =>
-        match fiber_cancelled(f, w.cancelled) : World
-        | true =>
-            let _ = run_fiber_fins(f);
-            with_ready(w, rest)
+pub let block_on(@A : Type, root : Task(A)) -> A =
+    let runq : Cell(Lst(Job)) = Cell/new(Lst/nil(@Job));
+    let blocked : Cell(Lst(Parked)) = Cell/new(Lst/nil(@Parked));
+    let parked : Cell(Lst(Slot)) = Cell/new(Lst/nil(@Slot));
+    let result : Cell(Option(A)) = Cell/new(Option/none(@A));
+    let enqueue = (j : Job) =>
+        Cell/set(runq, Lst/cons(j, Cell/get(runq)));
+    let _ = enqueue(Job {
+        resume = () => bind(root, (a) => let _ = Cell/set(result, Option/some(@A, a)); pure(())),
+        token = Cell/new(false),
+        fins = Lst/nil(@Guard)
+    });
+    rec serve(job : Job) -> {} =
+        match Cell/get(job.token) : {}
+        | true => run_fins(job.fins)
         | false =>
-            match step(f, w.entropy) : World
-            | advanced(news, e) =>
-                World {
-                    ready = splice(news, rest),
-                    blocked = w.blocked,
-                    joining = w.joining,
-                    cancelled = w.cancelled,
-                    entropy = e
-                }
-            | parked(p, e) =>
-                World {
-                    ready = rest,
-                    blocked = Lst/cons(p, w.blocked),
-                    joining = w.joining,
-                    cancelled = w.cancelled,
-                    entropy = e
-                }
-            | joined(j, gc, e) =>
-                World {
-                    ready = rest,
-                    blocked = w.blocked,
-                    joining = Lst/cons(j, w.joining),
-                    cancelled = app_ids(gc, w.cancelled),
-                    entropy = e
-                }
-            end
-        end
-    | nil() =>
-        match w.blocked : World
-        | cons(_, _) =>
-            let handles = Lst/to_arr(Lst/map((p) => p.handle, w.blocked));
-            let events = Lst/to_arr(Lst/map((p) => p.interest, w.blocked));
-            let results = /sys/Io/poll(handles, events, -1);
-            let split = partition(w.blocked, results, 0);
-            World {
-                ready = split.0,
-                blocked = split.1,
-                joining = w.joining,
-                cancelled = w.cancelled,
-                entropy = w.entropy
-            }
-        | nil() => w
-        end
-    end;
-
-rec schedule(w : World) -> {} =
-    let h = housekeep(w);
-    match h.ready : {}
-    | cons(_, _) => schedule(drive(h))
-    | nil() =>
-        match h.blocked : {}
-        | cons(_, _) => schedule(drive(h))
-        | nil() => drain_joining(h.joining)
-        end
-    end;
-
-pub let block_on(@A : Type, t : Task(A)) -> A =
-    rec loop(root : Task(A), rgroups : Lst(Group), rguards : Lst(Guard), w : World) -> A =
-        let h = housekeep(w);
-        match root : A
-        | done(a) =>
-            let _ = run_all(rguards);
-            let _ = schedule(with_cancelled(h, Lst/cons(Group { 0 }, h.cancelled)));
-            a
-        | spawn(gs, child, k) =>
-            loop(k(), rgroups, rguards,
-                with_ready(h, Lst/cons(Fiber/fiber(child, gs, rgroups), h.ready)))
-        | acquire(gh, fin, k) =>
-            loop(k(), rgroups, Lst/cons((gh, fin), rguards), h)
-        | release(gh, k) =>
-            let gs = release_guard(gh, rguards);
-            loop(k(), rgroups, gs, h)
-        | scope(k) =>
-            let minted = fresh(h.entropy);
-            loop(k(), Lst/cons(minted.0, rgroups), rguards,
-                with_entropy(h, minted.1))
-        | cancel(k) =>
-            match rgroups : A
-            | cons(g, grest) =>
-                loop(Task/join(k), rgroups, rguards,
-                    with_cancelled(h, Lst/cons(g, h.cancelled)))
-            | nil() => loop(k(), rgroups, rguards, h)
-            end
-        | join(k) =>
-            match rgroups : A
-            | cons(g, grest) =>
-                match group_present(g, h.ready, h.blocked, h.joining) : A
-                | false =>
-                    loop(k(), grest, rguards,
-                        with_cancelled(with_entropy(h, recycle(h.entropy, g)), drop_group(g, h.cancelled)))
-                | true =>
-                    match h.ready : A
-                    | cons(_, _) => loop(Task/join(k), rgroups, rguards, drive(h))
-                    | nil() =>
-                        match h.blocked : A
-                        | cons(_, _) => loop(Task/join(k), rgroups, rguards, drive(h))
-                        | nil() => loop(k(), grest, rguards, h)
-                        end
-                    end
-                end
-            | nil() => loop(k(), rgroups, rguards, h)
-            end
-        | wait(rh, rev, rk) =>
-            match h.ready : A
-            | cons(_, _) => loop(Task/wait(rh, rev, rk), rgroups, rguards, drive(h))
-            | nil() =>
-                let handles = Lst/to_arr(Lst/cons(rh, Lst/map((p) => p.handle, h.blocked)));
-                let events = Lst/to_arr(Lst/cons(rev, Lst/map((p) => p.interest, h.blocked)));
-                let results = /sys/Io/poll(handles, events, -1);
-                let split = partition(h.blocked, results, 1);
-                let next = World {
-                    ready = split.0,
-                    blocked = split.1,
-                    joining = h.joining,
-                    cancelled = h.cancelled,
-                    entropy = h.entropy
-                };
-                match is_ready(Arr/get(results, 0), rev) : A
-                | true => loop(rk(), rgroups, rguards, next)
-                | false => loop(Task/wait(rh, rev, rk), rgroups, rguards, next)
+            match job.resume() : {}
+            | done(_) => run_fins(job.fins)
+            | step(p, k) =>
+                match p : {}
+                | wait(h, ev) =>
+                    Cell/set(blocked, Lst/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, fins = job.fins }, Cell/get(blocked)))
+                | fork(child, ct) =>
+                    let _ = enqueue(Job { resume = k, token = job.token, fins = job.fins });
+                    enqueue(Job { resume = child, token = ct, fins = Lst/nil(@Guard) })
+                | park(reg) =>
+                    let slot : Slot = Cell/new(Option/some(@Job, Job { resume = k, token = job.token, fins = job.fins }));
+                    let _ = Cell/set(parked, Lst/cons(slot, Cell/get(parked)));
+                    let wake = () =>
+                        match Cell/get(slot) : {}
+                        | none() => ()
+                        | some(j) => let _ = Cell/set(slot, Option/none(@Job)); enqueue(j)
+                        end;
+                    reg(wake)
+                | acquire(h, fin) =>
+                    serve(Job { resume = k, token = job.token, fins = Lst/cons((h, fin), job.fins) })
+                | release(h) =>
+                    serve(Job { resume = k, token = job.token, fins = release_guard(h, job.fins) })
+                | defer() =>
+                    serve(Job { resume = k, token = job.token, fins = job.fins })
                 end
             end
         end;
-    loop(t, Lst/cons(Group { 0 }, Lst/nil()), Lst/nil(),
-        World {
-            ready = Lst/nil(),
-            blocked = Lst/nil(),
-            joining = Lst/nil(),
-            cancelled = Lst/nil(),
-            entropy = Entropy { next = 1, free = Lst/nil() }
-        });
+    rec drive() -> A =
+        match Cell/get(result) : A
+        | some(a) =>
+            let _ = drain_jobs(Cell/get(runq));
+            let _ = drain_parked(Cell/get(blocked));
+            let _ = drain_slots(Cell/get(parked));
+            a
+        | none() =>
+            match Cell/get(runq) : A
+            | cons(job, rest) =>
+                let _ = Cell/set(runq, rest);
+                let _ = serve(job);
+                drive()
+            | nil() =>
+                let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
+                match Cell/get(blocked) : A
+                | cons(_, _) =>
+                    let split = poll_ready(Cell/get(blocked));
+                    let _ = Cell/set(runq, split.0);
+                    let _ = Cell/set(blocked, split.1);
+                    drive()
+                | nil() =>
+                    let _ = drain_jobs(Cell/get(runq));
+                    let _ = drain_parked(Cell/get(blocked));
+                    let _ = drain_slots(Cell/get(parked));
+                    /sys/Io/exit(@A, 1)
+                end
+            end
+        end;
+    drive();
 
 pub let run(main : Task({})) -> {} =
     let _ = block_on(main);
     ();
+
+pub let Handle(A : Type) -> Type =
+    { result : Future(A), token : Token };
+
+pub let spawn(@A : Type, body : () -> Task(A)) -> Task(Handle(A)) =
+    defer(() =>
+        let f = new_future(@A);
+        let t : Token = Cell/new(false);
+        bind(fork_with(() => bind(body(), (a) => let _ = fulfill(f, a); pure(())), t), (_) => pure((f, t))));
+
+pub let cancel(t : Token) -> {} =
+    Cell/set(t, true);
+
+let cancel_all(ts : Lst(Token)) -> {} =
+    rec each(rest : Lst(Token)) -> {} =
+        match rest : {}
+        | nil() => ()
+        | cons(t, more) => let _ = cancel(t); each(more)
+        end;
+    each(ts);
+
+pub let join_all(@A : Type, tasks : Arr(() -> Task(A))) -> Task(Arr(A)) =
+    rec go(i : Nat) -> Task(Lst(A)) =
+        let ! = bind;
+        match Nat/lt(i, Arr/len(tasks)) : Task(Lst(A))
+        | false => pure(Lst/nil(@A))
+        | true =>
+            let h = spawn(Arr/get(tasks, i))!;
+            let rest = go(Nat/succ(i))!;
+            let a = await(h.result)!;
+            pure(Lst/cons(a, rest))
+        end;
+    bind(go(0), (xs) => pure(Lst/to_arr(xs)));
+
+pub let select(@A : Type, tasks : Arr(() -> Task(A))) -> Task({ Nat, A }) =
+    defer(() =>
+        let winner : Future({ Nat, A }) = new_future(@{ Nat, A });
+        rec arm(i : Nat) -> Task(Lst(Token)) =
+            let ! = bind;
+            match Nat/lt(i, Arr/len(tasks)) : Task(Lst(Token))
+            | false => pure(Lst/nil(@Token))
+            | true =>
+                let t : Token = Cell/new(false);
+                let _ = fork_with(() => bind((Arr/get(tasks, i))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
+                let rest = arm(Nat/succ(i))!;
+                pure(Lst/cons(t, rest))
+            end;
+        let ! = bind;
+        let tokens = arm(0)!;
+        let w = await(winner)!;
+        let _ = cancel_all(tokens);
+        pure(w));
+
+pub let race(@A : Type, tasks : Arr(() -> Task(A))) -> Task(A) =
+    bind(select(tasks), (w) => pure(w.1));

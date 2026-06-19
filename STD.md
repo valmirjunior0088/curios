@@ -179,7 +179,7 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 
 The handle-based IO primitives (`read`/`write`/`open`/`connect`/`close`) and the ambient host services (clocks, randomness, process environment) all live in `/sys/Io`, but `/std/Io` re-exports only the byte-stream operations on the standard handles. The rest surface through dedicated modules: file handles through [`/std/File`](#stdfile), sockets through [`/std/Net`](#stdnet), time through [`/std/Time`](#stdtime), randomness through [`/std/Rand`](#stdrand), and process access through [`/std/Proc`](#stdproc).
 
-Asynchronous, non-blocking IO and concurrency are layered on top by [`/std/Task`](#stdtask) — a free-monad scheduler with structured concurrency. The `File` and `Net` operations are `Task`s built on its non-blocking `read`/`write`/`accept` leaves, so they multiplex over a single poll and are driven by `Task/block_on`.
+Asynchronous, non-blocking IO and concurrency are layered on top by [`/std/Task`](#stdtask) — a free-monad scheduler with fire-and-forget fibers, awaitable futures, and a finalizer guarantee. The `File` and `Net` operations are `Task`s built on its non-blocking `read`/`write`/`accept` leaves, so they multiplex over a single poll and are driven by `Task/block_on`.
 
 ### `/std/Io`
 
@@ -239,50 +239,57 @@ A buffered, line-oriented reader layered over [`/std/Io`](#stdio): a small state
 
 ### `/std/Task`
 
-The asynchronous effect and concurrency layer. A `Task(A)` is a **free monad** the scheduler interprets: building one is pure — the effects fire only when a scheduler (`run` or `block_on`) drives it — so a task is a first-class, composable description of work. On top of it sits **structured concurrency**: every spawned fiber is *owned* by the scope that launched it, nothing outlives that scope, and cancelling a scope promptly reaps its whole subtree (running each finalizer).
+The asynchronous effect and concurrency layer. A `Task(A)` is a **free monad**: building one performs nothing — every effect is reified as data and fires only when a scheduler (`run` or `block_on`) interprets it — so a task is a first-class, inert description of work, composed with `bind`/`map` and handed to a runner. Internally it is a two-constructor type (a finished value, or a suspended effect the scheduler steps), but those constructors are private: `Task` is an **opaque** type, built only through the combinators below.
 
-```
-union Task(A : Type)
-| done(A)                                     -- a finished value
-| wait(Io, Nat, () -> Task(A))                -- yield until a handle is ready for an interest
-| spawn(Lst(Guard), Task({}), () -> Task(A))  -- fork a child (born owning the given guards) into the current scope
-| acquire(Io, () -> {}, () -> Task(A))        -- register a finalizer keyed to a handle
-| release(Io, () -> Task(A))                  -- run and drop the finalizer keyed to a handle
-| scope(() -> Task(A))                        -- enter a fresh cancellation scope (group)
-| join(() -> Task(A))                         -- close the scope, awaiting its children
-| cancel(() -> Task(A))                       -- close the scope, cancelling its children
-end
+The surface is two tiers. The **application API** is what programs use — the monad, spawning and awaiting, cancellation, the resource bracket, and the runners. The **SPI** is the seam for building *new* effects and resources on the engine — the leaf IO primitives, the effect and blocking constructors, the unbalanced finalizer pair, and the promise primitive; both [`/std/File`](#stdfile) and [`/std/Net`](#stdnet) are built entirely on it.
 
-let Guard : Type = { Io, Finalizer }          -- a finalizer paired with the handle it releases
+**Application API:**
 
-union Fiber | fiber(@A : Type, Task(A), Lst(Guard), Lst(Nat)) end
-```
+| Binding | Type | Description |
+| ------- | ---- | ----------- |
+| `pure(a)` | `(@A : Type, A) -> Task(A)` | Lift a value into a finished task |
+| `bind(m, f)` | `(@A, @B) -> (Task(A), (A) -> Task(B)) -> Task(B)` | Sequence two tasks (use with `let ! = Task/bind;` blocks) |
+| `map(f, m)` | `(@A, @B, (A) -> B, Task(A)) -> Task(B)` | Map a task's result with a pure function |
+| `go(body)` | `(Fiber) -> Task({})` | Spawn `body` as a fire-and-forget fiber — no handle, not cancelable |
+| `spawn(body)` | `(@A : Type, () -> Task(A)) -> Task(Handle(A))` | Spawn `body` as a fiber, returning a `Handle` to await or cancel it |
+| `await(f)` | `(@A : Type, Future(A)) -> Task(A)` | Park until `f` is fulfilled, then yield its value |
+| `join_all(tasks)` | `(@A, Arr(() -> Task(A))) -> Task(Arr(A))` | Spawn every task, await them all, collect results positionally |
+| `select(tasks)` | `(@A, Arr(() -> Task(A))) -> Task({ Nat, A })` | Run all; the first to finish wins (its index and value); the losers are cancelled |
+| `race(tasks)` | `(@A, Arr(() -> Task(A))) -> Task(A)` | `select`'s winning value, dropping the index |
+| `cancel(t)` | `(Token) -> {}` | Flag a token cancelled; its fiber is reaped at its next step, finalizers running |
+| `using(h, release, body)` | `(@A, Io, Finalizer, Task(A)) -> Task(A)` | Bracket `h`: register `release`, run `body`, release exactly once — on completion or on cancel/drop |
+| `run(main)` | `(Task({})) -> {}` | Drive `main` as the program root (`block_on` at the unit result) |
+| `block_on(t)` | `(@A : Type, Task(A)) -> A` | Drive `t` to its value, multiplexing every fiber over one `Io/poll` |
+| `Handle(A)` | `Type` (`= { result : Future(A), token : Token }`) | A spawned fiber's result future paired with its cancellation token |
+| `Future(A)` | `Type` (`= Cell(Fut(A))`) | A one-shot result cell, awaited with `await` |
+| `Token` | `Type` (`= Cell(Bln)`) | A cooperative-cancellation flag |
+| `Finalizer` | `Type` (`= () -> {}`) | A synchronous cleanup action, run at release or on cancellation |
+| `Fiber` | `Type` (`= () -> Task({})`) | A fiber body: a thunk producing a unit task |
 
-The constructors are the raw interpreter surface; programs work through the combinators below. The `Nat` in `wait` is an interest bitmask (`READ = 1`, `WRITE = 2`, plus `ERR`/`HUP`), but `read`/`write`/`accept` set it for you. Finalizers are **handle-keyed** (`Guard`), so `release(h)` runs the one finalizer for `h` and a flat open/close pair is targeted rather than a blind LIFO pop. `Fiber` is a task with its result type hidden behind an existential (so one ready queue holds tasks of differing result types), paired with its guard list and the stack of cancellation groups it belongs to.
+**SPI** — for building new effects and resources on the scheduler:
 
-| Binding                          | Type                                                         | Description                                                                       |
-| -------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `pure(a)`                        | `(@A : Type, A) -> Task(A)`                                  | Lift a value into a finished task                                                 |
-| `bind(m, f)`                     | `(@A, @B) -> (Task(A), (A) -> Task(B)) -> Task(B)`           | Sequence two tasks (use with `let ! = Task/bind;` blocks)                         |
-| `using(h, release, body)`        | `(@A, Io, () -> {}, Task(A)) -> Task(A)`                    | Bracket handle `h`: register `release`, run `body`, release exactly once — on completion or on drop/cancel |
-| `read(h, n)`                     | `(Io, Nat) -> Task(Io/Read)`                                | Read up to `n` bytes, yielding on would-block; `chunk` / `eof` / `error`          |
-| `write(h, b)`                    | `(Io, Bin) -> Task(Result({}, Io/Error))`                   | Write all of `b`, yielding on would-block and resending only the unwritten tail   |
-| `accept(l)`                      | `(Io) -> Task(Result(Io, Io/Error))`                        | Accept the next connection on listener `l`, yielding until one is pending         |
-| `nonblocking(h)`                 | `(Io) -> {}`                                                | Put a handle into non-blocking mode                                               |
-| `go(child)`                      | `(Task({})) -> Task({})`                                     | Spawn `child` into the current scope, fire-and-forget                             |
-| `go_using(h, release, body)`     | `(Io, () -> {}, Task({})) -> Task({})`                      | Spawn `body` fire-and-forget, born owning `release(h)` — so it runs even if the child is reaped before its first step |
-| `nursery(body)`                  | `(@A : Type, Task(A)) -> Task(A)`                           | Run `body`, then wait for every fiber it spawned to finish (join)                 |
-| `scoped(body)`                   | `(@A : Type, Task(A)) -> Task(A)`                           | Run `body`, then cancel every fiber it spawned (cancel-on-exit)                   |
-| `block_on(t)`                    | `(@A : Type, Task(A)) -> A`                                 | Drive `t` to its value, multiplexing everything it spawns over one `Io/poll`      |
-| `run(main)`                      | `(Task({})) -> {}`                                          | `block_on` at the unit result — drive `main` as the program root                  |
-| `Finalizer`                      | `Type` (`= () -> {}`)                                        | A synchronous cleanup action, run at scope exit or on cancellation                |
-| `Guard`                          | `Type` (`= { Io, Finalizer }`)                              | A finalizer paired with the handle it releases                                    |
+| Binding | Type | Description |
+| ------- | ---- | ----------- |
+| `defer(body)` | `(@A : Type, () -> Task(A)) -> Task(A)` | Suspend `body` so its construction effects fire only when served — what keeps the leaves inert |
+| `wait(h, ev)` | `(Io, Nat) -> Task({})` | Yield until handle `h` is ready for interest bitmask `ev` (`READ = 1`, `WRITE = 2`, plus `ERR`/`HUP`) |
+| `park(register)` | `((Waker) -> {}) -> Task({})` | Yield, handing `register` a one-shot waker that re-queues the fiber |
+| `acquire(h, fin)` | `(Io, Finalizer) -> Task({})` | Register finalizer `fin` keyed to handle `h` on the running fiber |
+| `release(h)` | `(Io) -> Task({})` | Run and drop the finalizer keyed to `h` |
+| `new_future()` | `(@A : Type) -> Future(A)` | A fresh, unfulfilled future |
+| `fulfill(f, a)` | `(@A : Type, Future(A), A) -> {}` | Fulfill `f` with `a` (idempotent), waking everyone parked on it |
+| `nonblocking(h)` | `(Io) -> {}` | Put a handle into non-blocking mode |
+| `read(h, n)` | `(Io, Nat) -> Task(Io/Read)` | Read up to `n` bytes, yielding on would-block; `chunk` / `eof` / `error` |
+| `write(h, b)` | `(Io, Bin) -> Task(Result({}, Io/Error))` | Write all of `b`, yielding on would-block and resending only the unwritten tail |
+| `accept(l)` | `(Io) -> Task(Result(Io, Io/Error))` | Accept the next connection on listener `l`, yielding until one is pending |
+| `Waker` | `Type` (`= () -> {}`) | The one-shot resume callback handed to `park`'s registrar |
 
-**Resource brackets.** Finalizers are **handle-keyed**: `acquire(h, fin, k)` registers `fin` against handle `h` on the running fiber, and `release(h, k)` runs and drops the one keyed to `h`. A fiber dropped or cancelled before it reaches its `release` still has every outstanding finalizer run by the scheduler, so a handle acquired this way is released exactly once whatever path execution takes. This is the structural guarantee: a *flat* `open`/`close` pair (`File/open`/`File/close`, `Net/connect`/`Net/close`) is leak-safe on its own, because `open` registers the close as a finalizer the moment it hands back the handle — `with` is merely the sugar that pairs them around a body, never the only safe doorway. `using(h, release, body)` is that bracket as one combinator. `go_using` seeds the guard at a spawned child's **birth**, so the release runs even if the child is reaped before its first step (the `Net/serve` fd-leak guarantee).
+**Inert construction.** Evaluation is strict, so a leaf like `read(h, n)` built eagerly would fire its syscall the instant it is *constructed*, not when it is served. Every leaf and resource-allocating combinator is therefore wrapped in `defer`, which reifies its body as a suspended step the scheduler forces only on arrival. Building a task tree — even one you never run — thus performs no IO and allocates no scheduler state.
 
-**Structured concurrency.** `go`/`spawn` launch a child into the *current* cancellation scope, so it is owned there (`spawn` takes the guard list the child is born owning; `go` passes none, `go_using` one). `nursery(body)` opens a fresh scope (`scope`), runs `body`, and does not return until every fiber `body` spawned has finished (`join`) — the black-box rule, nothing the body forks outlives the call. `scoped(body)` is the daemon-helper form: it *cancels* (`cancel`) the helpers the instant `body` returns, running their finalizers before it delivers `body`'s value. Scopes nest, and cancelling one promptly cancels every descendant (a child carries all of its ancestors' group ids, so cancellation reaches the subtree for free).
+**Resource brackets and the finalizer guarantee.** Finalizers are **handle-keyed**: `acquire(h, fin)` registers `fin` against handle `h` on the running fiber, and `release(h)` runs and drops the one keyed to `h` (LIFO among that fiber's guards). The guarantee is **exactly-once** — a finalizer runs on the fiber's normal completion, on an explicit `release`, on cancellation, or, for a fiber still parked when the program ends, when `block_on` drains it at shutdown. So a handle acquired this way is released on every path and never twice. `using(h, release, body)` is that bracket as a single combinator; `File/open` and `Net/connect` register their `close` as a finalizer the instant they hand back the handle, so even a flat open/close pair is leak-safe.
 
-**Running.** `block_on(t)` drives the root `t` to its value while multiplexing every fiber it spawns over a single `Io/poll`; when the root finishes, every still-outstanding child is dropped and its finalizers run — a stuck background fiber can never hang shutdown. `run` is `block_on` at the unit result. The leaf actions `read`/`write`/`accept` are the non-blocking primitives every higher layer (`/std/File`, `/std/Net`) is built on: each yields to the scheduler on would-block and resumes when the handle is ready, surfacing a typed `Io/Read` or `Result(_, Io/Error)` rather than a raw status.
+**Spawning, futures, cancellation.** `go` launches a fire-and-forget fiber — nothing to await, nothing to cancel. `spawn` launches one and hands back a `Handle`: its result `Future` and a cancellation `Token`, so `await(h.result)` collects the value and `cancel(h.token)` stops it. A `Future` is a one-shot cell (`new_future` / `fulfill` / `await`); awaiting one parks the fiber until something fulfills it. Cancellation is **cooperative** — `cancel` sets the token and the scheduler reaps the fiber at its next step, running its finalizers, rather than interrupting it mid-step. `join_all` spawns every task and awaits all of them (positional results); `select` runs them and lets the first finisher win, cancelling the losers; `race` is `select` without the index.
+
+**Running.** `block_on(t)` is the scheduler loop: it drives the root `t` while multiplexing every fiber's IO waits over a single `/sys/Io/poll`, waking fibers as their handles become ready and resuming fibers parked on futures as those fulfill. When the root produces its value, every still-outstanding fiber is drained and its finalizers run — a stuck background fiber can never leak a resource or hang shutdown. If the program reaches a state where nothing is runnable and nothing is waiting on IO (a genuine deadlock — the root can never finish), `block_on` runs all outstanding finalizers and then terminates the process with a non-zero exit. `run` is `block_on` at the unit result, the normal program entry. The leaf actions `read`/`write`/`accept` are the non-blocking primitives every higher layer (`/std/File`, `/std/Net`) builds on: each yields on would-block and resumes when the handle is ready, surfacing a typed `Io/Read` or `Result(_, Io/Error)` rather than a raw status.
 
 ### `/std/File`
 
@@ -323,12 +330,12 @@ struct Settings pub {
 | `call(settings, host, port, request)` | `(Settings, Str, Nat, Bin) -> Task(Result(Bin, Io/Error))`                  | Connect, send `request`, read the whole response to EOF, close |
 | `read(c, n)`                          | `(Socket, Nat) -> Task(Io/Read)`                                            | Read up to `n` bytes from the socket (`chunk`/`eof`/`error`)   |
 | `write(c, b)`                         | `(Socket, Bin) -> Task(Result({}, Io/Error))`                              | Write all of `b` to the socket                                 |
-| `serve(host, port, handler)`          | `(Str, Nat, (Socket) -> Task({})) -> Task(Result({}, Io/Error))`           | Bind `host`:`port`, then accept in a loop, running each connection's `handler` as its own owned fiber |
+| `serve(host, port, handler)`          | `(Str, Nat, (Socket) -> Task({})) -> Task(Result({}, Io/Error))`           | Bind `host`:`port`, then accept in a loop, running each connection's `handler` as its own fire-and-forget fiber |
 | `serve_tls(host, port, cert, key, handler)` | `(Str, Nat, Bin, Bin, (Socket) -> Task({})) -> Task(Result({}, Io/Error))` | Like `serve` but **sequential**, terminating TLS on each accepted connection with the PEM `cert` chain and `key` |
 
 As with `File`, the `Socket` must not outlive the `with` or `handler` body — a delayed effect would touch a closed connection. A TLS `with`/`call` (`settings.tls`) upgrades the connection right after connect; `read`/`write` then transparently serve the encrypted stream.
 
-`serve` is a **concurrent** server: it binds a listening socket (private and fully bracketed — closed when the loop ends), then loops `accept` → spawn the connection's bracketed handler as its own fiber → accept again, so a slow connection never blocks the accept loop or its peers. The accept loop runs inside a `Task/nursery`, so the handlers are *owned* by the server scope: in-flight connections are awaited when the loop ends, and cancelling the server (or the program shutting down) promptly cancels every handler and runs its `close`. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Io/Error`. `serve_tls` is **sequential** — the rustls handshake and record layer are driven synchronously by the host, so each accepted connection completes its handshake and runs its handler before the next `accept`. It builds a server config from the PEM `cert`/`key` once; a connection whose handshake fails is dropped while the loop continues (unlike a failed `accept`, which ends it). Concurrent TLS handling is future work.
+`serve` is a **concurrent** server: it binds a listening socket (private and fully bracketed — closed when the loop ends), then loops `accept` → spawn the connection's bracketed handler as its own fiber → accept again, so a slow connection never blocks the accept loop or its peers. Each handler is spawned with `Task/go` and brackets its socket with `using`, so the connection's `close` is a scheduler-tracked finalizer: it runs when the handler completes, and at program shutdown the scheduler drains every still-running handler and runs its `close`. A failed `accept` ends the loop; a failed `listen` (e.g. the port is in use) is returned as `Io/Error`. `serve_tls` is **sequential** — the rustls handshake and record layer are driven synchronously by the host, so each accepted connection completes its handshake and runs its handler before the next `accept`. It builds a server config from the PEM `cert`/`key` once; a connection whose handshake fails is dropped while the loop continues (unlike a failed `accept`, which ends it). Concurrent TLS handling is future work.
 
 ### `/std/Http`
 

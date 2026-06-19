@@ -9,25 +9,26 @@ pub let write(f : File, b : Bin) -> Task(Result({}, Io/Error)) =
     Task/write(f.0, b);
 
 pub let open(path : Str, mode : Io/Mode) -> Task(Result(File, Io/Error)) =
-    let r = /sys/Io/open(Str/to_bin(path), Io/of_mode(mode));
-    match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(File, Io/Error))
-    | true =>
-        let _ = Task/nonblocking(r.handle);
-        Task/acquire(r.handle, () => /sys/Io/close(r.handle), () =>
-            Task/done(Result/success(File { r.handle })))
-    | false => Task/done(Result/failure(Io/error_of(r.status)))
-    end;
+    Task/defer(() =>
+        let r = /sys/Io/open(Str/to_bin(path), Io/of_mode(mode));
+        match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(File, Io/Error))
+        | true =>
+            let _ = Task/nonblocking(r.handle);
+            Task/bind(Task/acquire(r.handle, () => /sys/Io/close(r.handle)), (_) =>
+                Task/pure(Result/success(File { r.handle })))
+        | false => Task/pure(Result/failure(Io/error_of(r.status)))
+        end);
 
 pub let close(f : File) -> Task({}) =
-    Task/release(f.0, () => Task/done(()));
+    Task/release(f.0);
 
 pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Task(A)) -> Task(Result(A, Io/Error)) =
     Task/bind(open(path, mode), (opened) =>
         match opened : Task(Result(A, Io/Error))
         | success(f) =>
             Task/bind(body(f), (a) =>
-                Task/bind(close(f), (()) => Task/done(Result/success(a))))
-        | failure(e) => Task/done(Result/failure(e))
+                Task/bind(close(f), (()) => Task/pure(Result/success(a))))
+        | failure(e) => Task/pure(Result/failure(e))
         end);
 
 let drain(f : File) -> Task(Bin) =
