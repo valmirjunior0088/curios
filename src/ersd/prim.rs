@@ -80,11 +80,7 @@ pub enum PurePrim {
     ArrAppend(Term, Term),
     ArrConcat(Vec<Term>),
     Io(u32),
-    /// Handle identity. Kept abstract through `ersd`: the byte representation a
-    /// handle erases to is only chosen at the `ersd → cont` lowering, where this
-    /// becomes a `Bin` comparison.
     IoEql(Term, Term),
-    Unit,
 }
 
 #[derive(Debug)]
@@ -112,7 +108,6 @@ pub enum HostPrim {
     IoRandom(Term),
     IoArgs,
     IoEnv(Term),
-    // Only the exit code survives erasure; the polymorphic result type is gone.
     IoExit(Term),
 }
 

@@ -460,7 +460,6 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::Io(token) => work.fresh(cont::Value::Pure(cont::Data::Bin(
             BigUint::from(*token).to_bytes_le(),
         ))),
-        ersd::PurePrim::Unit => work.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
     }
 }
 
@@ -1089,10 +1088,6 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::ArrConcat(operands) => {
             lower_arr_concat(work, operands, frame, vec![], cont)
-        }
-        ersd::PurePrim::Unit => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
-            cont.call(work, value)
         }
     }
 }
