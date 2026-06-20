@@ -184,6 +184,94 @@ fn arr_concat_length_clash_is_rejected() {
 }
 
 #[test]
+fn erased_param_used_at_runtime_is_rejected() {
+    // Relevance (QTT {0,ω}), phase 2: `@` on the type marks the binder erased
+    // (quantity 0). Returning an erased binder is a runtime (ω) use of a `Zero`
+    // var — the one and only relevance error.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let f : (n : @Nat) -> Nat = (n) => n;
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
+fn erased_param_unused_is_accepted() {
+    // An erased binder that the body never references is fine — and at runtime
+    // it is still passed (erasure is phase 3), so the call behaves normally.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let f : (n : @Nat, m : Nat) -> Nat = (n, m) => m;
+        let r : Nat = f(5, 3);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    assert_eq!(run(source), b"3");
+}
+
+#[test]
+fn erased_param_in_type_position_is_accepted() {
+    // The category-(a) flip: a term checked against `Type` is an erased context
+    // (ρ=0), so an erased binder is usable there. `Eq(n, n)` is a type, so the
+    // erased `n` flows freely into it — rejected without the ρ=0 chokepoint.
+    let source = r#"
+        use /std/{Io, Str, Nat, Eq};
+        let P : (n : @Nat) -> Type = (n) => Eq(n, n);
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn erased_param_is_dropped_at_runtime() {
+    // Phase 3: erasure actually drops `Zero` binders and their arguments. `g`'s
+    // erased `n` does not exist at runtime, yet `g` passes it to `h`'s erased `m`
+    // (category c lets the erased var be passed). This runs ONLY if both the
+    // parameter and the argument are dropped — otherwise `h(n)` would reference a
+    // variable that erase removed from `g`, a dangling runtime reference.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let h : (m : @Nat) -> Nat = (m) => 0;
+        let g : (n : @Nat) -> Nat = (n) => h(n);
+        let r : Nat = g(7);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    assert_eq!(run(source), b"0");
+}
+
+#[test]
+fn erased_struct_field_collapses_to_bare_value() {
+    // Phase 3b: a record with an erased field is a newtype — the erased field is
+    // dropped and the struct collapses to its single relevant field (bare `Nat`
+    // here). `make` fills the erased `ghost` with its own erased `n`, which only
+    // works if both are dropped (else a dangling runtime reference). Projecting
+    // `.val` off the collapsed record must still yield `val`, not `ghost`.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        struct Wrap pub { val : Nat, ghost : @Nat }
+        let make : (n : @Nat) -> Wrap = (n) => Wrap { val = 5, ghost = n };
+        let r : Nat = make(7).val;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    assert_eq!(run(source), b"5");
+}
+
+#[test]
+fn erased_tuple_field_is_a_subset_type() {
+    // The anonymous Σ form of the same idea: `(bytes : Bin, @proof)` is a subset
+    // type whose erased witness is dropped, collapsing to the bare relevant
+    // field. Here `make` puts its erased `n` in the erased second component.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let make : (n : @Nat) -> { val : Nat, @Nat } = (n) => (5, n);
+        let r : Nat = make(7).0;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    assert_eq!(run(source), b"5");
+}
+
+#[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
         std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))

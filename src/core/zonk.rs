@@ -85,6 +85,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                 Structure {
                     params: structure.params.zonk(context)?,
                     fields: structure.fields.zonk(context)?,
+                    field_quantities: structure.field_quantities.clone(),
                     module: structure.module.clone(),
                     rep_public: structure.rep_public,
                 },
@@ -207,9 +208,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         Subterm::FuncType(FuncType {
             telescope,
             plicities,
+            quantities,
         }) => Subterm::FuncType(FuncType {
             telescope: telescope.zonk(context)?,
             plicities: plicities.clone(),
+            quantities: quantities.clone(),
         }),
 
         Subterm::Apply(Apply {
@@ -222,8 +225,12 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             plicities: plicities.clone(),
         }),
 
-        Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
+        Subterm::TupleType(TupleType {
+            telescope,
+            quantities,
+        }) => Subterm::TupleType(TupleType {
             telescope: telescope.zonk(context)?,
+            quantities: quantities.clone(),
         }),
 
         Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {

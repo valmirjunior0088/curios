@@ -93,7 +93,7 @@ fn synth_neutral(context: &mut Context, term: &Term) -> Result<Option<Term>, Red
             };
 
             match Term::unwrap_or_clone(reduce(context, head_type)?) {
-                Subterm::TupleType(TupleType { telescope }) => {
+                Subterm::TupleType(TupleType { telescope, .. }) => {
                     Ok(telescope.nth(*index, |j| Term::proj(head.clone(), j)))
                 }
                 _ => Ok(None),
@@ -184,6 +184,14 @@ impl Convert {
         this: FuncType,
         that: FuncType,
     ) -> Result<bool, ReduceError> {
+        // Quantity is part of a function type's identity (unlike plicity, which
+        // convert ignores): an erased domain and a relevant one are different
+        // types — they erase to different runtime arities. Mismatched arity also
+        // shows up here as unequal-length quantity vectors.
+        if this.quantities != that.quantities {
+            return Ok(false);
+        }
+
         fn walk(
             cmp: &mut Convert,
             context: &mut Context,
@@ -313,7 +321,7 @@ impl Convert {
         }
 
         let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
+            Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => Some(telescope),
             _ => None,
         };
 
@@ -697,7 +705,7 @@ impl Convert {
         let n = tuple.fields.len();
 
         let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::TupleType(TupleType { telescope }) if telescope.len() == n => Some(telescope),
+            Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => Some(telescope),
             _ => None,
         };
 
@@ -737,7 +745,7 @@ impl Convert {
                 );
                 Ok(true)
             }
-            Subterm::TupleType(TupleType { telescope }) => {
+            Subterm::TupleType(TupleType { telescope, .. }) => {
                 for i in 0..telescope.len() {
                     self.enqueue(
                         Term::type_(),

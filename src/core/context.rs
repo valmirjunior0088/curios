@@ -1,5 +1,5 @@
 use {
-    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Structure, Term, Var},
+    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Quantity, Structure, Term, Var},
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -107,6 +107,15 @@ pub struct Context {
     // frames are delimited by `local_marks`.
     local: Vec<(String, Term)>,
     local_marks: Vec<usize>,
+    // Per-binder erasure quantities, a name-keyed store mirroring `assumptions`
+    // frame-for-frame (`assume` defaults `Omega`; `assume_quantified` sets it).
+    // Read at the `Var` use site to enforce the relevance discipline.
+    assumption_quantities: Vec<HashMap<String, Quantity>>,
+    // The ambient resource ρ the elaborator is checking at: `Omega` in runtime
+    // positions, `Zero` in erased ones (types, indices, arguments to `Zero`
+    // binders). A `Zero` binder referenced while ρ is `Omega` is the relevance
+    // error. Default `Omega`; lowered by `with_quantity` around erased positions.
+    quantity_mode: Quantity,
     // Parked conversion constraints (§8) — frame-independent, like `metas`.
     parked: Vec<ParkedGoal>,
     // Ids solved since the last `wake_parked` sweep: the wake signal.
@@ -164,6 +173,8 @@ impl Context {
             suppress_refinements: false,
             local: Vec::new(),
             local_marks: Vec::new(),
+            assumption_quantities: vec![HashMap::new()],
+            quantity_mode: Quantity::Omega,
             metas: MetaStore::default(),
             next_metavar: Entropy::<usize>::new(),
             inductives: BTreeMap::new(),
@@ -211,6 +222,7 @@ impl Context {
 
     fn enter_frame(&mut self) {
         self.assumptions.push(HashMap::new());
+        self.assumption_quantities.push(HashMap::new());
         self.definitions.push(HashMap::new());
         self.refinements.push(HashMap::new());
         self.refinement_projections.push(HashMap::new());
@@ -220,6 +232,7 @@ impl Context {
     fn leave_frame(&mut self) {
         self.locals_stamp.fresh();
         self.assumptions.pop().unwrap();
+        self.assumption_quantities.pop().unwrap();
         let definitions = self.definitions.pop().unwrap();
         let refinements = self.refinements.pop().unwrap();
         let refinement_projections = self.refinement_projections.pop().unwrap();
@@ -239,7 +252,18 @@ impl Context {
         result
     }
 
+    /// Assume `label : type_` at the default quantity (`Omega`, relevant) — the
+    /// form for every binder that is not explicitly erased.
     pub fn assume<A>(&mut self, label: A, type_: &Term)
+    where
+        A: Into<String>,
+    {
+        self.assume_quantified(label, type_, Quantity::Omega);
+    }
+
+    /// Assume `label : type_` at an explicit quantity. A `Zero` binder may only
+    /// be referenced from erased positions; the `Var` use site enforces it.
+    pub fn assume_quantified<A>(&mut self, label: A, type_: &Term, quantity: Quantity)
     where
         A: Into<String>,
     {
@@ -250,7 +274,39 @@ impl Context {
         self.assumptions
             .last_mut()
             .unwrap()
-            .insert(label, type_.clone());
+            .insert(label.clone(), type_.clone());
+        self.assumption_quantities
+            .last_mut()
+            .unwrap()
+            .insert(label, quantity);
+    }
+
+    /// The quantity of the innermost binding of `label`, or `Omega` if unknown
+    /// (an unbound name errors elsewhere; treating it as relevant is the safe
+    /// default — it never erases something that might be needed).
+    pub fn assumption_quantity(&self, label: &str) -> Quantity {
+        self.assumption_quantities
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get(label).copied())
+            .unwrap_or(Quantity::Omega)
+    }
+
+    /// The ambient resource ρ the elaborator is currently checking at.
+    pub fn current_quantity(&self) -> Quantity {
+        self.quantity_mode
+    }
+
+    /// Run `f` with the ambient resource scaled by `quantity` (the semiring
+    /// product): an erased position (`Zero`) stays erased, an `Omega` position
+    /// inherits `quantity`. Restores the previous mode afterwards.
+    pub fn with_quantity<R>(&mut self, quantity: Quantity, f: impl FnOnce(&mut Self) -> R) -> R {
+        let saved = self.quantity_mode;
+        self.quantity_mode = saved.meet(quantity);
+        let result = f(self);
+        self.quantity_mode = saved;
+
+        result
     }
 
     /// Replace the type of an existing assumption in place — the innermost

@@ -586,11 +586,15 @@ fn process_items(
                     .fields
                     .iter()
                     .enumerate()
-                    .map(|(i, (n, t))| {
-                        let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                        Ok((n, lower.term(t)?))
+                    .map(|(i, param)| {
+                        let n = param.label.clone().unwrap_or_else(|| format!("_{i}"));
+                        Ok((n, lower.term(&param.type_)?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
+
+                // One quantity per field binder (field-only, aligned with
+                // `fields_at`); `erase` drops the `Zero` ones.
+                let field_quantities = s.fields.iter().map(|param| param.quantity).collect();
 
                 // Registry entry: the parameter telescope, and the full field
                 // telescope (parameter binders first — field types may mention
@@ -603,6 +607,7 @@ fn process_items(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
                             (),
                         ),
+                        field_quantities,
                         module,
                         rep_public: s.rep_pub,
                     },

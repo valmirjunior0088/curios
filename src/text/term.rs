@@ -1,5 +1,5 @@
 use {
-    super::{Name, Plicity, Prim},
+    super::{Name, Plicity, Quantity, Prim},
     crate::Span,
     std::{collections::BTreeMap, ops::Deref},
 };
@@ -58,9 +58,29 @@ impl From<Subterm> for Term {
     }
 }
 
+/// One Π-binder as written: its plicity (`@` on the name), its quantity (`@` on
+/// the type — erased), an optional binder name, and the domain type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuncTypeParam {
+    pub plicity: Plicity,
+    pub quantity: Quantity,
+    pub label: Option<String>,
+    pub type_: Term,
+}
+
+/// One Σ-type / struct-declaration field as written: an optional label, a
+/// quantity (`@` on the type — erased), and the field type. Shared by tuple
+/// types and `struct` declarations (the `TopStruct` fields reuse this grammar).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TupleTypeParam {
+    pub label: Option<String>,
+    pub quantity: Quantity,
+    pub type_: Term,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
-    pub params: Vec<(Plicity, Option<String>, Term)>,
+    pub params: Vec<FuncTypeParam>,
     pub output: Term,
 }
 
@@ -147,7 +167,7 @@ pub struct Apply {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType {
-    pub fields: Vec<(Option<String>, Term)>,
+    pub fields: Vec<TupleTypeParam>,
 }
 
 /// Tuple literal fields may carry a name annotation (`(status = 0, handle = h)`);
@@ -322,7 +342,15 @@ impl LetSignature {
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
-                    .map(|(plicity, pattern, t)| (*plicity, pattern.binder_name(), t.clone()))
+                    .map(|(plicity, pattern, t)| FuncTypeParam {
+                        plicity: *plicity,
+                        // Function-definition params don't yet carry a written
+                        // quantity; default to `Omega`. Erasure on definition
+                        // params is threaded in a later step.
+                        quantity: Quantity::Omega,
+                        label: pattern.binder_name(),
+                        type_: t.clone(),
+                    })
                     .collect(),
                 output: output.clone(),
             })

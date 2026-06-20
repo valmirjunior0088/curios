@@ -2,7 +2,8 @@ use {
     super::{
         Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Func, FuncType,
         ImplicitOrigin, Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern,
-        MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Structure,
+        MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
+        Structure,
         Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
         case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
@@ -46,11 +47,12 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
     let mut domains = Vec::new();
     let output = context.with_frame(|context| walk(context, ft.telescope.clone(), &mut domains))?;
 
-    let rebuilt = Term::func_type_marked(
+    let rebuilt = Term::func_type_quantified(
         ft.plicities
             .iter()
+            .zip(&ft.quantities)
             .zip(domains)
-            .map(|(&plicity, (label, domain))| (plicity, label, domain)),
+            .map(|((&plicity, &quantity), (label, domain))| (plicity, quantity, label, domain)),
         output,
     );
 
@@ -251,22 +253,29 @@ fn elaborate_apply(
     // and its rebuilt form lands after the output `expect` pins its metas.
     let mut postponed = Vec::new();
     let mut slot = 0usize;
+    // An argument to an erased (`Zero`) parameter sits in an erased position, so
+    // it is checked at ρ scaled by the binder's quantity — this is what lets an
+    // erased variable be *passed* to an erased parameter (category c).
+    let quantities = ft.quantities.clone();
     let (mut elaborated, output) = ft.telescope.clone().walk_map(params, |arg, ty| {
         let index = slot;
         slot += 1;
+        let quantity = quantities.get(index).copied().unwrap_or(Quantity::Omega);
 
         if checking && blocked_on_metavar(context, arg, ty, &result_metavars, expected_ground)? {
             postponed.push((index, arg.clone(), ty.clone()));
             Ok(arg.clone())
         } else {
-            check(context, arg, ty.clone())
+            context.with_quantity(quantity, |context| check(context, arg, ty.clone()))
         }
     })?;
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &output, expected)?;
         for (index, arg, ty) in postponed {
-            elaborated[index] = check(context, &arg, ty)?;
+            let quantity = quantities.get(index).copied().unwrap_or(Quantity::Omega);
+            elaborated[index] =
+                context.with_quantity(quantity, |context| check(context, &arg, ty))?;
         }
     }
 
@@ -388,7 +397,13 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
     let telescope = Telescope::build(fields, ()).relabel(&source_labels);
 
     Ok((
-        Subterm::TupleType(TupleType { telescope }).into(),
+        Subterm::TupleType(TupleType {
+            telescope,
+            // Field order is preserved through the walk and relabel, so the input
+            // quantities still align one-for-one.
+            quantities: tt.quantities.clone(),
+        })
+        .into(),
         Term::type_(),
     ))
 }
@@ -827,7 +842,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
     // own, or the struct's (instantiated at the head type's parameters). A
     // struct additionally enforces representation privacy here (§7).
     let telescope = match &*head_type {
-        Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
+        Subterm::TupleType(TupleType { telescope, .. }) => telescope.clone(),
         Subterm::StructType(StructType { name, params }) => {
             let Some(structure) = context.structure(name).cloned() else {
                 return Err(Error::unbound_variable(Term::var(Var::free(name))));
@@ -1132,6 +1147,8 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
         context: &mut Context,
         tele: Telescope<()>,
         fields: &[Term],
+        quantities: &[Quantity],
+        idx: usize,
         elaborated: &mut Vec<Term>,
     ) -> Result<(), Error> {
         match tele {
@@ -1143,16 +1160,26 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
                 // whereas a raw `Field::Label` substituted into a later field type
                 // would panic once that type is reduced (e.g. `Task(b.A)` arising
                 // from a field typed `Task(A)` in `{ A : Type, t : Task(A) }`).
-                let head = check(context, &fields[0], ty)?;
+                // An erased field's value sits in an erased position (ρ scaled by
+                // its quantity), so an erased binder may fill it.
+                let quantity = quantities.get(idx).copied().unwrap_or(Quantity::Omega);
+                let head = context.with_quantity(quantity, |context| check(context, &fields[0], ty))?;
                 let rest = rest.open(&[&head]);
                 elaborated.push(head);
-                walk(context, rest, &fields[1..], elaborated)
+                walk(context, rest, &fields[1..], quantities, idx + 1, elaborated)
             }
         }
     }
 
     let mut elaborated = Vec::with_capacity(fields.len());
-    walk(context, field_telescope, fields, &mut elaborated)?;
+    walk(
+        context,
+        field_telescope,
+        fields,
+        &structure.field_quantities,
+        0,
+        &mut elaborated,
+    )?;
 
     Ok((
         Term::struct_(name, resolved.clone(), elaborated),
@@ -1763,6 +1790,8 @@ fn elaborate_func_check(
         term: &Term,
         body: Telescope<Term>,
         type_: Telescope<Term>,
+        quantities: &[Quantity],
+        idx: usize,
         domains: &mut Vec<(String, Term)>,
     ) -> Result<Term, Error> {
         match (body, type_) {
@@ -1777,13 +1806,18 @@ fn elaborate_func_check(
                 expect(context, term, &domain, &type_)?;
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::var(Var::free(&name));
-                context.assume(&name, &type_);
+                // Assume the parameter at the expected type's quantity, so the
+                // body (checked at `Omega`) cannot reference an erased binder.
+                let quantity = quantities.get(idx).copied().unwrap_or(Quantity::Omega);
+                context.assume_quantified(&name, &type_, quantity);
                 domains.push((name, type_.clone()));
                 walk(
                     context,
                     term,
                     body_rest.open(&[&x]),
                     type_rest.open(&[&x]),
+                    quantities,
+                    idx + 1,
                     domains,
                 )
             }
@@ -1793,8 +1827,17 @@ fn elaborate_func_check(
     }
 
     let mut domains = Vec::new();
-    let body = context
-        .with_frame(|context| walk(context, term, telescope.clone(), ft.telescope, &mut domains))?;
+    let body = context.with_frame(|context| {
+        walk(
+            context,
+            term,
+            telescope.clone(),
+            ft.telescope,
+            &ft.quantities,
+            0,
+            &mut domains,
+        )
+    })?;
 
     Ok((Term::func(domains, body), expected))
 }
@@ -1871,8 +1914,12 @@ fn elaborate_tuple(
         }
     };
 
-    let type_telescope = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
-        Subterm::TupleType(TupleType { telescope }) => telescope,
+    let (type_telescope, quantities) = match Term::unwrap_or_clone(reduce_with(context, &expected)?)
+    {
+        Subterm::TupleType(TupleType {
+            telescope,
+            quantities,
+        }) => (telescope, quantities),
         Subterm::Metavar(_) if !context.parking_suppressed() => {
             return park_checking(context, term, &expected);
         }
@@ -1909,6 +1956,8 @@ fn elaborate_tuple(
         context: &mut Context,
         tele: Telescope<()>,
         fields: &[Term],
+        quantities: &[Quantity],
+        idx: usize,
         elaborated: &mut Vec<Term>,
     ) -> Result<(), Error> {
         match tele {
@@ -1920,16 +1969,19 @@ fn elaborate_tuple(
                 // whereas a raw `Field::Label` substituted into a later field type
                 // would panic once that type is reduced (e.g. `Task(b.A)` arising
                 // from a field typed `Task(A)` in `{ A : Type, t : Task(A) }`).
-                let head = check(context, &fields[0], ty)?;
+                // An erased field's value is checked at ρ scaled by its quantity,
+                // so an erased binder may fill an erased (subset-witness) field.
+                let quantity = quantities.get(idx).copied().unwrap_or(Quantity::Omega);
+                let head = context.with_quantity(quantity, |context| check(context, &fields[0], ty))?;
                 let rest = rest.open(&[&head]);
                 elaborated.push(head);
-                walk(context, rest, &fields[1..], elaborated)
+                walk(context, rest, &fields[1..], quantities, idx + 1, elaborated)
             }
         }
     }
 
     let mut elaborated = Vec::with_capacity(fields.len());
-    walk(context, type_telescope, fields, &mut elaborated)?;
+    walk(context, type_telescope, fields, &quantities, 0, &mut elaborated)?;
 
     Ok((Term::tuple(elaborated), expected))
 }
@@ -2148,6 +2200,7 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
         Structure {
             params,
             fields,
+            field_quantities: structure.field_quantities.clone(),
             module: structure.module,
             rep_public: structure.rep_public,
         },
@@ -2470,6 +2523,19 @@ fn insert_implicits_on_check(
 }
 
 pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
+    // A term checked against `Type` *is* a type (or type family) — an erased
+    // position. Lower the ambient resource to `Zero` so an erased binder may be
+    // referenced here (in an index, a domain, a motive). This single chokepoint
+    // covers every `check(.., Term::type_())` and `Mode::Check(Term::type_())`
+    // site; the `current_quantity` guard keeps the recursion one level deep.
+    if let Mode::Check(expected) = &mode {
+        if matches!(&**expected, Subterm::Type) && context.current_quantity() != Quantity::Zero {
+            return context.with_quantity(Quantity::Zero, |context| {
+                elaborate(context, term, mode.clone())
+            });
+        }
+    }
+
     let result = elaborate_subterm(context, term, mode);
 
     // Carry the source span onto the rebuilt term as well as onto any error, so
@@ -2502,7 +2568,17 @@ fn elaborate_subterm(
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::Var(var) => match context.assumption(var.unwrap()) {
-            Some(type_) => (term.clone(), type_.clone()),
+            Some(type_) => {
+                // The relevance check: an erased (`Zero`) binder referenced while
+                // the ambient resource is `Omega` (a runtime position) is the one
+                // and only place the discipline is enforced.
+                if context.assumption_quantity(var.unwrap()) == Quantity::Zero
+                    && context.current_quantity() == Quantity::Omega
+                {
+                    return Err(Error::erased_variable_at_runtime(Term::var(var.clone())));
+                }
+                (term.clone(), type_.clone())
+            }
             None => return Err(Error::unbound_variable(Term::var(var.clone()))),
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),

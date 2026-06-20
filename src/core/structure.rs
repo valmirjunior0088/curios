@@ -1,4 +1,4 @@
-use super::{Telescope, Term};
+use super::{Quantity, Telescope, Term};
 
 /// One struct declaration's registry entry: the metadata a `struct`
 /// declaration produces alongside its type-former binding.
@@ -20,6 +20,12 @@ pub struct Structure {
     /// Instantiate at known parameters by peeling the leading `params.len()`
     /// binders, exactly like `Inductive::instantiate`.
     pub fields: Telescope<()>,
+    /// One erasure quantity per *field* binder (not the leading parameter
+    /// binders), aligned with the field-only telescope `fields_at` returns. A
+    /// `Zero` field is dropped at erasure — `erase` consults this to lower a
+    /// proof-carrying record to its relevant fields (and to a bare field, via the
+    /// single-field collapse, when only one remains).
+    pub field_quantities: Vec<Quantity>,
     /// The declaring module's joined qualified name (e.g. `Foo/Bar`); the root
     /// module is the empty string. Compared against the use-site module for the
     /// representation-privacy checks (§7).

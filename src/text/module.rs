@@ -1,5 +1,5 @@
 use {
-    super::{LetSignature, Name, Plicity, Term},
+    super::{LetSignature, Name, Plicity, Term, TupleTypeParam},
     crate::Span,
 };
 
@@ -97,7 +97,7 @@ pub struct TopStruct {
     pub rep_pub: bool,
     pub label: String,
     pub params: Vec<(Plicity, String, Term)>,
-    pub fields: Vec<(Option<String>, Term)>,
+    pub fields: Vec<TupleTypeParam>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,7 +1,7 @@
 use {
     super::{
         Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
-        Qualifier, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
+        Qualifier, Quantity, Subterm, Term, TopItem, TopLet, TopMod, TupleType, TupleTypeParam,
     },
     crate::wire,
 };
@@ -69,7 +69,11 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
     Subterm::TupleType(TupleType {
         fields: fields
             .into_iter()
-            .map(|(label, type_)| (Some(label.to_string()), type_))
+            .map(|(label, type_)| TupleTypeParam {
+                label: Some(label.to_string()),
+                quantity: Quantity::Omega,
+                type_,
+            })
             .collect(),
     })
     .into()

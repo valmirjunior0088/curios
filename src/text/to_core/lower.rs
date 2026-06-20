@@ -154,14 +154,14 @@ impl<'a, 'b> Lower<'a, 'b> {
             Subterm::FuncType(ft) => {
                 let mut seen = Vec::new();
                 let mut params = Vec::with_capacity(ft.params.len());
-                for (plicity, label, ty) in &ft.params {
-                    let domain = self.scoped(seen.clone(), || self.term(ty))?;
-                    let name = label.clone().unwrap_or_default();
+                for param in &ft.params {
+                    let domain = self.scoped(seen.clone(), || self.term(&param.type_))?;
+                    let name = param.label.clone().unwrap_or_default();
                     seen.push(name.clone());
-                    params.push((*plicity, name, domain));
+                    params.push((param.plicity, param.quantity, name, domain));
                 }
                 let output = self.scoped(seen, || self.term(&ft.output))?;
-                core::Term::func_type_marked(params, output)
+                core::Term::func_type_quantified(params, output)
             }
             Subterm::Func(func) => {
                 let body =
@@ -182,13 +182,13 @@ impl<'a, 'b> Lower<'a, 'b> {
             Subterm::TupleType(tt) => {
                 let mut seen = Vec::new();
                 let mut fields = Vec::with_capacity(tt.fields.len());
-                for (label, type_) in &tt.fields {
-                    let lowered = self.scoped(seen.clone(), || self.term(type_))?;
-                    let name = label.clone().unwrap_or_default();
+                for param in &tt.fields {
+                    let lowered = self.scoped(seen.clone(), || self.term(&param.type_))?;
+                    let name = param.label.clone().unwrap_or_default();
                     seen.push(name.clone());
-                    fields.push((name, lowered));
+                    fields.push((param.quantity, name, lowered));
                 }
-                core::Term::tuple_type(fields)
+                core::Term::tuple_type_quantified(fields)
             }
             Subterm::Tuple(tuple) => core::Term::tuple_named(
                 tuple

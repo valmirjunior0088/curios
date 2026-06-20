@@ -12,11 +12,12 @@ fn parse_rec_func_and_apply() {
                 signature: LetSignature::Name {
                     type_: Some(
                         Subterm::FuncType(FuncType {
-                            params: vec![(
-                                Plicity::Explicit,
-                                Some("x".to_string()),
-                                Subterm::Type.into()
-                            )],
+                            params: vec![FuncTypeParam {
+                                plicity: Plicity::Explicit,
+                                quantity: Quantity::Omega,
+                                label: Some("x".to_string()),
+                                type_: Subterm::Type.into(),
+                            }],
                             output: Subterm::Type.into(),
                         })
                         .into(),
@@ -174,11 +175,12 @@ fn parse_top_rec_mixed_pub() {
                 signature: LetSignature::Name {
                     type_: Some(
                         Subterm::FuncType(FuncType {
-                            params: vec![(
-                                Plicity::Explicit,
-                                Some("x".to_string()),
-                                Subterm::Type.into()
-                            )],
+                            params: vec![FuncTypeParam {
+                                plicity: Plicity::Explicit,
+                                quantity: Quantity::Omega,
+                                label: Some("x".to_string()),
+                                type_: Subterm::Type.into(),
+                            }],
                             output: Subterm::Type.into(),
                         })
                         .into(),
@@ -567,8 +569,8 @@ fn parse_implicit_marks_on_binders_and_arguments() {
     let t = "(@T : Type, x : T) -> T".parse::<Term>().unwrap();
     match t.as_subterm() {
         Subterm::FuncType(ft) => {
-            assert_eq!(ft.params[0].0, Plicity::Implicit);
-            assert_eq!(ft.params[1].0, Plicity::Explicit);
+            assert_eq!(ft.params[0].plicity, Plicity::Implicit);
+            assert_eq!(ft.params[1].plicity, Plicity::Explicit);
         }
         other => panic!("expected a func type, got {other:?}"),
     }
@@ -712,6 +714,37 @@ fn omitted_motive_round_trips() {
     assert!(!printed.contains(" : "));
     // … and re-parses to the same tree.
     assert_eq!(printed.parse::<Term>().unwrap(), term);
+}
+
+#[test]
+fn erased_quantity_on_type_parses_and_round_trips() {
+    // `@` on the *type* marks the binder erased (quantity 0); `@` on the *name*
+    // is plicity. The two positions are independent and never collide.
+    let param = |src: &str| -> FuncTypeParam {
+        match &*src.parse::<Term>().unwrap() {
+            Subterm::FuncType(ft) => ft.params[0].clone(),
+            other => panic!("expected a function type, got {other:?}"),
+        }
+    };
+
+    let erased = param("(x : @Nat) -> Nat");
+    assert_eq!(erased.plicity, Plicity::Explicit);
+    assert_eq!(erased.quantity, Quantity::Zero);
+
+    let implicit_erased = param("(@x : @Nat) -> Nat");
+    assert_eq!(implicit_erased.plicity, Plicity::Implicit);
+    assert_eq!(implicit_erased.quantity, Quantity::Zero);
+
+    // The default is unrestricted, and an implicit-but-relevant binder keeps
+    // working — the `Vec/len` pattern.
+    let relevant = param("(@n : Nat) -> Nat");
+    assert_eq!(relevant.plicity, Plicity::Implicit);
+    assert_eq!(relevant.quantity, Quantity::Omega);
+
+    for src in ["(x : @Nat) -> Nat", "(@x : @Nat) -> Nat", "(@n : Nat) -> Nat"] {
+        let term = src.parse::<Term>().unwrap();
+        assert_eq!(term.to_string().parse::<Term>().unwrap(), term, "{src}");
+    }
 }
 
 #[test]

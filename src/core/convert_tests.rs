@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Inductive, Int, Nat, Prim, Structure, Var},
+    crate::core::{Atom, Inductive, Int, Nat, Prim, Quantity, Structure, Var},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -529,6 +529,7 @@ fn convert_struct_unit_field_is_irrelevant() {
                 ],
                 (),
             ),
+            field_quantities: vec![Quantity::Omega, Quantity::Omega],
             module: String::new(),
             rep_public: true,
         },

@@ -1,7 +1,8 @@
 use {
     super::{
         Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Item, Let,
-        Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
+        Match, Module, Nat, One, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
+        Subterm,
         Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -142,7 +143,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
     match &**term {
         Subterm::FuncType(FuncType { telescope: t, .. }) => telescope(out, t),
         Subterm::Func(Func { telescope: t }) => telescope(out, t),
-        Subterm::TupleType(TupleType { telescope: t }) => tuple_telescope(out, t),
+        Subterm::TupleType(TupleType { telescope: t, .. }) => tuple_telescope(out, t),
         Subterm::Apply(Apply { head, params, .. }) => {
             collect_labels(head, out);
             each(out, params);
@@ -736,10 +737,12 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         Subterm::FuncType(FuncType {
             telescope,
             plicities,
+            quantities,
         }) => {
             fn walk(
                 cur: Telescope<Term>,
                 plicities: &[Plicity],
+                quantities: &[Quantity],
                 depth: usize,
                 total: usize,
                 idx: usize,
@@ -752,29 +755,36 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         let label = raw
                             .map(str::to_string)
                             .unwrap_or_else(|| label_at(depth + idx));
+                        // Plicity marks the name (`@x`); quantity marks the type
+                        // (`@Nat` = erased), so the two `@`s never collide.
                         let mark = match plicities.get(idx) {
                             Some(Plicity::Implicit) => "@",
                             _ => "",
                         };
+                        let quant = match quantities.get(idx) {
+                            Some(Quantity::Zero) => "@",
+                            _ => "",
+                        };
+                        let typed = flat([pure(quant), print_term(ty, depth + total)]);
                         let printer = match raw {
                             Some(_) => flat([
                                 pure(mark),
                                 pure(display_label(&label)),
                                 pure(" : "),
-                                print_term(ty, depth + total),
+                                typed,
                             ]),
-                            None => flat([pure(mark), print_term(ty, depth + total)]),
+                            None => flat([pure(mark), typed]),
                         };
                         printers.push(printer);
                         let next = rest.open(&[&Term::var(Var::free(&label))]);
-                        walk(next, plicities, depth, total, idx + 1, printers)
+                        walk(next, plicities, quantities, depth, total, idx + 1, printers)
                     }
                 }
             }
 
             let n = telescope.len();
             let mut printers = Vec::with_capacity(n);
-            let output = walk(telescope, &plicities, depth, n, 0, &mut printers);
+            let output = walk(telescope, &plicities, &quantities, depth, n, 0, &mut printers);
             flat([
                 pure("("),
                 sep_flat(printers, || pure(", ")),
@@ -823,7 +833,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ),
             pure(")"),
         ]),
-        Subterm::TupleType(TupleType { telescope }) => {
+        Subterm::TupleType(TupleType { telescope, .. }) => {
             fn walk(
                 cur: Telescope<()>,
                 depth: usize,

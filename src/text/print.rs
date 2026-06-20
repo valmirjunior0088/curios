@@ -2,9 +2,9 @@ use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
-        Plicity, Prim, Proj,
+        Plicity, Prim, Proj, Quantity,
         Rec, StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion,
-        TopUse, Tuple, TupleType, UnionMatch, UseGroup,
+        TopUse, Tuple, TupleType, TupleTypeParam, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_traits::One,
@@ -115,6 +115,19 @@ fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {
     match label {
         Some(label) => flat([pure(label), pure(" : "), print_term(ty)]),
         None => print_term(ty),
+    }
+}
+
+/// A Σ-type / struct field: the quantity prefixes the type (`@T` = erased).
+fn print_field(param: TupleTypeParam) -> Printer<'static> {
+    let quant = match param.quantity {
+        Quantity::Zero => pure("@"),
+        Quantity::Omega => pure(""),
+    };
+    let typed = flat([quant, print_term(param.type_)]);
+    match param.label {
+        Some(label) => flat([pure(label), pure(" : "), typed]),
+        None => typed,
     }
 }
 
@@ -340,8 +353,18 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
             sep_flat(
-                params.into_iter().map(|(plicity, label, ty)| {
-                    flat([print_plicity(plicity), print_labeled((label, ty))])
+                params.into_iter().map(|param| {
+                    // Plicity prefixes the name; quantity prefixes the type.
+                    let quant = match param.quantity {
+                        Quantity::Zero => pure("@"),
+                        Quantity::Omega => pure(""),
+                    };
+                    let typed = flat([quant, print_term(param.type_)]);
+                    let body = match param.label {
+                        Some(label) => flat([pure(label), pure(" : "), typed]),
+                        None => typed,
+                    };
+                    flat([print_plicity(param.plicity), body])
                 }),
                 || pure(", "),
             ),
@@ -374,7 +397,7 @@ fn print_term(term: Term) -> Printer<'static> {
             pure(")"),
         ]),
         Subterm::TupleType(TupleType { fields }) => {
-            let items = fields.into_iter().map(|field| indent(print_labeled(field)));
+            let items = fields.into_iter().map(|param| indent(print_field(param)));
             flat([pure("{ "), sep_flat(items, || pure("\n, ")), pure("\n}")])
         }
         Subterm::Tuple(Tuple { fields }) => {
@@ -818,7 +841,7 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
         pure(" "),
         print_pub(item.rep_pub),
         pure("{ "),
-        sep_flat(item.fields.into_iter().map(print_labeled), || pure(", ")),
+        sep_flat(item.fields.into_iter().map(print_field), || pure(", ")),
         pure(" }"),
     ])
 }

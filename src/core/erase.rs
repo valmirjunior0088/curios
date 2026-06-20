@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, Item, Let, Many, Match,
-        Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Quantity, Rec, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
         erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
@@ -26,25 +26,41 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
         context: &mut Context,
         body: Telescope<Term>,
         type_: Telescope<Term>,
+        quantities: &[Quantity],
+        idx: usize,
         names: &mut Vec<String>,
         candidates: &mut Vec<bool>,
+        dropped: &mut Vec<String>,
     ) -> Result<(Term, Term), Error> {
         match (body, type_) {
             (Telescope::Done(body), Telescope::Done(output)) => Ok((*body, *output)),
             (Telescope::Cons(_domain, body_rest), Telescope::Cons(type_, type_rest)) => {
-                // The flag is read before the binder is assumed: a parameter's type
-                // never depends on the parameter itself.
-                candidates.push(is_candidate(context, &type_)?);
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::var(Var::free(&name));
                 context.assume(&name, &type_);
-                names.push(name);
+                // An erased (`Zero`) parameter is dropped from the runtime
+                // closure entirely; the checker guarantees the body only
+                // references it from erased positions, which erase removes. It is
+                // still opened/assumed (de Bruijn, typing) and excluded from
+                // captures below — it is neither a runtime param nor a capture.
+                match quantities.get(idx) {
+                    Some(Quantity::Zero) => dropped.push(name),
+                    _ => {
+                        // The flag is read before the binder is assumed: a
+                        // parameter's type never depends on the parameter itself.
+                        candidates.push(is_candidate(context, &type_)?);
+                        names.push(name);
+                    }
+                }
                 walk(
                     context,
                     body_rest.open(&[&x]),
                     type_rest.open(&[&x]),
+                    quantities,
+                    idx + 1,
                     names,
                     candidates,
+                    dropped,
                 )
             }
             _ => unreachable!("erase: function/type telescope arity mismatch"),
@@ -53,25 +69,30 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
 
     let mut param_names = Vec::new();
     let mut candidates = Vec::new();
+    let mut dropped = Vec::new();
 
     let (erased_body, captures) = context.with_frame(|context| {
         let (body_opened, output_type) = walk(
             context,
             telescope.clone(),
             ft.telescope,
+            &ft.quantities,
+            0,
             &mut param_names,
             &mut candidates,
+            &mut dropped,
         )?;
 
         // Captures are the body's free variables other than the lambda's own
         // parameters (which appear as fresh frees once the body is opened). The
         // candidate flag rides from here — the last point a binder's type is
         // known — down to `cont`, where the optimizer specializes function-typed
-        // arguments.
+        // arguments. Dropped (erased) parameters are excluded too: they do not
+        // exist at runtime, so they can be neither a param nor a capture.
         let captures = body_opened
             .free_vars()
             .into_iter()
-            .filter(|name| !param_names.contains(name))
+            .filter(|name| !param_names.contains(name) && !dropped.contains(name))
             .map(|name| {
                 let type_ = infer(context, &Term::var(Var::free(&name)))?;
                 let candidate = is_candidate(context, &type_)?;
@@ -79,7 +100,18 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
-        let erased_body = erase(context, &body_opened, &output_type)?;
+        // A type-level function (output type `Type`) that dropped an erased
+        // parameter has a type-valued body which may reference that now-absent
+        // binder. A type carries no runtime content, so erase the whole body to a
+        // unit — this is what keeps an erased index from dangling in the lowered
+        // closure. (Guarded on a dropped param so existing type-level functions
+        // keep their current lowering.)
+        let body_is_type = matches!(&*reduce_with(context, &output_type)?, Subterm::Type);
+        let erased_body = if body_is_type && !dropped.is_empty() {
+            ersd::Subterm::Erased.into()
+        } else {
+            erase(context, &body_opened, &output_type)?
+        };
 
         Ok::<_, Error>((erased_body, captures))
     })?;
@@ -137,8 +169,16 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
 
     let mut erased_params = Vec::with_capacity(params.len());
 
+    // Drop arguments to erased (`Zero`) parameters: they are not part of the
+    // runtime closure, so the argument is never evaluated. `walk` still opens the
+    // telescope with the (un-erased) argument for dependent later domains.
+    let quantities = ft.quantities.clone();
+    let mut idx = 0;
     ft.telescope.clone().walk(params, |arg, ty| {
-        erased_params.push(erase(context, arg, ty)?);
+        if !matches!(quantities.get(idx), Some(Quantity::Zero)) {
+            erased_params.push(erase(context, arg, ty)?);
+        }
+        idx += 1;
         Ok(())
     })?;
 
@@ -155,17 +195,26 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
 /// the value as we go so later domains see the earlier values (the dependency).
 /// The arity is checked by elaborate (§9), so a `Done` reached before the values
 /// are exhausted is an internal invariant violation.
+///
+/// Fields at a `Zero` quantity are dropped — not erased at all, so their value
+/// (which may reference erased binders) never reaches the runtime. The telescope
+/// is still opened with the un-erased value, so later dependent (type-valued)
+/// domains stay correct. `quantities` aligns one-for-one with `values`; a short
+/// or empty slice defaults the remaining fields to relevant.
 fn erase_telescoped<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
     values: &[Term],
+    quantities: &[Quantity],
 ) -> Result<Vec<ersd::Term>, Error> {
     let mut erased = Vec::with_capacity(values.len());
 
-    for value in values {
+    for (index, value) in values.iter().enumerate() {
         match telescope {
             Telescope::Cons(ty, rest) => {
-                erased.push(erase(context, value, &ty)?);
+                if !matches!(quantities.get(index), Some(Quantity::Zero)) {
+                    erased.push(erase(context, value, &ty)?);
+                }
                 telescope = rest.open(&[value]);
             }
             Telescope::Done(_) => unreachable!("erase: arity checked by elaborate"),
@@ -180,8 +229,11 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
 
     // Elaborate already checked this tuple against a tuple type of matching
     // arity (§9); the telescope is re-derived here only to lower the fields.
-    let type_telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-        Subterm::TupleType(TupleType { telescope }) => telescope,
+    let (type_telescope, quantities) = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
+        Subterm::TupleType(TupleType {
+            telescope,
+            quantities,
+        }) => (telescope, quantities),
         _ => unreachable!("erase: tuple checked against non-tuple type"),
     };
 
@@ -191,12 +243,19 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
         "erase: tuple width disagrees with the tuple type",
     );
 
-    let erased_fields = erase_telescoped(context, type_telescope, fields)?;
+    let dropped_any = quantities.iter().any(|q| matches!(q, Quantity::Zero));
+    let erased_fields = erase_telescoped(context, type_telescope, fields, &quantities)?;
 
-    Ok(ersd::Subterm::Tuple(ersd::Tuple {
-        fields: erased_fields,
+    // A subset type whose erased witnesses were dropped can collapse to its lone
+    // relevant field — the same newtype collapse `erase_struct` performs. Guarded
+    // on a drop having happened, so an ordinary 1-field tuple keeps its rep.
+    Ok(match erased_fields.len() {
+        1 if dropped_any => erased_fields.into_iter().next().expect("one field"),
+        _ => ersd::Subterm::Tuple(ersd::Tuple {
+            fields: erased_fields,
+        })
+        .into(),
     })
-    .into())
 }
 
 /// Erase a case body in a frame where `head` is refined to `scrutinee` (the
@@ -488,33 +547,43 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
     // here — `projectable_at` — died with the tagged-tuple encoding: a union
     // payload is no longer reached by projecting a structural pair, so a
     // projection's head type is always a `TupleType` again.)
-    match &*head_type {
-        Subterm::TupleType(TupleType { telescope }) => {
-            assert!(*index < telescope.len(), "erase: projected a non-tuple");
-        }
-        // A struct projects positionally with no tag offset (like a tuple, not
-        // a variant). A *single-field* struct erased to its bare field, so the
-        // projection vanishes — the value already *is* the field.
+    // Erased (`Zero`) fields are dropped, so the runtime projection index is the
+    // count of *relevant* fields before `index`, and a record left with a single
+    // relevant field erased to that bare field (the projection then vanishes —
+    // the value already *is* the field). `quantities` is field-only; a short
+    // slice (a plain tuple, or a constructor payload) defaults to all-relevant.
+    let (field_count, quantities) = match &*head_type {
+        Subterm::TupleType(TupleType {
+            telescope,
+            quantities,
+        }) => (telescope.len(), quantities.clone()),
+        // A struct projects positionally with no tag offset (like a tuple, not a
+        // variant).
         Subterm::StructType(StructType { name, params }) => {
             let structure = context
                 .structure(name)
                 .cloned()
                 .expect("erase: projection head names a registered struct");
-            let field_count = structure.fields_at(params).len();
-            assert!(
-                *index < field_count,
-                "erase: struct projection out of range"
-            );
-            if field_count == 1 {
-                return erase(context, head, &head_type);
-            }
+            (
+                structure.fields_at(params).len(),
+                structure.field_quantities.clone(),
+            )
         }
         _ => unreachable!("erase: projected a non-tuple/struct"),
+    };
+
+    assert!(*index < field_count, "erase: projection out of range");
+    let is_zero = |i: usize| matches!(quantities.get(i), Some(Quantity::Zero));
+    let relevant_total = (0..field_count).filter(|&i| !is_zero(i)).count();
+    let relevant_before = (0..*index).filter(|&i| !is_zero(i)).count();
+
+    if relevant_total == 1 {
+        return erase(context, head, &head_type);
     }
 
     Ok(ersd::Subterm::Proj(ersd::Proj {
         head: erase(context, head, &head_type)?,
-        index: *index,
+        index: relevant_before,
     })
     .into())
 }
@@ -548,7 +617,9 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
     // inline after the tag.
     let mut fields = Vec::with_capacity(payload.len() + 1);
     fields.push(ersd::Subterm::Atom(ersd::Atom { index }).into());
-    fields.extend(erase_telescoped(context, telescope, payload)?);
+    // Constructor payload quantities are not yet tracked in the registry, so all
+    // payload fields are relevant for now (empty slice = default `Omega`).
+    fields.extend(erase_telescoped(context, telescope, payload, &[])?);
 
     Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
 }
@@ -570,8 +641,15 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
         .cloned()
         .expect("erase: struct names a registered struct");
 
-    // Erase the fields against the instantiated (dependent) field telescope.
-    let erased = erase_telescoped(context, structure.fields_at(params), fields)?;
+    // Erase the fields against the instantiated (dependent) field telescope,
+    // dropping the `Zero` ones. The single-field collapse below then makes a
+    // proof-carrying record with one relevant field a bare value.
+    let erased = erase_telescoped(
+        context,
+        structure.fields_at(params),
+        fields,
+        &structure.field_quantities,
+    )?;
 
     Ok(match erased.len() {
         1 => erased.into_iter().next().expect("one field"),
