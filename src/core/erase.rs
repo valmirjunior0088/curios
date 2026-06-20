@@ -174,7 +174,7 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
     // telescope with the (un-erased) argument for dependent later domains.
     let quantities = ft.quantities.clone();
     let mut idx = 0;
-    ft.telescope.clone().walk(params, |arg, ty| {
+    ft.telescope.clone().walk(params, |_, arg, ty| {
         if !matches!(quantities.get(idx), Some(Quantity::Zero)) {
             erased_params.push(erase(context, arg, ty)?);
         }
@@ -614,12 +614,16 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
         .expect("erase: constructor instantiates at its inductive's parameters");
 
     // Erase the payload against the constructor telescope's (dependent) types,
-    // inline after the tag.
+    // inline after the tag. `Zero`-marked payload fields are dropped from the
+    // tuple (the registry's per-constructor quantities are payload-aligned).
+    let quantities = inductive
+        .constructors
+        .get(tag)
+        .map(|c| c.quantities.as_slice())
+        .unwrap_or(&[]);
     let mut fields = Vec::with_capacity(payload.len() + 1);
     fields.push(ersd::Subterm::Atom(ersd::Atom { index }).into());
-    // Constructor payload quantities are not yet tracked in the registry, so all
-    // payload fields are relevant for now (empty slice = default `Omega`).
-    fields.extend(erase_telescoped(context, telescope, payload, &[])?);
+    fields.extend(erase_telescoped(context, telescope, payload, quantities)?);
 
     Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
 }
@@ -788,16 +792,43 @@ fn erase_union_match(
                 let var_refs = vars.iter().collect::<Vec<_>>();
                 let body = erase(context, &scope.open(&var_refs), &expected)?;
 
-                // Bind each payload binder to its flat-record slot:
-                // `let x_i = scrutinee.(i + 1); …` (innermost-last, so fold in
-                // reverse). Projections read the let-bound scrutinee — never a
-                // re-erased copy of the head term, which would re-execute an
-                // effectful scrutinee once per arm.
+                // Bind each *relevant* payload binder to its flat-record slot:
+                // `let x_i = scrutinee.(slot); …` (innermost-last, so fold in
+                // reverse). `Zero` payload fields are absent from the runtime
+                // tuple, so a relevant binder's slot is `1 + (relevant payload
+                // before it)` (field 0 is the tag); an erased binder gets no
+                // `let` at all — the arm body only uses it in erased (→ `Erased`)
+                // positions, so nothing projects it. Projections read the
+                // let-bound scrutinee — never a re-erased copy of the head term,
+                // which would re-execute an effectful scrutinee once per arm.
+                let quantities = inductive
+                    .constructors
+                    .get(tag)
+                    .map(|c| c.quantities.as_slice())
+                    .unwrap_or(&[]);
+                let mut relevant = 0usize;
+                let runtime_slot = labels
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| {
+                        if quantities.get(i) == Some(&Quantity::Zero) {
+                            None
+                        } else {
+                            let slot = 1 + relevant;
+                            relevant += 1;
+                            Some(slot)
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
                 labels
                     .iter()
                     .enumerate()
                     .rev()
                     .try_fold(body, |tail, (i, label)| {
+                        let Some(slot) = runtime_slot[i] else {
+                            return Ok(tail);
+                        };
                         Ok(ersd::Subterm::Let(ersd::Let {
                             name: label.clone(),
                             body: ersd::Subterm::Proj(ersd::Proj {
@@ -805,7 +836,7 @@ fn erase_union_match(
                                     scrutinee_label.as_str(),
                                 ))
                                 .into(),
-                                index: i + 1,
+                                index: slot,
                             })
                             .into(),
                             tail,

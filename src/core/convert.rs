@@ -124,7 +124,7 @@ fn apply_param_types(
     };
 
     let mut types = Vec::with_capacity(params.len());
-    telescope.walk(params, |_, ty| {
+    telescope.walk(params, |_, _, ty| {
         types.push(ty.clone());
         Ok(())
     })?;

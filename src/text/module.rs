@@ -1,5 +1,5 @@
 use {
-    super::{LetSignature, Name, Plicity, Term, TupleTypeParam},
+    super::{LetSignature, Name, Plicity, Quantity, Term, TupleTypeParam},
     crate::Span,
 };
 
@@ -52,15 +52,24 @@ pub struct TopLet {
     pub signature: LetSignature,
 }
 
+/// One payload binder of a `union` case. The name is optional (`success(A)`
+/// stays positional); it is required when a later payload type or the case
+/// target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit
+/// at the value-constructor function — `cons(@m : Nat, …)`, `m` recoverable from
+/// a later payload's type); `quantity` is the `@`-on-the-type mark (erased — the
+/// field is dropped from the runtime variant tuple).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CasePayloadParam {
+    pub plicity: Plicity,
+    pub quantity: Quantity,
+    pub label: Option<String>,
+    pub type_: Term,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase {
     pub label: String,
-    /// Payload binders. The name is optional (`success(A)` stays positional);
-    /// it is required when a later payload type or the case target mentions
-    /// the binder. A *named* binder may carry `@`, making it implicit at the
-    /// value-constructor function (`cons(@m : Nat, ...)` — `m` is recoverable
-    /// from a later payload's type).
-    pub payload: Vec<(Plicity, Option<String>, Term)>,
+    pub payload: Vec<CasePayloadParam>,
     /// The parenthesized index expressions after the payload — the case's
     /// terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to
     /// `: (Nat/succ(m))`. Present iff the union head declares indices.

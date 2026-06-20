@@ -523,7 +523,7 @@ impl<B: Bound> Telescope<B> {
     /// body. The walk is infallible; the error type `E` belongs to the callback.
     pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
     where
-        F: FnMut(&Term, &Term) -> Result<(), E>,
+        F: FnMut(usize, &Term, &Term) -> Result<(), E>,
     {
         assert!(
             self.len() == args.len(),
@@ -538,7 +538,7 @@ impl<B: Bound> Telescope<B> {
             match tele {
                 Telescope::Done(body) => return Ok(*body),
                 Telescope::Cons(ty, rest) => {
-                    f(&args[i], &ty)?;
+                    f(i, &args[i], &ty)?;
                     tele = rest.open(&[&args[i]]);
                     i += 1;
                 }
@@ -553,7 +553,7 @@ impl<B: Bound> Telescope<B> {
     /// the body.
     pub fn walk_map<F, E>(self, args: &[Term], mut f: F) -> Result<(Vec<Term>, B), E>
     where
-        F: FnMut(&Term, &Term) -> Result<Term, E>,
+        F: FnMut(usize, &Term, &Term) -> Result<Term, E>,
     {
         assert!(
             self.len() == args.len(),
@@ -569,7 +569,7 @@ impl<B: Bound> Telescope<B> {
             match tele {
                 Telescope::Done(body) => return Ok((mapped, *body)),
                 Telescope::Cons(ty, rest) => {
-                    let term = f(&args[i], &ty)?;
+                    let term = f(i, &args[i], &ty)?;
                     tele = rest.open(&[&term]);
                     mapped.push(term);
                     i += 1;

@@ -1,7 +1,28 @@
 use {
-    super::{Atom, Telescope, Term},
+    super::{Atom, Quantity, Telescope, Term},
     std::collections::BTreeMap,
 };
+
+/// One constructor's registry signature: the telescope paired with its payload
+/// quantities, bundled so the two can never drift (the registry mirror of how
+/// [`super::FuncType`] keeps its `quantities` beside its telescope).
+///
+/// The telescope is the constructor's *full* signature — the parameter binders
+/// first, then the payload binders, terminating in the constructed type. E.g.
+/// `success ↦ (A : Type, E : Type, _0 : A) -> UnionType { Result, [A, E] }`.
+/// For an indexed union the terminal is *per-case*: its indices are that case's
+/// target expressions over the payload binders. Instantiating peels the leading
+/// `params.len()` binders by opening each with the corresponding parameter.
+///
+/// `quantities` is aligned with the *payload* binders that remain after
+/// `instantiate` peels the parameters (it excludes the parameter binders, which
+/// are always relevant); `erase` drops the `Zero` payload fields from the
+/// runtime variant tuple.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InductiveParam {
+    pub telescope: Telescope<Term>,
+    pub quantities: Vec<Quantity>,
+}
 
 /// One inductive declaration's registry entry: the metadata a `union`
 /// declaration produces alongside its type-constructor and value-constructor
@@ -25,15 +46,10 @@ pub struct Inductive {
     /// unindexed union. Like `constructors`, instantiate at known parameters
     /// by peeling the leading `params.len()` binders.
     pub indices: Telescope<()>,
-    /// Per-constructor signatures, keyed by tag. Each telescope is the
-    /// constructor's *full* signature — the parameter binders first, then the
-    /// payload binders, terminating in the constructed type. E.g.
-    /// `success ↦ (A : Type, E : Type, _0 : A) -> UnionType { Result, [A, E] }`.
-    /// For an indexed union the terminal is *per-case*: its indices are that
-    /// case's target expressions over the payload binders.
-    /// Instantiating a constructor at known parameters peels the leading
-    /// `params.len()` binders by opening each with the corresponding parameter.
-    pub constructors: BTreeMap<Atom, Telescope<Term>>,
+    /// Per-constructor signatures, keyed by tag — each the constructor's
+    /// signature telescope paired with its payload quantities (see
+    /// [`InductiveParam`]).
+    pub constructors: BTreeMap<Atom, InductiveParam>,
 }
 
 impl Inductive {
@@ -41,7 +57,7 @@ impl Inductive {
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
     /// `(_0 : Nat) -> UnionType { Result, [Nat, Bin] }`.
     pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
-        let mut telescope = self.constructors.get(tag)?.clone();
+        let mut telescope = self.constructors.get(tag)?.telescope.clone();
 
         for param in params {
             telescope = match telescope {

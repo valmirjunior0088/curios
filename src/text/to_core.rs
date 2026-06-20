@@ -377,9 +377,12 @@ fn process_items(
                                     .payload
                                     .iter()
                                     .enumerate()
-                                    .map(|(i, (_, n, t))| {
-                                        let n = n.clone().unwrap_or_else(|| format!("_{i}"));
-                                        Ok((n, lower.term(t)?))
+                                    .map(|(i, param)| {
+                                        let n = param
+                                            .label
+                                            .clone()
+                                            .unwrap_or_else(|| format!("_{i}"));
+                                        Ok((n, lower.term(&param.type_)?))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -390,12 +393,24 @@ fn process_items(
                                     .map(|t| lower.term(t))
                                     .collect::<Result<Vec<_>, Error>>()?;
 
-                                let signature = core::Telescope::build(
+                                let telescope = core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
                                     core::Term::union_type(&name, param_vars.clone(), target),
                                 );
 
-                                Ok((core::Atom::from(c.label.as_str()), signature))
+                                // Payload quantities, parallel to the payload
+                                // binders left after `instantiate` peels the
+                                // parameters — `erase` drops the `Zero` ones.
+                                let quantities =
+                                    c.payload.iter().map(|p| p.quantity).collect::<Vec<_>>();
+
+                                Ok((
+                                    core::Atom::from(c.label.as_str()),
+                                    core::InductiveParam {
+                                        telescope,
+                                        quantities,
+                                    },
+                                ))
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
@@ -509,13 +524,27 @@ fn process_items(
                             u.params
                                 .iter()
                                 .map(|(_, n, t)| {
-                                    Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
+                                    Ok((
+                                        core::Plicity::Implicit,
+                                        core::Quantity::Omega,
+                                        n.clone(),
+                                        lower.term(t)?,
+                                    ))
                                 })
-                                .chain(c.payload.iter().enumerate().map(|(i, (p, n, t))| {
-                                    Ok((*p, payload_name(i, n), lower.term(t)?))
+                                .chain(c.payload.iter().enumerate().map(|(i, param)| {
+                                    Ok((
+                                        param.plicity,
+                                        param.quantity,
+                                        payload_name(i, &param.label),
+                                        lower.term(&param.type_)?,
+                                    ))
                                 }))
                                 .collect::<Result<Vec<_>, Error>>()?;
-                        let ctor_type = core::Term::func_type_marked(
+                        // Quantified so `erase_func` drops the same `@`-marked
+                        // payload params that `erase_variant` drops from the
+                        // tuple — the constructor function's arity and its
+                        // injected variant's arity stay in lockstep.
+                        let ctor_type = core::Term::func_type_quantified(
                             param_tys.clone(),
                             lower.term(&output_type)?,
                         );
@@ -526,8 +555,8 @@ fn process_items(
                             .payload
                             .iter()
                             .enumerate()
-                            .map(|(i, (_, n, _))| {
-                                core::Term::var(core::Var::free(payload_name(i, n)))
+                            .map(|(i, param)| {
+                                core::Term::var(core::Var::free(payload_name(i, &param.label)))
                             })
                             .collect();
                         let inject = core::Term::variant(
@@ -539,8 +568,10 @@ fn process_items(
                             args,
                         );
                         // The lambda binds every parameter regardless of mark.
-                        let ctor_body =
-                            core::Term::func(param_tys.into_iter().map(|(_, n, t)| (n, t)), inject);
+                        let ctor_body = core::Term::func(
+                            param_tys.into_iter().map(|(_, _, n, t)| (n, t)),
+                            inject,
+                        );
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
@@ -799,7 +830,7 @@ fn inductive_free_vars(inductive: &core::Inductive) -> HashSet<String> {
             inductive
                 .constructors
                 .values()
-                .flat_map(|signature| signature.free_vars()),
+                .flat_map(|param| param.telescope.free_vars()),
         )
         .collect()
 }

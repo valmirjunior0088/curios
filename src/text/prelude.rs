@@ -1,7 +1,8 @@
 use {
     super::{
-        Error, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim,
-        Qualifier, Quantity, Subterm, Term, TopItem, TopLet, TopMod, TupleType, TupleTypeParam,
+        Error, FuncSugarParam, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern,
+        Plicity, Prim, Qualifier, Quantity, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
+        TupleTypeParam,
     },
     crate::wire,
 };
@@ -135,7 +136,12 @@ fn pub_fn_marked(
         signature: LetSignature::Func {
             params: params
                 .into_iter()
-                .map(|(p, n, t)| (p, Pattern::Bind(n.to_string()), t))
+                .map(|(p, n, t)| FuncSugarParam {
+                    plicity: p,
+                    quantity: Quantity::Omega,
+                    pattern: Pattern::Bind(n.to_string()),
+                    type_: t,
+                })
                 .collect(),
             output,
             body,

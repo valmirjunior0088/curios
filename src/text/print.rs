@@ -616,12 +616,18 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
         } => flat([
             pure("("),
             sep_flat(
-                params.into_iter().map(|(plicity, pattern, ty)| {
+                params.into_iter().map(|param| {
+                    // Plicity prefixes the name; quantity prefixes the type.
+                    let quant = match param.quantity {
+                        Quantity::Zero => pure("@"),
+                        Quantity::Omega => pure(""),
+                    };
                     flat([
-                        print_plicity(plicity),
-                        print_pattern(pattern),
+                        print_plicity(param.plicity),
+                        print_pattern(param.pattern),
                         pure(" : "),
-                        print_term(ty),
+                        quant,
+                        print_term(param.type_),
                     ])
                 }),
                 || pure(", "),
@@ -733,8 +739,17 @@ fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
 
 fn print_top_union_case(case: TopCase) -> Printer<'static> {
     let payload = sep_flat(
-        case.payload.into_iter().map(|(plicity, name, ty)| {
-            flat([print_plicity(plicity), print_labeled((name, ty))])
+        case.payload.into_iter().map(|param| {
+            // Plicity prefixes the name; the quantity (`@` = erased) prefixes
+            // the type — shared with `print_field`.
+            flat([
+                print_plicity(param.plicity),
+                print_field(TupleTypeParam {
+                    label: param.label,
+                    quantity: param.quantity,
+                    type_: param.type_,
+                }),
+            ])
         }),
         || pure(", "),
     );

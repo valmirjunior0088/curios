@@ -1,7 +1,8 @@
 use {
     super::{
         Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Func, FuncType,
-        ImplicitOrigin, Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern,
+        ImplicitOrigin, Inductive, InductiveParam, Invert, Item, Let, Many, Match, Metavar, Module,
+        MotivePattern,
         MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
         Structure,
         Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
@@ -252,14 +253,11 @@ fn elaborate_apply(
     // A postponed intro form stays lowered for now; its holes are unbirthed,
     // and its rebuilt form lands after the output `expect` pins its metas.
     let mut postponed = Vec::new();
-    let mut slot = 0usize;
     // An argument to an erased (`Zero`) parameter sits in an erased position, so
     // it is checked at ρ scaled by the binder's quantity — this is what lets an
     // erased variable be *passed* to an erased parameter (category c).
     let quantities = ft.quantities.clone();
-    let (mut elaborated, output) = ft.telescope.clone().walk_map(params, |arg, ty| {
-        let index = slot;
-        slot += 1;
+    let (mut elaborated, output) = ft.telescope.clone().walk_map(params, |index, arg, ty| {
         let quantity = quantities.get(index).copied().unwrap_or(Quantity::Omega);
 
         if checking && blocked_on_metavar(context, arg, ty, &result_metavars, expected_ground)? {
@@ -839,10 +837,14 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
     let head_type = reduce_with(context, &head_type)?;
 
     // Both tuples and structs project; the field telescope is the tuple type's
-    // own, or the struct's (instantiated at the head type's parameters). A
-    // struct additionally enforces representation privacy here (§7).
-    let telescope = match &*head_type {
-        Subterm::TupleType(TupleType { telescope, .. }) => telescope.clone(),
+    // own, or the struct's (instantiated at the head type's parameters). The
+    // per-field quantities ride alongside (relevance check below). A struct
+    // additionally enforces representation privacy here (§7).
+    let (telescope, quantities) = match &*head_type {
+        Subterm::TupleType(TupleType {
+            telescope,
+            quantities,
+        }) => (telescope.clone(), quantities.clone()),
         Subterm::StructType(StructType { name, params }) => {
             let Some(structure) = context.structure(name).cloned() else {
                 return Err(Error::unbound_variable(Term::var(Var::free(name))));
@@ -860,7 +862,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
                 return Err(Error::private_field(name.clone(), field));
             }
 
-            structure.fields_at(params)
+            (structure.fields_at(params), structure.field_quantities.clone())
         }
         other => return Err(Error::not_a_tuple(other.clone())),
     };
@@ -891,6 +893,19 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
 
     if index >= telescope.len() {
         return Err(Error::tuple_index_out_of_bounds(index, telescope.len()));
+    }
+
+    // Relevance (QTT): an erased field is dropped from the runtime rep, so
+    // projecting it in a runtime (ω) position is the same leak the `Var` check
+    // catches for binders — it would read past the collapsed value. Empty
+    // `quantities` (legacy all-ω construction) never trips this.
+    if quantities.get(index) == Some(&Quantity::Zero)
+        && context.current_quantity() == Quantity::Omega
+    {
+        return Err(Error::erased_variable_at_runtime(Term::proj(
+            head.clone(),
+            index,
+        )));
     }
 
     let field_type = telescope
@@ -925,7 +940,7 @@ fn elaborate_union_type(context: &mut Context, ut: &UnionType) -> Result<(Term, 
     }
 
     let mut elaborated = Vec::with_capacity(args.len());
-    inductive.indices.walk(&args, |arg, ty| {
+    inductive.indices.walk(&args, |_, arg, ty| {
         elaborated.push(check(context, arg, ty.clone())?);
         Ok(())
     })?;
@@ -960,7 +975,7 @@ fn elaborate_variant(
         return Err(Error::unbound_variable(Term::var(Var::free(name))));
     };
 
-    let Some(signature) = inductive.constructors.get(tag).cloned() else {
+    let Some(signature) = inductive.constructors.get(tag).map(|c| c.telescope.clone()) else {
         return Err(Error::match_case_missing(term.clone(), tag.clone()));
     };
 
@@ -973,9 +988,26 @@ fn elaborate_variant(
         ));
     }
 
+    // Payload quantities (params excluded); an arg to an erased payload field
+    // sits in an erased position, so it is checked at ρ scaled by that quantity
+    // — this lets an erased variable be injected into an erased field
+    // (category c, the variant analogue of `elaborate_apply`).
+    let quantities = inductive
+        .constructors
+        .get(tag)
+        .map(|c| c.quantities.clone())
+        .unwrap_or_default();
+    let n_params = params.len();
+
     let mut elaborated = Vec::with_capacity(args.len());
-    let output = signature.walk(&args, |arg, ty| {
-        elaborated.push(check(context, arg, ty.clone())?);
+    let output = signature.walk(&args, |slot, arg, ty| {
+        let quantity = match slot.checked_sub(n_params) {
+            Some(payload_index) => {
+                quantities.get(payload_index).copied().unwrap_or(Quantity::Omega)
+            }
+            None => Quantity::Omega,
+        };
+        elaborated.push(context.with_quantity(quantity, |context| check(context, arg, ty.clone()))?);
         Ok(())
     })?;
 
@@ -1040,7 +1072,7 @@ fn elaborate_struct_type(
     }
 
     let mut elaborated = Vec::with_capacity(params.len());
-    structure.params.walk(params, |arg, ty| {
+    structure.params.walk(params, |_, arg, ty| {
         elaborated.push(check(context, arg, ty.clone())?);
         Ok(())
     })?;
@@ -1334,12 +1366,24 @@ fn elaborate_union_match(
             .map(|label| Term::var(Var::free(label)))
             .collect::<Vec<_>>();
 
+        // Payload quantities, aligned with the arm's binders — an erased
+        // payload binder is assumed at `Zero`, so referencing it in a runtime
+        // position of the arm body is caught by the `Var` check (it is dropped
+        // from the variant tuple, so a runtime use would dangle).
+        let arm_quantities = inductive
+            .constructors
+            .get(tag)
+            .map(|c| c.quantities.clone())
+            .unwrap_or_default();
+
         let body_elaborated = context.with_frame(|context| {
             let mut telescope = telescope;
-            for (label, var) in labels.iter().zip(&vars) {
+            for (i, (label, var)) in labels.iter().zip(&vars).enumerate() {
                 match telescope {
                     Telescope::Cons(ty, rest) => {
-                        context.assume(label, &ty);
+                        let quantity =
+                            arm_quantities.get(i).copied().unwrap_or(Quantity::Omega);
+                        context.assume_quantified(label, &ty, quantity);
                         telescope = rest.open(&[var]);
                     }
                     Telescope::Done(_) => unreachable!("arity checked above"),
@@ -1470,7 +1514,7 @@ fn check_union_motive(
     // Each parameter's declared type at the actual parameters, for checking
     // verbatim slots.
     let mut param_types = Vec::with_capacity(n_params);
-    inductive.params.clone().walk(params, |_, ty| {
+    inductive.params.clone().walk(params, |_, _, ty| {
         param_types.push(ty.clone());
         Ok(())
     })?;
@@ -2107,7 +2151,8 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
     };
 
     let mut constructors = BTreeMap::new();
-    for (tag, signature) in &inductive.constructors {
+    for (tag, param) in &inductive.constructors {
+        let signature = &param.telescope;
         let labels = signature
             .labels()
             .iter()
@@ -2137,7 +2182,10 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.insert(
             tag.clone(),
-            Telescope::build(entries, terminal).relabel(&label_refs),
+            InductiveParam {
+                telescope: Telescope::build(entries, terminal).relabel(&label_refs),
+                quantities: param.quantities.clone(),
+            },
         );
     }
 

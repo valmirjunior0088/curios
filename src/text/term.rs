@@ -310,6 +310,18 @@ pub enum Match {
     Bin(BinMatch),
 }
 
+/// One parameter of the function-definition sugar `let f(p : T, …) -> R = body`.
+/// Unlike [`FuncTypeParam`], it carries a [`Pattern`] (so a parameter can
+/// destructure) rather than a bare label, and feeds two lowerings: the binder
+/// name flows into the Π-type, the whole pattern into the lambda.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuncSugarParam {
+    pub plicity: Plicity,
+    pub quantity: Quantity,
+    pub pattern: Pattern,
+    pub type_: Term,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature {
     Name {
@@ -320,7 +332,7 @@ pub enum LetSignature {
         body: Term,
     },
     Func {
-        params: Vec<(Plicity, Pattern, Term)>,
+        params: Vec<FuncSugarParam>,
         output: Term,
         body: Term,
     },
@@ -342,14 +354,11 @@ impl LetSignature {
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
-                    .map(|(plicity, pattern, t)| FuncTypeParam {
-                        plicity: *plicity,
-                        // Function-definition params don't yet carry a written
-                        // quantity; default to `Omega`. Erasure on definition
-                        // params is threaded in a later step.
-                        quantity: Quantity::Omega,
-                        label: pattern.binder_name(),
-                        type_: t.clone(),
+                    .map(|param| FuncTypeParam {
+                        plicity: param.plicity,
+                        quantity: param.quantity,
+                        label: param.pattern.binder_name(),
+                        type_: param.type_.clone(),
                     })
                     .collect(),
                 output: output.clone(),
@@ -368,7 +377,7 @@ impl LetSignature {
             LetSignature::Func { params, body, .. } => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|(_, pattern, t)| (pattern.clone(), Some(t.clone())))
+                    .map(|param| (param.pattern.clone(), Some(param.type_.clone())))
                     .collect(),
                 body: body.clone(),
             })

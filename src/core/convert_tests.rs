@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Inductive, Int, Nat, Prim, Quantity, Structure, Var},
+    crate::core::{Atom, Inductive, InductiveParam, Int, Nat, Prim, Quantity, Structure, Var},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -562,13 +562,16 @@ fn convert_variant_unit_payload_is_irrelevant() {
             indices: Telescope::done(()),
             constructors: BTreeMap::from([(
                 Atom::from("wrap"),
-                Telescope::build(
-                    [
-                        ("x", Term::prim(Prim::NatType)),
-                        ("u", Term::tuple_type_unit()),
-                    ],
-                    Term::union_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
-                ),
+                InductiveParam {
+                    telescope: Telescope::build(
+                        [
+                            ("x", Term::prim(Prim::NatType)),
+                            ("u", Term::tuple_type_unit()),
+                        ],
+                        Term::union_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
+                    ),
+                    quantities: vec![Quantity::Omega, Quantity::Omega],
+                },
             )]),
         },
     );

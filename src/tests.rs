@@ -272,6 +272,93 @@ fn erased_tuple_field_is_a_subset_type() {
 }
 
 #[test]
+fn erased_definition_param_is_dropped_at_runtime() {
+    // Item 3 (surface): the combined def-form sugar `let f(n : @Nat) -> R = body`
+    // carries the quantity on the inline parameter — previously only the explicit
+    // `let f : (n : @Nat) -> R = …` signature form did. `g`'s erased `n` is
+    // dropped and passed to `h`'s erased `m` (runs only if both are dropped).
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let h(m : @Nat) -> Nat = 0;
+        let g(n : @Nat) -> Nat = h(n);
+        let r : Nat = g(7);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    assert_eq!(run(source), b"0");
+}
+
+#[test]
+fn erased_definition_param_used_at_runtime_is_rejected() {
+    // The def-form counterpart of the rejection check: an erased inline param
+    // returned at runtime is the same leak the signature form catches.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let f(n : @Nat) -> Nat = n;
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
+fn erased_field_projected_at_runtime_is_rejected() {
+    // Item 2 (soundness): the erased field is dropped from the rep, so projecting
+    // it in a runtime (ω) position must be rejected exactly like referencing an
+    // erased binder — otherwise the projection reads past the collapsed value.
+    // The relevant `.val` (the test above) still projects fine.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        struct Wrap pub { val : Nat, ghost : @Nat }
+        let make : (n : @Nat) -> Wrap = (n) => Wrap { val = 5, ghost = n };
+        let r : Nat = make(7).ghost;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
+fn erased_union_payload_is_dropped_at_runtime() {
+    // Item 1: a constructor payload field marked `@` on its type is erased —
+    // dropped from the runtime variant tuple. `make` fills the erased `ghost`
+    // with its own erased `n` (runs only if both are dropped); the match binds
+    // only the relevant `val`, so its projection must skip the absent field.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        union Boxed
+        | box(ghost : @Nat, val : Nat)
+        end
+        let make : (n : @Nat) -> Boxed = (n) => Boxed/box(n, 5);
+        let get : (b : Boxed) -> Nat = (b) =>
+            match b : Nat
+            | box(ghost, val) => val
+            end;
+        let r : Nat = get(make(7));
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        "#;
+    assert_eq!(run(source), b"5");
+}
+
+#[test]
+fn erased_union_payload_used_at_runtime_is_rejected() {
+    // The erased payload binder may only appear in erased positions; returning
+    // it from the arm is a runtime use of a field that erase has dropped.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        union Boxed
+        | box(ghost : @Nat, val : Nat)
+        end
+        let get : (b : Boxed) -> Nat = (b) =>
+            match b : Nat
+            | box(ghost, val) => ghost
+            end;
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
         std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))

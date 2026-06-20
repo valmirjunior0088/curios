@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, FuncTypeParam,
-        GroupItem, Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat,
+        Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Let, LetBang, LetSignature, LoadError,
+        Match, Module, Motive, Name, Nat,
         NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Quantity, Rec,
         RecItem, StructLit, Subterm, Term, TupleTypeParam,
         TopCase, TopItem,
@@ -861,12 +862,23 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_func_sugar_param<'a>() -> Parser<'a, (Plicity, Pattern, Term)> {
+fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     parse_plicity()
         .and(parse_pattern())
         .and_drop(parse_literal(":"))
+        .and(parse_quantity())
         .and(lazy(parse_term))
-        .map(|((plicity, pattern), ty): ((Plicity, Pattern), Term)| (plicity, pattern, ty))
+        .map(
+            |(((plicity, pattern), quantity), type_): (
+                ((Plicity, Pattern), Quantity),
+                Term,
+            )| FuncSugarParam {
+                plicity,
+                quantity,
+                pattern,
+                type_,
+            },
+        )
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the
@@ -1275,17 +1287,34 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
 }
 
 // A payload binder: `@m : Nat` (named, implicit at the constructor function),
-// `m : Nat` (named), or a bare type (positional). `@` requires a name — a
-// positional binder has nothing for a later type or the target to mention.
-fn parse_union_payload_field<'a>() -> Parser<'a, (Plicity, Option<String>, Term)> {
+// `m : Nat` (named), or a bare type (positional). Plicity's `@` (on the name)
+// requires a name — a positional binder has nothing for a later type or the
+// target to mention. The quantity's `@` (on the type) marks the field erased and
+// is allowed on both named and positional binders (a dropped field is never
+// referenced, named or not).
+fn parse_union_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
     catch(
         parse_plicity()
             .and(parse_identifier())
             .and_drop(parse_literal(":")),
     )
-    .and(lazy(parse_term))
-    .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, Some(name.to_string()), ty))
-    .or(lazy(parse_term).map(|ty| (Plicity::Explicit, None, ty)))
+    .and(parse_quantity().and(lazy(parse_term)))
+    .map(|((plicity, name), (quantity, type_)): ((Plicity, &str), (Quantity, Term))| {
+        CasePayloadParam {
+            plicity,
+            quantity,
+            label: Some(name.to_string()),
+            type_,
+        }
+    })
+    .or(parse_quantity()
+        .and(lazy(parse_term))
+        .map(|(quantity, type_)| CasePayloadParam {
+            plicity: Plicity::Explicit,
+            quantity,
+            label: None,
+            type_,
+        }))
 }
 
 fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {

@@ -596,8 +596,8 @@ fn parse_implicit_marks_on_let_shorthand_and_union_params() {
             signature: LetSignature::Func { params, .. },
             ..
         }) => {
-            assert_eq!(params[0].0, Plicity::Implicit);
-            assert_eq!(params[1].0, Plicity::Explicit);
+            assert_eq!(params[0].plicity, Plicity::Implicit);
+            assert_eq!(params[1].plicity, Plicity::Explicit);
         }
         other => panic!("expected a func let, got {other:?}"),
     }
@@ -744,6 +744,44 @@ fn erased_quantity_on_type_parses_and_round_trips() {
     for src in ["(x : @Nat) -> Nat", "(@x : @Nat) -> Nat", "(@n : Nat) -> Nat"] {
         let term = src.parse::<Term>().unwrap();
         assert_eq!(term.to_string().parse::<Term>().unwrap(), term, "{src}");
+    }
+}
+
+#[test]
+fn erased_quantity_on_def_form_param() {
+    // Item 3: the combined function-definition sugar `let f(n : @Nat) -> R = …`
+    // now carries `@` on the inline parameter type, not only the explicit
+    // function-type signature form.
+    let m = "let foo(n : @Nat, m : Nat) -> Nat = m;"
+        .parse::<Module>()
+        .unwrap();
+    match &m.items[0] {
+        TopItem::Let(TopLet {
+            signature: LetSignature::Func { params, .. },
+            ..
+        }) => {
+            assert_eq!(params[0].quantity, Quantity::Zero);
+            assert_eq!(params[1].quantity, Quantity::Omega);
+        }
+        other => panic!("expected a func let, got {other:?}"),
+    }
+}
+
+#[test]
+fn erased_quantity_on_union_payload() {
+    // Item 1: `@` on a constructor payload's type marks the field erased
+    // (dropped from the runtime variant tuple), on named and positional binders
+    // alike. Distinct from the `@`-on-the-name plicity mark.
+    let m = "union Boxed | box(ghost : @Nat, val : Nat) end"
+        .parse::<Module>()
+        .unwrap();
+    match &m.items[0] {
+        TopItem::Union(unions) => {
+            let payload = &unions[0].cases[0].payload;
+            assert_eq!(payload[0].quantity, Quantity::Zero);
+            assert_eq!(payload[1].quantity, Quantity::Omega);
+        }
+        other => panic!("expected a union, got {other:?}"),
     }
 }
 

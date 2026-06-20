@@ -1,6 +1,6 @@
 use super::{
     Apply, Arity, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
-    Item, Let,
+    InductiveParam, Item, Let,
     Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
     StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Variant,
 };
@@ -68,7 +68,15 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     constructors: inductive
                         .constructors
                         .iter()
-                        .map(|(tag, signature)| Ok((tag.clone(), signature.zonk(context)?)))
+                        .map(|(tag, param)| {
+                            Ok((
+                                tag.clone(),
+                                InductiveParam {
+                                    telescope: param.telescope.zonk(context)?,
+                                    quantities: param.quantities.clone(),
+                                },
+                            ))
+                        })
                         .collect::<Result<_, Error>>()?,
                 },
             ))
