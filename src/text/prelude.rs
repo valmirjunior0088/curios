@@ -767,11 +767,60 @@ impl<L: Loader> Loader for StdLoader<L> {
     }
 }
 
-/// Wrap a loader so `sys` and `std` resolve from the binary and everything else falls
-/// through to `inner`. The wrapped loader also reports `sys` and `std` from
+// The `syn` library: modules the compiler's desugaring targets, kept alongside the
+// compiler (`syn/*.crs`) and embedded in the binary. Like `sys` it is internal —
+// walled from user code (see `to_core::INTERNAL_ROOTS`) and reached through `std`
+// re-exports. Well-formedness is a compiler invariant, so a parse failure is a `panic!`.
+const SYN: &[(&[&str], &str)] = &[
+    (&["syn"], include_str!("../../syn.crs")),
+    (&["syn", "Str"], include_str!("../../syn/Str.crs")),
+];
+
+// Serves the embedded `syn` modules, delegating everything else to `inner`.
+pub struct SynLoader<L> {
+    inner: L,
+}
+
+thread_local! {
+    // Parse every embedded `syn` module once per thread; `load` hands out clones.
+    // Mirrors `STD_MODULES` (§ loader cache).
+    static SYN_MODULES: Vec<Module> = SYN
+        .iter()
+        .map(|(segments, source)| {
+            source.parse::<Module>().unwrap_or_else(|error| {
+                panic!("embedded syn module {} is malformed: {error:?}", segments.join("/"))
+            })
+        })
+        .collect();
+}
+
+impl<L: Loader> Loader for SynLoader<L> {
+    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
+        let path = qualifier.iter().collect::<Vec<_>>();
+
+        if let Some(index) = SYN.iter().position(|(segments, _)| path == **segments) {
+            return Ok(SYN_MODULES.with(|modules| modules[index].clone()));
+        }
+
+        self.inner.load(qualifier)
+    }
+
+    fn roots(&self) -> Vec<String> {
+        self.inner
+            .roots()
+            .into_iter()
+            .chain(["syn".to_string()])
+            .collect()
+    }
+}
+
+/// Wrap a loader so `sys`, `syn`, and `std` resolve from the binary and everything else
+/// falls through to `inner`. The wrapped loader also reports those roots from
 /// [`Loader::roots`], so `to_core` declares them at the entrypoint root automatically.
 pub fn prelude<L: Loader>(inner: L) -> impl Loader {
     SysLoader {
-        inner: StdLoader { inner },
+        inner: SynLoader {
+            inner: StdLoader { inner },
+        },
     }
 }

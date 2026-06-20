@@ -16,12 +16,13 @@ use {
 };
 
 // Root modules reachable only from the standard library — the trusted primitive
-// substrate (`sys`). User code reaches them through their `/std` wrappers; any
-// reference that resolves into one from outside is rejected during resolution.
-const INTERNAL_ROOTS: &[&str] = &["sys"];
+// substrate (`sys`) and the desugar-target library (`syn`). User code reaches them
+// through their `/std` wrappers; any reference that resolves into one from outside is
+// rejected during resolution.
+const INTERNAL_ROOTS: &[&str] = &["sys", "syn"];
 // Consuming roots permitted to reference an internal root: the standard library,
 // and the internal roots themselves (so they may reference one another).
-const PRIVILEGED_ROOTS: &[&str] = &["std", "sys"];
+const PRIVILEGED_ROOTS: &[&str] = &["std", "sys", "syn"];
 
 // Reject a reference that *resolves into* an internal root (`sys`) when the
 // consuming module lies outside the privileged roots. `resolved` is the segments
