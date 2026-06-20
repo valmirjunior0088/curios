@@ -3583,3 +3583,148 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
         "#;
     assert_eq!(run(source), b"255");
 }
+
+#[test]
+fn utf8_slice_closed_peels_codepoints() {
+    // INCREMENT (slice_closed), the hard tail: prove codepoint slicing preserves
+    // validity WITHOUT byte-offset reasoning. Walk the derivation, peeling one
+    // codepoint at a time (a `more`-run from `lead` back to `lead`). The core lemma
+    // `take_to_lead` walks from any state to the next `lead` boundary, returning the
+    // consumed codepoint-fragment (with its derivation `midd : Utf8(s, mid)`) and the
+    // valid remainder `tv : Valid(tail)`. `take1`/`drop1` then split the first
+    // codepoint; iterating them (mechanical) gives `slice`, reassembled via
+    // `concat_closed`. The `bad` state never reaches `lead`, but the arm still
+    // elaborates for a general index (its `stop` prunes; it's just never hit at
+    // runtime on valid input).
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin, Bln};
+
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+            match Nat/gte(c, lo)
+            | true => Nat/lte(c, hi)
+            | false => false
+            end;
+
+        union Scan
+        | lead()
+        | cont(Nat, Nat, Nat)
+        | bad()
+        end
+
+        let classify(c : Nat) -> Scan =
+            match in_range(c, 0, 127)
+            | true => Scan/lead()
+            | false =>
+                match in_range(c, 194, 223)
+                | true => Scan/cont(1, 128, 191)
+                | false =>
+                    match in_range(c, 224, 239)
+                    | true => Scan/cont(2, 128, 191)
+                    | false =>
+                        match in_range(c, 240, 244)
+                        | true => Scan/cont(3, 128, 191)
+                        | false => Scan/bad()
+                        end
+                    end
+                end
+            end;
+
+        let step(c : Nat, s : Scan) -> Scan =
+            match s
+            | bad() => Scan/bad()
+            | cont(rem, lo, hi) =>
+                match in_range(c, lo, hi)
+                | false => Scan/bad()
+                | true =>
+                    match Nat/eql(rem, 1)
+                    | true => Scan/lead()
+                    | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+                    end
+                end
+            | lead() => classify(c)
+            end;
+
+        union Utf8 : (s : Scan, b : Bin)
+        | stop() : (Scan/lead(), \\)
+        | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
+            : (st, Bin/concat(Bin/append(\\, c), t))
+        end
+
+        let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
+
+        rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
+            -> Utf8(s, Bin/concat(a, b)) =
+            match va : (w : Utf8(q, x)) => Utf8(q, Bin/concat(x, b))
+            | stop() => vb
+            | more(c, st, t, rest) => Utf8/more(c, st, Bin/concat(t, b), seq(rest, vb))
+            end;
+
+        let concat_closed(@a : Bin, @b : Bin, va : Valid(a), vb : Valid(b))
+            -> Valid(Bin/concat(a, b)) =
+            seq(va, vb);
+
+        rec take_to_lead(@s : Scan, @b : Bin, d : Utf8(s, b))
+            -> { mid : Bin, tail : Bin, midd : Utf8(s, mid), tv : Valid(tail) } =
+            let go =
+                match s : (s) => (p : Utf8(s, b))
+                    -> { mid : Bin, tail : Bin, midd : Utf8(s, mid), tv : Valid(tail) }
+                | lead() => (d) => (\\, b, Utf8/stop(), d)
+                | cont(rem, lo, hi) => (d) =>
+                    match d : { mid : Bin, tail : Bin, midd : Utf8(Scan/cont(rem, lo, hi), mid), tv : Valid(tail) }
+                    | more(c, st, t, rest) =>
+                        let w = take_to_lead(rest);
+                        (Bin/concat(Bin/append(\\, c), w.mid), w.tail,
+                         Utf8/more(c, st, w.mid, w.midd), w.tv)
+                    end
+                | bad() => (d) =>
+                    match d : { mid : Bin, tail : Bin, midd : Utf8(Scan/bad(), mid), tv : Valid(tail) }
+                    | more(c, st, t, rest) =>
+                        let w = take_to_lead(rest);
+                        (Bin/concat(Bin/append(\\, c), w.mid), w.tail,
+                         Utf8/more(c, st, w.mid, w.midd), w.tv)
+                    end
+                end;
+            go(d);
+
+        let take1(@b : Bin, d : Valid(b)) -> { cp : Bin, v : Valid(cp) } =
+            match d : { cp : Bin, v : Valid(cp) }
+            | stop() => (\\, Utf8/stop())
+            | more(c, st, t, rest) =>
+                let w = take_to_lead(rest);
+                (Bin/concat(Bin/append(\\, c), w.mid), Utf8/more(c, st, w.mid, w.midd))
+            end;
+
+        let drop1(@b : Bin, d : Valid(b)) -> { rest : Bin, v : Valid(rest) } =
+            match d : { rest : Bin, v : Valid(rest) }
+            | stop() => (\\, Utf8/stop())
+            | more(c, st, t, rest) =>
+                let w = take_to_lead(rest);
+                (w.tail, w.tv)
+            end;
+
+        rec drop_n(n : Nat, @b : Bin, d : Valid(b)) -> { r : Bin, v : Valid(r) } =
+            match Nat/eql(n, 0)
+            | true => (b, d)
+            | false =>
+                let w = drop1(d);
+                drop_n(Nat/sub(n, 1), @w.rest, w.v)
+            end;
+
+        rec take_n(n : Nat, @b : Bin, d : Valid(b)) -> { r : Bin, v : Valid(r) } =
+            match Nat/eql(n, 0)
+            | true => (\\, Utf8/stop())
+            | false =>
+                let hd = take1(d);
+                let tl = drop1(d);
+                let tn = take_n(Nat/sub(n, 1), @tl.rest, tl.v);
+                (Bin/concat(hd.cp, tn.r), concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
+            end;
+
+        let slice(@b : Bin, d : Valid(b), x : Nat, y : Nat) -> { r : Bin, v : Valid(r) } =
+            let dropped = drop_n(x, d);
+            take_n(Nat/sub(y, x), @dropped.r, dropped.v);
+
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
