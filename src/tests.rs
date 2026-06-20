@@ -3269,3 +3269,90 @@ fn utf8_construction_spike() {
         "#;
     assert_eq!(run(source), b"ok");
 }
+
+#[test]
+fn utf8_concat_closed_holds_for_the_real_automaton() {
+    // INCREMENT A of the Str migration: `concat_closed` against the ACTUAL UTF-8
+    // `Scan`/`classify`/`step` automaton from std/Str.crs (not the spike's stub).
+    // The spike showed `seq` is step-agnostic — it threads `step(c, s)` without
+    // inspecting it — so swapping in the real, range-checking automaton changes
+    // nothing in the proof: both arms still close by the definitional free-monoid
+    // laws (`concat(\\, b) ≡ b`; associativity). This is the lemma that earns the
+    // proof-carrying newtype: `Valid(a) -> Valid(b) -> Valid(concat a b)`.
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin, Bln};
+
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+            match Nat/gte(c, lo)
+            | true => Nat/lte(c, hi)
+            | false => false
+            end;
+
+        union Scan
+        | lead()
+        | cont(Nat, Nat, Nat)
+        | bad()
+        end
+
+        let classify(c : Nat) -> Scan =
+            match in_range(c, 0, 127)
+            | true => Scan/lead()
+            | false =>
+                match in_range(c, 194, 223)
+                | true => Scan/cont(1, 128, 191)
+                | false =>
+                    match in_range(c, 224, 239)
+                    | true =>
+                        let lo = match Nat/eql(c, 224) | true => 160 | false => 128 end;
+                        let hi = match Nat/eql(c, 237) | true => 159 | false => 191 end;
+                        Scan/cont(2, lo, hi)
+                    | false =>
+                        match in_range(c, 240, 244)
+                        | true =>
+                            let lo = match Nat/eql(c, 240) | true => 144 | false => 128 end;
+                            let hi = match Nat/eql(c, 244) | true => 143 | false => 191 end;
+                            Scan/cont(3, lo, hi)
+                        | false => Scan/bad()
+                        end
+                    end
+                end
+            end;
+
+        let step(c : Nat, s : Scan) -> Scan =
+            match s
+            | bad() => Scan/bad()
+            | cont(rem, lo, hi) =>
+                match in_range(c, lo, hi)
+                | false => Scan/bad()
+                | true =>
+                    match Nat/eql(rem, 1)
+                    | true => Scan/lead()
+                    | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+                    end
+                end
+            | lead() => classify(c)
+            end;
+
+        union Utf8 : (s : Scan, b : Bin)
+        | stop() : (Scan/lead(), \\)
+        | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
+            : (st, Bin/concat(Bin/append(\\, c), t))
+        end
+
+        let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
+
+        rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
+            -> Utf8(s, Bin/concat(a, b)) =
+            match va : (w : Utf8(q, x)) => Utf8(q, Bin/concat(x, b))
+            | stop() => vb
+            | more(c, st, t, rest) => Utf8/more(c, st, Bin/concat(t, b), seq(rest, vb))
+            end;
+
+        let concat_closed(@a : Bin, @b : Bin, va : Valid(a), vb : Valid(b))
+            -> Valid(Bin/concat(a, b)) =
+            seq(va, vb);
+
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
