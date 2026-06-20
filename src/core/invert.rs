@@ -158,11 +158,18 @@ fn unify_index(
         }
 
         (Subterm::Variant(a), Subterm::Variant(t)) => {
-            if a.name != t.name || a.payload.len() != t.payload.len() {
+            // A different union is incomparable; but two *different constructors*
+            // of the same union definitely clash — even though they legitimately
+            // differ in payload arity, so the tag check must precede the arity
+            // check (which is then just defensive: equal tags share an arity).
+            if a.name != t.name {
                 return Ok(Step::Refuse);
             }
             if a.tag != t.tag {
                 return Ok(Step::Clash);
+            }
+            if a.payload.len() != t.payload.len() {
+                return Ok(Step::Refuse);
             }
             for (pa, pt) in a.payload.iter().zip(&t.payload) {
                 match unify_index(context, pa, pt, flex, tainted, false, solutions)? {
