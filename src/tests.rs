@@ -3458,3 +3458,128 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
         "#;
     assert_eq!(run(source), b"yesno");
 }
+
+#[test]
+fn utf8_decimal_is_ascii_carries_its_proof() {
+    // INCREMENT C of the Str migration: producers (`Nat/to_str`) must yield a
+    // `Valid` Bin without a bridge. The trick that avoids ALL Nat-comparison
+    // arithmetic: `digit` emits each decimal digit as a CONCRETE byte literal per
+    // branch, so `step(byte, lead)` *reduces* to `lead` and the per-digit proof is
+    // just `refl`. `single` wraps one ASCII byte into a `Valid` via `subst` over
+    // that proof; `decimal` recurses and combines the high digits with the low one
+    // through the already-proven `concat_closed`. The result type — `decimal` returns
+    // a dependent pair `{ b : Bin, v : Valid(b) }` — IS `decimal_is_ascii`. Runtime
+    // check: `decimal(255).b` renders "255", proving the bytes are real digits.
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin, Bln, Eq};
+
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+            match Nat/gte(c, lo)
+            | true => Nat/lte(c, hi)
+            | false => false
+            end;
+
+        union Scan
+        | lead()
+        | cont(Nat, Nat, Nat)
+        | bad()
+        end
+
+        let classify(c : Nat) -> Scan =
+            match in_range(c, 0, 127)
+            | true => Scan/lead()
+            | false =>
+                match in_range(c, 194, 223)
+                | true => Scan/cont(1, 128, 191)
+                | false =>
+                    match in_range(c, 224, 239)
+                    | true =>
+                        let lo = match Nat/eql(c, 224) | true => 160 | false => 128 end;
+                        let hi = match Nat/eql(c, 237) | true => 159 | false => 191 end;
+                        Scan/cont(2, lo, hi)
+                    | false =>
+                        match in_range(c, 240, 244)
+                        | true =>
+                            let lo = match Nat/eql(c, 240) | true => 144 | false => 128 end;
+                            let hi = match Nat/eql(c, 244) | true => 143 | false => 191 end;
+                            Scan/cont(3, lo, hi)
+                        | false => Scan/bad()
+                        end
+                    end
+                end
+            end;
+
+        let step(c : Nat, s : Scan) -> Scan =
+            match s
+            | bad() => Scan/bad()
+            | cont(rem, lo, hi) =>
+                match in_range(c, lo, hi)
+                | false => Scan/bad()
+                | true =>
+                    match Nat/eql(rem, 1)
+                    | true => Scan/lead()
+                    | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+                    end
+                end
+            | lead() => classify(c)
+            end;
+
+        union Utf8 : (s : Scan, b : Bin)
+        | stop() : (Scan/lead(), \\)
+        | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
+            : (st, Bin/concat(Bin/append(\\, c), t))
+        end
+
+        let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
+
+        rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
+            -> Utf8(s, Bin/concat(a, b)) =
+            match va : (w : Utf8(q, x)) => Utf8(q, Bin/concat(x, b))
+            | stop() => vb
+            | more(c, st, t, rest) => Utf8/more(c, st, Bin/concat(t, b), seq(rest, vb))
+            end;
+
+        let concat_closed(@a : Bin, @b : Bin, va : Valid(a), vb : Valid(b))
+            -> Valid(Bin/concat(a, b)) =
+            seq(va, vb);
+
+        let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
+            -> Valid(Bin/append(\\, c)) =
+            let r : Utf8(step(c, Scan/lead()), \\) =
+                Eq/subst((sc) => Utf8(sc, \\), Eq/sym(ok), Utf8/stop());
+            Utf8/more(c, Scan/lead(), \\, r);
+
+        let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
+            match Nat/eql(d, 0) | true => (48, Eq/refl()) | false =>
+            match Nat/eql(d, 1) | true => (49, Eq/refl()) | false =>
+            match Nat/eql(d, 2) | true => (50, Eq/refl()) | false =>
+            match Nat/eql(d, 3) | true => (51, Eq/refl()) | false =>
+            match Nat/eql(d, 4) | true => (52, Eq/refl()) | false =>
+            match Nat/eql(d, 5) | true => (53, Eq/refl()) | false =>
+            match Nat/eql(d, 6) | true => (54, Eq/refl()) | false =>
+            match Nat/eql(d, 7) | true => (55, Eq/refl()) | false =>
+            match Nat/eql(d, 8) | true => (56, Eq/refl()) | false =>
+            match Nat/eql(d, 9) | true => (57, Eq/refl()) | false =>
+            (48, Eq/refl())
+            end end end end end end end end end end;
+
+        let single_digit(d : Nat) -> { b : Bin, v : Valid(b) } =
+            let g = digit(d);
+            (Bin/append(\\, g.c), single(g.c, g.ok));
+
+        rec decimal(n : Nat) -> { b : Bin, v : Valid(b) } =
+            match Nat/lt(n, 10)
+            | true => single_digit(n)
+            | false =>
+                let hi = decimal(Nat/div(n, 10));
+                let lo = single_digit(Nat/rem(n, 10));
+                (Bin/concat(hi.b, lo.b), concat_closed(@hi.b, @lo.b, hi.v, lo.v))
+            end;
+
+        let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
+            decimal(n).v;
+
+        Io/write(Io/stdout, decimal(255).b)
+        "#;
+    assert_eq!(run(source), b"255");
+}
