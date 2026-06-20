@@ -310,6 +310,45 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                 },
             })))),
         },
+
+        Cases::Inductive {
+            carrier: Carrier::Bin,
+            empty_case,
+            cons_case,
+        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
+            Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty() => {
+                Ok(Reduce::Continue(empty_case))
+            }
+            Subterm::Prim(Prim::Bin(mut bytes)) => {
+                // The generator is the leading byte, reflected back as a `Nat`.
+                let head_byte = bytes.remove(0);
+                let head_elem: Term =
+                    Subterm::Prim(Prim::Nat(Nat::new(head_byte as usize))).into();
+                let tail: Term = Subterm::Prim(Prim::Bin(bytes)).into();
+
+                let ih: Term = Subterm::Match(Match {
+                    head: tail.clone(),
+                    motive: motive.clone(),
+                    cases: Cases::Inductive {
+                        carrier: Carrier::Bin,
+                        empty_case: empty_case.clone(),
+                        cons_case: cons_case.clone(),
+                    },
+                })
+                .into();
+
+                Ok(Reduce::Continue(cons_case.open(&[&head_elem, &tail, &ih])))
+            }
+            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                head: head.into(),
+                motive,
+                cases: Cases::Inductive {
+                    carrier: Carrier::Bin,
+                    empty_case,
+                    cons_case,
+                },
+            })))),
+        },
     }
 }
 

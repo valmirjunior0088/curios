@@ -411,9 +411,13 @@ fn elaborate_prim_head(
         Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => {
             Ok((head, head_type))
         }
+        Prim::BinType if matches!(&*head_type, Subterm::Prim(Prim::BinType)) => {
+            Ok((head, head_type))
+        }
         Prim::NatType => Err(Error::not_nat_type(head_type)),
         Prim::BlnType => Err(Error::not_bln_type(head_type)),
-        _ => unreachable!("elaborate_prim_head supports only NatType and BlnType"),
+        Prim::BinType => Err(Error::not_bin_type(head_type)),
+        _ => unreachable!("elaborate_prim_head supports only NatType, BlnType and BinType"),
     }
 }
 
@@ -590,6 +594,91 @@ fn elaborate_arr_match(
     Ok((rebuilt, result_type))
 }
 
+fn elaborate_bin_match(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    empty_case: &Term,
+    cons_case: &Scope<Three>,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    // `Bin` is a parameterless carrier (like `Nat`/`Bln`), so the scrutinee's type
+    // is just `Bin` — no element type to read off the head as `Arr` needs.
+    let (head_elaborated, head_type) = elaborate_prim_head(context, head, Prim::BinType)?;
+
+    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
+    let motive = check_motive(context, &head_type, motive)?;
+
+    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
+
+    let empty_value: Term = Subterm::Prim(Prim::Bin(vec![])).into();
+    let empty_elaborated = check(context, empty_case, motive.open(&[&empty_value]))?;
+
+    let head_label = context.fresh(cons_case.first_label());
+    let tail_label = context.fresh(cons_case.second_label());
+    let ih_label = context.fresh(cons_case.third_label());
+
+    let cons_body = context.with_frame(|context| {
+        // A `Bin`'s generator is a single byte, typed as `Nat`.
+        context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
+        context.assume(&tail_label, &head_type);
+        context.assume(
+            &ih_label,
+            &motive.open(&[&Term::var(Var::free(&tail_label))]),
+        );
+
+        // The cons value `head :: tail`, encoded as the monoid operation on the
+        // singleton `[head]` and the tail. A `Bin` literal holds only concrete
+        // bytes, so the singleton of the symbolic byte `head` is `append(\\, head)`
+        // (a byte appended to the empty bytestring), not a `Bin` literal.
+        let singleton: Term = Subterm::Prim(Prim::BinAppend(
+            Subterm::Prim(Prim::Bin(vec![])).into(),
+            Term::var(Var::free(&head_label)),
+        ))
+        .into();
+        let cons_value: Term = Subterm::Prim(Prim::BinConcat(vec![
+            singleton,
+            Term::var(Var::free(&tail_label)),
+        ]))
+        .into();
+
+        check(
+            context,
+            &cons_case.open(&[
+                &Term::var(Var::free(&head_label)),
+                &Term::var(Var::free(&tail_label)),
+                &Term::var(Var::free(&ih_label)),
+            ]),
+            motive.open(&[&cons_value]),
+        )
+    })?;
+
+    let cons_elaborated = Scope::close(
+        Three,
+        &[
+            head_label.as_str(),
+            tail_label.as_str(),
+            ih_label.as_str(),
+        ],
+        cons_body,
+    );
+
+    let result_type = motive.open(&[&head_elaborated]);
+    let rebuilt = Subterm::Match(Match {
+        head: head_elaborated,
+        motive,
+        cases: Cases::Inductive {
+            carrier: Carrier::Bin,
+            empty_case: empty_elaborated,
+            cons_case: cons_elaborated,
+        },
+    })
+    .into();
+
+    Ok((rebuilt, result_type))
+}
+
 fn elaborate_switch(
     context: &mut Context,
     head: &Term,
@@ -671,6 +760,11 @@ fn elaborate_match(
             empty_case,
             cons_case,
         } => elaborate_arr_match(context, head, motive, empty_case, cons_case, term, mode),
+        Cases::Inductive {
+            carrier: Carrier::Bin,
+            empty_case,
+            cons_case,
+        } => elaborate_bin_match(context, head, motive, empty_case, cons_case, term, mode),
     }
 }
 

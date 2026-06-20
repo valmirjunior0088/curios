@@ -127,6 +127,9 @@ pub enum Error {
     NotArrType {
         head_type: Box<Term>,
     },
+    NotBinType {
+        head_type: Box<Term>,
+    },
     WrongNumberOfArguments {
         expected: usize,
         got: usize,
@@ -332,6 +335,12 @@ impl Error {
         }
     }
 
+    pub fn not_bin_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotBinType {
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
     pub fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
         Self::WrongNumberOfArguments { expected, got }
     }
@@ -529,6 +538,7 @@ impl Error {
             | Self::NotNatType { head_type }
             | Self::NotBlnType { head_type }
             | Self::NotArrType { head_type }
+            | Self::NotBinType { head_type }
             | Self::NotAUnionType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
                 out.push(expected)
@@ -633,6 +643,9 @@ impl fmt::Display for Error {
             }
             Error::NotArrType { head_type } => {
                 write!(f, "expected Arr but got {head_type}")
+            }
+            Error::NotBinType { head_type } => {
+                write!(f, "expected Bin but got {head_type}")
             }
             Error::WrongNumberOfArguments { expected, got } => {
                 write!(

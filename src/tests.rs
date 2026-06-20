@@ -88,6 +88,63 @@ fn arr_match_is_a_foldr() {
 }
 
 #[test]
+fn bin_match_is_a_foldr() {
+    // Native `Bin` induction (slice 2): the `| \\ | (h, t), ih` eliminator, erased
+    // exactly like `Arr` — `Nat`-induction on the byte length, reusing the loop.
+    // The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr`
+    // probe as `arr_match_is_a_foldr`: the bytes `\01\02\03\04` fold to `4321`, not
+    // `1234`, pinning head = first byte and ih = fold of the tail.
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin};
+        let bytes : Bin = \01\02\03\04;
+        let digits : Nat =
+            match bytes : Nat
+            | \\ => 0
+            | (h, t), ih => Nat/add(Nat/mul(ih, 10), h)
+            end;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
+        "#;
+    assert_eq!(run(source), b"4321");
+}
+
+#[test]
+fn bin_concat_is_a_free_monoid() {
+    // `peel_bin` (core::spine) makes `Bin` a free monoid up to *definitional*
+    // equality: `concat` associates, the empty bytestring `\\` is its identity,
+    // and a literal run re-segments freely — all provable by `refl` for SYMBOLIC
+    // operands, which `reduce` cannot fold. Each binding's declared type forces
+    // `convert` to peel the two `BinConcat`s to a common normal form; without the
+    // peel these are stuck, distinct terms and `refl` would not check.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin};
+        let assoc(a : Bin, b : Bin, c : Bin)
+            -> Eq(Bin/concat(a, Bin/concat(b, c)), Bin/concat(Bin/concat(a, b), c)) =
+            Eq/refl();
+        let left_id(a : Bin) -> Eq(Bin/concat(\\, a), a) = Eq/refl();
+        let right_id(a : Bin) -> Eq(Bin/concat(a, \\), a) = Eq/refl();
+        let resegment(x : Bin)
+            -> Eq(Bin/concat(\01\02, x), Bin/concat(\01, Bin/concat(\02, x))) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn bin_concat_leading_byte_clash_is_rejected() {
+    // The dual: a leading-byte disagreement under a shared symbolic tail is a
+    // definite `Clash`, so `\01 ++ x` and `\02 ++ x` are never convertible and the
+    // `refl` is rejected. Guards `peel_bin` against deciding unequal values equal.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin};
+        let bad(x : Bin) -> Eq(Bin/concat(\01, x), Bin/concat(\02, x)) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
         std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))

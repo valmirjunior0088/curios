@@ -3,8 +3,8 @@ use {
     crate::{
         core,
         text::{
-            ArrMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
-            PatternLit, Prim, Subterm, Term,
+            ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
+            Pattern, PatternLit, Prim, Subterm, Term,
         },
     },
     num_bigint::BigUint,
@@ -303,6 +303,30 @@ impl<'a, 'b> Lower<'a, 'b> {
                     core::Term::arr_match(
                         self.term(head)?,
                         core::Term::metavar(self.context.fresh_metavar()),
+                        label,
+                        body,
+                        self.term(empty_case)?,
+                        head_label.clone(),
+                        tail_label.clone(),
+                        ih_label.clone(),
+                        self.scoped(
+                            [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                            || self.term(cons_case),
+                        )?,
+                    )
+                }
+                Match::Bin(BinMatch {
+                    head,
+                    motive,
+                    empty_case,
+                    head_label,
+                    tail_label,
+                    ih_label,
+                    cons_case,
+                }) => {
+                    let (label, body) = self.motive_parts(motive)?;
+                    core::Term::bin_match(
+                        self.term(head)?,
                         label,
                         body,
                         self.term(empty_case)?,
@@ -786,6 +810,30 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Term::arr_match(
                     self.collect(head, bind, binds)?,
                     core::Term::metavar(self.context.fresh_metavar()),
+                    label,
+                    body,
+                    self.region(empty_case, bind)?,
+                    head_label.clone(),
+                    tail_label.clone(),
+                    ih_label.clone(),
+                    self.scoped(
+                        [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                        || self.region(cons_case, bind),
+                    )?,
+                )
+            }
+            Match::Bin(BinMatch {
+                head,
+                motive,
+                empty_case,
+                head_label,
+                tail_label,
+                ih_label,
+                cons_case,
+            }) => {
+                let (label, body) = self.motive_parts(motive)?;
+                core::Term::bin_match(
+                    self.collect(head, bind, binds)?,
                     label,
                     body,
                     self.region(empty_case, bind)?,

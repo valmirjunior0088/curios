@@ -320,6 +320,11 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
             empty_case,
             cons_case,
         } => erase_arr_match(context, head, motive, elem, empty_case, cons_case),
+        Cases::Inductive {
+            carrier: Carrier::Bin,
+            empty_case,
+            cons_case,
+        } => erase_bin_match(context, head, motive, empty_case, cons_case),
     }
 }
 
@@ -364,6 +369,58 @@ fn erase_arr_match(
         Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into();
     let tail_value: Term = Subterm::Prim(Prim::ArrSlice(
         elem.clone(),
+        head.clone(),
+        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&pred_label)))).into(),
+        len.clone(),
+    ))
+    .into();
+
+    let succ_body = cons_case.open(&[
+        &head_value,
+        &tail_value,
+        &Term::var(Var::free(&ih_label)),
+    ]);
+    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+
+    erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
+}
+
+/// Erase a `Bin` induction exactly as `erase_arr_match` does for `Arr` — `Nat`
+/// induction on the bytestring's length, reusing the `Nat` loop emitter wholesale.
+/// `Bin` carries no element type, so this is the `erase_arr_match` desugar with the
+/// element parameter dropped (`BinLen`/`BinGet`/`BinSlice` for `ArrLen`/`ArrGet`/
+/// `ArrSlice`); the recovered byte is a `Nat`, the `Bin`'s generator.
+fn erase_bin_match(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    empty_case: &Term,
+    cons_case: &Scope<Three>,
+) -> Result<ersd::Term, Error> {
+    let len: Term = Subterm::Prim(Prim::BinLen(head.clone())).into();
+    let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
+
+    // Nat motive `Q(i) = P(suffix of length i) = motive[ b[len - i ..] ]`.
+    let i_label = context.fresh(None);
+    let suffix_i: Term = Subterm::Prim(Prim::BinSlice(
+        head.clone(),
+        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&i_label)))).into(),
+        len.clone(),
+    ))
+    .into();
+    let nat_motive = Scope::close(Many(1), &[i_label.as_str()], motive.open(&[&suffix_i]));
+
+    // Successor arm: recover the byte and tail at index `len - 1 - pred`.
+    let pred_label = context.fresh(cons_case.first_label());
+    let ih_label = context.fresh(cons_case.third_label());
+
+    let index: Term = Subterm::Prim(Prim::nat_sub(
+        Subterm::Prim(Prim::nat_sub(len.clone(), one)),
+        Term::var(Var::free(&pred_label)),
+    ))
+    .into();
+    let head_value: Term = Subterm::Prim(Prim::BinGet(head.clone(), index)).into();
+    let tail_value: Term = Subterm::Prim(Prim::BinSlice(
         head.clone(),
         Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&pred_label)))).into(),
         len.clone(),

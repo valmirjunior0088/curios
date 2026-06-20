@@ -529,6 +529,48 @@ impl Term {
         }))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn bin_match<H, M, EC, HL, TL, IL, CC>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        empty_case: EC,
+        head_label: HL,
+        tail_label: TL,
+        ih_label: IL,
+        cons_case: CC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        EC: Into<Term>,
+        HL: Into<String>,
+        TL: Into<String>,
+        IL: Into<String>,
+        CC: Into<Term>,
+    {
+        let head_label = head_label.into();
+        let tail_label = tail_label.into();
+        let ih_label = ih_label.into();
+
+        Self::from(Subterm::Match(Match {
+            head: head.into(),
+            motive: match motive_label {
+                Some(l) => Scope::close(Many(1), &[l], motive.into()),
+                None => Scope::constant(Many(1), motive.into()),
+            },
+            cases: Cases::Inductive {
+                carrier: Carrier::Bin,
+                empty_case: empty_case.into(),
+                cons_case: Scope::close(
+                    Three,
+                    &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
+                    cons_case.into(),
+                ),
+            },
+        }))
+    }
+
     pub fn switch<H, M, I, B, D>(
         head: H,
         motive_label: Option<&str>,
@@ -863,6 +905,7 @@ pub enum Cases {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Carrier {
     Arr(Term),
+    Bin,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1054,11 +1097,13 @@ impl Subterm {
                         });
                     }
                     Cases::Inductive {
-                        carrier: Carrier::Arr(elem),
+                        carrier,
                         empty_case,
                         cons_case,
                     } => {
-                        elem.collect_metavars(ids);
+                        if let Carrier::Arr(elem) = carrier {
+                            elem.collect_metavars(ids);
+                        }
                         empty_case.collect_metavars(ids);
                         cons_case.body().collect_metavars(ids);
                     }
@@ -1255,11 +1300,14 @@ impl Bound for Subterm {
                         }),
                     },
                     Cases::Inductive {
-                        carrier: Carrier::Arr(elem),
+                        carrier,
                         empty_case,
                         cons_case,
                     } => Cases::Inductive {
-                        carrier: Carrier::Arr(visit.visit_subterm(elem)),
+                        carrier: match carrier {
+                            Carrier::Arr(elem) => Carrier::Arr(visit.visit_subterm(elem)),
+                            Carrier::Bin => Carrier::Bin,
+                        },
                         empty_case: visit.visit_subterm(empty_case),
                         cons_case: visit.visit_scope(cons_case),
                     },
@@ -1368,10 +1416,16 @@ impl Bound for Subterm {
                     )
                 }
                 Cases::Inductive {
-                    carrier: Carrier::Arr(elem),
+                    carrier,
                     empty_case,
                     cons_case,
-                } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
+                } => {
+                    let carrier_reach = match carrier {
+                        Carrier::Arr(elem) => elem.reach(),
+                        Carrier::Bin => 0,
+                    };
+                    carrier_reach.max(empty_case.reach()).max(cons_case.reach())
+                }
             }),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())

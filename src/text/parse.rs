@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, ArrMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
-        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
-        PatternLit,
-        Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem,
+        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
+        LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch,
+        Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term,
+        TopCase, TopItem,
         TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
     },
     crate::{
@@ -735,8 +735,9 @@ fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
         .and_keep(lazy(parse_term))
 }
 
-// The `| (head, tail), ih =>` cons arm of an `Arr` fold.
-fn parse_arr_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
+// The `| (head, tail), ih =>` cons arm of a native-inductive fold. Carrier-neutral
+// (`Arr` and `Bin` share it); only the empty arm's literal selects the carrier.
+fn parse_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
     parse_literal("|")
         .and_drop(parse_literal("("))
         .and_keep(parse_identifier())
@@ -757,11 +758,39 @@ fn parse_arr_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
 
 fn parse_arr_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(catch(parse_arr_empty_branch()).and(parse_arr_cons_branch()))
+        .and(catch(parse_arr_empty_branch()).and(parse_cons_branch()))
         .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
                 Subterm::Match(Match::Arr(ArrMatch {
+                    head,
+                    motive,
+                    empty_case,
+                    head_label,
+                    tail_label,
+                    ih_label,
+                    cons_case,
+                }))
+            },
+        )
+        .map(Into::into)
+}
+
+// The `| \\ =>` identity arm of a `Bin` fold (the empty bytestring literal).
+fn parse_bin_empty_branch<'a>() -> Parser<'a, Term> {
+    parse_literal("|")
+        .and_drop(parse_literal("\\\\"))
+        .and_drop(parse_literal("=>"))
+        .and_keep(lazy(parse_term))
+}
+
+fn parse_bin_match<'a>() -> Parser<'a, Term> {
+    catch(parse_match_prefix())
+        .and(catch(parse_bin_empty_branch()).and(parse_cons_branch()))
+        .and_drop(parse_keyword("end"))
+        .map(
+            |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
+                Subterm::Match(Match::Bin(BinMatch {
                     head,
                     motive,
                     empty_case,
@@ -780,6 +809,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
         .or(catch(parse_nat_match()))
         .or(catch(parse_nat_switch()))
         .or(catch(parse_arr_match()))
+        .or(catch(parse_bin_match()))
         .or(parse_union_match())
 }
 

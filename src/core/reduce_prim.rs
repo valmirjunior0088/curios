@@ -787,7 +787,16 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 .iter()
                 .map(|e| reduce(context, e.clone()))
                 .collect::<Result<_, _>>()?;
-            let merged = reduced.iter().try_fold(Vec::new(), |mut acc, t| {
+            // Drop the empty-bytestring identity from the concatenation, so
+            // `concat(\\, a)`/`concat(a, \\)` collapse to `a` — the monoid unit
+            // law, the definitional partner of `peel_bin`'s `\\`-handling
+            // (`core::spine`), without which a symbolic identity stays a stuck
+            // `BinConcat` distinct from its bare operand.
+            let mut kept: Vec<Term> = reduced
+                .into_iter()
+                .filter(|t| !matches!(&**t, Subterm::Prim(Prim::Bin(b)) if b.is_empty()))
+                .collect();
+            let merged = kept.iter().try_fold(Vec::new(), |mut acc, t| {
                 if let Subterm::Prim(Prim::Bin(b)) = &**t {
                     acc.extend(b);
                     Some(acc)
@@ -796,8 +805,11 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 }
             });
             Ok(match merged {
+                // All operands literal (or all dropped) — one byte literal.
                 Some(bytes) => Subterm::Prim(Prim::Bin(bytes)),
-                None => Subterm::Prim(Prim::BinConcat(reduced)),
+                // A lone surviving operand is the concatenation itself.
+                None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
+                None => Subterm::Prim(Prim::BinConcat(kept)),
             })
         }
         Prim::BinFlatten(operand) => {

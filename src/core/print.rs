@@ -206,11 +206,13 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                 }
                 Cases::Union { cases, .. } => cases.iter().for_each(|(_, s)| scope(out, s)),
                 Cases::Inductive {
-                    carrier: Carrier::Arr(elem),
+                    carrier,
                     empty_case,
                     cons_case,
                 } => {
-                    collect_labels(elem, out);
+                    if let Carrier::Arr(elem) = carrier {
+                        collect_labels(elem, out);
+                    }
                     collect_labels(empty_case, out);
                     scope(out, cons_case);
                 }
@@ -984,10 +986,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 Cases::Nat { .. } => "Nat.fold ",
                 Cases::Switch { .. } => "Nat.match ",
                 Cases::Union { .. } => "match ",
-                Cases::Inductive {
-                    carrier: Carrier::Arr(_),
-                    ..
-                } => "Arr.fold ",
+                Cases::Inductive { carrier, .. } => match carrier {
+                    Carrier::Arr(_) => "Arr.fold ",
+                    Carrier::Bin => "Bin.fold ",
+                },
             };
 
             let prefix = flat([
@@ -1083,14 +1085,19 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         .collect::<Vec<_>>(),
                 ),
                 Cases::Inductive {
-                    carrier: Carrier::Arr(_),
+                    carrier,
                     empty_case,
                     cons_case,
                 } => {
+                    // Only the identity arm's literal distinguishes the carriers.
+                    let empty_arm = match carrier {
+                        Carrier::Arr(_) => "\n| [] =>\n",
+                        Carrier::Bin => "\n| \\\\ =>\n",
+                    };
                     let ((head_label, tail_label, ih_label), cons_case) =
                         open_scope_three(cons_case, depth);
                     flat([
-                        pure("\n| [] =>\n"),
+                        pure(empty_arm),
                         indent(flat([print_term(empty_case, depth), pure(";")])),
                         pure("\n| ("),
                         pure(display_label(&head_label)),

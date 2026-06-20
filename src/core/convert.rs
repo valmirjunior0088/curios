@@ -585,17 +585,24 @@ impl Convert {
 
             (
                 Cases::Inductive {
-                    carrier: Carrier::Arr(this_elem),
+                    carrier: this_carrier,
                     empty_case: this_empty,
                     cons_case: this_cons,
                 },
                 Cases::Inductive {
-                    carrier: Carrier::Arr(that_elem),
+                    carrier: that_carrier,
                     empty_case: that_empty,
                     cons_case: that_cons,
                 },
             ) => {
-                self.enqueue(Term::type_(), this_elem, that_elem);
+                match (this_carrier, that_carrier) {
+                    (Carrier::Arr(this_elem), Carrier::Arr(that_elem)) => {
+                        self.enqueue(Term::type_(), this_elem, that_elem);
+                    }
+                    (Carrier::Bin, Carrier::Bin) => {}
+                    // Distinct carriers are never structurally convertible.
+                    _ => return Ok(false),
+                }
                 self.enqueue(Term::type_(), this_empty, that_empty);
 
                 let head_label: Term = Term::var(Var::free(context.fresh(None)));
