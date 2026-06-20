@@ -3197,3 +3197,75 @@ fn cell_two_cells_are_distinct() {
         b"7",
     );
 }
+
+#[test]
+fn utf8_inductive_spike() {
+    // DE-RISKING PROBE (Str migration): a state-indexed inductive relation over a
+    // native `Bin` index, with `cons(c, t)` encoded as `concat(append(\\, c), t)`.
+    // The point is `seq` (the concatenation lemma underlying `concat_closed`): a
+    // 2-case induction on the derivation whose arms close ONLY if the native-Bin
+    // free-monoid laws hold *definitionally* — `concat(\\, b) ≡ b` (stop arm) and
+    // `concat(concat(single c, t), b) ≡ concat(single c, concat(t, b))` (more arm).
+    // If this typechecks, the inductive-`IsUtf8` approach is viable and the
+    // cons-index inversion limit does not bite the proof path.
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin};
+
+        union Scan
+        | lead()
+        | cont()
+        | bad()
+        end
+
+        let step(c : Nat, s : Scan) -> Scan =
+            match s
+            | lead() => match Nat/lt(c, 128) | true => Scan/lead() | false => Scan/cont() end
+            | cont() => Scan/lead()
+            | bad() => Scan/bad()
+            end;
+
+        union Utf8 : (s : Scan, b : Bin)
+        | stop() : (Scan/lead(), \\)
+        | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
+            : (st, Bin/concat(Bin/append(\\, c), t))
+        end
+
+        rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
+            -> Utf8(s, Bin/concat(a, b)) =
+            match va : (w : Utf8(q, x)) => Utf8(q, Bin/concat(x, b))
+            | stop() => vb
+            | more(c, st, t, rest) => Utf8/more(c, st, Bin/concat(t, b), seq(rest, vb))
+            end;
+
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn utf8_construction_spike() {
+    // DE-RISKING PROBE 2 (Str migration), the CONSTRUCTING side: the `of_bin`
+    // checker must BUILD a derivation whose index matches the input `Bin`, by
+    // native-`Bin` recursion. That needs the native eliminator's motive to be
+    // DEPENDENT — refining `b` to `cons(h, t)` in the cons arm so the arm can
+    // return `P(cons h t)` from `ih : P(t)`. Probe with the trivial all-accepting
+    // relation `All` built by induction on `b`. If this typechecks, the checker is
+    // expressible (real decision-procedure work, but no missing primitive).
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin};
+
+        union All : (b : Bin)
+        | empty() : (\\)
+        | snoc(c : Nat, t : Bin, rest : All(t)) : (Bin/concat(Bin/append(\\, c), t))
+        end
+
+        rec build(b : Bin) -> All(b) =
+            match b : (b) => All(b)
+            | \\ => All/empty()
+            | (h, t), ih => All/snoc(h, t, ih)
+            end;
+
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
