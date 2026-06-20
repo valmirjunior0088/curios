@@ -345,6 +345,163 @@ fn lowers_and_runs_arr_concat() {
 }
 
 #[test]
+fn lowers_and_runs_bin_flatten() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+
+    module.add_const(cont::ValueName::from("B1"), cont::Data::Bin(vec![1, 2]));
+    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(vec![3, 4, 5]));
+    module.add_const(
+        cont::ValueName::from("PARTS"),
+        cont::Data::Arr(vec![
+            cont::ValueName::from("B1"),
+            cont::ValueName::from("B2"),
+        ]),
+    );
+    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![
+                    (
+                        cont::ValueName::from("flat"),
+                        cont::Value::Eval(cont::Code::BinFlatten(cont::ValueName::from("PARTS"))),
+                    ),
+                    // flat = [1, 2, 3, 4, 5]; read index 3 to prove order + offset.
+                    (
+                        cont::ValueName::from("byte"),
+                        cont::Value::Eval(cont::Code::BinGet(
+                            cont::ValueName::from("flat"),
+                            cont::ValueName::from("THREE"),
+                        )),
+                    ),
+                    (
+                        cont::ValueName::from("str"),
+                        cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("byte"))),
+                    ),
+                ],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
+                    resume: cont::BlockName::from("io_done"),
+                }),
+            },
+        },
+    );
+
+    assert_eq!(i32_result(&module), 4);
+}
+
+#[test]
+fn lowers_and_runs_arr_flatten() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+
+    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("TWO"), cont::Data::Nat(2));
+    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+    module.add_const(
+        cont::ValueName::from("A1"),
+        cont::Data::Arr(vec![cont::ValueName::from("ONE")]),
+    );
+    module.add_const(
+        cont::ValueName::from("A2"),
+        cont::Data::Arr(vec![
+            cont::ValueName::from("TWO"),
+            cont::ValueName::from("THREE"),
+        ]),
+    );
+    module.add_const(
+        cont::ValueName::from("PARTS"),
+        cont::Data::Arr(vec![
+            cont::ValueName::from("A1"),
+            cont::ValueName::from("A2"),
+        ]),
+    );
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![
+                    (
+                        cont::ValueName::from("flat"),
+                        cont::Value::Eval(cont::Code::ArrFlatten(cont::ValueName::from("PARTS"))),
+                    ),
+                    // flat = [1, 2, 3]; read index 2 to prove order + offset.
+                    (
+                        cont::ValueName::from("elem"),
+                        cont::Value::Eval(cont::Code::ArrGet(
+                            cont::ValueName::from("flat"),
+                            cont::ValueName::from("TWO"),
+                        )),
+                    ),
+                    (
+                        cont::ValueName::from("str"),
+                        cont::Value::Eval(cont::Code::NatToStr(cont::ValueName::from("elem"))),
+                    ),
+                ],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
+                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
+                    handle: cont::ValueName::from("STDOUT"),
+                    bytes: cont::ValueName::from("str"),
+                    resume: cont::BlockName::from("io_done"),
+                }),
+            },
+        },
+    );
+
+    assert_eq!(i32_result(&module), 3);
+}
+
+#[test]
 fn lowers_and_runs_flt_floor() {
     let mut module = cont::Module::new();
     module.set_entry(cont::FuncName::from("main"));

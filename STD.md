@@ -123,7 +123,7 @@ Booleans. The values are the literals `true`/`false`, eliminated with [`match`](
 
 ### `/std/Bin`
 
-Raw byte sequences. `fold`, `concat_all`, and `join` are library helpers; the rest are `/sys` primitives.
+Raw byte sequences. `fold` and `join` are library helpers; the rest are `/sys` primitives.
 
 | Binding             | Type                                      | Description                                |
 | ------------------- | ----------------------------------------- | ------------------------------------------ |
@@ -133,8 +133,8 @@ Raw byte sequences. `fold`, `concat_all`, and `join` are library helpers; the re
 | `slice(b, s, e)`    | `(Bin, Nat, Nat) -> Bin`                  | Subsequence from `s` to `e` (traps if out of range) |
 | `append(b, x)`      | `(Bin, Nat) -> Bin`                       | Append a single byte (`x` taken mod 256)   |
 | `concat(a, b)`      | `(Bin, Bin) -> Bin`                       | Concatenate two sequences                  |
+| `flatten(parts)`    | `(Arr(Bin)) -> Bin`                       | Concatenate every part in one allocation   |
 | `fold(b, init, f)`  | `(@A : Type, Bin, A, (Nat, A) -> A) -> A` | Left fold over the bytes                   |
-| `concat_all(parts)` | `(Arr(Bin)) -> Bin`                       | Concatenate every part                     |
 | `join(sep, parts)`  | `(Bin, Arr(Bin)) -> Bin`                  | Concatenate with a separator between parts |
 
 ### `/std/Arr`
@@ -148,6 +148,7 @@ Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold`, `map`, and 
 | `slice(a, s, e)`     | `(@T : Type, Arr(T), Nat, Nat) -> Arr(T)`             | Subarray from `s` to `e`    |
 | `append(a, x)`       | `(@T : Type, Arr(T), T) -> Arr(T)`                    | Append a single element     |
 | `concat(a, b)`       | `(@T : Type, Arr(T), Arr(T)) -> Arr(T)`               | Concatenate two arrays      |
+| `flatten(a)`         | `(@T : Type, Arr(Arr(T))) -> Arr(T)`                  | Concatenate every inner array in one allocation |
 | `fold(arr, init, f)` | `(@T : Type, @A : Type, Arr(T), A, (T, A) -> A) -> A` | Left fold over the elements |
 | `map(f, arr)`        | `(@A : Type, @B : Type, (A) -> B, Arr(A)) -> Arr(B)`  | Elementwise map             |
 | `balanced(n, empty, single, combine)` | `(@A : Type, Nat, A, (Nat) -> A, (A, A) -> A) -> A` | Balanced fold over indices `0..n`: `single` per index, `combine` to merge halves, `empty` when `n = 0` |
@@ -166,7 +167,7 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 | `of_bin(b)`         | `(Bin) -> Option(Str)`   | Checked construction: `some` iff `b` is well-formed UTF-8      |
 | `is_utf8(b)`        | `(Bin) -> Bln`           | Whether `b` is well-formed UTF-8                               |
 | `concat(a, b)`      | `(Str, Str) -> Str`      | Concatenate two strings                                        |
-| `concat_all(parts)` | `(Arr(Str)) -> Str`      | Concatenate every part                                         |
+| `flatten(parts)`    | `(Arr(Str)) -> Str`      | Concatenate every part                                         |
 | `join(sep, parts)`  | `(Str, Arr(Str)) -> Str` | Concatenate with a separator between parts                     |
 | `eql(a, b)`         | `(Str, Str) -> Bln`      | String equality (byte equality; UTF-8 is canonical)            |
 | `len(s)`            | `(Str) -> Nat`           | Codepoint count (Unicode scalar values, _not_ bytes/graphemes) |

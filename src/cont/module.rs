@@ -96,11 +96,13 @@ pub enum Code {
     BinSlice(ValueName, ValueName, ValueName),
     BinAppend(ValueName, ValueName),
     BinConcat(Vec<ValueName>),
+    BinFlatten(ValueName),
     ArrLen(ValueName),
     ArrGet(ValueName, ValueName),
     ArrSlice(ValueName, ValueName, ValueName),
     ArrAppend(ValueName, ValueName),
     ArrConcat(Vec<ValueName>),
+    ArrFlatten(ValueName),
     TplGet(ValueName, usize),
 }
 

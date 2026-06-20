@@ -163,6 +163,212 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
+    /// Push the inner array `outer[idx]` on the stack, cast to its concrete type.
+    /// The outer array is always the generic ref array (`arr_type`), whose elements
+    /// are top refs, so each read is followed by a cast to `inner` -- `bin_type`
+    /// for `Bin.flatten`, `arr_type` for `Arr.flatten`.
+    fn array_get_cast_instrs(
+        &self,
+        operand: &'a cont::ValueName,
+        idx_local: &wasm::LocalName,
+        arr_type: &wasm::TypeName,
+        inner: &wasm::RefType,
+    ) -> Vec<wasm::Instr> {
+        let mut instrs = self.context.load_value_instrs(operand, LoadAs::Arr);
+        instrs.push(wasm::Instr::LocalGet {
+            local_name: idx_local.clone(),
+        });
+        instrs.push(wasm::Instr::ArrayGet {
+            type_name: arr_type.clone(),
+        });
+        instrs.push(wasm::Instr::RefCast {
+            ref_type: inner.clone(),
+        });
+        instrs
+    }
+
+    /// Flatten a runtime `Arr` of arrays into one array in a single allocation.
+    /// Two passes over the outer array: the first sums the inner lengths to size
+    /// one result; the second copies each inner array into it at a running offset --
+    /// no intermediate results. `elem_type` is the inner *and* result array type
+    /// (`bin_type` for `Bin.flatten`, `arr_type` for `Arr.flatten`); `result_load`
+    /// reads the freshly-built result back for the copy.
+    fn emit_flatten(
+        &mut self,
+        result_local: &wasm::LocalName,
+        value_name: &'a cont::ValueName,
+        operand: &'a cont::ValueName,
+        elem_type: wasm::TypeName,
+        result_load: LoadAs,
+    ) {
+        let arr_type = self.context.table().arr_type();
+        let inner = wasm::RefType {
+            is_nullable: false,
+            heap_type: wasm::HeapType::Concrete(elem_type.clone()),
+        };
+
+        let count_local = self
+            .context
+            .push_local("count", wasm::ValType::Num(wasm::NumType::I32));
+        let idx_local = self
+            .context
+            .push_local("idx", wasm::ValType::Num(wasm::NumType::I32));
+        let total_local = self
+            .context
+            .push_local("total", wasm::ValType::Num(wasm::NumType::I32));
+        let offset_local = self
+            .context
+            .push_local("offset", wasm::ValType::Num(wasm::NumType::I32));
+
+        let sum_loop = wasm::LabelName::from(format!("{}_sum_loop", result_local));
+        let sum_step = wasm::LabelName::from(format!("{}_sum_step", result_local));
+        let copy_loop = wasm::LabelName::from(format!("{}_copy_loop", result_local));
+        let copy_step = wasm::LabelName::from(format!("{}_copy_step", result_local));
+
+        // count = outer.len
+        self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Arr));
+        self.emit_instr(wasm::Instr::ArrayLen);
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: count_local.clone(),
+        });
+
+        // --- pass 1: total = sum of inner lengths ---
+        // The body sits under an `idx < count` guard and re-enters with `br`; when
+        // the guard fails the `loop` falls through its own end, so no separate exit
+        // block is needed -- the loop label alone carries the iteration.
+        self.emit_instr(wasm::Instr::I32Const { value: 0 });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: total_local.clone(),
+        });
+        self.emit_instr(wasm::Instr::I32Const { value: 0 });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: idx_local.clone(),
+        });
+
+        // total += outer[idx].len; idx += 1; continue
+        let mut sum_step_body = vec![wasm::Instr::LocalGet {
+            local_name: total_local.clone(),
+        }];
+        sum_step_body.extend(self.array_get_cast_instrs(operand, &idx_local, &arr_type, &inner));
+        sum_step_body.extend([
+            wasm::Instr::ArrayLen,
+            wasm::Instr::I32Add,
+            wasm::Instr::LocalSet {
+                local_name: total_local.clone(),
+            },
+            wasm::Instr::LocalGet {
+                local_name: idx_local.clone(),
+            },
+            wasm::Instr::I32Const { value: 1 },
+            wasm::Instr::I32Add,
+            wasm::Instr::LocalSet {
+                local_name: idx_local.clone(),
+            },
+            wasm::Instr::Br {
+                label_name: sum_loop.clone(),
+            },
+        ]);
+
+        self.emit_instr(wasm::Instr::Loop {
+            label_name: sum_loop,
+            block_type: wasm::BlockType::Empty,
+            instructions: vec![
+                wasm::Instr::LocalGet {
+                    local_name: idx_local.clone(),
+                },
+                wasm::Instr::LocalGet {
+                    local_name: count_local.clone(),
+                },
+                wasm::Instr::I32LtU,
+                wasm::Instr::If {
+                    label_name: sum_step,
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: sum_step_body,
+                    else_instructions: vec![],
+                },
+            ],
+        });
+
+        // result = new array sized `total`
+        self.emit_instr(wasm::Instr::LocalGet {
+            local_name: total_local,
+        });
+        self.emit_instr(wasm::Instr::ArrayNewDefault {
+            type_name: elem_type.clone(),
+        });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: result_local.clone(),
+        });
+
+        // --- pass 2: copy each inner array at a running offset ---
+        self.emit_instr(wasm::Instr::I32Const { value: 0 });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: offset_local.clone(),
+        });
+        self.emit_instr(wasm::Instr::I32Const { value: 0 });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: idx_local.clone(),
+        });
+
+        // array.copy: dest = result, dest_off = offset, src = outer[idx],
+        // src_off = 0, len = outer[idx].len
+        let mut copy_step_body = self.context.load_value_instrs(value_name, result_load);
+        copy_step_body.push(wasm::Instr::LocalGet {
+            local_name: offset_local.clone(),
+        });
+        copy_step_body.extend(self.array_get_cast_instrs(operand, &idx_local, &arr_type, &inner));
+        copy_step_body.push(wasm::Instr::I32Const { value: 0 });
+        copy_step_body.extend(self.array_get_cast_instrs(operand, &idx_local, &arr_type, &inner));
+        copy_step_body.push(wasm::Instr::ArrayLen);
+        copy_step_body.push(wasm::Instr::ArrayCopy {
+            source_name: elem_type.clone(),
+            target_name: elem_type,
+        });
+        // offset += outer[idx].len; idx += 1; continue
+        copy_step_body.push(wasm::Instr::LocalGet {
+            local_name: offset_local.clone(),
+        });
+        copy_step_body.extend(self.array_get_cast_instrs(operand, &idx_local, &arr_type, &inner));
+        copy_step_body.extend([
+            wasm::Instr::ArrayLen,
+            wasm::Instr::I32Add,
+            wasm::Instr::LocalSet {
+                local_name: offset_local.clone(),
+            },
+            wasm::Instr::LocalGet {
+                local_name: idx_local.clone(),
+            },
+            wasm::Instr::I32Const { value: 1 },
+            wasm::Instr::I32Add,
+            wasm::Instr::LocalSet {
+                local_name: idx_local.clone(),
+            },
+            wasm::Instr::Br {
+                label_name: copy_loop.clone(),
+            },
+        ]);
+
+        self.emit_instr(wasm::Instr::Loop {
+            label_name: copy_loop,
+            block_type: wasm::BlockType::Empty,
+            instructions: vec![
+                wasm::Instr::LocalGet {
+                    local_name: idx_local.clone(),
+                },
+                wasm::Instr::LocalGet {
+                    local_name: count_local.clone(),
+                },
+                wasm::Instr::I32LtU,
+                wasm::Instr::If {
+                    label_name: copy_step,
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: copy_step_body,
+                    else_instructions: vec![],
+                },
+            ],
+        });
+    }
+
     pub fn emit(&mut self, value_name: &'a cont::ValueName, op: &'a cont::Code) {
         let result_local = self
             .context
@@ -1095,6 +1301,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     }
                 }
             }
+            cont::Code::BinFlatten(operand) => {
+                let bin_type = self.context.table().bin_type();
+                self.emit_flatten(&result_local, value_name, operand, bin_type, LoadAs::Bin);
+            }
             cont::Code::ArrLen(lst) => self.emit_unary_op(
                 &result_local,
                 lst,
@@ -1271,6 +1481,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                         }
                     }
                 }
+            }
+            cont::Code::ArrFlatten(operand) => {
+                let arr_type = self.context.table().arr_type();
+                self.emit_flatten(&result_local, value_name, operand, arr_type, LoadAs::Arr);
             }
             cont::Code::TplGet(tuple, index) => {
                 let tpl_n_type = self.context.table().find_tpl_type(*index + 1);

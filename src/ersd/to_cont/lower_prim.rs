@@ -434,6 +434,9 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
 
             work.fresh(cont::Value::Eval(cont::Code::BinConcat(names)))
         }
+        ersd::PurePrim::BinFlatten(operand) => {
+            lower_pure_unary_code(work, operand, frame, cont::Code::BinFlatten)
+        }
         ersd::PurePrim::Arr(elements) => {
             let names = lower_pure_names(work, elements, frame);
 
@@ -453,6 +456,9 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
             let names = lower_pure_names(work, operands, frame);
 
             work.fresh(cont::Value::Eval(cont::Code::ArrConcat(names)))
+        }
+        ersd::PurePrim::ArrFlatten(operand) => {
+            lower_pure_unary_code(work, operand, frame, cont::Code::ArrFlatten)
         }
         // A handle erases to its host token bytes: the LE encoding of the token
         // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
@@ -1108,6 +1114,9 @@ fn lower_value_pure_prim<'b>(
         ersd::PurePrim::BinConcat(operands) => {
             lower_bin_concat(work, operands, frame, vec![], cont)
         }
+        ersd::PurePrim::BinFlatten(operand) => {
+            lower_unary_code(work, operand, frame, cont, cont::Code::BinFlatten)
+        }
         ersd::PurePrim::Arr(elements) => lower_lst(work, elements, frame, vec![], cont),
         ersd::PurePrim::ArrLen(lst) => lower_unary_code(work, lst, frame, cont, cont::Code::ArrLen),
         ersd::PurePrim::ArrGet(lst, idx) => {
@@ -1121,6 +1130,9 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::ArrConcat(operands) => {
             lower_arr_concat(work, operands, frame, vec![], cont)
+        }
+        ersd::PurePrim::ArrFlatten(operand) => {
+            lower_unary_code(work, operand, frame, cont, cont::Code::ArrFlatten)
         }
     }
 }

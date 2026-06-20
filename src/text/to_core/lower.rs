@@ -1542,6 +1542,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BinConcat(left, right) => {
                 core::Prim::bin_concat([self.term(left)?, self.term(right)?])
             }
+            Prim::BinFlatten(operand) => core::Prim::bin_flatten(self.term(operand)?),
             Prim::ArrType(inner) => core::Prim::arr_type(self.term(inner)?),
             Prim::Arr(elems) => core::Prim::Arr(
                 elems
@@ -1564,6 +1565,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
             Prim::ArrConcat(ty, left, right) => {
                 core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
+            }
+            Prim::ArrFlatten(ty, operand) => {
+                core::Prim::arr_flatten(self.term(ty)?, self.term(operand)?)
             }
             Prim::CellType(inner) => core::Prim::cell_type(self.term(inner)?),
             Prim::Cell(type_, init) => core::Prim::cell_new(self.term(type_)?, self.term(init)?),

@@ -1703,7 +1703,7 @@ fn str_get_indexes_codepoints_of_every_width() {
         use /std/{Str, Nat, Io};
         match Str/of_bin(\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
-            Io/print(Str/concat_all([
+            Io/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
                 Nat/to_str(Str/get(s, 0)), ",",
                 Nat/to_str(Str/get(s, 1)), ",",
@@ -1877,7 +1877,7 @@ fn nat_bitwise_ops_execute() {
             | error(_) => \\
             end;
         let x = Bin/get(bytes, 0);
-        let r = Str/concat_all([
+        let r = Str/flatten([
             Nat/to_str(Nat/and(x, 15)), ",",
             Nat/to_str(Nat/or(x, 128)), ",",
             Nat/to_str(Nat/xor(x, 255)), ",",
@@ -1915,7 +1915,7 @@ fn int_bitwise_ops_execute() {
             end;
         let x = Nat/to_int(Bin/get(bytes, 0));
         let neg = Int/sub(+0, x);
-        let r = Str/concat_all([
+        let r = Str/flatten([
             Int/to_str(Int/and(x, +15)), ",",
             Int/to_str(Int/or(x, +128)), ",",
             Int/to_str(Int/xor(x, +255)), ",",
@@ -2469,7 +2469,7 @@ fn http_perform_parses_a_scripted_response() {
                 end;
             match Str/of_bin(response.body) : {}
             | some(body) =>
-                let _ = Io/write(Io/stdout, Str/to_bin(Str/concat_all([
+                let _ = Io/write(Io/stdout, Str/to_bin(Str/flatten([
                     Nat/to_str(response.status.code), " ", ct, " ", body
                 ]))); ()
             | none() => let _ = Io/write(Io/stdout, Str/to_bin("bad body")); ()

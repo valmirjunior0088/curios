@@ -21,7 +21,7 @@ fn main() {
 
         match Task/block_on(Http/perform(Http/get("example.com", 80, "/"))) : {}
         | success(response) =>
-            Io/print(Str/concat_all([
+            Io/print(Str/flatten([
                 "status: ",
                 Nat/to_str(response.status.code),
                 " ",

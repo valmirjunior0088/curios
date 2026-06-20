@@ -8,9 +8,6 @@ pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
     | pred + 1, ih => f(get(b, pred), ih)
     end;
 
-pub let concat_all(parts : Arr(Bin)) -> Bin =
-    Arr/balanced(Arr/len(parts), \\, (i) => Arr/get(parts, i), concat);
-
 pub let join(sep : Bin, parts : Arr(Bin)) -> Bin =
     Arr/balanced(Arr/len(parts), \\, (i) => Arr/get(parts, i),
         (l, r) => concat(concat(l, sep), r));

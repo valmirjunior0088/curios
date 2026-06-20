@@ -98,22 +98,22 @@ let header_lookup(headers : Arr({Str, Str}), name : Str) -> Option(Str) =
         end);
 
 let render_header(pair : {Str, Str}) -> Str =
-    Str/concat_all([pair.0, ": ", pair.1, "\r\n"]);
+    Str/flatten([pair.0, ": ", pair.1, "\r\n"]);
 
 let content_length(body : Bin) -> Str =
     match Nat/eql(Bin/len(body), 0) : Str
     | true => ""
-    | false => Str/concat_all(["Content-Length: ", Nat/to_str(Bin/len(body)), "\r\n"])
+    | false => Str/flatten(["Content-Length: ", Nat/to_str(Bin/len(body)), "\r\n"])
     end;
 
 pub let render(request : Request) -> Bin =
     Bin/concat(
-        Str/to_bin(Str/concat_all([
+        Str/to_bin(Str/flatten([
             method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
             "Host: ", request.host, "\r\n",
             "Connection: close\r\n",
             content_length(request.body),
-            Str/concat_all(Arr/map(render_header, request.headers)),
+            Str/flatten(Arr/map(render_header, request.headers)),
             "\r\n"
         ])),
         request.body);

@@ -82,6 +82,7 @@ pub enum Prim {
     BinSlice(Term, Term, Term),
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
+    BinFlatten(Term),
     StrType,
     Str(Vec<u8>),
     StrToBin(Term),
@@ -93,6 +94,7 @@ pub enum Prim {
     ArrSlice(Term, Term, Term, Term),
     ArrAppend(Term, Term, Term),
     ArrConcat(Term, Vec<Term>),
+    ArrFlatten(Term, Term),
     IoType,
     Io(u32),
     // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
@@ -614,6 +616,13 @@ impl Prim {
         Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
     }
 
+    pub fn bin_flatten<A>(array: A) -> Self
+    where
+        A: Into<Term>,
+    {
+        Self::BinFlatten(array.into())
+    }
+
     pub fn str_to_bin<S>(str: S) -> Self
     where
         S: Into<Term>,
@@ -689,6 +698,14 @@ impl Prim {
             type_.into(),
             operands.into_iter().map(|e| e.into()).collect(),
         )
+    }
+
+    pub fn arr_flatten<T, A>(type_: T, array: A) -> Self
+    where
+        T: Into<Term>,
+        A: Into<Term>,
+    {
+        Self::ArrFlatten(type_.into(), array.into())
     }
 
     pub fn io_read<H, N>(handle: H, count: N) -> Self

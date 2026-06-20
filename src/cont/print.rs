@@ -169,6 +169,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::BinConcat(operands) => {
             flat([pure("Bin.concat"), pure(" "), print_value_names(operands)])
         }
+        Code::BinFlatten(operand) => print_unary("Bin.flatten", operand),
         Code::ArrLen(lst) => print_unary("Arr.len", lst),
         Code::ArrGet(lst, idx) => print_binary("Arr.get", lst, idx),
         Code::ArrSlice(lst, start, end) => flat([
@@ -184,6 +185,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::ArrConcat(operands) => {
             flat([pure("Arr.concat"), pure(" "), print_value_names(operands)])
         }
+        Code::ArrFlatten(operand) => print_unary("Arr.flatten", operand),
         Code::TplGet(tuple, index) => flat([
             pure("Tpl.get "),
             print_value_name(tuple),

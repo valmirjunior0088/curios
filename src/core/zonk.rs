@@ -465,6 +465,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, c)?,
         ),
         Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
+        Prim::BinFlatten(t) => Prim::BinFlatten(zonk_term(context, t)?),
 
         Prim::StrToBin(t) => Prim::StrToBin(zonk_term(context, t)?),
         Prim::StrOfBin(t) => Prim::StrOfBin(zonk_term(context, t)?),
@@ -490,6 +491,9 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         ),
         Prim::ArrConcat(ty, operands) => {
             Prim::ArrConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
+        }
+        Prim::ArrFlatten(ty, operand) => {
+            Prim::ArrFlatten(zonk_term(context, ty)?, zonk_term(context, operand)?)
         }
 
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),

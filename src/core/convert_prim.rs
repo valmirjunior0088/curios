@@ -116,6 +116,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
         | (Prim::BinLen(this), Prim::BinLen(that))
+        | (Prim::BinFlatten(this), Prim::BinFlatten(that))
         | (Prim::StrToBin(this), Prim::StrToBin(that))
         | (Prim::StrOfBin(this), Prim::StrOfBin(that)) => {
             cmp.enqueue(Term::type_(), this, that);
@@ -197,6 +198,12 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
             for (this, that) in this_ops.into_iter().zip(that_ops) {
                 cmp.enqueue(Term::type_(), this, that);
             }
+            Ok(true)
+        }
+        (Prim::ArrFlatten(this_ty, this_op), Prim::ArrFlatten(that_ty, that_op)) => {
+            cmp.enqueue(Term::type_(), this_ty, that_ty);
+            cmp.enqueue(Term::type_(), this_op, that_op);
+
             Ok(true)
         }
         (Prim::CellType(this), Prim::CellType(that)) => {

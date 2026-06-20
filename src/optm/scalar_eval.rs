@@ -311,6 +311,22 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
             Some(Scalar::Bin(bytes))
         }
 
+        // Flatten a known `Arr(Bin)` of literal parts into one bytestring. The
+        // outer array's elements are read through `scalar`, so this folds whenever
+        // every part is a literal `Bin`. (`ArrFlatten` has no scalar fold: its
+        // parts are arrays, which the environment exposes only by `ValueName`, not
+        // from an element — so it is left to the runtime loop.)
+        BinFlatten(operand) => {
+            let mut bytes = Vec::new();
+            for elem in env.arr(operand)? {
+                match env.scalar(elem)? {
+                    Scalar::Bin(part) => bytes.extend_from_slice(&part),
+                    _ => return None,
+                }
+            }
+            Some(Scalar::Bin(bytes))
+        }
+
         // `Bin` builders. A slice needs in-bounds literal indices; an append needs
         // a literal byte. Each yields a fresh literal bytestring, so it cascades
         // through further projection and concatenation.

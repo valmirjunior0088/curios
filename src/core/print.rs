@@ -514,6 +514,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
+        Prim::BinFlatten(operand) => print_unary("Bin.flatten ", operand, depth),
         Prim::StrType => pure("Str"),
         Prim::Str(bytes) => pure(format!("{:?}", String::from_utf8_lossy(bytes.as_slice()))),
         Prim::StrToBin(s) => print_unary("Str.to_bin ", s, depth),
@@ -562,6 +563,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
+        Prim::ArrFlatten(ty, operand) => print_binary("Arr.flatten ", ty, operand, depth),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoRead(handle, count) => flat([

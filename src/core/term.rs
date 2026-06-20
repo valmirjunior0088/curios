@@ -1350,6 +1350,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::FltTrunc(t)
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
+        | Prim::BinFlatten(t)
         | Prim::StrToBin(t)
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
@@ -1411,6 +1412,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
         | Prim::ArrLen(a, b)
+        | Prim::ArrFlatten(a, b)
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
@@ -1483,6 +1485,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::FltTrunc(t)
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
+        | Prim::BinFlatten(t)
         | Prim::StrToBin(t)
         | Prim::StrOfBin(t)
         | Prim::ArrType(t)
@@ -1544,6 +1547,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BinGet(a, b)
         | Prim::BinAppend(a, b)
         | Prim::ArrLen(a, b)
+        | Prim::ArrFlatten(a, b)
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
@@ -1711,6 +1715,7 @@ where
         Prim::BinConcat(operands) => {
             Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
         }
+        Prim::BinFlatten(operand) => Prim::BinFlatten(visit.visit_subterm(operand)),
         Prim::StrType => Prim::StrType,
         Prim::Str(bytes) => Prim::Str(bytes.clone()),
         Prim::StrToBin(str) => Prim::StrToBin(visit.visit_subterm(str)),
@@ -1738,6 +1743,7 @@ where
             visit.visit_subterm(ty),
             operands.iter().map(|e| visit.visit_subterm(e)).collect(),
         ),
+        Prim::ArrFlatten(ty, operand) => traverse_binary(ty, operand, visit, Prim::ArrFlatten),
         Prim::IoType => Prim::IoType,
         Prim::Io(token) => Prim::Io(*token),
         Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),

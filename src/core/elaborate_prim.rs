@@ -222,6 +222,11 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::BinConcat(elaborated), bin_type)
         }
+        Prim::BinFlatten(operand) => {
+            let outer_type: Term = Subterm::Prim(Prim::ArrType(bin_type.clone())).into();
+            let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
+            (Prim::BinFlatten(operand), bin_type)
+        }
         Prim::StrType => (prim.clone(), Term::type_()),
         Prim::Str(_) => (prim.clone(), str_type),
         // `Str/to_bin` reveals the underlying UTF-8 carrier; total and safe.
@@ -278,6 +283,13 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 elaborated.push(elaborate(context, operand, Mode::Check(list_type.clone()))?.0);
             }
             (Prim::ArrConcat(type_, elaborated), list_type)
+        }
+        Prim::ArrFlatten(type_, operand) => {
+            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
+            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let outer_type: Term = Subterm::Prim(Prim::ArrType(list_type.clone())).into();
+            let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
+            (Prim::ArrFlatten(type_, operand), list_type)
         }
         Prim::IoType => (prim.clone(), Term::type_()),
         Prim::Io(_) => (prim.clone(), io_type),

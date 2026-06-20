@@ -215,6 +215,11 @@ pub fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(ersd::PurePrim::BinConcat(erased)))
         }
+        Prim::BinFlatten(operand) => {
+            let outer_type = Subterm::Prim(Prim::ArrType(bin_type())).into();
+            let operand = erase(context, operand, &outer_type)?;
+            Ok(pure(ersd::PurePrim::BinFlatten(operand)))
+        }
         // `Str` shares `Bin`'s runtime representation (a UTF-8 byte buffer), so the
         // type erases like `Bin` and the two conversions are runtime no-ops.
         Prim::StrType => Ok(ersd::Subterm::Erased.into()),
@@ -270,6 +275,12 @@ pub fn erase_prim(
                 .map(|e| erase(context, e, &expected_list_type))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(ersd::PurePrim::ArrConcat(erased)))
+        }
+        Prim::ArrFlatten(type_, operand) => {
+            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let outer_type = Subterm::Prim(Prim::ArrType(list_type)).into();
+            let operand = erase(context, operand, &outer_type)?;
+            Ok(pure(ersd::PurePrim::ArrFlatten(operand)))
         }
         Prim::IoType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Io(token) => Ok(pure(ersd::PurePrim::Io(token))),

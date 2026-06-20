@@ -134,6 +134,7 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
             pure("Bin.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
+        PurePrim::BinFlatten(operand) => print_unary("Bin.flatten", operand),
         PurePrim::Arr(elems) => flat([
             pure("["),
             sep_flat(elems.iter().map(|t| print_term(t)), || pure(", ")),
@@ -147,6 +148,7 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
             pure("Arr.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
+        PurePrim::ArrFlatten(operand) => print_unary("Arr.flatten", operand),
         PurePrim::Io(token) => pure(format!("Io({token})")),
         PurePrim::IoEql(left, right) => print_binary("Io.eql", left, right),
     }

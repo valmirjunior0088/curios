@@ -800,6 +800,25 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 None => Subterm::Prim(Prim::BinConcat(reduced)),
             })
         }
+        Prim::BinFlatten(operand) => {
+            let operand = reduce(context, operand.clone())?;
+            // A literal outer array of literal `Bin`s flattens to one byte literal.
+            let merged = match &*operand {
+                Subterm::Prim(Prim::Arr(parts)) => parts.iter().try_fold(Vec::new(), |mut acc, t| {
+                    if let Subterm::Prim(Prim::Bin(bytes)) = &**t {
+                        acc.extend(bytes);
+                        Some(acc)
+                    } else {
+                        None
+                    }
+                }),
+                _ => None,
+            };
+            Ok(match merged {
+                Some(bytes) => Subterm::Prim(Prim::Bin(bytes)),
+                None => Subterm::Prim(Prim::bin_flatten(operand)),
+            })
+        }
         Prim::StrType => Ok(Subterm::Prim(Prim::StrType)),
         Prim::Str(bytes) => Ok(Subterm::Prim(Prim::Str(bytes.clone()))),
         Prim::StrToBin(str) => {
@@ -920,6 +939,26 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             Ok(match merged {
                 Some(elems) => Subterm::Prim(Prim::Arr(elems)),
                 None => Subterm::Prim(Prim::arr_concat(type_, reduced)),
+            })
+        }
+        Prim::ArrFlatten(type_, operand) => {
+            let type_ = reduce(context, type_.clone())?;
+            let operand = reduce(context, operand.clone())?;
+            // A literal outer array of literal inner arrays flattens to one array.
+            let merged = match &*operand {
+                Subterm::Prim(Prim::Arr(parts)) => parts.iter().try_fold(Vec::new(), |mut acc, t| {
+                    if let Subterm::Prim(Prim::Arr(elems)) = &**t {
+                        acc.extend(elems.iter().cloned());
+                        Some(acc)
+                    } else {
+                        None
+                    }
+                }),
+                _ => None,
+            };
+            Ok(match merged {
+                Some(elems) => Subterm::Prim(Prim::Arr(elems)),
+                None => Subterm::Prim(Prim::arr_flatten(type_, operand)),
             })
         }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
