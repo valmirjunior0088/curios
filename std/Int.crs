@@ -2,6 +2,13 @@ pub use /sys/{Int};
 pub use /sys/Int/*;
 use /std/{Nat, Str, Option};
 
+pub let to_str(n : Int) -> Str =
+    let mag = Nat/to_str(abs(n));
+    match gte(n, +0)
+    | true => Str/concat("+", mag)
+    | false => Str/concat("-", mag)
+    end;
+
 pub let not(x : Int) -> Int =
     xor(x, -1);
 

@@ -2,6 +2,12 @@ pub use /sys/{Flt};
 pub use /sys/Flt/*;
 use /std/{Nat, Int, Str, Bln, Option};
 
+pub let to_str(f : Flt) -> Str =
+    match Str/of_bin(to_str_bin(f))
+    | some(s) => s
+    | none() => ""
+    end;
+
 let pow10(n : Nat) -> Flt =
     match n
     | 0 => +1.0

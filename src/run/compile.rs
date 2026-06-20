@@ -454,7 +454,7 @@ mod tests {
         let error = compile(source, None).unwrap_err();
 
         assert!(
-            error.contains("implicit argument 'T' of 'cast' was not inferred"),
+            error.contains("implicit argument 'T' of '/cast' was not inferred"),
             "unexpected error: {error}"
         );
     }
@@ -1319,7 +1319,7 @@ mod tests {
         // expensive) `std/Json`, `std/Parse`, `std/Fmt`, … into the typechecked core.
         let names = core_item_names("use /std/{Io, Nat};\n/std/Io/print(/std/Nat/to_str(0))");
 
-        for unused in ["std/Json", "std/Parse", "std/Fmt", "std/Lst", "std/Str"] {
+        for unused in ["/std/Json", "/std/Parse", "/std/Fmt", "/std/Lst", "/std/Str"] {
             assert!(
                 !names.iter().any(|name| name.starts_with(unused)),
                 "expected `{unused}` to be pruned, but it survived in {names:?}"
@@ -1335,12 +1335,12 @@ mod tests {
         );
 
         assert!(
-            names.iter().any(|name| name.starts_with("std/Json")),
-            "expected `std/Json` to be retained, got {names:?}"
+            names.iter().any(|name| name.starts_with("/std/Json")),
+            "expected `/std/Json` to be retained, got {names:?}"
         );
         assert!(
-            names.iter().any(|name| name.starts_with("std/Parse")),
-            "expected transitive `std/Parse` to be retained, got {names:?}"
+            names.iter().any(|name| name.starts_with("/std/Parse")),
+            "expected transitive `/std/Parse` to be retained, got {names:?}"
         );
     }
 

@@ -621,20 +621,20 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             inner,
             |v| {
                 v.to_big_uint()
-                    .map(|b| Prim::Str(format!("{b}").into_bytes()))
+                    .map(|b| Prim::Bin(format!("{b}").into_bytes()))
             },
             Prim::NatToStr,
         ),
         Prim::IntToStr(inner) => reduce_int_unary(
             context,
             inner,
-            |v| Some(Prim::Str(format!("{v}").into_bytes())),
+            |v| Some(Prim::Bin(format!("{v}").into_bytes())),
             Prim::IntToStr,
         ),
         Prim::FltToStr(inner) => reduce_flt_unary(
             context,
             inner,
-            |v| Prim::Str(format!("{v}").into_bytes()),
+            |v| Prim::Bin(format!("{v}").into_bytes()),
             Prim::FltToStr,
         ),
         Prim::FltToLeBin(inner) => reduce_flt_unary(
@@ -814,22 +814,30 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         }
         Prim::BinFlatten(operand) => {
             let operand = reduce(context, operand.clone())?;
-            // A literal outer array of literal `Bin`s flattens to one byte literal.
-            let merged = match &*operand {
-                Subterm::Prim(Prim::Arr(parts)) => parts.iter().try_fold(Vec::new(), |mut acc, t| {
-                    if let Subterm::Prim(Prim::Bin(bytes)) = &**t {
-                        acc.extend(bytes);
-                        Some(acc)
-                    } else {
-                        None
-                    }
-                }),
-                _ => None,
-            };
-            Ok(match merged {
-                Some(bytes) => Subterm::Prim(Prim::Bin(bytes)),
-                None => Subterm::Prim(Prim::bin_flatten(operand)),
-            })
+            match Term::unwrap_or_clone(operand) {
+                // A literal outer array flattens to the concatenation of its inner
+                // `Bin`s. Reducing the `BinConcat` merges all-literal parts to one
+                // byte literal, while symbolic parts (a mapped `to_bin`, a variable)
+                // survive as a `BinConcat` rather than getting stuck.
+                Subterm::Prim(Prim::Arr(parts)) => {
+                    reduce(context, Subterm::Prim(Prim::BinConcat(parts)).into())
+                        .map(Term::unwrap_or_clone)
+                }
+                // `flatten` distributes over array concatenation: a symbolic outer
+                // cons `cons(x, xs) = concat([x], xs)` flattens to
+                // `concat(flatten([x]), flatten(xs)) = concat(x, flatten(xs))` — the
+                // one-step decode the `Bin/flatten` structural proofs
+                // (`flatten_closed`) rely on, mirroring the `Bin` eliminator's rule.
+                Subterm::Prim(Prim::ArrConcat(_elem, segments)) => {
+                    let distributed = segments
+                        .into_iter()
+                        .map(|seg| Subterm::Prim(Prim::bin_flatten(seg)).into())
+                        .collect::<Vec<Term>>();
+                    reduce(context, Subterm::Prim(Prim::BinConcat(distributed)).into())
+                        .map(Term::unwrap_or_clone)
+                }
+                operand => Ok(Subterm::Prim(Prim::bin_flatten(operand))),
+            }
         }
         Prim::StrType => Ok(Subterm::Prim(Prim::StrType)),
         Prim::Str(bytes) => Ok(Subterm::Prim(Prim::Str(bytes.clone()))),

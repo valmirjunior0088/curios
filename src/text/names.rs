@@ -24,7 +24,14 @@ impl Qualifier {
     }
 
     pub fn join(&self) -> String {
-        self.segments.join("/")
+        // A canonical resolved identity is absolute: it carries a leading `/` so a
+        // hand-built reference (e.g. the string-literal meta-emitter's `/syn/Str/…`)
+        // matches a definition's key unambiguously. The empty (root) qualifier joins
+        // to the empty string, not a bare `/`.
+        match self.segments.is_empty() {
+            true => String::new(),
+            false => format!("/{}", self.segments.join("/")),
+        }
     }
 
     pub fn is_single(&self) -> bool {
@@ -120,9 +127,13 @@ impl Name {
     }
 
     pub fn join(&self) -> String {
+        // A `Name` is a *surface* reference printed back as written: an absolute
+        // reference keeps `Qualifier::join`'s leading `/`; a relative one strips it.
+        // (Canonical core identities go through `Qualifier::join` directly and are
+        // always absolute — this `is_abs`-respecting form is only for surface text.)
         match self.is_abs {
-            true => format!("/{}", self.qualifier.join()),
-            false => self.qualifier.join(),
+            true => self.qualifier.join(),
+            false => self.qualifier.join().trim_start_matches('/').to_string(),
         }
     }
 

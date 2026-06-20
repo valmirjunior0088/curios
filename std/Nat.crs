@@ -2,6 +2,9 @@ pub use /sys/{Nat};
 pub use /sys/Nat/*;
 use /std/{Str, Option, Char};
 
+pub let to_str(n : Nat) -> Str =
+    Str/of_nat(n);
+
 pub let of_str(s : Str) -> Option(Nat) =
     match Nat/eql(Str/len(s), 0)
     | true => Option/none()

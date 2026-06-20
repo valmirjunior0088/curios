@@ -10,6 +10,97 @@ fn run(source: &str) -> Vec<u8> {
 }
 
 #[test]
+fn utf8_slice_proof_aligns_with_byte_walk() {
+    // The corrected `slice_closed` shape: a RELEVANT byte walk (`to_lead_bytes`) and
+    // a MIRRORING proof walk (`to_lead_proof : Valid(to_lead_bytes(s, b))`). The proof
+    // peels the derivation while the byte function reduces in lockstep — which only
+    // works now that the `Bin` eliminator decodes a *symbolic* cons (the new reduce
+    // rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to
+    // `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
+    let source = r#"
+        use /std/{Io, Bin, Nat, Bln};
+
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+            match Nat/gte(c, lo)
+            | true => Nat/lte(c, hi)
+            | false => false
+            end;
+
+        union Scan
+        | lead()
+        | cont(Nat, Nat, Nat)
+        | bad()
+        end
+
+        let classify(c : Nat) -> Scan =
+            match in_range(c, 0, 127)
+            | true => Scan/lead()
+            | false =>
+                match in_range(c, 194, 223)
+                | true => Scan/cont(1, 128, 191)
+                | false => Scan/bad()
+                end
+            end;
+
+        let step(c : Nat, s : Scan) -> Scan =
+            match s
+            | bad() => Scan/bad()
+            | cont(rem, lo, hi) =>
+                match in_range(c, lo, hi)
+                | false => Scan/bad()
+                | true =>
+                    match Nat/eql(rem, 1)
+                    | true => Scan/lead()
+                    | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+                    end
+                end
+            | lead() => classify(c)
+            end;
+
+        union Utf8 : (s : Scan, b : Bin)
+        | stop() : (Scan/lead(), \\)
+        | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
+            : (st, Bin/concat(Bin/append(\\, c), t))
+        end
+
+        let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
+
+        rec to_lead_bytes(s : Scan, b : Bin) -> Bin =
+            match s
+            | lead() => b
+            | cont(rem, lo, hi) =>
+                match b
+                | \\ => \\
+                | (h, t), ih => to_lead_bytes(step(h, Scan/cont(rem, lo, hi)), t)
+                end
+            | bad() =>
+                match b
+                | \\ => \\
+                | (h, t), ih => to_lead_bytes(step(h, Scan/bad()), t)
+                end
+            end;
+
+        rec to_lead_proof(s : Scan, b : Bin, d : Utf8(s, b)) -> Valid(to_lead_bytes(s, b)) =
+            let go =
+                match s : (s) => (p : Utf8(s, b)) -> Valid(to_lead_bytes(s, b))
+                | lead() => (p) => p
+                | cont(rem, lo, hi) => (p) =>
+                    match p : (w : Utf8(q, x)) => Valid(to_lead_bytes(q, x))
+                    | more(c, st, t, rest) => to_lead_proof(step(c, st), t, rest)
+                    end
+                | bad() => (p) =>
+                    match p : (w : Utf8(q, x)) => Valid(to_lead_bytes(q, x))
+                    | more(c, st, t, rest) => to_lead_proof(step(c, st), t, rest)
+                    end
+                end;
+            go(d);
+
+        Io/write(Io/stdout, \6F\6B)
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn nullary_closure_survives_erasure_and_codegen() {
     // A nullary closure stored in a union field and called indirectly via a
     // `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity
@@ -993,6 +1084,12 @@ fn printf_partial_evaluation_reduces_residual() {
     // `Str/of_bin` validation guarding the runtime `%s` argument). Together they
     // collapse the post-§1 residue (≈14 funcs) down to a handful — the assert pins
     // a comfortable upper bound while leaving headroom for legitimate std/Fmt drift.
+    // Proof-carrying `Str` routes both runtime paths through recursive, unfoldable
+    // validators: the `%d` (`Nat/to_str`) path through the `of_nat` decimal producer
+    // (digit/single_digit/concat), and the `%s` (`Str/trim`) path through the
+    // codepoint-peeling proof-carrying `slice` (drop_n/take_n/drop1/take1/tl_proof).
+    // Both carry their UTF-8 proof and can't be folded even for a constant, so a
+    // handful of extra residual funcs over the pre-`/syn/Str` baseline are expected.
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
@@ -1028,8 +1125,8 @@ fn printf_partial_evaluation_reduces_residual() {
 
     let funcs = optm_funcs.expect("Stage::Optm observed");
     assert!(
-        funcs < 5,
-        "expected fewer than 5 residual funcs after partial evaluation and \
+        funcs <= 12,
+        "expected at most 12 residual funcs after partial evaluation and \
          size-bounded multi-site inlining, got {funcs}",
     );
 

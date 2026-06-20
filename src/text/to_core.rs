@@ -16,12 +16,14 @@ use {
 };
 
 // Root modules reachable only from the standard library — the trusted primitive
-// substrate (`sys`) and the desugar-target library (`syn`). User code reaches them
-// through their `/std` wrappers; any reference that resolves into one from outside is
-// rejected during resolution.
-const INTERNAL_ROOTS: &[&str] = &["sys", "syn"];
-// Consuming roots permitted to reference an internal root: the standard library,
-// and the internal roots themselves (so they may reference one another).
+// substrate (`sys`). User code reaches them through their `/std` wrappers; any
+// reference that resolves into one from outside is rejected during resolution.
+// `syn` (the desugar-target library) is deliberately NOT internal: string-literal
+// desugaring emits references to `/syn/Str`, so the name must be reachable from any
+// module the way an ordinary library is.
+const INTERNAL_ROOTS: &[&str] = &["sys"];
+// Consuming roots permitted to reference an internal root: the standard library, the
+// internal roots themselves, and `syn` (which reaches `/sys` prims via `/std` re-exports).
 const PRIVILEGED_ROOTS: &[&str] = &["std", "sys", "syn"];
 
 // Reject a reference that *resolves into* an internal root (`sys`) when the
@@ -809,10 +811,17 @@ fn flat_item_free_vars(item: &FlatItem) -> HashSet<String> {
 
     lets.iter()
         .flat_map(|let_| {
+            // Construction head names (`Struct`/`Variant`/type-former normal forms)
+            // are reachability edges too — a body that *builds* a struct (the
+            // string-literal meta-emitter's `/syn/Str/Str`) must keep its backing
+            // type-former and field-type definitions alive even though no `Var`
+            // names them. See `Subterm::construction_names`.
             let_.type_
                 .free_vars()
                 .into_iter()
                 .chain(let_.body.free_vars())
+                .chain(let_.type_.construction_names())
+                .chain(let_.body.construction_names())
         })
         .collect()
 }
@@ -853,7 +862,9 @@ fn structure_free_vars(structure: &core::Structure) -> HashSet<String> {
 fn flat_item_prunable(item: &FlatItem, library_roots: &HashSet<String>) -> bool {
     !library_roots.is_empty()
         && flat_item_names(item).iter().all(|name| {
-            name.split('/')
+            // Names are absolute (leading `/`), so the root is the first non-empty segment.
+            name.trim_start_matches('/')
+                .split('/')
                 .next()
                 .is_some_and(|segment| library_roots.contains(segment))
         })
@@ -960,6 +971,8 @@ pub fn to_core(
         .free_vars()
         .into_iter()
         .chain(type_.iter().flat_map(|type_| type_.free_vars()))
+        .chain(tail.construction_names())
+        .chain(type_.iter().flat_map(|type_| type_.construction_names()))
         .collect();
     let library_roots: HashSet<String> = roots.iter().cloned().collect();
 

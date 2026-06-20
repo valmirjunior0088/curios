@@ -1102,6 +1102,140 @@ impl Subterm {
         ids
     }
 
+    /// Collect the head name of every inductive/struct *construction* and
+    /// *type-former normal form* occurring in this subterm. These names are not
+    /// `Var`s (they live in the registry, not the variable graph), so they do not
+    /// appear in `free_vars`; the reachability prune (`order_flat_items`) needs
+    /// them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the
+    /// string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former
+    /// and field-type definitions alive even when no `Var` mentions them.
+    pub fn construction_names(&self) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        self.collect_construction_names(&mut names);
+        names
+    }
+
+    fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+        match self {
+            Subterm::Type | Subterm::Var(_) => {}
+            Subterm::Metavar(Metavar { spine, .. }) => {
+                spine.iter().for_each(|t| t.collect_construction_names(names));
+            }
+            Subterm::Prim(prim) => prim_construction_names(prim, names),
+            Subterm::Func(Func { telescope }) => {
+                telescope_term_construction_names(telescope, names)
+            }
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                telescope_term_construction_names(telescope, names)
+            }
+            Subterm::Apply(Apply { head, params, .. }) => {
+                head.collect_construction_names(names);
+                params.iter().for_each(|p| p.collect_construction_names(names));
+            }
+            Subterm::TupleType(TupleType { telescope, .. }) => {
+                telescope_unit_construction_names(telescope, names)
+            }
+            Subterm::Tuple(Tuple { fields, .. }) => {
+                fields.iter().for_each(|f| f.collect_construction_names(names));
+            }
+            Subterm::Proj(Proj { head, .. }) => head.collect_construction_names(names),
+            Subterm::UnionType(UnionType {
+                name,
+                params,
+                indices,
+            }) => {
+                names.insert(name.clone());
+                params.iter().for_each(|p| p.collect_construction_names(names));
+                indices.iter().for_each(|i| i.collect_construction_names(names));
+            }
+            Subterm::Variant(Variant {
+                name,
+                params,
+                payload,
+                ..
+            }) => {
+                names.insert(name.clone());
+                params.iter().for_each(|p| p.collect_construction_names(names));
+                payload.iter().for_each(|p| p.collect_construction_names(names));
+            }
+            Subterm::StructType(StructType { name, params }) => {
+                names.insert(name.clone());
+                params.iter().for_each(|p| p.collect_construction_names(names));
+            }
+            Subterm::Struct(Struct {
+                name,
+                params,
+                fields,
+                ..
+            }) => {
+                names.insert(name.clone());
+                params.iter().for_each(|p| p.collect_construction_names(names));
+                fields.iter().for_each(|f| f.collect_construction_names(names));
+            }
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => {
+                head.collect_construction_names(names);
+                motive.body().collect_construction_names(names);
+                match cases {
+                    Cases::Bln {
+                        false_case,
+                        true_case,
+                    } => {
+                        false_case.collect_construction_names(names);
+                        true_case.collect_construction_names(names);
+                    }
+                    Cases::Nat {
+                        zero_case,
+                        succ_case,
+                    } => {
+                        zero_case.collect_construction_names(names);
+                        succ_case.body().collect_construction_names(names);
+                    }
+                    Cases::Switch { cases, default } => {
+                        cases.values().for_each(|b| b.collect_construction_names(names));
+                        default.collect_construction_names(names);
+                    }
+                    Cases::Union { cases, pattern } => {
+                        cases
+                            .values()
+                            .for_each(|s| s.body().collect_construction_names(names));
+                        pattern.iter().flat_map(|p| &p.slots).for_each(|slot| {
+                            if let MotiveSlot::Term(t) = slot {
+                                t.collect_construction_names(names);
+                            }
+                        });
+                    }
+                    Cases::Inductive {
+                        carrier,
+                        empty_case,
+                        cons_case,
+                    } => {
+                        if let Carrier::Arr(elem) = carrier {
+                            elem.collect_construction_names(names);
+                        }
+                        empty_case.collect_construction_names(names);
+                        cons_case.body().collect_construction_names(names);
+                    }
+                }
+            }
+            Subterm::Let(Let { type_, body, tail }) => {
+                type_.collect_construction_names(names);
+                body.collect_construction_names(names);
+                tail.body().collect_construction_names(names);
+            }
+            Subterm::Rec(Rec { items, tail }) => {
+                for (type_, value) in items {
+                    type_.body().collect_construction_names(names);
+                    value.body().collect_construction_names(names);
+                }
+                tail.body().collect_construction_names(names);
+            }
+        }
+    }
+
     fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
@@ -1231,6 +1365,26 @@ impl CollectMetavars for Term {
 
 impl CollectMetavars for () {
     fn collect_metavars(&self, _: &mut BTreeSet<usize>) {}
+}
+
+// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the
+// trailing body/return type. Concrete in `Term` — no collector trait needed.
+fn telescope_term_construction_names(telescope: &Telescope<Term>, names: &mut BTreeSet<String>) {
+    match telescope {
+        Telescope::Cons(ty, rest) => {
+            ty.collect_construction_names(names);
+            telescope_term_construction_names(rest.body(), names);
+        }
+        Telescope::Done(body) => body.collect_construction_names(names),
+    }
+}
+
+// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body is `()`.
+fn telescope_unit_construction_names(telescope: &Telescope<()>, names: &mut BTreeSet<String>) {
+    if let Telescope::Cons(ty, rest) = telescope {
+        ty.collect_construction_names(names);
+        telescope_unit_construction_names(rest.body(), names);
+    }
 }
 
 impl Bound for Term {
@@ -1822,6 +1976,170 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
             c.collect_metavars(ids);
+        }
+    }
+}
+
+// Construction-name twin of `prim_metavars`: recurse into every operand `Term` so
+// a construction nested inside a primitive (e.g. `Arr(Str)`'s element type) still
+// contributes its head name. Prims own no head names of their own.
+fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
+    match prim {
+        Prim::BlnType
+        | Prim::Bln(_)
+        | Prim::NatType
+        | Prim::Nat(Nat::Zero)
+        | Prim::IntType
+        | Prim::Int(_)
+        | Prim::FltType
+        | Prim::Flt(_)
+        | Prim::BinType
+        | Prim::Bin(_)
+        | Prim::StrType
+        | Prim::Str(_)
+        | Prim::IoType
+        | Prim::Io(_)
+        | Prim::IoClockWall
+        | Prim::IoClockMono
+        | Prim::IoArgs => {}
+
+        Prim::Nat(Nat::Succ(_, inner)) => inner.collect_construction_names(names),
+
+        Prim::NatToStr(t)
+        | Prim::IntToStr(t)
+        | Prim::FltToStr(t)
+        | Prim::FltToLeBin(t)
+        | Prim::NatToInt(t)
+        | Prim::NatToFlt(t)
+        | Prim::IntToNat(t)
+        | Prim::IntToFlt(t)
+        | Prim::FltToNat(t)
+        | Prim::FltToInt(t)
+        | Prim::FltNeg(t)
+        | Prim::FltAbs(t)
+        | Prim::FltSqrt(t)
+        | Prim::FltFloor(t)
+        | Prim::FltCeil(t)
+        | Prim::FltTrunc(t)
+        | Prim::FltNearest(t)
+        | Prim::BinLen(t)
+        | Prim::BinFlatten(t)
+        | Prim::StrToBin(t)
+        | Prim::StrOfBin(t)
+        | Prim::ArrType(t)
+        | Prim::IoClose(t)
+        | Prim::IoSocket(t)
+        | Prim::IoAccept(t)
+        | Prim::IoRandom(t)
+        | Prim::IoEnv(t) => t.collect_construction_names(names),
+
+        Prim::IoEql(a, b)
+        | Prim::NatEql(a, b)
+        | Prim::NatNeq(a, b)
+        | Prim::NatAdd(a, b)
+        | Prim::NatSub(a, b)
+        | Prim::NatMul(a, b)
+        | Prim::NatLt(a, b)
+        | Prim::NatDiv(a, b)
+        | Prim::NatRem(a, b)
+        | Prim::NatGt(a, b)
+        | Prim::NatLte(a, b)
+        | Prim::NatGte(a, b)
+        | Prim::NatAnd(a, b)
+        | Prim::NatOr(a, b)
+        | Prim::NatXor(a, b)
+        | Prim::NatShl(a, b)
+        | Prim::NatShr(a, b)
+        | Prim::BlnAnd(a, b)
+        | Prim::BlnOr(a, b)
+        | Prim::BlnXor(a, b)
+        | Prim::IntEql(a, b)
+        | Prim::IntNeq(a, b)
+        | Prim::IntAdd(a, b)
+        | Prim::IntSub(a, b)
+        | Prim::IntMul(a, b)
+        | Prim::IntDiv(a, b)
+        | Prim::IntRem(a, b)
+        | Prim::IntLt(a, b)
+        | Prim::IntGt(a, b)
+        | Prim::IntLte(a, b)
+        | Prim::IntGte(a, b)
+        | Prim::IntAnd(a, b)
+        | Prim::IntOr(a, b)
+        | Prim::IntXor(a, b)
+        | Prim::IntShl(a, b)
+        | Prim::IntShr(a, b)
+        | Prim::FltAdd(a, b)
+        | Prim::FltSub(a, b)
+        | Prim::FltMul(a, b)
+        | Prim::FltDiv(a, b)
+        | Prim::FltEql(a, b)
+        | Prim::FltNeq(a, b)
+        | Prim::FltLt(a, b)
+        | Prim::FltGt(a, b)
+        | Prim::FltLte(a, b)
+        | Prim::FltGte(a, b)
+        | Prim::FltMin(a, b)
+        | Prim::FltMax(a, b)
+        | Prim::BinEql(a, b)
+        | Prim::BinGet(a, b)
+        | Prim::BinAppend(a, b)
+        | Prim::ArrLen(a, b)
+        | Prim::ArrFlatten(a, b)
+        | Prim::IoRead(a, b)
+        | Prim::IoWrite(a, b)
+        | Prim::IoOpen(a, b)
+        | Prim::IoResolve(a, b)
+        | Prim::IoBind(a, b)
+        | Prim::IoConnect(a, b)
+        | Prim::IoListen(a, b)
+        | Prim::IoSetNonblocking(a, b)
+        | Prim::IoSetRecvTimeout(a, b)
+        | Prim::IoSetSendTimeout(a, b)
+        | Prim::IoSetReuseaddr(a, b)
+        | Prim::IoStartTls(a, b)
+        | Prim::IoTlsServerConfig(a, b)
+        | Prim::IoStartTlsServer(a, b)
+        | Prim::IoExit(a, b) => {
+            a.collect_construction_names(names);
+            b.collect_construction_names(names);
+        }
+
+        Prim::BinSlice(a, b, c)
+        | Prim::ArrGet(a, b, c)
+        | Prim::ArrAppend(a, b, c)
+        | Prim::IoPoll(a, b, c) => {
+            a.collect_construction_names(names);
+            b.collect_construction_names(names);
+            c.collect_construction_names(names);
+        }
+
+        Prim::ArrSlice(a, b, c, d) => {
+            a.collect_construction_names(names);
+            b.collect_construction_names(names);
+            c.collect_construction_names(names);
+            d.collect_construction_names(names);
+        }
+
+        Prim::BinConcat(terms) | Prim::Arr(terms) => terms
+            .iter()
+            .for_each(|term| term.collect_construction_names(names)),
+        Prim::ArrConcat(ty, terms) => {
+            ty.collect_construction_names(names);
+            terms
+                .iter()
+                .for_each(|term| term.collect_construction_names(names));
+        }
+
+        Prim::CellType(a) => a.collect_construction_names(names),
+        Prim::Cell(a, b) | Prim::CellGet(a, b) => {
+            a.collect_construction_names(names);
+            b.collect_construction_names(names);
+        }
+        Prim::CellSet(a, b, c) => {
+            a.collect_construction_names(names);
+            b.collect_construction_names(names);
+            c.collect_construction_names(names);
         }
     }
 }

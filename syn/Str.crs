@@ -1,4 +1,4 @@
-use /std/{Nat, Bin, Bln, Option};
+use /std/{Nat, Bin, Bln, Option, Eq, Arr};
 
 let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
     match Nat/gte(c, lo)
@@ -70,63 +70,6 @@ let concat_closed(@a : Bin, @b : Bin, va : Valid(a), vb : Valid(b))
     -> Valid(Bin/concat(a, b)) =
     seq(va, vb);
 
-rec take_to_lead(@s : Scan, @b : Bin, d : Utf8(s, b))
-    -> { mid : Bin, tail : Bin, midd : Utf8(s, mid), tv : Valid(tail) } =
-    let go =
-        match s : (s) => (p : Utf8(s, b))
-            -> { mid : Bin, tail : Bin, midd : Utf8(s, mid), tv : Valid(tail) }
-        | lead() => (d) => (\\, b, Utf8/stop(), d)
-        | cont(rem, lo, hi) => (d) =>
-            match d : { mid : Bin, tail : Bin, midd : Utf8(Scan/cont(rem, lo, hi), mid), tv : Valid(tail) }
-            | more(c, st, t, rest) =>
-                let w = take_to_lead(rest);
-                (Bin/concat(Bin/append(\\, c), w.mid), w.tail,
-                 Utf8/more(c, st, w.mid, w.midd), w.tv)
-            end
-        | bad() => (d) =>
-            match d : { mid : Bin, tail : Bin, midd : Utf8(Scan/bad(), mid), tv : Valid(tail) }
-            | more(c, st, t, rest) =>
-                let w = take_to_lead(rest);
-                (Bin/concat(Bin/append(\\, c), w.mid), w.tail,
-                 Utf8/more(c, st, w.mid, w.midd), w.tv)
-            end
-        end;
-    go(d);
-
-let take1(@b : Bin, d : Valid(b)) -> { cp : Bin, v : Valid(cp) } =
-    match d : { cp : Bin, v : Valid(cp) }
-    | stop() => (\\, Utf8/stop())
-    | more(c, st, t, rest) =>
-        let w = take_to_lead(rest);
-        (Bin/concat(Bin/append(\\, c), w.mid), Utf8/more(c, st, w.mid, w.midd))
-    end;
-
-let drop1(@b : Bin, d : Valid(b)) -> { rest : Bin, v : Valid(rest) } =
-    match d : { rest : Bin, v : Valid(rest) }
-    | stop() => (\\, Utf8/stop())
-    | more(c, st, t, rest) =>
-        let w = take_to_lead(rest);
-        (w.tail, w.tv)
-    end;
-
-rec drop_n(n : Nat, @b : Bin, d : Valid(b)) -> { r : Bin, v : Valid(r) } =
-    match Nat/eql(n, 0)
-    | true => (b, d)
-    | false =>
-        let w = drop1(d);
-        drop_n(Nat/sub(n, 1), @w.rest, w.v)
-    end;
-
-rec take_n(n : Nat, @b : Bin, d : Valid(b)) -> { r : Bin, v : Valid(r) } =
-    match Nat/eql(n, 0)
-    | true => (\\, Utf8/stop())
-    | false =>
-        let hd = take1(d);
-        let tl = drop1(d);
-        let tn = take_n(Nat/sub(n, 1), @tl.rest, tl.v);
-        (Bin/concat(hd.cp, tn.r), concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
-    end;
-
 let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
     match b : (b) => (s : Scan) -> Option(Utf8(s, b))
     | \\ => (s) =>
@@ -142,7 +85,10 @@ let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
         end
     end;
 
-pub struct Str { bytes : Bin, valid : @Valid(bytes) }
+pub struct Str pub {
+    bytes : Bin,
+    valid : @Valid(bytes)
+}
 
 pub let to_bin(s : Str) -> Bin =
     s.bytes;
@@ -157,10 +103,148 @@ pub let concat(a : Str, b : Str) -> Str =
     Str { bytes = Bin/concat(a.bytes, b.bytes),
           valid = concat_closed(@a.bytes, @b.bytes, a.valid, b.valid) };
 
-pub let slice(s : Str, x : Nat, y : Nat) -> Str =
-    let dropped = drop_n(x, s.valid);
-    let kept = take_n(Nat/sub(y, x), @dropped.r, dropped.v);
-    Str { bytes = kept.r, valid = kept.v };
+let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
+    -> Valid(Bin/append(\\, c)) =
+    let r : Utf8(step(c, Scan/lead()), \\) =
+        Eq/subst((sc) => Utf8(sc, \\), Eq/sym(ok), Utf8/stop());
+    Utf8/more(c, Scan/lead(), \\, r);
 
-pub let empty : Str =
-    Str { bytes = \\, valid = Utf8/stop() };
+let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
+    match Nat/eql(d, 0) | true => (48, Eq/refl()) | false =>
+    match Nat/eql(d, 1) | true => (49, Eq/refl()) | false =>
+    match Nat/eql(d, 2) | true => (50, Eq/refl()) | false =>
+    match Nat/eql(d, 3) | true => (51, Eq/refl()) | false =>
+    match Nat/eql(d, 4) | true => (52, Eq/refl()) | false =>
+    match Nat/eql(d, 5) | true => (53, Eq/refl()) | false =>
+    match Nat/eql(d, 6) | true => (54, Eq/refl()) | false =>
+    match Nat/eql(d, 7) | true => (55, Eq/refl()) | false =>
+    match Nat/eql(d, 8) | true => (56, Eq/refl()) | false =>
+    match Nat/eql(d, 9) | true => (57, Eq/refl()) | false =>
+    (48, Eq/refl())
+    end end end end end end end end end end;
+
+let single_digit(d : Nat) -> Str =
+    let g = digit(d);
+    Str { bytes = Bin/append(\\, g.c), valid = single(g.c, g.ok) };
+
+pub rec of_nat(n : Nat) -> Str =
+    match Nat/lt(n, 10)
+    | true => single_digit(n)
+    | false => concat(of_nat(Nat/div(n, 10)), single_digit(Nat/rem(n, 10)))
+    end;
+
+rec tl_mid(s : Scan, b : Bin) -> Bin =
+    match s
+    | lead() => \\
+    | cont(rem, lo, hi) =>
+        match b
+        | \\ => \\
+        | (h, t), ih => Bin/concat(Bin/append(\\, h), tl_mid(step(h, Scan/cont(rem, lo, hi)), t))
+        end
+    | bad() =>
+        match b
+        | \\ => \\
+        | (h, t), ih => Bin/concat(Bin/append(\\, h), tl_mid(step(h, Scan/bad()), t))
+        end
+    end;
+
+rec tl_tail(s : Scan, b : Bin) -> Bin =
+    match s
+    | lead() => b
+    | cont(rem, lo, hi) =>
+        match b
+        | \\ => \\
+        | (h, t), ih => tl_tail(step(h, Scan/cont(rem, lo, hi)), t)
+        end
+    | bad() =>
+        match b
+        | \\ => \\
+        | (h, t), ih => tl_tail(step(h, Scan/bad()), t)
+        end
+    end;
+
+rec tl_proof(s : Scan, b : Bin, d : Utf8(s, b))
+    -> { midd : Utf8(s, tl_mid(s, b)), tv : Valid(tl_tail(s, b)) } =
+    let go =
+        match s : (s) => (p : Utf8(s, b))
+            -> { midd : Utf8(s, tl_mid(s, b)), tv : Valid(tl_tail(s, b)) }
+        | lead() => (p) => (Utf8/stop(), p)
+        | cont(rem, lo, hi) => (p) =>
+            match p : (w : Utf8(q, x)) => { midd : Utf8(q, tl_mid(q, x)), tv : Valid(tl_tail(q, x)) }
+            | more(c, st, t, rest) =>
+                let w = tl_proof(step(c, st), t, rest);
+                (Utf8/more(c, st, tl_mid(step(c, st), t), w.midd), w.tv)
+            end
+        | bad() => (p) =>
+            match p : (w : Utf8(q, x)) => { midd : Utf8(q, tl_mid(q, x)), tv : Valid(tl_tail(q, x)) }
+            | more(c, st, t, rest) =>
+                let w = tl_proof(step(c, st), t, rest);
+                (Utf8/more(c, st, tl_mid(step(c, st), t), w.midd), w.tv)
+            end
+        end;
+    go(d);
+
+let drop1_bytes(b : Bin) -> Bin =
+    match b
+    | \\ => \\
+    | (h, t), ih => tl_tail(step(h, Scan/lead()), t)
+    end;
+
+let take1_bytes(b : Bin) -> Bin =
+    match b
+    | \\ => \\
+    | (h, t), ih => Bin/concat(Bin/append(\\, h), tl_mid(step(h, Scan/lead()), t))
+    end;
+
+let drop1_proof(@b : Bin, d : Valid(b)) -> Valid(drop1_bytes(b)) =
+    match d : (w : Utf8(q, x)) => Valid(drop1_bytes(x))
+    | stop() => Utf8/stop()
+    | more(c, st, t, rest) =>
+        let w = tl_proof(step(c, st), t, rest);
+        w.tv
+    end;
+
+let take1_proof(@b : Bin, d : Valid(b)) -> Valid(take1_bytes(b)) =
+    match d : (w : Utf8(q, x)) => Valid(take1_bytes(x))
+    | stop() => Utf8/stop()
+    | more(c, st, t, rest) =>
+        let w = tl_proof(step(c, st), t, rest);
+        Utf8/more(c, st, tl_mid(step(c, st), t), w.midd)
+    end;
+
+let drop1(s : Str) -> Str =
+    Str { bytes = drop1_bytes(s.bytes), valid = drop1_proof(@s.bytes, s.valid) };
+
+let take1(s : Str) -> Str =
+    Str { bytes = take1_bytes(s.bytes), valid = take1_proof(@s.bytes, s.valid) };
+
+rec drop_n(n : Nat, s : Str) -> Str =
+    match Nat/eql(n, 0)
+    | true => s
+    | false => drop_n(Nat/sub(n, 1), drop1(s))
+    end;
+
+rec take_n(n : Nat, s : Str) -> Str =
+    match Nat/eql(n, 0)
+    | true => ""
+    | false => concat(take1(s), take_n(Nat/sub(n, 1), drop1(s)))
+    end;
+
+pub let slice(s : Str, x : Nat, y : Nat) -> Str =
+    take_n(Nat/sub(y, x), drop_n(x, s));
+
+let to_bins(parts : Arr(Str)) -> Arr(Bin) =
+    match parts
+    | [] => []
+    | (h, t), ih => Arr/concat([to_bin(h)], ih)
+    end;
+
+pub let flatten(parts : Arr(Str)) -> Str =
+    Str {
+        bytes = Bin/flatten(to_bins(parts)),
+        valid =
+            match parts : (p) => Valid(Bin/flatten(to_bins(p)))
+            | [] => Utf8/stop()
+            | (h, t), ih => concat_closed(@to_bin(h), @Bin/flatten(to_bins(t)), h.valid, ih)
+            end
+    };

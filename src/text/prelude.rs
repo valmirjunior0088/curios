@@ -50,10 +50,6 @@ fn bin() -> Term {
     prim(Prim::BinType)
 }
 
-fn str() -> Term {
-    prim(Prim::StrType)
-}
-
 fn bln() -> Term {
     prim(Prim::BlnType)
 }
@@ -162,11 +158,12 @@ fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Prim) -> TopI
     pub_fn(label, vec![("a", input)], output, prim(ctor(name("a"))))
 }
 
-// A text-rendering conversion. The primitive is intrinsically `_ -> Str`: its
-// output is UTF-8 by its (trusted) contract — decimal/ASCII text — the same
-// inherent primitive trust as `Bin/len` returning the right length.
-fn to_str(input: Term, ctor: fn(Term) -> Prim) -> TopItem {
-    pub_fn("to_str", vec![("a", input)], str(), prim(ctor(name("a"))))
+// A text-rendering conversion to the raw UTF-8 *bytes*. The primitive emits
+// decimal/ASCII text — UTF-8 by its (trusted) contract, the same inherent
+// primitive trust as `Bin/len` returning the right length — so `/std/{Nat,Int,Flt}`
+// wrap it with the checked `Str/of_bin` to land in the proof-carrying `Str`.
+fn to_str_bin(input: Term, ctor: fn(Term) -> Prim) -> TopItem {
+    pub_fn("to_str_bin", vec![("a", input)], bin(), prim(ctor(name("a"))))
 }
 
 fn nat_succ() -> TopItem {
@@ -199,7 +196,7 @@ fn nat_ops() -> Vec<TopItem> {
         binary("shr", nat(), nat(), Prim::NatShr),
         unary("to_int", nat(), int(), Prim::NatToInt),
         unary("to_flt", nat(), flt(), Prim::NatToFlt),
-        to_str(nat(), Prim::NatToStr),
+        to_str_bin(nat(), Prim::NatToStr),
     ]
 }
 
@@ -238,7 +235,7 @@ fn int_ops() -> Vec<TopItem> {
         binary("shr", int(), int(), Prim::IntShr),
         unary("to_nat", int(), nat(), Prim::IntToNat),
         unary("to_flt", int(), flt(), Prim::IntToFlt),
-        to_str(int(), Prim::IntToStr),
+        to_str_bin(int(), Prim::IntToStr),
     ]
 }
 
@@ -265,20 +262,8 @@ fn flt_ops() -> Vec<TopItem> {
         unary("nearest", flt(), flt(), Prim::FltNearest),
         unary("to_nat", flt(), nat(), Prim::FltToNat),
         unary("to_int", flt(), int(), Prim::FltToInt),
-        to_str(flt(), Prim::FltToStr),
+        to_str_bin(flt(), Prim::FltToStr),
         unary("to_le_bin", flt(), bin(), Prim::FltToLeBin),
-    ]
-}
-
-fn str_ops() -> Vec<TopItem> {
-    vec![
-        // `Str` shares `Bin`'s runtime representation but not its surface.
-        // `to_bin` is the carrier projection; `concat`/`eql` are defined in
-        // `/std/Str` on top of it rather than as primitives.
-        unary("to_bin", str(), bin(), Prim::StrToBin),
-        // The trusted `Bin -> Str` coercion — the raw substrate beneath the
-        // checked `/std/Str/of_bin`. Not re-exported into the `/std/Str` API.
-        unary("of_bin", bin(), str(), Prim::StrOfBin),
     ]
 }
 
@@ -630,7 +615,6 @@ fn sys_module() -> Module {
             pub_let("Int", type_(), int()),
             pub_let("Flt", type_(), flt()),
             pub_let("Bin", type_(), bin()),
-            pub_let("Str", type_(), str()),
             pub_let("Bln", type_(), bln()),
             pub_let("Io", type_(), io()),
             pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
@@ -640,7 +624,6 @@ fn sys_module() -> Module {
             pub_mod("Int", int_ops()),
             pub_mod("Flt", flt_ops()),
             pub_mod("Bin", bin_ops()),
-            pub_mod("Str", str_ops()),
             pub_mod("Arr", arr_ops()),
             pub_mod("Cell", cell_ops()),
             pub_mod("Io", io_ops()),

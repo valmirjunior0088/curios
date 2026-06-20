@@ -58,10 +58,10 @@ fn single_let_binding() {
             x
         "#),
         core::Term::let_(
-            "x",
+            "/x",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("x"))
+            core::Term::var(core::Var::free("/x"))
         ),
     );
 }
@@ -76,10 +76,10 @@ fn nested_module_binding_reference() {
             Foo/f
         "#),
         core::Term::let_(
-            "Foo/f",
+            "/Foo/f",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("Foo/f"))
+            core::Term::var(core::Var::free("/Foo/f"))
         ),
     );
 }
@@ -94,10 +94,10 @@ fn module_named_after_type_resolves_by_qualified_path() {
             Nat/double
         "#),
         core::Term::let_(
-            "Nat/double",
+            "/Nat/double",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("Nat/double"))
+            core::Term::var(core::Var::free("/Nat/double"))
         ),
     );
 }
@@ -115,10 +115,10 @@ fn use_shorthand_resolves_qualifier() {
             Bar/f
         "#),
         core::Term::let_(
-            "Foo/Bar/f",
+            "/Foo/Bar/f",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("Foo/Bar/f"))
+            core::Term::var(core::Var::free("/Foo/Bar/f"))
         ),
     );
 }
@@ -238,10 +238,10 @@ fn pub_use_exposes_qualifier() {
             MyMod/Bar/f
         "#),
         core::Term::let_(
-            "Foo/Bar/f",
+            "/Foo/Bar/f",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("Foo/Bar/f"))
+            core::Term::var(core::Var::free("/Foo/Bar/f"))
         ),
     );
 }
@@ -282,10 +282,10 @@ fn use_of_pub_use_path_resolves_through_alias() {
             Bar/f
         "#),
         core::Term::let_(
-            "Foo/Bar/f",
+            "/Foo/Bar/f",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("Foo/Bar/f"))
+            core::Term::var(core::Var::free("/Foo/Bar/f"))
         ),
     );
 }
@@ -308,10 +308,10 @@ fn chained_pub_use_re_exports_transitively() {
             C/X/f
         "#),
         core::Term::let_(
-            "A/X/f",
+            "/A/X/f",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("A/X/f"))
+            core::Term::var(core::Var::free("/A/X/f"))
         ),
     );
 }
@@ -337,10 +337,10 @@ fn chained_re_export_resolves_out_of_order() {
             A/x
         "#),
         core::Term::let_(
-            "C/x",
+            "/C/x",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("C/x"))
+            core::Term::var(core::Var::free("/C/x"))
         ),
     );
 }
@@ -408,10 +408,10 @@ fn deep_facade_traversal_through_re_exported_module() {
             x
         "#),
         core::Term::let_(
-            "B/M/x",
+            "/B/M/x",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("B/M/x"))
+            core::Term::var(core::Var::free("/B/M/x"))
         ),
     );
 }
@@ -433,10 +433,10 @@ fn re_exports_from_own_private_child() {
             helper
         "#),
         core::Term::let_(
-            "Facade/Impl/helper",
+            "/Facade/Impl/helper",
             core::Term::type_(),
             core::Term::type_(),
-            core::Term::var(core::Var::free("Facade/Impl/helper"))
+            core::Term::var(core::Var::free("/Facade/Impl/helper"))
         ),
     );
 }
@@ -996,14 +996,14 @@ fn use_glob_imports_all_public_bindings() {
             x
         "#),
         core::Term::let_(
-            "Foo/x",
+            "/Foo/x",
             core::Term::type_(),
             core::Term::type_(),
             core::Term::let_(
-                "Foo/y",
+                "/Foo/y",
                 core::Term::type_(),
                 core::Term::type_(),
-                core::Term::var(core::Var::free("Foo/x"))
+                core::Term::var(core::Var::free("/Foo/x"))
             )
         ),
     );
@@ -1123,7 +1123,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
     assert!(matches!(
         super::to_core(&entrypoint, &text::NullLoader).unwrap_err(),
         text::Error::Located { error, .. }
-            if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "A")
+            if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "/A")
     ));
 }
 

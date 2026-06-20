@@ -142,10 +142,69 @@ impl<'a, 'b> Lower<'a, 'b> {
         })
     }
 
+    // The meta-emitter: a string literal becomes a proof-carrying `/syn/Str` value
+    // `Str { bytes = <Bin>, valid = <Utf8 derivation> }`. The derivation is the
+    // canonical `more`-spine (one `more` per byte, ending in `stop`), starting from
+    // the `lead` state — `valid`'s type is `Valid(b) = Utf8(lead, b)`. `valid` is
+    // erased, so at runtime `Str` collapses to its `Bin` bytes — a literal costs
+    // exactly what a `Bin` literal did.
+    fn str_literal(&self, bytes: &[u8]) -> core::Term {
+        core::Term::struct_named(
+            "/syn/Str/Str",
+            Vec::<core::Term>::new(),
+            [
+                (None, core::Term::prim(core::Prim::Bin(bytes.to_vec()))),
+                (None, self.utf8_derivation(bytes, Self::scan_lead())),
+            ],
+        )
+    }
+
+    // A constructor/function `Var` applied to `args` — the absolute core name as the
+    // parser would resolve it (privacy is a surface-resolution concern; these are
+    // already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
+    fn syn_call(name: &str, args: impl IntoIterator<Item = core::Term>) -> core::Term {
+        core::Term::apply(
+            core::Term::var(core::Var::free(name)),
+            args.into_iter().collect::<Vec<_>>(),
+        )
+    }
+
+    fn scan_lead() -> core::Term {
+        Self::syn_call("/syn/Str/Scan/lead", [])
+    }
+
+    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term —
+    // `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s
+    // expected index (`Utf8(step(c, state), tail)`) is definitionally the state we
+    // thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, \\)`
+    // matches because `step` of the last byte reduces back to `lead` for valid UTF-8
+    // (a string literal is valid UTF-8 by construction).
+    fn utf8_derivation(&self, bytes: &[u8], state: core::Term) -> core::Term {
+        match bytes.split_first() {
+            None => Self::syn_call("/syn/Str/Utf8/stop", []),
+            Some((&head, tail)) => {
+                let byte: core::Term = core::Term::prim(core::Prim::Nat(core::Nat::new(head as usize)));
+                let next = Self::syn_call("/syn/Str/step", [byte.clone(), state.clone()]);
+                Self::syn_call(
+                    "/syn/Str/Utf8/more",
+                    [
+                        byte,
+                        state,
+                        core::Term::prim(core::Prim::Bin(tail.to_vec())),
+                        self.utf8_derivation(tail, next),
+                    ],
+                )
+            }
+        }
+    }
+
     fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
         Ok(match term {
             Subterm::Type => core::Term::type_(),
             Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
+            // A string literal desugars to a proof-carrying `/syn/Str` construction
+            // (the meta-emitter — see `str_literal`); `Str` is no longer a core primitive.
+            Subterm::Prim(Prim::Str(string)) => self.str_literal(string.as_bytes()),
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
             Subterm::Name(name) => core::Term::var(core::Var::free(self.resolve_name(name)?)),
             // Each parameter type sees the *preceding* parameters' binders, and

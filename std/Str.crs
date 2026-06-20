@@ -1,70 +1,8 @@
-pub use /sys/{Str};
-pub use /sys/Str/{let to_bin};
+pub use /syn/Str/{let Str, let to_bin, let of_bin, let concat, let of_nat, let slice, let flatten};
 use /std/{Char, Nat, Bin, Bln, Arr, Option};
-
-let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
-    match Nat/gte(c, lo)
-    | true => Nat/lte(c, hi)
-    | false => false
-    end;
-
-union Scan
-| lead()
-| cont(Nat, Nat, Nat)
-| bad()
-end
-
-let classify(c : Nat) -> Scan =
-    match in_range(c, 0, 127)
-    | true => Scan/lead()
-    | false =>
-        match in_range(c, 194, 223)
-        | true => Scan/cont(1, 128, 191)
-        | false =>
-            match in_range(c, 224, 239)
-            | true =>
-                let lo = match Nat/eql(c, 224) | true => 160 | false => 128 end;
-                let hi = match Nat/eql(c, 237) | true => 159 | false => 191 end;
-                Scan/cont(2, lo, hi)
-            | false =>
-                match in_range(c, 240, 244)
-                | true =>
-                    let lo = match Nat/eql(c, 240) | true => 144 | false => 128 end;
-                    let hi = match Nat/eql(c, 244) | true => 143 | false => 191 end;
-                    Scan/cont(3, lo, hi)
-                | false => Scan/bad()
-                end
-            end
-        end
-    end;
-
-let step(c : Nat, s : Scan) -> Scan =
-    match s
-    | bad() => Scan/bad()
-    | cont(rem, lo, hi) =>
-        match in_range(c, lo, hi)
-        | false => Scan/bad()
-        | true =>
-            match Nat/eql(rem, 1)
-            | true => Scan/lead()
-            | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
-            end
-        end
-    | lead() => classify(c)
-    end;
-
-pub let is_utf8(b : Bin) -> Bln =
-    match Bin/fold(b, Scan/lead(), step)
-    | lead() => true
-    | cont(rem, lo, hi) => false
-    | bad() => false
-    end;
 
 pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
-
-pub let concat(a : Str, b : Str) -> Str =
-    /sys/Str/of_bin(Bin/concat(to_bin(a), to_bin(b)));
 
 let codepoint_width(lead : Nat) -> Nat =
     match Nat/lt(lead, 128)
@@ -144,19 +82,6 @@ pub let find(s : Str, target : Nat) -> Option(Nat) =
 pub let get(s : Str, i : Nat) -> Nat =
     let b = to_bin(s);
     decode_at(b, byte_offset(b, i));
-
-pub let slice(s : Str, start : Nat, stop : Nat) -> Str =
-    let b = to_bin(s);
-    /sys/Str/of_bin(Bin/slice(b, byte_offset(b, start), byte_offset(b, stop)));
-
-pub let of_bin(b : Bin) -> Option(Str) =
-    match is_utf8(b)
-    | true => Option/some(/sys/Str/of_bin(b))
-    | false => Option/none()
-    end;
-
-pub let flatten(parts : Arr(Str)) -> Str =
-    /sys/Str/of_bin(Bin/flatten(Arr/map(to_bin, parts)));
 
 pub let join(sep : Str, parts : Arr(Str)) -> Str =
     Arr/balanced(Arr/len(parts), "", (i) => Arr/get(parts, i),
