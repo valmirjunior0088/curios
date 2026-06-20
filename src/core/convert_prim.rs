@@ -1,6 +1,6 @@
 use {
     super::Convert,
-    crate::core::{Nat, Prim, ReduceError, Term},
+    crate::core::{Peel, Prim, ReduceError, Term, peel_nat},
 };
 
 pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
@@ -12,27 +12,16 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::StrType, Prim::StrType)
         | (Prim::IoType, Prim::IoType) => Ok(true),
         (Prim::Io(this), Prim::Io(that)) => Ok(this == that),
-        (Prim::Nat(Nat::Zero), Prim::Nat(Nat::Zero)) => Ok(true),
-        // Successor is injective, so the shared literal spine peels off
-        // exactly; the leftover rides on the longer side. This is what lets
-        // a flex tail solve through a spine difference — `2 ~ ?n + 1`
-        // becomes `1 ~ ?n`.
-        (Prim::Nat(Nat::Succ(spine_l, il)), Prim::Nat(Nat::Succ(spine_r, ir))) => {
-            match spine_l.cmp(&spine_r) {
-                std::cmp::Ordering::Equal => cmp.enqueue(Term::type_(), il, ir),
-                std::cmp::Ordering::Greater => cmp.enqueue(
-                    Term::type_(),
-                    Term::prim(Prim::Nat(Nat::Succ(spine_l - spine_r, il))),
-                    ir,
-                ),
-                std::cmp::Ordering::Less => cmp.enqueue(
-                    Term::type_(),
-                    il,
-                    Term::prim(Prim::Nat(Nat::Succ(spine_r - spine_l, ir))),
-                ),
+        // Two `Nat`s are the free monoid on one generator: peel the shared
+        // successor spine and enqueue the residual tails (`core::spine`).
+        (Prim::Nat(actual), Prim::Nat(target)) => Ok(match peel_nat(&actual, &target) {
+            Peel::Equal => true,
+            Peel::Clash | Peel::Stuck => false,
+            Peel::Continue(left, right) => {
+                cmp.enqueue(Term::type_(), left, right);
+                true
             }
-            Ok(true)
-        }
+        }),
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
         (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),

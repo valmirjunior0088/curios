@@ -13,6 +13,9 @@ pub use nat::*;
 mod prim;
 pub use prim::*;
 
+mod spine;
+pub use spine::*;
+
 mod names;
 pub use names::*;
 

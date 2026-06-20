@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Arity, Atom, Cases, Definition, Field, Flt, Func, FuncType, Item, Let, Match,
-        Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, Two, UnionType, Var, Variant,
+        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Item, Let,
+        Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::{
@@ -205,6 +205,15 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     collect_labels(default, out);
                 }
                 Cases::Union { cases, .. } => cases.iter().for_each(|(_, s)| scope(out, s)),
+                Cases::Inductive {
+                    carrier: Carrier::Arr(elem),
+                    empty_case,
+                    cons_case,
+                } => {
+                    collect_labels(elem, out);
+                    collect_labels(empty_case, out);
+                    scope(out, cons_case);
+                }
             }
         }
         Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
@@ -350,6 +359,28 @@ fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
     let body = scope.open(&[&Term::var(Var::free(&fst)), &Term::var(Var::free(&snd))]);
 
     ((fst, snd), body)
+}
+
+fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((String, String, String), Term) {
+    let fst = scope
+        .first_label()
+        .map(str::to_string)
+        .unwrap_or_else(|| label_at(depth));
+    let snd = scope
+        .second_label()
+        .map(str::to_string)
+        .unwrap_or_else(|| label_at(depth + 1));
+    let thd = scope
+        .third_label()
+        .map(str::to_string)
+        .unwrap_or_else(|| label_at(depth + 2));
+    let body = scope.open(&[
+        &Term::var(Var::free(&fst)),
+        &Term::var(Var::free(&snd)),
+        &Term::var(Var::free(&thd)),
+    ]);
+
+    ((fst, snd, thd), body)
 }
 
 fn print_var(var: Var) -> Printer<'static> {
@@ -953,6 +984,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 Cases::Nat { .. } => "Nat.fold ",
                 Cases::Switch { .. } => "Nat.match ",
                 Cases::Union { .. } => "match ",
+                Cases::Inductive {
+                    carrier: Carrier::Arr(_),
+                    ..
+                } => "Arr.fold ",
             };
 
             let prefix = flat([
@@ -1047,6 +1082,26 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         })
                         .collect::<Vec<_>>(),
                 ),
+                Cases::Inductive {
+                    carrier: Carrier::Arr(_),
+                    empty_case,
+                    cons_case,
+                } => {
+                    let ((head_label, tail_label, ih_label), cons_case) =
+                        open_scope_three(cons_case, depth);
+                    flat([
+                        pure("\n| [] =>\n"),
+                        indent(flat([print_term(empty_case, depth), pure(";")])),
+                        pure("\n| ("),
+                        pure(display_label(&head_label)),
+                        pure(", "),
+                        pure(display_label(&tail_label)),
+                        pure("), "),
+                        pure(display_label(&ih_label)),
+                        pure(" =>\n"),
+                        indent(flat([print_term(cons_case, depth), pure(";")])),
+                    ])
+                }
             };
 
             flat([prefix, arms])

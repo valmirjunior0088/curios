@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, Atom, Bound, Cases, Context, Error, Field, Func, Item, Let, Many, Match, Module,
-        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, UnionType, Var, Variant, erase_prim,
-        expect_prim_head, infer, reduce_with, refine_head,
+        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, Item, Let, Many, Match,
+        Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -315,7 +315,69 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
         Cases::Union { cases, pattern } => {
             erase_union_match(context, head, motive, cases, pattern.as_ref())
         }
+        Cases::Inductive {
+            carrier: Carrier::Arr(elem),
+            empty_case,
+            cons_case,
+        } => erase_arr_match(context, head, motive, elem, empty_case, cons_case),
     }
+}
+
+/// Erase an `Arr` induction by desugaring it to `Nat` induction on the array's
+/// length, reusing `erase_nat_match` and so the `Nat` loop emitter wholesale (no
+/// new ersd/cont machinery). The structural fold is a `foldr`, so the loop walks
+/// the buffer back-to-front: at `Nat`-step `pred = i` the original cons arm fires
+/// with `head := v[len-1-i]` and `tail := v[len-i ..]`, and the induction
+/// hypothesis is the accumulator. (See `reduce` for the matching type-level rule.)
+fn erase_arr_match(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    elem: &Term,
+    empty_case: &Term,
+    cons_case: &Scope<Three>,
+) -> Result<ersd::Term, Error> {
+    let len: Term = Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into();
+    let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
+
+    // Nat motive `Q(i) = P(suffix of length i) = motive[ v[len - i ..] ]`.
+    let i_label = context.fresh(None);
+    let suffix_i: Term = Subterm::Prim(Prim::ArrSlice(
+        elem.clone(),
+        head.clone(),
+        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&i_label)))).into(),
+        len.clone(),
+    ))
+    .into();
+    let nat_motive = Scope::close(Many(1), &[i_label.as_str()], motive.open(&[&suffix_i]));
+
+    // Successor arm: recover the element and tail at index `len - 1 - pred`.
+    let pred_label = context.fresh(cons_case.first_label());
+    let ih_label = context.fresh(cons_case.third_label());
+
+    let index: Term = Subterm::Prim(Prim::nat_sub(
+        Subterm::Prim(Prim::nat_sub(len.clone(), one)),
+        Term::var(Var::free(&pred_label)),
+    ))
+    .into();
+    let head_value: Term =
+        Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into();
+    let tail_value: Term = Subterm::Prim(Prim::ArrSlice(
+        elem.clone(),
+        head.clone(),
+        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&pred_label)))).into(),
+        len.clone(),
+    ))
+    .into();
+
+    let succ_body = cons_case.open(&[
+        &head_value,
+        &tail_value,
+        &Term::var(Var::free(&ih_label)),
+    ]);
+    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+
+    erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
 }
 
 fn erase_bln_match(

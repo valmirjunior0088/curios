@@ -3,8 +3,8 @@ use {
     crate::{
         core,
         text::{
-            Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
-            Prim, Subterm, Term,
+            ArrMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
+            PatternLit, Prim, Subterm, Term,
         },
     },
     num_bigint::BigUint,
@@ -287,6 +287,33 @@ impl<'a, 'b> Lower<'a, 'b> {
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     self.union_rows(head, &um.motive, rows)?
+                }
+                Match::Arr(ArrMatch {
+                    head,
+                    motive,
+                    empty_case,
+                    head_label,
+                    tail_label,
+                    ih_label,
+                    cons_case,
+                }) => {
+                    let (label, body) = self.motive_parts(motive)?;
+                    // The element type is type-directed (read off the scrutinee
+                    // during elaboration), so lowering leaves it a hole.
+                    core::Term::arr_match(
+                        self.term(head)?,
+                        core::Term::metavar(self.context.fresh_metavar()),
+                        label,
+                        body,
+                        self.term(empty_case)?,
+                        head_label.clone(),
+                        tail_label.clone(),
+                        ih_label.clone(),
+                        self.scoped(
+                            [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                            || self.term(cons_case),
+                        )?,
+                    )
                 }
             },
             // A `let` is non-recursive: its binder is in scope only in the tail,
@@ -745,6 +772,31 @@ impl<'a, 'b> Lower<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
                 self.union_rows(head, &um.motive, rows)?
+            }
+            Match::Arr(ArrMatch {
+                head,
+                motive,
+                empty_case,
+                head_label,
+                tail_label,
+                ih_label,
+                cons_case,
+            }) => {
+                let (label, body) = self.motive_parts(motive)?;
+                core::Term::arr_match(
+                    self.collect(head, bind, binds)?,
+                    core::Term::metavar(self.context.fresh_metavar()),
+                    label,
+                    body,
+                    self.region(empty_case, bind)?,
+                    head_label.clone(),
+                    tail_label.clone(),
+                    ih_label.clone(),
+                    self.scoped(
+                        [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                        || self.region(cons_case, bind),
+                    )?,
+                )
             }
         })
     }

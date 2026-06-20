@@ -68,6 +68,26 @@ fn end_to_end() {
 }
 
 #[test]
+fn arr_match_is_a_foldr() {
+    // Native `Arr` induction (slice 1): the `| [] | (h, t), ih` eliminator,
+    // erased by desugaring to `Nat`-induction on the length and reusing the loop.
+    // `f(h, ih) = ih * 10 + h` is non-commutative, so the result distinguishes a
+    // structural `foldr` (head is the *first* element, ih is the fold of the tail)
+    // from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
+    let source = r#"
+        use /std/{Io, Str, Nat, Arr};
+        let xs : Arr(Nat) = [1, 2, 3, 4];
+        let digits : Nat =
+            match xs : Nat
+            | [] => 0
+            | (h, t), ih => Nat/add(Nat/mul(ih, 10), h)
+            end;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
+        "#;
+    assert_eq!(run(source), b"4321");
+}
+
+#[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
         std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))

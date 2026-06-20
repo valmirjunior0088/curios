@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang, LetSignature,
-        LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
+        Apply, ArrMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let, LetBang,
+        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, Pattern,
+        PatternLit,
         Plicity, Prim, Proj, Qualifier, Rec, RecItem, StructLit, Subterm, Term, TopCase, TopItem,
         TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
     },
@@ -634,7 +635,7 @@ fn parse_bln_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_nat_fold_match<'a>() -> Parser<'a, Term> {
+fn parse_nat_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(
             catch(
@@ -686,7 +687,7 @@ fn parse_nat_default<'a>() -> Parser<'a, Term> {
         .and_keep(lazy(parse_term))
 }
 
-fn parse_nat_match<'a>() -> Parser<'a, Term> {
+fn parse_nat_switch<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(catch(many0(parse_nat_case).and(parse_nat_default())))
         .and_drop(parse_keyword("end"))
@@ -725,10 +726,60 @@ fn parse_union_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+// The `| [] =>` identity arm of an `Arr` fold.
+fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
+    parse_literal("|")
+        .and_drop(parse_literal("["))
+        .and_drop(parse_literal("]"))
+        .and_drop(parse_literal("=>"))
+        .and_keep(lazy(parse_term))
+}
+
+// The `| (head, tail), ih =>` cons arm of an `Arr` fold.
+fn parse_arr_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
+    parse_literal("|")
+        .and_drop(parse_literal("("))
+        .and_keep(parse_identifier())
+        .and_drop(parse_literal(","))
+        .and(parse_identifier())
+        .and_drop(parse_literal(")"))
+        .and_drop(parse_literal(","))
+        .and(parse_identifier())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .map(|(((head, tail), ih), cons_case)| {
+            (
+                (head.to_string(), tail.to_string(), ih.to_string()),
+                cons_case,
+            )
+        })
+}
+
+fn parse_arr_match<'a>() -> Parser<'a, Term> {
+    catch(parse_match_prefix())
+        .and(catch(parse_arr_empty_branch()).and(parse_arr_cons_branch()))
+        .and_drop(parse_keyword("end"))
+        .map(
+            |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
+                Subterm::Match(Match::Arr(ArrMatch {
+                    head,
+                    motive,
+                    empty_case,
+                    head_label,
+                    tail_label,
+                    ih_label,
+                    cons_case,
+                }))
+            },
+        )
+        .map(Into::into)
+}
+
 fn parse_match<'a>() -> Parser<'a, Term> {
     catch(parse_bln_match())
-        .or(catch(parse_nat_fold_match()))
         .or(catch(parse_nat_match()))
+        .or(catch(parse_nat_switch()))
+        .or(catch(parse_arr_match()))
         .or(parse_union_match())
 }
 

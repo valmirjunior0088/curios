@@ -1,9 +1,10 @@
 use {
     super::{
-        Apply, Atom, Cases, Context, Definition, Error, Field, Func, FuncType, ImplicitOrigin,
-        Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat,
-        ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, UnionType, Var, Variant, case_target_indices,
+        Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Func, FuncType,
+        ImplicitOrigin, Inductive, Invert, Item, Let, Many, Match, Metavar, Module, MotivePattern,
+        MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct, StructType, Structure,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
         reduce_with, refine_head,
     },
@@ -503,6 +504,92 @@ fn elaborate_nat_match(
     Ok((rebuilt, result_type))
 }
 
+fn elaborate_arr_match(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    empty_case: &Term,
+    cons_case: &Scope<Three>,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    // `Arr` carries an element type the eliminator must read off the scrutinee
+    // (unlike `Nat`, whose carrier is parameterless) — infer the head, then
+    // demand its type is `Arr(elem)`.
+    let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
+    let head_type = reduce_with(context, &head_type)?;
+    let elem = match &*head_type {
+        Subterm::Prim(Prim::ArrType(elem)) => elem.clone(),
+        _ => return Err(Error::not_arr_type(head_type)),
+    };
+
+    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
+    let motive = check_motive(context, &head_type, motive)?;
+
+    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
+
+    let empty_value: Term = Subterm::Prim(Prim::Arr(vec![])).into();
+    let empty_elaborated = check(context, empty_case, motive.open(&[&empty_value]))?;
+
+    let head_label = context.fresh(cons_case.first_label());
+    let tail_label = context.fresh(cons_case.second_label());
+    let ih_label = context.fresh(cons_case.third_label());
+
+    let cons_body = context.with_frame(|context| {
+        context.assume(&head_label, &elem);
+        context.assume(&tail_label, &head_type);
+        context.assume(
+            &ih_label,
+            &motive.open(&[&Term::var(Var::free(&tail_label))]),
+        );
+
+        // The cons value `head :: tail`, encoded as the monoid operation on a
+        // singleton and the tail (no separate prepend primitive).
+        let cons_value: Term = Subterm::Prim(Prim::ArrConcat(
+            elem.clone(),
+            vec![
+                Subterm::Prim(Prim::Arr(vec![Term::var(Var::free(&head_label))])).into(),
+                Term::var(Var::free(&tail_label)),
+            ],
+        ))
+        .into();
+
+        check(
+            context,
+            &cons_case.open(&[
+                &Term::var(Var::free(&head_label)),
+                &Term::var(Var::free(&tail_label)),
+                &Term::var(Var::free(&ih_label)),
+            ]),
+            motive.open(&[&cons_value]),
+        )
+    })?;
+
+    let cons_elaborated = Scope::close(
+        Three,
+        &[
+            head_label.as_str(),
+            tail_label.as_str(),
+            ih_label.as_str(),
+        ],
+        cons_body,
+    );
+
+    let result_type = motive.open(&[&head_elaborated]);
+    let rebuilt = Subterm::Match(Match {
+        head: head_elaborated,
+        motive,
+        cases: Cases::Inductive {
+            carrier: Carrier::Arr(elem),
+            empty_case: empty_elaborated,
+            cons_case: cons_elaborated,
+        },
+    })
+    .into();
+
+    Ok((rebuilt, result_type))
+}
+
 fn elaborate_switch(
     context: &mut Context,
     head: &Term,
@@ -579,6 +666,11 @@ fn elaborate_match(
         Cases::Union { cases, pattern } => {
             elaborate_union_match(context, head, motive, cases, pattern.as_ref(), term, mode)
         }
+        Cases::Inductive {
+            carrier: Carrier::Arr(_),
+            empty_case,
+            cons_case,
+        } => elaborate_arr_match(context, head, motive, empty_case, cons_case, term, mode),
     }
 }
 

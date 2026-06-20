@@ -49,6 +49,21 @@ impl Arity for Two {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Three;
+
+impl Three {
+    pub const ARITY: usize = 3;
+}
+
+impl Arity for Three {
+    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; Self::ARITY];
+
+    fn arity(&self) -> usize {
+        Self::ARITY
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Many(pub usize);
 
 impl Arity for Many {
@@ -301,6 +316,10 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
     pub fn second_label(&self) -> Option<&str> {
         self.names.as_deref()?.get(1).map(String::as_str)
+    }
+
+    pub fn third_label(&self) -> Option<&str> {
+        self.names.as_deref()?.get(2).map(String::as_str)
     }
 
     pub fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {

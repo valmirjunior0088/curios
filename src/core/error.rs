@@ -124,6 +124,9 @@ pub enum Error {
     NotBlnType {
         head_type: Box<Term>,
     },
+    NotArrType {
+        head_type: Box<Term>,
+    },
     WrongNumberOfArguments {
         expected: usize,
         got: usize,
@@ -319,6 +322,12 @@ impl Error {
 
     pub fn not_bln_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotBlnType {
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn not_arr_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotArrType {
             head_type: Box::new(head_type.into()),
         }
     }
@@ -519,6 +528,7 @@ impl Error {
             | Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
             | Self::NotBlnType { head_type }
+            | Self::NotArrType { head_type }
             | Self::NotAUnionType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
                 out.push(expected)
@@ -620,6 +630,9 @@ impl fmt::Display for Error {
             }
             Error::NotBlnType { head_type } => {
                 write!(f, "expected Bool but got {head_type}")
+            }
+            Error::NotArrType { head_type } => {
+                write!(f, "expected Arr but got {head_type}")
             }
             Error::WrongNumberOfArguments { expected, got } => {
                 write!(

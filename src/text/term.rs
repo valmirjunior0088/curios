@@ -211,6 +211,21 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
+/// Structural induction on an `Arr`: an `| [] =>` identity arm and a
+/// `| (head, tail), ih =>` cons arm. The surface analogue of `NatMatch::Induction`
+/// for the native free-monoid primitives (the empty literal selects the carrier;
+/// only `Arr` exists today).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrMatch {
+    pub head: Term,
+    pub motive: Option<Motive>,
+    pub empty_case: Term,
+    pub head_label: String,
+    pub tail_label: String,
+    pub ih_label: String,
+    pub cons_case: Term,
+}
+
 /// A projection names its field either positionally (`p.0`) or by the tuple
 /// type's label (`p.status`). Labels are resolved to positions during core
 /// elaboration; they never survive past it.
@@ -257,6 +272,7 @@ pub enum Match {
     Bln(BlnMatch),
     Nat(NatMatch),
     Union(UnionMatch),
+    Arr(ArrMatch),
 }
 
 #[derive(Debug, Clone, PartialEq)]

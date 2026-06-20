@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, Rec, ReduceError,
-        Struct, Subterm, Term, Tuple, Var, reduce_prim,
+        Apply, Carrier, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, Rec,
+        ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -268,6 +268,48 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                 cases: Cases::Union { cases, pattern },
             }))))
         }
+
+        // Structural induction on a native free-monoid primitive. The reduce
+        // rule is the one-step decode: an identity-form value (empty literal)
+        // takes the empty arm; a cons-form value (a non-empty literal) peels its
+        // head generator and recurses symbolically for the induction hypothesis,
+        // exactly as `Cases::Nat` peels one successor. A symbolic value (a
+        // concatenation with a non-literal lead, a variable) is stuck: rebuild.
+        Cases::Inductive {
+            carrier: Carrier::Arr(elem),
+            empty_case,
+            cons_case,
+        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
+            Subterm::Prim(Prim::Arr(elems)) if elems.is_empty() => {
+                Ok(Reduce::Continue(empty_case))
+            }
+            Subterm::Prim(Prim::Arr(mut elems)) => {
+                let head_elem = elems.remove(0);
+                let tail: Term = Subterm::Prim(Prim::Arr(elems)).into();
+
+                let ih: Term = Subterm::Match(Match {
+                    head: tail.clone(),
+                    motive: motive.clone(),
+                    cases: Cases::Inductive {
+                        carrier: Carrier::Arr(elem.clone()),
+                        empty_case: empty_case.clone(),
+                        cons_case: cons_case.clone(),
+                    },
+                })
+                .into();
+
+                Ok(Reduce::Continue(cons_case.open(&[&head_elem, &tail, &ih])))
+            }
+            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                head: head.into(),
+                motive,
+                cases: Cases::Inductive {
+                    carrier: Carrier::Arr(elem),
+                    empty_case,
+                    cons_case,
+                },
+            })))),
+        },
     }
 }
 

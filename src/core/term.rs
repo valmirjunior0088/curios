@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Two, Var, Visit},
+    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -485,6 +485,50 @@ impl Term {
         }))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn arr_match<H, M, EL, EC, HL, TL, IL, CC>(
+        head: H,
+        elem: EL,
+        motive_label: Option<&str>,
+        motive: M,
+        empty_case: EC,
+        head_label: HL,
+        tail_label: TL,
+        ih_label: IL,
+        cons_case: CC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        EL: Into<Term>,
+        EC: Into<Term>,
+        HL: Into<String>,
+        TL: Into<String>,
+        IL: Into<String>,
+        CC: Into<Term>,
+    {
+        let head_label = head_label.into();
+        let tail_label = tail_label.into();
+        let ih_label = ih_label.into();
+
+        Self::from(Subterm::Match(Match {
+            head: head.into(),
+            motive: match motive_label {
+                Some(l) => Scope::close(Many(1), &[l], motive.into()),
+                None => Scope::constant(Many(1), motive.into()),
+            },
+            cases: Cases::Inductive {
+                carrier: Carrier::Arr(elem.into()),
+                empty_case: empty_case.into(),
+                cons_case: Scope::close(
+                    Three,
+                    &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
+                    cons_case.into(),
+                ),
+            },
+        }))
+    }
+
     pub fn switch<H, M, I, B, D>(
         head: H,
         motive_label: Option<&str>,
@@ -802,6 +846,23 @@ pub enum Cases {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
     },
+    /// Structural induction on a native free-monoid primitive (`Arr`/`Bin`/`Str`):
+    /// an identity arm plus a cons arm binding the head generator, the tail, and
+    /// the induction hypothesis at the tail. The `carrier` selects the primitive
+    /// and carries its parameters (`Arr`'s element type). The dual of `Cases::Nat`
+    /// where the generator carries a payload.
+    Inductive {
+        carrier: Carrier,
+        empty_case: Term,
+        cons_case: Scope<Three>,
+    },
+}
+
+/// The native free-monoid primitive a `Cases::Inductive` eliminates, with its
+/// type parameters. `Bin`/`Str` carry none; `Arr` carries its element type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Carrier {
+    Arr(Term),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -991,6 +1052,15 @@ impl Subterm {
                                 t.collect_metavars(ids);
                             }
                         });
+                    }
+                    Cases::Inductive {
+                        carrier: Carrier::Arr(elem),
+                        empty_case,
+                        cons_case,
+                    } => {
+                        elem.collect_metavars(ids);
+                        empty_case.collect_metavars(ids);
+                        cons_case.body().collect_metavars(ids);
                     }
                 }
             }
@@ -1184,6 +1254,15 @@ impl Bound for Subterm {
                                 .collect(),
                         }),
                     },
+                    Cases::Inductive {
+                        carrier: Carrier::Arr(elem),
+                        empty_case,
+                        cons_case,
+                    } => Cases::Inductive {
+                        carrier: Carrier::Arr(visit.visit_subterm(elem)),
+                        empty_case: visit.visit_subterm(empty_case),
+                        cons_case: visit.visit_scope(cons_case),
+                    },
                 },
             }),
             Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
@@ -1288,6 +1367,11 @@ impl Bound for Subterm {
                             }),
                     )
                 }
+                Cases::Inductive {
+                    carrier: Carrier::Arr(elem),
+                    empty_case,
+                    cons_case,
+                } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
             }),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())

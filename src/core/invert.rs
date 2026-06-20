@@ -7,9 +7,8 @@
 //! `impossible` keyword.
 
 use {
-    super::{Context, Error, Nat, Prim, Subterm, Telescope, Term, UnionType, reduce_with},
-    num_traits::Zero,
-    std::{cmp::Ordering, collections::BTreeSet},
+    super::{Context, Error, Peel, Subterm, Telescope, Term, UnionType, peel_prim, reduce_with},
+    std::collections::BTreeSet,
 };
 
 /// The outcome of inversion: either every index position decomposed (or
@@ -141,8 +140,14 @@ fn unify_index(
     match (&*actual, &*target) {
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Ok(Step::Refuse),
 
-        (Subterm::Prim(Prim::Nat(a)), Subterm::Prim(Prim::Nat(t))) => {
-            unify_nat(context, a, t, flex, tainted, solutions)
+        (Subterm::Prim(this), Subterm::Prim(that)) => match peel_prim(this, that) {
+            Some(Peel::Equal) => Ok(Step::Ok),
+            Some(Peel::Clash) => Ok(Step::Clash),
+            Some(Peel::Stuck) => Ok(Step::Refuse),
+            Some(Peel::Continue(left, right)) => {
+                unify_index(context, &left, &right, flex, tainted, false, solutions)
+            }
+            None => Ok(Step::Refuse),
         }
 
         // The same rigid variable on both sides is trivially forced.
@@ -181,63 +186,6 @@ fn unify_index(
             Ok(Step::Ok)
         }
 
-        (Subterm::Prim(Prim::Bln(a)), Subterm::Prim(Prim::Bln(t))) => Ok(match a == t {
-            true => Step::Ok,
-            false => Step::Clash,
-        }),
-
-        (Subterm::Prim(Prim::Int(a)), Subterm::Prim(Prim::Int(t))) => Ok(match a == t {
-            true => Step::Ok,
-            false => Step::Clash,
-        }),
-
         _ => Ok(Step::Refuse),
-    }
-}
-
-/// `Nat` inversion over successor spines: `k + a ~ k' + t` peels the shared
-/// literal part and recurses on the remainder; a leftover positive spine
-/// against zero is a definite clash (a `Nat` is never negative).
-fn unify_nat(
-    context: &mut Context,
-    actual: &Nat,
-    target: &Nat,
-    flex: &[String],
-    tainted: &BTreeSet<String>,
-    solutions: &mut Vec<(String, Term)>,
-) -> Result<Step, Error> {
-    let zero = || Term::prim(Prim::Nat(Nat::Zero));
-
-    match (actual, target) {
-        (Nat::Zero, Nat::Zero) => Ok(Step::Ok),
-        (Nat::Zero, Nat::Succ(spine, rest)) => match spine.is_zero() {
-            true => unify_index(context, &zero(), rest, flex, tainted, false, solutions),
-            false => Ok(Step::Clash),
-        },
-        (Nat::Succ(spine, rest), Nat::Zero) => match spine.is_zero() {
-            true => unify_index(context, rest, &zero(), flex, tainted, false, solutions),
-            false => Ok(Step::Clash),
-        },
-        (Nat::Succ(ka, ra), Nat::Succ(kt, rt)) => match ka.cmp(kt) {
-            Ordering::Equal => unify_index(context, ra, rt, flex, tainted, false, solutions),
-            Ordering::Greater => unify_index(
-                context,
-                &Term::prim(Prim::Nat(Nat::Succ(ka - kt, ra.clone()))),
-                rt,
-                flex,
-                tainted,
-                false,
-                solutions,
-            ),
-            Ordering::Less => unify_index(
-                context,
-                ra,
-                &Term::prim(Prim::Nat(Nat::Succ(kt - ka, rt.clone()))),
-                flex,
-                tainted,
-                false,
-                solutions,
-            ),
-        },
     }
 }

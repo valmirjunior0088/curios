@@ -1,5 +1,6 @@
 use super::{
-    Apply, Arity, Bound, Cases, Context, Definition, Error, Func, FuncType, Inductive, Item, Let,
+    Apply, Arity, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
+    Item, Let,
     Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
     StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Variant,
 };
@@ -295,6 +296,15 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 } => Cases::Nat {
                     zero_case: zonk_term(context, zero_case)?,
                     succ_case: enter_scope(succ_case, |b| zonk_term(context, b))?,
+                },
+                Cases::Inductive {
+                    carrier: Carrier::Arr(elem),
+                    empty_case,
+                    cons_case,
+                } => Cases::Inductive {
+                    carrier: Carrier::Arr(zonk_term(context, elem)?),
+                    empty_case: zonk_term(context, empty_case)?,
+                    cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
                 },
                 Cases::Switch { cases, default } => Cases::Switch {
                     cases: cases

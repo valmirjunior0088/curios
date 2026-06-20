@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Bound, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
+        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
         ReduceError, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UnionType,
         Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
@@ -579,6 +579,33 @@ impl Convert {
                         that_scope.open(&binder_refs),
                     );
                 }
+
+                Ok(true)
+            }
+
+            (
+                Cases::Inductive {
+                    carrier: Carrier::Arr(this_elem),
+                    empty_case: this_empty,
+                    cons_case: this_cons,
+                },
+                Cases::Inductive {
+                    carrier: Carrier::Arr(that_elem),
+                    empty_case: that_empty,
+                    cons_case: that_cons,
+                },
+            ) => {
+                self.enqueue(Term::type_(), this_elem, that_elem);
+                self.enqueue(Term::type_(), this_empty, that_empty);
+
+                let head_label: Term = Term::var(Var::free(context.fresh(None)));
+                let tail_label: Term = Term::var(Var::free(context.fresh(None)));
+                let ih_label: Term = Term::var(Var::free(context.fresh(None)));
+                self.enqueue(
+                    Term::type_(),
+                    this_cons.open(&[&head_label, &tail_label, &ih_label]),
+                    that_cons.open(&[&head_label, &tail_label, &ih_label]),
+                );
 
                 Ok(true)
             }
