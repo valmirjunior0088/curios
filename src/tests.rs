@@ -3356,3 +3356,105 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
         "#;
     assert_eq!(run(source), b"ok");
 }
+
+#[test]
+fn utf8_of_bin_checker_decides_and_builds_derivations() {
+    // INCREMENT B of the Str migration: the `of_bin` decision procedure. It must
+    // both DECIDE validity at runtime and BUILD a real `Utf8` derivation in the
+    // `some` case. The native `Bin` eliminator is a fold (its `ih` is the
+    // fold-of-tail with fixed parameters), but the checker threads a changing
+    // `Scan` state — so we fold `b` into a FUNCTION `(s) -> Option(Utf8(s, b))`
+    // (foldl-as-foldr convoy), letting each step receive its state from the caller.
+    // `of_bin_valid(b) = check(b)(lead)`. The runtime `decide` proves the automaton
+    // actually runs: "hi" (ASCII) is accepted, a lone `\80` continuation byte is
+    // rejected — output "yesno".
+    let source = r#"
+        use /std/{Io, Str, Nat, Bin, Bln, Option};
+
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+            match Nat/gte(c, lo)
+            | true => Nat/lte(c, hi)
+            | false => false
+            end;
+
+        union Scan
+        | lead()
+        | cont(Nat, Nat, Nat)
+        | bad()
+        end
+
+        let classify(c : Nat) -> Scan =
+            match in_range(c, 0, 127)
+            | true => Scan/lead()
+            | false =>
+                match in_range(c, 194, 223)
+                | true => Scan/cont(1, 128, 191)
+                | false =>
+                    match in_range(c, 224, 239)
+                    | true =>
+                        let lo = match Nat/eql(c, 224) | true => 160 | false => 128 end;
+                        let hi = match Nat/eql(c, 237) | true => 159 | false => 191 end;
+                        Scan/cont(2, lo, hi)
+                    | false =>
+                        match in_range(c, 240, 244)
+                        | true =>
+                            let lo = match Nat/eql(c, 240) | true => 144 | false => 128 end;
+                            let hi = match Nat/eql(c, 244) | true => 143 | false => 191 end;
+                            Scan/cont(3, lo, hi)
+                        | false => Scan/bad()
+                        end
+                    end
+                end
+            end;
+
+        let step(c : Nat, s : Scan) -> Scan =
+            match s
+            | bad() => Scan/bad()
+            | cont(rem, lo, hi) =>
+                match in_range(c, lo, hi)
+                | false => Scan/bad()
+                | true =>
+                    match Nat/eql(rem, 1)
+                    | true => Scan/lead()
+                    | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+                    end
+                end
+            | lead() => classify(c)
+            end;
+
+        union Utf8 : (s : Scan, b : Bin)
+        | stop() : (Scan/lead(), \\)
+        | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
+            : (st, Bin/concat(Bin/append(\\, c), t))
+        end
+
+        let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
+
+        let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
+            match b : (b) => (s : Scan) -> Option(Utf8(s, b))
+            | \\ => (s) =>
+                match s : (s) => Option(Utf8(s, \\))
+                | lead() => Option/some(Utf8/stop())
+                | cont(rem, lo, hi) => Option/none()
+                | bad() => Option/none()
+                end
+            | (h, t), ih => (s) =>
+                match ih(step(h, s)) : Option(Utf8(s, Bin/concat(Bin/append(\\, h), t)))
+                | some(rest) => Option/some(Utf8/more(h, s, t, rest))
+                | none() => Option/none()
+                end
+            end;
+
+        let of_bin_valid(b : Bin) -> Option(Valid(b)) =
+            check(b)(Scan/lead());
+
+        let decide(b : Bin) -> Bin =
+            match of_bin_valid(b)
+            | some(_) => Str/to_bin("yes")
+            | none() => Str/to_bin("no")
+            end;
+
+        Io/write(Io/stdout, Bin/concat(decide(\68\69), decide(\80)))
+        "#;
+    assert_eq!(run(source), b"yesno");
+}
