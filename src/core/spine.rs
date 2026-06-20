@@ -1,11 +1,13 @@
 //! The free-monoid peel shared by inversion (`invert`) and conversion
 //! (`convert`). A primitive whose values are a literal run of generators over a
-//! symbolic tail — a `Nat` count today, a `Bin` byte run or `Arr` element run
-//! later — reduces two values by stripping their longest common literal head;
-//! the residual tails go back to the caller's own recursion. `Bln`/`Int` are
-//! the degenerate, zero-generator spines. The point of the seam: a new instance
-//! is one `peel_prim` arm and nothing else — the drivers, the `Peel`
-//! vocabulary, and the termination argument are shared.
+//! symbolic tail — a `Nat` count, a `Bin` byte run, an `Arr` element run —
+//! reduces two values by stripping their longest common literal head; the
+//! residual tails go back to the caller's own recursion. `Bln`/`Int` are the
+//! degenerate, zero-generator spines. The point of the seam: a new instance is
+//! one `peel_prim` arm and nothing else — the drivers, the `Peel` vocabulary,
+//! and the termination argument are shared, and `Bin`/`Arr` further share the
+//! `peel_prefix` step itself (they differ only in element type and whether a
+//! stalled literal head is a clash).
 
 use {
     super::{Nat, Prim, Subterm, Term},
@@ -37,8 +39,9 @@ pub fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
         (Prim::Bln(actual), Prim::Bln(target)) => Some(decide(actual == target)),
         (Prim::Int(actual), Prim::Int(target)) => Some(decide(actual == target)),
-        // `Bin` is the free monoid on its bytes: peel the longest common prefix.
-        _ => peel_bin(left, right),
+        // `Bin`/`Arr` are the free monoids on their bytes/elements: peel the
+        // longest common prefix (each returns `None` for the other's shapes).
+        _ => peel_bin(left, right).or_else(|| peel_arr(left, right)),
     }
 }
 
@@ -76,15 +79,86 @@ pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
     }
 }
 
-/// One segment of a flattened `Bin` value: either a run of concrete bytes or an
-/// opaque symbolic chunk (a variable, a `BinAppend`, a slice — anything whose
-/// bytes and length are not statically known). A `Bin` value is a sequence of
-/// these, and `BinConcat` is their juxtaposition; flattening normalises away the
-/// monoid laws (associativity, the empty-bytestring identity, and re-segmented
-/// literal runs) so two definitionally equal values decompose to the same list.
-enum Atom {
-    Lit(Vec<u8>),
+/// One segment of a flattened free-monoid value: either a run of consecutive
+/// literal elements — concrete bytes (`Bin`) or terms (`Arr`) — or an opaque
+/// symbolic chunk (a variable, an append, a slice: anything whose contents and
+/// length are not statically known). A value is a sequence of these, and the
+/// concatenation primitive is their juxtaposition; flattening normalises the
+/// monoid laws (associativity, the empty identity, re-segmented literal runs) so
+/// two definitionally equal values decompose to the same list.
+enum Atom<E> {
+    Lit(Vec<E>),
     Sym(Term),
+}
+
+/// The one free-monoid step `peel_bin` and `peel_arr` share: strip the longest
+/// common prefix the two segment lists *certainly* agree on — literal elements
+/// matched one-for-one and whole symbolic chunks that are syntactically identical
+/// — leaving each list at its residual tail. Reports whether anything was peeled,
+/// so the caller knows it made progress (and a `Continue` cannot loop). Literal
+/// elements compare by `==`: exact for `Bin`'s bytes, *syntactic* for `Arr`'s
+/// terms — hence `peel_arr` must not read a stalled literal head as a clash.
+fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<Atom<E>>) -> bool {
+    let mut peeled = false;
+
+    loop {
+        match (left.front(), right.front()) {
+            (Some(Atom::Lit(a)), Some(Atom::Lit(b))) => {
+                let common = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+                if common == 0 {
+                    break;
+                }
+                peeled = true;
+                consume(left, common);
+                consume(right, common);
+            }
+            (Some(Atom::Sym(x)), Some(Atom::Sym(y))) if x == y => {
+                peeled = true;
+                left.pop_front();
+                right.pop_front();
+            }
+            _ => break,
+        }
+    }
+
+    peeled
+}
+
+/// Drop `count` leading elements off the head run, removing the run outright when
+/// it is exactly consumed. `count` never exceeds the run's length.
+fn consume<E>(atoms: &mut VecDeque<Atom<E>>, count: usize) {
+    match atoms.front_mut() {
+        Some(Atom::Lit(run)) if run.len() == count => {
+            atoms.pop_front();
+        }
+        Some(Atom::Lit(run)) => {
+            run.drain(0..count);
+        }
+        _ => unreachable!("consume called on a non-literal head"),
+    }
+}
+
+/// Append an atom, keeping the list normalised: empty runs vanish (the identity)
+/// and a run abutting another run merges into it (so no two `Lit`s are adjacent).
+fn push<E>(out: &mut Vec<Atom<E>>, atom: Atom<E>) {
+    match atom {
+        Atom::Lit(run) if run.is_empty() => {}
+        Atom::Lit(run) => match out.last_mut() {
+            Some(Atom::Lit(head)) => head.extend(run),
+            _ => out.push(Atom::Lit(run)),
+        },
+        Atom::Sym(term) => out.push(Atom::Sym(term)),
+    }
+}
+
+/// One side peeled down to the empty identity while the other did not: a leftover
+/// literal run is a definite length mismatch (`Clash`); a leftover symbolic chunk
+/// might itself be empty, so its emptiness is undecidable (`Stuck`).
+fn against_identity<E>(atom: &Atom<E>) -> Peel {
+    match atom {
+        Atom::Lit(_) => Peel::Clash,
+        Atom::Sym(_) => Peel::Stuck,
+    }
 }
 
 /// `Bin` is the free monoid on its bytes. Two values reduce by stripping their
@@ -106,46 +180,58 @@ pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
         return None;
     }
 
-    let mut left = atoms(left);
-    let mut right = atoms(right);
-    let mut peeled = false;
-
-    loop {
-        match (left.front(), right.front()) {
-            (Some(Atom::Lit(a)), Some(Atom::Lit(b))) => {
-                let common = a.iter().zip(b).take_while(|(x, y)| x == y).count();
-                if common == 0 {
-                    break;
-                }
-                peeled = true;
-                consume_bytes(&mut left, common);
-                consume_bytes(&mut right, common);
-            }
-            (Some(Atom::Sym(x)), Some(Atom::Sym(y))) if x == y => {
-                peeled = true;
-                left.pop_front();
-                right.pop_front();
-            }
-            _ => break,
-        }
-    }
+    let mut left = bin_atoms(left);
+    let mut right = bin_atoms(right);
+    let peeled = peel_prefix(&mut left, &mut right);
 
     Some(match (left.front(), right.front()) {
         (None, None) => Peel::Equal,
-        // One side is the identity. A leftover concrete run is a definite length
-        // mismatch; a leftover symbolic chunk might itself be empty — undecidable.
-        (None, Some(atom)) | (Some(atom), None) => match atom {
-            Atom::Lit(_) => Peel::Clash,
-            Atom::Sym(_) => Peel::Stuck,
-        },
+        (None, Some(atom)) | (Some(atom), None) => against_identity(atom),
         // Both still lead with a concrete run: the loop only stops here once their
-        // first bytes disagree, so the values are unequal.
+        // first bytes disagree, and bytes are decided — so the values are unequal.
         (Some(Atom::Lit(_)), Some(Atom::Lit(_))) => Peel::Clash,
         // A literal facing a symbolic chunk, or two unlike symbolic chunks. If a
         // common prefix was peeled the residual tails go back to the caller;
         // otherwise nothing here is decidable by peeling.
         _ => match peeled {
-            true => Peel::Continue(reassemble(left), reassemble(right)),
+            true => Peel::Continue(reassemble_bin(left), reassemble_bin(right)),
+            false => Peel::Stuck,
+        },
+    })
+}
+
+/// `Arr` is the free monoid on its elements — the same peel as `peel_bin`, with
+/// two differences. Its literal runs hold *terms*, not decided bytes, so two
+/// leading runs whose heads disagree are NOT a clash (the elements may still be
+/// convertible): the peel defers, and the caller's structural element-wise
+/// comparison settles it. And its concatenation carries an element type, recovered
+/// here to rebuild a residual `ArrConcat`. A leftover literal run against the empty
+/// identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
+pub fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
+    if !arr_valued(left) || !arr_valued(right) {
+        return None;
+    }
+
+    // The element type for a rebuilt `ArrConcat` residual — present whenever a side
+    // is itself an `ArrConcat`, which is exactly when a multi-segment residual (the
+    // only thing that rebuilds an `ArrConcat`) can arise.
+    let elem = arr_elem(left).or_else(|| arr_elem(right));
+
+    let mut left = arr_atoms(left);
+    let mut right = arr_atoms(right);
+    let peeled = peel_prefix(&mut left, &mut right);
+
+    Some(match (left.front(), right.front()) {
+        (None, None) => Peel::Equal,
+        (None, Some(atom)) | (Some(atom), None) => against_identity(atom),
+        // Two leading literal runs whose heads differ, a literal facing a symbolic
+        // chunk, or two unlike chunks — none decidable by peeling (an element
+        // disagreement is syntactic, not semantic). Hand back any peeled residual.
+        _ => match peeled {
+            true => Peel::Continue(
+                reassemble_arr(left, elem.clone()),
+                reassemble_arr(right, elem),
+            ),
             false => Peel::Stuck,
         },
     })
@@ -159,61 +245,71 @@ fn bin_valued(prim: &Prim) -> bool {
     matches!(prim, Prim::Bin(_) | Prim::BinConcat(_))
 }
 
-/// Flatten a `Bin` value to its segment list, normalising the monoid laws:
-/// nested `BinConcat`s splice in, empty runs drop out, and adjacent concrete runs
-/// merge (so no two `Lit`s are ever adjacent).
-fn atoms(prim: &Prim) -> VecDeque<Atom> {
+/// The `Arr` analogue of [`bin_valued`]: only `Arr` and `ArrConcat` carry the
+/// monoid structure (`ArrSlice`/`ArrAppend`/`ArrFlatten` stay opaque chunks).
+fn arr_valued(prim: &Prim) -> bool {
+    matches!(prim, Prim::Arr(_) | Prim::ArrConcat(_, _))
+}
+
+/// The element type of an `ArrConcat`, for rebuilding residuals (`None` for a bare
+/// `Arr` literal, which never needs it — it rebuilds as a single run).
+fn arr_elem(prim: &Prim) -> Option<Term> {
+    match prim {
+        Prim::ArrConcat(elem, _) => Some(elem.clone()),
+        _ => None,
+    }
+}
+
+/// Flatten a `Bin` value to its segment list, normalising the monoid laws: nested
+/// `BinConcat`s splice in, empty runs drop out, adjacent runs merge.
+fn bin_atoms(prim: &Prim) -> VecDeque<Atom<u8>> {
     let mut out = Vec::new();
-    collect_prim(prim, &mut out);
+    bin_collect_prim(prim, &mut out);
     out.into()
 }
 
-fn collect_prim(prim: &Prim, out: &mut Vec<Atom>) {
+fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
     match prim {
         Prim::Bin(bytes) => push(out, Atom::Lit(bytes.clone())),
-        Prim::BinConcat(operands) => operands.iter().for_each(|op| collect_term(op, out)),
+        Prim::BinConcat(operands) => operands.iter().for_each(|op| bin_collect_term(op, out)),
         other => push(out, Atom::Sym(Term::prim(other.clone()))),
     }
 }
 
-fn collect_term(term: &Term, out: &mut Vec<Atom>) {
+fn bin_collect_term(term: &Term, out: &mut Vec<Atom<u8>>) {
     match &**term {
-        Subterm::Prim(prim) => collect_prim(prim, out),
+        Subterm::Prim(prim) => bin_collect_prim(prim, out),
         _ => push(out, Atom::Sym(term.clone())),
     }
 }
 
-/// Append an atom, keeping the list normalised: empty runs vanish (identity) and a
-/// run abutting another run merges into it (associativity of the byte sequence).
-fn push(out: &mut Vec<Atom>, atom: Atom) {
-    match atom {
-        Atom::Lit(bytes) if bytes.is_empty() => {}
-        Atom::Lit(bytes) => match out.last_mut() {
-            Some(Atom::Lit(run)) => run.extend(bytes),
-            _ => out.push(Atom::Lit(bytes)),
-        },
-        Atom::Sym(term) => out.push(Atom::Sym(term)),
+/// Flatten an `Arr` value to its segment list — the [`bin_atoms`] decomposition
+/// over element terms rather than bytes.
+fn arr_atoms(prim: &Prim) -> VecDeque<Atom<Term>> {
+    let mut out = Vec::new();
+    arr_collect_prim(prim, &mut out);
+    out.into()
+}
+
+fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
+    match prim {
+        Prim::Arr(elems) => push(out, Atom::Lit(elems.clone())),
+        Prim::ArrConcat(_, operands) => operands.iter().for_each(|op| arr_collect_term(op, out)),
+        other => push(out, Atom::Sym(Term::prim(other.clone()))),
     }
 }
 
-/// Drop `count` bytes off the leading concrete run, removing the run outright when
-/// it is exactly consumed. `count` never exceeds the run's length.
-fn consume_bytes(atoms: &mut VecDeque<Atom>, count: usize) {
-    match atoms.front_mut() {
-        Some(Atom::Lit(run)) if run.len() == count => {
-            atoms.pop_front();
-        }
-        Some(Atom::Lit(run)) => {
-            run.drain(0..count);
-        }
-        _ => unreachable!("consume_bytes called on a non-literal head"),
+fn arr_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
+    match &**term {
+        Subterm::Prim(prim) => arr_collect_prim(prim, out),
+        _ => push(out, Atom::Sym(term.clone())),
     }
 }
 
 /// Rebuild a `Bin` term from a residual segment list: a lone run is a `Bin`
 /// literal, a lone symbolic chunk is itself (so the inverter sees the bare binder
 /// it must solve), and a mixture is their `BinConcat`.
-fn reassemble(atoms: VecDeque<Atom>) -> Term {
+fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
     let into_term = |atom| match atom {
         Atom::Lit(bytes) => Term::prim(Prim::Bin(bytes)),
         Atom::Sym(term) => term,
@@ -222,5 +318,24 @@ fn reassemble(atoms: VecDeque<Atom>) -> Term {
     match atoms.len() {
         1 => into_term(atoms.into_iter().next().unwrap()),
         _ => Term::prim(Prim::BinConcat(atoms.into_iter().map(into_term).collect())),
+    }
+}
+
+/// Rebuild an `Arr` term from a residual segment list — [`reassemble_bin`] over
+/// element runs, restoring the element type a multi-segment `ArrConcat` carries.
+/// `elem` is `Some` whenever the residual has more than one segment (such a
+/// residual can only come from an input `ArrConcat`).
+fn reassemble_arr(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
+    let into_term = |atom| match atom {
+        Atom::Lit(elems) => Term::prim(Prim::Arr(elems)),
+        Atom::Sym(term) => term,
+    };
+
+    match atoms.len() {
+        1 => into_term(atoms.into_iter().next().unwrap()),
+        _ => {
+            let elem = elem.expect("a multi-segment Arr residual implies an ArrConcat operand");
+            Term::prim(Prim::ArrConcat(elem, atoms.into_iter().map(into_term).collect()))
+        }
     }
 }

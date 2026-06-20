@@ -145,6 +145,45 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 }
 
 #[test]
+fn arr_concat_is_a_free_monoid() {
+    // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
+    // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`
+    // is its identity, and a literal run re-segments freely — all by `refl` for
+    // SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels
+    // the two `ArrConcat`s to a common normal form.
+    let source = r#"
+        use /std/{Io, Str, Eq, Arr};
+        let assoc(@T : Type, a : Arr(T), b : Arr(T), c : Arr(T))
+            -> Eq(Arr/concat(a, Arr/concat(b, c)), Arr/concat(Arr/concat(a, b), c)) =
+            Eq/refl();
+        let left_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat([], a), a) = Eq/refl();
+        let right_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat(a, []), a) = Eq/refl();
+        let resegment(@T : Type, a : T, b : T, c : Arr(T))
+            -> Eq(Arr/concat([a, b], c), Arr/concat([a], Arr/concat([b], c))) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn arr_concat_length_clash_is_rejected() {
+    // Unlike `Bin`, an `Arr` element disagreement is NOT a clash (elements are
+    // terms that may be convertible) — but a literal *length* mismatch still is:
+    // `[x, y]` and `[x]` peel their shared head and leave one side longer, a
+    // definite `Clash`, so the `refl` is rejected. Exercises `peel_arr`'s clash
+    // against the empty identity (the element-mismatch case instead defers to the
+    // structural arm, kept sound by `Stuck` fall-through).
+    let source = r#"
+        use /std/{Io, Str, Eq, Arr};
+        let bad(@T : Type, x : T, y : T) -> Eq([x, y], [x]) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
 fn flt_to_le_bin_prints_raw_bytes() {
     let source = r#"
         std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))

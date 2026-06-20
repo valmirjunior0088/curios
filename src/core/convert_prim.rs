@@ -1,14 +1,15 @@
 use {
     super::Convert,
-    crate::core::{Peel, Prim, ReduceError, Term, peel_bin, peel_nat},
+    crate::core::{Peel, Prim, ReduceError, Term, peel_arr, peel_bin, peel_nat},
 };
 
 pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
-    // Two `Bin` values are the free monoid on their bytes: peel the longest common
-    // prefix (`core::spine`). `Stuck` falls through to the structural arms below,
-    // which compare like-shaped symbolic operands (`BinAppend`, slices) the peel
-    // leaves opaque — so the peel only ever strengthens conversion, never weakens.
-    if let Some(peel) = peel_bin(&this, &that) {
+    // Two `Bin`/`Arr` values are the free monoid on their bytes/elements: peel the
+    // longest common prefix (`core::spine`). `Stuck` falls through to the
+    // structural arms below, which compare like-shaped symbolic operands (slices,
+    // appends) and `Arr` element runs the peel leaves opaque — so the peel only
+    // ever strengthens conversion, never weakens it.
+    if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_arr(&this, &that)) {
         match peel {
             Peel::Equal => return Ok(true),
             Peel::Clash => return Ok(false),
