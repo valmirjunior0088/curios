@@ -6,7 +6,7 @@ pub union Json
 | num(Flt)
 | str(Str)
 | arr(Arr(Json))
-| obj(Arr({ Str, Json }))
+| obj(Arr({Str, Json}))
 end
 
 pub use Json/*;
@@ -85,7 +85,7 @@ let take_literal(literal : Str) -> Parse({}) =
     (input, pos) =>
         let lit = Str/to_bin(literal);
         let r =
-            match Bin/len(lit) : { Nat, Bln }
+            match Bin/len(lit) : {Nat, Bln}
             | 0 => (pos, true)
             | step + 1, ih =>
                 match ih.1
@@ -290,7 +290,7 @@ and parse_obj : Parse(Json) =
     let pairs = Parse/sep_by0(parse_pair, symbol(','))!;
     let _ = symbol('}')!;
     Parse/pure(Json/obj(pairs))
-and parse_pair : Parse({ Str, Json }) =
+and parse_pair : Parse({Str, Json}) =
     let ! = Parse/bind;
     let _ = ws!;
     let key = parse_raw_str!;

@@ -72,21 +72,21 @@ Rust has structs and tuples as separate concepts. Curios has one aggregate type 
 
 ```
 -- Unnamed (like a Rust tuple)
-let point : { Nat, Nat } = (3, 4);
+let point : {Nat, Nat} = (3, 4);
 
 -- Named (like a Rust struct)
-let point : { x : Nat, y : Nat } = (x = 3, y = 4);
+let point : {x : Nat, y : Nat} = (x = 3, y = 4);
 ```
 
-There are no struct declarations. The type expression is the definition, and labels are part of the type's identity: `{ x : Nat, y : Nat }`, `{ a : Nat, b : Nat }`, and `{ Nat, Nat }` are three distinct types. At the construction site the names are optional and checked positionally — `(3, 4)` builds the named point just as well, and a written name must match the label at that position (no reordering, unlike Rust struct literals).
+There are no struct declarations. The type expression is the definition, and labels are part of the type's identity: `{x : Nat, y : Nat}`, `{a : Nat, b : Nat}`, and `{Nat, Nat}` are three distinct types. At the construction site the names are optional and checked positionally — `(3, 4)` builds the named point just as well, and a written name must match the label at that position (no reordering, unlike Rust struct literals).
 
 To extract a field, use dot notation — by position always, by label when the type names it:
 
 ```
-let x_coord(p : { Nat, Nat }) -> Nat =
+let x_coord(p : {Nat, Nat}) -> Nat =
     p.0;
 
-let x_coord(p : { x : Nat, y : Nat }) -> Nat =
+let x_coord(p : {x : Nat, y : Nat}) -> Nat =
     p.x;
 ```
 
@@ -196,7 +196,7 @@ Rust's `Vec<T>` does not track length in the type. `[T; N]` does, but `N` must b
 rec Vec(T : Type, n : Nat) -> Type =
     match n : Type
     | 0 => {}
-    | pred + 1, ih => { T, ih }
+    | pred + 1, ih => {T, ih}
     end;
 ```
 
@@ -204,8 +204,8 @@ The `match` here builds a type: for length 0 the type is the empty tuple `{}`; f
 
 ```
 -- Vec(Nat, 0)  =  {}
--- Vec(Nat, 1)  =  { Nat, {} }
--- Vec(Nat, 2)  =  { Nat, { Nat, {} } }
+-- Vec(Nat, 1)  =  {Nat, {}}
+-- Vec(Nat, 2)  =  {Nat, {Nat, {}}}
 ```
 
 Values follow the same structure:
@@ -223,7 +223,7 @@ let head(T : Type, n : Nat, v : Vec(T, Nat/succ(n))) -> T =
     v.0;
 ```
 
-`Vec(T, Nat/succ(n))` reduces to `{ T, Vec(T, n) }`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
+`Vec(T, Nat/succ(n))` reduces to `{T, Vec(T, n)}`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
 The same shape is also available as a declared _indexed union_ — this is what `/std/Vec` is:
 
@@ -249,7 +249,7 @@ rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T
     end;
 ```
 
-Which to reach for: the _recursion-computed_ type reduces definitionally — `Vec(Nat, 2)` literally **is** `{ Nat, { Nat, {} } }`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The _indexed union_ is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
+Which to reach for: the _recursion-computed_ type reduces definitionally — `Vec(Nat, 2)` literally **is** `{Nat, {Nat, {}}}`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The _indexed union_ is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
 
 ## Payoff: typed format strings
 

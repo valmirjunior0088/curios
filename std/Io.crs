@@ -11,7 +11,7 @@ pub union Error
 | other(Nat)
 end
 
-let errors : Arr({ Nat, Error }) =
+let errors : Arr({Nat, Error}) =
     [
         (/sys/Io/Status/not_found, Error/not_found()),
         (/sys/Io/Status/permission_denied, Error/permission_denied()),

@@ -227,8 +227,8 @@ A buffered, line-oriented reader layered over [`/std/Io`](#stdio): a small state
 
 | Binding     | Type                                               | Description                                                              |
 | ----------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
-| `Buffer`    | `Type` (`= { Io, Bin }`)                           | A handle plus bytes already read but not yet consumed                    |
-| `Reader(A)` | `(Type) -> Type` (`= (Buffer) -> { Buffer, A }`)   | The buffered-reader state monad                                          |
+| `Buffer`    | `Type` (`= {Io, Bin}`)                           | A handle plus bytes already read but not yet consumed                    |
+| `Reader(A)` | `(Type) -> Type` (`= (Buffer) -> {Buffer, A}`)   | The buffered-reader state monad                                          |
 | `buffer(h)` | `(Io) -> Buffer`                                   | A fresh buffer over `h`, empty                                           |
 | `pure(a)`   | `(@A : Type, A) -> Reader(A)`                       | Lift a value                                                             |
 | `bind`      | `(@A, @B) -> (Reader(A), (A) -> Reader(B)) -> Reader(B)` | Sequence two actions (use with `let ! = Reader/bind;` blocks)       |
@@ -254,13 +254,13 @@ The surface is two tiers. The **application API** is what programs use — the m
 | `spawn(body)` | `(@A : Type, () -> Task(A)) -> Task(Handle(A))` | Spawn `body` as a fiber, returning a `Handle` to await or cancel it |
 | `await(f)` | `(@A : Type, Future(A)) -> Task(A)` | Park until `f` is fulfilled, then yield its value |
 | `join_all(tasks)` | `(@A, Arr(() -> Task(A))) -> Task(Arr(A))` | Spawn every task, await them all, collect results positionally |
-| `select(tasks)` | `(@A, Arr(() -> Task(A))) -> Task({ Nat, A })` | Run all; the first to finish wins (its index and value); the losers are cancelled |
+| `select(tasks)` | `(@A, Arr(() -> Task(A))) -> Task({Nat, A})` | Run all; the first to finish wins (its index and value); the losers are cancelled |
 | `race(tasks)` | `(@A, Arr(() -> Task(A))) -> Task(A)` | `select`'s winning value, dropping the index |
 | `cancel(t)` | `(Token) -> {}` | Flag a token cancelled; its fiber is reaped at its next step, finalizers running |
 | `using(h, release, body)` | `(@A, Io, Finalizer, Task(A)) -> Task(A)` | Bracket `h`: register `release`, run `body`, release exactly once — on completion or on cancel/drop |
 | `run(main)` | `(Task({})) -> {}` | Drive `main` as the program root (`block_on` at the unit result) |
 | `block_on(t)` | `(@A : Type, Task(A)) -> A` | Drive `t` to its value, multiplexing every fiber over one `Io/poll` |
-| `Handle(A)` | `Type` (`= { result : Future(A), token : Token }`) | A spawned fiber's result future paired with its cancellation token |
+| `Handle(A)` | `Type` (`= {result : Future(A), token : Token}`) | A spawned fiber's result future paired with its cancellation token |
 | `Future(A)` | `Type` (`= Cell(Fut(A))`) | A one-shot result cell, awaited with `await` |
 | `Token` | `Type` (`= Cell(Bln)`) | A cooperative-cancellation flag |
 | `Finalizer` | `Type` (`= () -> {}`) | A synchronous cleanup action, run at release or on cancellation |
@@ -350,13 +350,13 @@ struct Request pub {
     host : Str,
     port : Nat,
     path : Str,
-    headers : Arr({ Str, Str }),
+    headers : Arr({Str, Str}),
     body : Bin,
     settings : Net/Settings
 }
 
 struct Status pub   { version : Str, code : Nat, reason : Str }
-struct Response pub { status : Status, headers : Arr({ Str, Str }), body : Bin }
+struct Response pub { status : Status, headers : Arr({Str, Str}), body : Bin }
 ```
 
 `Request`, `Status`, and `Response` all have public representations. In a `Request`, `headers` are sent verbatim and in order after the automatic `Host`/`Connection: close`/`Content-Length` lines; `body` is sent as-is (its `Content-Length` is added automatically when non-empty). A failed round trip is `Error/net` (a transport failure surfaced by `/std/Net`) or `Error/malformed` (a response that did not parse).
@@ -526,7 +526,7 @@ The uninhabited type: a union with zero cases. No value of `Void` can be constru
 Byte-level parser combinators over a `(input : Bin, position : Nat)` state:
 
 ```
-Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Str)
+Parse(A) = (Bin, Nat) -> Result({Nat, A}, Str)
 ```
 
 — success carries the new position and the value; failure carries a message (`Str`). The input being parsed stays a `Bin` (raw bytes).
@@ -538,7 +538,7 @@ Parse(A) = (Bin, Nat) -> Result({ Nat, A }, Str)
 | `map(f, p)`                         | Map the result                                      |
 | `bind`                              | Sequencing, shaped for `let ! = Parse/bind;` blocks |
 | `or(p, q)`                          | Try `p`, fall back to `q`                           |
-| `and(p, q)`                         | Both in sequence; pairs the results as `{ A, B }`   |
+| `and(p, q)`                         | Both in sequence; pairs the results as `{A, B}`   |
 | `any_byte` / `peek_byte`            | Next byte, consuming / not consuming                |
 | `take_byte(expected)`               | Exactly the given byte                              |
 | `take_while(pred)`                  | Longest run of bytes satisfying `pred`              |
@@ -552,7 +552,7 @@ A JSON tree and a byte-level codec:
 ```
 pub union Json
 | null() | bln(Bln) | num(Flt) | str(Str)
-| arr(Arr(Json)) | obj(Arr({ Str, Json }))
+| arr(Arr(Json)) | obj(Arr({Str, Json}))
 end
 ```
 

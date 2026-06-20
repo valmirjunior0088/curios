@@ -27,7 +27,7 @@ pub let Token : Type =
     Cell(Bln);
 
 let Guard : Type =
-    { Io, Finalizer };
+    {Io, Finalizer};
 
 pub let pure(@A : Type, a : A) -> Task(A) =
     Task/done(a);
@@ -234,18 +234,18 @@ let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
 let is_ready(results : Nat, interest : Nat) -> Bln =
     Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(/sys/Io/Poll/err, /sys/Io/Poll/hup))), 0);
 
-let poll_ready(blocked : Lst(Parked)) -> { Lst(Job), Lst(Parked) } =
+let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
     let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
     let events = Lst/to_arr(Lst/map((p) => p.interest, blocked));
     let results = /sys/Io/poll(handles, events, -1);
-    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> { Lst(Job), Lst(Parked) } =
-        match rest : { Lst(Job), Lst(Parked) }
+    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
+        match rest : {Lst(Job), Lst(Parked)}
         | nil() => (woken, still)
         | cons(p, tail) =>
-            match Cell/get(p.token) : { Lst(Job), Lst(Parked) }
+            match Cell/get(p.token) : {Lst(Job), Lst(Parked)}
             | true => let _ = run_fins(p.fins); walk(tail, Nat/succ(i), woken, still)
             | false =>
-                match is_ready(Arr/get(results, i), p.interest) : { Lst(Job), Lst(Parked) }
+                match is_ready(Arr/get(results, i), p.interest) : {Lst(Job), Lst(Parked)}
                 | true => walk(tail, Nat/succ(i), Lst/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
                 | false => walk(tail, Nat/succ(i), woken, Lst/cons(p, still))
                 end
@@ -332,7 +332,7 @@ pub let run(main : Task({})) -> {} =
     ();
 
 pub let Handle(A : Type) -> Type =
-    { result : Future(A), token : Token };
+    {result : Future(A), token : Token};
 
 pub let spawn(@A : Type, body : () -> Task(A)) -> Task(Handle(A)) =
     defer(() =>
@@ -364,9 +364,9 @@ pub let join_all(@A : Type, tasks : Arr(() -> Task(A))) -> Task(Arr(A)) =
         end;
     bind(go(0), (xs) => pure(Lst/to_arr(xs)));
 
-pub let select(@A : Type, tasks : Arr(() -> Task(A))) -> Task({ Nat, A }) =
+pub let select(@A : Type, tasks : Arr(() -> Task(A))) -> Task({Nat, A}) =
     defer(() =>
-        let winner : Future({ Nat, A }) = new_future(@{ Nat, A });
+        let winner : Future({Nat, A}) = new_future(@{Nat, A});
         rec arm(i : Nat) -> Task(Lst(Token)) =
             let ! = bind;
             match Nat/lt(i, Arr/len(tasks)) : Task(Lst(Token))

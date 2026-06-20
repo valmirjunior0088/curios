@@ -129,7 +129,7 @@ pub let len(s : Str) -> Nat =
     fold(s, 0, (cp, acc) => Nat/add(acc, 1));
 
 pub let find(s : Str, target : Nat) -> Option(Nat) =
-    let r : { Nat, Option(Nat) } =
+    let r : {Nat, Option(Nat)} =
         fold(s, (0, Option/none()), (cp, acc) =>
             match acc.1
             | some(_) => acc
@@ -162,9 +162,9 @@ pub let join(sep : Str, parts : Arr(Str)) -> Str =
     Arr/balanced(Arr/len(parts), "", (i) => Arr/get(parts, i),
         (l, r) => concat(concat(l, sep), r));
 
-let trim_bounds(s : Str) -> { Nat, Nat } =
+let trim_bounds(s : Str) -> {Nat, Nat} =
     let n = len(s);
-    let r : { Nat, Nat, Nat } =
+    let r : {Nat, Nat, Nat} =
         fold(s, (0, n, 0), (cp, acc) =>
             match Char/is_whitespace(cp)
             | true => (Nat/add(acc.0, 1), acc.1, acc.2)

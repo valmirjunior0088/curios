@@ -429,7 +429,7 @@ e.1
 e.status
 ```
 
-Indices are zero-based. A label is sugar for the position it names — `e.status` and `e.0` on a `{ status : Nat, ... }` value elaborate to the same projection, and both spellings remain valid on labeled tuples. Unlabeled fields are accessible by index only. Chains are supported and may mix forms: `e.inner.1` reads field 1 of the `inner` field of `e`. [Struct](#struct) values project the same way, by index or declared label, subject to the struct's representation visibility.
+Indices are zero-based. A label is sugar for the position it names — `e.status` and `e.0` on a `{status : Nat, ...}` value elaborate to the same projection, and both spellings remain valid on labeled tuples. Unlabeled fields are accessible by index only. Chains are supported and may mix forms: `e.inner.1` reads field 1 of the `inner` field of `e`. [Struct](#struct) values project the same way, by index or declared label, subject to the struct's representation visibility.
 
 ## Types
 
@@ -458,16 +458,16 @@ A non-dependent parameter omits its name; named and unnamed parameters may be mi
 ### Tuple type
 
 ```
-{ A, B }
-{ label1 : A, label2 : B }
-{ n : Nat, v : Vec(Bin, n) }
+{A, B}
+{label1 : A, label2 : B}
+{n : Nat, v : Vec(Bin, n)}
 ```
 
 Fields may optionally be named, and labels do three jobs:
 
-- **They bind dependently**: a later field's type may mention an earlier label, making the tuple a dependent record — `{ n : Nat, v : Vec(Bin, n) }` only accepts a vector whose length is the first field.
+- **They bind dependently**: a later field's type may mention an earlier label, making the tuple a dependent record — `{n : Nat, v : Vec(Bin, n)}` only accepts a vector whose length is the first field.
 - **They are projectable**: `p.n` is sugar for the positional `p.0` (see [Field access](#field-access)).
-- **They are part of the type's identity**: `{ a : Nat }`, `{ b : Nat }`, and `{ Nat }` are three distinct types, and two labeled spellings must agree label-for-label to be convertible. (Function-type parameter names carry no such weight — they stay alpha-convertible.)
+- **They are part of the type's identity**: `{a : Nat}`, `{b : Nat}`, and `{Nat}` are three distinct types, and two labeled spellings must agree label-for-label to be convertible. (Function-type parameter names carry no such weight — they stay alpha-convertible.)
 
 Labels must be unique within a type. The empty tuple type `{}` (whose only value is `()`) serves as a unit.
 

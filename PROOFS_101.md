@@ -185,7 +185,7 @@ rec IsSorted(l : Lst(Nat)) -> Type =
     | cons(x, rest) =>
         match rest : Type
         | nil() => {}
-        | cons(y, _) => { Lte(x, y), IsSorted(rest) }
+        | cons(y, _) => {Lte(x, y), IsSorted(rest)}
         end
     end;
 ```

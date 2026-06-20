@@ -48,7 +48,7 @@ pub let nanos(d : Duration) -> Nat =
 pub let to_millis(d : Duration) -> Nat =
     Nat/add(Nat/mul(d.secs, 1000), Nat/div(d.nanos, 1000000));
 
-let sub_digit(x : Nat, y : Nat) -> { digit : Nat, borrow : Nat } =
+let sub_digit(x : Nat, y : Nat) -> {digit : Nat, borrow : Nat} =
     match Nat/lt(x, y)
     | true => (digit = Nat/sub(Nat/add(x, 1000000000), y), borrow = 1)
     | false => (digit = Nat/sub(x, y), borrow = 0)
